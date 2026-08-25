@@ -21,6 +21,8 @@ from app.models import (
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
     StaffingVacationUnionSelection,
+    StaffingVacationWeekConversion,
+    StaffingVacationDaySelection,
     StaffingWorkAssignment,
     User,
 )
@@ -384,6 +386,92 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         values["staffing_person_id"] = second.id
         self.client.post(f"/neostaffing/vacation-selection/union/{calendar.id}/select", data=values)
         self.assertEqual(StaffingVacationUnionSelection.query.filter(StaffingVacationUnionSelection.status.in_(("pending", "approved"))).count(), 1)
+
+    def test_union_optional_split_regular_rejection_and_day_capacity_override(self):
+        grandmaster = self._user("union_split_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        first = self._union_person("US1", "Split", "One", self.units["blue_area"])
+        second = self._union_person("US2", "Split", "Two", self.units["blue_area"])
+        ft_actor = self._union_actor("union_split_ft", "simulator", "full_time_supervisor")
+        db.session.commit()
+        weeks = vacation_service.vacation_year_weeks(self.YEAR)
+        regular = vacation_service.add_union_week(
+            calendar, first, self.YEAR, weeks[20].week_ending, "regular", ft_actor
+        )
+        optional = vacation_service.add_union_week(
+            calendar, first, self.YEAR, weeks[21].week_ending, "optional", ft_actor
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "Regular Union vacation weeks cannot"):
+            vacation_service.split_union_optional_week(
+                calendar, first, self.YEAR, ft_actor, selection=regular, today=date(2027, 1, 1)
+            )
+        db.session.rollback()
+        first_conversion = vacation_service.split_union_optional_week(
+            calendar, first, self.YEAR, ft_actor, selection=optional, today=date(2027, 1, 1)
+        )
+        second_conversion = vacation_service.split_union_optional_week(
+            calendar, second, self.YEAR, ft_actor, today=date(2027, 1, 1)
+        )
+        db.session.commit()
+        self.assertEqual(optional.status, "cancelled")
+
+        day = date(2027, 2, 10)
+        vacation_service.schedule_split_vacation_day(first_conversion, day, ft_actor)
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "single-day capacity is full"):
+            vacation_service.schedule_split_vacation_day(second_conversion, day, ft_actor)
+        db.session.rollback()
+        vacation_service.schedule_split_vacation_day(
+            second_conversion, day, ft_actor, capacity_override=True
+        )
+        db.session.commit()
+        context = vacation_service.union_calendars_context(self.YEAR, grandmaster)
+        row = next(item for item in context["calendars"] if item["calendar"].id == calendar.id)
+        self.assertTrue(row["daily_over"])
+        self.assertEqual(row["daily_usage"][day], 2)
+        first_row = next(
+            person_row for person_row in row["person_rows"]
+            if person_row["person"].id == first.id
+        )
+        self.assertEqual(first_row["split_day_balance"], 4)
+        self._login(ft_actor)
+        rendered = self.client.get(
+            f"/neostaffing/vacation-selection/union?year={self.YEAR}"
+        )
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn(b"DAY OVER", rendered.data)
+
+    def test_split_day_whole_week_overlap_cancel_and_union_recombine(self):
+        grandmaster = self._user("union_recombine_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person("US3", "Recombine", "Union", self.units["blue_area"])
+        ft_actor = self._union_actor("union_recombine_ft", "simulator", "full_time_supervisor")
+        db.session.commit()
+        conversion = vacation_service.split_union_optional_week(
+            calendar, person, self.YEAR, ft_actor, today=date(2027, 1, 1)
+        )
+        whole = vacation_service.add_union_week(
+            calendar, person, self.YEAR, date(2027, 3, 13), "regular", ft_actor
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "whole vacation week"):
+            vacation_service.schedule_split_vacation_day(
+                conversion, date(2027, 3, 10), ft_actor
+            )
+        db.session.rollback()
+        scheduled = vacation_service.schedule_split_vacation_day(
+            conversion, date(2027, 4, 10), ft_actor
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "Cancel all scheduled"):
+            vacation_service.recombine_split_vacation_week(conversion, ft_actor)
+        db.session.rollback()
+        vacation_service.cancel_split_vacation_day(scheduled, ft_actor)
+        vacation_service.recombine_split_vacation_week(conversion, ft_actor)
+        db.session.commit()
+        self.assertIsNotNone(conversion.recombined_at)
+        self.assertEqual(whole.status, "approved")
 
     def test_union_context_uses_bounded_queries_as_calendar_count_grows(self):
         user = self._user("query_gm", "grandmaster")

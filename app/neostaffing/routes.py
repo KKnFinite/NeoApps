@@ -955,6 +955,26 @@ def vacation_management_select():
     )
 
 
+@bp.post("/vacation-selection/management/split")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_split():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.split_management_week(
+            request.form.get("staffing_person_id"),
+            vacation_year,
+            current_user,
+            selection=request.form.get("selection_id"),
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation week split into five days.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
 @bp.route("/vacation-selection/management/pass", methods=["POST"])
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_management_pass():
@@ -1018,6 +1038,80 @@ def vacation_union_select(calendar_id):
     else:
         flash("Union vacation week reserved.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
+
+
+@bp.post("/vacation-selection/union/<int:calendar_id>/split")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_split(calendar_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.split_union_optional_week(
+            calendar_id,
+            request.form.get("staffing_person_id"),
+            vacation_year,
+            current_user,
+            selection=request.form.get("selection_id"),
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Optional Week split into five vacation days.", "success")
+    return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
+
+
+@bp.post("/vacation-selection/split-day/schedule")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_split_day_schedule():
+    vacation_year = request.form.get("vacation_year")
+    program = request.form.get("program")
+    try:
+        vacation_service.schedule_split_vacation_day(
+            request.form.get("conversion_id"),
+            request.form.get("vacation_date"),
+            current_user,
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Split vacation day scheduled.", "success")
+    return redirect(_vacation_program_url(program, vacation_year))
+
+
+@bp.post("/vacation-selection/split-day/<int:day_id>/cancel")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_split_day_cancel(day_id):
+    vacation_year = request.form.get("vacation_year")
+    program = request.form.get("program")
+    try:
+        vacation_service.cancel_split_vacation_day(day_id, current_user)
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Split vacation day removed.", "success")
+    return redirect(_vacation_program_url(program, vacation_year))
+
+
+@bp.post("/vacation-selection/split-week/<int:conversion_id>/recombine")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_split_week_recombine(conversion_id):
+    vacation_year = request.form.get("vacation_year")
+    program = request.form.get("program")
+    try:
+        vacation_service.recombine_split_vacation_week(conversion_id, current_user)
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Five split days recombined into one unused vacation week.", "success")
+    return redirect(_vacation_program_url(program, vacation_year))
 
 
 @bp.post("/vacation-selection/union/selection/<int:selection_id>/review")
@@ -2007,6 +2101,15 @@ def _vacation_year_arg():
         return vacation_service.normalize_vacation_year(raw_year)
     except ValueError:
         return vacation_service.default_vacation_year()
+
+
+def _vacation_program_url(program, vacation_year):
+    endpoint = (
+        "neostaffing.vacation_union_calendars"
+        if str(program or "").strip().casefold() == "union"
+        else "neostaffing.vacation_management"
+    )
+    return url_for(endpoint, year=vacation_year)
 
 
 def _vacation_year_options(selected_year):

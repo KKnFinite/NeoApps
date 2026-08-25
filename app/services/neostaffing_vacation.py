@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 import calendar as calendar_module
 import math
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
@@ -21,6 +21,8 @@ from app.models import (
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
     StaffingVacationUnionSelection,
+    StaffingVacationWeekConversion,
+    StaffingVacationDaySelection,
     StaffingWorkAssignment,
 )
 from app.models.user import ROLE_LEVELS
@@ -59,6 +61,10 @@ VACATION_MANAGEMENT_PASS_ADMIN_CLASSIFICATIONS = frozenset(
         "manager",
         "division_manager",
     }
+)
+VACATION_SPLIT_MANAGER_CLASSIFICATIONS = frozenset({"manager", "division_manager"})
+VACATION_SPLIT_ADMIN_CLASSIFICATIONS = frozenset(
+    {"full_time_supervisor", "manager", "division_manager"}
 )
 
 
@@ -387,6 +393,25 @@ def management_vacation_context(vacation_year, user, today=None):
     selections_by_person = {}
     for selection in selections:
         selections_by_person.setdefault(selection.staffing_person_id, []).append(selection)
+    conversions = (
+        StaffingVacationWeekConversion.query.options(
+            selectinload(StaffingVacationWeekConversion.days)
+        )
+        .filter_by(vacation_year=year, program="management", recombined_at=None)
+        .order_by(StaffingVacationWeekConversion.id)
+        .all()
+    )
+    conversions_by_person = {}
+    bank_usage_by_person = {
+        person_id: list(rows) for person_id, rows in selections_by_person.items()
+    }
+    for conversion in conversions:
+        conversions_by_person.setdefault(conversion.staffing_person_id, []).append(
+            conversion
+        )
+        bank_usage_by_person.setdefault(conversion.staffing_person_id, []).append(
+            conversion
+        )
 
     primary_by_person, secondary_by_person = _primary_and_secondary_assignments(
         leadership
@@ -436,7 +461,7 @@ def management_vacation_context(vacation_year, user, today=None):
         turn = management_turn_snapshot(
             year,
             primary_people,
-            selections_by_person,
+            bank_usage_by_person,
             state_by_area.get(area.id),
             today=today,
         )
@@ -465,6 +490,8 @@ def management_vacation_context(vacation_year, user, today=None):
                 year,
             )
             remaining = max(0, entitlement - len(selected))
+            person_conversions = conversions_by_person.get(person.id, [])
+            remaining = max(0, remaining - len(person_conversions))
             owner_can_write = bool(
                 actor.is_grandmaster
                 or (actor.person and actor.person.id == person.id)
@@ -475,6 +502,27 @@ def management_vacation_context(vacation_year, user, today=None):
                     "entitlement": entitlement,
                     "remaining": remaining,
                     "selections": selected,
+                    "split_conversions": [
+                        {
+                            "conversion": conversion,
+                            "scheduled_days": [
+                                day for day in conversion.days if day.status == "scheduled"
+                            ],
+                            "remaining_days": 5
+                            - sum(1 for day in conversion.days if day.status == "scheduled"),
+                        }
+                        for conversion in person_conversions
+                    ],
+                    "split_day_balance": sum(
+                        5 - sum(1 for day in conversion.days if day.status == "scheduled")
+                        for conversion in person_conversions
+                    ),
+                    "can_split": _can_manage_split_days_for_area(
+                        actor, area.id, manager_only=True
+                    ),
+                    "can_manage_split_days": _can_manage_split_days_for_area(
+                        actor, area.id
+                    ),
                     "is_active_turn": person.id == turn.current_person_id,
                     "can_select": owner_can_write
                     and _turn_allows_person(turn, person, current_person)
@@ -684,6 +732,7 @@ def add_management_weeks(
     existing_by_week = {row.week_ending: row for row in existing_rows}
     if any(row.cancelled_at is None for row in existing_rows):
         raise ValueError("One of the selected weeks is already in this vacation bank.")
+    _ensure_weeks_have_no_split_days(person.id, normalized_weeks)
     current_selections = all_person_selections.get(person.id, [])
     remaining = _management_remaining_for_person(person, year, current_selections)
     if len(normalized_weeks) > remaining:
@@ -1128,6 +1177,8 @@ def add_union_week(
     active_selections = pool["active_selections_by_person"].get(person.id, ())
     entitlement = union_vacation_entitlement(person.seniority_date, year)
     used_bank = sum(1 for row in active_selections if row.bank_type == bank_type)
+    if bank_type == "optional":
+        used_bank += _active_conversion_count(person.id, year, "union")
     available_bank = (
         entitlement.regular_weeks
         if bank_type == "regular"
@@ -1148,6 +1199,7 @@ def add_union_week(
     )
     if existing and existing.status in VACATION_UNION_ACTIVE_SELECTION_STATUSES:
         raise ValueError("The employee already has a selection for this week.")
+    _ensure_weeks_have_no_split_days(person.id, [week])
 
     capacity = union_whole_week_capacity(
         len(pool["official_members_by_calendar"].get(locked_calendar.id, ())),
@@ -1189,6 +1241,236 @@ def add_union_week(
         db.session.add(selection)
     db.session.flush()
     return selection
+
+
+def split_management_week(
+    person,
+    vacation_year,
+    user,
+    *,
+    selection=None,
+    today=None,
+):
+    """Convert one Management week (selected future or unused bank) into five days."""
+    year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
+    person = _locked_management_person(person)
+    hierarchy = vacation_hierarchy()
+    area = management_primary_area(person, hierarchy)
+    if not area:
+        raise ValueError("The selected person does not have a primary Management area.")
+    actor = vacation_actor(user, hierarchy)
+    if not _can_manage_split_days(actor, person, "management", manager_only=True):
+        raise ValueError("Only an authorized Manager may split Management vacation weeks.")
+    _lock_management_area(area.id)
+    source = None
+    if selection:
+        source = (
+            StaffingVacationManagementSelection.query.filter_by(
+                id=_positive_int(getattr(selection, "id", selection), "selection"),
+                staffing_person_id=person.id,
+                vacation_year=year,
+                cancelled_at=None,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not source:
+            raise ValueError("The Management vacation week is no longer available to split.")
+        if source.week_ending - timedelta(days=6) <= today:
+            raise ValueError("A started or past Management vacation week cannot be split.")
+    else:
+        bank_usage = _management_active_selections_by_person(year).get(person.id, ())
+        if _management_remaining_for_person(person, year, bank_usage) <= 0:
+            raise ValueError("The employee has no unused Management vacation week to split.")
+
+    now = datetime.utcnow()
+    if source:
+        source.cancelled_at = now
+        source.cancelled_by_user_id = getattr(user, "id", None)
+        source.cancellation_reason = "split"
+        source.updated_at = now
+    conversion = StaffingVacationWeekConversion(
+        staffing_person_id=person.id,
+        vacation_year=year,
+        program="management",
+        source_management_selection_id=source.id if source else None,
+        converted_by_user_id=getattr(user, "id", None),
+        converted_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(conversion)
+    db.session.flush()
+    return conversion
+
+
+def split_union_optional_week(
+    calendar,
+    person,
+    vacation_year,
+    user,
+    *,
+    selection=None,
+    today=None,
+):
+    """Convert only one Union Optional Week into five split vacation days."""
+    year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
+    calendar = _locked_union_calendar(calendar, year)
+    person = _locked_union_person(person)
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    if _union_actor_entry_status(actor, calendar) != "approved":
+        raise ValueError("Only an authorized FT Supervisor or Manager may split the Optional Week.")
+    pool = _union_pool_data(year, hierarchy=hierarchy)
+    if pool["official_calendar_by_person"].get(person.id) != calendar.id:
+        raise ValueError("This is not the employee's Official Union vacation calendar.")
+    source = None
+    if selection:
+        source = (
+            StaffingVacationUnionSelection.query.filter(
+                StaffingVacationUnionSelection.id
+                == _positive_int(getattr(selection, "id", selection), "selection"),
+                StaffingVacationUnionSelection.staffing_person_id == person.id,
+                StaffingVacationUnionSelection.vacation_year == year,
+                StaffingVacationUnionSelection.status.in_(
+                    VACATION_UNION_ACTIVE_SELECTION_STATUSES
+                ),
+            )
+            .with_for_update()
+            .first()
+        )
+        if not source:
+            raise ValueError("The Union vacation week is no longer available to split.")
+        if source.bank_type != "optional":
+            raise ValueError("Regular Union vacation weeks cannot be split.")
+        if source.week_ending - timedelta(days=6) <= today:
+            raise ValueError("A started or past Optional Week cannot be split.")
+    else:
+        optional_used = sum(
+            1
+            for row in pool["active_selections_by_person"].get(person.id, ())
+            if row.bank_type == "optional"
+        ) + _active_conversion_count(person.id, year, "union")
+        if optional_used >= 1:
+            raise ValueError("The employee has no unused Optional Week to split.")
+
+    now = datetime.utcnow()
+    if source:
+        source.status = "cancelled"
+        source.cancelled_by_user_id = getattr(user, "id", None)
+        source.cancelled_at = now
+        source.updated_at = now
+    conversion = StaffingVacationWeekConversion(
+        staffing_person_id=person.id,
+        vacation_year=year,
+        program="union",
+        source_union_selection_id=source.id if source else None,
+        converted_by_user_id=getattr(user, "id", None),
+        converted_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(conversion)
+    db.session.flush()
+    return conversion
+
+
+def schedule_split_vacation_day(
+    conversion,
+    vacation_date,
+    user,
+    *,
+    capacity_override=False,
+):
+    """Schedule one split day with reusable person/day exclusivity."""
+    conversion = _locked_active_conversion(conversion)
+    day = _normalize_vacation_date(conversion.vacation_year, vacation_date)
+    person = _locked_person(conversion.staffing_person_id)
+    actor, calendar = _authorize_split_day_write(conversion, person, user)
+    active_days = _locked_conversion_days(conversion.id)
+    if len(active_days) >= 5:
+        raise ValueError("No split vacation days remain available.")
+    _ensure_time_off_day_available(person.id, day)
+
+    if conversion.program == "union":
+        calendar = _locked_union_calendar(calendar.id, conversion.vacation_year)
+        pool = _union_pool_data(conversion.vacation_year)
+        calendar_id = pool["official_calendar_by_person"].get(person.id)
+        if not calendar_id or not calendar or calendar.id != calendar_id:
+            raise ValueError("The employee does not currently have this Official Union calendar.")
+        capacity = union_single_day_capacity(
+            len(pool["official_members_by_calendar"].get(calendar.id, ()))
+        )
+        used = _union_day_usage(conversion.vacation_year, pool).get(
+            (calendar.id, day), 0
+        )
+        if used >= capacity.capacity and not _boolean(capacity_override):
+            raise ValueError("Union single-day capacity is full; confirm a one-time override.")
+        if _boolean(capacity_override) and not _can_override_split_capacity(actor):
+            raise ValueError("PT Supervisors cannot override Union vacation capacity.")
+
+    now = datetime.utcnow()
+    row = StaffingVacationDaySelection(
+        conversion_id=conversion.id,
+        staffing_person_id=person.id,
+        vacation_year=conversion.vacation_year,
+        vacation_date=day,
+        item_type="split_vacation",
+        status="scheduled",
+        entered_by_user_id=getattr(user, "id", None),
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(row)
+    db.session.flush()
+    return row
+
+
+def cancel_split_vacation_day(day_selection, user):
+    """Cancel or correct one split day, including an erroneous past entry."""
+    row = (
+        StaffingVacationDaySelection.query.filter_by(
+            id=_positive_int(getattr(day_selection, "id", day_selection), "split day"),
+            status="scheduled",
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The split vacation day is no longer scheduled.")
+    conversion = _locked_active_conversion(row.conversion_id)
+    person = _locked_person(row.staffing_person_id)
+    _authorize_split_day_write(conversion, person, user)
+    now = datetime.utcnow()
+    row.status = "cancelled"
+    row.cancelled_by_user_id = getattr(user, "id", None)
+    row.cancelled_at = now
+    row.updated_at = now
+    db.session.flush()
+    return row
+
+
+def recombine_split_vacation_week(conversion, user):
+    """Return an untouched five-day conversion to a generic unused week bank."""
+    conversion = _locked_active_conversion(conversion)
+    person = _locked_person(conversion.staffing_person_id)
+    actor, _calendar = _authorize_split_day_write(
+        conversion, person, user, recombine=True
+    )
+    if conversion.program == "management" and not _can_manage_split_days(
+        actor, person, "management", manager_only=True
+    ):
+        raise ValueError("Only an authorized Manager may recombine Management split days.")
+    if _locked_conversion_days(conversion.id):
+        raise ValueError("Cancel all scheduled split days before recombining the week.")
+    now = datetime.utcnow()
+    conversion.recombined_by_user_id = getattr(user, "id", None)
+    conversion.recombined_at = now
+    conversion.updated_at = now
+    db.session.flush()
+    return conversion
 
 
 def review_union_selection(selection, approve, user, *, capacity_override=False):
@@ -1392,6 +1674,218 @@ def _union_pool_data(vacation_year, *, hierarchy=None, calendars=None):
     }
 
 
+def _union_day_usage(vacation_year, pool):
+    rows = (
+        db.session.query(StaffingVacationDaySelection)
+        .join(
+            StaffingVacationWeekConversion,
+            StaffingVacationWeekConversion.id
+            == StaffingVacationDaySelection.conversion_id,
+        )
+        .filter(
+            StaffingVacationDaySelection.vacation_year == vacation_year,
+            StaffingVacationDaySelection.status == "scheduled",
+            StaffingVacationWeekConversion.program == "union",
+            StaffingVacationWeekConversion.recombined_at.is_(None),
+        )
+        .all()
+    )
+    usage = {}
+    for row in rows:
+        calendar_id = pool["official_calendar_by_person"].get(row.staffing_person_id)
+        if calendar_id:
+            key = (calendar_id, row.vacation_date)
+            usage[key] = usage.get(key, 0) + 1
+    return usage
+
+
+def _locked_union_calendar(calendar, vacation_year):
+    calendar_id = getattr(calendar, "id", calendar)
+    row = (
+        StaffingVacationUnionCalendar.query.options(
+            selectinload(StaffingVacationUnionCalendar.scopes)
+        )
+        .filter_by(
+            id=_positive_int(calendar_id, "Union calendar"),
+            vacation_year=vacation_year,
+            active=True,
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The selected Official Union calendar is not available.")
+    return row
+
+
+def _locked_person(person):
+    person_id = getattr(person, "id", person)
+    row = (
+        StaffingPerson.query.filter_by(id=_positive_int(person_id, "employee"))
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The selected employee was not found.")
+    return row
+
+
+def _locked_management_person(person):
+    row = _locked_person(person)
+    return _management_person(row)
+
+
+def _locked_active_conversion(conversion):
+    conversion_id = getattr(conversion, "id", conversion)
+    row = (
+        StaffingVacationWeekConversion.query.filter_by(
+            id=_positive_int(conversion_id, "split vacation conversion"),
+            recombined_at=None,
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The split vacation week is no longer active.")
+    return row
+
+
+def _locked_conversion_days(conversion_id):
+    return (
+        StaffingVacationDaySelection.query.filter_by(
+            conversion_id=conversion_id,
+            status="scheduled",
+        )
+        .order_by(StaffingVacationDaySelection.vacation_date)
+        .with_for_update()
+        .all()
+    )
+
+
+def _active_conversion_count(person_id, vacation_year, program):
+    return StaffingVacationWeekConversion.query.filter_by(
+        staffing_person_id=person_id,
+        vacation_year=vacation_year,
+        program=program,
+        recombined_at=None,
+    ).count()
+
+
+def _can_manage_split_days(actor, person, program, *, manager_only=False):
+    if actor.is_grandmaster:
+        return True
+    if not actor.person:
+        return False
+    required = (
+        VACATION_SPLIT_MANAGER_CLASSIFICATIONS
+        if manager_only
+        else VACATION_SPLIT_ADMIN_CLASSIFICATIONS
+    )
+    if actor.person.classification not in required:
+        return False
+    if program != "management":
+        return False
+    area = management_primary_area(person)
+    return bool(area and can_edit_management_capacity(actor, area.id))
+
+
+def _can_manage_split_days_for_area(actor, area_id, *, manager_only=False):
+    if actor.is_grandmaster:
+        return True
+    if not actor.person:
+        return False
+    required = (
+        VACATION_SPLIT_MANAGER_CLASSIFICATIONS
+        if manager_only
+        else VACATION_SPLIT_ADMIN_CLASSIFICATIONS
+    )
+    return bool(
+        actor.person.classification in required
+        and can_edit_management_capacity(actor, area_id)
+    )
+
+
+def _authorize_split_day_write(conversion, person, user, *, recombine=False):
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    if conversion.program == "management":
+        if not _can_manage_split_days(actor, person, "management"):
+            raise ValueError("You do not have authority to manage these split vacation days.")
+        return actor, None
+    pool = _union_pool_data(conversion.vacation_year, hierarchy=hierarchy)
+    calendar_id = pool["official_calendar_by_person"].get(person.id)
+    calendar = pool["calendar_by_id"].get(calendar_id)
+    if not calendar or _union_actor_entry_status(actor, calendar) != "approved":
+        action = "recombine" if recombine else "manage"
+        raise ValueError(
+            f"Only an authorized FT Supervisor or Manager may {action} Union split days."
+        )
+    return actor, calendar
+
+
+def _can_override_split_capacity(actor):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification in VACATION_SPLIT_ADMIN_CLASSIFICATIONS
+        )
+    )
+
+
+def _normalize_vacation_date(vacation_year, value):
+    try:
+        day = value if isinstance(value, date) else date.fromisoformat(str(value))
+    except (TypeError, ValueError) as error:
+        raise ValueError("Select a valid vacation date.") from error
+    if day.year != vacation_year:
+        raise ValueError("The vacation date must be within the selected vacation year.")
+    return day
+
+
+def _ensure_time_off_day_available(person_id, vacation_date):
+    if StaffingVacationDaySelection.query.filter_by(
+        staffing_person_id=person_id,
+        vacation_date=vacation_date,
+        status="scheduled",
+    ).first():
+        raise ValueError("The employee already has a time-off item for this date.")
+    latest_week_ending = vacation_date + timedelta(days=6)
+    management_overlap = StaffingVacationManagementSelection.query.filter(
+        StaffingVacationManagementSelection.staffing_person_id == person_id,
+        StaffingVacationManagementSelection.cancelled_at.is_(None),
+        StaffingVacationManagementSelection.week_ending.between(
+            vacation_date, latest_week_ending
+        ),
+    ).first()
+    union_overlap = StaffingVacationUnionSelection.query.filter(
+        StaffingVacationUnionSelection.staffing_person_id == person_id,
+        StaffingVacationUnionSelection.status.in_(
+            VACATION_UNION_ACTIVE_SELECTION_STATUSES
+        ),
+        StaffingVacationUnionSelection.week_ending.between(
+            vacation_date, latest_week_ending
+        ),
+    ).first()
+    if management_overlap or union_overlap:
+        raise ValueError("The employee already has a whole vacation week covering this date.")
+
+
+def _ensure_weeks_have_no_split_days(person_id, week_endings):
+    ranges = [
+        StaffingVacationDaySelection.vacation_date.between(
+            week_ending - timedelta(days=6), week_ending
+        )
+        for week_ending in week_endings
+    ]
+    if ranges and StaffingVacationDaySelection.query.filter(
+        StaffingVacationDaySelection.staffing_person_id == person_id,
+        StaffingVacationDaySelection.status == "scheduled",
+        or_(*ranges),
+    ).first():
+        raise ValueError("A split vacation day already exists within the selected week.")
+
+
 def _union_actor_entry_status(actor, calendar):
     if not calendar or not calendar.active:
         return None
@@ -1460,6 +1954,26 @@ def union_calendars_context(vacation_year, user):
         .all()
     )
     pool = _union_pool_data(year, hierarchy=hierarchy, calendars=calendars)
+    union_conversions = []
+    if pool["official_calendar_by_person"]:
+        union_conversions = (
+            StaffingVacationWeekConversion.query.options(
+                selectinload(StaffingVacationWeekConversion.days)
+            )
+            .filter_by(vacation_year=year, program="union", recombined_at=None)
+            .order_by(StaffingVacationWeekConversion.id)
+            .all()
+        )
+    conversions_by_person = {}
+    for conversion in union_conversions:
+        conversions_by_person.setdefault(conversion.staffing_person_id, []).append(
+            conversion
+        )
+    daily_usage = (
+        _union_day_usage(year, pool)
+        if pool["official_calendar_by_person"]
+        else {}
+    )
     weeks = vacation_year_weeks(year)
 
     calendar_rows = []
@@ -1483,6 +1997,7 @@ def union_calendars_context(vacation_year, user):
             else "ALL / MULTIPLE DEPARTMENTS"
         )
         entry_status = _union_actor_entry_status(actor, calendar)
+        daily_capacity = union_single_day_capacity(len(members))
         week_rows = []
         week_by_ending = {}
         for week in weeks:
@@ -1514,6 +2029,8 @@ def union_calendars_context(vacation_year, user):
             optional_used = sum(
                 1 for selection in selections if selection.bank_type == "optional"
             )
+            person_conversions = conversions_by_person.get(person.id, [])
+            optional_used += len(person_conversions)
             selection_rows = []
             for selection in selections:
                 week_row = week_by_ending.get(selection.week_ending)
@@ -1546,6 +2063,23 @@ def union_calendars_context(vacation_year, user):
                         entitlement.optional_weeks - optional_used,
                     ),
                     "selections": selection_rows,
+                    "split_conversions": [
+                        {
+                            "conversion": conversion,
+                            "scheduled_days": [
+                                day for day in conversion.days if day.status == "scheduled"
+                            ],
+                            "remaining_days": 5
+                            - sum(1 for day in conversion.days if day.status == "scheduled"),
+                        }
+                        for conversion in person_conversions
+                    ],
+                    "split_day_balance": sum(
+                        5 - sum(1 for day in conversion.days if day.status == "scheduled")
+                        for conversion in person_conversions
+                    ),
+                    "can_split_optional": entry_status == "approved",
+                    "can_manage_split_days": entry_status == "approved",
                     "can_add": bool(
                         calendar.active
                         and entry_status
@@ -1567,6 +2101,16 @@ def union_calendars_context(vacation_year, user):
                 "person_rows": person_rows,
                 "payroll_count": len(members),
                 "single_day_capacity": union_single_day_capacity(len(members)),
+                "daily_usage": {
+                    day: used
+                    for (calendar_id, day), used in daily_usage.items()
+                    if calendar_id == calendar.id
+                },
+                "daily_over": any(
+                    used > daily_capacity.capacity
+                    for (calendar_id, _day), used in daily_usage.items()
+                    if calendar_id == calendar.id
+                ),
                 "can_edit": can_edit_union_scope(actor, scope_ids),
                 "entry_status": entry_status,
                 "can_override": entry_status == "approved",
@@ -1729,6 +2273,13 @@ def _management_active_selections_by_person(vacation_year):
     )
     result = {}
     for row in rows:
+        result.setdefault(row.staffing_person_id, []).append(row)
+    conversions = StaffingVacationWeekConversion.query.filter_by(
+        vacation_year=normalize_vacation_year(vacation_year),
+        program="management",
+        recombined_at=None,
+    ).all()
+    for row in conversions:
         result.setdefault(row.staffing_person_id, []).append(row)
     return result
 

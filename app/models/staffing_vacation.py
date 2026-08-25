@@ -157,6 +157,122 @@ class StaffingVacationUnionSelection(db.Model):
     cancelled_by_user = db.relationship("User", foreign_keys=[cancelled_by_user_id])
 
 
+class StaffingVacationWeekConversion(db.Model):
+    """One durable whole-week entitlement converted into five split days."""
+
+    __tablename__ = "staffing_vacation_week_conversions"
+    __table_args__ = (
+        db.CheckConstraint(
+            "vacation_year >= 2000 AND vacation_year <= 2200",
+            name="ck_staffing_vacation_week_conversions_year",
+        ),
+        db.CheckConstraint(
+            "program IN ('management', 'union')",
+            name="ck_staffing_vacation_week_conversions_program",
+        ),
+        db.CheckConstraint(
+            "NOT (source_management_selection_id IS NOT NULL "
+            "AND source_union_selection_id IS NOT NULL)",
+            name="ck_staffing_vacation_week_conversions_one_source",
+        ),
+        db.Index(
+            "ix_staffing_vacation_week_conversions_person_year_program",
+            "staffing_person_id",
+            "vacation_year",
+            "program",
+            "recombined_at",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    staffing_person_id = db.Column(
+        db.Integer, db.ForeignKey("staffing_people.id"), nullable=False, index=True
+    )
+    vacation_year = db.Column(db.Integer, nullable=False, index=True)
+    program = db.Column(db.String(16), nullable=False, index=True)
+    source_management_selection_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_management_selections.id"),
+        nullable=True,
+        unique=True,
+    )
+    source_union_selection_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_union_selections.id"),
+        nullable=True,
+        unique=True,
+    )
+    converted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    converted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    recombined_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    recombined_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    person = db.relationship("StaffingPerson")
+    source_management_selection = db.relationship("StaffingVacationManagementSelection")
+    source_union_selection = db.relationship("StaffingVacationUnionSelection")
+    days = db.relationship(
+        "StaffingVacationDaySelection",
+        back_populates="conversion",
+        cascade="all, delete-orphan",
+        order_by="StaffingVacationDaySelection.vacation_date",
+    )
+
+
+class StaffingVacationDaySelection(db.Model):
+    """Sparse reusable person/day time-off boundary; split vacation is first type."""
+
+    __tablename__ = "staffing_vacation_day_selections"
+    __table_args__ = (
+        db.CheckConstraint(
+            "vacation_year >= 2000 AND vacation_year <= 2200",
+            name="ck_staffing_vacation_day_selections_year",
+        ),
+        db.CheckConstraint(
+            "item_type IN ('split_vacation')",
+            name="ck_staffing_vacation_day_selections_item_type",
+        ),
+        db.CheckConstraint(
+            "status IN ('scheduled', 'cancelled')",
+            name="ck_staffing_vacation_day_selections_status",
+        ),
+        db.Index(
+            "ix_staffing_vacation_day_selections_person_date_status",
+            "staffing_person_id",
+            "vacation_date",
+            "status",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversion_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_week_conversions.id"),
+        nullable=False,
+        index=True,
+    )
+    staffing_person_id = db.Column(
+        db.Integer, db.ForeignKey("staffing_people.id"), nullable=False, index=True
+    )
+    vacation_year = db.Column(db.Integer, nullable=False, index=True)
+    vacation_date = db.Column(db.Date, nullable=False, index=True)
+    item_type = db.Column(db.String(32), nullable=False, default="split_vacation")
+    status = db.Column(db.String(16), nullable=False, default="scheduled", index=True)
+    entered_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancelled_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    conversion = db.relationship("StaffingVacationWeekConversion", back_populates="days")
+    person = db.relationship("StaffingPerson")
+
+
 class StaffingVacationManagementCapacity(db.Model):
     """Whole-week Management limits for one hierarchy area and vacation year."""
 

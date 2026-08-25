@@ -12,6 +12,8 @@ from app.models import (
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
     StaffingVacationUnionSelection,
+    StaffingVacationWeekConversion,
+    StaffingVacationDaySelection,
 )
 
 
@@ -24,6 +26,8 @@ NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationManagementCapacity,
     StaffingVacationManagementWeekOverride,
     StaffingVacationManagementSelection,
+    StaffingVacationWeekConversion,
+    StaffingVacationDaySelection,
     StaffingVacationManagementTurnState,
     StaffingVacationManagementTurnResolution,
 )

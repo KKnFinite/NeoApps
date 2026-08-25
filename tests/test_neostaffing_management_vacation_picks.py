@@ -15,6 +15,8 @@ from app.models import (
     StaffingVacationManagementSelection,
     StaffingVacationManagementTurnResolution,
     StaffingVacationManagementTurnState,
+    StaffingVacationWeekConversion,
+    StaffingVacationDaySelection,
     User,
 )
 from app.services import neostaffing_vacation as vacation_service
@@ -427,6 +429,130 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             40,
         )
         self.assertLessEqual(select_count, 10)
+
+    def test_management_split_schedule_cancel_and_recombine(self):
+        person, person_user = self._management_user(
+            "MVS1", "Split", "Supervisor", "1990-01-01", "full_time_supervisor"
+        )
+        _manager, manager_user = self._management_user(
+            "MVS2", "Area", "Manager", "1990-01-01", "manager"
+        )
+        self._capacity(self.units["ramp"], 2)
+        db.session.commit()
+        selected = vacation_service.add_management_week(
+            person, self.YEAR, date(2027, 7, 3), person_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+
+        conversion = vacation_service.split_management_week(
+            person,
+            self.YEAR,
+            manager_user,
+            selection=selected,
+            today=date(2027, 1, 1),
+        )
+        db.session.commit()
+        self.assertEqual(conversion.program, "management")
+        self.assertIsNotNone(selected.cancelled_at)
+        self.assertEqual(selected.cancellation_reason, "split")
+        self.assertEqual(len(conversion.days), 0)
+        context = vacation_service.management_vacation_context(
+            self.YEAR, manager_user, today=date(2027, 1, 1)
+        )
+        person_row = next(
+            row for row in self._area_row(context, self.units["ramp"])["person_rows"]
+            if row["person"].id == person.id
+        )
+        self.assertEqual(person_row["split_day_balance"], 5)
+
+        day = vacation_service.schedule_split_vacation_day(
+            conversion, date(2027, 2, 10), manager_user
+        )
+        db.session.commit()
+        self.assertEqual(day.status, "scheduled")
+        context = vacation_service.management_vacation_context(
+            self.YEAR, manager_user, today=date(2027, 1, 1)
+        )
+        person_row = next(
+            row for row in self._area_row(context, self.units["ramp"])["person_rows"]
+            if row["person"].id == person.id
+        )
+        self.assertEqual(person_row["split_day_balance"], 4)
+        with self.assertRaisesRegex(ValueError, "time-off item"):
+            vacation_service.schedule_split_vacation_day(
+                conversion, date(2027, 2, 10), manager_user
+            )
+        db.session.rollback()
+        vacation_service.cancel_split_vacation_day(day, manager_user)
+        db.session.commit()
+        self.assertEqual(day.status, "cancelled")
+        self._login(manager_user)
+        rendered = self.client.get(
+            f"/neostaffing/vacation-selection/management?year={self.YEAR}"
+        )
+        self.assertEqual(rendered.status_code, 200)
+        self.assertIn(b"5 / 5 SPLIT DAYS AVAILABLE", rendered.data)
+        vacation_service.recombine_split_vacation_week(conversion, manager_user)
+        db.session.commit()
+        self.assertIsNotNone(conversion.recombined_at)
+
+    def test_management_split_authority_future_boundary_and_consumed_day(self):
+        person, person_user = self._management_user(
+            "MVS3", "Boundary", "Supervisor", "1990-01-01", "full_time_supervisor"
+        )
+        _manager, manager_user = self._management_user(
+            "MVS4", "Boundary", "Manager", "1990-01-01", "manager"
+        )
+        self._capacity(self.units["ramp"], 2)
+        db.session.commit()
+        selected = vacation_service.add_management_week(
+            person, self.YEAR, date(2027, 1, 9), person_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "authorized Manager"):
+            vacation_service.split_management_week(
+                person, self.YEAR, person_user, selection=selected, today=date(2027, 1, 1)
+            )
+        with self.assertRaisesRegex(ValueError, "started or past"):
+            vacation_service.split_management_week(
+                person, self.YEAR, manager_user, selection=selected, today=date(2027, 1, 3)
+            )
+        db.session.rollback()
+
+        conversion = vacation_service.split_management_week(
+            person, self.YEAR, manager_user, today=date(2026, 12, 1)
+        )
+        db.session.commit()
+        past_day = vacation_service.schedule_split_vacation_day(
+            conversion, date(2027, 1, 2), manager_user
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "Cancel all scheduled"):
+            vacation_service.recombine_split_vacation_week(conversion, manager_user)
+        db.session.rollback()
+        vacation_service.cancel_split_vacation_day(past_day, manager_user)
+        vacation_service.recombine_split_vacation_week(conversion, manager_user)
+        db.session.commit()
+        self.assertEqual(StaffingVacationDaySelection.query.count(), 1)
+
+    def test_management_split_route_requires_csrf(self):
+        person, _person_user = self._management_user(
+            "MVS5", "Route", "Supervisor", "1990-01-01", "full_time_supervisor"
+        )
+        _manager, manager_user = self._management_user(
+            "MVS6", "Route", "Manager", "1990-01-01", "manager"
+        )
+        db.session.commit()
+        self._login(manager_user)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = self.client.get(f"/neostaffing/vacation-selection/management?year={self.YEAR}")
+        token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
+        values = {"vacation_year": self.YEAR, "staffing_person_id": person.id}
+        self.assertEqual(self.client.post("/neostaffing/vacation-selection/management/split", data=values).status_code, 400)
+        self.assertEqual(StaffingVacationWeekConversion.query.count(), 0)
+        values["csrf_token"] = token
+        self.assertEqual(self.client.post("/neostaffing/vacation-selection/management/split", data=values).status_code, 302)
+        self.assertEqual(StaffingVacationWeekConversion.query.count(), 1)
 
     def _hierarchy(self):
         night = StaffingUnit(unit_type="sort", name="Night", display_order=1)
