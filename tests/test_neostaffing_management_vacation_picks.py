@@ -1,0 +1,538 @@
+from datetime import date, datetime
+import re
+import unittest
+
+from sqlalchemy import event
+
+from app import create_app
+from app.extensions import db
+from app.models import (
+    PortalAppAccess,
+    StaffingLeadershipAssignment,
+    StaffingPerson,
+    StaffingUnit,
+    StaffingVacationManagementCapacity,
+    StaffingVacationManagementSelection,
+    StaffingVacationManagementTurnResolution,
+    StaffingVacationManagementTurnState,
+    User,
+)
+from app.services import neostaffing_vacation as vacation_service
+from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
+
+
+class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
+    YEAR = 2027
+    OPEN_DAY = date(2026, 11, 1)
+
+    def setUp(self):
+        config = type(
+            "ManagementVacationPicksConfig",
+            (),
+            {
+                "SECRET_KEY": "test",
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            },
+        )
+        self.app = create_app(config)
+        self.context = self.app.app_context()
+        self.context.push()
+        db.create_all()
+        ensure_default_permission_rules()
+        self.client = self.app.test_client()
+        self.units = self._hierarchy()
+        db.session.commit()
+
+    def tearDown(self):
+        db.session.remove()
+        db.drop_all()
+        self.context.pop()
+
+    def test_management_entitlement_thresholds_use_seniority_date(self):
+        year_end = date(self.YEAR, 12, 31)
+        cases = (
+            (date(self.YEAR, 1, 1), 2),
+            (date(year_end.year - 5, 12, 31), 3),
+            (date(year_end.year - 10, 12, 31), 4),
+            (date(year_end.year - 20, 12, 31), 5),
+            (date(year_end.year - 25, 12, 31), 6),
+        )
+        for seniority_date, expected in cases:
+            with self.subTest(seniority_date=seniority_date):
+                self.assertEqual(
+                    vacation_service.management_vacation_entitlement(
+                        seniority_date,
+                        self.YEAR,
+                    ),
+                    expected,
+                )
+
+    def test_initial_turn_seniority_junior_block_pass_and_later_pick(self):
+        senior, senior_user = self._management_user(
+            "MV1", "Zoe", "Able", "1990-01-01", "full_time_supervisor"
+        )
+        tied_first, tied_user = self._management_user(
+            "MV2", "Amy", "Baker", "2000-01-01", "full_time_supervisor"
+        )
+        junior, junior_user = self._management_user(
+            "MV3", "Zed", "Baker", "2000-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 3)
+        db.session.commit()
+
+        context = vacation_service.management_vacation_context(
+            self.YEAR,
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        area = self._area_row(context, self.units["ramp"])
+        self.assertEqual(
+            [row["person"].id for row in area["person_rows"]],
+            [senior.id, tied_first.id, junior.id],
+        )
+        self.assertEqual(area["turn"].current_person_id, senior.id)
+
+        with self.assertRaisesRegex(ValueError, "has not reached"):
+            vacation_service.add_management_week(
+                junior,
+                self.YEAR,
+                date(2027, 1, 2),
+                junior_user,
+                today=self.OPEN_DAY,
+            )
+        self.assertEqual(StaffingVacationManagementSelection.query.count(), 0)
+
+        vacation_service.pass_management_turn(
+            self.YEAR,
+            self.units["ramp"].id,
+            senior,
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        state = StaffingVacationManagementTurnState.query.one()
+        self.assertEqual(state.current_person_id, tied_first.id)
+        self.assertEqual(state.resolutions[0].outcome, "passed")
+
+        vacation_service.add_management_week(
+            senior,
+            self.YEAR,
+            date(2027, 1, 2),
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(
+            vacation_service.management_vacation_entitlement(
+                senior.seniority_date,
+                self.YEAR,
+            )
+            - 1,
+            self._remaining(senior),
+        )
+
+    def test_manual_pass_authority_allows_ft_and_manager_but_not_pt(self):
+        current, _current_user = self._management_user(
+            "MV10", "Current", "Senior", "1990-01-01", "full_time_supervisor"
+        )
+        ft_admin, ft_user = self._management_user(
+            "MV11", "Admin", "FT", "2000-01-01", "full_time_supervisor"
+        )
+        manager, manager_user = self._management_user(
+            "MV12", "Area", "Manager", "1995-01-01", "manager"
+        )
+        self._capacity(self.units["ramp"], 2)
+        db.session.commit()
+
+        vacation_service.pass_management_turn(
+            self.YEAR,
+            self.units["ramp"].id,
+            current,
+            ft_user,
+            administrative=True,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(
+            StaffingVacationManagementTurnResolution.query.one().outcome,
+            "admin_passed",
+        )
+
+        state = StaffingVacationManagementTurnState.query.one()
+        next_person = db.session.get(StaffingPerson, state.current_person_id)
+        vacation_service.pass_management_turn(
+            self.YEAR,
+            self.units["ramp"].id,
+            next_person,
+            manager_user,
+            administrative=True,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+
+        pt_target, _ = self._management_user(
+            "MV13", "Target", "PT", "1990-01-01", "part_time_supervisor"
+        )
+        pt_actor, pt_user = self._management_user(
+            "MV14", "Actor", "PT", "2000-01-01", "part_time_supervisor"
+        )
+        self._capacity(self.units["blue_department"], 2)
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "do not have authority"):
+            vacation_service.pass_management_turn(
+                self.YEAR,
+                self.units["blue_department"].id,
+                pt_target,
+                pt_user,
+                administrative=True,
+                today=self.OPEN_DAY,
+            )
+
+    def test_capacity_and_bank_are_atomic_and_prevent_double_consumption(self):
+        senior, senior_user = self._management_user(
+            "MV20", "Senior", "One", "1990-01-01", "full_time_supervisor"
+        )
+        junior, junior_user = self._management_user(
+            "MV21", "Junior", "Two", "2000-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 1)
+        db.session.commit()
+        full_week = date(2027, 2, 6)
+        other_week = date(2027, 2, 13)
+
+        vacation_service.add_management_week(
+            senior,
+            self.YEAR,
+            full_week,
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        vacation_service.pass_management_turn(
+            self.YEAR,
+            self.units["ramp"].id,
+            senior,
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "capacity is full"):
+            vacation_service.add_management_weeks(
+                junior,
+                self.YEAR,
+                [other_week, full_week],
+                junior_user,
+                today=self.OPEN_DAY,
+            )
+        db.session.rollback()
+        self.assertEqual(
+            StaffingVacationManagementSelection.query.filter_by(
+                staffing_person_id=junior.id
+            ).count(),
+            0,
+        )
+        self.assertEqual(StaffingVacationManagementSelection.query.count(), 1)
+
+    def test_transfer_follows_person_grandfathers_pick_and_advances_old_turn(self):
+        senior, senior_user = self._management_user(
+            "MV30", "Senior", "Transfer", "1990-01-01", "full_time_supervisor"
+        )
+        junior, _junior_user = self._management_user(
+            "MV31", "Junior", "Remain", "2000-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 1)
+        self._capacity(self.units["hub"], 0)
+        db.session.commit()
+        week = date(2027, 3, 6)
+        vacation_service.add_management_week(
+            senior,
+            self.YEAR,
+            week,
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        old_state = StaffingVacationManagementTurnState.query.one()
+        self.assertEqual(old_state.current_person_id, senior.id)
+
+        old_assignment = StaffingLeadershipAssignment.query.filter_by(
+            person_id=senior.id,
+            active=True,
+        ).one()
+        old_assignment.active = False
+        db.session.add(
+            StaffingLeadershipAssignment(
+                person=senior,
+                unit=self.units["hub_department"],
+                leadership_level="department",
+                active=True,
+            )
+        )
+        db.session.flush()
+        vacation_service.reconcile_management_person_state(
+            senior,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+
+        self.assertEqual(old_state.current_person_id, junior.id)
+        context = vacation_service.management_vacation_context(
+            self.YEAR,
+            senior_user,
+            today=self.OPEN_DAY,
+        )
+        ramp = self._area_row(context, self.units["ramp"])
+        hub = self._area_row(context, self.units["hub"])
+        self.assertEqual(ramp["week_rows"][9]["used"], 0)
+        selected_week = next(row for row in hub["week_rows"] if row["week"].week_ending == week)
+        self.assertEqual((selected_week["used"], selected_week["limit"]), (1, 0))
+        self.assertEqual(StaffingVacationManagementSelection.query.count(), 1)
+
+    def test_completed_turn_does_not_reopen_for_new_supervisor(self):
+        only, only_user = self._management_user(
+            "MV40", "Only", "Existing", "1995-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        db.session.commit()
+        vacation_service.pass_management_turn(
+            self.YEAR,
+            self.units["ramp"].id,
+            only,
+            only_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        state = StaffingVacationManagementTurnState.query.one()
+        self.assertIsNotNone(state.completed_at)
+
+        newcomer, newcomer_user = self._management_user(
+            "MV41", "New", "Supervisor", "1980-01-01", "full_time_supervisor"
+        )
+        context = vacation_service.management_vacation_context(
+            self.YEAR,
+            newcomer_user,
+            today=self.OPEN_DAY,
+        )
+        row = self._area_row(context, self.units["ramp"])
+        self.assertTrue(row["turn"].completed)
+        self.assertIsNone(row["turn"].current_person_id)
+        vacation_service.add_management_week(
+            newcomer,
+            self.YEAR,
+            date(2027, 4, 3),
+            newcomer_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(self._remaining(newcomer), 5)
+
+    def test_termination_removes_future_capacity_but_preserves_past_history(self):
+        person, user = self._management_user(
+            "MV50", "Departing", "Supervisor", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        db.session.commit()
+        past_week = date(2027, 1, 2)
+        future_week = date(2027, 7, 3)
+        vacation_service.add_management_weeks(
+            person,
+            self.YEAR,
+            [past_week, future_week],
+            user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+
+        person.active = False
+        vacation_service.reconcile_management_person_state(
+            person,
+            today=date(2027, 6, 15),
+        )
+        db.session.commit()
+        rows = StaffingVacationManagementSelection.query.order_by(
+            StaffingVacationManagementSelection.week_ending
+        ).all()
+        self.assertIsNone(rows[0].cancelled_at)
+        self.assertIsNotNone(rows[1].cancelled_at)
+        self.assertEqual(rows[1].cancellation_reason, "left_management")
+        self.assertEqual(len(rows), 2)
+
+    def test_management_pick_routes_enforce_csrf_and_server_authority(self):
+        senior, user = self._management_user(
+            "MV60", "Route", "Supervisor", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 1, year=2026)
+        db.session.commit()
+        self._login(user)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = self.client.get("/neostaffing/vacation-selection/management?year=2026")
+        token = re.search(
+            r'<meta name="csrf-token" content="([^"]+)">',
+            page.get_data(as_text=True),
+        ).group(1)
+        values = {
+            "vacation_year": "2026",
+            "staffing_person_id": str(senior.id),
+            "week_endings": "2026-12-05",
+        }
+        missing = self.client.post(
+            "/neostaffing/vacation-selection/management/select",
+            data=values,
+        )
+        self.assertEqual(missing.status_code, 400)
+        self.assertEqual(StaffingVacationManagementSelection.query.count(), 0)
+        values["csrf_token"] = token
+        saved = self.client.post(
+            "/neostaffing/vacation-selection/management/select",
+            data=values,
+        )
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(StaffingVacationManagementSelection.query.count(), 1)
+
+    def test_management_context_queries_remain_bounded_as_roster_grows(self):
+        viewer = None
+        for index in range(40):
+            _person, user = self._management_user(
+                f"MVQ{index:02d}",
+                f"First{index:02d}",
+                f"Last{index:02d}",
+                f"{1980 + index % 20}-01-01",
+                "full_time_supervisor",
+            )
+            viewer = viewer or user
+        self._capacity(self.units["ramp"], 4)
+        db.session.commit()
+        db.session.expire_all()
+        select_count = 0
+
+        def count_selects(_connection, _cursor, statement, _parameters, _context, _many):
+            nonlocal select_count
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_count += 1
+
+        event.listen(db.engine, "before_cursor_execute", count_selects)
+        try:
+            context = vacation_service.management_vacation_context(
+                self.YEAR,
+                viewer,
+                today=self.OPEN_DAY,
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", count_selects)
+
+        self.assertEqual(
+            len(self._area_row(context, self.units["ramp"])["person_rows"]),
+            40,
+        )
+        self.assertLessEqual(select_count, 10)
+
+    def _hierarchy(self):
+        night = StaffingUnit(unit_type="sort", name="Night", display_order=1)
+        ramp = StaffingUnit(unit_type="operation", name="Ramp", parent=night, display_order=1)
+        hub = StaffingUnit(unit_type="operation", name="Hub", parent=night, display_order=2)
+        blue = StaffingUnit(unit_type="department", name="Blue", parent=ramp, display_order=1)
+        hub_department = StaffingUnit(unit_type="department", name="Hub Ops", parent=hub, display_order=1)
+        db.session.add_all([night, ramp, hub, blue, hub_department])
+        db.session.flush()
+        return {
+            "night": night,
+            "ramp": ramp,
+            "hub": hub,
+            "blue_department": blue,
+            "hub_department": hub_department,
+        }
+
+    def _management_user(
+        self,
+        employee_id,
+        first_name,
+        last_name,
+        seniority,
+        classification,
+        unit=None,
+        app_role="simulator",
+    ):
+        person = StaffingPerson(
+            employee_id=employee_id,
+            first_name=first_name,
+            last_name=last_name,
+            seniority_date=date.fromisoformat(seniority),
+            classification=classification,
+            employee_status="active",
+            active=True,
+        )
+        db.session.add(person)
+        db.session.flush()
+        leadership_unit = unit or self.units["blue_department"]
+        db.session.add(
+            StaffingLeadershipAssignment(
+                person=person,
+                unit=leadership_unit,
+                leadership_level=leadership_unit.unit_type,
+                active=True,
+            )
+        )
+        user = User(
+            username=f"user_{employee_id.lower()}",
+            email=f"{employee_id.lower()}@example.com",
+            first_name=first_name,
+            last_name=last_name,
+            full_name=f"{first_name} {last_name}",
+            employee_id=employee_id,
+            role="watcher",
+            is_active=True,
+            email_verified_at=datetime.utcnow(),
+        )
+        set_user_password(user, "TestPassword123!")
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neostaffing",
+                status="approved",
+                role=app_role,
+                is_active=True,
+                approved_at=datetime.utcnow(),
+            )
+        )
+        db.session.commit()
+        return person, user
+
+    def _capacity(self, area, limit, year=None):
+        db.session.add(
+            StaffingVacationManagementCapacity(
+                vacation_year=year or self.YEAR,
+                area_unit_id=area.id,
+                normal_limit=limit,
+                one_pinned_limit=limit,
+                two_plus_pinned_limit=limit,
+            )
+        )
+
+    def _remaining(self, person):
+        active = StaffingVacationManagementSelection.query.filter_by(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            cancelled_at=None,
+        ).count()
+        return vacation_service.management_vacation_entitlement(
+            person.seniority_date,
+            self.YEAR,
+        ) - active
+
+    @staticmethod
+    def _area_row(context, area):
+        return next(row for row in context["areas"] if row["area"].id == area.id)
+
+    def _login(self, user):
+        return self.client.post(
+            "/login",
+            data={"username": user.username, "password": "TestPassword123!"},
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

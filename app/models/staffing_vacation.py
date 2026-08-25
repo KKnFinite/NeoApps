@@ -183,3 +183,142 @@ class StaffingVacationManagementWeekOverride(db.Model):
 
     area = db.relationship("StaffingUnit", foreign_keys=[area_unit_id])
     created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
+
+
+class StaffingVacationManagementSelection(db.Model):
+    """Durable whole-week Management vacation selection for a person/year."""
+
+    __tablename__ = "staffing_vacation_management_selections"
+    __table_args__ = (
+        db.CheckConstraint(
+            "vacation_year >= 2000 AND vacation_year <= 2200",
+            name="ck_staffing_vacation_management_selections_year",
+        ),
+        db.UniqueConstraint(
+            "staffing_person_id",
+            "vacation_year",
+            "week_ending",
+            name="uq_staffing_vacation_management_selections_person_year_week",
+        ),
+        db.Index(
+            "ix_staffing_vacation_management_selections_year_week",
+            "vacation_year",
+            "week_ending",
+            "cancelled_at",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    staffing_person_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_people.id"),
+        nullable=False,
+        index=True,
+    )
+    vacation_year = db.Column(db.Integer, nullable=False, index=True)
+    week_ending = db.Column(db.Date, nullable=False, index=True)
+    selected_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancelled_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancelled_at = db.Column(db.DateTime, nullable=True, index=True)
+    cancellation_reason = db.Column(db.String(40), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    person = db.relationship("StaffingPerson")
+    selected_by_user = db.relationship("User", foreign_keys=[selected_by_user_id])
+    cancelled_by_user = db.relationship("User", foreign_keys=[cancelled_by_user_id])
+
+
+class StaffingVacationManagementTurnState(db.Model):
+    """Minimal persisted cursor for one area's initial seniority turn."""
+
+    __tablename__ = "staffing_vacation_management_turn_states"
+    __table_args__ = (
+        db.CheckConstraint(
+            "vacation_year >= 2000 AND vacation_year <= 2200",
+            name="ck_staffing_vacation_management_turn_states_year",
+        ),
+        db.UniqueConstraint(
+            "vacation_year",
+            "area_unit_id",
+            name="uq_staffing_vacation_management_turn_states_year_area",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    vacation_year = db.Column(db.Integer, nullable=False, index=True)
+    area_unit_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_units.id"),
+        nullable=False,
+        index=True,
+    )
+    current_person_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_people.id"),
+        nullable=True,
+        index=True,
+    )
+    started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True, index=True)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    area = db.relationship("StaffingUnit", foreign_keys=[area_unit_id])
+    current_person = db.relationship("StaffingPerson", foreign_keys=[current_person_id])
+    resolutions = db.relationship(
+        "StaffingVacationManagementTurnResolution",
+        back_populates="turn_state",
+        cascade="all, delete-orphan",
+        order_by="StaffingVacationManagementTurnResolution.id",
+    )
+
+
+class StaffingVacationManagementTurnResolution(db.Model):
+    """Resolved initial-turn participation without persisting roster membership."""
+
+    __tablename__ = "staffing_vacation_management_turn_resolutions"
+    __table_args__ = (
+        db.CheckConstraint(
+            "outcome IN ('completed', 'passed', 'admin_passed', 'transferred', 'departed')",
+            name="ck_staffing_vacation_management_turn_resolutions_outcome",
+        ),
+        db.UniqueConstraint(
+            "turn_state_id",
+            "staffing_person_id",
+            name="uq_staffing_vacation_management_turn_resolutions_state_person",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    turn_state_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_management_turn_states.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    staffing_person_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_people.id"),
+        nullable=False,
+        index=True,
+    )
+    outcome = db.Column(db.String(24), nullable=False)
+    resolved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    turn_state = db.relationship(
+        "StaffingVacationManagementTurnState",
+        back_populates="resolutions",
+    )
+    person = db.relationship("StaffingPerson")
+    resolved_by_user = db.relationship("User", foreign_keys=[resolved_by_user_id])

@@ -926,6 +926,62 @@ def vacation_management_reduced_capacity():
     )
 
 
+@bp.route("/vacation-selection/management/select", methods=["POST"])
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_select():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        person = db.session.get(
+            StaffingPerson,
+            int(request.form.get("staffing_person_id") or 0),
+        )
+        week_endings = request.form.getlist("week_endings") or [
+            request.form.get("week_ending")
+        ]
+        saved = vacation_service.add_management_weeks(
+            person,
+            vacation_year,
+            week_endings,
+            current_user,
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash(f"Added {len(saved)} Management vacation week(s).", "success")
+    return redirect(
+        url_for("neostaffing.vacation_management", year=vacation_year)
+    )
+
+
+@bp.route("/vacation-selection/management/pass", methods=["POST"])
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_pass():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        person = db.session.get(
+            StaffingPerson,
+            int(request.form.get("staffing_person_id") or 0),
+        )
+        vacation_service.pass_management_turn(
+            vacation_year,
+            request.form.get("area_unit_id"),
+            person,
+            current_user,
+            administrative=request.form.get("administrative") == "1",
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation turn advanced.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_management", year=vacation_year)
+    )
+
+
 @bp.route("/vacation-selection/union")
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_union_calendars():

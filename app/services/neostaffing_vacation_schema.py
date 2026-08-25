@@ -5,6 +5,9 @@ from sqlalchemy import text
 from app.extensions import db
 from app.models import (
     StaffingVacationManagementCapacity,
+    StaffingVacationManagementSelection,
+    StaffingVacationManagementTurnResolution,
+    StaffingVacationManagementTurnState,
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
@@ -18,6 +21,9 @@ NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationUnionCalendarScope,
     StaffingVacationManagementCapacity,
     StaffingVacationManagementWeekOverride,
+    StaffingVacationManagementSelection,
+    StaffingVacationManagementTurnState,
+    StaffingVacationManagementTurnResolution,
 )
 
 

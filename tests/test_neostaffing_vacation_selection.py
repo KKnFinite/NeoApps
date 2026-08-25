@@ -309,7 +309,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertEqual((landing.status_code, management.status_code, union.status_code, editor.status_code), (200, 200, 200, 200))
         self.assertIn(b"MANAGEMENT VACATION", landing.data)
         self.assertIn(b"UNION VACATION CALENDARS", landing.data)
-        self.assertIn(b"DYNAMIC ORG CHART CONTEXT", management.data)
+        self.assertIn(b"DYNAMIC ORG CHART OWNERSHIP", management.data)
         self.assertIn(b"data-vacation-union-editor", editor.data)
         self.assertIn(b"SELECTING A PARENT SELECTS ALL CHILDREN", editor.data)
         self.assertIn(b'aria-current="page"', union.data)

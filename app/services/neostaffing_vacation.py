@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import calendar as calendar_module
 import math
 
@@ -14,6 +14,9 @@ from app.models import (
     StaffingPerson,
     StaffingUnit,
     StaffingVacationManagementCapacity,
+    StaffingVacationManagementSelection,
+    StaffingVacationManagementTurnResolution,
+    StaffingVacationManagementTurnState,
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
@@ -40,6 +43,13 @@ VACATION_MANAGEMENT_CLASSIFICATIONS = frozenset(
         "part_time_supervisor",
         "full_time_supervisor",
         "full_time_specialist",
+        "manager",
+        "division_manager",
+    }
+)
+VACATION_MANAGEMENT_PASS_ADMIN_CLASSIFICATIONS = frozenset(
+    {
+        "full_time_supervisor",
         "manager",
         "division_manager",
     }
@@ -73,6 +83,14 @@ class VacationActor:
     normal_scope_ids: frozenset[int]
     sideways_scope_ids: frozenset[int]
     management_capacity_ids: frozenset[int]
+
+
+@dataclass(frozen=True)
+class ManagementTurnSnapshot:
+    status: str
+    current_person_id: int | None
+    resolved_person_ids: frozenset[int]
+    completed: bool
 
 
 def default_vacation_year(today=None):
@@ -155,6 +173,27 @@ def union_single_day_capacity(payroll_count):
         capacity=max(1, math.floor(payroll * 5 / 100)),
         seasonal=False,
     )
+
+
+def management_vacation_entitlement(seniority_date, vacation_year):
+    """Return whole-week entitlement earned by the end of the vacation year."""
+    year = normalize_vacation_year(vacation_year)
+    if not isinstance(seniority_date, date):
+        raise ValueError("A valid seniority date is required.")
+    service_date = date(year, 12, 31)
+    completed_years = service_date.year - seniority_date.year - (
+        (service_date.month, service_date.day)
+        < (seniority_date.month, seniority_date.day)
+    )
+    if completed_years >= 25:
+        return 6
+    if completed_years >= 20:
+        return 5
+    if completed_years >= 10:
+        return 4
+    if completed_years >= 5:
+        return 3
+    return 2
 
 
 def vacation_hierarchy(include_inactive=False):
@@ -280,27 +319,17 @@ def operation_has_editable_union_scope(actor, operation_id, hierarchy):
     )
 
 
-def management_vacation_context(vacation_year, user):
+def management_vacation_context(vacation_year, user, today=None):
     year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
     hierarchy = vacation_hierarchy()
-    leadership = (
-        StaffingLeadershipAssignment.query.options(
-            joinedload(StaffingLeadershipAssignment.person),
-        )
-        .join(StaffingPerson)
-        .filter(
-            StaffingLeadershipAssignment.active.is_(True),
-            StaffingPerson.active.is_(True),
-            StaffingPerson.classification.in_(VACATION_MANAGEMENT_CLASSIFICATIONS),
-        )
-        .order_by(StaffingLeadershipAssignment.id)
-        .all()
-    )
+    leadership = _management_leadership_rows()
+    actor_employee_id = str(getattr(user, "employee_id", "") or "").casefold()
     actor_rows = [
         row
         for row in leadership
-        if getattr(row.person, "employee_id", "")
-        == str(getattr(user, "employee_id", "") or "")
+        if str(getattr(row.person, "employee_id", "") or "").casefold()
+        == actor_employee_id
     ]
     actor = vacation_actor(user, hierarchy, actor_rows)
     capacity_by_area = {
@@ -314,17 +343,34 @@ def management_vacation_context(vacation_year, user):
         vacation_year=year
     ).all():
         off_weeks_by_area.setdefault(row.area_unit_id, set()).add(row.week_ending)
+    selections = (
+        StaffingVacationManagementSelection.query.filter_by(vacation_year=year)
+        .filter(StaffingVacationManagementSelection.cancelled_at.is_(None))
+        .order_by(
+            StaffingVacationManagementSelection.week_ending,
+            StaffingVacationManagementSelection.id,
+        )
+        .all()
+    )
+    states = (
+        StaffingVacationManagementTurnState.query.options(
+            joinedload(StaffingVacationManagementTurnState.current_person),
+            selectinload(StaffingVacationManagementTurnState.resolutions),
+        )
+        .filter_by(vacation_year=year)
+        .all()
+    )
+    state_by_area = {state.area_unit_id: state for state in states}
+    selections_by_person = {}
+    for selection in selections:
+        selections_by_person.setdefault(selection.staffing_person_id, []).append(selection)
 
-    primary_by_person = {}
-    secondary_by_person = {}
-    for assignment in leadership:
-        if assignment.person_id not in primary_by_person:
-            primary_by_person[assignment.person_id] = assignment
-        else:
-            secondary_by_person.setdefault(assignment.person_id, []).append(assignment)
-
+    primary_by_person, secondary_by_person = _primary_and_secondary_assignments(
+        leadership
+    )
     people_by_area = {}
     secondary_by_area = {}
+    primary_area_by_person = {}
     for person_id, assignment in primary_by_person.items():
         area = management_area_for_assignment(
             assignment.person,
@@ -332,6 +378,7 @@ def management_vacation_context(vacation_year, user):
             hierarchy,
         )
         if area:
+            primary_area_by_person[person_id] = area
             people_by_area.setdefault(area.id, []).append(assignment.person)
         for secondary in secondary_by_person.get(person_id, ()):
             secondary_area = management_area_for_assignment(
@@ -342,6 +389,14 @@ def management_vacation_context(vacation_year, user):
             if secondary_area and (not area or secondary_area.id != area.id):
                 secondary_by_area.setdefault(secondary_area.id, []).append(secondary.person)
 
+    used_by_area_week = {}
+    for selection in selections:
+        area = primary_area_by_person.get(selection.staffing_person_id)
+        if area:
+            key = (area.id, selection.week_ending)
+            used_by_area_week[key] = used_by_area_week.get(key, 0) + 1
+
+    weeks = vacation_year_weeks(year)
     area_rows = []
     for area in hierarchy["units"]:
         if area.unit_type not in VACATION_MANAGEMENT_AREA_TYPES:
@@ -355,13 +410,73 @@ def management_vacation_context(vacation_year, user):
             and not can_edit_management_capacity(actor, area.id)
         ):
             continue
+        turn = management_turn_snapshot(
+            year,
+            primary_people,
+            selections_by_person,
+            state_by_area.get(area.id),
+            today=today,
+        )
+        capacity = capacity_by_area.get(area.id)
+        week_rows = []
+        for week in weeks:
+            used = used_by_area_week.get((area.id, week.week_ending), 0)
+            limit = capacity.normal_limit if capacity else None
+            week_rows.append(
+                {
+                    "week": week,
+                    "used": used,
+                    "limit": limit,
+                    "full": limit is None or used >= limit,
+                }
+            )
+        person_rows = []
+        current_person = next(
+            (person for person in primary_people if person.id == turn.current_person_id),
+            None,
+        )
+        for person in primary_people:
+            selected = selections_by_person.get(person.id, [])
+            entitlement = management_vacation_entitlement(
+                person.seniority_date,
+                year,
+            )
+            remaining = max(0, entitlement - len(selected))
+            owner_can_write = bool(
+                actor.is_grandmaster
+                or (actor.person and actor.person.id == person.id)
+            )
+            person_rows.append(
+                {
+                    "person": person,
+                    "entitlement": entitlement,
+                    "remaining": remaining,
+                    "selections": selected,
+                    "is_active_turn": person.id == turn.current_person_id,
+                    "can_select": owner_can_write
+                    and _turn_allows_person(turn, person, current_person)
+                    and remaining > 0,
+                    "can_pass": bool(
+                        actor.person
+                        and actor.person.id == person.id
+                        and person.id == turn.current_person_id
+                    ),
+                }
+            )
         area_rows.append(
             {
                 "area": area,
                 "path": unit_path(area, hierarchy),
                 "people": primary_people,
+                "person_rows": person_rows,
                 "secondary_people": secondary_people,
-                "capacity": capacity_by_area.get(area.id),
+                "capacity": capacity,
+                "week_rows": week_rows,
+                "turn": turn,
+                "can_admin_pass": bool(
+                    turn.current_person_id
+                    and _can_administer_management_turn(actor, area.id)
+                ),
                 "off_week_endings": off_weeks_by_area.get(area.id, set()),
                 "can_edit": can_edit_management_capacity(actor, area.id),
             }
@@ -369,7 +484,7 @@ def management_vacation_context(vacation_year, user):
     area_rows.sort(key=lambda row: _unit_sort_key(row["area"], hierarchy))
     return {
         "vacation_year": year,
-        "weeks": vacation_year_weeks(year),
+        "weeks": weeks,
         "selection_opens_on": vacation_selection_opens_on(year),
         "areas": area_rows,
         "actor": actor,
@@ -390,6 +505,333 @@ def management_area_for_assignment(person, unit, hierarchy):
             unit if unit.unit_type == "sort" else None
         )
     return None
+
+
+def management_primary_area(person, hierarchy=None):
+    """Resolve current Management ownership from the first active assignment."""
+    if (
+        not person
+        or not person.active
+        or person.employee_status != "active"
+        or person.classification not in VACATION_MANAGEMENT_CLASSIFICATIONS
+    ):
+        return None
+    hierarchy = hierarchy or vacation_hierarchy()
+    assignment = (
+        StaffingLeadershipAssignment.query.filter_by(
+            person_id=person.id,
+            active=True,
+        )
+        .order_by(StaffingLeadershipAssignment.id)
+        .first()
+    )
+    if not assignment:
+        return None
+    return management_area_for_assignment(
+        person,
+        hierarchy["by_id"].get(assignment.unit_id),
+        hierarchy,
+    )
+
+
+def management_turn_snapshot(
+    vacation_year,
+    people,
+    selections_by_person,
+    state=None,
+    *,
+    today=None,
+):
+    year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
+    resolved_ids = frozenset(
+        resolution.staffing_person_id
+        for resolution in (state.resolutions if state else ())
+    )
+    if today < vacation_selection_opens_on(year):
+        return ManagementTurnSnapshot("not_open", None, resolved_ids, False)
+    if state and state.completed_at:
+        return ManagementTurnSnapshot("completed", None, resolved_ids, True)
+
+    ordered = _seniority_order(people)
+    unresolved_with_bank = [
+        person
+        for person in ordered
+        if person.id not in resolved_ids
+        and _management_remaining_for_person(
+            person,
+            year,
+            selections_by_person.get(person.id, ()),
+        )
+        > 0
+    ]
+    current_id = state.current_person_id if state else None
+    if current_id and any(person.id == current_id for person in unresolved_with_bank):
+        return ManagementTurnSnapshot("active", current_id, resolved_ids, False)
+    if state and state.current_person:
+        anchor = _person_sort_key(state.current_person)
+        unresolved_with_bank = [
+            person
+            for person in unresolved_with_bank
+            if _person_sort_key(person) > anchor
+        ]
+    if unresolved_with_bank:
+        return ManagementTurnSnapshot(
+            "active",
+            unresolved_with_bank[0].id,
+            resolved_ids,
+            False,
+        )
+    return ManagementTurnSnapshot("completed", None, resolved_ids, True)
+
+
+def add_management_weeks(
+    person,
+    vacation_year,
+    week_endings,
+    user,
+    *,
+    today=None,
+):
+    """Atomically reserve one or more whole weeks against bank and capacity."""
+    year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
+    if today < vacation_selection_opens_on(year):
+        raise ValueError("Initial Management vacation selection has not opened yet.")
+    normalized_weeks = sorted(
+        {normalize_week_ending(year, value) for value in week_endings}
+    )
+    if not normalized_weeks:
+        raise ValueError("Select at least one vacation week.")
+    person = _management_person(person)
+    hierarchy = vacation_hierarchy()
+    area = management_primary_area(person, hierarchy)
+    if not area:
+        raise ValueError("The selected person does not have a primary Management area.")
+    actor = vacation_actor(user, hierarchy)
+    if not (
+        actor.is_grandmaster
+        or (actor.person and actor.person.id == person.id)
+    ):
+        raise ValueError("You may only select your own Management vacation weeks.")
+
+    _lock_management_area(area.id)
+    capacity = (
+        StaffingVacationManagementCapacity.query.filter_by(
+            vacation_year=year,
+            area_unit_id=area.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if not capacity:
+        raise ValueError("Management capacity is not configured for this area and year.")
+    people = _management_people_for_area(area.id, hierarchy)
+    all_person_selections = _management_active_selections_by_person(year)
+    state = _locked_management_turn_state(
+        year,
+        area,
+        people,
+        all_person_selections,
+        today,
+    )
+    turn = management_turn_snapshot(
+        year,
+        people,
+        all_person_selections,
+        state,
+        today=today,
+    )
+    current_person = next(
+        (row for row in people if row.id == turn.current_person_id),
+        state.current_person if state else None,
+    )
+    if not _turn_allows_person(turn, person, current_person):
+        raise ValueError("Initial selection has not reached this supervisor yet.")
+
+    existing_rows = (
+        StaffingVacationManagementSelection.query.filter(
+            StaffingVacationManagementSelection.staffing_person_id == person.id,
+            StaffingVacationManagementSelection.vacation_year == year,
+            StaffingVacationManagementSelection.week_ending.in_(normalized_weeks),
+        )
+        .with_for_update()
+        .all()
+    )
+    existing_by_week = {row.week_ending: row for row in existing_rows}
+    if any(row.cancelled_at is None for row in existing_rows):
+        raise ValueError("One of the selected weeks is already in this vacation bank.")
+    current_selections = all_person_selections.get(person.id, [])
+    remaining = _management_remaining_for_person(person, year, current_selections)
+    if len(normalized_weeks) > remaining:
+        raise ValueError("The selected weeks exceed the remaining vacation bank.")
+
+    usage = _management_week_usage(year, normalized_weeks, hierarchy)
+    for week in normalized_weeks:
+        if usage.get((area.id, week), 0) >= capacity.normal_limit:
+            raise ValueError(
+                f"Management capacity is full for WE {week.strftime('%b %d, %Y')}."
+            )
+
+    now = datetime.utcnow()
+    saved = []
+    for week in normalized_weeks:
+        row = existing_by_week.get(week)
+        if row:
+            row.cancelled_at = None
+            row.cancelled_by_user_id = None
+            row.cancellation_reason = None
+            row.selected_by_user_id = getattr(user, "id", None)
+            row.updated_at = now
+        else:
+            row = StaffingVacationManagementSelection(
+                staffing_person_id=person.id,
+                vacation_year=year,
+                week_ending=week,
+                selected_by_user_id=getattr(user, "id", None),
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(row)
+        saved.append(row)
+    db.session.flush()
+
+    new_remaining = remaining - len(normalized_weeks)
+    if state.current_person_id == person.id and new_remaining == 0:
+        _advance_management_turn(
+            state,
+            people,
+            _management_active_selections_by_person(year),
+            person,
+            "completed",
+            user,
+            now,
+        )
+    db.session.flush()
+    return saved
+
+
+def add_management_week(person, vacation_year, week_ending, user, *, today=None):
+    return add_management_weeks(
+        person,
+        vacation_year,
+        [week_ending],
+        user,
+        today=today,
+    )[0]
+
+
+def pass_management_turn(
+    vacation_year,
+    area_id,
+    person,
+    user,
+    *,
+    administrative=False,
+    today=None,
+):
+    year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
+    if today < vacation_selection_opens_on(year):
+        raise ValueError("Initial Management vacation selection has not opened yet.")
+    person = _management_person(person)
+    hierarchy = vacation_hierarchy()
+    area = hierarchy["by_id"].get(_positive_int(area_id, "Management area"))
+    if not area or area.unit_type not in VACATION_MANAGEMENT_AREA_TYPES:
+        raise ValueError("Select a valid Management vacation area.")
+    actor = vacation_actor(user, hierarchy)
+    if administrative:
+        if not _can_administer_management_turn(actor, area.id):
+            raise ValueError("You do not have authority to advance this Management turn.")
+    elif not actor.person or actor.person.id != person.id:
+        raise ValueError("Only the active supervisor may voluntarily pass their turn.")
+
+    _lock_management_area(area.id)
+    people = _management_people_for_area(area.id, hierarchy)
+    selections_by_person = _management_active_selections_by_person(year)
+    state = _locked_management_turn_state(
+        year,
+        area,
+        people,
+        selections_by_person,
+        today,
+    )
+    turn = management_turn_snapshot(
+        year,
+        people,
+        selections_by_person,
+        state,
+        today=today,
+    )
+    if turn.current_person_id != person.id:
+        raise ValueError("This supervisor is no longer the active Management turn.")
+    now = datetime.utcnow()
+    _advance_management_turn(
+        state,
+        people,
+        selections_by_person,
+        person,
+        "admin_passed" if administrative else "passed",
+        user,
+        now,
+    )
+    db.session.flush()
+    return state
+
+
+def reconcile_management_person_state(person, user=None, *, today=None):
+    """Reconcile active turns and future picks after a management roster change."""
+    person = _management_person(person, require_active=False)
+    today = today or date.today()
+    hierarchy = vacation_hierarchy()
+    current_area = management_primary_area(person, hierarchy)
+    now = datetime.utcnow()
+    states = (
+        StaffingVacationManagementTurnState.query.filter(
+            StaffingVacationManagementTurnState.current_person_id == person.id,
+            StaffingVacationManagementTurnState.completed_at.is_(None),
+        )
+        .with_for_update()
+        .all()
+    )
+    for state in states:
+        if current_area and current_area.id == state.area_unit_id:
+            continue
+        area = hierarchy["by_id"].get(state.area_unit_id)
+        if not area:
+            continue
+        people = _management_people_for_area(area.id, hierarchy)
+        selections_by_person = _management_active_selections_by_person(
+            state.vacation_year
+        )
+        _advance_management_turn(
+            state,
+            people,
+            selections_by_person,
+            person,
+            "transferred" if current_area else "departed",
+            user,
+            now,
+        )
+
+    cancelled = []
+    if not current_area:
+        cancelled = (
+            StaffingVacationManagementSelection.query.filter(
+                StaffingVacationManagementSelection.staffing_person_id == person.id,
+                StaffingVacationManagementSelection.cancelled_at.is_(None),
+                StaffingVacationManagementSelection.week_ending >= today,
+            )
+            .with_for_update()
+            .all()
+        )
+        for row in cancelled:
+            row.cancelled_at = now
+            row.cancelled_by_user_id = getattr(user, "id", None)
+            row.cancellation_reason = "left_management"
+            row.updated_at = now
+    db.session.flush()
+    return {"advanced_turns": len(states), "cancelled_future_picks": len(cancelled)}
 
 
 def save_management_capacity(vacation_year, area_id, values, user):
@@ -793,6 +1235,261 @@ def unit_path(unit, hierarchy):
     return " / ".join(reversed(names))
 
 
+def _management_leadership_rows():
+    return (
+        StaffingLeadershipAssignment.query.options(
+            joinedload(StaffingLeadershipAssignment.person),
+        )
+        .join(StaffingPerson)
+        .filter(
+            StaffingLeadershipAssignment.active.is_(True),
+            StaffingPerson.active.is_(True),
+            StaffingPerson.employee_status == "active",
+            StaffingPerson.classification.in_(VACATION_MANAGEMENT_CLASSIFICATIONS),
+        )
+        .order_by(StaffingLeadershipAssignment.id)
+        .all()
+    )
+
+
+def _primary_and_secondary_assignments(leadership_rows):
+    primary = {}
+    secondary = {}
+    for assignment in leadership_rows:
+        if assignment.person_id not in primary:
+            primary[assignment.person_id] = assignment
+        else:
+            secondary.setdefault(assignment.person_id, []).append(assignment)
+    return primary, secondary
+
+
+def _management_people_for_area(area_id, hierarchy):
+    primary, _secondary = _primary_and_secondary_assignments(
+        _management_leadership_rows()
+    )
+    people = []
+    for assignment in primary.values():
+        area = management_area_for_assignment(
+            assignment.person,
+            hierarchy["by_id"].get(assignment.unit_id),
+            hierarchy,
+        )
+        if area and area.id == area_id:
+            people.append(assignment.person)
+    return _seniority_order(people)
+
+
+def _management_active_selections_by_person(vacation_year):
+    rows = (
+        StaffingVacationManagementSelection.query.filter_by(
+            vacation_year=normalize_vacation_year(vacation_year)
+        )
+        .filter(StaffingVacationManagementSelection.cancelled_at.is_(None))
+        .order_by(
+            StaffingVacationManagementSelection.week_ending,
+            StaffingVacationManagementSelection.id,
+        )
+        .all()
+    )
+    result = {}
+    for row in rows:
+        result.setdefault(row.staffing_person_id, []).append(row)
+    return result
+
+
+def _management_remaining_for_person(person, vacation_year, selections):
+    return max(
+        0,
+        management_vacation_entitlement(person.seniority_date, vacation_year)
+        - len(tuple(selections)),
+    )
+
+
+def _turn_allows_person(turn, person, current_person):
+    if turn.status == "not_open":
+        return False
+    if turn.completed:
+        return True
+    if person.id == turn.current_person_id:
+        return True
+    if person.id in turn.resolved_person_ids:
+        return True
+    return bool(
+        current_person
+        and _person_sort_key(person) < _person_sort_key(current_person)
+    )
+
+
+def _can_administer_management_turn(actor, area_id):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification
+            in VACATION_MANAGEMENT_PASS_ADMIN_CLASSIFICATIONS
+            and can_edit_management_capacity(actor, area_id)
+        )
+    )
+
+
+def _management_person(person, require_active=True):
+    if isinstance(person, StaffingPerson):
+        row = person
+    else:
+        row = db.session.get(StaffingPerson, _positive_int(person, "person"))
+    if not row:
+        raise ValueError("The selected Management supervisor was not found.")
+    if require_active and (
+        not row.active
+        or row.employee_status != "active"
+        or row.classification not in VACATION_MANAGEMENT_CLASSIFICATIONS
+    ):
+        raise ValueError("The selected person is not an active Management supervisor.")
+    return row
+
+
+def _lock_management_area(area_id):
+    area = (
+        StaffingUnit.query.filter_by(id=area_id, active=True)
+        .with_for_update()
+        .first()
+    )
+    if not area:
+        raise ValueError("The Management vacation area is no longer available.")
+    return area
+
+
+def _locked_management_turn_state(
+    vacation_year,
+    area,
+    people,
+    selections_by_person,
+    today,
+):
+    state = (
+        StaffingVacationManagementTurnState.query.options(
+            joinedload(StaffingVacationManagementTurnState.current_person),
+            selectinload(StaffingVacationManagementTurnState.resolutions),
+        )
+        .filter_by(vacation_year=vacation_year, area_unit_id=area.id)
+        .with_for_update()
+        .first()
+    )
+    if state:
+        snapshot = management_turn_snapshot(
+            vacation_year,
+            people,
+            selections_by_person,
+            state,
+            today=today,
+        )
+        if state.current_person_id != snapshot.current_person_id:
+            state.current_person_id = snapshot.current_person_id
+        if snapshot.completed and not state.completed_at:
+            state.completed_at = datetime.utcnow()
+        db.session.flush()
+        return state
+
+    snapshot = management_turn_snapshot(
+        vacation_year,
+        people,
+        selections_by_person,
+        None,
+        today=today,
+    )
+    now = datetime.utcnow()
+    state = StaffingVacationManagementTurnState(
+        vacation_year=vacation_year,
+        area_unit_id=area.id,
+        current_person_id=snapshot.current_person_id,
+        started_at=now,
+        completed_at=now if snapshot.completed else None,
+        updated_at=now,
+    )
+    db.session.add(state)
+    db.session.flush()
+    return state
+
+
+def _advance_management_turn(
+    state,
+    people,
+    selections_by_person,
+    person,
+    outcome,
+    user,
+    now,
+):
+    existing = next(
+        (
+            resolution
+            for resolution in state.resolutions
+            if resolution.staffing_person_id == person.id
+        ),
+        None,
+    )
+    if not existing:
+        existing = StaffingVacationManagementTurnResolution(
+            staffing_person_id=person.id,
+            outcome=outcome,
+            resolved_by_user_id=getattr(user, "id", None),
+            resolved_at=now,
+        )
+        state.resolutions.append(existing)
+    resolved_ids = {
+        resolution.staffing_person_id for resolution in state.resolutions
+    }
+    anchor = _person_sort_key(person)
+    candidates = [
+        candidate
+        for candidate in _seniority_order(people)
+        if candidate.id not in resolved_ids
+        and _person_sort_key(candidate) > anchor
+        and _management_remaining_for_person(
+            candidate,
+            state.vacation_year,
+            selections_by_person.get(candidate.id, ()),
+        )
+        > 0
+    ]
+    state.current_person_id = candidates[0].id if candidates else None
+    state.completed_at = None if candidates else now
+    state.updated_at = now
+    db.session.flush()
+    return state
+
+
+def _management_week_usage(vacation_year, week_endings, hierarchy):
+    weeks = set(week_endings)
+    selections = (
+        StaffingVacationManagementSelection.query.filter(
+            StaffingVacationManagementSelection.vacation_year == vacation_year,
+            StaffingVacationManagementSelection.week_ending.in_(weeks),
+            StaffingVacationManagementSelection.cancelled_at.is_(None),
+        )
+        .all()
+    )
+    primary, _secondary = _primary_and_secondary_assignments(
+        _management_leadership_rows()
+    )
+    area_by_person = {}
+    for person_id, assignment in primary.items():
+        area = management_area_for_assignment(
+            assignment.person,
+            hierarchy["by_id"].get(assignment.unit_id),
+            hierarchy,
+        )
+        if area:
+            area_by_person[person_id] = area.id
+    usage = {}
+    for selection in selections:
+        area_id = area_by_person.get(selection.staffing_person_id)
+        if area_id:
+            key = (area_id, selection.week_ending)
+            usage[key] = usage.get(key, 0) + 1
+    return usage
+
+
 def _replace_union_scopes(calendar, scope_ids):
     existing = {scope.staffing_unit_id: scope for scope in calendar.scopes}
     for unit_id, scope in existing.items():
@@ -915,12 +1612,16 @@ def _unit_sort_key(unit, hierarchy):
 def _seniority_order(people):
     return sorted(
         people,
-        key=lambda person: (
-            person.seniority_date,
-            person.last_name.casefold(),
-            person.first_name.casefold(),
-            person.id,
-        ),
+        key=_person_sort_key,
+    )
+
+
+def _person_sort_key(person):
+    return (
+        person.seniority_date,
+        person.last_name.casefold(),
+        person.first_name.casefold(),
+        person.id,
     )
 
 

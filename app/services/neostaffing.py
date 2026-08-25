@@ -1451,6 +1451,7 @@ def update_person(person, values, is_new=False):
 
     old_classification = None if is_new else person.classification
     old_active = None if is_new else person.active
+    old_employee_status = None if is_new else person.employee_status
     _apply_person_values(person, person_values)
 
     if old_classification and old_classification != person_values["classification"]:
@@ -1460,6 +1461,16 @@ def update_person(person, values, is_new=False):
         or old_active != person_values["active"]
     ):
         end_invalid_reporting_relationships_for_person(person)
+    if person.id and (
+        old_classification != person_values["classification"]
+        or old_active != person_values["active"]
+        or old_employee_status != person_values["employee_status"]
+    ):
+        from app.services.neostaffing_vacation import (
+            reconcile_management_person_state,
+        )
+
+        reconcile_management_person_state(person)
 
     return person
 
@@ -1727,6 +1738,9 @@ def create_leadership_assignment(person, unit, leadership_level=None):
     if existing:
         existing.active = True
         db.session.flush()
+        from app.services.neostaffing_vacation import reconcile_management_person_state
+
+        reconcile_management_person_state(person)
         return existing
 
     assignment = StaffingLeadershipAssignment(
@@ -1737,6 +1751,9 @@ def create_leadership_assignment(person, unit, leadership_level=None):
     )
     db.session.add(assignment)
     db.session.flush()
+    from app.services.neostaffing_vacation import reconcile_management_person_state
+
+    reconcile_management_person_state(person)
     return assignment
 
 
@@ -1755,6 +1772,9 @@ def delete_leadership_assignment(assignment):
         db.session.expire(person, ["leadership_assignments"])
     if unit in db.session:
         db.session.expire(unit, ["leadership_assignments"])
+    from app.services.neostaffing_vacation import reconcile_management_person_state
+
+    reconcile_management_person_state(person)
 
 
 def remove_invalid_assignments_for_person(person):

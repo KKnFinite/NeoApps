@@ -409,6 +409,17 @@ def apply_workspace(workspace, user):
 
     purged = staffing_service.purge_expired_reporting_relationship_history(today)
     db.session.flush()
+    from app.services.neostaffing_vacation import reconcile_management_person_state
+
+    vacation_touched_refs = set(simulation["leadership_touched_refs"])
+    vacation_membership_fields = {"classification", "employee_status", "active"}
+    vacation_touched_refs.update(
+        ref
+        for ref, staged in workspace["people"].items()
+        if vacation_membership_fields.intersection(staged.get("changes", {}))
+    )
+    for ref in vacation_touched_refs:
+        reconcile_management_person_state(ref_to_person[ref], today=today)
     return {
         "people": changed_people,
         "unit_changes": len(workspace["units"]),
