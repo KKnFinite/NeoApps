@@ -36,15 +36,16 @@
           <div class="neostaffing-shift-flow-composite-doors" aria-hidden="true">
             {% for column in composite.columns %}<strong>{{ column.door.name }}</strong>{% endfor %}
           </div>
-          {% for band_key,band_label in composite.bands %}
-            <section class="neostaffing-shift-flow-composite-band">
-              <header>{{ band_label }}</header>
+          {% for band in composite.display_bands %}
+            <section class="neostaffing-shift-flow-composite-band" data-shift-flow-composite-band data-band="{{ band.key }}">
+              <header>{{ band.label }}</header>
               <div class="neostaffing-shift-flow-composite-cells">
-                {% for column in composite.columns %}
-                  {% set cell = column.bands|selectattr('key', 'equalto', band_key)|first %}
-                  <article class="neostaffing-shift-flow-composite-cell{% if can_edit_shift_flow and not composite.issues %} is-final-door-target{% endif %}"{% if can_edit_shift_flow and not composite.issues %} data-shift-flow-composite-cell data-final-door-id="{{ column.door.id }}" data-band="{{ band_key }}"{% endif %}>
-                    <ul>{% for row in cell.rows %}{{ final_door_employee(row, composite, can_edit_shift_flow) }}{% endfor %}</ul>
-                  </article>
+                {% for display_row in band.rows %}
+                  {% for cell in display_row.cells %}
+                    <article class="neostaffing-shift-flow-composite-cell{% if can_edit_shift_flow and not composite.issues %} is-final-door-target{% endif %}" data-shift-flow-display-row="{{ display_row.index }}" data-door-label="{{ cell.door.name }}" data-band-label="{{ band.label }}"{% if display_row.trailing %} data-shift-flow-empty-row{% endif %}{% if can_edit_shift_flow and not composite.issues %} data-shift-flow-composite-cell data-final-door-id="{{ cell.door.id }}" data-band="{{ band.key }}"{% endif %} aria-label="{{ cell.door.name }} {{ band.label }} row {{ display_row.index + 1 }}{% if display_row.trailing %}, empty drop row{% endif %}">
+                      <ul>{% if cell.row %}{{ final_door_employee(cell.row, composite, can_edit_shift_flow) }}{% endif %}</ul>
+                    </article>
+                  {% endfor %}
                 {% endfor %}
               </div>
             </section>

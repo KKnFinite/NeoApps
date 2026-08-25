@@ -309,6 +309,80 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(cells[("Door 34", "at_door")]["rows"][0]["setup_assignment"], "NO SETUP")
         self.assertNotIn("sections", cells[("Door 34", "at_door")])
 
+    def test_final_composite_derives_aligned_dynamic_rows_with_one_empty_trailer(self):
+        areas = self._configure_final_composite()
+        same_door_people = []
+        for employee_id in ("100030", "100031", "100032"):
+            person = self._person(employee_id)
+            staffing_service.create_shift_flow_plan(
+                person,
+                self._values(
+                    areas["East Ballmat"],
+                    "1",
+                    areas["Door 24"],
+                    areas["Door 34"],
+                ),
+                self.door,
+            )
+            db.session.add(
+                StaffingWorkAssignment(person=person, work_area=self.door, active=True)
+            )
+            same_door_people.append(person)
+        other_door = self._person("100033")
+        staffing_service.create_shift_flow_plan(
+            other_door,
+            self._values(
+                areas["East Ballmat"],
+                "1",
+                None,
+                areas["Door 32"],
+            ),
+            self.door,
+        )
+        db.session.add(
+            StaffingWorkAssignment(person=other_door, work_area=self.door, active=True)
+        )
+        db.session.commit()
+
+        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        band = next(item for item in board["display_bands"] if item["key"] == "bm1")
+
+        self.assertEqual(band["occupied_row_count"], 3)
+        self.assertEqual(len(band["rows"]), 4)
+        self.assertTrue(band["rows"][-1]["trailing"])
+        self.assertTrue(all(cell["row"] is None for cell in band["rows"][-1]["cells"]))
+        self.assertTrue(all(len(display_row["cells"]) == 6 for display_row in band["rows"]))
+
+        door_34_index = next(
+            index
+            for index, cell in enumerate(band["rows"][0]["cells"])
+            if cell["door"].name == "Door 34"
+        )
+        door_32_index = next(
+            index
+            for index, cell in enumerate(band["rows"][0]["cells"])
+            if cell["door"].name == "Door 32"
+        )
+        self.assertEqual(
+            {
+                band["rows"][index]["cells"][door_34_index]["row"]["person"].id
+                for index in range(3)
+            },
+            {person.id for person in same_door_people},
+        )
+        self.assertEqual(
+            band["rows"][0]["cells"][door_32_index]["row"]["person"].id,
+            other_door.id,
+        )
+        self.assertIsNone(band["rows"][1]["cells"][door_32_index]["row"])
+
+        empty_band = next(
+            item for item in board["display_bands"] if item["key"] == "bm2"
+        )
+        self.assertEqual(empty_band["occupied_row_count"], 0)
+        self.assertEqual(len(empty_band["rows"]), 1)
+        self.assertTrue(empty_band["rows"][0]["trailing"])
+
     def test_final_composite_persistently_accounts_for_attention_and_opposite_side_people(self):
         areas = self._configure_final_composite()
         east_person = self._person("100012")
@@ -402,6 +476,28 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertNotIn("data-shift-flow-setup-section", template)
         self.assertNotIn("cell.sections", template)
         self.assertNotIn("NON-SETUP", template)
+
+    def test_final_composite_dynamic_row_markup_and_committed_reflow_contract(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
+        javascript = (root / "app/static/js/neostaffing_shift_flow_drag.js").read_text(encoding="utf-8")
+        css = (root / "app/static/css/base.css").read_text(encoding="utf-8")
+
+        self.assertIn("composite.display_bands", template)
+        self.assertIn("data-shift-flow-display-row", template)
+        self.assertIn("data-shift-flow-empty-row", template)
+        self.assertIn("data-shift-flow-composite-band", template)
+        self.assertIn("normalizeBandRows", javascript)
+        self.assertIn("rowIndex <= occupiedRowCount", javascript)
+        self.assertIn("container.replaceChildren(fragment)", javascript)
+        self.assertIn("normalizeBands(sourceBand, targetBand)", javascript)
+        self.assertIn("[data-shift-flow-empty-row]", css)
+
+        commit_check = javascript.index("if (!response.ok || !payload.ok)")
+        dom_move = javascript.index('targetCell.querySelector("ul")?.append(row)')
+        row_reflow = javascript.index("normalizeBands(sourceBand, targetBand)")
+        self.assertLess(commit_check, dom_move)
+        self.assertLess(dom_move, row_reflow)
 
     def test_wave_drag_moves_use_side_ballmat_and_preserve_setup(self):
         areas = self._configure_final_composite()

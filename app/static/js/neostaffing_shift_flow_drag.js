@@ -4,7 +4,6 @@
     const composite = document.querySelector("[data-shift-flow-composite-board]");
     if (composite) {
         const feedback = composite.querySelector("[data-shift-flow-drag-feedback]");
-        const cells = [...composite.querySelectorAll("[data-shift-flow-composite-cell]")];
         const attention = composite.querySelector("[data-shift-flow-needs-attention]");
         let dragged = null;
         let saving = false;
@@ -13,12 +12,68 @@
             feedback.textContent = text || "";
             feedback.classList.toggle("is-error", Boolean(isError));
         };
-        const clearCells = () => cells.forEach((cell) => cell.classList.remove("is-drag-over"));
+        const compositeCells = () => [
+            ...composite.querySelectorAll("[data-shift-flow-composite-cell]"),
+        ];
+        const clearCells = () => compositeCells().forEach(
+            (cell) => cell.classList.remove("is-drag-over"),
+        );
         const adjustNumber = (selector, amount) => {
             const node = composite.querySelector(selector) || document.querySelector(selector);
             if (!node) return;
             const current = Number.parseInt(node.textContent, 10);
             if (Number.isFinite(current)) node.textContent = String(current + amount);
+        };
+        const normalizeBandRows = (band) => {
+            const container = band?.querySelector(".neostaffing-shift-flow-composite-cells");
+            if (!container) return;
+            const existingCells = [
+                ...container.querySelectorAll("[data-shift-flow-composite-cell]"),
+            ];
+            const doorIds = [];
+            const prototypes = new Map();
+            const peopleByDoor = new Map();
+            existingCells.forEach((cell) => {
+                const doorId = cell.dataset.finalDoorId;
+                if (!prototypes.has(doorId)) {
+                    doorIds.push(doorId);
+                    prototypes.set(doorId, cell);
+                    peopleByDoor.set(doorId, []);
+                }
+                peopleByDoor.get(doorId).push(
+                    ...cell.querySelectorAll("[data-shift-flow-person-id]"),
+                );
+            });
+            const occupiedRowCount = Math.max(
+                0,
+                ...doorIds.map((doorId) => peopleByDoor.get(doorId).length),
+            );
+            const fragment = document.createDocumentFragment();
+            for (let rowIndex = 0; rowIndex <= occupiedRowCount; rowIndex += 1) {
+                doorIds.forEach((doorId) => {
+                    const cell = prototypes.get(doorId).cloneNode(false);
+                    cell.classList.remove("is-drag-over");
+                    cell.dataset.shiftFlowDisplayRow = String(rowIndex);
+                    if (rowIndex === occupiedRowCount) {
+                        cell.dataset.shiftFlowEmptyRow = "";
+                    } else {
+                        delete cell.dataset.shiftFlowEmptyRow;
+                    }
+                    cell.setAttribute(
+                        "aria-label",
+                        `${cell.dataset.doorLabel} ${cell.dataset.bandLabel} row ${rowIndex + 1}${rowIndex === occupiedRowCount ? ", empty drop row" : ""}`,
+                    );
+                    const list = document.createElement("ul");
+                    const person = peopleByDoor.get(doorId)[rowIndex];
+                    if (person) list.append(person);
+                    cell.append(list);
+                    fragment.append(cell);
+                });
+            }
+            container.replaceChildren(fragment);
+        };
+        const normalizeBands = (...bands) => {
+            [...new Set(bands.filter(Boolean))].forEach(normalizeBandRows);
         };
         const showAttentionEmptyState = () => {
             const list = attention?.querySelector("[data-shift-flow-attention-list]");
@@ -58,6 +113,8 @@
             clearCells();
             const row = dragged;
             const sourceCell = row.closest("[data-shift-flow-composite-cell]");
+            const sourceBand = sourceCell?.closest("[data-shift-flow-composite-band]");
+            const targetBand = targetCell.closest("[data-shift-flow-composite-band]");
             const fromAttention = Boolean(row.closest("[data-shift-flow-needs-attention]"));
             if (sourceCell === targetCell) {
                 message("Already assigned to this Final Door cell.");
@@ -84,6 +141,7 @@
                 }
                 if (payload.changed) {
                     targetCell.querySelector("ul")?.append(row);
+                    normalizeBands(sourceBand, targetBand);
                     if (fromAttention) {
                         row.classList.remove("is-needs-attention-source");
                         row.querySelector("em")?.remove();

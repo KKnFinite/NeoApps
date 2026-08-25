@@ -617,6 +617,46 @@ def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
                 row["person"].first_name.casefold(),
             )
         )
+    display_bands = []
+    for band_key, band_label in SHIFT_FLOW_COMPOSITE_BANDS:
+        band_columns = [
+            {
+                "door": column["door"],
+                "rows": cells[(column["door"].id, band_key)]["rows"],
+            }
+            for column in columns
+        ]
+        occupied_row_count = max(
+            (len(column["rows"]) for column in band_columns),
+            default=0,
+        )
+        display_rows = []
+        for row_index in range(occupied_row_count + 1):
+            display_rows.append(
+                {
+                    "index": row_index,
+                    "trailing": row_index == occupied_row_count,
+                    "cells": [
+                        {
+                            "door": column["door"],
+                            "row": (
+                                column["rows"][row_index]
+                                if row_index < len(column["rows"])
+                                else None
+                            ),
+                        }
+                        for column in band_columns
+                    ],
+                }
+            )
+        display_bands.append(
+            {
+                "key": band_key,
+                "label": band_label,
+                "occupied_row_count": occupied_row_count,
+                "rows": display_rows,
+            }
+        )
     needs_attention.sort(
         key=lambda row: (
             row["person"].last_name.casefold(),
@@ -631,6 +671,7 @@ def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
         "doors": doors,
         "columns": columns,
         "bands": SHIFT_FLOW_COMPOSITE_BANDS,
+        "display_bands": display_bands,
         "ballmat": ballmat,
         "discharge": discharge,
         "issues": issues,
