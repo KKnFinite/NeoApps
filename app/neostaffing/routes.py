@@ -1098,6 +1098,46 @@ def vacation_split_day_cancel(day_id):
     return redirect(_vacation_program_url(program, vacation_year))
 
 
+@bp.post("/vacation-selection/day/schedule")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_day_schedule():
+    vacation_year = request.form.get("vacation_year")
+    program = request.form.get("program")
+    try:
+        vacation_service.schedule_vacation_entitlement_day(
+            request.form.get("staffing_person_id"),
+            request.form.get("vacation_date"),
+            request.form.get("item_type"),
+            current_user,
+            program=program,
+            entitlement_id=request.form.get("entitlement_id"),
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Vacation day scheduled.", "success")
+    return redirect(_vacation_program_url(program, vacation_year))
+
+
+@bp.post("/vacation-selection/day/<int:day_id>/cancel")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_day_cancel(day_id):
+    vacation_year = request.form.get("vacation_year")
+    program = request.form.get("program")
+    try:
+        vacation_service.cancel_vacation_entitlement_day(day_id, current_user)
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Vacation day removed; entitlement restored.", "success")
+    return redirect(_vacation_program_url(program, vacation_year))
+
+
 @bp.post("/vacation-selection/split-week/<int:conversion_id>/recombine")
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_split_week_recombine(conversion_id):

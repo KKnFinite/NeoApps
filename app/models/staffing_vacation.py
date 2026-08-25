@@ -223,7 +223,7 @@ class StaffingVacationWeekConversion(db.Model):
 
 
 class StaffingVacationDaySelection(db.Model):
-    """Sparse reusable person/day time-off boundary; split vacation is first type."""
+    """Sparse reusable person/day time-off boundary across vacation day types."""
 
     __tablename__ = "staffing_vacation_day_selections"
     __table_args__ = (
@@ -232,7 +232,8 @@ class StaffingVacationDaySelection(db.Model):
             name="ck_staffing_vacation_day_selections_year",
         ),
         db.CheckConstraint(
-            "item_type IN ('split_vacation')",
+            "item_type IN ('split_vacation', 'd_day', 'optional_day', "
+            "'anniversary_day', 'floating_holiday')",
             name="ck_staffing_vacation_day_selections_item_type",
         ),
         db.CheckConstraint(
@@ -251,7 +252,13 @@ class StaffingVacationDaySelection(db.Model):
     conversion_id = db.Column(
         db.Integer,
         db.ForeignKey("staffing_vacation_week_conversions.id"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    entitlement_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_day_entitlements.id"),
+        nullable=True,
         index=True,
     )
     staffing_person_id = db.Column(
@@ -270,6 +277,54 @@ class StaffingVacationDaySelection(db.Model):
     )
 
     conversion = db.relationship("StaffingVacationWeekConversion", back_populates="days")
+    entitlement = db.relationship("StaffingVacationDayEntitlement")
+    person = db.relationship("StaffingPerson")
+
+
+class StaffingVacationDayEntitlement(db.Model):
+    """Durable non-derived day entitlement; currently Floating Holidays only."""
+
+    __tablename__ = "staffing_vacation_day_entitlements"
+    __table_args__ = (
+        db.CheckConstraint(
+            "vacation_year >= 2000 AND vacation_year <= 2200",
+            name="ck_staffing_vacation_day_entitlements_year",
+        ),
+        db.CheckConstraint(
+            "entitlement_type IN ('floating_holiday')",
+            name="ck_staffing_vacation_day_entitlements_type",
+        ),
+        db.CheckConstraint(
+            "source_program IN ('management', 'union')",
+            name="ck_staffing_vacation_day_entitlements_program",
+        ),
+        db.UniqueConstraint(
+            "source_program",
+            "source_selection_id",
+            "source_holiday_date",
+            name="uq_staffing_vacation_day_entitlements_source_holiday",
+        ),
+        db.Index(
+            "ix_staffing_vacation_day_entitlements_person_year_type",
+            "staffing_person_id",
+            "vacation_year",
+            "entitlement_type",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    staffing_person_id = db.Column(
+        db.Integer, db.ForeignKey("staffing_people.id"), nullable=False, index=True
+    )
+    vacation_year = db.Column(db.Integer, nullable=False, index=True)
+    entitlement_type = db.Column(db.String(32), nullable=False)
+    source_program = db.Column(db.String(16), nullable=False)
+    source_selection_id = db.Column(db.Integer, nullable=False)
+    source_holiday_date = db.Column(db.Date, nullable=False)
+    source_holiday_name = db.Column(db.String(80), nullable=False)
+    awarded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
     person = db.relationship("StaffingPerson")
 
 

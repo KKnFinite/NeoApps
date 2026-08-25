@@ -23,6 +23,7 @@ from app.models import (
     StaffingVacationUnionSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
+    StaffingVacationDayEntitlement,
     StaffingWorkAssignment,
     User,
 )
@@ -491,7 +492,97 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
 
         self.assertEqual(len(result["calendars"]), 3)
-        self.assertLessEqual(len(statements), 6)
+        # Generic days and durable Floating Holiday awards are bounded bulk reads.
+        self.assertLessEqual(len(statements), 8)
+
+    def test_union_optional_days_reset_august_first_and_restore(self):
+        grandmaster = self._user("optional_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "OPT1", "Optional", "Employee", self.units["blue_area"]
+        )
+        db.session.commit()
+        rows = []
+        for month, day in ((8, 1), (9, 1), (10, 1), (11, 1)):
+            rows.append(
+                vacation_service.schedule_vacation_entitlement_day(
+                    person,
+                    date(self.YEAR, month, day),
+                    "optional_day",
+                    grandmaster,
+                    program="union",
+                )
+            )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "No Optional Days remain"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person,
+                date(self.YEAR, 12, 1),
+                "optional_day",
+                grandmaster,
+                program="union",
+            )
+        db.session.rollback()
+        rows = [db.session.get(StaffingVacationDaySelection, row.id) for row in rows]
+        vacation_service.cancel_vacation_entitlement_day(
+            rows[0], grandmaster, today=date(self.YEAR, 12, 1)
+        )
+        restored = vacation_service.schedule_vacation_entitlement_day(
+            person,
+            date(self.YEAR, 12, 1),
+            "optional_day",
+            grandmaster,
+            program="union",
+        )
+        self.assertEqual(restored.item_type, "optional_day")
+        self.assertNotEqual(
+            vacation_service.optional_day_cycle(date(self.YEAR, 7, 31)),
+            vacation_service.optional_day_cycle(date(self.YEAR, 8, 1)),
+        )
+
+    def test_floating_holiday_award_is_durable_idempotent_and_consumable(self):
+        grandmaster = self._user("floating_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "FLT1", "Floating", "Employee", self.units["blue_area"]
+        )
+        selection = vacation_service.add_union_week(
+            calendar,
+            person,
+            self.YEAR,
+            date(self.YEAR, 7, 10),
+            "regular",
+            grandmaster,
+        )
+        db.session.commit()
+        holiday = date(self.YEAR, 7, 4)
+        first = vacation_service.award_floating_holidays_for_selection(
+            selection, "union", {holiday: "Qualifying Holiday"}
+        )
+        db.session.commit()
+        second = vacation_service.award_floating_holidays_for_selection(
+            selection, "union", {holiday: "Qualifying Holiday"}
+        )
+        self.assertEqual(first[0].id, second[0].id)
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 1)
+        used = vacation_service.schedule_vacation_entitlement_day(
+            person,
+            date(self.YEAR, 8, 15),
+            "floating_holiday",
+            grandmaster,
+            program="union",
+            entitlement_id=first[0].id,
+        )
+        self.assertEqual(used.entitlement_id, first[0].id)
+        with self.assertRaisesRegex(ValueError, "already used"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person,
+                date(self.YEAR, 8, 16),
+                "floating_holiday",
+                grandmaster,
+                program="union",
+                entitlement_id=first[0].id,
+            )
 
     def test_vacation_routes_render_separate_workspaces_and_navigation(self):
         user = self._user("route_gm", "grandmaster")

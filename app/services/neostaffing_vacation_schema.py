@@ -14,6 +14,7 @@ from app.models import (
     StaffingVacationUnionSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
+    StaffingVacationDayEntitlement,
 )
 
 
@@ -27,6 +28,7 @@ NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationManagementWeekOverride,
     StaffingVacationManagementSelection,
     StaffingVacationWeekConversion,
+    StaffingVacationDayEntitlement,
     StaffingVacationDaySelection,
     StaffingVacationManagementTurnState,
     StaffingVacationManagementTurnResolution,
@@ -53,6 +55,41 @@ def ensure_neostaffing_vacation_tables(app):
             )
             for model in NEOSTAFFING_VACATION_MODELS:
                 model.__table__.create(bind=connection, checkfirst=True)
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_day_selections "
+                    "ALTER COLUMN conversion_id DROP NOT NULL"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_day_selections "
+                    "ADD COLUMN IF NOT EXISTS entitlement_id INTEGER NULL "
+                    "REFERENCES staffing_vacation_day_entitlements(id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_day_selections "
+                    "DROP CONSTRAINT IF EXISTS "
+                    "ck_staffing_vacation_day_selections_item_type"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_day_selections ADD CONSTRAINT "
+                    "ck_staffing_vacation_day_selections_item_type CHECK "
+                    "(item_type IN ('split_vacation', 'd_day', 'optional_day', "
+                    "'anniversary_day', 'floating_holiday'))"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_staffing_vacation_day_selections_entitlement_id ON "
+                    "staffing_vacation_day_selections (entitlement_id)"
+                )
+            )
             db.session.commit()
         except Exception as error:
             db.session.rollback()

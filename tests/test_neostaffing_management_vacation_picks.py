@@ -428,7 +428,9 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             len(self._area_row(context, self.units["ramp"])["person_rows"]),
             40,
         )
-        self.assertLessEqual(select_count, 10)
+        # Day selections and durable Floating Holiday awards are two additional
+        # bounded collections; query count must remain roster-size invariant.
+        self.assertLessEqual(select_count, 12)
 
     def test_management_split_schedule_cancel_and_recombine(self):
         person, person_user = self._management_user(
@@ -569,6 +571,71 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             "blue_department": blue,
             "hub_department": hub_department,
         }
+
+    def test_management_day_entitlements_cycles_exclusivity_and_correction(self):
+        person, actor = self._management_user(
+            "MVD1", "Day", "Supervisor", "2000-03-15", "full_time_supervisor"
+        )
+        db.session.commit()
+        scheduled = []
+        for day_number in range(1, 6):
+            scheduled.append(
+                vacation_service.schedule_vacation_entitlement_day(
+                    person,
+                    date(self.YEAR, 1, day_number),
+                    "d_day",
+                    actor,
+                    program="management",
+                )
+            )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "No D-Days remain"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person, date(self.YEAR, 1, 6), "d_day", actor, program="management"
+            )
+        db.session.rollback()
+        scheduled = [
+            db.session.get(StaffingVacationDaySelection, row.id) for row in scheduled
+        ]
+        vacation_service.cancel_vacation_entitlement_day(
+            scheduled[0], actor, today=date(self.YEAR, 2, 1)
+        )
+        replacement = vacation_service.schedule_vacation_entitlement_day(
+            person, date(self.YEAR, 1, 6), "d_day", actor, program="management"
+        )
+        self.assertEqual(replacement.item_type, "d_day")
+        with self.assertRaisesRegex(ValueError, "already has a time-off item"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person,
+                replacement.vacation_date,
+                "anniversary_day",
+                actor,
+                program="management",
+                today=date(self.YEAR, 12, 31),
+            )
+
+    def test_anniversary_day_is_available_only_on_actual_anniversary(self):
+        person, actor = self._management_user(
+            "MVA1", "Ann", "Supervisor", "2000-03-15", "full_time_supervisor"
+        )
+        with self.assertRaisesRegex(ValueError, "actual anniversary"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person,
+                date(self.YEAR, 3, 14),
+                "anniversary_day",
+                actor,
+                program="management",
+                today=date(self.YEAR, 3, 15),
+            )
+        row = vacation_service.schedule_vacation_entitlement_day(
+            person,
+            date(self.YEAR, 3, 15),
+            "anniversary_day",
+            actor,
+            program="management",
+            today=date(self.YEAR, 3, 15),
+        )
+        self.assertEqual(row.item_type, "anniversary_day")
 
     def _management_user(
         self,

@@ -23,6 +23,7 @@ from app.models import (
     StaffingVacationUnionSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
+    StaffingVacationDayEntitlement,
     StaffingWorkAssignment,
 )
 from app.models.user import ROLE_LEVELS
@@ -66,6 +67,11 @@ VACATION_SPLIT_MANAGER_CLASSIFICATIONS = frozenset({"manager", "division_manager
 VACATION_SPLIT_ADMIN_CLASSIFICATIONS = frozenset(
     {"full_time_supervisor", "manager", "division_manager"}
 )
+VACATION_DAY_ITEM_TYPES = frozenset(
+    {"d_day", "optional_day", "anniversary_day", "floating_holiday"}
+)
+D_DAY_ENTITLEMENT = 5
+OPTIONAL_DAY_ENTITLEMENT = 4
 
 
 @dataclass(frozen=True)
@@ -205,6 +211,30 @@ def union_vacation_entitlement(seniority_date, vacation_year):
         0,
     )
     return UnionVacationEntitlement(regular_weeks=regular)
+
+
+def d_day_cycle(value):
+    """Return the non-carrying January 1 through December 31 D-Day cycle."""
+    day = value if isinstance(value, date) else date.fromisoformat(str(value))
+    return date(day.year, 1, 1), date(day.year, 12, 31)
+
+
+def optional_day_cycle(value):
+    """Return the August 1 through July 31 Union Optional Day cycle."""
+    day = value if isinstance(value, date) else date.fromisoformat(str(value))
+    start_year = day.year if day.month >= 8 else day.year - 1
+    return date(start_year, 8, 1), date(start_year + 1, 7, 31)
+
+
+def employee_anniversary_date(seniority_date, year):
+    """Resolve the actual annual seniority anniversary, including leap-day service."""
+    if not isinstance(seniority_date, date):
+        raise ValueError("A valid seniority date is required.")
+    year = normalize_vacation_year(year)
+    try:
+        return seniority_date.replace(year=year)
+    except ValueError:
+        return date(year, 2, 28)
 
 
 def management_vacation_entitlement(seniority_date, vacation_year):
@@ -412,6 +442,7 @@ def management_vacation_context(vacation_year, user, today=None):
         bank_usage_by_person.setdefault(conversion.staffing_person_id, []).append(
             conversion
         )
+    day_rows_by_person, floating_by_person = _vacation_day_rows_for_year(year)
 
     primary_by_person, secondary_by_person = _primary_and_secondary_assignments(
         leadership
@@ -517,10 +548,34 @@ def management_vacation_context(vacation_year, user, today=None):
                         5 - sum(1 for day in conversion.days if day.status == "scheduled")
                         for conversion in person_conversions
                     ),
+                    "day_items": day_rows_by_person.get(person.id, []),
+                    "d_days_remaining": max(
+                        0,
+                        D_DAY_ENTITLEMENT
+                        - sum(
+                            row.item_type == "d_day"
+                            for row in day_rows_by_person.get(person.id, ())
+                        ),
+                    ),
+                    "anniversary_available": max(
+                        0,
+                        1
+                        - sum(
+                            row.item_type == "anniversary_day"
+                            for row in day_rows_by_person.get(person.id, ())
+                        ),
+                    ),
+                    "floating_available": _available_floating_entitlements(
+                        floating_by_person.get(person.id, ()),
+                        day_rows_by_person.get(person.id, ()),
+                    ),
                     "can_split": _can_manage_split_days_for_area(
                         actor, area.id, manager_only=True
                     ),
                     "can_manage_split_days": _can_manage_split_days_for_area(
+                        actor, area.id
+                    ),
+                    "can_manage_days": _can_manage_management_days_for_area(
                         actor, area.id
                     ),
                     "is_active_turn": person.id == turn.current_person_id,
@@ -1452,6 +1507,182 @@ def cancel_split_vacation_day(day_selection, user):
     return row
 
 
+def award_floating_holidays_for_selection(
+    selection,
+    program,
+    qualifying_holidays,
+):
+    """Idempotently preserve holidays supplied by NeoApps' holiday authority.
+
+    ``qualifying_holidays`` is deliberately an explicit date/name mapping. This
+    module does not own or invent a parallel holiday calendar.
+    """
+    program = str(program or "").strip().casefold()
+    if program == "management":
+        row = StaffingVacationManagementSelection.query.filter_by(
+            id=_positive_int(getattr(selection, "id", selection), "selection"),
+            cancelled_at=None,
+        ).with_for_update().first()
+    elif program == "union":
+        row = StaffingVacationUnionSelection.query.filter(
+            StaffingVacationUnionSelection.id
+            == _positive_int(getattr(selection, "id", selection), "selection"),
+            StaffingVacationUnionSelection.status == "approved",
+        ).with_for_update().first()
+    else:
+        raise ValueError("Choose a valid vacation program.")
+    if not row:
+        raise ValueError("Only an approved active whole vacation week can earn holidays.")
+    week_start = row.week_ending - timedelta(days=6)
+    holiday_rows = []
+    for raw_day, raw_name in dict(qualifying_holidays or {}).items():
+        holiday_day = raw_day if isinstance(raw_day, date) else date.fromisoformat(str(raw_day))
+        if not week_start <= holiday_day <= row.week_ending:
+            continue
+        holiday_name = str(raw_name or "").strip()
+        if not holiday_name:
+            raise ValueError("A qualifying holiday must have a name.")
+        entitlement = StaffingVacationDayEntitlement.query.filter_by(
+            source_program=program,
+            source_selection_id=row.id,
+            source_holiday_date=holiday_day,
+        ).first()
+        if not entitlement:
+            entitlement = StaffingVacationDayEntitlement(
+                staffing_person_id=row.staffing_person_id,
+                vacation_year=row.vacation_year,
+                entitlement_type="floating_holiday",
+                source_program=program,
+                source_selection_id=row.id,
+                source_holiday_date=holiday_day,
+                source_holiday_name=holiday_name,
+            )
+            db.session.add(entitlement)
+        holiday_rows.append(entitlement)
+    db.session.flush()
+    return holiday_rows
+
+
+def schedule_vacation_entitlement_day(
+    person,
+    vacation_date,
+    item_type,
+    user,
+    *,
+    program,
+    entitlement_id=None,
+    capacity_override=False,
+    today=None,
+):
+    """Consume one derived or durable day entitlement transactionally."""
+    day = vacation_date if isinstance(vacation_date, date) else date.fromisoformat(str(vacation_date))
+    item_type = str(item_type or "").strip().casefold()
+    program = str(program or "").strip().casefold()
+    if item_type not in VACATION_DAY_ITEM_TYPES:
+        raise ValueError("Choose a valid vacation day type.")
+    if program not in {"management", "union"}:
+        raise ValueError("Choose a valid vacation program.")
+    person = _locked_person(person)
+    actor, calendar = _authorize_vacation_day_write(
+        person, program, user, vacation_year=day.year
+    )
+    _ensure_time_off_day_available(person.id, day)
+    active_rows = (
+        StaffingVacationDaySelection.query.filter_by(
+            staffing_person_id=person.id,
+            item_type=item_type,
+            status="scheduled",
+        )
+        .with_for_update()
+        .all()
+    )
+    entitlement = None
+    if item_type == "d_day":
+        if program != "management" or person.classification not in VACATION_MANAGEMENT_CLASSIFICATIONS:
+            raise ValueError("D-Days apply only to Management employees.")
+        cycle_start, cycle_end = d_day_cycle(day)
+        if sum(cycle_start <= row.vacation_date <= cycle_end for row in active_rows) >= D_DAY_ENTITLEMENT:
+            raise ValueError("No D-Days remain in this calendar year.")
+    elif item_type == "optional_day":
+        if program != "union":
+            raise ValueError("Optional Days apply only to Union employees.")
+        cycle_start, cycle_end = optional_day_cycle(day)
+        if sum(cycle_start <= row.vacation_date <= cycle_end for row in active_rows) >= OPTIONAL_DAY_ENTITLEMENT:
+            raise ValueError("No Optional Days remain in this August-July cycle.")
+    elif item_type == "anniversary_day":
+        anniversary = employee_anniversary_date(person.seniority_date, day.year)
+        if day != anniversary:
+            raise ValueError("Anniversary Day may be used only on the actual anniversary date.")
+        if (today or date.today()) < anniversary:
+            raise ValueError("Anniversary Day is not available before the anniversary date.")
+        if any(row.vacation_date.year == day.year for row in active_rows):
+            raise ValueError("Anniversary Day is already used for this year.")
+    else:
+        entitlement = StaffingVacationDayEntitlement.query.filter_by(
+            id=_positive_int(entitlement_id, "Floating Holiday entitlement"),
+            staffing_person_id=person.id,
+            entitlement_type="floating_holiday",
+            source_program=program,
+        ).with_for_update().first()
+        if not entitlement:
+            raise ValueError("The Floating Holiday entitlement is not available.")
+        if day.year != entitlement.vacation_year:
+            raise ValueError("The Floating Holiday must be used in its vacation year.")
+        if any(row.entitlement_id == entitlement.id for row in active_rows):
+            raise ValueError("This Floating Holiday entitlement is already used.")
+
+    if program == "union":
+        _enforce_union_day_capacity(
+            person,
+            day,
+            actor,
+            calendar,
+            capacity_override=capacity_override,
+        )
+    now = datetime.utcnow()
+    row = StaffingVacationDaySelection(
+        conversion_id=None,
+        entitlement_id=entitlement.id if entitlement else None,
+        staffing_person_id=person.id,
+        vacation_year=day.year,
+        vacation_date=day,
+        item_type=item_type,
+        status="scheduled",
+        entered_by_user_id=getattr(user, "id", None),
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(row)
+    db.session.flush()
+    return row
+
+
+def cancel_vacation_entitlement_day(day_selection, user, *, today=None):
+    """Correct a day entry and restore its derived or durable entitlement."""
+    row = StaffingVacationDaySelection.query.filter(
+        StaffingVacationDaySelection.id
+        == _positive_int(getattr(day_selection, "id", day_selection), "vacation day"),
+        StaffingVacationDaySelection.item_type.in_(VACATION_DAY_ITEM_TYPES),
+        StaffingVacationDaySelection.status == "scheduled",
+    ).with_for_update().first()
+    if not row:
+        raise ValueError("The vacation day is no longer scheduled.")
+    person = _locked_person(row.staffing_person_id)
+    program = _day_selection_program(row, person)
+    actor, _calendar = _authorize_vacation_day_write(
+        person, program, user, vacation_year=row.vacation_year
+    )
+    if row.vacation_date < (today or date.today()) and not _can_correct_past_day(actor):
+        raise ValueError("Only an FT Supervisor or Manager may correct a past vacation day.")
+    now = datetime.utcnow()
+    row.status = "cancelled"
+    row.cancelled_by_user_id = getattr(user, "id", None)
+    row.cancelled_at = now
+    row.updated_at = now
+    db.session.flush()
+    return row
+
+
 def recombine_split_vacation_week(conversion, user):
     """Return an untouched five-day conversion to a generic unused week bank."""
     conversion = _locked_active_conversion(conversion)
@@ -1677,16 +1908,9 @@ def _union_pool_data(vacation_year, *, hierarchy=None, calendars=None):
 def _union_day_usage(vacation_year, pool):
     rows = (
         db.session.query(StaffingVacationDaySelection)
-        .join(
-            StaffingVacationWeekConversion,
-            StaffingVacationWeekConversion.id
-            == StaffingVacationDaySelection.conversion_id,
-        )
         .filter(
             StaffingVacationDaySelection.vacation_year == vacation_year,
             StaffingVacationDaySelection.status == "scheduled",
-            StaffingVacationWeekConversion.program == "union",
-            StaffingVacationWeekConversion.recombined_at.is_(None),
         )
         .all()
     )
@@ -1697,6 +1921,82 @@ def _union_day_usage(vacation_year, pool):
             key = (calendar_id, row.vacation_date)
             usage[key] = usage.get(key, 0) + 1
     return usage
+
+
+def _authorize_vacation_day_write(person, program, user, *, vacation_year):
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    if program == "management":
+        area = management_primary_area(person, hierarchy)
+        allowed = bool(
+            area
+            and (
+                actor.is_grandmaster
+                or (
+                    actor.person
+                    and actor.person.classification in VACATION_MANAGEMENT_CLASSIFICATIONS
+                    and can_edit_management_capacity(actor, area.id)
+                )
+            )
+        )
+        if not allowed:
+            raise ValueError("You do not have authority to manage these vacation days.")
+        return actor, None
+    pool = _union_pool_data(vacation_year, hierarchy=hierarchy)
+    calendar_id = pool["official_calendar_by_person"].get(person.id)
+    calendar = pool["calendar_by_id"].get(calendar_id)
+    if not calendar or not _union_actor_entry_status(actor, calendar):
+        raise ValueError("You do not have authority to manage these Union vacation days.")
+    return actor, calendar
+
+
+def _enforce_union_day_capacity(
+    person,
+    vacation_date,
+    actor,
+    calendar,
+    *,
+    capacity_override=False,
+):
+    calendar = _locked_union_calendar(calendar.id, calendar.vacation_year)
+    pool = _union_pool_data(calendar.vacation_year)
+    if pool["official_calendar_by_person"].get(person.id) != calendar.id:
+        raise ValueError("The employee's Official Union calendar changed; reload and retry.")
+    capacity = union_single_day_capacity(
+        len(pool["official_members_by_calendar"].get(calendar.id, ()))
+    )
+    used = _union_day_usage(calendar.vacation_year, pool).get(
+        (calendar.id, vacation_date), 0
+    )
+    override = _boolean(capacity_override)
+    if used >= capacity.capacity and not override:
+        raise ValueError("Union single-day capacity is full; confirm a one-time override.")
+    if override and not _can_override_split_capacity(actor):
+        raise ValueError("PT Supervisors cannot override Union vacation capacity.")
+
+
+def _day_selection_program(row, person):
+    if row.item_type == "d_day":
+        return "management"
+    if row.item_type == "optional_day":
+        return "union"
+    if row.item_type == "floating_holiday" and row.entitlement:
+        return row.entitlement.source_program
+    return (
+        "management"
+        if person.classification in VACATION_MANAGEMENT_CLASSIFICATIONS
+        else "union"
+    )
+
+
+def _can_correct_past_day(actor):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification in VACATION_SPLIT_ADMIN_CLASSIFICATIONS
+        )
+    )
 
 
 def _locked_union_calendar(calendar, vacation_year):
@@ -1802,6 +2102,17 @@ def _can_manage_split_days_for_area(actor, area_id, *, manager_only=False):
     return bool(
         actor.person.classification in required
         and can_edit_management_capacity(actor, area_id)
+    )
+
+
+def _can_manage_management_days_for_area(actor, area_id):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification in VACATION_MANAGEMENT_CLASSIFICATIONS
+            and can_edit_management_capacity(actor, area_id)
+        )
     )
 
 
@@ -1937,6 +2248,40 @@ def _completed_service_years(start_date, through_date):
     )
 
 
+def _vacation_day_rows_for_year(vacation_year):
+    rows = StaffingVacationDaySelection.query.options(
+        joinedload(StaffingVacationDaySelection.entitlement)
+    ).filter_by(vacation_year=vacation_year, status="scheduled").order_by(
+        StaffingVacationDaySelection.vacation_date,
+        StaffingVacationDaySelection.id,
+    ).all()
+    entitlements = StaffingVacationDayEntitlement.query.filter_by(
+        vacation_year=vacation_year,
+        entitlement_type="floating_holiday",
+    ).order_by(
+        StaffingVacationDayEntitlement.source_holiday_date,
+        StaffingVacationDayEntitlement.id,
+    ).all()
+    rows_by_person = {}
+    entitlements_by_person = {}
+    for row in rows:
+        rows_by_person.setdefault(row.staffing_person_id, []).append(row)
+    for entitlement in entitlements:
+        entitlements_by_person.setdefault(entitlement.staffing_person_id, []).append(
+            entitlement
+        )
+    return rows_by_person, entitlements_by_person
+
+
+def _available_floating_entitlements(entitlements, day_rows):
+    used = {
+        row.entitlement_id
+        for row in day_rows
+        if row.status == "scheduled" and row.entitlement_id
+    }
+    return [row for row in entitlements if row.id not in used]
+
+
 def union_calendars_context(vacation_year, user):
     year = normalize_vacation_year(vacation_year)
     hierarchy = vacation_hierarchy()
@@ -1969,6 +2314,7 @@ def union_calendars_context(vacation_year, user):
         conversions_by_person.setdefault(conversion.staffing_person_id, []).append(
             conversion
         )
+    day_rows_by_person, floating_by_person = _vacation_day_rows_for_year(year)
     daily_usage = (
         _union_day_usage(year, pool)
         if pool["official_calendar_by_person"]
@@ -2078,8 +2424,32 @@ def union_calendars_context(vacation_year, user):
                         5 - sum(1 for day in conversion.days if day.status == "scheduled")
                         for conversion in person_conversions
                     ),
+                    "day_items": day_rows_by_person.get(person.id, []),
+                    "optional_days_remaining": max(
+                        0,
+                        OPTIONAL_DAY_ENTITLEMENT
+                        - sum(
+                            row.item_type == "optional_day"
+                            and optional_day_cycle(row.vacation_date)[0].year
+                            == optional_day_cycle(date(year, 8, 1))[0].year
+                            for row in day_rows_by_person.get(person.id, ())
+                        ),
+                    ),
+                    "anniversary_available": max(
+                        0,
+                        1
+                        - sum(
+                            row.item_type == "anniversary_day"
+                            for row in day_rows_by_person.get(person.id, ())
+                        ),
+                    ),
+                    "floating_available": _available_floating_entitlements(
+                        floating_by_person.get(person.id, ()),
+                        day_rows_by_person.get(person.id, ()),
+                    ),
                     "can_split_optional": entry_status == "approved",
                     "can_manage_split_days": entry_status == "approved",
+                    "can_manage_days": bool(entry_status),
                     "can_add": bool(
                         calendar.active
                         and entry_status
