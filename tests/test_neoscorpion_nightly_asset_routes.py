@@ -1,5 +1,5 @@
 import unittest
-from datetime import date
+from datetime import date, datetime, time
 from unittest.mock import patch
 
 from sqlalchemy import event
@@ -9,8 +9,11 @@ from app.extensions import db
 from app.models import (
     GatewayMembership,
     GatewayNodeRole,
+    GatewaySortMatrix,
     NeoNode,
+    NeoScorpionFuelAssignment,
     NeoScorpionFuelTruck,
+    NeoScorpionFuelWorkState,
     NeoScorpionSettings,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
@@ -18,6 +21,9 @@ from app.models import (
     PermissionRule,
     PortalAppAccess,
     SortDateOperation,
+    SortDateMission,
+    SortTimelineSettings,
+    SortTimelineSortSetting,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -341,6 +347,34 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
     def test_dispatch_truck_card_actions_stay_on_dispatch_and_are_safe_to_repeat(self):
         self._login_user("card_truck_dispatcher", "simulator")
         operation = self._add_operation(date(2026, 8, 17))
+        timeline_settings = SortTimelineSettings(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+        )
+        db.session.add_all(
+            [
+                timeline_settings,
+                SortTimelineSortSetting(
+                    timeline_settings=timeline_settings,
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    sort_name="night",
+                    planning_start_local=time(18, 0),
+                    sort_window_end_local=time(8, 0),
+                ),
+                GatewaySortMatrix(
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    day_of_week="monday",
+                    sort_name="night",
+                    is_active=True,
+                ),
+            ]
+        )
+        db.session.commit()
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 8, 17, 22, 0
+        )
         truck = self._add_truck("TRUCK CARD", capacity=8000)
         db.session.commit()
         self.client.post(
@@ -421,12 +455,102 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         self.assertEqual(duplicate_return.status_code, 400)
         self.assertIn("not currently topping off", duplicate_return.json["error"])
 
-        fallback = self.client.post(
+        completed_mission = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            mission_source="manual",
+            flight_number="UPS CARD",
+            origin=self.gateway.code,
+            destination="SDF",
+            timezone="America/Chicago",
+            planned_source="manual",
+            fuel_status="waiting",
+        )
+        db.session.add(completed_mission)
+        db.session.flush()
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=completed_mission.id,
+            assigned_truck_id=truck.id,
+            review_status="assigned",
+        )
+        db.session.add(assignment)
+        db.session.commit()
+
+        future_assignment = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "mark_topping_off"},
+            headers=headers,
+        )
+        self.assertEqual(future_assignment.status_code, 400)
+        self.assertEqual(
+            future_assignment.json,
+            {"ok": False, "error": "Truck has a future assigned job."},
+        )
+
+        db.session.add(
+            NeoScorpionFuelWorkState(
+                fuel_assignment_id=assignment.id,
+                tail_number="N901UP",
+                on_at_utc=datetime(2026, 8, 18, 2, 0),
+            )
+        )
+        db.session.commit()
+        actively_fueling = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={**card_data, "action": "mark_topping_off"},
+            headers=headers,
+        )
+        self.assertEqual(actively_fueling.status_code, 400)
+        self.assertEqual(
+            actively_fueling.json,
+            {"ok": False, "error": "Truck is actively fueling."},
+        )
+
+        assignment.completed_at_utc = datetime(2026, 8, 18, 3, 0)
+        assignment.review_status = "complete"
+        completed_mission.fuel_status = "complete"
+        db.session.commit()
+        completed_prior = self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
             data={**card_data, "action": "mark_topping_off"},
         )
-        self.assertEqual(fallback.status_code, 302)
-        self.assertEqual(fallback.headers["Location"], "/neoscorpion/fuel-dispatch")
+        self.assertEqual(completed_prior.status_code, 200)
+        self.assertEqual(
+            completed_prior.json,
+            {"ok": True, "changed": True, "revision": 4},
+        )
+        self.assertNotIn("Location", completed_prior.headers)
+
+        oos_truck = self._add_truck("TRUCK OOS", capacity=8000)
+        sump_truck = self._add_truck("TRUCK SUMP", capacity=8000)
+        db.session.commit()
+        for blocked_truck, blocked_status, expected_error in (
+            (oos_truck, "unavailable_oos", "Truck is unavailable / OOS."),
+            (sump_truck, "needs_sump", "MARK SUMPED before changing this truck's status."),
+        ):
+            db.session.add(
+                NeoScorpionSortTruck(
+                    sort_date_operation_id=operation.id,
+                    fuel_truck_id=blocked_truck.id,
+                    status=blocked_status,
+                )
+            )
+            db.session.commit()
+            blocked = self.client.post(
+                "/neoscorpion/fuel-dispatch/assets",
+                data={
+                    "action": "mark_topping_off",
+                    "dispatch_truck_card": "1",
+                    "fuel_truck_id": str(blocked_truck.id),
+                },
+                headers=headers,
+            )
+            self.assertEqual(blocked.status_code, 400)
+            self.assertEqual(blocked.json, {"ok": False, "error": expected_error})
 
         ordinary_assets = self.client.post(
             "/neoscorpion/fuel-dispatch/assets",

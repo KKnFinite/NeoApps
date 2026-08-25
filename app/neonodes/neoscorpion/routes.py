@@ -518,10 +518,11 @@ def manage_nightly_assets():
         request.form.get("dispatch_truck_card") == "1"
         and action in {"mark_topping_off", "complete_top_off"}
     )
-    json_response = compact_truck_card and bool(
-        request.headers.get("X-Requested-With") == "XMLHttpRequest"
-        or request.accept_mimetypes.best == "application/json"
-    )
+    # The compact Fuel Dispatch cards explicitly opt into the JSON contract.
+    # Do not depend on optional fetch headers here: a missing or altered header
+    # previously made a successful card request fall through to a 302 redirect,
+    # which the client then reported as a generic save failure.
+    json_response = compact_truck_card
     access = permission_access(
         FUEL_DISPATCH_VIEW_PERMISSION,
         FUEL_DISPATCH_EDIT_PERMISSION,

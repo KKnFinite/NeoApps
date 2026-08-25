@@ -488,6 +488,12 @@ def mark_nightly_truck_topping_off(
     nightly_truck = _selected_truck(locked_operation.id, truck.id)
     if nightly_truck.status == "needs_sump":
         raise ValueError("MARK SUMPED before changing this truck's status.")
+    if (
+        nightly_truck.status == "unavailable_oos"
+        or not truck.is_active
+        or truck.is_out_of_service
+    ):
+        raise ValueError("Truck is unavailable / OOS.")
     if nightly_truck.status == "topping_off":
         return _unchanged(state)
     active_assignments = _active_assignments_for_resource(
