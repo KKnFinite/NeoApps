@@ -62,6 +62,7 @@ from app.models.staffing_change_request import StaffingChangeRequest
 from app.models.staffing_change_request_event import StaffingChangeRequestEvent
 from app.models.staffing_change_request_item import StaffingChangeRequestItem
 from app.models.staffing_daily_attendance import StaffingDailyAttendance
+from app.models.staffing_attendance_summary import StaffingAttendanceSummary
 from app.models.staffing_group import StaffingGroup
 from app.models.staffing_group_membership import StaffingGroupMembership
 from app.models.staffing_notification import StaffingNotification
@@ -143,6 +144,7 @@ __all__ = [
     "StaffingChangeRequestItem",
     "StaffingChangeRequestEvent",
     "StaffingDailyAttendance",
+    "StaffingAttendanceSummary",
     "StaffingGroup",
     "StaffingGroupMembership",
     "StaffingNotification",

@@ -959,6 +959,61 @@ def attendance_staffing_counts(scope, operation, *, group_by_person_id=None):
     }
 
 
+def attendance_operation_department_counts(operation):
+    """Bulk-build the existing attendance counts for all Operation/Department scopes."""
+    hierarchy = _daily_attendance_hierarchy()
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    scope_units = [
+        unit
+        for unit in hierarchy["units"]
+        if unit.unit_type in {"operation", "department"}
+        and _unit_belongs_to_staffing_sort(unit, staffing_sort, hierarchy)
+    ]
+    assignments = _attendance_count_assignments(
+        staffing_sort,
+        staffing_sort,
+        hierarchy,
+    )
+    records = _daily_attendance_records(
+        [assignment.person_id for assignment in assignments],
+        operation,
+        staffing_sort,
+    )
+    assignments_by_scope = {
+        (unit.unit_type, unit.id): [] for unit in scope_units
+    }
+    for assignment in assignments:
+        work_area = hierarchy["by_id"].get(assignment.work_area_unit_id)
+        department, operation_unit, _row_sort = _daily_attendance_placement(
+            work_area,
+            hierarchy,
+        )
+        if operation_unit:
+            assignments_by_scope.setdefault(
+                ("operation", operation_unit.id),
+                [],
+            ).append(assignment)
+        if department:
+            assignments_by_scope.setdefault(
+                ("department", department.id),
+                [],
+            ).append(assignment)
+
+    return {
+        "staffing_sort": staffing_sort,
+        "scopes": tuple(
+            {
+                "scope": unit,
+                **_attendance_staffing_count_totals(
+                    assignments_by_scope.get((unit.unit_type, unit.id), ()),
+                    records,
+                ),
+            }
+            for unit in scope_units
+        ),
+    }
+
+
 def operational_flow_shorthand(plan):
     """Compact read-only Shift Flow notation for operational staffing screens."""
     if not plan:

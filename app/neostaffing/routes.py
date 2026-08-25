@@ -1,6 +1,14 @@
 from functools import wraps
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
@@ -16,6 +24,7 @@ from app.models import (
 from app.neostaffing import bp
 from app.services.access_control import get_user_app_role, user_can_access_app, user_has_app_access
 from app.services import neostaffing as staffing_service
+from app.services import neostaffing_attendance_history as attendance_history_service
 from app.services import neostaffing_change_requests as change_request_service
 from app.services import neostaffing_bulk_change as bulk_change_service
 from app.services import neostaffing_management_review as management_review_service
@@ -701,6 +710,18 @@ def reverse_change_request_item(item_id):
 
 
 def _handle_attendance():
+    if request.method == "GET":
+        try:
+            rollover = attendance_history_service.maintain_current_attendance_rollover(
+                current_user
+            )
+            if rollover.changed:
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception(
+                "NeoStaffing attendance rollover maintenance failed"
+            )
     can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
     can_view_staffing_groups = user_can(STAFFING_GROUPS_VIEW_PERMISSION)
     if request.method == "POST":
