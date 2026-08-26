@@ -75,6 +75,7 @@ from app.models.staffing_work_assignment import StaffingWorkAssignment
 from app.models.staffing_vacation import (
     StaffingVacationManagementCapacity,
     StaffingVacationManagementSelection,
+    StaffingVacationManagementChangeRequest,
     StaffingVacationManagementTurnResolution,
     StaffingVacationManagementTurnState,
     StaffingVacationManagementWeekOverride,
@@ -156,6 +157,7 @@ __all__ = [
     "StaffingWorkAssignment",
     "StaffingVacationManagementCapacity",
     "StaffingVacationManagementSelection",
+    "StaffingVacationManagementChangeRequest",
     "StaffingVacationManagementTurnResolution",
     "StaffingVacationManagementTurnState",
     "StaffingVacationManagementWeekOverride",

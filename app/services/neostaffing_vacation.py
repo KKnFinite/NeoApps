@@ -16,6 +16,7 @@ from app.models import (
     StaffingPerson,
     StaffingUnit,
     StaffingVacationManagementCapacity,
+    StaffingVacationManagementChangeRequest,
     StaffingVacationManagementSelection,
     StaffingVacationManagementTurnResolution,
     StaffingVacationManagementTurnState,
@@ -428,7 +429,10 @@ def management_vacation_context(vacation_year, user, today=None):
     ).all():
         off_weeks_by_area.setdefault(row.area_unit_id, set()).add(row.week_ending)
     selections = (
-        StaffingVacationManagementSelection.query.filter_by(vacation_year=year)
+        StaffingVacationManagementSelection.query.options(
+            joinedload(StaffingVacationManagementSelection.change_requests)
+        )
+        .filter_by(vacation_year=year)
         .filter(StaffingVacationManagementSelection.cancelled_at.is_(None))
         .order_by(
             StaffingVacationManagementSelection.week_ending,
@@ -436,6 +440,12 @@ def management_vacation_context(vacation_year, user, today=None):
         )
         .all()
     )
+    pending_request_by_selection = {
+        request.selection_id: request
+        for selection in selections
+        for request in selection.change_requests
+        if request.status == "pending"
+    }
     states = (
         StaffingVacationManagementTurnState.query.options(
             joinedload(StaffingVacationManagementTurnState.current_person),
@@ -553,6 +563,9 @@ def management_vacation_context(vacation_year, user, today=None):
                 }
             )
         person_rows = []
+        can_manage_week_changes = _can_administer_management_week_changes(
+            actor, area.id
+        )
         current_person = next(
             (person for person in primary_people if person.id == turn.current_person_id),
             None,
@@ -576,6 +589,22 @@ def management_vacation_context(vacation_year, user, today=None):
                     "entitlement": entitlement,
                     "remaining": remaining,
                     "selections": selected,
+                    "pending_request_by_selection": {
+                        selection.id: pending_request_by_selection[selection.id]
+                        for selection in selected
+                        if selection.id in pending_request_by_selection
+                    },
+                    "future_selection_ids": {
+                        selection.id
+                        for selection in selected
+                        if not _management_week_has_started(
+                            selection.week_ending, today
+                        )
+                    },
+                    "can_request_week_changes": bool(
+                        actor.person and actor.person.id == person.id
+                    ),
+                    "can_manage_week_changes": can_manage_week_changes,
                     "split_conversions": [
                         {
                             "conversion": conversion,
@@ -953,6 +982,200 @@ def add_management_week(person, vacation_year, week_ending, user, *, today=None)
         user,
         today=today,
     )[0]
+
+
+def request_management_selection_change(
+    selection,
+    request_type,
+    user,
+    *,
+    requested_week_ending=None,
+    today=None,
+):
+    """Create one employee-owned pending move/cancel request without releasing capacity."""
+    today = today or date.today()
+    selection = _locked_management_selection(selection)
+    person = _locked_management_person(selection.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    if not actor.person or actor.person.id != person.id:
+        raise ValueError("You may only request changes to your own vacation week.")
+    _ensure_management_selection_is_active(selection)
+    _ensure_management_week_not_started(selection.week_ending, today)
+    request_type = str(request_type or "").strip().lower()
+    if request_type not in {"move", "cancel"}:
+        raise ValueError("Choose move or cancellation.")
+    destination = None
+    if request_type == "move":
+        destination = normalize_week_ending(
+            selection.vacation_year, requested_week_ending
+        )
+        _ensure_management_week_not_started(destination, today)
+        if destination == selection.week_ending:
+            raise ValueError("Choose a different destination week.")
+        _ensure_person_has_no_active_management_week(
+            person.id,
+            selection.vacation_year,
+            destination,
+            exclude_selection_id=selection.id,
+        )
+    existing = (
+        StaffingVacationManagementChangeRequest.query.filter_by(
+            selection_id=selection.id,
+            status="pending",
+        )
+        .with_for_update()
+        .first()
+    )
+    if existing:
+        raise ValueError("A change request is already pending for this vacation week.")
+    now = datetime.utcnow()
+    row = StaffingVacationManagementChangeRequest(
+        selection_id=selection.id,
+        request_type=request_type,
+        requested_week_ending=destination,
+        status="pending",
+        requested_by_user_id=getattr(user, "id", None),
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(row)
+    db.session.flush()
+    return row
+
+
+def cancel_management_selection_change_request(change_request, user):
+    row = _locked_management_change_request(change_request)
+    if row.status != "pending":
+        raise ValueError("This vacation change request is no longer pending.")
+    selection = _locked_management_selection(row.selection_id)
+    person = _locked_management_person(selection.staffing_person_id)
+    actor = vacation_actor(user)
+    if not actor.person or actor.person.id != person.id:
+        raise ValueError("Only the requesting employee may cancel this request.")
+    now = datetime.utcnow()
+    _resolve_management_change_request(row, "cancelled", user, now)
+    db.session.flush()
+    return row
+
+
+def review_management_selection_change_request(
+    change_request,
+    decision,
+    user,
+    *,
+    capacity_override=False,
+    today=None,
+):
+    today = today or date.today()
+    row = _locked_management_change_request(change_request)
+    if row.status != "pending":
+        raise ValueError("This vacation change request is no longer pending.")
+    selection = _locked_management_selection(row.selection_id)
+    person = _locked_management_person(selection.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    area, actor = _authorize_management_week_change(person, user, hierarchy)
+    _lock_management_area(area.id)
+    _ensure_management_selection_is_active(selection)
+    decision = str(decision or "").strip().lower()
+    if decision not in {"approve", "deny"}:
+        raise ValueError("Choose approve or deny.")
+    now = datetime.utcnow()
+    if decision == "deny":
+        _resolve_management_change_request(row, "denied", user, now)
+    else:
+        _ensure_management_week_not_started(selection.week_ending, today)
+    if decision == "approve" and row.request_type == "cancel":
+        _cancel_management_selection_row(
+            selection, user, now, reason="request_approved"
+        )
+        _resolve_management_change_request(row, "approved", user, now)
+    elif decision == "approve":
+        destination = normalize_week_ending(
+            selection.vacation_year, row.requested_week_ending
+        )
+        _ensure_management_week_not_started(destination, today)
+        _move_management_selection_row(
+            selection,
+            person,
+            area,
+            destination,
+            actor,
+            user,
+            hierarchy,
+            capacity_override=capacity_override,
+            cancellation_reason="request_moved",
+        )
+        _resolve_management_change_request(row, "approved", user, now)
+    db.session.flush()
+    return row
+
+
+def move_management_selection(
+    selection,
+    requested_week_ending,
+    user,
+    *,
+    capacity_override=False,
+    today=None,
+):
+    today = today or date.today()
+    selection = _locked_management_selection(selection)
+    person = _locked_management_person(selection.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    area, actor = _authorize_management_week_change(person, user, hierarchy)
+    _lock_management_area(area.id)
+    _ensure_management_selection_is_active(selection)
+    _ensure_management_week_not_started(selection.week_ending, today)
+    destination = normalize_week_ending(
+        selection.vacation_year, requested_week_ending
+    )
+    _ensure_management_week_not_started(destination, today)
+    if destination == selection.week_ending:
+        raise ValueError("Choose a different destination week.")
+    result = _move_management_selection_row(
+        selection,
+        person,
+        area,
+        destination,
+        actor,
+        user,
+        hierarchy,
+        capacity_override=capacity_override,
+        cancellation_reason="direct_moved",
+    )
+    _cancel_pending_management_change_requests(selection.id, user)
+    db.session.flush()
+    return result
+
+
+def cancel_management_selection(
+    selection,
+    user,
+    *,
+    correction=False,
+    today=None,
+):
+    today = today or date.today()
+    selection = _locked_management_selection(selection)
+    person = _locked_management_person(selection.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    area, _actor = _authorize_management_week_change(person, user, hierarchy)
+    _lock_management_area(area.id)
+    _ensure_management_selection_is_active(selection)
+    started = _management_week_has_started(selection.week_ending, today)
+    if started and not _boolean(correction):
+        raise ValueError("Past or already-started weeks require correction removal.")
+    now = datetime.utcnow()
+    _cancel_management_selection_row(
+        selection,
+        user,
+        now,
+        reason="past_correction" if started else "direct_cancelled",
+    )
+    _cancel_pending_management_change_requests(selection.id, user, now=now)
+    db.session.flush()
+    return selection
 
 
 def pass_management_turn(
@@ -2908,6 +3131,249 @@ def _can_manage_management_days_for_area(actor, area_id):
             and can_edit_management_capacity(actor, area_id)
         )
     )
+
+
+def _can_administer_management_week_changes(actor, area_id):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification
+            in VACATION_MANAGEMENT_PASS_ADMIN_CLASSIFICATIONS
+            and can_edit_management_capacity(actor, area_id)
+        )
+    )
+
+
+def _authorize_management_week_change(person, user, hierarchy=None):
+    hierarchy = hierarchy or vacation_hierarchy()
+    area = management_primary_area(person, hierarchy)
+    if not area:
+        raise ValueError("The selected person has no active primary Management area.")
+    actor = vacation_actor(user, hierarchy)
+    if not _can_administer_management_week_changes(actor, area.id):
+        raise ValueError(
+            "Only an authorized FT Supervisor or Manager may change this vacation week."
+        )
+    return area, actor
+
+
+def _locked_management_selection(selection):
+    selection_id = getattr(selection, "id", selection)
+    row = (
+        StaffingVacationManagementSelection.query.filter_by(
+            id=_positive_int(selection_id, "Management vacation selection")
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The Management vacation selection was not found.")
+    return row
+
+
+def _locked_management_change_request(change_request):
+    request_id = getattr(change_request, "id", change_request)
+    row = (
+        StaffingVacationManagementChangeRequest.query.filter_by(
+            id=_positive_int(request_id, "Management vacation change request")
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The Management vacation change request was not found.")
+    return row
+
+
+def _management_week_has_started(week_ending, today):
+    return week_ending - timedelta(days=6) <= today
+
+
+def _ensure_management_week_not_started(week_ending, today):
+    if _management_week_has_started(week_ending, today):
+        raise ValueError("Past or already-started vacation weeks cannot be changed.")
+
+
+def _ensure_management_selection_is_active(selection):
+    if selection.cancelled_at is not None:
+        raise ValueError("This Management vacation week is no longer active.")
+
+
+def _ensure_person_has_no_active_management_week(
+    person_id,
+    vacation_year,
+    week_ending,
+    *,
+    exclude_selection_id=None,
+):
+    query = StaffingVacationManagementSelection.query.filter_by(
+        staffing_person_id=person_id,
+        vacation_year=vacation_year,
+        week_ending=week_ending,
+        cancelled_at=None,
+    )
+    if exclude_selection_id:
+        query = query.filter(
+            StaffingVacationManagementSelection.id != exclude_selection_id
+        )
+    if query.with_for_update().first():
+        raise ValueError("The employee already has this vacation week selected.")
+
+
+def _validate_management_move_capacity(
+    person,
+    vacation_year,
+    week_ending,
+    area,
+    actor,
+    hierarchy,
+    *,
+    capacity_override=False,
+):
+    capacity = (
+        StaffingVacationManagementCapacity.query.filter_by(
+            vacation_year=vacation_year,
+            area_unit_id=area.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if not capacity:
+        raise ValueError("Management capacity is not configured for this area and year.")
+    selections_by_person = _management_active_selections_by_person(vacation_year)
+    usage = _management_week_usage(vacation_year, [week_ending], hierarchy)
+    leadership_rows = _management_leadership_rows()
+    primary_assignments, _secondary = _primary_and_secondary_assignments(
+        leadership_rows
+    )
+    pinned_people = _management_pinned_people_for_area(
+        area, primary_assignments, hierarchy
+    )
+    pinned_ids = [row.id for row in pinned_people]
+    pinned_day_rows = {}
+    if pinned_ids:
+        for row in StaffingVacationDaySelection.query.filter(
+            StaffingVacationDaySelection.staffing_person_id.in_(pinned_ids),
+            StaffingVacationDaySelection.vacation_year == vacation_year,
+            StaffingVacationDaySelection.status == "scheduled",
+        ).all():
+            pinned_day_rows.setdefault(row.staffing_person_id, []).append(row)
+    pinned_statuses = _pinned_week_statuses(
+        pinned_people,
+        [VacationWeek(vacation_year, week_ending - timedelta(days=6), week_ending)],
+        selections_by_person,
+        pinned_day_rows,
+    )
+    reduced_off = (
+        StaffingVacationManagementWeekOverride.query.filter_by(
+            vacation_year=vacation_year,
+            area_unit_id=area.id,
+            week_ending=week_ending,
+        ).first()
+        is not None
+    )
+    limit = management_capacity_limit(
+        capacity,
+        len(pinned_statuses.get(week_ending, {})),
+        reduced_capacity_on=not reduced_off,
+    )
+    used = usage.get((area.id, week_ending), 0)
+    override = _boolean(capacity_override)
+    if used >= limit and not override:
+        raise ValueError(
+            "Management capacity is full; confirm a one-time override for this move."
+        )
+    if override and not _can_administer_management_week_changes(actor, area.id):
+        raise ValueError("You do not have authority to override Management capacity.")
+
+
+def _move_management_selection_row(
+    selection,
+    person,
+    area,
+    destination,
+    actor,
+    user,
+    hierarchy,
+    *,
+    capacity_override=False,
+    cancellation_reason,
+):
+    _ensure_person_has_no_active_management_week(
+        person.id,
+        selection.vacation_year,
+        destination,
+        exclude_selection_id=selection.id,
+    )
+    _validate_management_move_capacity(
+        person,
+        selection.vacation_year,
+        destination,
+        area,
+        actor,
+        hierarchy,
+        capacity_override=capacity_override,
+    )
+    target = (
+        StaffingVacationManagementSelection.query.filter(
+            StaffingVacationManagementSelection.staffing_person_id == person.id,
+            StaffingVacationManagementSelection.vacation_year
+            == selection.vacation_year,
+            StaffingVacationManagementSelection.week_ending == destination,
+            StaffingVacationManagementSelection.id != selection.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    now = datetime.utcnow()
+    if target:
+        _cancel_management_selection_row(
+            selection, user, now, reason=cancellation_reason
+        )
+        target.cancelled_at = None
+        target.cancelled_by_user_id = None
+        target.cancellation_reason = None
+        target.selected_by_user_id = getattr(user, "id", None)
+        target.updated_at = now
+        result = target
+    else:
+        selection.week_ending = destination
+        selection.selected_by_user_id = getattr(user, "id", None)
+        selection.updated_at = now
+        result = selection
+    db.session.flush()
+    _award_configured_floating_holidays([result], "management")
+    return result
+
+
+def _cancel_management_selection_row(selection, user, now, *, reason):
+    selection.cancelled_at = now
+    selection.cancelled_by_user_id = getattr(user, "id", None)
+    selection.cancellation_reason = reason
+    selection.updated_at = now
+
+
+def _resolve_management_change_request(row, status, user, now):
+    row.status = status
+    row.resolved_by_user_id = getattr(user, "id", None)
+    row.resolved_at = now
+    row.updated_at = now
+
+
+def _cancel_pending_management_change_requests(selection_id, user, *, now=None):
+    now = now or datetime.utcnow()
+    rows = (
+        StaffingVacationManagementChangeRequest.query.filter_by(
+            selection_id=selection_id,
+            status="pending",
+        )
+        .with_for_update()
+        .all()
+    )
+    for row in rows:
+        _resolve_management_change_request(row, "cancelled", user, now)
+    return rows
 
 
 def _authorize_split_day_write(conversion, person, user, *, recombine=False):

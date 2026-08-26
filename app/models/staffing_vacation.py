@@ -547,6 +547,70 @@ class StaffingVacationManagementSelection(db.Model):
     person = db.relationship("StaffingPerson")
     selected_by_user = db.relationship("User", foreign_keys=[selected_by_user_id])
     cancelled_by_user = db.relationship("User", foreign_keys=[cancelled_by_user_id])
+    change_requests = db.relationship(
+        "StaffingVacationManagementChangeRequest",
+        back_populates="selection",
+        order_by="StaffingVacationManagementChangeRequest.created_at",
+    )
+
+
+class StaffingVacationManagementChangeRequest(db.Model):
+    """Pending/resolved employee request against one approved Management week."""
+
+    __tablename__ = "staffing_vacation_management_change_requests"
+    __table_args__ = (
+        db.CheckConstraint(
+            "request_type IN ('move', 'cancel')",
+            name="ck_staffing_vacation_management_change_requests_type",
+        ),
+        db.CheckConstraint(
+            "status IN ('pending', 'approved', 'denied', 'cancelled')",
+            name="ck_staffing_vacation_management_change_requests_status",
+        ),
+        db.CheckConstraint(
+            "(request_type = 'move' AND requested_week_ending IS NOT NULL) OR "
+            "(request_type = 'cancel' AND requested_week_ending IS NULL)",
+            name="ck_staffing_vacation_management_change_requests_destination",
+        ),
+        db.Index(
+            "uq_staffing_vacation_management_change_requests_pending",
+            "selection_id",
+            unique=True,
+            postgresql_where=db.text("status = 'pending'"),
+            sqlite_where=db.text("status = 'pending'"),
+        ),
+        db.Index(
+            "ix_staffing_vacation_management_change_requests_status",
+            "status",
+            "created_at",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    selection_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_management_selections.id"),
+        nullable=False,
+        index=True,
+    )
+    request_type = db.Column(db.String(16), nullable=False)
+    requested_week_ending = db.Column(db.Date, nullable=True, index=True)
+    status = db.Column(db.String(16), nullable=False, default="pending")
+    requested_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False
+    )
+    resolved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    selection = db.relationship(
+        "StaffingVacationManagementSelection", back_populates="change_requests"
+    )
+    requested_by_user = db.relationship("User", foreign_keys=[requested_by_user_id])
+    resolved_by_user = db.relationship("User", foreign_keys=[resolved_by_user_id])
 
 
 class StaffingVacationManagementTurnState(db.Model):

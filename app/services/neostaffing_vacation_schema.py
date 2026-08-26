@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import (
     StaffingVacationManagementCapacity,
     StaffingVacationManagementSelection,
+    StaffingVacationManagementChangeRequest,
     StaffingVacationManagementTurnResolution,
     StaffingVacationManagementTurnState,
     StaffingVacationManagementWeekOverride,
@@ -30,6 +31,7 @@ NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationManagementCapacity,
     StaffingVacationManagementWeekOverride,
     StaffingVacationManagementSelection,
+    StaffingVacationManagementChangeRequest,
     StaffingVacationWeekConversion,
     StaffingVacationDayEntitlement,
     StaffingVacationQualifyingHoliday,

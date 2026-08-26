@@ -12,6 +12,7 @@ from app.models import (
     StaffingPerson,
     StaffingUnit,
     StaffingVacationManagementCapacity,
+    StaffingVacationManagementChangeRequest,
     StaffingVacationManagementSelection,
     StaffingVacationManagementTurnResolution,
     StaffingVacationManagementTurnState,
@@ -586,6 +587,295 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         values["csrf_token"] = token
         self.assertEqual(self.client.post("/neostaffing/vacation-selection/management/split", data=values).status_code, 302)
         self.assertEqual(StaffingVacationWeekConversion.query.count(), 1)
+
+    def test_management_future_move_and_cancel_requests_keep_original_reserved(self):
+        person, person_user = self._management_user(
+            "MVC1", "Change", "Employee", "2000-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        move_source = self._selection(person, date(self.YEAR, 2, 6))
+        cancel_source = self._selection(person, date(self.YEAR, 2, 13))
+        db.session.commit()
+
+        move_request = vacation_service.request_management_selection_change(
+            move_source,
+            "move",
+            person_user,
+            requested_week_ending=date(self.YEAR, 3, 6),
+            today=self.OPEN_DAY,
+        )
+        cancel_request = vacation_service.request_management_selection_change(
+            cancel_source,
+            "cancel",
+            person_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+
+        self.assertEqual(move_request.status, "pending")
+        self.assertEqual(cancel_request.status, "pending")
+        self.assertIsNone(move_source.cancelled_at)
+        self.assertIsNone(cancel_source.cancelled_at)
+        self.assertEqual(self._remaining(person), 4)
+        with self.assertRaisesRegex(ValueError, "already pending"):
+            vacation_service.request_management_selection_change(
+                move_source,
+                "cancel",
+                person_user,
+                today=self.OPEN_DAY,
+            )
+
+    def test_request_cancel_and_deny_leave_original_unchanged(self):
+        person, person_user = self._management_user(
+            "MVC2", "Request", "Owner", "2000-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVC3", "Review", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        first = self._selection(person, date(self.YEAR, 3, 6))
+        second = self._selection(person, date(self.YEAR, 3, 13))
+        db.session.commit()
+        cancelled = vacation_service.request_management_selection_change(
+            first, "cancel", person_user, today=self.OPEN_DAY
+        )
+        denied = vacation_service.request_management_selection_change(
+            second,
+            "move",
+            person_user,
+            requested_week_ending=date(self.YEAR, 4, 3),
+            today=self.OPEN_DAY,
+        )
+        vacation_service.cancel_management_selection_change_request(
+            cancelled, person_user
+        )
+        vacation_service.review_management_selection_change_request(
+            denied, "deny", admin_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        self.assertEqual(cancelled.status, "cancelled")
+        self.assertEqual(denied.status, "denied")
+        self.assertIsNone(first.cancelled_at)
+        self.assertIsNone(second.cancelled_at)
+
+    def test_approved_move_is_atomic_and_full_destination_requires_override(self):
+        person, person_user = self._management_user(
+            "MVC4", "Moving", "Employee", "2000-01-01", "full_time_supervisor"
+        )
+        blocker, _blocker_user = self._management_user(
+            "MVC5", "Capacity", "Blocker", "2001-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVC6", "Approve", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 1)
+        source = self._selection(person, date(self.YEAR, 4, 3))
+        destination = date(self.YEAR, 4, 10)
+        self._selection(blocker, destination)
+        db.session.commit()
+        request_row = vacation_service.request_management_selection_change(
+            source,
+            "move",
+            person_user,
+            requested_week_ending=destination,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+
+        with self.assertRaisesRegex(ValueError, "one-time override"):
+            vacation_service.review_management_selection_change_request(
+                request_row, "approve", admin_user, today=self.OPEN_DAY
+            )
+        db.session.rollback()
+        request_row = db.session.get(
+            StaffingVacationManagementChangeRequest, request_row.id
+        )
+        source = db.session.get(StaffingVacationManagementSelection, source.id)
+        self.assertEqual(request_row.status, "pending")
+        self.assertEqual(source.week_ending, date(self.YEAR, 4, 3))
+
+        vacation_service.review_management_selection_change_request(
+            request_row,
+            "approve",
+            admin_user,
+            capacity_override=True,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(request_row.status, "approved")
+        self.assertEqual(source.week_ending, destination)
+        self.assertEqual(
+            StaffingVacationManagementSelection.query.filter_by(
+                staffing_person_id=person.id, cancelled_at=None
+            ).count(),
+            1,
+        )
+
+        direct_person, _direct_user = self._management_user(
+            "MVC14", "Direct", "Override", "2002-01-01", "full_time_supervisor"
+        )
+        direct_source = self._selection(direct_person, date(self.YEAR, 4, 17))
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "one-time override"):
+            vacation_service.move_management_selection(
+                direct_source, destination, admin_user, today=self.OPEN_DAY
+            )
+        db.session.rollback()
+        direct_source = db.session.get(
+            StaffingVacationManagementSelection, direct_source.id
+        )
+        self.assertEqual(direct_source.week_ending, date(self.YEAR, 4, 17))
+        vacation_service.move_management_selection(
+            direct_source,
+            destination,
+            admin_user,
+            capacity_override=True,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(direct_source.week_ending, destination)
+
+    def test_approved_cancel_and_direct_actions_restore_bank(self):
+        person, person_user = self._management_user(
+            "MVC7", "Cancel", "Employee", "2000-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVC8", "Direct", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        requested = self._selection(person, date(self.YEAR, 5, 1))
+        direct = self._selection(person, date(self.YEAR, 5, 8))
+        db.session.commit()
+        starting_remaining = self._remaining(person)
+        request_row = vacation_service.request_management_selection_change(
+            requested, "cancel", person_user, today=self.OPEN_DAY
+        )
+        vacation_service.review_management_selection_change_request(
+            request_row, "approve", admin_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        self.assertIsNotNone(requested.cancelled_at)
+        self.assertEqual(self._remaining(person), starting_remaining + 1)
+
+        vacation_service.move_management_selection(
+            direct,
+            date(self.YEAR, 5, 15),
+            admin_user,
+            today=self.OPEN_DAY,
+        )
+        self.assertEqual(direct.week_ending, date(self.YEAR, 5, 15))
+        vacation_service.cancel_management_selection(
+            direct, admin_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        self.assertEqual(self._remaining(person), starting_remaining + 2)
+
+    def test_past_request_is_blocked_but_authorized_correction_restores_bank(self):
+        person, person_user = self._management_user(
+            "MVC9", "Past", "Employee", "2000-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVC10", "Past", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        selection = self._selection(person, date(self.YEAR, 1, 2))
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "already-started"):
+            vacation_service.request_management_selection_change(
+                selection,
+                "cancel",
+                person_user,
+                today=date(self.YEAR, 1, 1),
+            )
+        with self.assertRaisesRegex(ValueError, "require correction"):
+            vacation_service.cancel_management_selection(
+                selection, admin_user, today=date(self.YEAR, 1, 1)
+            )
+        vacation_service.cancel_management_selection(
+            selection,
+            admin_user,
+            correction=True,
+            today=date(self.YEAR, 1, 1),
+        )
+        db.session.commit()
+        self.assertEqual(selection.cancellation_reason, "past_correction")
+        self.assertEqual(self._remaining(person), 6)
+
+    def test_pt_supervisor_cannot_review_or_direct_change(self):
+        person, person_user = self._management_user(
+            "MVC11", "Protected", "Employee", "2000-01-01", "full_time_supervisor"
+        )
+        _pt, pt_user = self._management_user(
+            "MVC12", "Part", "Time", "1990-01-01", "part_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        selection = self._selection(person, date(self.YEAR, 6, 5))
+        request_row = vacation_service.request_management_selection_change(
+            selection,
+            "cancel",
+            person_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "authorized FT Supervisor"):
+            vacation_service.review_management_selection_change_request(
+                request_row, "approve", pt_user, today=self.OPEN_DAY
+            )
+        with self.assertRaisesRegex(ValueError, "authorized FT Supervisor"):
+            vacation_service.move_management_selection(
+                selection,
+                date(self.YEAR, 6, 12),
+                pt_user,
+                today=self.OPEN_DAY,
+            )
+
+    def test_management_change_routes_enforce_csrf_and_render_pending_state(self):
+        person, person_user = self._management_user(
+            "MVC13", "Route", "Employee", "2000-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        selection = self._selection(person, date(self.YEAR, 7, 3))
+        db.session.commit()
+        self._login(person_user)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        values = {
+            "vacation_year": self.YEAR,
+            "selection_id": selection.id,
+            "request_type": "cancel",
+        }
+        blocked = self.client.post(
+            "/neostaffing/vacation-selection/management/change-request",
+            data=values,
+        )
+        self.assertEqual(blocked.status_code, 400)
+        page = self.client.get(
+            f"/neostaffing/vacation-selection/management?year={self.YEAR}"
+        )
+        token = re.search(
+            r'<meta name="csrf-token" content="([^"]+)">',
+            page.get_data(as_text=True),
+        ).group(1)
+        values["csrf_token"] = token
+        response = self.client.post(
+            "/neostaffing/vacation-selection/management/change-request",
+            data=values,
+        )
+        self.assertEqual(response.status_code, 302)
+        rendered = self.client.get(
+            f"/neostaffing/vacation-selection/management?year={self.YEAR}"
+        )
+        self.assertIn(b"PENDING CANCEL", rendered.data)
+        self.assertIn(b"CANCEL REQUEST", rendered.data)
+
+    def _selection(self, person, week_ending):
+        row = StaffingVacationManagementSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            week_ending=week_ending,
+        )
+        db.session.add(row)
+        db.session.flush()
+        return row
 
     def _hierarchy(self):
         night = StaffingUnit(unit_type="sort", name="Night", display_order=1)

@@ -28320,6 +28320,38 @@ body:has(.neostaffing-bulk-console) { overflow-x: clip; }
     font-weight: 800;
 }
 
+.neostaffing-vacation-week-change {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.32rem 0;
+    border-bottom: 1px solid rgba(104, 144, 143, 0.18);
+}
+
+.neostaffing-vacation-week-change.is-pending {
+    padding: 0.38rem;
+    border: 1px solid rgba(218, 174, 92, 0.45);
+    background: rgba(116, 82, 26, 0.16);
+}
+
+.neostaffing-vacation-week-change > b {
+    color: #e7c57e;
+    font-size: 0.64rem;
+    letter-spacing: 0.05em;
+}
+
+.neostaffing-vacation-week-change details > form,
+.neostaffing-vacation-week-change > form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    align-items: center;
+}
+
+.neostaffing-vacation-week-change select {
+    min-width: 8rem;
+    max-width: 100%;
+}
+
 @media (max-width: 900px) {
     .neostaffing-vacation-report-groups {
         grid-template-columns: 1fr;

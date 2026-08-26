@@ -1046,6 +1046,102 @@ def vacation_management_select():
     )
 
 
+@bp.post("/vacation-selection/management/change-request")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_change_request():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.request_management_selection_change(
+            request.form.get("selection_id"),
+            request.form.get("request_type"),
+            current_user,
+            requested_week_ending=request.form.get("requested_week_ending"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation change request submitted.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
+@bp.post("/vacation-selection/management/change-request/<int:request_id>/cancel")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_change_request_cancel(request_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.cancel_management_selection_change_request(
+            request_id, current_user
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation change request cancelled.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
+@bp.post("/vacation-selection/management/change-request/<int:request_id>/review")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_change_request_review(request_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.review_management_selection_change_request(
+            request_id,
+            request.form.get("decision"),
+            current_user,
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation change request resolved.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
+@bp.post("/vacation-selection/management/selection/<int:selection_id>/move")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_selection_move(selection_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.move_management_selection(
+            selection_id,
+            request.form.get("requested_week_ending"),
+            current_user,
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation week moved.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
+@bp.post("/vacation-selection/management/selection/<int:selection_id>/cancel")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_selection_cancel(selection_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.cancel_management_selection(
+            selection_id,
+            current_user,
+            correction=request.form.get("correction"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management vacation week removed and bank restored.", "success")
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+
+
 @bp.post("/vacation-selection/management/split")
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_management_split():
