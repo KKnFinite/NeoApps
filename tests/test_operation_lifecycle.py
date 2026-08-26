@@ -583,7 +583,7 @@ class OperationLifecycleTest(unittest.TestCase):
         writer.assert_not_called()
         polling.assert_not_called()
 
-    def test_authenticated_gateway_request_runs_lifecycle(self):
+    def test_authenticated_gateway_get_does_not_create_operation(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026, 6, 18, 20, 30
         )
@@ -604,9 +604,7 @@ class OperationLifecycleTest(unittest.TestCase):
         response = self.client.get("/rfd")
 
         self.assertEqual(response.status_code, 200)
-        operation = SortDateOperation.query.one()
-        self.assertEqual(operation.sort_date, date(2026, 6, 18))
-        self.assertIsNone(operation.generated_by_user_id)
+        self.assertEqual(SortDateOperation.query.count(), 0)
 
     def test_public_and_auth_requests_do_not_run_lifecycle(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(

@@ -6,7 +6,6 @@ from flask import (
     abort,
     current_app,
     flash,
-    g,
     jsonify,
     make_response,
     redirect,
@@ -93,14 +92,13 @@ from app.services.sort_date_operations import (
     mission_display_timing_data,
     normalize_optional_window_minutes,
     normalize_wave,
-    sync_sort_operation_with_master,
 )
 from app.services.gateway_matrix import (
     DAY_OPTIONS as MATRIX_DAY_OPTIONS,
     SORT_OPTIONS as MATRIX_SORT_OPTIONS,
+    current_gateway_local_datetime,
     current_operations_for_gateway,
     matrix_state_for_gateway,
-    operations_for_gateway_date,
     save_gateway_matrix,
 )
 from app.services.night_sorting import (
@@ -144,7 +142,9 @@ from app.services.parking_plan_collaboration import (
     validate_parking_source_snapshot,
 )
 from app.services.planning_collaboration import planning_state_revision
-from app.services.operation_lifecycle import ensure_operational_sort_operations
+from app.services.operation_lifecycle import (
+    current_existing_operational_sort_operations,
+)
 from app.services.operation_scope import operation_by_id
 from app.services.live_collaboration import (
     changed_field_conflicts,
@@ -332,16 +332,14 @@ def rfd_hub():
         flash("NeoGateway landing access denied.", "error")
         return redirect(url_for("auth.portal_dashboard"))
 
-    generation_result = _auto_generate_today_sorts(gateway)
-    current_sort_operations = current_operations_for_gateway(gateway)
+    current_state = _current_sort_state(gateway)
+    current_sort_operations = current_state["operations"]
     active_sort_operation = _selected_current_operation(
         current_sort_operations,
         operation_id=request.args.get("operation_id"),
     )
     if active_sort_operation:
         active_sort_status = "Active sort ready."
-    elif generation_result["errors"]:
-        active_sort_status = "Active sort unavailable: " + "; ".join(generation_result["errors"])
     else:
         active_sort_status = "No active sort configured for today."
 
@@ -378,16 +376,9 @@ def motherbrain():
     if denied:
         return denied
 
-    generation_result = _auto_generate_today_sorts(gateway)
-    sort_date = generation_result["sort_date"]
-    operations = current_operations_for_gateway(gateway)
-    sync_results = [_sync_operation_with_master(operation) for operation in operations]
-    if any(
-        result["added"] or result["updated"]
-        for result in sync_results
-    ):
-        db.session.commit()
-        operations = current_operations_for_gateway(gateway)
+    current_state = _current_sort_state(gateway)
+    sort_date = current_state["sort_date"]
+    operations = current_state["operations"]
     selected_operation = _selected_current_operation(
         operations,
         operation_id=request.args.get("operation_id"),
@@ -497,10 +488,7 @@ def _render_system_settings(gateway, can_edit):
             gateway,
             "night",
         ),
-        google_live_poll_health=google_motherbrain_live_poll_health(
-            gateway,
-            lifecycle=getattr(g, "operational_sort_ensure_result", None),
-        ),
+        google_live_poll_health=google_motherbrain_live_poll_health(gateway),
     )
 
 
@@ -548,9 +536,9 @@ def flight_api_test():
     denied = _permission_guard(MANAGE_API_VIEW_PERMISSION)
     if denied:
         return denied
-    generation_result = _auto_generate_today_sorts(gateway)
-    sort_date = generation_result["sort_date"]
-    operations = current_operations_for_gateway(gateway)
+    current_state = _current_sort_state(gateway)
+    sort_date = current_state["sort_date"]
+    operations = current_state["operations"]
     selected_operation = _selected_current_operation(operations)
     import_result = None
     selected_lookup_window = None
@@ -767,9 +755,9 @@ def flight_api_review():
         flash("Access denied.", "error")
         return redirect(url_for("neomotherbrain.rfd_hub"))
 
-    generation_result = _auto_generate_today_sorts(gateway)
-    sort_date = generation_result["sort_date"]
-    operations = operations_for_gateway_date(gateway, sort_date)
+    current_state = _current_sort_state(gateway)
+    sort_date = current_state["sort_date"]
+    operations = current_state["operations"]
     selected_operation = _selected_current_operation(
         operations,
         operation_id=request.args.get("operation_id"),
@@ -1757,16 +1745,9 @@ def manage_sort():
     denied = _permission_guard(MANAGE_SORT_VIEW_PERMISSION)
     if denied:
         return denied
-    generation_result = _auto_generate_today_sorts(gateway)
-    sort_date = generation_result["sort_date"]
-    operations = current_operations_for_gateway(gateway)
-    sync_results = [_sync_operation_with_master(operation) for operation in operations]
-    if any(
-        result["added"] or result["updated"]
-        for result in sync_results
-    ):
-        db.session.commit()
-        operations = current_operations_for_gateway(gateway)
+    current_state = _current_sort_state(gateway)
+    sort_date = current_state["sort_date"]
+    operations = current_state["operations"]
     selected_operation = _selected_current_operation(
         operations,
         operation_id=request.args.get("operation_id"),
@@ -1788,8 +1769,8 @@ def manage_sort():
         sort_date=sort_date,
         operations=operations,
         selected_operation=selected_operation,
-        created_count=len(generation_result["created"]),
-        errors=generation_result["errors"],
+        created_count=0,
+        errors=(),
         **_flight_api_auto_poll_timer_context(gateway, operation=selected_operation),
     )
 
@@ -2168,10 +2149,6 @@ def operation_detail(operation_id):
     if denied:
         return denied
     operation = _operation_or_404(operation_id)
-    sync_result = _sync_operation_with_master(operation)
-    if sync_result["added"] or sync_result["updated"]:
-        db.session.commit()
-        operation = _operation_or_404(operation_id)
     arrival_count = _mission_count(operation, "arrival")
     departure_count = _mission_count(operation, "departure")
     return render_template(
@@ -3291,14 +3268,17 @@ def _render_new_operation_form(form):
     )
 
 
-def _auto_generate_today_sorts(gateway):
-    result = getattr(g, "operational_sort_ensure_result", None)
-    if result is None:
-        result = ensure_operational_sort_operations(gateway)
-        g.operational_sort_ensure_result = result
-    for error in result["errors"]:
-        current_app.logger.warning("Operational sort generation skipped: %s", error)
-    return result
+def _current_sort_state(gateway):
+    local_now = current_gateway_local_datetime(gateway)
+    operations = current_existing_operational_sort_operations(
+        gateway,
+        local_now=local_now,
+    )
+    return {
+        "sort_date": operations[0].sort_date if operations else local_now.date(),
+        "local_now": local_now,
+        "operations": operations,
+    }
 
 
 def _selected_current_operation(operations, operation_id=None):
@@ -4579,8 +4559,7 @@ def _record_alp_planning_marker(
 
 
 def _review_item_matches_selected_operation(gateway, review_item):
-    generation_result = _auto_generate_today_sorts(gateway)
-    operations = current_operations_for_gateway(gateway)
+    operations = _current_sort_state(gateway)["operations"]
     selected_operation = _selected_current_operation(
         operations,
         operation_id=request.form.get("operation_id"),
@@ -4589,19 +4568,6 @@ def _review_item_matches_selected_operation(gateway, review_item):
         selected_operation
         and selected_operation.id == review_item.sort_date_operation_id
     )
-
-
-def _sync_operation_with_master(operation):
-    result = sync_sort_operation_with_master(operation)
-    for master_row in result["skipped"]:
-        current_app.logger.warning(
-            "Master schedule sync skipped duplicate flight %s for %s %s %s",
-            master_row.flight_number,
-            operation.gateway_code,
-            operation.sort_date,
-            operation.sort_name,
-        )
-    return result
 
 
 def _mission_or_404(operation, mission_id, for_update=False):

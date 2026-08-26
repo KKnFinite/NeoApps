@@ -374,7 +374,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         pull_revision = upcoming_pulls_revision(self.gateway, operation=operation)
         self.assertNotEqual(pull_revision, lineup_revision)
 
-    def test_upcoming_pulls_state_skips_lifecycle_but_page_does_not(self):
+    def test_upcoming_pulls_page_and_state_skip_global_lifecycle_writes(self):
         self._add_operation_departure("UPS701", "BOS")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -388,8 +388,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ) as expire_alerts:
             page = self.client.get("/neoermac/upcoming-pulls")
             self.assertEqual(page.status_code, 200)
-            ensure_lifecycle.assert_called_once()
-            expire_alerts.assert_called_once()
+            ensure_lifecycle.assert_not_called()
+            expire_alerts.assert_not_called()
             ensure_lifecycle.reset_mock()
             expire_alerts.reset_mock()
 
@@ -4061,7 +4061,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'data-refresh-url="/neoermac/view-outbound/state"', page.data)
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
-    def test_view_outbound_only_skips_lifecycle_for_state_request(self):
+    def test_view_outbound_page_and_state_skip_global_lifecycle_writes(self):
         self._add_operation_departure("UPS501", "SDF", tail="N501UP")
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -4078,8 +4078,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
             page = self.client.get("/neoermac/view-outbound")
 
         self.assertEqual(page.status_code, 200)
-        lifecycle.assert_called_once_with(self.gateway)
-        alert_expiration.assert_called_once_with(self.gateway)
+        lifecycle.assert_not_called()
+        alert_expiration.assert_not_called()
         revision = re.search(
             rb'data-outbound-revision="([a-f0-9]+)"',
             page.data,

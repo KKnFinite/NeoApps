@@ -1,26 +1,32 @@
 """Safe display status for the server-resolved Google MotherBrain live poll."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.models import MotherBrainGoogleLivePollState
-from app.services.gateway_matrix import gateway_timezone
+from app.models import MotherBrainGoogleLivePollState, SortTimelineSortSetting
+from app.services.gateway_matrix import (
+    current_gateway_local_datetime,
+    gateway_timezone,
+)
 from app.services.google_motherbrain_import import (
     GOOGLE_MOTHERBRAIN_SORT_NAME,
 )
 from app.services.google_motherbrain_live_poll_execution import (
-    _polling_window_operation,
+    google_polling_window_for_operation,
 )
 from app.services.google_motherbrain_live_polling import (
     google_motherbrain_live_polling_status,
 )
-from app.services.operation_lifecycle import ensure_operational_sort_operations
+from app.services.operation_lifecycle import (
+    current_existing_operational_sort_operations,
+)
 
 
 GOOGLE_LIVE_POLL_STALE_AFTER = timedelta(minutes=3)
 
 
-def google_motherbrain_live_poll_health(gateway, now=None, *, lifecycle=None):
+def google_motherbrain_live_poll_health(gateway, now=None):
     """Return a safe current-sort sync summary without reading Google.
 
     The selected operation-detail URL is deliberately not accepted here.  The
@@ -43,8 +49,40 @@ def google_motherbrain_live_poll_health(gateway, now=None, *, lifecycle=None):
     if not polling["enabled"]:
         return health
 
-    lifecycle = lifecycle or ensure_operational_sort_operations(gateway, now=now)
-    operation = _polling_window_operation(gateway, lifecycle, now=now)
+    local_now = current_gateway_local_datetime(gateway, now=now)
+    operations = current_existing_operational_sort_operations(
+        gateway,
+        now=now,
+        local_now=local_now,
+    )
+    operation = next(
+        (
+            row
+            for row in operations
+            if str(row.sort_name or "").strip().lower()
+            == GOOGLE_MOTHERBRAIN_SORT_NAME
+        ),
+        None,
+    )
+    if operation is not None:
+        sort_setting = SortTimelineSortSetting.query.filter_by(
+            gateway_id=gateway.id,
+            sort_name=GOOGLE_MOTHERBRAIN_SORT_NAME,
+        ).first()
+        start_local, end_local = (
+            google_polling_window_for_operation(
+                operation,
+                SimpleNamespace(sort_settings=[sort_setting]),
+            )
+            if sort_setting is not None
+            else (None, None)
+        )
+        if not (
+            start_local
+            and end_local
+            and start_local <= local_now < end_local
+        ):
+            operation = None
     if operation is None:
         health.update(
             {

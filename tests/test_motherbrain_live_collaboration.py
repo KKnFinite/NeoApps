@@ -746,7 +746,7 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         db.session.commit()
         self._assert_revision_changed(revision, "arrival")
 
-    def test_normal_planning_page_keeps_global_lifecycle_maintenance(self):
+    def test_normal_planning_page_skips_global_lifecycle_maintenance(self):
         with (
             patch(
                 "app.services.operation_lifecycle.ensure_operational_sort_operations"
@@ -761,8 +761,8 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        lifecycle.assert_called_once_with(self.gateway)
-        alert_expiration.assert_called_once_with(self.gateway)
+        lifecycle.assert_not_called()
+        alert_expiration.assert_not_called()
 
     def test_stale_mission_save_returns_structured_field_conflict(self):
         mission = self._mission(

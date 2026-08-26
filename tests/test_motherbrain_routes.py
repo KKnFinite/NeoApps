@@ -1735,7 +1735,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(monday_day.gateway_code, "RFD")
         self.assertTrue(monday_day.is_active)
 
-    def test_motherbrain_auto_generates_today_active_matrix_sorts(self):
+    def test_motherbrain_get_does_not_generate_active_matrix_sort(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
@@ -1755,11 +1755,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
             sort_name="night",
         ).first()
         self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(operation)
-        self.assertEqual(len(operation.missions), 1)
-        self.assertEqual(operation.missions[0].flight_number, "AUTO01")
+        self.assertIsNone(operation)
+        self.assertEqual(SortDateMission.query.count(), 0)
 
-    def test_rfd_hub_creates_and_displays_today_active_sort(self):
+    def test_rfd_hub_get_does_not_create_today_active_sort(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
@@ -1774,19 +1773,58 @@ class MotherBrainRoutesTest(unittest.TestCase):
             sort_name="night",
         ).first()
         self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(operation)
-        self.assertIn(b"rfd-active-sort-banner", response.data)
-        self.assertIn(b"Active Sort", response.data)
-        self.assertIn(
-            f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
-            response.data,
-        )
+        self.assertIsNone(operation)
+        self.assertIn(b"No active sort configured for today.", response.data)
         self.assertNotIn(b'rfd-active-sort-select', response.data)
+
+    def test_operational_read_pages_do_not_create_any_sort_rows(self):
+        sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
+        self._add_master(
+            flight_number="READONLY",
+            active_days=day,
+            sort_name="night",
+        )
+        db.session.commit()
+
+        for method, path in (
+            ("GET", "/rfd"),
+            ("GET", "/motherbrain"),
+            ("GET", "/motherbrain/manage-sort"),
+            ("HEAD", "/motherbrain/manage-sort"),
+            ("GET", "/motherbrain/flight-api-test"),
+            ("GET", "/motherbrain/flight-api-review"),
+        ):
+            with self.subTest(method=method, path=path):
+                statements = []
+
+                def capture(_conn, _cursor, statement, _params, _context, _many):
+                    statements.append(statement.strip().lower())
+
+                event.listen(db.engine, "before_cursor_execute", capture)
+                try:
+                    response = self.client.open(path, method=method)
+                finally:
+                    event.remove(db.engine, "before_cursor_execute", capture)
+                self.assertEqual(response.status_code, 200)
+                self.assertFalse(
+                    any(
+                        statement.startswith(("insert", "update", "delete"))
+                        for statement in statements
+                    )
+                )
+                self.assertEqual(SortDateOperation.query.count(), 0)
+                self.assertEqual(SortDateMission.query.count(), 0)
+                self.assertEqual(SortDateTailState.query.count(), 0)
+                self.assertEqual(SortDateCrewAssignment.query.count(), 0)
 
     def test_rfd_hub_reuses_existing_active_sort_without_duplicate(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
         existing = self._operation(sort_date=sort_date, sort_name="night")
         db.session.add(existing)
         db.session.commit()
@@ -1809,6 +1847,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_rfd_hub_multiple_active_sorts_render_selector_and_update_launch_context(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "day")
+        self._add_matrix_cell(day, "night")
+        self._set_sort_window("day", time(0, 0), time(23, 59))
+        self._set_sort_window("night", time(0, 0), time(23, 59))
         day_operation = self._operation(sort_date=sort_date, sort_name="day")
         night_operation = self._operation(sort_date=sort_date, sort_name="night")
         db.session.add_all([day_operation, night_operation])
@@ -1834,7 +1877,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b"rfd-hub-sort-status", response.data)
         self.assertEqual(SortDateOperation.query.filter_by(gateway_code="RFD").count(), 0)
 
-    def test_manage_sort_creates_missing_operations_without_duplicates(self):
+    def test_manage_sort_displays_existing_operation_without_duplicates(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         self._add_matrix_cell(day, "night")
@@ -1844,6 +1887,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             active_days=day,
             sort_name="night",
         )
+        operation = self._operation(sort_date=sort_date, sort_name="night")
+        db.session.add(operation)
         db.session.commit()
 
         first_response = self.client.get("/motherbrain/manage-sort")
@@ -1906,14 +1951,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self._add_matrix_cell(day, "day")
         self._set_sort_window("night", time(0, 0), time(23, 59))
         self._set_sort_window("day", time(0, 0), time(23, 59))
+        night_operation = self._operation(sort_date=sort_date, sort_name="night")
+        day_operation = self._operation(sort_date=sort_date, sort_name="day")
+        db.session.add_all((night_operation, day_operation))
         db.session.commit()
 
-        self.client.get("/motherbrain/manage-sort")
-        night_operation = SortDateOperation.query.filter_by(
-            gateway_code="RFD",
-            sort_date=sort_date,
-            sort_name="night",
-        ).one()
         response = self.client.get(f"/motherbrain/manage-sort?operation_id={night_operation.id}")
 
         self.assertEqual(response.status_code, 200)
@@ -1924,6 +1966,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_flight_api_review_uses_selected_operation_context(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
+        day = sort_date.strftime("%A").lower()
+        self._add_matrix_cell(day, "night")
+        self._add_matrix_cell(day, "day")
+        self._set_sort_window("night", time(0, 0), time(23, 59))
+        self._set_sort_window("day", time(0, 0), time(23, 59))
         night_operation = self._operation(sort_date=sort_date, sort_name="night")
         day_operation = self._operation(sort_date=sort_date, sort_name="day")
         db.session.add_all([night_operation, day_operation])
@@ -1958,6 +2005,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_manage_sort_after_midnight_shows_previous_day_active_night_sort(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
+        self._add_matrix_cell("thursday", "night")
         self._set_sort_window("night", time(22, 0), time(4, 0))
         previous_operation = self._operation(
             gateway_id=self.rfd_gateway.id,
@@ -1995,6 +2043,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_manage_sort_does_not_create_current_day_duplicate_while_prior_night_active(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 19, 0, 30)
         self._set_sort_window("night", time(22, 0), time(4, 0))
+        self._add_matrix_cell("thursday", "night")
         self._add_matrix_cell("friday", "night")
         previous_operation = self._operation(
             gateway_id=self.rfd_gateway.id,
@@ -2015,7 +2064,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(current_day_operations, [])
         self.assertIn(b"RFD NIGHT 6/18/26", response.data)
 
-    def test_manage_sort_syncs_new_master_rows_into_existing_operation(self):
+    def test_manage_sort_get_does_not_sync_new_master_rows(self):
         sort_date = current_gateway_local_date(self.rfd_gateway)
         day = sort_date.strftime("%A").lower()
         operation = self._operation(sort_date=sort_date)
@@ -2028,13 +2077,13 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get("/motherbrain/manage-sort")
 
-        mission = SortDateMission.query.filter_by(flight_number="SYNCIN").one()
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(mission.sort_date_operation_id, operation.id)
-        self.assertEqual(mission.master_flight_schedule_id, master.id)
-        self.assertEqual(mission.mission_source, "master")
+        self.assertEqual(
+            SortDateMission.query.filter_by(flight_number="SYNCIN").count(),
+            0,
+        )
 
-    def test_operation_detail_syncs_newer_master_template_fields(self):
+    def test_operation_detail_get_does_not_sync_newer_master_template_fields(self):
         master = self._add_master(
             flight_number="SYNCUP",
             active_days="monday",
@@ -2066,8 +2115,11 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         updated_mission = db.session.get(SortDateMission, mission.id)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(updated_mission.destination, "ONT")
-        self.assertEqual(updated_mission.planned_datetime_local, datetime(2026, 6, 2, 3, 20))
+        self.assertEqual(updated_mission.destination, "OLD")
+        self.assertNotEqual(
+            updated_mission.planned_datetime_local,
+            datetime(2026, 6, 2, 3, 20),
+        )
 
     def test_manage_sort_empty_state_is_simple_centered_message(self):
         response = self.client.get("/motherbrain/manage-sort")

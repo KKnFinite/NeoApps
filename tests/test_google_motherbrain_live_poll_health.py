@@ -93,6 +93,19 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
         self.assertEqual(health["status"], "off")
         self.assertEqual(health["label"], "OFF")
 
+    def test_enabled_health_read_does_not_create_missing_operation(self):
+        self._enable()
+        db.session.delete(self.operation)
+        db.session.commit()
+
+        health = google_motherbrain_live_poll_health(
+            self.gateway,
+            now=self.NOW_UTC,
+        )
+
+        self.assertEqual(health["status"], "outside_window")
+        self.assertEqual(SortDateOperation.query.count(), 0)
+
     def test_recent_success_is_current(self):
         self._enable()
         self._state(last_success_at_utc=self._utc_now() - timedelta(minutes=2))

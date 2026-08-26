@@ -634,45 +634,8 @@ def register_request_guards(app):
                     ), 404
             return None
 
-        # NeoScorpion and NeoErmac resolve an already-existing current operation
-        # through the read-only lifecycle-window authority. Their normal GETs
-        # must never generate or otherwise mutate sort operations.
-        if request.blueprint in {"neoscorpion", "neoermac"}:
-            return None
-
-        from app.services.access_control import get_current_gateway
-        from app.services.operation_lifecycle import ensure_operational_sort_operations
-
-        gateway = get_current_gateway()
-        if not user_has_gateway_access(current_user, gateway.code):
-            return None
-
-        try:
-            g.operational_sort_ensure_result = ensure_operational_sort_operations(gateway)
-        except Exception:
-            db.session.rollback()
-            app.logger.exception("Operational sort lifecycle check failed.")
-            from app.services.gateway_matrix import current_gateway_local_datetime
-
-            local_now = current_gateway_local_datetime(gateway)
-            g.operational_sort_ensure_result = {
-                "sort_date": local_now.date(),
-                "local_now": local_now,
-                "eligible": [],
-                "created": [],
-                "existing": [],
-                "errors": ["Operation lifecycle check failed."],
-            }
-        try:
-            from app.services.unmatched_review_alerts import (
-                expire_unmatched_review_alerts,
-            )
-
-            if expire_unmatched_review_alerts(gateway):
-                db.session.commit()
-        except Exception:
-            db.session.rollback()
-            app.logger.exception("Unmatched review alert expiration failed safely.")
+        # Ordinary operational GET/HEAD requests are read-only. Operation
+        # creation and operational maintenance belong to explicit write paths.
         return None
 
     @app.after_request
