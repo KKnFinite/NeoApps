@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 import re
 
 from flask import current_app
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -2597,8 +2597,6 @@ def people_context(filters=None, user=None):
         paginated_rows = rows
 
     selected_person = _resolve_people_detail(filters.get("person_id"), rows)
-    if selected_person is None and paginated_rows:
-        selected_person = paginated_rows[0]
 
     counts = {
         "total": total_matches,
@@ -2694,21 +2692,28 @@ def management_candidates_for_unit(unit):
     if not unit:
         return []
     candidates = []
-    people = (
-        StaffingPerson.query.filter(
+    linked_people = (
+        db.session.query(StaffingPerson, User)
+        .join(
+            User,
+            and_(
+                User.employee_id.is_not(None),
+                func.lower(func.trim(User.employee_id))
+                == func.lower(func.trim(StaffingPerson.employee_id)),
+            ),
+        )
+        .filter(
             StaffingPerson.active.is_(True),
             StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS),
+            User.is_active.is_(True),
         )
         .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.employee_id)
         .all()
     )
-    for person in people:
+    for person, linked_user in linked_people:
         try:
             leadership_level = default_leadership_level_for(person, unit)
         except ValueError:
-            continue
-        linked_user = linked_user_for_person(person)
-        if not linked_user:
             continue
         candidates.append(
             {
@@ -4268,7 +4273,8 @@ def linked_user_for_person(person):
     if not person or not person.employee_id:
         return None
     return User.query.filter(
-        func.lower(User.employee_id) == person.employee_id.lower()
+        User.is_active.is_(True),
+        func.lower(func.trim(User.employee_id)) == person.employee_id.strip().lower(),
     ).first()
 
 

@@ -1635,6 +1635,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         leadership = self.client.get(
             f"/neostaffing/people?work_area_id={work_area.id}&leadership_only=1&person_id={supervisor.id}"
         )
+        unselected = self.client.get(
+            f"/neostaffing/people?work_area_id={work_area.id}"
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"E810", response.data)
@@ -1658,6 +1661,103 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"E812", leadership.data)
         self.assertIn(b"Part Time Supervisor", leadership.data)
         self.assertNotIn(b"E810", leadership.data)
+        self.assertIn(b"Select an employee to view details.", unselected.data)
+        self.assertNotIn(
+            f'/neostaffing/app-management/people/{avery.id}/update'.encode(),
+            unselected.data,
+        )
+
+    def test_pt_supervisor_candidates_use_linked_universal_account_without_staffing_access(self):
+        editor_user = self._user("staffing_pt_candidate_editor")
+        self._grant_app_access(editor_user, "neostaffing", "simulator")
+        _sort, _operation, department, work_area = self._staffing_hierarchy()
+        editor = staffing_service.create_person(
+            {
+                "employee_id": "PTC-EDITOR",
+                "first_name": "Full",
+                "last_name": "Editor",
+                "seniority_date": "2015-01-01",
+                "classification": "full_time_supervisor",
+            }
+        )
+        editor_user.employee_id = editor.employee_id
+        eligible = staffing_service.create_person(
+            {
+                "employee_id": "PTC-100",
+                "first_name": "Fueling",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        linked_account = self._link_user_for_person(eligible, "staffing_pt_candidate_link")
+        linked_account.employee_id = f"  {eligible.employee_id.lower()}  "
+        wrong_classification = staffing_service.create_person(
+            {
+                "employee_id": "PTC-UNION",
+                "first_name": "Union",
+                "last_name": "Worker",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time",
+            }
+        )
+        self._link_user_for_person(wrong_classification, "staffing_pt_candidate_union")
+        inactive = staffing_service.create_person(
+            {
+                "employee_id": "PTC-INACTIVE",
+                "first_name": "Inactive",
+                "last_name": "Supervisor",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        inactive.active = False
+        self._link_user_for_person(inactive, "staffing_pt_candidate_inactive")
+        staffing_service.create_person(
+            {
+                "employee_id": "PTC-UNLINKED",
+                "first_name": "Unlinked",
+                "last_name": "Supervisor",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        staffing_service.create_leadership_assignment(editor, department)
+        db.session.add(
+            StaffingReportingRelationship(
+                person=eligible,
+                reports_to_person=editor,
+            )
+        )
+        db.session.commit()
+        client = self._logged_in_client(editor_user.username)
+
+        page = client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        assigned = client.post(
+            "/neostaffing/app-management/management-assignments",
+            data={
+                "person_id": str(eligible.id),
+                "unit_id": str(work_area.id),
+                "leadership_level": "work_area",
+                "return_unit_id": str(work_area.id),
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"PTC-100", page.data)
+        self.assertNotIn(b"PTC-UNION", page.data)
+        self.assertNotIn(b"PTC-INACTIVE", page.data)
+        self.assertNotIn(b"PTC-UNLINKED", page.data)
+        self.assertEqual(assigned.status_code, 302)
+        self.assertTrue(
+            StaffingLeadershipAssignment.query.filter_by(
+                person_id=eligible.id,
+                unit_id=work_area.id,
+                leadership_level="work_area",
+                active=True,
+            ).one_or_none()
+        )
 
     def test_people_view_is_work_area_roster_with_secondary_filters(self):
         user = self._user("staffing_people_filters")

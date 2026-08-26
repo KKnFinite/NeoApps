@@ -648,6 +648,12 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
             ["E701", "E700"],
         )
         self.assertEqual(work_area_context["selected_sort"], sort)
+        self.assertIsNone(work_area_context["selected_person"])
+
+        selected_context = staffing_service.people_context(
+            {"work_area_id": str(work_area.id), "person_id": str(east_employee.id)}
+        )
+        self.assertEqual(selected_context["selected_person"]["person"], east_employee)
 
     def test_people_context_searches_by_employee_id_and_name(self):
         _sort, operation, _department, work_area = self._hierarchy()
