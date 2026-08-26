@@ -20,6 +20,7 @@ from app.models import (
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionCalendarShare,
     StaffingVacationUnionSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
@@ -171,9 +172,322 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             user,
         )
         db.session.commit()
-        self.assertEqual(calendar.name, "Ramp Union Updated")
+        self.assertEqual(calendar.name, "Hourly Vacation Calendar - Blue Ramp")
         self.assertTrue(calendar.include_full_time)
         self.assertEqual({scope.staffing_unit_id for scope in calendar.scopes}, {self.units["blue_area"].id})
+
+    def test_official_calendar_authority_overlap_and_generated_name(self):
+        grandmaster = self._user("official_overlap_gm", "grandmaster")
+        pt_actor = self._union_actor(
+            "official_pt", "simulator", "part_time_supervisor"
+        )
+        ft_actor = self._union_actor(
+            "official_ft", "simulator", "full_time_supervisor"
+        )
+        master_actor = self._union_actor(
+            "official_master", "master", "full_time_supervisor"
+        )
+        employee = self._union_person(
+            "OC1", "Official", "Employee", self.units["blue_area"]
+        )
+        db.session.commit()
+        values = {
+            "vacation_year": self.YEAR,
+            "calendar_type": "official",
+            "operation_unit_id": self.units["ramp"].id,
+            "include_part_time": "1",
+            "staffing_unit_ids": [self.units["blue_area"].id],
+            "active": "1",
+        }
+        with self.assertRaisesRegex(ValueError, "FT Supervisor or Manager"):
+            vacation_service.create_union_calendar(values, pt_actor)
+        db.session.rollback()
+
+        sideways_values = dict(values)
+        sideways_values["staffing_unit_ids"] = [self.units["brown_area"].id]
+        with self.assertRaisesRegex(ValueError, "FT Supervisor or Manager"):
+            vacation_service.create_union_calendar(sideways_values, ft_actor)
+        db.session.rollback()
+        sideways = vacation_service.create_union_calendar(
+            sideways_values, master_actor
+        )
+        db.session.commit()
+        self.assertIn("Brown Outbound", sideways.name)
+
+        calendar = vacation_service.create_union_calendar(values, ft_actor)
+        db.session.commit()
+        self.assertEqual(calendar.calendar_type, "official")
+        self.assertEqual(calendar.owner_user_id, ft_actor.id)
+        self.assertEqual(
+            calendar.name, "Hourly Vacation Calendar - PT - Blue Ramp"
+        )
+        with self.assertRaisesRegex(ValueError, "only one Official") as conflict:
+            vacation_service.create_union_calendar(values, grandmaster)
+        self.assertIn(employee.employee_id, str(conflict.exception))
+        self.assertIn("Blue Ramp", str(conflict.exception))
+
+    def test_official_name_truncation_scope_edit_and_delete_preserves_selection(self):
+        grandmaster = self._user("official_admin_gm", "grandmaster")
+        extra_units = []
+        for index in range(4):
+            department = StaffingUnit(
+                unit_type="department",
+                name=f"Extra Department {index + 1}",
+                parent=self.units["ramp"],
+                display_order=10 + index,
+            )
+            area = StaffingUnit(
+                unit_type="work_area",
+                name=f"Extra Area {index + 1}",
+                parent=department,
+                display_order=1,
+            )
+            db.session.add_all([department, area])
+            extra_units.append(area)
+        person = self._union_person(
+            "OC2", "Durable", "Selection", self.units["blue_area"]
+        )
+        db.session.flush()
+        values = {
+            "vacation_year": self.YEAR,
+            "calendar_type": "official",
+            "operation_unit_id": self.units["ramp"].id,
+            "include_part_time": "1",
+            "staffing_unit_ids": [area.id for area in extra_units],
+            "active": "1",
+        }
+        calendar = vacation_service.create_union_calendar(values, grandmaster)
+        self.assertIn("+1 more", calendar.name)
+        self.assertIn(
+            "Extra Department 4",
+            vacation_service.union_calendar_scope_label(calendar),
+        )
+        selection = StaffingVacationUnionSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 7, 10),
+            bank_type="regular",
+            status="approved",
+            entered_by_user_id=grandmaster.id,
+        )
+        db.session.add(selection)
+        db.session.commit()
+
+        update = dict(values)
+        update["staffing_unit_ids"] = [self.units["brown_area"].id]
+        vacation_service.update_union_calendar(calendar, update, grandmaster)
+        self.assertEqual(
+            calendar.name, "Hourly Vacation Calendar - PT - Brown Outbound"
+        )
+        vacation_service.delete_union_calendar(calendar, grandmaster)
+        db.session.commit()
+        self.assertIsNotNone(
+            db.session.get(StaffingVacationUnionSelection, selection.id)
+        )
+
+    def test_view_only_limit_overlap_sharing_read_only_and_independent_copy(self):
+        owner = self._union_actor(
+            "view_owner", "simulator", "part_time_supervisor"
+        )
+        recipient = self._union_actor(
+            "view_recipient", "simulator", "part_time_supervisor"
+        )
+        recipient_two = self._union_actor(
+            "second_recipient", "simulator", "full_time_supervisor"
+        )
+        grandmaster = self._user("view_overlap_gm", "grandmaster")
+        official = self._calendar(
+            grandmaster, [self.units["blue_area"].id], name="Official"
+        )
+        db.session.commit()
+        created = []
+        for index in range(5):
+            created.append(
+                vacation_service.create_union_calendar(
+                    {
+                        "vacation_year": self.YEAR,
+                        "calendar_type": "view_only",
+                        "name": f"Personal {index + 1}",
+                        "operation_unit_id": self.units["ramp"].id,
+                        "include_part_time": "1",
+                        "staffing_unit_ids": [self.units["blue_area"].id],
+                        "active": "1",
+                    },
+                    owner,
+                )
+            )
+        db.session.commit()
+        self.assertEqual(official.calendar_type, "official")
+        self.assertEqual(len(created), 5)
+        with self.assertRaisesRegex(ValueError, "up to 5"):
+            vacation_service.create_union_calendar(
+                {
+                    "vacation_year": self.YEAR,
+                    "calendar_type": "view_only",
+                    "name": "Sixth",
+                    "operation_unit_id": self.units["ramp"].id,
+                    "include_part_time": "1",
+                    "staffing_unit_ids": [self.units["blue_area"].id],
+                    "active": "1",
+                },
+                owner,
+            )
+        db.session.rollback()
+        calendar = db.session.get(StaffingVacationUnionCalendar, created[0].id)
+        vacation_service.update_view_calendar_shares(
+            calendar, [recipient.id, recipient_two.id], owner
+        )
+        db.session.commit()
+        self.assertEqual(StaffingVacationUnionCalendarShare.query.count(), 2)
+        self.assertTrue(vacation_service.can_view_union_calendar(calendar, recipient))
+        self.assertTrue(
+            vacation_service.can_view_union_calendar(calendar, recipient_two)
+        )
+        search = vacation_service.search_management_calendar_users("second_rec")
+        self.assertEqual([row["user"].id for row in search], [recipient_two.id])
+        with self.assertRaisesRegex(ValueError, "Only the owner"):
+            vacation_service.update_union_calendar(
+                calendar,
+                {
+                    "vacation_year": self.YEAR,
+                    "calendar_type": "view_only",
+                    "name": "Forged Rename",
+                    "operation_unit_id": self.units["ramp"].id,
+                    "include_part_time": "1",
+                    "staffing_unit_ids": [self.units["blue_area"].id],
+                    "active": "1",
+                },
+                recipient,
+            )
+        db.session.rollback()
+        copied = vacation_service.copy_shared_view_calendar(
+            calendar, "Independent Copy", recipient
+        )
+        db.session.commit()
+        self.assertNotEqual(copied.id, calendar.id)
+        self.assertEqual(copied.owner_user_id, recipient.id)
+        calendar.name = "Owner Changed Name"
+        db.session.commit()
+        self.assertEqual(copied.name, "Independent Copy")
+        self._login(recipient)
+        self.assertEqual(
+            self.client.get(
+                f"/neostaffing/vacation-selection/union/{calendar.id}/view"
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/neostaffing/vacation-selection/union/{calendar.id}/edit"
+            ).status_code,
+            302,
+        )
+
+    def test_calendar_owner_fallback_prefers_level_then_seniority(self):
+        owner = self._union_actor(
+            "fallback_owner", "simulator", "full_time_supervisor"
+        )
+        senior_ft = self._union_actor(
+            "fallback_ft", "simulator", "full_time_supervisor"
+        )
+        manager = self._union_actor(
+            "fallback_manager", "simulator", "manager"
+        )
+        official = vacation_service.create_union_calendar(
+            {
+                "vacation_year": self.YEAR,
+                "calendar_type": "official",
+                "operation_unit_id": self.units["ramp"].id,
+                "include_part_time": "1",
+                "staffing_unit_ids": [self.units["blue_area"].id],
+                "active": "1",
+            },
+            owner,
+        )
+        calendar = vacation_service.create_union_calendar(
+            {
+                "vacation_year": self.YEAR,
+                "calendar_type": "view_only",
+                "name": "Fallback View",
+                "operation_unit_id": self.units["ramp"].id,
+                "include_part_time": "1",
+                "staffing_unit_ids": [self.units["blue_area"].id],
+                "active": "1",
+            },
+            owner,
+        )
+        owner.is_active = False
+        db.session.commit()
+
+        replacement = vacation_service.resolve_union_calendar_owner(
+            calendar, persist=True
+        )
+        db.session.commit()
+        self.assertEqual(replacement.id, manager.id)
+        self.assertEqual(calendar.owner_user_id, manager.id)
+        self.assertNotEqual(replacement.id, senior_ft.id)
+        official_replacement = vacation_service.resolve_union_calendar_owner(
+            official, persist=True
+        )
+        self.assertEqual(official_replacement.id, manager.id)
+        self.assertEqual(official.owner_user_id, manager.id)
+
+        grandmaster = self._user("fallback_gm", "grandmaster")
+        manager.is_active = False
+        senior_ft.is_active = False
+        db.session.commit()
+        fallback = vacation_service.resolve_union_calendar_owner(
+            calendar, persist=True
+        )
+        db.session.commit()
+        self.assertEqual(fallback.id, grandmaster.id)
+        self.assertEqual(calendar.owner_user_id, grandmaster.id)
+        self.assertEqual(
+            vacation_service.resolve_union_calendar_owner(official).id,
+            grandmaster.id,
+        )
+
+    def test_grandmaster_calendar_admin_and_context_queries_are_bounded(self):
+        grandmaster = self._user("calendar_admin_gm", "grandmaster")
+        owner = self._union_actor(
+            "bounded_view_owner", "simulator", "part_time_supervisor"
+        )
+        for index in range(5):
+            vacation_service.create_union_calendar(
+                {
+                    "vacation_year": self.YEAR,
+                    "calendar_type": "view_only",
+                    "name": f"Bounded View {index}",
+                    "operation_unit_id": self.units["ramp"].id,
+                    "include_part_time": "1",
+                    "staffing_unit_ids": [self.units["blue_area"].id],
+                    "active": "1",
+                },
+                owner,
+            )
+        db.session.commit()
+        statements = []
+
+        def record(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", record)
+        try:
+            context = vacation_service.union_calendars_context(self.YEAR, owner)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record)
+        self.assertEqual(len(context["my_view_calendars"]), 5)
+        self.assertLessEqual(len(statements), 16)
+        admin = vacation_service.union_calendar_admin_context(grandmaster)
+        self.assertEqual(len(admin["calendars"]), 5)
+        with self.assertRaisesRegex(ValueError, "Grandmaster"):
+            vacation_service.union_calendar_admin_context(owner)
+        self._login(grandmaster)
+        page = self.client.get("/neostaffing/vacation-selection/union/admin")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"CALENDAR ADMIN", page.data)
+        self.assertIn(b"Bounded View 0", page.data)
 
     def test_union_membership_filters_pt_ft_seasonal_non_domiciled_and_inactive(self):
         people = {

@@ -1,7 +1,7 @@
 (() => {
     "use strict";
     const editor = document.querySelector("[data-vacation-union-editor]");
-    if (!editor) return;
+    if (editor) {
     const operationSelect = editor.querySelector("[data-vacation-operation-select]");
     const trees = [...editor.querySelectorAll("[data-vacation-operation-tree]")];
     const childChecks = (node) => [...node.querySelectorAll(":scope > ul [data-vacation-scope-check]")];
@@ -39,4 +39,53 @@
     });
     editor.querySelectorAll('[data-indeterminate="1"]').forEach((input) => { input.indeterminate = true; });
     selectOperation();
+    }
+
+    const sharing = document.querySelector("[data-vacation-sharing]");
+    if (!sharing) return;
+    const search = sharing.querySelector("[data-vacation-share-search]");
+    const results = sharing.querySelector("[data-vacation-share-results]");
+    const selected = sharing.querySelector("[data-vacation-share-selected]");
+    let searchTimer = null;
+    const selectedIds = () => new Set(
+        [...selected.querySelectorAll('input[name="recipient_user_ids"]')].map((input) => input.value)
+    );
+    const addRecipient = (row) => {
+        if (selectedIds().has(String(row.user_id))) return;
+        selected.querySelector("small")?.remove();
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        const text = document.createElement("span");
+        input.type = "checkbox";
+        input.name = "recipient_user_ids";
+        input.value = row.user_id;
+        input.checked = true;
+        text.textContent = `${row.name} · ${row.employee_id}`;
+        label.append(input, text);
+        selected.append(label);
+    };
+    const renderResults = (rows) => {
+        results.replaceChildren();
+        rows.filter((row) => !selectedIds().has(String(row.user_id))).forEach((row) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = `${row.name} · ${row.employee_id}`;
+            button.addEventListener("click", () => { addRecipient(row); button.remove(); });
+            results.append(button);
+        });
+    };
+    search.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        const query = search.value.trim();
+        if (query.length < 2) { results.replaceChildren(); return; }
+        searchTimer = setTimeout(async () => {
+            try {
+                const response = await fetch(`${sharing.dataset.searchUrl}?q=${encodeURIComponent(query)}`, { headers: { Accept: "application/json" } });
+                if (!response.ok) throw new Error("search failed");
+                renderResults((await response.json()).results || []);
+            } catch (_error) {
+                results.textContent = "Search unavailable.";
+            }
+        }, 180);
+    });
 })();

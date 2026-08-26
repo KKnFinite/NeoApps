@@ -11,6 +11,7 @@ from app.models import (
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionCalendarShare,
     StaffingVacationUnionSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
@@ -24,6 +25,7 @@ NEOSTAFFING_VACATION_SCHEMA_LOCK_TIMEOUT = "5s"
 NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionCalendarShare,
     StaffingVacationUnionSelection,
     StaffingVacationManagementCapacity,
     StaffingVacationManagementWeekOverride,
@@ -57,6 +59,52 @@ def ensure_neostaffing_vacation_tables(app):
             )
             for model in NEOSTAFFING_VACATION_MODELS:
                 model.__table__.create(bind=connection, checkfirst=True)
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_union_calendars "
+                    "ADD COLUMN IF NOT EXISTS calendar_type VARCHAR(20) "
+                    "NOT NULL DEFAULT 'official'"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_union_calendars "
+                    "ADD COLUMN IF NOT EXISTS owner_user_id INTEGER NULL "
+                    "REFERENCES users(id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE staffing_vacation_union_calendars "
+                    "DROP CONSTRAINT IF EXISTS "
+                    "uq_staffing_vacation_union_calendars_year_operation_name"
+                )
+            )
+            connection.execute(
+                text(
+                    "DO $$ BEGIN "
+                    "IF NOT EXISTS (SELECT 1 FROM pg_constraint "
+                    "WHERE conname = 'ck_staffing_vacation_union_calendars_type') "
+                    "THEN ALTER TABLE staffing_vacation_union_calendars "
+                    "ADD CONSTRAINT ck_staffing_vacation_union_calendars_type "
+                    "CHECK (calendar_type IN ('official', 'view_only')); "
+                    "END IF; END $$"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_staffing_vacation_union_calendars_type "
+                    "ON staffing_vacation_union_calendars (calendar_type)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_staffing_vacation_union_calendars_owner_user_id "
+                    "ON staffing_vacation_union_calendars (owner_user_id)"
+                )
+            )
             connection.execute(
                 text(
                     "ALTER TABLE staffing_vacation_day_selections "

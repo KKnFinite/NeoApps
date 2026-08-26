@@ -16,11 +16,9 @@ class StaffingVacationUnionCalendar(db.Model):
             "include_part_time OR include_full_time",
             name="ck_staffing_vacation_union_calendars_classification",
         ),
-        db.UniqueConstraint(
-            "vacation_year",
-            "operation_unit_id",
-            "name",
-            name="uq_staffing_vacation_union_calendars_year_operation_name",
+        db.CheckConstraint(
+            "calendar_type IN ('official', 'view_only')",
+            name="ck_staffing_vacation_union_calendars_type",
         ),
         db.Index(
             "ix_staffing_vacation_union_calendars_year_operation",
@@ -39,6 +37,12 @@ class StaffingVacationUnionCalendar(db.Model):
         index=True,
     )
     name = db.Column(db.String(140), nullable=False)
+    calendar_type = db.Column(
+        db.String(20), nullable=False, default="official", index=True
+    )
+    owner_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=True, index=True
+    )
     include_part_time = db.Column(db.Boolean, nullable=False, default=True)
     include_full_time = db.Column(db.Boolean, nullable=False, default=False)
     active = db.Column(db.Boolean, nullable=False, default=True, index=True)
@@ -59,6 +63,13 @@ class StaffingVacationUnionCalendar(db.Model):
         cascade="all, delete-orphan",
         order_by="StaffingVacationUnionCalendarScope.id",
     )
+    shares = db.relationship(
+        "StaffingVacationUnionCalendarShare",
+        back_populates="calendar",
+        cascade="all, delete-orphan",
+        order_by="StaffingVacationUnionCalendarShare.id",
+    )
+    owner = db.relationship("User", foreign_keys=[owner_user_id])
     created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     updated_by_user = db.relationship("User", foreign_keys=[updated_by_user_id])
 
@@ -94,6 +105,45 @@ class StaffingVacationUnionCalendarScope(db.Model):
         back_populates="scopes",
     )
     staffing_unit = db.relationship("StaffingUnit")
+
+
+class StaffingVacationUnionCalendarShare(db.Model):
+    """Read-only access to one owner's View Only calendar object."""
+
+    __tablename__ = "staffing_vacation_union_calendar_shares"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "calendar_id",
+            "recipient_user_id",
+            name="uq_staffing_vacation_union_calendar_shares_recipient",
+        ),
+        db.Index(
+            "ix_staffing_vacation_union_calendar_shares_recipient",
+            "recipient_user_id",
+            "calendar_id",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    calendar_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_vacation_union_calendars.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    recipient_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False, index=True
+    )
+    shared_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    calendar = db.relationship(
+        "StaffingVacationUnionCalendar", back_populates="shares"
+    )
+    recipient = db.relationship("User", foreign_keys=[recipient_user_id])
+    shared_by_user = db.relationship("User", foreign_keys=[shared_by_user_id])
 
 
 class StaffingVacationUnionSelection(db.Model):

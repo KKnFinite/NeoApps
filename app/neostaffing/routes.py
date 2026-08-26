@@ -1020,6 +1020,23 @@ def vacation_union_calendars():
     )
 
 
+@bp.get("/vacation-selection/union/<int:calendar_id>/view")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_view(calendar_id):
+    try:
+        calendar = vacation_service.view_union_calendar_context(
+            calendar_id, current_user
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(url_for("neostaffing.vacation_union_calendars"))
+    return render_template(
+        "neostaffing/vacation_union_view.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        view=calendar,
+    )
+
+
 @bp.post("/vacation-selection/union/<int:calendar_id>/select")
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_union_select(calendar_id):
@@ -1286,6 +1303,106 @@ def vacation_union_calendar_edit(calendar_id):
                 )
             )
     return _render_vacation_union_editor(calendar, calendar.vacation_year)
+
+
+@bp.post("/vacation-selection/union/<int:calendar_id>/delete")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_delete(calendar_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.delete_union_calendar(calendar_id, current_user)
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Union vacation calendar deleted; employee selections were preserved.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_union_calendars", year=vacation_year)
+    )
+
+
+@bp.post("/vacation-selection/union/<int:calendar_id>/shares")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_shares(calendar_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.update_view_calendar_shares(
+            calendar_id,
+            request.form.getlist("recipient_user_ids"),
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("View Only calendar sharing updated.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_union_calendar_edit", calendar_id=calendar_id)
+    )
+
+
+@bp.get("/vacation-selection/union/share-search")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_share_search():
+    rows = vacation_service.search_management_calendar_users(
+        request.args.get("q"), exclude_user_id=current_user.id
+    )
+    return jsonify(
+        {
+            "results": [
+                {
+                    "user_id": row["user"].id,
+                    "employee_id": getattr(row["person"], "employee_id", None)
+                    or row["user"].employee_id
+                    or "",
+                    "name": getattr(row["person"], "full_name", None)
+                    or row["user"].full_name,
+                }
+                for row in rows
+            ]
+        }
+    )
+
+
+@bp.post("/vacation-selection/union/<int:calendar_id>/copy")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_copy(calendar_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        copied = vacation_service.copy_shared_view_calendar(
+            calendar_id, request.form.get("name"), current_user
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Independent View Only calendar created from shared scope.", "success")
+        return redirect(
+            url_for(
+                "neostaffing.vacation_union_calendar_edit", calendar_id=copied.id
+            )
+        )
+    return redirect(
+        url_for("neostaffing.vacation_union_calendars", year=vacation_year)
+    )
+
+
+@bp.get("/vacation-selection/union/admin")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_admin():
+    try:
+        admin = vacation_service.union_calendar_admin_context(current_user)
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(url_for("neostaffing.vacation_union_calendars"))
+    return render_template(
+        "neostaffing/vacation_union_admin.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        admin=admin,
+    )
 
 
 @bp.route("/settings")
@@ -2252,6 +2369,12 @@ def _render_vacation_union_editor(calendar, vacation_year):
     year = vacation_service.normalize_vacation_year(vacation_year)
     hierarchy = vacation_service.vacation_hierarchy()
     actor = vacation_service.vacation_actor(current_user, hierarchy)
+    calendar_type = str(
+        (request.form.get("calendar_type") if request.method == "POST" else None)
+        or getattr(calendar, "calendar_type", None)
+        or request.args.get("type")
+        or "official"
+    ).casefold()
     operations = [
         unit for unit in hierarchy["units"] if unit.unit_type == "operation"
     ]
@@ -2290,9 +2413,8 @@ def _render_vacation_union_editor(calendar, vacation_year):
     else:
         selected_scope_ids = set()
 
-    if calendar and not vacation_service.can_edit_union_scope(
-        actor,
-        selected_scope_ids,
+    if calendar and not vacation_service.can_edit_union_calendar(
+        calendar, current_user
     ):
         flash("You do not have authority to edit this Union vacation calendar.", "error")
         return redirect(
@@ -2301,7 +2423,9 @@ def _render_vacation_union_editor(calendar, vacation_year):
                 year=calendar.vacation_year,
             )
         )
-    if not calendar and not (actor.is_grandmaster or actor.sideways_scope_ids):
+    if not calendar and not vacation_service.can_create_union_calendar_type(
+        calendar_type, current_user
+    ):
         flash("You do not have authority to create a Union vacation calendar.", "error")
         return redirect(
             url_for("neostaffing.vacation_union_calendars", year=year)
@@ -2328,4 +2452,15 @@ def _render_vacation_union_editor(calendar, vacation_year):
         operation_trees=operation_trees,
         selected_operation_id=selected_operation_id,
         selected_scope_ids=selected_scope_ids,
+        calendar_type=calendar_type,
+        share_recipients=(
+            [share.recipient for share in calendar.shares]
+            if calendar and calendar_type == "view_only"
+            else []
+        ),
+        full_scope_label=(
+            vacation_service.union_calendar_scope_label(calendar, hierarchy)
+            if calendar
+            else ""
+        ),
     )

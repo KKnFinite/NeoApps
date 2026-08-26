@@ -7,9 +7,11 @@ import math
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
 from app.models import (
+    PortalAppAccess,
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
@@ -20,12 +22,14 @@ from app.models import (
     StaffingVacationManagementWeekOverride,
     StaffingVacationUnionCalendar,
     StaffingVacationUnionCalendarScope,
+    StaffingVacationUnionCalendarShare,
     StaffingVacationUnionSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
     StaffingVacationQualifyingHoliday,
     StaffingWorkAssignment,
+    User,
 )
 from app.models.user import ROLE_LEVELS
 from app.services.access_control import get_user_app_role
@@ -48,6 +52,20 @@ VACATION_UNION_PENDING_ENTRY_CLASSIFICATIONS = frozenset({"part_time_supervisor"
 VACATION_UNION_DIRECT_ENTRY_CLASSIFICATIONS = frozenset(
     {"full_time_supervisor", "manager", "division_manager"}
 )
+VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS = frozenset(
+    {"full_time_supervisor", "manager", "division_manager"}
+)
+VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS = frozenset(
+    {
+        "part_time_supervisor",
+        "full_time_supervisor",
+        "full_time_specialist",
+        "manager",
+        "division_manager",
+    }
+)
+VACATION_VIEW_CALENDAR_LIMIT = 5
+VACATION_CALENDAR_TYPES = frozenset({"official", "view_only"})
 VACATION_MANAGEMENT_CLASSIFICATIONS = frozenset(
     {
         "part_time_supervisor",
@@ -1211,11 +1229,15 @@ def update_union_calendar(calendar, values, user):
 
 def _save_union_calendar(calendar, values, user):
     year = normalize_vacation_year(values.get("vacation_year"))
-    name = str(values.get("name") or "").strip()
-    if not name:
-        raise ValueError("Union calendar name is required.")
-    if len(name) > 140:
-        raise ValueError("Union calendar name must be 140 characters or fewer.")
+    calendar_type = str(
+        values.get("calendar_type")
+        or getattr(calendar, "calendar_type", None)
+        or "official"
+    ).strip().casefold()
+    if calendar_type not in VACATION_CALENDAR_TYPES:
+        raise ValueError("Choose Official or View Only calendar type.")
+    if calendar and calendar.calendar_type != calendar_type:
+        raise ValueError("Calendar type cannot be changed after creation.")
     operation_id = _positive_int(values.get("operation_unit_id"), "Operation")
     scope_ids = _submitted_scope_ids(values)
     include_pt = _boolean(values.get("include_part_time"))
@@ -1235,26 +1257,67 @@ def _save_union_calendar(calendar, values, user):
         for unit in scope_units
     ):
         raise ValueError("Select valid organizational scope within the Operation.")
-    scope_ids = _canonical_scope_ids(scope_ids, hierarchy)
+    scope_ids = _highest_union_scope_ids(scope_ids, operation.id, hierarchy)
     actor = vacation_actor(user, hierarchy)
-    if not can_edit_union_scope(actor, scope_ids):
-        raise ValueError("You do not have authority to configure this Union calendar scope.")
-
-    duplicate = StaffingVacationUnionCalendar.query.filter(
-        StaffingVacationUnionCalendar.vacation_year == year,
-        StaffingVacationUnionCalendar.operation_unit_id == operation.id,
-        func.lower(StaffingVacationUnionCalendar.name) == name.casefold(),
-    )
     if calendar:
-        duplicate = duplicate.filter(StaffingVacationUnionCalendar.id != calendar.id)
-    if duplicate.first():
-        raise ValueError("A Union calendar with this name already exists for the year.")
+        resolve_union_calendar_owner(calendar, persist=True)
+    if calendar_type == "official":
+        if not _can_manage_official_calendar(actor, scope_ids):
+            raise ValueError(
+                "Only an authorized FT Supervisor or Manager may configure an Official calendar."
+            )
+        StaffingUnit.query.filter_by(id=operation.id).with_for_update().first()
+        conflicts = official_calendar_overlap_conflicts(
+            year,
+            scope_ids,
+            include_pt,
+            include_ft,
+            exclude_calendar_id=getattr(calendar, "id", None),
+            hierarchy=hierarchy,
+        )
+        if conflicts:
+            summary = "; ".join(
+                f"{row['calendar_name']} [{row['scope_label']}]: "
+                f"{', '.join(row['employee_labels'][:5]) or 'overlapping organizational scope'}"
+                for row in conflicts
+            )
+            raise ValueError(
+                "Employees may belong to only one Official editable calendar per year. "
+                f"Conflicts: {summary}"
+            )
+        name = generated_official_calendar_name(
+            scope_ids, include_pt, include_ft, hierarchy
+        )
+    else:
+        if calendar:
+            if not _can_edit_view_calendar(calendar, user):
+                raise ValueError("Only the owner may edit this View Only calendar.")
+        else:
+            if not _can_own_view_calendar(actor):
+                raise ValueError("An active NeoStaffing management user is required.")
+            owned_count = StaffingVacationUnionCalendar.query.filter_by(
+                owner_user_id=getattr(user, "id", None),
+                calendar_type="view_only",
+            ).count()
+            if owned_count >= VACATION_VIEW_CALENDAR_LIMIT:
+                raise ValueError("You may create up to 5 personal View Only calendars.")
+        if not actor.is_grandmaster and not can_edit_union_scope(actor, scope_ids):
+            raise ValueError("You do not have authority to configure this View Only scope.")
+        name = str(values.get("name") or "").strip()
+        if not name:
+            raise ValueError("A custom View Only calendar name is required.")
+        if len(name) > 140:
+            raise ValueError("View Only calendar name must be 140 characters or fewer.")
 
     if not calendar:
         calendar = StaffingVacationUnionCalendar(
             created_by_user_id=getattr(user, "id", None),
+            owner_user_id=getattr(user, "id", None),
+            calendar_type=calendar_type,
         )
         db.session.add(calendar)
+    elif calendar.owner_user_id is None:
+        calendar.owner_user_id = getattr(calendar, "created_by_user_id", None)
     calendar.vacation_year = year
     calendar.operation_unit_id = operation.id
     calendar.name = name
@@ -1265,6 +1328,365 @@ def _save_union_calendar(calendar, values, user):
     _replace_union_scopes(calendar, scope_ids)
     db.session.flush()
     return calendar
+
+
+def delete_union_calendar(calendar, user):
+    """Delete one definition without touching employee/year selections."""
+    row = _locked_union_calendar_definition(calendar)
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    scope_ids = {scope.staffing_unit_id for scope in row.scopes}
+    if row.calendar_type == "official":
+        if not _can_manage_official_calendar(actor, scope_ids):
+            raise ValueError("You do not have authority to delete this Official calendar.")
+    elif not _can_edit_view_calendar(row, user):
+        raise ValueError("Only the owner may delete this View Only calendar.")
+    db.session.delete(row)
+    db.session.flush()
+
+
+def can_edit_union_calendar(calendar, user):
+    hierarchy = vacation_hierarchy()
+    actor = vacation_actor(user, hierarchy)
+    if calendar.calendar_type == "official":
+        return _can_manage_official_calendar(
+            actor, {scope.staffing_unit_id for scope in calendar.scopes}
+        )
+    return _can_edit_view_calendar(calendar, user)
+
+
+def can_create_union_calendar_type(calendar_type, user):
+    actor = vacation_actor(user)
+    if calendar_type == "official":
+        return bool(
+            actor.is_grandmaster
+            or (
+                actor.person
+                and actor.person.classification
+                in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
+                and actor.sideways_scope_ids
+            )
+        )
+    if calendar_type == "view_only":
+        return bool(
+            _can_own_view_calendar(actor)
+            and StaffingVacationUnionCalendar.query.filter_by(
+                owner_user_id=getattr(user, "id", None),
+                calendar_type="view_only",
+            ).count()
+            < VACATION_VIEW_CALENDAR_LIMIT
+        )
+    return False
+
+
+def generated_official_calendar_name(scope_ids, include_pt, include_ft, hierarchy=None):
+    hierarchy = hierarchy or vacation_hierarchy()
+    units = _ordered_scope_units(scope_ids, hierarchy)
+    labels = [unit.name for unit in units]
+    visible = labels[:3]
+    if len(labels) > 3:
+        visible.append(f"+{len(labels) - 3} more")
+    scope_label = ", ".join(visible) or "Unscoped"
+    classification = "PT" if include_pt and not include_ft else "FT" if include_ft and not include_pt else None
+    prefix = "Hourly Vacation Calendar"
+    if classification:
+        prefix += f" - {classification}"
+    return f"{prefix} - {scope_label}"[:140]
+
+
+def official_calendar_overlap_conflicts(
+    vacation_year,
+    scope_ids,
+    include_pt,
+    include_ft,
+    *,
+    exclude_calendar_id=None,
+    hierarchy=None,
+):
+    """Return bounded, employee-specific Official overlap details."""
+    year = normalize_vacation_year(vacation_year)
+    hierarchy = hierarchy or vacation_hierarchy()
+    calendars = StaffingVacationUnionCalendar.query.options(
+        selectinload(StaffingVacationUnionCalendar.scopes)
+    ).filter_by(vacation_year=year, calendar_type="official").all()
+    calendars = [row for row in calendars if row.id != exclude_calendar_id]
+    proposed = _membership_definition(scope_ids, include_pt, include_ft, hierarchy)
+    definitions = {
+        row.id: _membership_definition(
+            {scope.staffing_unit_id for scope in row.scopes},
+            row.include_part_time,
+            row.include_full_time,
+            hierarchy,
+        )
+        for row in calendars
+    }
+    people = _active_union_people_with_assignments()
+    proposed_people = {
+        person.id: person
+        for person, assignment in people
+        if _membership_matches(person, assignment, proposed)
+    }
+    conflicts = []
+    for row in calendars:
+        overlapping_area_ids = (
+            proposed["work_area_ids"] & definitions[row.id]["work_area_ids"]
+        )
+        overlapping_classifications = (
+            proposed["classifications"] & definitions[row.id]["classifications"]
+        )
+        if not overlapping_area_ids or not overlapping_classifications:
+            continue
+        member_ids = {
+            person.id
+            for person, assignment in people
+            if _membership_matches(person, assignment, definitions[row.id])
+        }
+        overlapping = _seniority_order(
+            [proposed_people[person_id] for person_id in proposed_people.keys() & member_ids]
+        )
+        conflicts.append(
+            {
+                "calendar_id": row.id,
+                "calendar_name": row.name,
+                "scope_label": union_calendar_scope_label(row, hierarchy),
+                "area_labels": [
+                    hierarchy["by_id"][area_id].name
+                    for area_id in sorted(overlapping_area_ids)
+                    if area_id in hierarchy["by_id"]
+                ],
+                "employee_ids": [person.id for person in overlapping],
+                "employee_labels": [
+                    f"{person.employee_id} {person.last_name}, {person.first_name}"
+                    for person in overlapping
+                ],
+            }
+        )
+    return conflicts
+
+
+def update_view_calendar_shares(calendar, recipient_user_ids, user):
+    row = _locked_union_calendar_definition(calendar)
+    if row.calendar_type != "view_only":
+        raise ValueError("Only View Only calendars can be shared.")
+    if not _can_edit_view_calendar(row, user):
+        raise ValueError("Only the owner may share this View Only calendar.")
+    recipient_ids = {
+        _positive_int(value, "share recipient") for value in recipient_user_ids or ()
+    }
+    recipient_ids.discard(row.owner_user_id)
+    eligible = {item["user"].id: item for item in management_calendar_users()}
+    invalid = recipient_ids - eligible.keys()
+    if invalid:
+        raise ValueError("Every share recipient must be an active management user.")
+    existing = {share.recipient_user_id: share for share in row.shares}
+    for recipient_id, share in existing.items():
+        if recipient_id not in recipient_ids:
+            db.session.delete(share)
+    for recipient_id in sorted(recipient_ids - existing.keys()):
+        row.shares.append(
+            StaffingVacationUnionCalendarShare(
+                recipient_user_id=recipient_id,
+                shared_by_user_id=getattr(user, "id", None),
+            )
+        )
+    db.session.flush()
+    return row
+
+
+def search_management_calendar_users(search, *, exclude_user_id=None, limit=30):
+    term = str(search or "").strip().casefold()
+    rows = management_calendar_users()
+    if term:
+        rows = [
+            row
+            for row in rows
+            if term
+            in str(
+                getattr(row["person"], "employee_id", None)
+                or row["user"].employee_id
+                or ""
+            ).casefold()
+            or term
+            in str(
+                getattr(row["person"], "first_name", None)
+                or row["user"].first_name
+                or ""
+            ).casefold()
+            or term
+            in str(
+                getattr(row["person"], "last_name", None)
+                or row["user"].last_name
+                or ""
+            ).casefold()
+        ]
+    return [
+        row for row in rows if row["user"].id != exclude_user_id
+    ][: max(1, min(int(limit), 50))]
+
+
+def copy_shared_view_calendar(calendar, name, user):
+    source = _locked_union_calendar_definition(calendar)
+    if source.calendar_type != "view_only" or not can_view_union_calendar(source, user):
+        raise ValueError("The shared View Only calendar is not available.")
+    if source.owner_user_id == getattr(user, "id", None):
+        raise ValueError("Copy is intended for a calendar shared with you.")
+    values = {
+        "vacation_year": source.vacation_year,
+        "calendar_type": "view_only",
+        "name": name,
+        "operation_unit_id": source.operation_unit_id,
+        "include_part_time": source.include_part_time,
+        "include_full_time": source.include_full_time,
+        "staffing_unit_ids": [scope.staffing_unit_id for scope in source.scopes],
+        "active": source.active,
+    }
+    return create_union_calendar(values, user)
+
+
+def can_view_union_calendar(calendar, user):
+    if calendar.calendar_type == "official":
+        return True
+    user_id = getattr(user, "id", None)
+    return bool(
+        getattr(user, "role", None) == "grandmaster"
+        or calendar.owner_user_id == user_id
+        or any(share.recipient_user_id == user_id for share in calendar.shares)
+    )
+
+
+def view_union_calendar_context(calendar, user):
+    row = StaffingVacationUnionCalendar.query.options(
+        selectinload(StaffingVacationUnionCalendar.scopes),
+        selectinload(StaffingVacationUnionCalendar.shares),
+        joinedload(StaffingVacationUnionCalendar.owner),
+    ).filter_by(id=_positive_int(getattr(calendar, "id", calendar), "calendar")).first()
+    owner = resolve_union_calendar_owner(row) if row else None
+    if not row or row.calendar_type != "view_only" or not (
+        can_view_union_calendar(row, user)
+        or getattr(owner, "id", None) == getattr(user, "id", None)
+    ):
+        raise ValueError("The View Only calendar is not available.")
+    hierarchy = vacation_hierarchy()
+    members = _members_by_calendar([row], hierarchy).get(row.id, [])
+    return {
+        "calendar": row,
+        "owner": owner,
+        "scope_label": union_calendar_scope_label(row, hierarchy),
+        "members": members,
+        "can_edit": _can_edit_view_calendar(row, user),
+    }
+
+
+def resolve_union_calendar_owner(
+    calendar, *, persist=False, candidates=None, hierarchy=None
+):
+    """Resolve deterministic ownership fallback without requiring a GET write."""
+    hierarchy = hierarchy or vacation_hierarchy()
+    scope_ids = {scope.staffing_unit_id for scope in calendar.scopes}
+    if candidates is None:
+        candidates = management_calendar_users(hierarchy=hierarchy)
+    by_user_id = {row["user"].id: row for row in candidates}
+    current = by_user_id.get(
+        calendar.owner_user_id or calendar.created_by_user_id
+    )
+    if current and _calendar_owner_candidate_allowed(calendar, current, scope_ids):
+        return current["user"]
+    scoped = [
+        row
+        for row in candidates
+        if not row["actor"].is_grandmaster
+        and _calendar_owner_candidate_allowed(calendar, row, scope_ids)
+    ]
+    grandmasters = [row for row in candidates if row["actor"].is_grandmaster]
+    ordered = sorted(scoped, key=_calendar_owner_priority) or sorted(
+        grandmasters, key=_grandmaster_owner_priority
+    )
+    owner = ordered[0]["user"] if ordered else None
+    if persist and calendar.owner_user_id != getattr(owner, "id", None):
+        calendar.owner_user_id = getattr(owner, "id", None)
+        calendar.updated_at = datetime.utcnow()
+        db.session.flush()
+    return owner
+
+
+def management_calendar_users(*, hierarchy=None):
+    """Load eligible management accounts, people, access, and authority in bounded reads."""
+    hierarchy = hierarchy or vacation_hierarchy()
+    users = User.query.filter_by(is_active=True).all()
+    people = StaffingPerson.query.filter(
+        StaffingPerson.active.is_(True),
+        StaffingPerson.employee_status == "active",
+        StaffingPerson.classification.in_(VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS),
+    ).all()
+    access_rows = PortalAppAccess.query.filter_by(
+        app_code="neostaffing", status="approved", is_active=True
+    ).all()
+    leadership = StaffingLeadershipAssignment.query.filter_by(active=True).all()
+    person_by_employee = {
+        str(person.employee_id or "").casefold(): person for person in people
+    }
+    access_by_user = {row.user_id: row for row in access_rows}
+    leadership_by_person = {}
+    for row in leadership:
+        leadership_by_person.setdefault(row.person_id, []).append(row)
+    result = []
+    for user in users:
+        access = access_by_user.get(user.id)
+        app_role = access.role if access else None
+        is_grandmaster = user.role == "grandmaster" or app_role == "grandmaster"
+        person = person_by_employee.get(str(user.employee_id or "").casefold())
+        if not is_grandmaster and (not access or not person):
+            continue
+        actor = _loaded_vacation_actor(
+            user,
+            app_role or "watcher",
+            person,
+            leadership_by_person.get(getattr(person, "id", None), []),
+            hierarchy,
+            is_grandmaster=is_grandmaster,
+        )
+        result.append({"user": user, "person": person, "actor": actor})
+    return result
+
+
+def union_calendar_admin_context(user):
+    actor = vacation_actor(user)
+    if not actor.is_grandmaster:
+        raise ValueError("Grandmaster access is required for calendar administration.")
+    calendars = StaffingVacationUnionCalendar.query.options(
+        selectinload(StaffingVacationUnionCalendar.scopes),
+        selectinload(StaffingVacationUnionCalendar.shares),
+    ).order_by(
+        StaffingVacationUnionCalendar.vacation_year.desc(),
+        StaffingVacationUnionCalendar.calendar_type,
+        func.lower(StaffingVacationUnionCalendar.name),
+    ).all()
+    hierarchy = vacation_hierarchy()
+    owner_candidates = management_calendar_users(hierarchy=hierarchy)
+    return {
+        "calendars": [
+            {
+                "calendar": calendar,
+                "display_name": (
+                    generated_official_calendar_name(
+                        {scope.staffing_unit_id for scope in calendar.scopes},
+                        calendar.include_part_time,
+                        calendar.include_full_time,
+                        hierarchy,
+                    )
+                    if calendar.calendar_type == "official"
+                    else calendar.name
+                ),
+                "owner": resolve_union_calendar_owner(
+                    calendar,
+                    candidates=owner_candidates,
+                    hierarchy=hierarchy,
+                ),
+                "scope_label": union_calendar_scope_label(calendar, hierarchy),
+            }
+            for calendar in calendars
+        ]
+    }
 
 
 def union_calendar_members(calendar):
@@ -2157,10 +2579,13 @@ def _union_pool_data(vacation_year, *, hierarchy=None, calendars=None):
             StaffingVacationUnionCalendar.query.options(
                 selectinload(StaffingVacationUnionCalendar.scopes)
             )
-            .filter_by(vacation_year=year)
+            .filter_by(vacation_year=year, calendar_type="official")
             .order_by(StaffingVacationUnionCalendar.id.asc())
             .all()
         )
+    calendars = [
+        calendar for calendar in calendars if calendar.calendar_type == "official"
+    ]
     calendar_by_id = {calendar.id: calendar for calendar in calendars}
     scope_ids_by_calendar = {
         calendar.id: {scope.staffing_unit_id for scope in calendar.scopes}
@@ -2377,6 +2802,7 @@ def _locked_union_calendar(calendar, vacation_year):
             id=_positive_int(calendar_id, "Union calendar"),
             vacation_year=vacation_year,
             active=True,
+            calendar_type="official",
         )
         .with_for_update()
         .first()
@@ -2656,7 +3082,7 @@ def union_calendars_context(vacation_year, user):
     actor = vacation_actor(user, hierarchy)
     calendars = (
         StaffingVacationUnionCalendar.query.options(
-            selectinload(StaffingVacationUnionCalendar.scopes)
+            selectinload(StaffingVacationUnionCalendar.scopes),
         )
         .filter_by(vacation_year=year)
         .order_by(
@@ -2666,7 +3092,48 @@ def union_calendars_context(vacation_year, user):
         )
         .all()
     )
-    pool = _union_pool_data(year, hierarchy=hierarchy, calendars=calendars)
+    official_calendars = [
+        calendar for calendar in calendars if calendar.calendar_type == "official"
+    ]
+    all_view_calendars = [
+        calendar for calendar in calendars if calendar.calendar_type == "view_only"
+    ]
+    if all_view_calendars:
+        shares = StaffingVacationUnionCalendarShare.query.options(
+            joinedload(StaffingVacationUnionCalendarShare.recipient)
+        ).filter(
+            StaffingVacationUnionCalendarShare.calendar_id.in_(
+                [calendar.id for calendar in all_view_calendars]
+            )
+        ).all()
+        shares_by_calendar = {}
+        for share in shares:
+            shares_by_calendar.setdefault(share.calendar_id, []).append(share)
+        for calendar in all_view_calendars:
+            set_committed_value(
+                calendar, "shares", shares_by_calendar.get(calendar.id, [])
+            )
+    owner_candidates = (
+        management_calendar_users(hierarchy=hierarchy)
+        if all_view_calendars
+        else []
+    )
+    resolved_owner_by_calendar = {
+        calendar.id: resolve_union_calendar_owner(
+            calendar, candidates=owner_candidates, hierarchy=hierarchy
+        )
+        for calendar in all_view_calendars
+    }
+    visible_view_calendars = [
+        calendar
+        for calendar in all_view_calendars
+        if can_view_union_calendar(calendar, user)
+        or getattr(resolved_owner_by_calendar.get(calendar.id), "id", None)
+        == getattr(user, "id", None)
+    ]
+    pool = _union_pool_data(
+        year, hierarchy=hierarchy, calendars=official_calendars
+    )
     union_conversions = []
     if pool["official_calendar_by_person"]:
         union_conversions = (
@@ -2691,7 +3158,7 @@ def union_calendars_context(vacation_year, user):
     weeks = vacation_year_weeks(year)
 
     calendar_rows = []
-    for calendar in calendars:
+    for calendar in official_calendars:
         scope_ids = pool["scope_ids_by_calendar"].get(calendar.id, set())
         members = pool["official_members_by_calendar"].get(calendar.id, [])
         scope_units = [
@@ -2831,6 +3298,16 @@ def union_calendars_context(vacation_year, user):
         calendar_rows.append(
             {
                 "calendar": calendar,
+                "display_name": (
+                    generated_official_calendar_name(
+                        {scope.staffing_unit_id for scope in calendar.scopes},
+                        calendar.include_part_time,
+                        calendar.include_full_time,
+                        hierarchy,
+                    )
+                    if calendar.calendar_type == "official"
+                    else calendar.name
+                ),
                 "operation": hierarchy["by_id"].get(calendar.operation_unit_id),
                 "department_label": department_label,
                 "scope_ids": scope_ids,
@@ -2849,7 +3326,7 @@ def union_calendars_context(vacation_year, user):
                     for (calendar_id, _day), used in daily_usage.items()
                     if calendar_id == calendar.id
                 ),
-                "can_edit": can_edit_union_scope(actor, scope_ids),
+                "can_edit": _can_manage_official_calendar(actor, scope_ids),
                 "entry_status": entry_status,
                 "can_override": entry_status == "approved",
                 "can_review": entry_status == "approved",
@@ -2878,6 +3355,37 @@ def union_calendars_context(vacation_year, user):
                 }
             )
         browser.append({"operation": operation, "departments": department_groups})
+    view_members = _members_by_calendar(visible_view_calendars, hierarchy)
+    view_rows = []
+    for calendar in visible_view_calendars:
+        owner = resolved_owner_by_calendar.get(calendar.id)
+        view_rows.append(
+            {
+                "calendar": calendar,
+                "owner": owner,
+                "scope_label": union_calendar_scope_label(calendar, hierarchy),
+                "scope_summary": union_calendar_scope_label(
+                    calendar, hierarchy, full=False
+                ),
+                "members": view_members.get(calendar.id, []),
+                "payroll_count": len(view_members.get(calendar.id, [])),
+                "can_edit": bool(
+                    actor.is_grandmaster
+                    or getattr(owner, "id", None) == getattr(user, "id", None)
+                ),
+                "shared_recipients": [share.recipient for share in calendar.shares],
+            }
+        )
+    user_id = getattr(user, "id", None)
+    my_view_rows = [
+        row for row in view_rows if row["calendar"].owner_user_id == user_id
+    ]
+    shared_view_rows = [
+        row for row in view_rows if row["calendar"].owner_user_id != user_id
+    ]
+    owned_view_count = sum(
+        calendar.owner_user_id == user_id for calendar in all_view_calendars
+    )
     return {
         "vacation_year": year,
         "weeks": weeks,
@@ -2888,6 +3396,24 @@ def union_calendars_context(vacation_year, user):
         ],
         "hierarchy": hierarchy,
         "actor": actor,
+        "my_view_calendars": my_view_rows,
+        "shared_view_calendars": shared_view_rows,
+        "can_create_official": bool(
+            actor.is_grandmaster
+            or (
+                actor.person
+                and actor.person.classification
+                in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
+                and actor.sideways_scope_ids
+            )
+        ),
+        "can_create_view": bool(
+            _can_own_view_calendar(actor)
+            and owned_view_count < VACATION_VIEW_CALENDAR_LIMIT
+        ),
+        "owned_view_count": owned_view_count,
+        "view_limit": VACATION_VIEW_CALENDAR_LIMIT,
+        "is_grandmaster": actor.is_grandmaster,
         "can_create": bool(actor.is_grandmaster or actor.sideways_scope_ids),
     }
 
@@ -3328,11 +3854,252 @@ def _replace_union_scopes(calendar, scope_ids):
     existing = {scope.staffing_unit_id: scope for scope in calendar.scopes}
     for unit_id, scope in existing.items():
         if unit_id not in scope_ids:
-            db.session.delete(scope)
+            calendar.scopes.remove(scope)
     for unit_id in sorted(scope_ids - set(existing)):
         calendar.scopes.append(
             StaffingVacationUnionCalendarScope(staffing_unit_id=unit_id)
         )
+
+
+def _locked_union_calendar_definition(calendar):
+    calendar_id = _positive_int(getattr(calendar, "id", calendar), "Union calendar")
+    row = StaffingVacationUnionCalendar.query.options(
+        selectinload(StaffingVacationUnionCalendar.scopes),
+        selectinload(StaffingVacationUnionCalendar.shares),
+    ).filter_by(id=calendar_id).with_for_update().first()
+    if not row:
+        raise ValueError("The selected Union vacation calendar was not found.")
+    return row
+
+
+def _can_manage_official_calendar(actor, scope_ids):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification
+            in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
+            and can_edit_union_scope(actor, scope_ids)
+        )
+    )
+
+
+def _can_own_view_calendar(actor):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification
+            in VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS
+        )
+    )
+
+
+def _can_edit_view_calendar(calendar, user):
+    if getattr(user, "role", None) == "grandmaster" or get_user_app_role(
+        user, "neostaffing"
+    ) == "grandmaster":
+        return True
+    owner = resolve_union_calendar_owner(calendar)
+    return getattr(owner, "id", None) == getattr(user, "id", None)
+
+
+def _membership_definition(scope_ids, include_pt, include_ft, hierarchy):
+    classifications = set()
+    if include_pt:
+        classifications.update(VACATION_PT_CLASSIFICATIONS)
+    if include_ft:
+        classifications.update(VACATION_FT_CLASSIFICATIONS)
+    return {
+        "work_area_ids": _scope_work_area_ids(set(scope_ids), hierarchy),
+        "classifications": classifications,
+    }
+
+
+def _membership_matches(person, assignment, definition):
+    return bool(
+        person.classification in definition["classifications"]
+        and assignment.work_area_unit_id in definition["work_area_ids"]
+    )
+
+
+def _active_union_people_with_assignments():
+    rows = (
+        db.session.query(StaffingPerson, StaffingWorkAssignment)
+        .join(
+            StaffingWorkAssignment,
+            StaffingWorkAssignment.person_id == StaffingPerson.id,
+        )
+        .filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.employee_status == "active",
+            StaffingPerson.classification.in_(VACATION_UNION_CLASSIFICATIONS),
+            StaffingWorkAssignment.active.is_(True),
+        )
+        .all()
+    )
+    by_person = {}
+    for person, assignment in rows:
+        by_person.setdefault(person.id, (person, assignment))
+    return list(by_person.values())
+
+
+def _members_by_calendar(calendars, hierarchy):
+    definitions = {
+        calendar.id: _membership_definition(
+            {scope.staffing_unit_id for scope in calendar.scopes},
+            calendar.include_part_time,
+            calendar.include_full_time,
+            hierarchy,
+        )
+        for calendar in calendars
+    }
+    result = {calendar.id: [] for calendar in calendars}
+    people = _active_union_people_with_assignments() if calendars else []
+    for calendar in calendars:
+        result[calendar.id] = _seniority_order(
+            [
+                person
+                for person, assignment in people
+                if _membership_matches(person, assignment, definitions[calendar.id])
+            ]
+        )
+    return result
+
+
+def _highest_union_scope_ids(scope_ids, operation_id, hierarchy):
+    """Collapse selected coverage to the highest complete accurate Org nodes."""
+    target_work_areas = _scope_work_area_ids(set(scope_ids), hierarchy)
+    operation_work_areas = _scope_work_area_ids({operation_id}, hierarchy)
+    if target_work_areas and target_work_areas == operation_work_areas:
+        return {operation_id}
+    result = set()
+    remaining = set(target_work_areas)
+    operation = hierarchy["by_id"][operation_id]
+    departments = [
+        unit
+        for unit in hierarchy["units"]
+        if unit.unit_type == "department"
+        and _is_descendant_or_self(unit.id, operation.id, hierarchy)
+    ]
+    for department in departments:
+        department_areas = _scope_work_area_ids({department.id}, hierarchy)
+        if department_areas and department_areas.issubset(remaining):
+            result.add(department.id)
+            remaining.difference_update(department_areas)
+    result.update(remaining)
+    return result
+
+
+def _ordered_scope_units(scope_ids, hierarchy):
+    positions = {unit.id: index for index, unit in enumerate(hierarchy["units"])}
+    return sorted(
+        (hierarchy["by_id"][unit_id] for unit_id in scope_ids if unit_id in hierarchy["by_id"]),
+        key=lambda unit: (positions.get(unit.id, 10**9), unit.id),
+    )
+
+
+def union_calendar_scope_label(calendar, hierarchy=None, *, full=True):
+    hierarchy = hierarchy or vacation_hierarchy()
+    labels = [
+        unit.name
+        for unit in _ordered_scope_units(
+            {scope.staffing_unit_id for scope in calendar.scopes}, hierarchy
+        )
+    ]
+    if full or len(labels) <= 3:
+        return ", ".join(labels)
+    return ", ".join(labels[:3] + [f"+{len(labels) - 3} more"])
+
+
+def _loaded_vacation_actor(
+    user,
+    app_role,
+    person,
+    leadership_rows,
+    hierarchy,
+    *,
+    is_grandmaster=False,
+):
+    if is_grandmaster:
+        all_ids = frozenset(hierarchy["by_id"])
+        return VacationActor(app_role, person, True, all_ids, all_ids, all_ids)
+    if not person:
+        return VacationActor(app_role, None, False, frozenset(), frozenset(), frozenset())
+    roots = {row.unit_id for row in leadership_rows if row.unit_id in hierarchy["by_id"]}
+    normal = _descendant_ids(roots, hierarchy)
+    sideways = set(normal)
+    if ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["master"]:
+        sibling_roots = {
+            sibling.id
+            for root_id in roots
+            for sibling in hierarchy["children"].get(
+                hierarchy["by_id"][root_id].parent_id, ()
+            )
+        }
+        sideways.update(_descendant_ids(sibling_roots, hierarchy))
+    management_ids = set()
+    for assignment in leadership_rows:
+        unit = hierarchy["by_id"].get(assignment.unit_id)
+        if not unit:
+            continue
+        management_ids.update(
+            _management_capacity_ids_for_assignment(person, unit, hierarchy)
+        )
+        if ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["master"]:
+            for sibling in hierarchy["children"].get(unit.parent_id, ()):
+                management_ids.update(
+                    _management_capacity_ids_for_assignment(person, sibling, hierarchy)
+                )
+    return VacationActor(
+        app_role,
+        person,
+        False,
+        frozenset(normal),
+        frozenset(sideways),
+        frozenset(management_ids),
+    )
+
+
+def _calendar_owner_candidate_allowed(calendar, candidate, scope_ids):
+    actor = candidate["actor"]
+    if actor.is_grandmaster:
+        return True
+    classification = getattr(candidate["person"], "classification", None)
+    required = (
+        VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
+        if calendar.calendar_type == "official"
+        else VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS
+    )
+    return classification in required and can_edit_union_scope(actor, scope_ids)
+
+
+def _calendar_owner_priority(candidate):
+    person = candidate["person"]
+    classification_rank = {
+        "division_manager": 5,
+        "manager": 4,
+        "full_time_specialist": 3,
+        "full_time_supervisor": 2,
+        "part_time_supervisor": 1,
+    }
+    return (
+        -classification_rank.get(getattr(person, "classification", None), 0),
+        getattr(person, "seniority_date", None) or date.max,
+        str(getattr(person, "last_name", "") or "").casefold(),
+        str(getattr(person, "first_name", "") or "").casefold(),
+        candidate["user"].id,
+    )
+
+
+def _grandmaster_owner_priority(candidate):
+    person = candidate["person"]
+    return (
+        getattr(person, "seniority_date", None) or date.max,
+        str(getattr(person, "last_name", "") or "").casefold(),
+        str(getattr(person, "first_name", "") or "").casefold(),
+        candidate["user"].id,
+    )
 
 
 def _submitted_scope_ids(values):
