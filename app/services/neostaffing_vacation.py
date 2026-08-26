@@ -493,7 +493,10 @@ def management_vacation_context(vacation_year, user, today=None):
         )
         if area:
             primary_area_by_person[person_id] = area
-            people_by_area.setdefault(area.id, []).append(assignment.person)
+            # Division Managers are the pinned one-level-up availability for
+            # Manager pools, not members of the lower-level capacity pool.
+            if assignment.person.classification != "division_manager":
+                people_by_area.setdefault(area.id, []).append(assignment.person)
         for secondary in secondary_by_person.get(person_id, ()):
             secondary_area = management_area_for_assignment(
                 secondary.person,
@@ -506,7 +509,8 @@ def management_vacation_context(vacation_year, user, today=None):
     used_by_area_week = {}
     for selection in selections:
         area = primary_area_by_person.get(selection.staffing_person_id)
-        if area:
+        assignment = primary_by_person.get(selection.staffing_person_id)
+        if area and assignment.person.classification != "division_manager":
             key = (area.id, selection.week_ending)
             used_by_area_week[key] = used_by_area_week.get(key, 0) + 1
 
@@ -675,6 +679,7 @@ def management_vacation_context(vacation_year, user, today=None):
                             person,
                             selections_by_person,
                             day_rows_by_person,
+                            today=today,
                         ),
                         "can_manage": _can_manage_management_days_for_area(
                             actor,
@@ -685,6 +690,24 @@ def management_vacation_context(vacation_year, user, today=None):
                                 ),
                                 hierarchy,
                             ).id,
+                        ),
+                        "remaining": _management_remaining_for_person(
+                            person,
+                            year,
+                            bank_usage_by_person.get(person.id, ()),
+                        ),
+                        "can_manage_vacation": bool(
+                            person.classification == "division_manager"
+                            and _can_manage_division_manager_vacation(
+                                actor, area.id
+                            )
+                        ),
+                        "can_add_vacation": bool(
+                            person.classification == "division_manager"
+                            and today >= vacation_selection_opens_on(year)
+                            and _can_manage_division_manager_vacation(
+                                actor, area.id
+                            )
                         ),
                     }
                     for person in pinned_people
@@ -702,12 +725,25 @@ def management_vacation_context(vacation_year, user, today=None):
             }
         )
     area_rows.sort(key=lambda row: _unit_sort_key(row["area"], hierarchy))
+    default_area = (
+        primary_area_by_person.get(actor.person.id) if actor.person else None
+    )
+    default_area_id = default_area.id if default_area else None
+    if default_area_id:
+        area_rows.sort(
+            key=lambda row: (
+                row["area"].id != default_area_id,
+                _unit_sort_key(row["area"], hierarchy),
+            )
+        )
     return {
         "vacation_year": year,
         "weeks": weeks,
         "selection_opens_on": vacation_selection_opens_on(year),
         "areas": area_rows,
         "actor": actor,
+        "today": today,
+        "default_area_id": default_area_id,
         "is_dynamic": True,
     }
 
@@ -982,6 +1018,80 @@ def add_management_week(person, vacation_year, week_ending, user, *, today=None)
         user,
         today=today,
     )[0]
+
+
+def add_division_manager_weeks(
+    person,
+    vacation_year,
+    week_endings,
+    user,
+    *,
+    today=None,
+):
+    """Directly add Division Manager weeks without consuming a Manager pool slot."""
+    year = normalize_vacation_year(vacation_year)
+    today = today or date.today()
+    if today < vacation_selection_opens_on(year):
+        raise ValueError("Management vacation selection has not opened yet.")
+    normalized_weeks = sorted(
+        {normalize_week_ending(year, value) for value in week_endings}
+    )
+    if not normalized_weeks:
+        raise ValueError("Select at least one vacation week.")
+    person = _management_person(person)
+    if person.classification != "division_manager":
+        raise ValueError("Select an active Division Manager.")
+    hierarchy = vacation_hierarchy()
+    area, actor = _authorize_management_week_change(person, user, hierarchy)
+    if not _can_manage_division_manager_vacation(actor, area.id):
+        raise ValueError(
+            "Only an authorized Manager may change Division Manager vacation."
+        )
+    _lock_management_area(area.id)
+    existing_rows = (
+        StaffingVacationManagementSelection.query.filter(
+            StaffingVacationManagementSelection.staffing_person_id == person.id,
+            StaffingVacationManagementSelection.vacation_year == year,
+            StaffingVacationManagementSelection.week_ending.in_(normalized_weeks),
+        )
+        .with_for_update()
+        .all()
+    )
+    existing_by_week = {row.week_ending: row for row in existing_rows}
+    if any(row.cancelled_at is None for row in existing_rows):
+        raise ValueError("One of the selected weeks is already in this vacation bank.")
+    _ensure_weeks_have_no_split_days(person.id, normalized_weeks)
+    current_selections = _management_active_selections_by_person(year).get(
+        person.id, ()
+    )
+    remaining = _management_remaining_for_person(person, year, current_selections)
+    if len(normalized_weeks) > remaining:
+        raise ValueError("The selected weeks exceed the remaining vacation bank.")
+
+    now = datetime.utcnow()
+    saved = []
+    for week in normalized_weeks:
+        row = existing_by_week.get(week)
+        if row:
+            row.cancelled_at = None
+            row.cancelled_by_user_id = None
+            row.cancellation_reason = None
+            row.selected_by_user_id = getattr(user, "id", None)
+            row.updated_at = now
+        else:
+            row = StaffingVacationManagementSelection(
+                staffing_person_id=person.id,
+                vacation_year=year,
+                week_ending=week,
+                selected_by_user_id=getattr(user, "id", None),
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(row)
+        saved.append(row)
+    db.session.flush()
+    _award_configured_floating_holidays(saved, "management")
+    return saved
 
 
 def request_management_selection_change(
@@ -3548,12 +3658,29 @@ def _can_administer_management_week_changes(actor, area_id):
     )
 
 
+def _can_manage_division_manager_vacation(actor, area_id):
+    return bool(
+        actor.is_grandmaster
+        or (
+            actor.person
+            and actor.person.classification in {"manager", "division_manager"}
+            and can_edit_management_capacity(actor, area_id)
+        )
+    )
+
+
 def _authorize_management_week_change(person, user, hierarchy=None):
     hierarchy = hierarchy or vacation_hierarchy()
     area = management_primary_area(person, hierarchy)
     if not area:
         raise ValueError("The selected person has no active primary Management area.")
     actor = vacation_actor(user, hierarchy)
+    if person.classification == "division_manager":
+        if not _can_manage_division_manager_vacation(actor, area.id):
+            raise ValueError(
+                "Only an authorized Manager may change Division Manager vacation."
+            )
+        return area, actor
     if not _can_administer_management_week_changes(actor, area.id):
         raise ValueError(
             "Only an authorized FT Supervisor or Manager may change this vacation week."
@@ -3709,15 +3836,16 @@ def _move_management_selection_row(
         destination,
         exclude_selection_id=selection.id,
     )
-    _validate_management_move_capacity(
-        person,
-        selection.vacation_year,
-        destination,
-        area,
-        actor,
-        hierarchy,
-        capacity_override=capacity_override,
-    )
+    if person.classification != "division_manager":
+        _validate_management_move_capacity(
+            person,
+            selection.vacation_year,
+            destination,
+            area,
+            actor,
+            hierarchy,
+            capacity_override=capacity_override,
+        )
     target = (
         StaffingVacationManagementSelection.query.filter(
             StaffingVacationManagementSelection.staffing_person_id == person.id,
@@ -4475,7 +4603,10 @@ def _pinned_person_availability(
     person,
     selections_by_person,
     day_rows_by_person,
+    *,
+    today=None,
 ):
+    today = today or date.today()
     rows = []
     for selection in selections_by_person.get(person.id, ()):
         week_ending = getattr(selection, "week_ending", None)
@@ -4486,6 +4617,9 @@ def _pinned_person_availability(
                     "label": "VACATION",
                     "date": week_ending,
                     "selection": selection,
+                    "started": _management_week_has_started(
+                        week_ending, today
+                    ),
                 }
             )
     labels = {
@@ -4520,6 +4654,8 @@ def _management_people_for_area(area_id, hierarchy, *, leadership_rows=None):
     )
     people = []
     for assignment in primary.values():
+        if assignment.person.classification == "division_manager":
+            continue
         area = management_area_for_assignment(
             assignment.person,
             hierarchy["by_id"].get(assignment.unit_id),
@@ -4732,6 +4868,8 @@ def _management_week_usage(vacation_year, week_endings, hierarchy):
     )
     area_by_person = {}
     for person_id, assignment in primary.items():
+        if assignment.person.classification == "division_manager":
+            continue
         area = management_area_for_assignment(
             assignment.person,
             hierarchy["by_id"].get(assignment.unit_id),

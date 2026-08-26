@@ -1029,12 +1029,12 @@ def vacation_management_select():
         week_endings = request.form.getlist("week_endings") or [
             request.form.get("week_ending")
         ]
-        saved = vacation_service.add_management_weeks(
-            person,
-            vacation_year,
-            week_endings,
-            current_user,
+        add_weeks = (
+            vacation_service.add_division_manager_weeks
+            if person and person.classification == "division_manager"
+            else vacation_service.add_management_weeks
         )
+        saved = add_weeks(person, vacation_year, week_endings, current_user)
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()

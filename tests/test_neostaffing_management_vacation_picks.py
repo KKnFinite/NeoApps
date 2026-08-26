@@ -1288,6 +1288,243 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self.assertEqual(area["turn"].resolved_person_ids, frozenset())
         self.assertNotIn(date(self.YEAR, 7, 10), area["off_week_endings"])
 
+    def test_managers_directly_manage_division_manager_weeks_with_actor_history(self):
+        division_manager, _division_user = self._management_user(
+            "MVDM1",
+            "Division",
+            "Leader",
+            "1980-01-01",
+            "division_manager",
+            unit=self.units["night"],
+        )
+        _manager_one, manager_one_user = self._management_user(
+            "MVDM2",
+            "Ramp",
+            "Manager",
+            "1985-01-01",
+            "manager",
+            unit=self.units["ramp"],
+        )
+        _manager_two, manager_two_user = self._management_user(
+            "MVDM3",
+            "Hub",
+            "Manager",
+            "1986-01-01",
+            "manager",
+            unit=self.units["hub"],
+        )
+        _ft, ft_user = self._management_user(
+            "MVDM4",
+            "Full",
+            "Supervisor",
+            "1990-01-01",
+            "full_time_supervisor",
+        )
+        _pt, pt_user = self._management_user(
+            "MVDM5",
+            "Part",
+            "Supervisor",
+            "1991-01-01",
+            "part_time_supervisor",
+        )
+        db.session.commit()
+        source = date(self.YEAR, 6, 5)
+        destination = date(self.YEAR, 6, 12)
+
+        saved = vacation_service.add_division_manager_weeks(
+            division_manager,
+            self.YEAR,
+            [source],
+            manager_one_user,
+            today=self.OPEN_DAY,
+        )[0]
+        db.session.commit()
+        self.assertEqual(saved.selected_by_user_id, manager_one_user.id)
+
+        moved = vacation_service.move_management_selection(
+            saved,
+            destination,
+            manager_two_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(moved.week_ending, destination)
+        self.assertEqual(moved.selected_by_user_id, manager_two_user.id)
+
+        vacation_service.cancel_management_selection(
+            moved,
+            manager_one_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(moved.cancelled_by_user_id, manager_one_user.id)
+        self.assertEqual(moved.cancellation_reason, "direct_cancelled")
+
+        second_manager_pick = vacation_service.add_division_manager_weeks(
+            division_manager,
+            self.YEAR,
+            [date(self.YEAR, 6, 19)],
+            manager_two_user,
+            today=self.OPEN_DAY,
+        )[0]
+        vacation_service.cancel_management_selection(
+            second_manager_pick,
+            manager_two_user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        self.assertEqual(second_manager_pick.selected_by_user_id, manager_two_user.id)
+        self.assertEqual(second_manager_pick.cancelled_by_user_id, manager_two_user.id)
+
+        for lower_user in (ft_user, pt_user):
+            with self.subTest(role=lower_user.employee_id):
+                with self.assertRaisesRegex(ValueError, "authorized Manager"):
+                    vacation_service.add_division_manager_weeks(
+                        division_manager,
+                        self.YEAR,
+                        [date(self.YEAR, 6, 26)],
+                        lower_user,
+                        today=self.OPEN_DAY,
+                    )
+                db.session.rollback()
+
+        self._login(manager_one_user)
+        manager_page = self.client.get(
+            "/neostaffing/vacation-selection/management?year=2026"
+        )
+        self.assertEqual(manager_page.status_code, 200)
+        self.assertIn(b"ADD DIVISION MANAGER WEEK", manager_page.data)
+        self.assertIn(b"PRIMARY", manager_page.data)
+        self._login(ft_user)
+        lower_page = self.client.get(
+            "/neostaffing/vacation-selection/management?year=2026"
+        )
+        self.assertEqual(lower_page.status_code, 200)
+        self.assertNotIn(b"ADD DIVISION MANAGER WEEK", lower_page.data)
+
+    def test_one_level_pins_are_distinct_and_never_consume_lower_pool_capacity(self):
+        pt, _pt_user = self._management_user(
+            "MVPIN1", "Pool", "PT", "1995-01-01", "part_time_supervisor"
+        )
+        ft_one, ft_user = self._management_user(
+            "MVPIN2", "First", "FT", "1985-01-01", "full_time_supervisor"
+        )
+        ft_two, _ = self._management_user(
+            "MVPIN3", "Second", "FT", "1986-01-01", "full_time_supervisor"
+        )
+        manager, manager_user = self._management_user(
+            "MVPIN4",
+            "Area",
+            "Manager",
+            "1980-01-01",
+            "manager",
+            unit=self.units["ramp"],
+        )
+        division_manager, _ = self._management_user(
+            "MVPIN5",
+            "Division",
+            "Manager",
+            "1970-01-01",
+            "division_manager",
+            unit=self.units["night"],
+        )
+        self._capacity(self.units["blue_department"], 3)
+        self._capacity(self.units["ramp"], 3)
+        self._capacity(self.units["night"], 3)
+        week_ending = date(self.YEAR, 5, 8)
+        db.session.add_all(
+            [
+                StaffingVacationManagementSelection(
+                    staffing_person_id=pt.id,
+                    vacation_year=self.YEAR,
+                    week_ending=week_ending,
+                ),
+                StaffingVacationManagementSelection(
+                    staffing_person_id=manager.id,
+                    vacation_year=self.YEAR,
+                    week_ending=week_ending,
+                ),
+                StaffingVacationManagementSelection(
+                    staffing_person_id=division_manager.id,
+                    vacation_year=self.YEAR,
+                    week_ending=week_ending,
+                ),
+            ]
+        )
+        vacation_service.schedule_management_availability_day(
+            ft_one, date(self.YEAR, 5, 3), "special_assignment", ft_user
+        )
+        vacation_service.schedule_management_availability_day(
+            ft_two, date(self.YEAR, 5, 4), "corporate_class", ft_user
+        )
+        db.session.commit()
+
+        context = vacation_service.management_vacation_context(
+            self.YEAR, manager_user, today=self.OPEN_DAY
+        )
+        department = self._area_row(context, self.units["blue_department"])
+        operation = self._area_row(context, self.units["ramp"])
+        division = self._area_row(context, self.units["night"])
+        department_week = next(
+            row for row in department["week_rows"] if row["week"].week_ending == week_ending
+        )
+        division_week = next(
+            row for row in division["week_rows"] if row["week"].week_ending == week_ending
+        )
+        self.assertEqual(
+            [row["person"].id for row in department["pinned_rows"]],
+            [ft_one.id, ft_two.id],
+        )
+        self.assertEqual(department_week["pinned_unavailable_count"], 2)
+        self.assertEqual(
+            [row["person"].id for row in operation["pinned_rows"]],
+            [manager.id],
+        )
+        self.assertEqual(
+            [row["person"].id for row in division["pinned_rows"]],
+            [division_manager.id],
+        )
+        self.assertNotIn(
+            division_manager.id,
+            [row["person"].id for row in division["person_rows"]],
+        )
+        self.assertEqual(division_week["used"], 1)
+        self.assertEqual(division_week["pinned_unavailable_count"], 1)
+        self.assertTrue(division["pinned_rows"][0]["can_manage_vacation"])
+
+    def test_management_context_defaults_to_actor_primary_area_and_stays_bounded(self):
+        _ft, ft_user = self._management_user(
+            "MVCTX1", "Default", "FT", "1990-01-01", "full_time_supervisor"
+        )
+        self._management_user(
+            "MVCTX2",
+            "Other",
+            "Manager",
+            "1980-01-01",
+            "manager",
+            unit=self.units["hub"],
+        )
+        self._capacity(self.units["ramp"], 3)
+        db.session.commit()
+        select_count = 0
+
+        def count_selects(_connection, _cursor, statement, _parameters, _context, _many):
+            nonlocal select_count
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_count += 1
+
+        event.listen(db.engine, "before_cursor_execute", count_selects)
+        try:
+            context = vacation_service.management_vacation_context(
+                self.YEAR, ft_user, today=self.OPEN_DAY
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", count_selects)
+        self.assertEqual(context["default_area_id"], self.units["ramp"].id)
+        self.assertEqual(context["areas"][0]["area"].id, self.units["ramp"].id)
+        self.assertGreater(len(context["areas"]), 1)
+        self.assertLessEqual(select_count, 12)
+
     def _management_user(
         self,
         employee_id,

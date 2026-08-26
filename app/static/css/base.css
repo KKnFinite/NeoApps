@@ -28661,6 +28661,9 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 .neostaffing-vacation-tabs { display:flex; gap:3px; padding:7px 0; }
 .neostaffing-vacation-tabs a { padding:6px 10px; border:1px solid #224a52; border-radius:4px; color:#89aaad; font-size:.66rem; font-weight:900; text-decoration:none; }
 .neostaffing-vacation-tabs a[aria-current="page"] { border-color:#45a8a6; background:#123b40; color:#e4faf8; }
+.neostaffing-vacation-context-nav { display:flex; gap:3px; overflow-x:auto; padding:0 0 6px; scrollbar-width:thin; }
+.neostaffing-vacation-context-nav a { flex:0 0 auto; padding:4px 7px; border:1px solid #213f46; color:#77989c; font-size:.56rem; font-weight:900; text-decoration:none; }
+.neostaffing-vacation-context-nav a.is-primary { border-color:#45a8a6; background:#12363b; color:#d9f4f1; }
 .neostaffing-vacation-management-list { display:grid; gap:7px; }
 .neostaffing-vacation-management-row { display:grid; grid-template-columns:minmax(180px,.75fr) minmax(270px,1.3fr) minmax(420px,2fr); gap:8px; padding:8px; border:1px solid #17383f; border-radius:5px; background:#0a1a20; }
 .neostaffing-vacation-management-row > header { display:flex; justify-content:space-between; gap:6px; }
@@ -28769,6 +28772,8 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 .neostaffing-vacation-pinned-row > span:nth-child(2) { display:flex; flex:1; flex-wrap:wrap; gap:4px; }
 .neostaffing-vacation-pinned-row em { padding:2px 5px; border:1px solid #2b5e63; color:#b8d9d7; font-size:.55rem; font-style:normal; }
 .neostaffing-vacation-pinned-row form { display:flex; align-items:center; gap:4px; margin-left:auto; }
+.neostaffing-vacation-pinned-actions { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.neostaffing-vacation-management-row.is-primary-context { border-color:#357b7b; }
 .neostaffing-vacation-roster-head,.neostaffing-vacation-roster-row { display:grid; grid-template-columns:minmax(190px,1.1fr) 84px minmax(260px,1.7fr) minmax(180px,1fr); align-items:center; gap:7px; min-height:34px; padding:4px 9px; border-bottom:1px solid rgba(34,72,80,.62); }
 .neostaffing-vacation-roster-head { min-height:24px; background:#08171c; color:#6f969a; font-size:.54rem; font-weight:900; letter-spacing:.07em; }
 .neostaffing-vacation-roster-row.is-active-turn { background:linear-gradient(90deg,rgba(31,99,97,.2),transparent 46%); }
