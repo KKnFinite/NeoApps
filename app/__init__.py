@@ -30,7 +30,11 @@ from app.auth.permissions import (
 )
 from app.config import Config, configure_secret_key
 from app.extensions import db, login_manager
-from app.services.access_control import user_can_access_node, user_has_gateway_access
+from app.services.access_control import (
+    prime_user_node_roles_for_request,
+    user_can_access_node,
+    user_has_gateway_access,
+)
 from app.services.permission_rules import permission_access, user_can
 from app.services.auth_session_security import (
     clear_authenticated_session_security_state,
@@ -366,6 +370,11 @@ def register_template_helpers(app):
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neorain",),
             },
+        )
+        prime_user_node_roles_for_request(
+            current_user,
+            gateway_code,
+            (spec["node_code"] for spec in node_specs),
         )
         for spec in node_specs:
             if spec["endpoint"] not in app.view_functions:

@@ -487,6 +487,120 @@ def user_can_access_node(user, gateway_code, node_code, minimum_role="watcher"):
     return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
 
 
+def prime_user_node_roles_for_request(user, gateway_code, node_codes):
+    """Seed the existing per-node access cache with one bounded projection."""
+    if not _is_authenticated_user(user):
+        return {}
+
+    gateway_code = _normalize_gateway_code(gateway_code)
+    normalized_codes = tuple(
+        dict.fromkeys(
+            normalized
+            for node_code in node_codes
+            if (normalized := _normalize_node_code(node_code))
+        )
+    )
+    unresolved_codes = tuple(
+        node_code
+        for node_code in normalized_codes
+        if get_request_cached(
+            "access.node_role",
+            (user.id, gateway_code, node_code),
+        )
+        is MISSING
+    )
+    if unresolved_codes:
+        for node_code in unresolved_codes:
+            set_request_cached("access.active_node", node_code, None)
+            set_request_cached(
+                "access.node_role",
+                (user.id, gateway_code, node_code),
+                None,
+            )
+
+        rows = (
+            db.session.query(
+                Gateway,
+                GatewayMembership,
+                PortalAppAccess,
+                NeoNode,
+                GatewayNodeRole,
+            )
+            .select_from(Gateway)
+            .join(NeoNode, NeoNode.code.in_(unresolved_codes))
+            .outerjoin(
+                GatewayMembership,
+                and_(
+                    GatewayMembership.gateway_id == Gateway.id,
+                    GatewayMembership.user_id == user.id,
+                    Gateway.is_active.is_(True),
+                ),
+            )
+            .outerjoin(
+                PortalAppAccess,
+                and_(
+                    PortalAppAccess.user_id == user.id,
+                    PortalAppAccess.app_code == "neogateway",
+                ),
+            )
+            .outerjoin(
+                GatewayNodeRole,
+                and_(
+                    GatewayNodeRole.gateway_membership_id == GatewayMembership.id,
+                    GatewayNodeRole.node_id == NeoNode.id,
+                    GatewayNodeRole.is_active.is_(True),
+                ),
+            )
+            .filter(Gateway.code == gateway_code)
+            .all()
+        )
+        for gateway, membership, app_access, node, node_role in rows:
+            if membership is not None:
+                set_committed_value(membership, "gateway", gateway)
+            if app_access is None:
+                app_access = _legacy_neogateway_app_access(user, membership)
+
+            resolved_role = None
+            active_node = node if node.is_active else None
+            if (
+                _membership_is_approved_active(membership)
+                and _app_access_is_approved_active(app_access)
+                and active_node is not None
+            ):
+                if node_role is not None:
+                    resolved_role = node_role.role
+                elif app_access.role in ROLE_LEVELS:
+                    resolved_role = app_access.role
+                else:
+                    resolved_role = "watcher"
+
+            set_request_cached("access.default_gateway", gateway_code, gateway)
+            set_request_cached(
+                "access.gateway_membership",
+                (user.id, gateway_code),
+                membership,
+            )
+            set_request_cached(
+                "access.app_access",
+                (user.id, "neogateway"),
+                app_access,
+            )
+            set_request_cached("access.active_node", node.code, active_node)
+            set_request_cached(
+                "access.node_role",
+                (user.id, gateway_code, node.code),
+                resolved_role,
+            )
+
+    return {
+        node_code: get_request_cached(
+            "access.node_role",
+            (user.id, gateway_code, node_code),
+        )
+        for node_code in normalized_codes
+    }
+
+
 def request_default_gateway_access_for_user(user):
     gateway = ensure_default_gateway_and_nodes()
     membership = GatewayMembership.query.filter_by(
@@ -701,6 +815,15 @@ def portal_dashboard_rows_for_user(user):
 
 def portal_install_rows_for_user(user):
     gateway_code = _default_gateway_code()
+    prime_user_node_roles_for_request(
+        user,
+        gateway_code,
+        (
+            target["code"]
+            for target in PWA_INSTALL_TARGETS
+            if target["kind"] == "node"
+        ),
+    )
     rows = []
     for target in PWA_INSTALL_TARGETS:
         if target["kind"] == "app":

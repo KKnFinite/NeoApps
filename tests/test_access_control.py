@@ -1,5 +1,7 @@
 import unittest
 
+from sqlalchemy import event
+
 from app import create_app
 from app.extensions import db
 from app.models import Gateway, GatewayMembership, GatewayNodeRole, NeoNode, PortalAppAccess, User
@@ -12,6 +14,7 @@ from app.services.access_control import (
     get_default_gateway,
     get_user_gateway_membership,
     get_user_node_role,
+    prime_user_node_roles_for_request,
     request_default_gateway_access_for_user,
     user_has_app_access,
     user_can_access_node,
@@ -463,6 +466,92 @@ class AccessControlTest(unittest.TestCase):
         self.assertFalse(
             user_can_access_node(user, "RFD", "ermac", minimum_role="operator")
         )
+
+    def test_shared_shell_node_roles_are_batched_and_reuse_request_cache(self):
+        user, membership = self._approved_user("batched_shell_user")
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        rain = NeoNode.query.filter_by(code="rain").one()
+        rain.is_active = False
+        db.session.add(
+            GatewayNodeRole(
+                gateway_membership_id=membership.id,
+                node_id=sektor.id,
+                role="operator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        user_id = user.id
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.strip())
+
+        with self.app.test_request_context("/neoermac"):
+            event.listen(db.engine, "before_cursor_execute", capture)
+            try:
+                roles = prime_user_node_roles_for_request(
+                    user,
+                    "RFD",
+                    ("sektor", "ermac", "rain"),
+                )
+                self.assertEqual(roles["sektor"], "operator")
+                self.assertEqual(roles["ermac"], "watcher")
+                self.assertIsNone(roles["rain"])
+                self.assertEqual(get_user_node_role(user, "RFD", "sektor"), "operator")
+                self.assertEqual(get_user_node_role(user, "RFD", "ermac"), "watcher")
+                self.assertIsNone(get_user_node_role(user, "RFD", "rain"))
+                prime_user_node_roles_for_request(
+                    user,
+                    "RFD",
+                    ("sektor", "ermac", "rain"),
+                )
+            finally:
+                event.remove(db.engine, "before_cursor_execute", capture)
+
+        selects = [statement for statement in statements if statement.upper().startswith("SELECT")]
+        writes = [
+            statement
+            for statement in statements
+            if statement.upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(len(selects), 1)
+        self.assertEqual(writes, [])
+        self.assertEqual(user.id, user_id)
+
+    def test_character_switcher_batch_is_bounded_and_read_only(self):
+        user = self._user("bounded_shell_user")
+        backfill_default_gateway_node_roles(user, role="watcher")
+        db.session.commit()
+        client = self.app.test_client()
+        client.post(
+            "/login",
+            data={"username": user.username, "password": "TestPassword123!"},
+        )
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.strip())
+
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            response = client.get("/neoermac")
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+
+        self.assertEqual(response.status_code, 200)
+        switcher = self._character_switcher_html(response)
+        self.assertIn('href="/neosektor"', switcher)
+        self.assertIn('href="/neoscorpion"', switcher)
+        self.assertNotIn('href="/neoermac"', switcher)
+        selects = [statement for statement in statements if statement.upper().startswith("SELECT")]
+        writes = [
+            statement
+            for statement in statements
+            if statement.upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertLessEqual(len(selects), 10)
+        self.assertEqual(writes, [])
 
     def test_user_can_have_rfd_access_without_dfw_access(self):
         user = self._user("rfd_only_user")

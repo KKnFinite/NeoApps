@@ -71,6 +71,7 @@ from app.services.flight_api import (
 from app.services.access_control import (
     get_current_gateway,
     get_user_node_role,
+    prime_user_node_roles_for_request,
     user_can_access_node,
     user_has_gateway_access,
 )
@@ -331,6 +332,12 @@ def rfd_hub():
     if not user_can(NEOGATEWAY_LANDING_VIEW_PERMISSION):
         flash("NeoGateway landing access denied.", "error")
         return redirect(url_for("auth.portal_dashboard"))
+
+    prime_user_node_roles_for_request(
+        current_user,
+        gateway.code,
+        ("motherbrain", "sektor", "ermac", "scorpion"),
+    )
 
     current_state = _current_sort_state(gateway)
     current_sort_operations = current_state["operations"]
