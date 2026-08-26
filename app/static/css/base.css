@@ -28256,6 +28256,75 @@ body:has(.neostaffing-bulk-console) { overflow-x: clip; }
 }
 
 /* NeoStaffing Reports full-width operations console. */
+.neostaffing-reports-mode-tabs {
+    display: flex;
+    gap: 0.35rem;
+    padding: 0.45rem 0.7rem 0;
+    flex-wrap: wrap;
+}
+
+.neostaffing-reports-mode-tabs a {
+    border: 1px solid rgba(94, 180, 176, 0.3);
+    color: #a9bebd;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 0.38rem 0.6rem;
+    text-decoration: none;
+}
+
+.neostaffing-reports-mode-tabs a[aria-current="page"] {
+    background: rgba(63, 158, 154, 0.2);
+    border-color: #4eaaa6;
+    color: #d7fffc;
+}
+
+.neostaffing-vacation-report-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+    padding: 0.7rem;
+}
+
+.neostaffing-vacation-report-groups > section {
+    min-width: 0;
+    border: 1px solid rgba(91, 132, 131, 0.28);
+    background: rgba(18, 27, 28, 0.72);
+}
+
+.neostaffing-vacation-report-groups > section > header,
+.neostaffing-vacation-report-groups > section > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    padding: 0.5rem 0.65rem;
+    border-bottom: 1px solid rgba(91, 132, 131, 0.2);
+}
+
+.neostaffing-vacation-report-groups > section > header span,
+.neostaffing-vacation-report-groups small {
+    color: #829897;
+    font-size: 0.66rem;
+}
+
+.neostaffing-vacation-report-groups > section > div > span {
+    display: grid;
+    min-width: 0;
+}
+
+.neostaffing-vacation-report-groups a {
+    flex: 0 0 auto;
+    color: #79d3ce;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+@media (max-width: 900px) {
+    .neostaffing-vacation-report-groups {
+        grid-template-columns: 1fr;
+    }
+}
 .neostaffing-reports-console { display: grid; grid-template-columns: clamp(144px, 10vw, 184px) minmax(0, 1fr); width: calc(100vw - 32px); height: calc(100vh - 122px); min-height: 560px; margin: -18px calc(50% - 50vw + 16px) -54px; overflow: hidden; background: #071317; border: 1px solid #18333a; border-radius: 7px; color: #d3e5e6; }
 body:has(.neostaffing-reports-console) { overflow-x: clip; }
 .neostaffing-reports-console > .neostaffing-rail { box-sizing: border-box; width: auto; min-width: 0; height: 100%; overflow-y: auto; border-right: 1px solid #19353c; background: #0a161c; }

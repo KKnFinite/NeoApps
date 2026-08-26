@@ -7,6 +7,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -31,6 +32,7 @@ from app.services import neostaffing_bulk_change as bulk_change_service
 from app.services import neostaffing_management_review as management_review_service
 from app.services import neostaffing_notifications as notification_service
 from app.services import neostaffing_vacation as vacation_service
+from app.services import neostaffing_vacation_reports as vacation_report_service
 from app.services.permission_rules import ensure_default_permission_rules, user_can
 
 
@@ -794,24 +796,55 @@ def org_chart():
 @neostaffing_app_required(permission_key=REPORTS_VIEW_PERMISSION)
 def reports():
     can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
-    context = staffing_service.reports_context(
-        {
-            "report_type": request.args.get("report_type", "").strip(),
-            "sort_id": request.args.get("sort_id", "").strip(),
-            "operation_id": request.args.get("operation_id", "").strip(),
-            "department_id": request.args.get("department_id", "").strip(),
-            "work_area_id": request.args.get("work_area_id", "").strip(),
-            "classification": request.args.get("classification", "").strip(),
-            "employee_status": request.args.get("employee_status", "").strip(),
-            "assignment_status": request.args.get("assignment_status", "").strip(),
-            "attendance_date": request.args.get("attendance_date", "").strip(),
-            "attendance_status": request.args.get("attendance_status", "").strip(),
-            "active": request.args.get("active", "").strip(),
-            "search": request.args.get("search", "").strip(),
-            "include_management": request.args.get("include_management", "").strip(),
-        },
-        current_user if not can_manage else None,
-    )
+    report_type = request.args.get("report_type", "").strip()
+    if report_type == "vacation_calendars":
+        vacation_year = _vacation_year_arg()
+        context = {
+            "report_type": report_type,
+            "vacation": vacation_report_service.accessible_vacation_calendars(
+                vacation_year, current_user
+            ),
+            "filters": {"report_type": report_type, "vacation_year": vacation_year},
+        }
+    elif report_type == "union_seniority":
+        context = {
+            "report_type": report_type,
+            "union_seniority": {
+                "scopes": vacation_report_service.union_seniority_scope_options()
+            },
+            "filters": {
+                "report_type": report_type,
+                "scope_id": request.args.get("scope_id", "").strip(),
+                "union_classification": request.args.get(
+                    "union_classification", "both"
+                ).strip(),
+            },
+        }
+    else:
+        context = staffing_service.reports_context(
+            {
+                "report_type": report_type,
+                "sort_id": request.args.get("sort_id", "").strip(),
+                "operation_id": request.args.get("operation_id", "").strip(),
+                "department_id": request.args.get("department_id", "").strip(),
+                "work_area_id": request.args.get("work_area_id", "").strip(),
+                "classification": request.args.get("classification", "").strip(),
+                "employee_status": request.args.get("employee_status", "").strip(),
+                "assignment_status": request.args.get(
+                    "assignment_status", ""
+                ).strip(),
+                "attendance_date": request.args.get("attendance_date", "").strip(),
+                "attendance_status": request.args.get(
+                    "attendance_status", ""
+                ).strip(),
+                "active": request.args.get("active", "").strip(),
+                "search": request.args.get("search", "").strip(),
+                "include_management": request.args.get(
+                    "include_management", ""
+                ).strip(),
+            },
+            current_user if not can_manage else None,
+        )
     return render_template(
         "neostaffing/reports.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
@@ -821,6 +854,61 @@ def reports():
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         attendance_status_labels=staffing_service.ATTENDANCE_STATUS_LABELS,
+    )
+
+
+@bp.get("/reports/vacation-calendar.pdf")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_calendar_pdf():
+    try:
+        report = vacation_report_service.vacation_calendar_report_data(
+            request.args.get("kind", ""),
+            request.args.get("calendar_id", ""),
+            request.args.get("year", ""),
+            current_user,
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(
+            url_for(
+                "neostaffing.reports",
+                report_type="vacation_calendars",
+                year=request.args.get("year", ""),
+            )
+        )
+    return send_file(
+        vacation_report_service.build_vacation_calendar_pdf(report),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"vacation-calendar-{report['vacation_year']}.pdf",
+    )
+
+
+@bp.get("/reports/union-seniority.pdf")
+@neostaffing_app_required(permission_key=REPORTS_VIEW_PERMISSION)
+def vacation_union_seniority_pdf():
+    try:
+        report = vacation_report_service.union_seniority_report_data(
+            request.args.get("scope_id", ""),
+            request.args.get("union_classification", "both"),
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(
+            url_for(
+                "neostaffing.reports",
+                report_type="union_seniority",
+                scope_id=request.args.get("scope_id", ""),
+                union_classification=request.args.get(
+                    "union_classification", "both"
+                ),
+            )
+        )
+    return send_file(
+        vacation_report_service.build_union_seniority_pdf(report),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name="union-seniority-list.pdf",
     )
 
 

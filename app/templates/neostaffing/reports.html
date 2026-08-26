@@ -12,10 +12,37 @@
     {% include "neostaffing/_section_nav.html" %}
     <main class="neostaffing-reports-workspace">
         <header class="neostaffing-reports-header">
-            <div><h1 id="staffing-reports-title">REPORTS</h1><span>STAFFING · SENIORITY · ATTENDANCE</span></div>
+            <div><h1 id="staffing-reports-title">REPORTS</h1><span>STAFFING · VACATION · SENIORITY</span></div>
             <div class="neostaffing-reports-header-status"><strong>{{ reports.report_type|upper }}</strong><span>READ ONLY</span></div>
         </header>
 
+        <nav class="neostaffing-reports-mode-tabs" aria-label="Report families">
+            <a href="{{ url_for('neostaffing.reports', report_type='staffing') }}"{% if reports.report_type in ('staffing', 'seniority', 'attendance') %} aria-current="page"{% endif %}>OPERATIONS</a>
+            <a href="{{ url_for('neostaffing.reports', report_type='vacation_calendars') }}"{% if reports.report_type == 'vacation_calendars' %} aria-current="page"{% endif %}>VACATION CALENDARS</a>
+            <a href="{{ url_for('neostaffing.reports', report_type='union_seniority') }}"{% if reports.report_type == 'union_seniority' %} aria-current="page"{% endif %}>UNION SENIORITY LIST</a>
+        </nav>
+
+        {% if reports.report_type == "vacation_calendars" %}
+        <form class="neostaffing-reports-toolbar" method="get" aria-label="Vacation report year">
+            <input type="hidden" name="report_type" value="vacation_calendars">
+            <label><span>VACATION YEAR</span><input type="number" min="2000" max="2200" name="year" value="{{ reports.vacation.vacation_year }}"></label>
+            <button type="submit">LOAD CALENDARS</button>
+        </form>
+        <section class="neostaffing-reports-results" aria-label="Accessible vacation calendars">
+            <header class="neostaffing-reports-results-head"><div><h2>VACATION CALENDARS</h2><span>FULL APPROVED CALENDAR PDF</span></div>{{ count_chip("YEAR", reports.vacation.vacation_year) }}</header>
+            <div class="neostaffing-vacation-report-groups">
+                <section><header><strong>MANAGEMENT</strong><span>DYNAMIC ORG CHART CALENDARS</span></header>{% for row in reports.vacation.management %}<div><span><strong>{{ row.name }}</strong><small>{{ row.scope }}</small></span><a href="{{ url_for('neostaffing.vacation_calendar_pdf', kind=row.kind, calendar_id=row.id, year=reports.vacation.vacation_year) }}">PRINT PDF</a></div>{% else %}<p>No accessible Management calendars.</p>{% endfor %}</section>
+                <section><header><strong>UNION</strong><span>OFFICIAL / VIEW ONLY</span></header>{% for row in reports.vacation.union %}<div><span><strong>{{ row.name }}</strong><small>{{ row.scope }} · {{ row.calendar_type|replace('_', ' ')|upper }}</small></span><a href="{{ url_for('neostaffing.vacation_calendar_pdf', kind=row.kind, calendar_id=row.id, year=reports.vacation.vacation_year) }}">PRINT PDF</a></div>{% else %}<p>No accessible Union calendars.</p>{% endfor %}</section>
+            </div>
+        </section>
+        {% elif reports.report_type == "union_seniority" %}
+        <form class="neostaffing-reports-toolbar" method="get" action="{{ url_for('neostaffing.vacation_union_seniority_pdf') }}" aria-label="Union Seniority List controls">
+            <label class="is-wide"><span>ORG CHART SCOPE</span><select name="scope_id" required><option value="">Select scope</option>{% for row in reports.union_seniority.scopes %}<option value="{{ row.unit.id }}"{% if reports.filters.scope_id|string == row.unit.id|string %} selected{% endif %}>{{ row.path }}</option>{% endfor %}</select></label>
+            <label><span>UNION CLASSIFICATION</span><select name="union_classification"><option value="pt"{% if reports.filters.union_classification == 'pt' %} selected{% endif %}>PT Union</option><option value="ft"{% if reports.filters.union_classification == 'ft' %} selected{% endif %}>FT Union</option><option value="both"{% if reports.filters.union_classification == 'both' %} selected{% endif %}>PT + FT Union</option></select></label>
+            <button type="submit">DOWNLOAD PDF</button>
+        </form>
+        <section class="neostaffing-reports-results"><header class="neostaffing-reports-results-head"><div><h2>UNION SENIORITY LIST</h2><span>UNION / HOURLY ONLY</span></div></header><p class="neostaffing-reports-empty">Choose an Org Chart scope and PT Union, FT Union, or both. Management classifications are excluded.</p></section>
+        {% else %}
         <form class="neostaffing-reports-toolbar" method="get" aria-label="Report controls">
             <label class="neostaffing-reports-report-type"><span>REPORT</span>
                 <select name="report_type">
@@ -70,6 +97,7 @@
             </div>
             {% endif %}
         </section>
+        {% endif %}
     </main>
 </section>
 {% endblock %}

@@ -14,7 +14,9 @@ MarkupSafe==3.0.3
 ortools==9.15.6755
 packaging==26.2
 psycopg2-binary==2.9.10
+pypdf>=5,<7
 python-dotenv==1.2.2
+reportlab>=4.0,<5
 SQLAlchemy==2.0.49
 typing_extensions==4.15.0
 Werkzeug==3.1.8
