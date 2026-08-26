@@ -3055,8 +3055,101 @@ def review_union_selection(selection, approve, user, *, capacity_override=False)
     return row
 
 
-def cancel_union_selection(selection, user):
+def move_union_selection(
+    selection,
+    requested_week_ending,
+    user,
+    *,
+    capacity_override=False,
+    today=None,
+):
+    """Atomically move one approved future Union week within its Official pool."""
+    today = _as_date(today or date.today())
+    selection_id = getattr(selection, "id", selection)
+    row = (
+        StaffingVacationUnionSelection.query.filter_by(
+            id=_positive_int(selection_id, "Union vacation selection"),
+            status="approved",
+        )
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise ValueError("The approved Union vacation selection is no longer active.")
+    if _union_week_has_started(row.week_ending, today):
+        raise ValueError("Past or already-started Union weeks cannot be moved.")
+    destination = normalize_week_ending(row.vacation_year, requested_week_ending)
+    if destination == row.week_ending:
+        raise ValueError("Choose a different destination week.")
+    if _union_week_has_started(destination, today):
+        raise ValueError("Choose a future destination week.")
+    person = _locked_union_person(row.staffing_person_id)
+    hierarchy = vacation_hierarchy()
+    pool = _union_pool_data(row.vacation_year, hierarchy=hierarchy)
+    calendar_id = pool["official_calendar_by_person"].get(person.id)
+    calendar = _locked_union_calendar(calendar_id, row.vacation_year)
+    pool = _union_pool_data(row.vacation_year, hierarchy=hierarchy)
+    actor = vacation_actor(user, hierarchy)
+    if _union_actor_entry_status(actor, calendar) != "approved":
+        raise ValueError("Only an authorized FT Supervisor or Manager may move this pick.")
+    if pool["official_calendar_by_person"].get(person.id) != calendar.id:
+        raise ValueError("The employee's Official Union calendar changed; reload and retry.")
+    _ensure_weeks_have_no_split_days(person.id, [destination])
+    capacity = union_whole_week_capacity(
+        len(pool["official_members_by_calendar"].get(calendar.id, ())),
+        row.vacation_year,
+        destination,
+    )
+    used = pool["usage_by_calendar_week"].get((calendar.id, destination), 0)
+    override = _boolean(capacity_override)
+    if used >= capacity.capacity and not override:
+        raise ValueError(
+            "Union vacation capacity is full; confirm a one-time override for this move."
+        )
+    if override and not _can_override_split_capacity(actor):
+        raise ValueError("PT Supervisors cannot override Union vacation capacity.")
+    target = (
+        StaffingVacationUnionSelection.query.filter(
+            StaffingVacationUnionSelection.staffing_person_id == person.id,
+            StaffingVacationUnionSelection.vacation_year == row.vacation_year,
+            StaffingVacationUnionSelection.week_ending == destination,
+            StaffingVacationUnionSelection.id != row.id,
+        )
+        .with_for_update()
+        .first()
+    )
+    if target and target.status in VACATION_UNION_ACTIVE_SELECTION_STATUSES:
+        raise ValueError("The employee already has this Union vacation week selected.")
+    now = datetime.utcnow()
+    if target:
+        row.status = "cancelled"
+        row.cancelled_by_user_id = getattr(user, "id", None)
+        row.cancelled_at = now
+        row.updated_at = now
+        target.bank_type = row.bank_type
+        target.status = "approved"
+        target.entered_by_user_id = getattr(user, "id", None)
+        target.reviewed_by_user_id = getattr(user, "id", None)
+        target.reviewed_at = now
+        target.cancelled_by_user_id = None
+        target.cancelled_at = None
+        target.updated_at = now
+        result = target
+    else:
+        row.week_ending = destination
+        row.entered_by_user_id = getattr(user, "id", None)
+        row.reviewed_by_user_id = getattr(user, "id", None)
+        row.reviewed_at = now
+        row.updated_at = now
+        result = row
+    db.session.flush()
+    _award_configured_floating_holidays([result], "union")
+    return result
+
+
+def cancel_union_selection(selection, user, *, correction=False, today=None):
     """Cancel an active Union selection without deleting its durable history."""
+    today = _as_date(today or date.today())
     selection_id = getattr(selection, "id", selection)
     row = (
         StaffingVacationUnionSelection.query.filter_by(
@@ -3087,6 +3180,11 @@ def cancel_union_selection(selection, user):
     )
     if not allowed:
         raise ValueError("You do not have authority to cancel this Union vacation pick.")
+    started = _union_week_has_started(row.week_ending, today)
+    if started and row.status == "approved" and not _boolean(correction):
+        raise ValueError("Past or already-started Union weeks require correction removal.")
+    if _boolean(correction) and entry_status != "approved" and not actor.is_grandmaster:
+        raise ValueError("Only an authorized FT Supervisor or Manager may correct a past pick.")
     now = datetime.utcnow()
     row.status = "cancelled"
     row.cancelled_by_user_id = getattr(user, "id", None)
@@ -3242,8 +3340,10 @@ def _authorize_vacation_day_write(person, program, user, *, vacation_year):
     pool = _union_pool_data(vacation_year, hierarchy=hierarchy)
     calendar_id = pool["official_calendar_by_person"].get(person.id)
     calendar = pool["calendar_by_id"].get(calendar_id)
-    if not calendar or not _union_actor_entry_status(actor, calendar):
-        raise ValueError("You do not have authority to manage these Union vacation days.")
+    if not calendar or _union_actor_entry_status(actor, calendar) != "approved":
+        raise ValueError(
+            "Only an authorized FT Supervisor or Manager may manage these Union vacation days."
+        )
     return actor, calendar
 
 
@@ -3776,6 +3876,10 @@ def _union_actor_entry_status(actor, calendar):
     return None
 
 
+def _union_week_has_started(week_ending, today):
+    return week_ending - timedelta(days=6) <= today
+
+
 def _union_can_cancel_selection(actor, entry_status, selection, user):
     return bool(
         actor.is_grandmaster
@@ -3847,6 +3951,7 @@ def _available_floating_entitlements(entitlements, day_rows):
 
 def union_calendars_context(vacation_year, user, today=None):
     year = normalize_vacation_year(vacation_year)
+    today = _as_date(today or date.today())
     hierarchy = vacation_hierarchy()
     actor = vacation_actor(user, hierarchy)
     calendars = (
@@ -3984,13 +4089,25 @@ def union_calendars_context(vacation_year, user, today=None):
             selection_rows = []
             for selection in selections:
                 week_row = week_by_ending.get(selection.week_ending)
+                started = _union_week_has_started(selection.week_ending, today)
                 selection_rows.append(
                     {
                         "selection": selection,
                         "over": bool(week_row and week_row["over"]),
+                        "started": started,
                         "can_review": bool(
                             selection.status == "pending"
                             and entry_status == "approved"
+                        ),
+                        "can_move": bool(
+                            selection.status == "approved"
+                            and entry_status == "approved"
+                            and not started
+                        ),
+                        "can_correct": bool(
+                            selection.status == "approved"
+                            and entry_status == "approved"
+                            and started
                         ),
                         "can_cancel": _union_can_cancel_selection(
                             actor,
@@ -4053,7 +4170,7 @@ def union_calendars_context(vacation_year, user, today=None):
                     ),
                     "can_split_optional": entry_status == "approved",
                     "can_manage_split_days": entry_status == "approved",
-                    "can_manage_days": bool(entry_status),
+                    "can_manage_days": entry_status == "approved",
                     "can_add": bool(
                         calendar.active
                         and entry_status
@@ -4157,6 +4274,7 @@ def union_calendars_context(vacation_year, user, today=None):
     )
     return {
         "vacation_year": year,
+        "today": today,
         "weeks": weeks,
         "calendars": calendar_rows,
         "browser": browser,

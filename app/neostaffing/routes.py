@@ -1450,7 +1450,11 @@ def vacation_union_selection_review(selection_id):
 def vacation_union_selection_cancel(selection_id):
     vacation_year = request.form.get("vacation_year")
     try:
-        vacation_service.cancel_union_selection(selection_id, current_user)
+        vacation_service.cancel_union_selection(
+            selection_id,
+            current_user,
+            correction=request.form.get("correction"),
+        )
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
@@ -1458,6 +1462,28 @@ def vacation_union_selection_cancel(selection_id):
     else:
         flash("Union vacation selection cancelled.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
+
+
+@bp.post("/vacation-selection/union/selection/<int:selection_id>/move")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_selection_move(selection_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.move_union_selection(
+            selection_id,
+            request.form.get("requested_week_ending"),
+            current_user,
+            capacity_override=request.form.get("capacity_override"),
+        )
+        db.session.commit()
+    except (TypeError, ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Union vacation week moved.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_union_calendars", year=vacation_year)
+    )
 
 
 @bp.route("/vacation-selection/union/new", methods=["GET", "POST"])

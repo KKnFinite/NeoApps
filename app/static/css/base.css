@@ -28720,6 +28720,11 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 .neostaffing-vacation-picks form { display:inline-flex; gap:3px; }
 .neostaffing-vacation-picks i { color:#f2c779; font-size:.52rem; font-style:normal; }
 .neostaffing-vacation-picks i.is-over { color:#ffc18d; }
+.neostaffing-vacation-picks em.is-pending { border-color:#8a6931; background:#302714; color:#f1ce87; }
+.neostaffing-vacation-picks em.is-approved { border-color:#28605f; color:#a8d9d6; }
+.neostaffing-vacation-picks em.is-approved i { color:#72bdb8; }
+.neostaffing-vacation-pending-note,.neostaffing-vacation-direct-note { padding:2px 5px; border:1px solid #745c31; color:#f1ce87; font-size:.5rem; }
+.neostaffing-vacation-direct-note { border-color:#28605f; color:#72bdb8; }
 .neostaffing-vacation-union-person details summary,.neostaffing-vacation-union-person button { color:#7bd5cf; font-size:.56rem; font-weight:900; }
 .neostaffing-vacation-union-person details form { display:flex; align-items:end; flex-wrap:wrap; gap:4px; padding-top:5px; }
 .neostaffing-vacation-union-person details label { display:grid; gap:2px; color:#708e93; font-size:.51rem; font-weight:900; }
