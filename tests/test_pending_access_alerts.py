@@ -1,6 +1,8 @@
 from datetime import datetime
 import unittest
 
+from sqlalchemy import event
+
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -14,7 +16,7 @@ from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
 )
-from app.services.my_alerts import my_alert_context
+from app.services.my_alerts import has_pending_access_requests, my_alert_context
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
 
@@ -154,6 +156,33 @@ class PendingAccessAlertsTest(unittest.TestCase):
 
         self.assertEqual(tray["count"], 0)
         self.assertFalse(tray["has_alerts"])
+
+    def test_pending_access_check_uses_one_select_and_no_writes(self):
+        self._gateway_request("query_gateway_request")
+        self._portal_app_request("query_portal_request")
+        db.session.expire_all()
+        statements = []
+
+        def capture_statement(_conn, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.strip().upper())
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        try:
+            self.assertTrue(has_pending_access_requests())
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+
+        self.assertEqual(
+            sum(statement.startswith("SELECT") for statement in statements),
+            1,
+        )
+        self.assertEqual(
+            sum(
+                statement.startswith(("INSERT", "UPDATE", "DELETE"))
+                for statement in statements
+            ),
+            0,
+        )
 
     def test_pending_alert_respects_access_request_view_permission(self):
         self._gateway_request("restricted_request")

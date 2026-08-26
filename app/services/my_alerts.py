@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 
+from sqlalchemy import select, union_all
+
+from app.extensions import db
 from app.models import GatewayMembership, PortalAppAccess
 from app.services.motherbrain_alerts import active_motherbrain_alerts
 
@@ -73,17 +76,14 @@ def pending_access_request_alert(can_view_permission=None):
 
 
 def has_pending_access_requests():
-    pending_membership = (
-        GatewayMembership.query.filter_by(status="pending", is_active=True)
-        .with_entities(GatewayMembership.id)
-        .first()
+    pending_ids = union_all(
+        select(GatewayMembership.id).where(
+            GatewayMembership.status == "pending",
+            GatewayMembership.is_active.is_(True),
+        ),
+        select(PortalAppAccess.id).where(
+            PortalAppAccess.status == "pending",
+            PortalAppAccess.is_active.is_(True),
+        ),
     )
-    if pending_membership:
-        return True
-
-    return (
-        PortalAppAccess.query.filter_by(status="pending", is_active=True)
-        .with_entities(PortalAppAccess.id)
-        .first()
-        is not None
-    )
+    return db.session.execute(pending_ids.limit(1)).scalar() is not None
