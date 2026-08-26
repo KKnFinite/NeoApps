@@ -27378,41 +27378,43 @@ body:has(.neostaffing-operational-attendance) { overflow-x: clip; }
 .neostaffing-operational-empty { color: #7f9293; font-size: .7rem; text-align: center; }
 .neostaffing-operational-empty { display: grid; place-items: center; min-height: 240px; }
 
-/* Ermac's Door View attendance integration keeps the shared roster behavior but
-   inherits Ermac's established red/green node palette. */
-.neostaffing-operational-attendance--ermac {
-    --node-primary: var(--node-ermac-primary);
-    --node-secondary: var(--node-ermac-secondary);
-    --node-highlight: var(--node-ermac-highlight);
-    --node-rgb: var(--node-ermac-primary-rgb);
-    --node-secondary-rgb: var(--node-ermac-secondary-rgb);
-    --node-highlight-rgb: var(--node-ermac-highlight-rgb);
-}
+/* Ermac's Door View attendance integration keeps the shared roster behavior
+   while using Ermac's existing theme-ermac primary red variables. */
 .neostaffing-operational-attendance--ermac .neostaffing-operational-heading p,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-summary > strong span,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-summary > span strong,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-flow {
-    color: var(--node-ermac-highlight);
+    color: color-mix(in srgb, var(--node-ermac-primary) 58%, #fff);
 }
 .neostaffing-operational-attendance--ermac .neostaffing-operational-back,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-roster button,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-table select {
-    border-color: rgba(var(--node-ermac-secondary-rgb), .55);
+    border-color: rgba(var(--node-ermac-primary-rgb), .78);
 }
 .neostaffing-operational-attendance--ermac .neostaffing-operational-roster {
-    border-top-color: var(--node-ermac-secondary);
+    border-top-color: var(--node-ermac-primary);
 }
 .neostaffing-operational-attendance--ermac .neostaffing-operational-roster.is-coming {
-    border-top-color: var(--node-ermac-primary);
+    border-top-color: color-mix(in srgb, var(--node-ermac-primary) 62%, #71767b);
 }
 .neostaffing-operational-attendance--ermac .neostaffing-operational-roster button {
     background: var(--node-ermac-primary);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-tabs a[aria-current="page"] {
+    border-color: var(--node-ermac-primary);
+    background: var(--node-ermac-primary);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table td a:hover strong {
+    color: color-mix(in srgb, var(--node-ermac-primary) 54%, #fff);
 }
 .neostaffing-operational-attendance--ermac .neostaffing-operational-back:hover,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-roster button:hover,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-table select:hover,
 .neostaffing-operational-attendance--ermac .neostaffing-operational-table select:focus {
-    border-color: var(--node-ermac-highlight);
+    border-color: color-mix(in srgb, var(--node-ermac-primary) 62%, #fff);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table select:focus {
+    box-shadow: 0 0 0 2px rgba(var(--node-ermac-primary-rgb), .24);
 }
 
 @media (max-width: 1100px) {

@@ -152,6 +152,18 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         self.assertIn("width: 100%;", manage_css.split("body:has", 1)[0])
         self.assertNotIn("width: 100vw;", manage_css.split("body:has", 1)[0])
         self.assertIn(".neostaffing-operational-attendance--ermac", manage_css)
+        ermac_css = manage_css.split(
+            "/* Ermac's Door View attendance integration", 1
+        )[1].split("@media (max-width: 1100px)", 1)[0]
+        self.assertIn("border-top-color: var(--node-ermac-primary);", ermac_css)
+        self.assertIn("rgba(var(--node-ermac-primary-rgb), .78)", ermac_css)
+        self.assertIn("rgba(var(--node-ermac-primary-rgb), .24)", ermac_css)
+        self.assertIn(
+            '.neostaffing-operational-tabs a[aria-current="page"]',
+            ermac_css,
+        )
+        self.assertNotIn("var(--node-ermac-secondary)", ermac_css)
+        self.assertNotIn("var(--node-ermac-highlight)", ermac_css)
         mobile_css = manage_css.split("@media (max-width: 720px)", 1)[1]
         self.assertIn(".neostaffing-operational-table { min-width: 0;", mobile_css)
         self.assertNotIn("min-width: 620px", mobile_css)
