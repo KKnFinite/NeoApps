@@ -1,5 +1,6 @@
+from contextlib import ExitStack
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from app import create_app
 from app.extensions import db
@@ -8,6 +9,8 @@ from app.services.sort_date_mission_schema import (
     DEPARTURE_STATUS_CONSTRAINT_NAME,
     GOOGLE_RAIN_MILESTONE_COLUMNS,
     SORT_DATE_MISSION_SCHEMA_LOCK_KEY,
+    _model_constraint_sql,
+    _schema_state,
     ensure_sort_date_mission_departure_status_constraint,
 )
 
@@ -78,100 +81,152 @@ class SortDateMissionSchemaTest(unittest.TestCase):
 
         connection.assert_not_called()
 
-    def test_postgresql_ensure_repairs_only_outdated_departure_constraint(self):
-        self.app.config.update(
-            TESTING=False,
-            SQLALCHEMY_DATABASE_URI="postgresql://example.test/neoapps",
-        )
-        connection = Mock()
-        definition_result = Mock()
-        definition_result.scalar.return_value = (
-            "CHECK (departure_status IN ('loading', 'departed', 'cancelled'))"
-        )
-
-        def execute(statement, *_args, **_kwargs):
-            if "SELECT pg_get_constraintdef" in str(statement):
-                return definition_result
-            return Mock()
-
-        connection.execute.side_effect = execute
-
-        with (
-            patch(
-                "app.services.sort_date_mission_schema.db.session.connection",
-                return_value=connection,
-            ),
-            patch(
-                "app.services.sort_date_mission_schema.db.session.commit"
-            ) as commit,
-            patch("app.services.schema_sync.sync_database_schema") as broad_sync,
-        ):
+    def test_fully_current_postgresql_schema_executes_no_ddl_or_lock(self):
+        read_connection = Mock()
+        locked_connection = Mock()
+        with self._postgresql_ensure_patches(
+            read_connection,
+            locked_connection,
+            schema_states=[((), True)],
+        ) as calls:
             self.assertTrue(
                 ensure_sort_date_mission_departure_status_constraint(self.app)
             )
 
-        statements = "\n".join(
-            str(call.args[0]) for call in connection.execute.call_args_list
-        )
-        self.assertIn("SET LOCAL lock_timeout", statements)
+        calls["session_connection"].assert_not_called()
+        locked_connection.execute.assert_not_called()
+        calls["commit"].assert_not_called()
+        calls["rollback"].assert_not_called()
+
+    def test_one_missing_rain_column_alters_only_that_column(self):
+        missing = "elmac_completed_at_utc"
+        connection = Mock()
+        with self._postgresql_ensure_patches(
+            Mock(),
+            connection,
+            schema_states=[((missing,), True), ((missing,), True)],
+        ) as calls:
+            self.assertTrue(
+                ensure_sort_date_mission_departure_status_constraint(self.app)
+            )
+
+        statements = self._statements(connection)
+        self.assertIn("SET LOCAL lock_timeout = '5s'", statements)
         self.assertIn("pg_advisory_xact_lock", statements)
         self.assertEqual(
             connection.execute.call_args_list[1].args[1]["lock_key"],
             SORT_DATE_MISSION_SCHEMA_LOCK_KEY,
         )
-        self.assertIn(
-            "DROP CONSTRAINT IF EXISTS ck_sort_date_missions_departure_status",
-            statements,
-        )
-        for column_name, column_sql in GOOGLE_RAIN_MILESTONE_COLUMNS.items():
-            self.assertIn(
-                f"ADD COLUMN IF NOT EXISTS {column_name} {column_sql}",
-                statements,
-            )
-        self.assertIn("ADD CONSTRAINT ck_sort_date_missions_departure_status", statements)
-        self.assertIn("'scheduled'", statements)
-        self.assertNotIn("CREATE TABLE", statements)
-        broad_sync.assert_not_called()
-        commit.assert_called_once_with()
+        self.assertIn(f"ADD COLUMN {missing} TIMESTAMP", statements)
+        for column_name in set(GOOGLE_RAIN_MILESTONE_COLUMNS) - {missing}:
+            self.assertNotIn(f"ADD COLUMN {column_name}", statements)
+        self.assertNotIn("DROP CONSTRAINT", statements)
+        calls["commit"].assert_called_once_with()
 
-    def test_current_postgresql_constraint_is_idempotently_left_unchanged(self):
-        self.app.config.update(
-            TESTING=False,
-            SQLALCHEMY_DATABASE_URI="postgresql://example.test/neoapps",
-        )
+    def test_multiple_missing_rain_columns_alter_only_those_columns(self):
+        missing = ("elmac_completed_source", "crew_load_completed_source")
         connection = Mock()
-        definition_result = Mock()
-        definition_result.scalar.return_value = (
-            "CHECK (departure_status IN ('scheduled', 'loading', 'departed'))"
-        )
-
-        def execute(statement, *_args, **_kwargs):
-            if "SELECT pg_get_constraintdef" in str(statement):
-                return definition_result
-            return Mock()
-
-        connection.execute.side_effect = execute
-
-        with (
-            patch(
-                "app.services.sort_date_mission_schema.db.session.connection",
-                return_value=connection,
-            ),
-            patch(
-                "app.services.sort_date_mission_schema.db.session.commit"
-            ) as commit,
+        with self._postgresql_ensure_patches(
+            Mock(),
+            connection,
+            schema_states=[(missing, True), (missing, True)],
         ):
             self.assertTrue(
                 ensure_sort_date_mission_departure_status_constraint(self.app)
             )
 
-        statements = "\n".join(
-            str(call.args[0]) for call in connection.execute.call_args_list
+        statements = self._statements(connection)
+        for column_name in missing:
+            self.assertIn(f"ADD COLUMN {column_name}", statements)
+        for column_name in set(GOOGLE_RAIN_MILESTONE_COLUMNS) - set(missing):
+            self.assertNotIn(f"ADD COLUMN {column_name}", statements)
+
+    def test_outdated_or_missing_constraint_is_repaired_without_column_ddl(self):
+        connection = Mock()
+        with self._postgresql_ensure_patches(
+            Mock(),
+            connection,
+            schema_states=[((), False), ((), False)],
+        ) as calls:
+            self.assertTrue(
+                ensure_sort_date_mission_departure_status_constraint(self.app)
+            )
+
+        statements = self._statements(connection)
+        self.assertNotIn("ADD COLUMN", statements)
+        self.assertIn("DROP CONSTRAINT IF EXISTS", statements)
+        self.assertIn(
+            "ADD CONSTRAINT ck_sort_date_missions_departure_status",
+            statements,
         )
-        self.assertNotIn("DROP CONSTRAINT", statements)
-        for column_name in GOOGLE_RAIN_MILESTONE_COLUMNS:
-            self.assertIn(f"ADD COLUMN IF NOT EXISTS {column_name}", statements)
-        commit.assert_called_once_with()
+        self.assertIn("'scheduled'", statements)
+        calls["commit"].assert_called_once_with()
+
+    def test_recheck_after_lock_prevents_duplicate_ddl(self):
+        connection = Mock()
+        with self._postgresql_ensure_patches(
+            Mock(),
+            connection,
+            schema_states=[
+                (("elmac_completed_at_utc",), False),
+                ((), True),
+            ],
+        ) as calls:
+            self.assertTrue(
+                ensure_sort_date_mission_departure_status_constraint(self.app)
+            )
+
+        statements = self._statements(connection)
+        self.assertIn("SET LOCAL lock_timeout = '5s'", statements)
+        self.assertEqual(statements.count("pg_advisory_xact_lock"), 1)
+        self.assertNotIn("ALTER TABLE", statements)
+        calls["commit"].assert_not_called()
+        calls["rollback"].assert_called_once_with()
+
+    def test_catalog_state_detects_current_outdated_and_missing_constraints(self):
+        current_definition = f"CHECK ({_model_constraint_sql()})"
+        for definition, expected_current in (
+            (current_definition, True),
+            ("CHECK (departure_status IN ('loading', 'departed'))", False),
+            (None, False),
+        ):
+            with self.subTest(definition=definition):
+                columns_result = Mock()
+                columns_result.scalars.return_value.all.return_value = list(
+                    GOOGLE_RAIN_MILESTONE_COLUMNS
+                )
+                definition_result = Mock()
+                definition_result.scalar.return_value = definition
+                connection = Mock()
+                connection.execute.side_effect = [
+                    columns_result,
+                    definition_result,
+                ]
+
+                missing_columns, constraint_is_current = _schema_state(
+                    connection
+                )
+
+                self.assertEqual(missing_columns, ())
+                self.assertEqual(constraint_is_current, expected_current)
+                statements = self._statements(connection)
+                self.assertIn("FROM pg_attribute", statements)
+                self.assertIn("pg_get_constraintdef", statements)
+
+    def test_failure_rolls_back_without_retry(self):
+        connection = Mock()
+        connection.execute.side_effect = RuntimeError("lock failed")
+        with self._postgresql_ensure_patches(
+            Mock(),
+            connection,
+            schema_states=[(("elmac_completed_at_utc",), True)],
+        ) as calls:
+            with self.assertRaisesRegex(RuntimeError, "lock failed"):
+                ensure_sort_date_mission_departure_status_constraint(self.app)
+
+        self.assertEqual(connection.execute.call_count, 1)
+        calls["commit"].assert_not_called()
+        calls["rollback"].assert_called_once_with()
 
     def test_factory_invokes_targeted_departure_status_ensure(self):
         with patch(
@@ -180,6 +235,68 @@ class SortDateMissionSchemaTest(unittest.TestCase):
             app = create_app(self.config)
 
         ensure.assert_called_once_with(app)
+
+    def _postgresql_ensure_patches(
+        self,
+        read_connection,
+        locked_connection,
+        *,
+        schema_states,
+    ):
+        self.app.config.update(
+            TESTING=False,
+            SQLALCHEMY_DATABASE_URI="postgresql://example.test/neoapps",
+        )
+        engine_context = MagicMock()
+        engine_context.__enter__.return_value = read_connection
+        stack = ExitStack()
+        stack.enter_context(
+            patch(
+                "app.services.sort_date_mission_schema.db.engine.connect",
+                return_value=engine_context,
+            )
+        )
+        session_connection = stack.enter_context(
+            patch(
+                "app.services.sort_date_mission_schema.db.session.connection",
+                return_value=locked_connection,
+            )
+        )
+        commit = stack.enter_context(
+            patch("app.services.sort_date_mission_schema.db.session.commit")
+        )
+        rollback = stack.enter_context(
+            patch("app.services.sort_date_mission_schema.db.session.rollback")
+        )
+        stack.enter_context(
+            patch(
+                "app.services.sort_date_mission_schema._schema_state",
+                side_effect=schema_states,
+            )
+        )
+        return _PatchResults(stack, session_connection, commit, rollback)
+
+    @staticmethod
+    def _statements(connection):
+        return "\n".join(
+            str(call.args[0]) for call in connection.execute.call_args_list
+        )
+
+
+class _PatchResults:
+    def __init__(self, stack, session_connection, commit, rollback):
+        self.stack = stack
+        self.results = {
+            "session_connection": session_connection,
+            "commit": commit,
+            "rollback": rollback,
+        }
+
+    def __enter__(self):
+        return self.results
+
+    def __exit__(self, *args):
+        return self.stack.__exit__(*args)
 
 
 if __name__ == "__main__":

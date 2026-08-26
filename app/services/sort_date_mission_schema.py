@@ -1,6 +1,8 @@
 """Targeted production schema ensure for active SortDateMission additions."""
 
-from sqlalchemy import text
+import re
+
+from sqlalchemy import bindparam, text
 
 from app.extensions import db
 from app.models import SortDateMission
@@ -24,6 +26,16 @@ def ensure_sort_date_mission_departure_status_constraint(app):
 
     with app.app_context():
         try:
+            with db.engine.connect() as read_connection:
+                missing_columns, constraint_is_current = _schema_state(
+                    read_connection
+                )
+            if not missing_columns and constraint_is_current:
+                app.logger.info(
+                    "SortDateMission targeted schema ensure already current"
+                )
+                return True
+
             connection = db.session.connection()
             connection.execute(
                 text(
@@ -35,22 +47,16 @@ def ensure_sort_date_mission_departure_status_constraint(app):
                 text("SELECT pg_advisory_xact_lock(:lock_key)"),
                 {"lock_key": SORT_DATE_MISSION_SCHEMA_LOCK_KEY},
             )
-            for column_name, column_sql in GOOGLE_RAIN_MILESTONE_COLUMNS.items():
+            missing_columns, constraint_is_current = _schema_state(connection)
+            for column_name in missing_columns:
+                column_sql = GOOGLE_RAIN_MILESTONE_COLUMNS[column_name]
                 connection.execute(
                     text(
                         f"ALTER TABLE {SortDateMission.__tablename__} "
-                        f"ADD COLUMN IF NOT EXISTS {column_name} {column_sql}"
+                        f"ADD COLUMN {column_name} {column_sql}"
                     )
                 )
-            definition = connection.execute(
-                text(
-                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-                    "WHERE conrelid = 'sort_date_missions'::regclass "
-                    "AND conname = :constraint_name"
-                ),
-                {"constraint_name": DEPARTURE_STATUS_CONSTRAINT_NAME},
-            ).scalar()
-            if not definition or "'scheduled'" not in str(definition):
+            if not constraint_is_current:
                 connection.execute(
                     text(
                         "ALTER TABLE sort_date_missions DROP CONSTRAINT IF EXISTS "
@@ -64,7 +70,10 @@ def ensure_sort_date_mission_departure_status_constraint(app):
                         f"{_model_constraint_sql()})"
                     )
                 )
-            db.session.commit()
+            if missing_columns or not constraint_is_current:
+                db.session.commit()
+            else:
+                db.session.rollback()
         except Exception as error:
             db.session.rollback()
             app.logger.error(
@@ -75,6 +84,38 @@ def ensure_sort_date_mission_departure_status_constraint(app):
 
     app.logger.info("SortDateMission targeted schema ensure completed")
     return True
+
+
+def _schema_state(connection):
+    column_result = connection.execute(
+        text(
+            "SELECT attname FROM pg_attribute "
+            "WHERE attrelid = 'sort_date_missions'::regclass "
+            "AND attnum > 0 AND NOT attisdropped "
+            "AND attname IN :column_names"
+        ).bindparams(bindparam("column_names", expanding=True)),
+        {"column_names": tuple(GOOGLE_RAIN_MILESTONE_COLUMNS)},
+    )
+    existing_columns = set(column_result.scalars().all())
+    missing_columns = tuple(
+        column_name
+        for column_name in GOOGLE_RAIN_MILESTONE_COLUMNS
+        if column_name not in existing_columns
+    )
+    definition = connection.execute(
+        text(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conrelid = 'sort_date_missions'::regclass "
+            "AND conname = :constraint_name"
+        ),
+        {"constraint_name": DEPARTURE_STATUS_CONSTRAINT_NAME},
+    ).scalar()
+    expected_values = re.findall(r"'([^']+)'", _model_constraint_sql())
+    constraint_is_current = bool(
+        definition
+        and all(f"'{value}'" in str(definition) for value in expected_values)
+    )
+    return missing_columns, constraint_is_current
 
 
 def _model_constraint_sql():
