@@ -188,6 +188,31 @@ def build_vacation_calendar_pdf(report, *, created_on=None):
             Spacer(1, 0.08 * inch),
         ]
     )
+    story = [heading]
+    pinned_rows = report.get("pinned_rows", ())
+    if pinned_rows:
+        story.extend(
+            [
+                Paragraph("Pinned Next Level - Read Only", styles["metadata"]),
+                Table(
+                    [
+                        ["Pinned Person", "Approved Availability"],
+                        *[
+                            [
+                                _escape(row["person"]),
+                                _pdf_lines(row["availability"], styles["cell"]),
+                            ]
+                            for row in pinned_rows
+                        ],
+                    ],
+                    colWidths=[2.25 * inch, 7.9 * inch],
+                    repeatRows=1,
+                    hAlign="CENTER",
+                    style=_table_style(),
+                ),
+                Spacer(1, 0.1 * inch),
+            ]
+        )
     rows = [["Week Ending", "Approved Whole Weeks", "Approved Single Days"]]
     for week in report["weeks"]:
         rows.append(
@@ -204,7 +229,8 @@ def build_vacation_calendar_pdf(report, *, created_on=None):
         hAlign="CENTER",
     )
     table.setStyle(_table_style())
-    document.build([heading, table])
+    story.append(table)
+    document.build(story)
     output.seek(0)
     return output
 
@@ -283,13 +309,30 @@ def _management_calendar_report_data(area_id, year, user):
                     f"{day.vacation_date.strftime('%a %m/%d')} - {label} - "
                     f"{day.item_type.replace('_', ' ').title()}"
                 )
-    return _calendar_report_contract(
+    report = _calendar_report_contract(
         f"Management Vacation Calendar - {area_row['area'].name}",
         year,
         context["weeks"],
         whole_by_week,
         day_by_week,
     )
+    report["pinned_rows"] = [
+        {
+            "person": (
+                f"{pinned['person'].last_name}, {pinned['person'].first_name} "
+                f"({pinned['person'].classification.replace('_', ' ').title()})"
+            ),
+            "availability": [
+                (
+                    f"{item['label']} - "
+                    f"{item['date'].strftime('%b %d, %Y')}"
+                )
+                for item in pinned["availability"]
+            ],
+        }
+        for pinned in area_row["pinned_rows"]
+    ]
+    return report
 
 
 def _union_calendar_report_data(calendar_id, year, user):

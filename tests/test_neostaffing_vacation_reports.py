@@ -12,6 +12,7 @@ from app.models import (
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingUnit,
+    StaffingVacationDaySelection,
     StaffingVacationManagementSelection,
     StaffingVacationUnionCalendarShare,
     StaffingVacationUnionSelection,
@@ -178,6 +179,103 @@ class NeoStaffingVacationReportsTest(unittest.TestCase):
         entries = [entry for week in report["weeks"] for entry in week["whole_week_entries"]]
         self.assertIn("Manager, Morgan", entries)
 
+    def test_management_pdf_includes_read_only_pinned_availability(self):
+        pinned_vacation = self._person(
+            "DM001", "Vera", "Vacation", "1970-01-01", "division_manager"
+        )
+        pinned_special = self._person(
+            "DM002", "Sam", "Special", "1971-01-01", "division_manager"
+        )
+        pinned_corporate = self._person(
+            "DM003", "Cora", "Corporate", "1972-01-01", "division_manager"
+        )
+        for person in (pinned_vacation, pinned_special, pinned_corporate):
+            db.session.add(
+                StaffingLeadershipAssignment(
+                    person=person,
+                    unit=self.units["night"],
+                    leadership_level="sort",
+                    active=True,
+                )
+            )
+        lower_selection = StaffingVacationManagementSelection(
+            staffing_person_id=self.management.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 2, 6),
+            selected_by_user_id=self.owner.id,
+        )
+        pinned_selection = StaffingVacationManagementSelection(
+            staffing_person_id=pinned_vacation.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 1, 23),
+            selected_by_user_id=self.owner.id,
+        )
+        db.session.add_all(
+            [
+                lower_selection,
+                pinned_selection,
+                StaffingVacationDaySelection(
+                    staffing_person_id=pinned_special.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 1, 25),
+                    item_type="special_assignment",
+                    status="scheduled",
+                ),
+                StaffingVacationDaySelection(
+                    staffing_person_id=pinned_corporate.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 1, 26),
+                    item_type="corporate_class",
+                    status="scheduled",
+                ),
+            ]
+        )
+        db.session.commit()
+
+        report = report_service.vacation_calendar_report_data(
+            "management", self.units["night"].id, self.YEAR, self.owner
+        )
+        self.assertEqual(len(report["pinned_rows"]), 3)
+        pinned_text = str(report["pinned_rows"])
+        self.assertIn("VACATION", pinned_text)
+        self.assertIn("SPECIAL ASSIGNMENT", pinned_text)
+        self.assertIn("CORPORATE CLASS", pinned_text)
+        whole_entries = [
+            entry for week in report["weeks"] for entry in week["whole_week_entries"]
+        ]
+        self.assertEqual(whole_entries, ["Manager, Morgan"])
+
+        context = vacation_service.management_vacation_context(
+            self.YEAR, self.owner, today=date(self.YEAR, 1, 20)
+        )
+        area = next(
+            row for row in context["areas"] if row["area"].id == self.units["night"].id
+        )
+        self.assertEqual(
+            sum(week["used"] for week in area["week_rows"]),
+            1,
+        )
+
+        pdf = report_service.build_vacation_calendar_pdf(
+            report, created_on=datetime(2026, 8, 25, 12, 0)
+        )
+        reader = PdfReader(pdf)
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertGreater(
+            float(reader.pages[0].mediabox.width),
+            float(reader.pages[0].mediabox.height),
+        )
+        for value in (
+            "Pinned Next Level - Read Only",
+            "Vacation, Vera",
+            "Special, Sam",
+            "Corporate, Cora",
+            "VACATION",
+            "SPECIAL ASSIGNMENT",
+            "CORPORATE CLASS",
+        ):
+            self.assertIn(value, text)
+
     def test_union_seniority_scope_filter_order_numbering_and_management_exclusion(self):
         both = report_service.union_seniority_report_data(
             self.units["ramp"].id, "both"
@@ -273,10 +371,16 @@ class NeoStaffingVacationReportsTest(unittest.TestCase):
                 "union", self.official.id, self.YEAR, self.owner
             )
             calendar_count = len(statements)
+            statements.clear()
+            report_service.vacation_calendar_report_data(
+                "management", self.units["night"].id, self.YEAR, self.owner
+            )
+            management_count = len(statements)
         finally:
             event.remove(db.engine, "before_cursor_execute", capture)
         self.assertLessEqual(seniority_count, 3)
         self.assertLessEqual(calendar_count, 10)
+        self.assertLessEqual(management_count, 13)
 
     def _hierarchy(self):
         night = StaffingUnit(unit_type="sort", name="Night", display_order=1)

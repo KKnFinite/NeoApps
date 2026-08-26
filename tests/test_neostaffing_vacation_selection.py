@@ -1011,7 +1011,8 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         finally:
             event.remove(db.engine, "before_cursor_execute", record)
         self.assertEqual(len(context["my_view_calendars"]), 5)
-        self.assertLessEqual(len(statements), 16)
+        # The active Aug-Jul Optional Day usage is one additional bounded aggregate.
+        self.assertLessEqual(len(statements), 17)
         admin = vacation_service.union_calendar_admin_context(grandmaster)
         self.assertEqual(len(admin["calendars"]), 5)
         with self.assertRaisesRegex(ValueError, "Grandmaster"):
@@ -1624,8 +1625,90 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
 
         self.assertEqual(len(result["calendars"]), 3)
-        # Generic days and durable Floating Holiday awards are bounded bulk reads.
-        self.assertLessEqual(len(statements), 8)
+        # Generic days, cycle usage, and durable awards are bounded bulk reads.
+        self.assertLessEqual(len(statements), 9)
+
+    def test_union_optional_day_context_uses_active_august_july_cycle(self):
+        grandmaster = self._user("optional_cycle_gm", "grandmaster")
+        self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "OPTC1", "Cycle", "Employee", self.units["blue_area"]
+        )
+        db.session.add_all(
+            [
+                StaffingVacationDaySelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR - 1,
+                    vacation_date=date(self.YEAR - 1, 8, 15),
+                    item_type="optional_day",
+                    status="scheduled",
+                ),
+                StaffingVacationDaySelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 1, 15),
+                    item_type="optional_day",
+                    status="scheduled",
+                ),
+            ]
+        )
+        db.session.commit()
+
+        context = vacation_service.union_calendars_context(
+            self.YEAR, grandmaster, today=date(self.YEAR, 1, 20)
+        )
+        person_row = context["calendars"][0]["person_rows"][0]
+        self.assertEqual(person_row["optional_days_remaining"], 2)
+        self.assertEqual(
+            person_row["optional_day_cycle_start"], date(self.YEAR - 1, 8, 1)
+        )
+        self.assertEqual(
+            vacation_service.optional_day_usage_by_person(
+                date(self.YEAR, 1, 20)
+            )[person.id],
+            2,
+        )
+
+        vacation_service.schedule_vacation_entitlement_day(
+            person,
+            date(self.YEAR, 2, 15),
+            "optional_day",
+            grandmaster,
+            program="union",
+        )
+        vacation_service.schedule_vacation_entitlement_day(
+            person,
+            date(self.YEAR, 3, 15),
+            "optional_day",
+            grandmaster,
+            program="union",
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "No Optional Days remain"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person,
+                date(self.YEAR, 4, 15),
+                "optional_day",
+                grandmaster,
+                program="union",
+            )
+        db.session.rollback()
+        context = vacation_service.union_calendars_context(
+            self.YEAR, grandmaster, today=date(self.YEAR, 3, 20)
+        )
+        self.assertEqual(
+            context["calendars"][0]["person_rows"][0]["optional_days_remaining"],
+            0,
+        )
+
+        reset_context = vacation_service.union_calendars_context(
+            self.YEAR, grandmaster, today=date(self.YEAR, 8, 1)
+        )
+        reset_row = reset_context["calendars"][0]["person_rows"][0]
+        self.assertEqual(reset_row["optional_days_remaining"], 4)
+        self.assertEqual(
+            reset_row["optional_day_cycle_start"], date(self.YEAR, 8, 1)
+        )
 
     def test_union_optional_days_reset_august_first_and_restore(self):
         grandmaster = self._user("optional_gm", "grandmaster")

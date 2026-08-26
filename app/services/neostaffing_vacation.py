@@ -266,6 +266,27 @@ def optional_day_cycle(value):
     return date(start_year, 8, 1), date(start_year + 1, 7, 31)
 
 
+def optional_day_usage_by_person(value):
+    """Return scheduled Optional Day usage for one active August-July cycle."""
+    cycle_start, cycle_end = optional_day_cycle(value)
+    return {
+        person_id: used
+        for person_id, used in db.session.query(
+            StaffingVacationDaySelection.staffing_person_id,
+            func.count(StaffingVacationDaySelection.id),
+        )
+        .filter(
+            StaffingVacationDaySelection.item_type == "optional_day",
+            StaffingVacationDaySelection.status == "scheduled",
+            StaffingVacationDaySelection.vacation_date.between(
+                cycle_start, cycle_end
+            ),
+        )
+        .group_by(StaffingVacationDaySelection.staffing_person_id)
+        .all()
+    }
+
+
 def employee_anniversary_date(seniority_date, year):
     """Resolve the actual annual seniority anniversary, including leap-day service."""
     if not isinstance(seniority_date, date):
@@ -4530,6 +4551,8 @@ def union_calendars_context(vacation_year, user, today=None):
             conversion
         )
     day_rows_by_person, floating_by_person = _vacation_day_rows_for_year(year)
+    optional_day_cycle_start, optional_day_cycle_end = optional_day_cycle(today)
+    optional_day_usage = optional_day_usage_by_person(today)
     daily_usage = (
         _union_day_usage(year, pool)
         if pool["official_calendar_by_person"]
@@ -4655,13 +4678,10 @@ def union_calendars_context(vacation_year, user, today=None):
                     "optional_days_remaining": max(
                         0,
                         OPTIONAL_DAY_ENTITLEMENT
-                        - sum(
-                            row.item_type == "optional_day"
-                            and optional_day_cycle(row.vacation_date)[0].year
-                            == optional_day_cycle(date(year, 8, 1))[0].year
-                            for row in day_rows_by_person.get(person.id, ())
-                        ),
+                        - optional_day_usage.get(person.id, 0),
                     ),
+                    "optional_day_cycle_start": optional_day_cycle_start,
+                    "optional_day_cycle_end": optional_day_cycle_end,
                     "anniversary_available": max(
                         0,
                         1
