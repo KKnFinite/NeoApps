@@ -7,8 +7,8 @@ from app.models import (
     MasterFlightSchedule,
     NeoErmacBuildingLineup,
     SortDateMission,
-    SortDateOperation,
 )
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data
 
 
@@ -477,21 +477,7 @@ def belt_color_key(belt_name):
 
 
 def _current_sort_destination_pull_times(gateway):
-    operation = (
-        SortDateOperation.query.filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
+    operation = current_operational_sort_operation(gateway)
     if not operation:
         return {}
 

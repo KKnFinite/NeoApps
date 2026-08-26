@@ -4,10 +4,13 @@ from datetime import date, datetime, time
 from app import create_app
 from app.extensions import db
 from app.models import (
+    GatewaySortMatrix,
     MasterFlightSchedule,
     NeoErmacDoorPull,
     SortDateMission,
     SortDateOperation,
+    SortTimelineSettings,
+    SortTimelineSortSetting,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoermac_building_lineup import (
@@ -35,6 +38,9 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
                 "DEFAULT_GATEWAY_TIMEZONE": "America/Chicago",
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(
+                    2026, 8, 10, 22, 0
+                ),
             },
         )
         self.app = create_app(TestConfig)
@@ -42,6 +48,31 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         self.context.push()
         db.create_all()
         self.gateway = ensure_default_gateway_and_nodes()
+        timeline = SortTimelineSettings(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+        )
+        db.session.add(timeline)
+        db.session.flush()
+        db.session.add_all(
+            [
+                GatewaySortMatrix(
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    day_of_week="monday",
+                    sort_name="night",
+                    is_active=True,
+                ),
+                SortTimelineSortSetting(
+                    timeline_settings=timeline,
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    sort_name="night",
+                    sort_window_start_local=time(20, 0),
+                    sort_window_end_local=time(4, 0),
+                ),
+            ]
+        )
         self.operation = SortDateOperation(
             gateway_id=self.gateway.id,
             sort_date=date(2026, 8, 10),

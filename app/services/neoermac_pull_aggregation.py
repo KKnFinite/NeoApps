@@ -1,15 +1,14 @@
 from datetime import timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import or_
-
-from app.models import NeoErmacDoorPull, SortDateMission, SortDateOperation
+from app.models import NeoErmacDoorPull, SortDateMission
 from app.services.gateway_matrix import gateway_timezone
 from app.services.neoermac_building_lineup import (
     get_building_lineup_doors_by_destination,
     normalize_destination,
 )
 from app.services.night_sorting import sort_datetime_for_local_time
+from app.services.operation_scope import current_operational_sort_operation
 
 
 PULL_AGGREGATION_FIELDS = (
@@ -237,18 +236,4 @@ def _normalized_status(value):
 
 
 def _current_operation(gateway):
-    return (
-        SortDateOperation.query.filter(
-            SortDateOperation.archived_at_utc.is_(None),
-            or_(
-                SortDateOperation.gateway_id == gateway.id,
-                SortDateOperation.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(
-            SortDateOperation.sort_date.desc(),
-            SortDateOperation.generated_at_utc.desc(),
-            SortDateOperation.id.desc(),
-        )
-        .first()
-    )
+    return current_operational_sort_operation(gateway)

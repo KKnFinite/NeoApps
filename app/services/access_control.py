@@ -2,8 +2,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from flask import current_app, g, has_request_context, request
-from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import aliased
+from sqlalchemy import and_
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
@@ -18,7 +17,6 @@ from app.models import (
 )
 from app.models.user import ROLE_LEVELS
 from app.services.operation_scope import (
-    CURRENT_OPERATION_NAMESPACE,
     OPERATION_BY_ID_NAMESPACE,
 )
 from app.services.request_cache import (
@@ -255,33 +253,9 @@ def prime_lightweight_live_request_scope(
         )
     )
 
-    include_operation = bool(
-        normalized_operation_id is not None or include_current_ermac_operation
-    )
+    include_operation = normalized_operation_id is not None
     if include_operation:
-        if normalized_operation_id is not None:
-            operation_join = SortDateOperation.id == normalized_operation_id
-        else:
-            operation_candidate = aliased(SortDateOperation)
-            current_operation_id = (
-                select(operation_candidate.id)
-                .where(
-                    operation_candidate.archived_at_utc.is_(None),
-                    or_(
-                        operation_candidate.gateway_id == Gateway.id,
-                        operation_candidate.gateway_code == Gateway.code,
-                    ),
-                )
-                .order_by(
-                    operation_candidate.sort_date.desc(),
-                    operation_candidate.generated_at_utc.desc(),
-                    operation_candidate.id.desc(),
-                )
-                .limit(1)
-                .correlate(Gateway)
-                .scalar_subquery()
-            )
-            operation_join = SortDateOperation.id == current_operation_id
+        operation_join = SortDateOperation.id == normalized_operation_id
 
         query = (
             query.add_entity(SortDateOperation)
@@ -354,24 +328,23 @@ def prime_lightweight_live_request_scope(
     )
 
     if include_operation:
-        if normalized_operation_id is not None:
-            set_request_cached(
-                OPERATION_BY_ID_NAMESPACE,
-                normalized_operation_id,
-                operation,
-            )
-        else:
-            set_request_cached(
-                CURRENT_OPERATION_NAMESPACE,
-                (gateway.id, gateway.code),
-                operation,
-            )
+        set_request_cached(
+            OPERATION_BY_ID_NAMESPACE,
+            normalized_operation_id,
+            operation,
+        )
         if operation is not None:
             set_request_cached(
                 "sort_timeline_sort_setting",
                 (gateway.id, operation.sort_name.strip().lower()),
                 sort_setting,
             )
+
+    if include_current_ermac_operation and gateway is not None:
+        from app.services.operation_scope import current_operational_sort_operation
+
+        operation = current_operational_sort_operation(gateway)
+        sort_setting = None
 
     scope = SimpleNamespace(
         gateway=gateway,

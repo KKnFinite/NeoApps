@@ -1,14 +1,14 @@
 """Request-local read-only operation resolution shared by live endpoints."""
 
-from sqlalchemy import or_
-
 from app.extensions import db
 from app.models import SortDateOperation
+from app.services.operation_lifecycle import (
+    current_existing_operational_sort_operations,
+)
 from app.services.request_cache import request_cached
 
 
 OPERATION_BY_ID_NAMESPACE = "operation.by_id"
-CURRENT_OPERATION_NAMESPACE = "operation.current_latest"
 
 
 def operation_by_id(operation_id):
@@ -23,24 +23,7 @@ def operation_by_id(operation_id):
     )
 
 
-def current_unarchived_operation(gateway):
-    cache_key = (gateway.id, gateway.code)
-    return request_cached(
-        CURRENT_OPERATION_NAMESPACE,
-        cache_key,
-        lambda: (
-            SortDateOperation.query.filter(
-                SortDateOperation.archived_at_utc.is_(None),
-                or_(
-                    SortDateOperation.gateway_id == gateway.id,
-                    SortDateOperation.gateway_code == gateway.code,
-                ),
-            )
-            .order_by(
-                SortDateOperation.sort_date.desc(),
-                SortDateOperation.generated_at_utc.desc(),
-                SortDateOperation.id.desc(),
-            )
-            .first()
-        ),
-    )
+def current_operational_sort_operation(gateway, now=None):
+    """Return an existing operation only inside its active lifecycle window."""
+    operations = current_existing_operational_sort_operations(gateway, now=now)
+    return operations[0] if operations else None

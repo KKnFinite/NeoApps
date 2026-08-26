@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 import unittest
 from unittest.mock import patch
 
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from app import create_app
@@ -17,7 +18,17 @@ from app.models import (
     User,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.neoermac_building_lineup import (
+    _current_sort_destination_pull_times,
+)
+from app.services.neoermac_dashboard import current_upcoming_pulls_operation
+from app.services.neoermac_door_view import current_door_view_operation
+from app.services.neoermac_pull_aggregation import (
+    recompute_current_sort_door_pull_aggregates,
+)
+from app.services.neoermac_view_outbound import current_view_outbound_operation
 from app.services.operation_lifecycle import ensure_operational_sort_operations
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
 
@@ -610,7 +621,7 @@ class OperationLifecycleTest(unittest.TestCase):
 
         self.assertEqual(SortDateOperation.query.count(), 0)
 
-    def test_authenticated_node_request_runs_shared_lifecycle_hook(self):
+    def test_authenticated_ermac_request_does_not_create_operation(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026, 6, 18, 20, 30
         )
@@ -631,7 +642,106 @@ class OperationLifecycleTest(unittest.TestCase):
         response = self.client.get("/neoermac")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(SortDateOperation.query.count(), 1)
+        self.assertEqual(SortDateOperation.query.count(), 0)
+
+    def test_ermac_resolvers_use_existing_active_window_operation(self):
+        self._activate("thursday", "night")
+        self._timeline("night", sort=(time(20, 0), time(4, 0)))
+        operation = self._operation(date(2026, 6, 18), "night")
+        db.session.add(operation)
+        db.session.commit()
+
+        resolved = self._resolve_ermac_operations(datetime(2026, 6, 18, 22, 0))
+
+        self.assertEqual(resolved, [operation, operation, operation, operation])
+
+    def test_ermac_resolvers_reject_previous_unarchived_operation_after_window(self):
+        self._activate("thursday", "night")
+        self._timeline("night", sort=(time(20, 0), time(4, 0)))
+        old_operation = self._operation(date(2026, 6, 18), "night")
+        db.session.add(old_operation)
+        db.session.commit()
+
+        resolved = self._resolve_ermac_operations(datetime(2026, 6, 19, 5, 0))
+
+        self.assertEqual(resolved, [None, None, None, None])
+        self.assertFalse(old_operation.archived_at_utc)
+        with (
+            self.app.test_request_context("/neoermac/door-view"),
+            patch(
+                "app.services.operation_lifecycle.current_gateway_local_datetime",
+                return_value=datetime(2026, 6, 19, 5, 0),
+            ),
+        ):
+            self.assertEqual(_current_sort_destination_pull_times(self.gateway), {})
+            self.assertEqual(
+                recompute_current_sort_door_pull_aggregates(self.gateway),
+                {},
+            )
+
+    def test_ermac_resolvers_keep_previous_date_night_current_after_midnight(self):
+        self._activate("thursday", "night")
+        self._timeline("night", sort=(time(20, 0), time(4, 0)))
+        operation = self._operation(date(2026, 6, 18), "night")
+        db.session.add(operation)
+        db.session.commit()
+
+        resolved = self._resolve_ermac_operations(datetime(2026, 6, 19, 2, 0))
+
+        self.assertEqual(resolved, [operation, operation, operation, operation])
+
+    def test_ermac_resolvers_return_no_current_sort_when_operation_is_missing(self):
+        self._activate("thursday", "night")
+        self._timeline("night", sort=(time(20, 0), time(4, 0)))
+        db.session.commit()
+
+        resolved = self._resolve_ermac_operations(datetime(2026, 6, 18, 22, 0))
+
+        self.assertEqual(resolved, [None, None, None, None])
+        self.assertEqual(SortDateOperation.query.count(), 0)
+
+    def test_ermac_current_resolution_is_read_only_and_bounded(self):
+        self._activate("thursday", "night")
+        self._timeline("night", sort=(time(20, 0), time(4, 0)))
+        operation = self._operation(date(2026, 6, 18), "night")
+        db.session.add(operation)
+        db.session.commit()
+        statements = []
+
+        def capture(_connection, _cursor, statement, _params, _context, _many):
+            statements.append(statement.strip().lower())
+
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            resolved = self._resolve_ermac_operations(
+                datetime(2026, 6, 18, 22, 0)
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+
+        self.assertEqual(resolved, [operation, operation, operation, operation])
+        self.assertFalse(
+            any(row.startswith(("insert", "update", "delete")) for row in statements)
+        )
+        self.assertLessEqual(
+            sum(row.startswith("select") for row in statements),
+            6,
+        )
+
+    def _resolve_ermac_operations(self, local_now):
+        with (
+            self.app.test_request_context("/neoermac/door-view"),
+            patch(
+                "app.services.operation_lifecycle.current_gateway_local_datetime",
+                return_value=local_now,
+            ),
+        ):
+            return [
+                current_operational_sort_operation(self.gateway),
+                current_door_view_operation(self.gateway),
+                current_upcoming_pulls_operation(self.gateway),
+                current_view_outbound_operation(self.gateway),
+            ]
 
     def _activate(self, day, sort_name, active=True, gateway=None):
         gateway = gateway or self.gateway

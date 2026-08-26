@@ -24,7 +24,7 @@ from app.services.neoermac_building_lineup import (
     normalize_destination,
 )
 from app.services.neoermac_live_refresh import neoermac_live_refresh_status
-from app.services.operation_scope import current_unarchived_operation
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
     departure_tail_presence,
@@ -392,7 +392,7 @@ def _departure_missions(operation):
 
 
 def _current_operation(gateway):
-    return current_unarchived_operation(gateway)
+    return current_operational_sort_operation(gateway)
 
 
 def _adjusted_pull_value(timing_data, pull_key):

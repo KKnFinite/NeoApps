@@ -18,7 +18,7 @@ from app.services.neoermac_building_lineup import (
 )
 from app.services.neoermac_door_view import PULL_FIELDS
 from app.services.neoermac_live_refresh import neoermac_live_refresh_status
-from app.services.operation_scope import current_unarchived_operation
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data
 
 
@@ -295,7 +295,7 @@ def _parking_assignments_by_tail(operation):
 
 
 def _current_operation(gateway):
-    return current_unarchived_operation(gateway)
+    return current_operational_sort_operation(gateway)
 
 
 def _planned_pull_time(mission, operation, pull_key):

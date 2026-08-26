@@ -634,10 +634,10 @@ def register_request_guards(app):
                     ), 404
             return None
 
-        # NeoScorpion resolves an already-existing current operation through
-        # its read-only lifecycle-window authority. Its normal GETs must never
-        # generate or otherwise mutate sort operations.
-        if request.blueprint == "neoscorpion":
+        # NeoScorpion and NeoErmac resolve an already-existing current operation
+        # through the read-only lifecycle-window authority. Their normal GETs
+        # must never generate or otherwise mutate sort operations.
+        if request.blueprint in {"neoscorpion", "neoermac"}:
             return None
 
         from app.services.access_control import get_current_gateway
