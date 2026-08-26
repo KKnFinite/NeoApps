@@ -1,6 +1,8 @@
 from pathlib import Path
 import unittest
 
+from sqlalchemy import event
+
 from app import create_app
 from app.extensions import db
 from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, PortalAppAccess, User
@@ -9,6 +11,8 @@ from app.services.permission_rules import (
     DEFAULT_PERMISSION_RULES,
     PERMISSION_RULE_ITEMS,
     ensure_default_permission_rules,
+    get_permission_rule,
+    preload_permission_rules,
     user_can,
 )
 from app.models.user import ROLE_LEVELS
@@ -230,6 +234,61 @@ class PermissionRulesTest(unittest.TestCase):
 
         self.assertTrue(user_can("neostaffing.hierarchy.view", staffing_user))
         self.assertTrue(user_can("neostaffing.org_chart.edit_structure", staffing_user))
+
+    def test_menu_permission_preload_uses_one_query_and_seeds_missing_keys(self):
+        user = self._user_with_ermac_role("permission_batch_operator", "operator")
+        custom_key = "neoermac.dashboard.view"
+        fallback_key = "neoermac.upcoming_pulls.view"
+        custom_rule = PermissionRule.query.filter_by(permission_key=custom_key).one()
+        fallback_rule = PermissionRule.query.filter_by(permission_key=fallback_key).one()
+        custom_rule.minimum_role = "master"
+        db.session.delete(fallback_rule)
+        db.session.add(
+            PortalAppAccess(
+                user_id=user.id,
+                app_code="neogateway",
+                status="approved",
+                role="operator",
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.strip())
+
+        with self.app.test_request_context("/neoermac"):
+            event.listen(db.engine, "before_cursor_execute", capture)
+            try:
+                loaded = preload_permission_rules(
+                    (custom_key, fallback_key, custom_key, "missing.permission")
+                )
+                self.assertEqual(loaded[custom_key].minimum_role, "master")
+                self.assertIsNone(loaded[fallback_key])
+                self.assertIsNone(loaded["missing.permission"])
+                self.assertIsNone(get_permission_rule(fallback_key))
+                self.assertFalse(user_can(custom_key, user))
+                self.assertTrue(user_can(fallback_key, user))
+                self.assertFalse(user_can("missing.permission", user))
+                preload_permission_rules((custom_key, fallback_key))
+            finally:
+                event.remove(db.engine, "before_cursor_execute", capture)
+
+        permission_selects = [
+            statement
+            for statement in statements
+            if statement.upper().startswith("SELECT")
+            and "permission_rules" in statement.lower()
+        ]
+        writes = [
+            statement
+            for statement in statements
+            if statement.upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(len(permission_selects), 1)
+        self.assertIn(" IN ", permission_selects[0])
+        self.assertEqual(writes, [])
 
     def test_neostaffing_route_uses_saved_view_permission(self):
         view_rule = PermissionRule.query.filter_by(

@@ -40,7 +40,7 @@ from app.services.neosektor_sheets_compat import (
     mirror_neosektor_operational_values,
     neosektor_integration_status,
 )
-from app.services.permission_rules import user_can
+from app.services.permission_rules import preload_permission_rules, user_can
 from app.services import neostaffing as staffing_service
 from app.services.uld_requests import (
     discharge_context,
@@ -879,6 +879,7 @@ def _page_by_title(title):
 
 
 def _visible_neosektor_menu_items():
+    _preload_neosektor_menu_permissions()
     items = []
     for label, endpoint, view_permission in NEOSEKTOR_INTERNAL_MENU:
         if view_permission and not user_can(view_permission):
@@ -894,6 +895,7 @@ def _visible_neosektor_menu_items():
 
 
 def _visible_neosektor_mobile_dashboard_items():
+    _preload_neosektor_menu_permissions()
     items = []
     for label, endpoint, view_permission, key, description in NEOSEKTOR_MOBILE_DASHBOARD:
         if view_permission and not user_can(view_permission):
@@ -911,12 +913,26 @@ def _visible_neosektor_mobile_dashboard_items():
 
 
 def _visible_neosektor_page_items():
+    _preload_neosektor_menu_permissions()
     items = []
     for label, endpoint, view_permission, edit_permission, description in NEOSEKTOR_PAGES:
         if view_permission and not user_can(view_permission):
             continue
         items.append((label, endpoint, view_permission, edit_permission, description))
     return items
+
+
+def _preload_neosektor_menu_permissions():
+    preload_permission_rules(
+        item[2]
+        for menu in (
+            NEOSEKTOR_INTERNAL_MENU,
+            NEOSEKTOR_MOBILE_DASHBOARD,
+            NEOSEKTOR_PAGES,
+        )
+        for item in menu
+        if item[2]
+    )
 
 
 def _selected_ballmat_side():

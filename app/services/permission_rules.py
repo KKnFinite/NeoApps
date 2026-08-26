@@ -7,7 +7,12 @@ from app.extensions import db
 from app.models import PermissionRule
 from app.models.user import ROLE_LEVELS
 from app.services.access_control import get_current_gateway, get_user_app_role, get_user_node_role
-from app.services.request_cache import request_cached
+from app.services.request_cache import (
+    MISSING,
+    get_request_cached,
+    request_cached,
+    set_request_cached,
+)
 
 
 DEFAULT_PERMISSION_RULES = (
@@ -1314,6 +1319,39 @@ def get_permission_rule(permission_key):
         normalized_key,
         lambda: PermissionRule.query.filter_by(permission_key=normalized_key).first(),
     )
+
+
+def preload_permission_rules(permission_keys):
+    """Seed fixed permission-menu keys into the existing request cache."""
+    normalized_keys = tuple(
+        dict.fromkeys(
+            normalized
+            for permission_key in permission_keys
+            if (normalized := normalize_permission_key(permission_key))
+        )
+    )
+    missing_keys = tuple(
+        permission_key
+        for permission_key in normalized_keys
+        if get_request_cached("permission.rule", permission_key) is MISSING
+    )
+    if missing_keys:
+        rules_by_key = {
+            normalize_permission_key(rule.permission_key): rule
+            for rule in PermissionRule.query.filter(
+                PermissionRule.permission_key.in_(missing_keys)
+            ).all()
+        }
+        for permission_key in missing_keys:
+            set_request_cached(
+                "permission.rule",
+                permission_key,
+                rules_by_key.get(permission_key),
+            )
+    return {
+        permission_key: get_request_cached("permission.rule", permission_key)
+        for permission_key in normalized_keys
+    }
 
 
 def default_minimum_role(permission_key):

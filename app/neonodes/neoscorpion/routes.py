@@ -38,6 +38,7 @@ from app.services.neoscorpion import (
     swap_assignment_fueler,
     swap_assignment_truck,
     truck_manager_context,
+    NEOSCORPION_MENU,
     visible_neoscorpion_menu_items,
 )
 from app.services.neoscorpion_assets import (
@@ -52,7 +53,11 @@ from app.services.neoscorpion_assets import (
     set_nightly_fuel_island_count,
     update_nightly_truck,
 )
-from app.services.permission_rules import permission_access, user_can
+from app.services.permission_rules import (
+    permission_access,
+    preload_permission_rules,
+    user_can,
+)
 from app.services.live_screen_refresh import save_live_screen_refresh_override
 
 
@@ -1028,6 +1033,7 @@ def _run_fuel_interruption_action(action, success_message, no_change_message):
 
 
 def _visible_neoscorpion_internal_menu():
+    preload_permission_rules(item.permission for item in NEOSCORPION_MENU)
     return visible_neoscorpion_menu_items(user_can, request.endpoint)
 
 
