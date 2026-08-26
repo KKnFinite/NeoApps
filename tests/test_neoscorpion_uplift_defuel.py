@@ -1,13 +1,15 @@
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, time
+from unittest.mock import patch
 
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
 
 from app import create_app
 from app.extensions import db
 from app.models import (
     GatewayMembership,
     GatewayNodeRole,
+    GatewaySortMatrix,
     NeoNode,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
@@ -23,6 +25,8 @@ from app.models import (
     SortDateMission,
     SortDateOperation,
     SortDateTailState,
+    SortTimelineSettings,
+    SortTimelineSortSetting,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -50,6 +54,9 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
                 "AUTO_BOOTSTRAP_DATABASE": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(
+                    2026, 8, 17, 22, 0
+                ),
             },
         )
         self.app = create_app(TestConfig)
@@ -58,7 +65,32 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         db.create_all()
         self.gateway = ensure_default_gateway_and_nodes()
         ensure_default_permission_rules()
-        db.session.add(NeoScorpionSettings(gateway_id=self.gateway.id))
+        timeline = SortTimelineSettings(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+        )
+        db.session.add_all(
+            [
+                NeoScorpionSettings(gateway_id=self.gateway.id),
+                timeline,
+                SortTimelineSortSetting(
+                    timeline_settings=timeline,
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    sort_name="night",
+                    planning_start_local=time(18, 0),
+                    sort_window_start_local=time(19, 0),
+                    sort_window_end_local=time(8, 0),
+                ),
+                GatewaySortMatrix(
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    day_of_week="monday",
+                    sort_name="night",
+                    is_active=True,
+                ),
+            ]
+        )
         self.fueler = self._add_user("cycle_fueler", "operator")
         self.dispatcher = self._add_user("cycle_dispatcher", "simulator")
         self.other_fueler = self._add_user("cycle_other", "operator")
@@ -224,6 +256,158 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertEqual(self._revision(operation), repeated_revision)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 2)
         self.assertEqual(nightly.current_gallons, 410)
+
+    def test_dispatcher_start_uplift_route_persists_inputs_without_snapshot_lock_join(self):
+        operation = self._operation()
+        mission, assignment = self._assignment(operation)
+        truck, nightly = self._truck(operation, assignment, "UP-ROUTE", 500)
+        self._complete_cycle(
+            operation,
+            assignment,
+            remaining=(10, 10, 10),
+            actual=(11, 10, 10),
+            transfer=50,
+        )
+        db.session.commit()
+        self._login(self.dispatcher)
+        statements = []
+
+        def capture(_connection, _cursor, statement, _params, _context, _many):
+            statements.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            response = self.client.post(
+                "/neoscorpion/fuel-dispatch/start-follow-up",
+                data={
+                    "assignment_id": str(assignment.id),
+                    "cycle_type": "uplift",
+                    "required_fuel": "55.25",
+                    "assigned_fueler_user_id": str(self.other_fueler.id),
+                    "assigned_truck_id": str(truck.id),
+                },
+                follow_redirects=False,
+            )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+
+        self.assertEqual(response.status_code, 302)
+        db.session.expire_all()
+        saved_assignment = db.session.get(NeoScorpionFuelAssignment, assignment.id)
+        saved_mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(saved_assignment.current_cycle_type, "uplift")
+        self.assertEqual(saved_assignment.assigned_fueler_user_id, self.other_fueler.id)
+        self.assertEqual(saved_assignment.assigned_truck_id, nightly.fuel_truck_id)
+        self.assertEqual(saved_mission.planned_fuel_load, 55_250)
+        self.assertEqual(saved_mission.fuel_status, "assigned")
+        event_queries = [
+            statement
+            for statement in statements
+            if "FROM neoscorpion_fueling_events" in statement
+        ]
+        event_and_snapshot_queries = [
+            statement
+            for statement in statements
+            if "FROM neoscorpion_fueling_events" in statement
+            or "FROM neoscorpion_fueling_event_tank_snapshots" in statement
+        ]
+        self.assertTrue(event_queries)
+        self.assertLessEqual(len(event_and_snapshot_queries), 3)
+        self.assertTrue(
+            any(
+                "neoscorpion_fueling_event_tank_snapshots" not in statement
+                for statement in event_queries
+            )
+        )
+        self.assertTrue(
+            any(
+                "FROM neoscorpion_fueling_event_tank_snapshots" in statement
+                for statement in statements
+            )
+        )
+
+    def test_dispatcher_start_uplift_validation_is_controlled_and_atomic(self):
+        operation = self._operation()
+        mission, assignment = self._assignment(operation)
+        truck, _nightly = self._truck(operation, assignment, "UP-INVALID", 500)
+        self._complete_cycle(
+            operation,
+            assignment,
+            remaining=(10, 10, 10),
+            actual=(11, 10, 10),
+            transfer=50,
+        )
+        db.session.commit()
+        self._login(self.dispatcher)
+        revision = self._revision(operation)
+        original = (
+            assignment.current_cycle_type,
+            assignment.current_cycle_number,
+            assignment.assigned_fueler_user_id,
+            assignment.assigned_truck_id,
+            mission.planned_fuel_load,
+            mission.fuel_status,
+        )
+        base = {
+            "assignment_id": str(assignment.id),
+            "cycle_type": "uplift",
+            "required_fuel": "55.0",
+            "assigned_fueler_user_id": str(self.other_fueler.id),
+            "assigned_truck_id": str(truck.id),
+        }
+        invalid_payloads = (
+            {**base, "required_fuel": ""},
+            {**base, "assigned_fueler_user_id": "not-an-id"},
+            {**base, "assigned_truck_id": "999999"},
+        )
+        for payload in invalid_payloads:
+            response = self.client.post(
+                "/neoscorpion/fuel-dispatch/start-follow-up",
+                data=payload,
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 400)
+            db.session.expire_all()
+            saved_assignment = db.session.get(NeoScorpionFuelAssignment, assignment.id)
+            saved_mission = db.session.get(SortDateMission, mission.id)
+            self.assertEqual(
+                (
+                    saved_assignment.current_cycle_type,
+                    saved_assignment.current_cycle_number,
+                    saved_assignment.assigned_fueler_user_id,
+                    saved_assignment.assigned_truck_id,
+                    saved_mission.planned_fuel_load,
+                    saved_mission.fuel_status,
+                ),
+                original,
+            )
+            self.assertEqual(self._revision(operation), revision)
+
+        with patch(
+            "app.neonodes.neoscorpion.routes.permission_access",
+            return_value={"can_view": True, "can_edit": False},
+        ):
+            denied = self.client.post(
+                "/neoscorpion/fuel-dispatch/start-follow-up",
+                data=base,
+                follow_redirects=False,
+            )
+        self.assertEqual(denied.status_code, 403)
+        db.session.expire_all()
+        saved_assignment = db.session.get(NeoScorpionFuelAssignment, assignment.id)
+        saved_mission = db.session.get(SortDateMission, mission.id)
+        self.assertEqual(
+            (
+                saved_assignment.current_cycle_type,
+                saved_assignment.current_cycle_number,
+                saved_assignment.assigned_fueler_user_id,
+                saved_assignment.assigned_truck_id,
+                saved_mission.planned_fuel_load,
+                saved_mission.fuel_status,
+            ),
+            original,
+        )
+        self.assertEqual(self._revision(operation), revision)
 
     def test_tail_swapped_uplift_does_not_copy_old_tail_actuals(self):
         operation = self._operation()

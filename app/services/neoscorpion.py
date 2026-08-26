@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 import re
 
 from flask_login import current_user
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
 from app.models import (
@@ -1867,7 +1867,9 @@ def start_follow_up_fuel_cycle(
         NeoScorpionFuelingEvent.query.filter_by(
             fuel_assignment_id=assignment.id,
         )
-        .options(joinedload(NeoScorpionFuelingEvent.tank_snapshots))
+        # Keep the row lock on the fueling-event table only. PostgreSQL rejects
+        # FOR UPDATE when joinedload adds the nullable snapshot outer join.
+        .options(selectinload(NeoScorpionFuelingEvent.tank_snapshots))
         .with_for_update()
         .order_by(
             NeoScorpionFuelingEvent.cycle_number.desc(),
