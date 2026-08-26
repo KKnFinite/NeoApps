@@ -5,8 +5,7 @@
         const input = document.createElement("textarea");
         input.value = value;
         input.setAttribute("readonly", "");
-        input.style.position = "fixed";
-        input.style.opacity = "0";
+        input.className = "neoscorpion-copy-fallback";
         document.body.appendChild(input);
         input.select();
         document.execCommand("copy");

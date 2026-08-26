@@ -9,8 +9,8 @@
     class="neoscorpion-mission-truck-bars{% if truck_visual.projected_short %} is-short{% endif %}"
     aria-label="Truck {{ truck_visual.truck_number }}: current {{ truck_visual.current_display }}{% if truck_visual.current_percent is not none %}, {{ truck_visual.current_percent }} percent{% endif %}; projected after this mission {% if truck_visual.projected_incomplete or truck_visual.projected_display == '-' %}unknown{% else %}{{ truck_visual.projected_display }}{% if truck_visual.projected_percent is not none %}, {{ truck_visual.projected_percent }} percent{% endif %}{% endif %}{% if truck_visual.projected_short %}; short{% endif %}"
 >
-    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini"><b{% if truck_visual.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck_visual.current_gauge_percent }}%"{% endif %}></b></i>
-    <i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if truck_visual.projected_short %} is-short{% endif %}"><b{% if truck_visual.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck_visual.projected_gauge_percent }}%"{% endif %}></b></i>
+    <progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini" max="100" value="{{ truck_visual.current_gauge_percent if truck_visual.current_gauge_percent is not none else 0 }}"></progress>
+    <progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if truck_visual.projected_short %} is-short{% endif %}" max="100" value="{{ truck_visual.projected_gauge_percent if truck_visual.projected_gauge_percent is not none else 0 }}"></progress>
     {% if truck_visual.projected_short %}<span class="neoscorpion-mission-truck-short">SHORT</span>{% endif %}
 </div>
 {% endif %}
@@ -58,8 +58,8 @@
                         <span>{% if truck.projected_short %}SHORT {% endif %}Projected {% if truck.projected_incomplete or truck.projected_gallons is none %}—{% else %}{{ truck.projected_display }}{% if truck.projected_percent is not none %} / {{ truck.projected_percent }}%{% endif %}{% endif %}</span>
                     </div>
                     <div class="neoscorpion-truck-gauges" aria-label="Truck {{ truck.truck_number }} fuel gauges">
-                        <div><span>Current</span><i class="neoscorpion-truck-gauge"><b{% if truck.current_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.current_gauge_percent }}%"{% endif %}></b></i></div>
-                        <div><span>Projected</span><i class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}"><b{% if truck.projected_gauge_percent is not none %} style="--truck-gauge-percent: {{ truck.projected_gauge_percent }}%"{% endif %}></b></i></div>
+                        <div><span>Current</span><progress class="neoscorpion-truck-gauge" max="100" value="{{ truck.current_gauge_percent if truck.current_gauge_percent is not none else 0 }}"></progress></div>
+                        <div><span>Projected</span><progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}" max="100" value="{{ truck.projected_gauge_percent if truck.projected_gauge_percent is not none else 0 }}"></progress></div>
                     </div>
                     {% if can_manage_assets and truck.status == "available" %}
                     <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>

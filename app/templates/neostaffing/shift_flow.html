@@ -61,10 +61,9 @@
         <p class="neostaffing-shift-flow-drag-feedback" data-shift-flow-drag-feedback aria-live="polite"></p>
       </section>
     {% else %}
-      {% set board_group_count = shift_flow.groups|length %}
       {% set editable_phase = shift_flow.phase in ['setup', 'sort_start', 'after_w1', 'after_w2'] %}
       <div class="neostaffing-shift-flow-board-scroll" tabindex="0"{% if editable_phase and can_edit_shift_flow %} data-shift-flow-drag-board data-shift-flow-phase="{{ shift_flow.phase }}" data-shift-flow-move-url="{{ url_for('neostaffing.move_shift_flow_lane', person_id=0) }}"{% endif %}>
-        <section class="neostaffing-shift-flow-groups" {% if board_group_count %}style="--shift-flow-group-count: {{ board_group_count }}"{% endif %}>
+        <section class="neostaffing-shift-flow-groups">
           {% for group in shift_flow.groups %}
             {% set wave_phase = shift_flow.phase in ['after_w1', 'after_w2'] %}
             {% set drop_target = editable_phase and can_edit_shift_flow and ((shift_flow.phase == 'setup' and group.lane_type in ['No Setup', 'Door', 'Ballmat']) or (shift_flow.phase == 'sort_start' and group.lane_type in ['Door', 'Ballmat', 'Discharge']) or (wave_phase and group.lane_type in ['Door', 'Ballmat'])) %}

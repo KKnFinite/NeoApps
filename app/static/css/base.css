@@ -24732,28 +24732,49 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 }
 
 .neoscorpion-truck-gauge {
+    appearance: none;
     display: block;
     overflow: hidden;
     flex: 1;
     min-width: 2.5rem;
     height: 0.45rem;
+    padding: 0;
+    border: 0;
     border-radius: 99px;
     background: rgba(255, 255, 255, 0.15);
 }
 
-.neoscorpion-truck-gauge > b {
-    display: block;
-    width: var(--truck-gauge-percent, 0%);
-    height: 100%;
+.neoscorpion-truck-gauge::-webkit-progress-bar {
+    background: transparent;
+}
+
+.neoscorpion-truck-gauge::-webkit-progress-value {
     background: var(--node-scorpion-primary);
 }
 
-.neoscorpion-truck-gauge--projected > b {
+.neoscorpion-truck-gauge::-moz-progress-bar {
+    background: var(--node-scorpion-primary);
+}
+
+.neoscorpion-truck-gauge--projected::-webkit-progress-value {
     background: var(--node-scorpion-highlight);
 }
 
-.neoscorpion-truck-gauge.is-short > b {
+.neoscorpion-truck-gauge--projected::-moz-progress-bar {
+    background: var(--node-scorpion-highlight);
+}
+
+.neoscorpion-truck-gauge.is-short::-webkit-progress-value {
     background: #e44747;
+}
+
+.neoscorpion-truck-gauge.is-short::-moz-progress-bar {
+    background: #e44747;
+}
+
+.neoscorpion-copy-fallback {
+    position: fixed;
+    opacity: 0;
 }
 
 .neoscorpion-mission-truck-bars {
@@ -27221,7 +27242,8 @@ body:has(.neostaffing-shift-flow) { overflow-x: clip; }
 .neostaffing-shift-flow-board-scroll { min-width: 0; overflow: auto; overscroll-behavior: contain; }
 .neostaffing-shift-flow-groups {
     display: grid;
-    grid-template-columns: repeat(var(--shift-flow-group-count, 1), clamp(220px, 15vw, 300px));
+    grid-auto-flow: column;
+    grid-auto-columns: clamp(220px, 15vw, 300px);
     align-items: start;
     gap: 8px;
     width: max-content;

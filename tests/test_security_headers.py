@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 import unittest
 
 from app import create_app
@@ -53,6 +54,7 @@ class SecurityHeadersTest(unittest.TestCase):
         self.assertIn("base-uri 'self'", policy)
         self.assertIn("frame-ancestors 'self'", policy)
         self.assertIn("form-action 'self'", policy)
+        self.assertIn("style-src-attr 'none'", policy)
         self.assertNotIn("unsafe-inline", policy)
         self.assertIsNotNone(nonce_match)
         self.assertIn(
@@ -69,6 +71,33 @@ class SecurityHeadersTest(unittest.TestCase):
             response.headers["Permissions-Policy"],
             "camera=(), microphone=(), geolocation=()",
         )
+
+    def test_confirmed_inline_style_conflicts_use_csp_safe_markup_and_state(self):
+        root = Path(__file__).resolve().parents[1]
+        shift_flow = (root / "app/templates/neostaffing/shift_flow.html").read_text(
+            encoding="utf-8"
+        )
+        fuel_dispatch = (
+            root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html"
+        ).read_text(encoding="utf-8")
+        copy_script = (
+            root / "app/static/js/neoscorpion_fuel_assignments_copy.js"
+        ).read_text(encoding="utf-8")
+        live_updates = (root / "app/static/js/live_updates.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("style=", shift_flow)
+        self.assertIn(
+            "grid-auto-columns",
+            (root / "app/static/css/base.css").read_text(encoding="utf-8"),
+        )
+        self.assertNotIn("style=", fuel_dispatch)
+        self.assertIn('<progress class="neoscorpion-truck-gauge', fuel_dispatch)
+        self.assertNotIn(".style.", copy_script)
+        self.assertIn('input.className = "neoscorpion-copy-fallback"', copy_script)
+        self.assertIn("replacement.hidden = current.hidden", live_updates)
+        self.assertNotIn("replacement.style.display", live_updates)
 
     def test_local_http_does_not_enable_hsts_or_csp_by_default(self):
         DevelopmentConfig = type(

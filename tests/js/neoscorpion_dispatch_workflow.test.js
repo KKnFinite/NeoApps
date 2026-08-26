@@ -39,6 +39,9 @@ test("dispatch compact rows retain authoritative copy data and exceptional fuel 
 
     assert.doesNotMatch(template, /<th>Truck Fuel<\/th>/);
     assert.match(template, /neoscorpion-mission-truck-bars/);
+    assert.match(template, /<progress class="neoscorpion-truck-gauge/);
+    assert.doesNotMatch(template, /style=/);
+    assert.doesNotMatch(template, /--truck-gauge-percent/);
     assert.match(template, /row\.cycle_type != 'fuel'/);
     assert.match(template, /data-copy-value="\{\{ row\.load_planning_output \}\}"/);
     assert.match(template, />COPY<\/button>/);
@@ -47,6 +50,17 @@ test("dispatch compact rows retain authoritative copy data and exceptional fuel 
     assert.match(template, /row\.aircraft_type && row\.aircraft_type != "UNKNOWN"/);
     assert.match(template, /row\.apu_allowance_lbs is none/);
     assert.match(template, /load_planning_placeholder/);
+});
+
+
+test("dispatch clipboard fallback and shared live updates avoid inline style mutation", () => {
+    const copyScript = readScript("neoscorpion_fuel_assignments_copy.js");
+    const liveScript = readScript("live_updates.js");
+
+    assert.match(copyScript, /input\.className = "neoscorpion-copy-fallback"/);
+    assert.doesNotMatch(copyScript, /\.style\./);
+    assert.match(liveScript, /replacement\.hidden = current\.hidden/);
+    assert.doesNotMatch(liveScript, /replacement\.style\.display/);
 });
 
 

@@ -431,7 +431,6 @@
 
     const preserveViewFlags = (current, replacement) => {
         replacement.hidden = current.hidden;
-        replacement.style.display = current.style.display;
         if (current.classList.contains("is-selected")) {
             replacement.classList.add("is-selected");
         }
