@@ -24,6 +24,7 @@ from app.models import (
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
+    StaffingVacationQualifyingHoliday,
     StaffingWorkAssignment,
     User,
 )
@@ -583,6 +584,176 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
                 program="union",
                 entitlement_id=first[0].id,
             )
+
+    def test_configured_floating_holidays_award_approved_week_once_each(self):
+        grandmaster = self._user("configured_floating_gm", "grandmaster")
+        vacation_service.save_qualifying_holiday(
+            None, date(self.YEAR, 7, 4), "Independence Day", grandmaster
+        )
+        vacation_service.save_qualifying_holiday(
+            None, date(self.YEAR, 7, 5), "Second Qualifier", grandmaster
+        )
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "FLT2", "Configured", "Employee", self.units["blue_area"]
+        )
+
+        selection = vacation_service.add_union_week(
+            calendar,
+            person,
+            self.YEAR,
+            date(self.YEAR, 7, 10),
+            "regular",
+            grandmaster,
+        )
+        db.session.commit()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 2)
+
+        vacation_service.reconcile_floating_holiday_entitlements()
+        db.session.commit()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 2)
+        self.assertEqual(
+            {
+                row.source_holiday_date
+                for row in StaffingVacationDayEntitlement.query.filter_by(
+                    source_program="union", source_selection_id=selection.id
+                ).all()
+            },
+            {date(self.YEAR, 7, 4), date(self.YEAR, 7, 5)},
+        )
+
+    def test_late_qualifying_date_reconciles_existing_approved_weeks(self):
+        grandmaster = self._user("late_floating_gm", "grandmaster")
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "FLT3", "Late", "Employee", self.units["blue_area"]
+        )
+        vacation_service.add_union_week(
+            calendar,
+            person,
+            self.YEAR,
+            date(self.YEAR, 7, 10),
+            "regular",
+            grandmaster,
+        )
+        db.session.commit()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 0)
+
+        vacation_service.save_qualifying_holiday(
+            None, date(self.YEAR, 7, 4), "Late Qualifier", grandmaster
+        )
+        db.session.commit()
+
+        award = StaffingVacationDayEntitlement.query.one()
+        self.assertEqual(award.source_holiday_name, "Late Qualifier")
+
+    def test_qualifying_date_edit_delete_preserves_consumed_durable_award(self):
+        grandmaster = self._user("safe_floating_gm", "grandmaster")
+        holiday = vacation_service.save_qualifying_holiday(
+            None, date(self.YEAR, 7, 4), "Original Holiday", grandmaster
+        )
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "FLT4", "Safe", "Employee", self.units["blue_area"]
+        )
+        vacation_service.add_union_week(
+            calendar,
+            person,
+            self.YEAR,
+            date(self.YEAR, 7, 10),
+            "regular",
+            grandmaster,
+        )
+        award = StaffingVacationDayEntitlement.query.one()
+        vacation_service.schedule_vacation_entitlement_day(
+            person,
+            date(self.YEAR, 8, 15),
+            "floating_holiday",
+            grandmaster,
+            program="union",
+            entitlement_id=award.id,
+        )
+        vacation_service.save_qualifying_holiday(
+            holiday, date(self.YEAR, 7, 4), "Renamed Holiday", grandmaster
+        )
+        vacation_service.delete_qualifying_holiday(holiday, grandmaster)
+        db.session.commit()
+
+        preserved = db.session.get(StaffingVacationDayEntitlement, award.id)
+        self.assertIsNotNone(preserved)
+        self.assertEqual(preserved.source_holiday_name, "Renamed Holiday")
+        self.assertEqual(StaffingVacationQualifyingHoliday.query.count(), 0)
+
+    def test_qualifying_date_duplicate_authority_and_settings_csrf(self):
+        master = self._user("holiday_master", "master")
+        watcher = self._user("holiday_watcher", "watcher")
+        vacation_service.save_qualifying_holiday(
+            None, date(self.YEAR, 12, 25), "Holiday", master
+        )
+        with self.assertRaisesRegex(ValueError, "already exists"):
+            vacation_service.save_qualifying_holiday(
+                None, date(self.YEAR, 12, 25), "Duplicate", master
+            )
+        db.session.rollback()
+        with self.assertRaisesRegex(ValueError, "Master access"):
+            vacation_service.save_qualifying_holiday(
+                None, date(self.YEAR, 1, 1), "Forbidden", watcher
+            )
+
+        self._login(master)
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        page = self.client.get("/neostaffing/settings")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"FLOATING HOLIDAYS", page.data)
+        self.assertIn(b"Holiday", page.data)
+        missing = self.client.post(
+            "/neostaffing/settings/floating-holidays",
+            data={"holiday_date": f"{self.YEAR}-11-27", "name": "No CSRF"},
+        )
+        self.assertEqual(missing.status_code, 400)
+        with self.client.session_transaction() as session:
+            session.clear()
+        self._login(watcher)
+        self.assertEqual(self.client.get("/neostaffing/settings").status_code, 302)
+
+    def test_floating_holiday_reconciliation_uses_bounded_selects(self):
+        grandmaster = self._user("bounded_floating_gm", "grandmaster")
+        holiday = StaffingVacationQualifyingHoliday(
+            holiday_date=date(self.YEAR, 7, 4),
+            name="Bounded Holiday",
+            created_by_user_id=grandmaster.id,
+            updated_by_user_id=grandmaster.id,
+        )
+        db.session.add(holiday)
+        for index in range(12):
+            person = self._person(
+                f"BF{index}", "Bounded", f"Person{index}", "2000-01-01", "part_time"
+            )
+            db.session.add(
+                StaffingVacationUnionSelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    week_ending=date(self.YEAR, 7, 10),
+                    bank_type="regular",
+                    status="approved",
+                    entered_by_user_id=grandmaster.id,
+                )
+            )
+        db.session.commit()
+        selects = []
+
+        def record_select(_conn, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", record_select)
+        try:
+            vacation_service.reconcile_floating_holiday_entitlements()
+            db.session.flush()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record_select)
+        self.assertLessEqual(len(selects), 4)
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 12)
 
     def test_vacation_routes_render_separate_workspaces_and_navigation(self):
         user = self._user("route_gm", "grandmaster")

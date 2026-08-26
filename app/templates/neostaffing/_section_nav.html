@@ -27,4 +27,7 @@
     {% if user_can("neostaffing.permissions.view") %}
     <a href="{{ url_for('neostaffing.permissions') }}" {% if request.endpoint == "neostaffing.permissions" %}aria-current="page"{% endif %}>Permissions</a>
     {% endif %}
+    {% if neostaffing_settings_visible %}
+    <a href="{{ url_for('neostaffing.settings') }}" {% if request.endpoint in ("neostaffing.settings", "neostaffing.save_floating_holiday_setting", "neostaffing.delete_floating_holiday_setting") %}aria-current="page"{% endif %}>Settings</a>
+    {% endif %}
 </aside>

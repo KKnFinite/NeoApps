@@ -84,6 +84,7 @@ from app.models.staffing_vacation import (
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
+    StaffingVacationQualifyingHoliday,
 )
 from app.models.sort_timeline_settings import (
     SortTimelineApiParticipation,
@@ -163,6 +164,7 @@ __all__ = [
     "StaffingVacationWeekConversion",
     "StaffingVacationDaySelection",
     "StaffingVacationDayEntitlement",
+    "StaffingVacationQualifyingHoliday",
     "StaffingLeadershipAssignment",
     "StaffingChangeRequest",
     "StaffingChangeRequestItem",

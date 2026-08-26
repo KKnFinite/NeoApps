@@ -15,6 +15,7 @@ from app.models import (
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
+    StaffingVacationQualifyingHoliday,
 )
 
 
@@ -29,6 +30,7 @@ NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationManagementSelection,
     StaffingVacationWeekConversion,
     StaffingVacationDayEntitlement,
+    StaffingVacationQualifyingHoliday,
     StaffingVacationDaySelection,
     StaffingVacationManagementTurnState,
     StaffingVacationManagementTurnResolution,

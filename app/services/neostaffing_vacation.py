@@ -24,6 +24,7 @@ from app.models import (
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
+    StaffingVacationQualifyingHoliday,
     StaffingWorkAssignment,
 )
 from app.models.user import ROLE_LEVELS
@@ -909,6 +910,8 @@ def add_management_weeks(
         saved.append(row)
     db.session.flush()
 
+    _award_configured_floating_holidays(saved, "management")
+
     new_remaining = remaining - len(normalized_weeks)
     if state.current_person_id == person.id and new_remaining == 0:
         _advance_management_turn(
@@ -1400,6 +1403,8 @@ def add_union_week(
         )
         db.session.add(selection)
     db.session.flush()
+    if entry_status == "approved":
+        _award_configured_floating_holidays([selection], "union")
     return selection
 
 
@@ -1615,12 +1620,12 @@ def cancel_split_vacation_day(day_selection, user):
 def award_floating_holidays_for_selection(
     selection,
     program,
-    qualifying_holidays,
+    qualifying_holidays=None,
 ):
     """Idempotently preserve holidays supplied by NeoApps' holiday authority.
 
-    ``qualifying_holidays`` is deliberately an explicit date/name mapping. This
-    module does not own or invent a parallel holiday calendar.
+    Normal application behavior reads NeoStaffing's configured qualifying dates.
+    An explicit mapping remains available for deterministic service tests.
     """
     program = str(program or "").strip().casefold()
     if program == "management":
@@ -1638,34 +1643,211 @@ def award_floating_holidays_for_selection(
         raise ValueError("Choose a valid vacation program.")
     if not row:
         raise ValueError("Only an approved active whole vacation week can earn holidays.")
-    week_start = row.week_ending - timedelta(days=6)
-    holiday_rows = []
-    for raw_day, raw_name in dict(qualifying_holidays or {}).items():
-        holiday_day = raw_day if isinstance(raw_day, date) else date.fromisoformat(str(raw_day))
-        if not week_start <= holiday_day <= row.week_ending:
-            continue
+    if qualifying_holidays is None:
+        holidays = StaffingVacationQualifyingHoliday.query.filter(
+            StaffingVacationQualifyingHoliday.holiday_date.between(
+                row.week_ending - timedelta(days=6), row.week_ending
+            )
+        ).all()
+        holiday_values = [(holiday.holiday_date, holiday.name) for holiday in holidays]
+    else:
+        holiday_values = list(dict(qualifying_holidays).items())
+    return _award_floating_entitlements([row], program, holiday_values)
+
+
+def _award_configured_floating_holidays(selections, program):
+    """Award configured dates for a bounded set of newly approved weeks."""
+    selections = list(selections)
+    if not selections:
+        return []
+    first_day = min(row.week_ending - timedelta(days=6) for row in selections)
+    last_day = max(row.week_ending for row in selections)
+    holidays = StaffingVacationQualifyingHoliday.query.filter(
+        StaffingVacationQualifyingHoliday.holiday_date.between(first_day, last_day)
+    ).order_by(
+        StaffingVacationQualifyingHoliday.holiday_date,
+        StaffingVacationQualifyingHoliday.id,
+    ).all()
+    return _award_floating_entitlements(
+        selections,
+        program,
+        [(holiday.holiday_date, holiday.name) for holiday in holidays],
+    )
+
+
+def qualifying_holiday_settings(user):
+    """Return the compact Settings contract and authorization state."""
+    return {
+        "holidays": StaffingVacationQualifyingHoliday.query.order_by(
+            StaffingVacationQualifyingHoliday.holiday_date,
+            func.lower(StaffingVacationQualifyingHoliday.name),
+            StaffingVacationQualifyingHoliday.id,
+        ).all(),
+        "can_edit": can_manage_vacation_settings(user),
+    }
+
+
+def can_manage_vacation_settings(user):
+    app_role = get_user_app_role(user, "neostaffing") or "watcher"
+    return bool(
+        getattr(user, "role", None) == "grandmaster"
+        or ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["master"]
+    )
+
+
+def save_qualifying_holiday(holiday, holiday_date, name, user):
+    """Create/edit one authoritative date and reconcile approved weeks."""
+    if not can_manage_vacation_settings(user):
+        raise ValueError("NeoStaffing Master access is required to edit holidays.")
+    try:
+        normalized_date = (
+            holiday_date
+            if isinstance(holiday_date, date)
+            else date.fromisoformat(str(holiday_date))
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError("Select a valid qualifying holiday date.") from error
+    normalized_name = str(name or "").strip()
+    if not normalized_name:
+        raise ValueError("Holiday name is required.")
+    if len(normalized_name) > 80:
+        raise ValueError("Holiday name must be 80 characters or fewer.")
+    holiday_id = getattr(holiday, "id", holiday)
+    row = None
+    if holiday_id:
+        row = StaffingVacationQualifyingHoliday.query.filter_by(
+            id=_positive_int(holiday_id, "holiday")
+        ).with_for_update().first()
+        if not row:
+            raise ValueError("The qualifying holiday was not found.")
+    duplicate = StaffingVacationQualifyingHoliday.query.filter(
+        StaffingVacationQualifyingHoliday.holiday_date == normalized_date,
+        StaffingVacationQualifyingHoliday.id != (row.id if row else 0),
+    ).first()
+    if duplicate:
+        raise ValueError("A qualifying holiday already exists for this date.")
+    now = datetime.utcnow()
+    if not row:
+        row = StaffingVacationQualifyingHoliday(
+            created_by_user_id=getattr(user, "id", None),
+            created_at=now,
+        )
+        db.session.add(row)
+    row.holiday_date = normalized_date
+    row.name = normalized_name
+    row.updated_by_user_id = getattr(user, "id", None)
+    row.updated_at = now
+    db.session.flush()
+    StaffingVacationDayEntitlement.query.filter_by(
+        source_holiday_date=normalized_date,
+        entitlement_type="floating_holiday",
+    ).update(
+        {StaffingVacationDayEntitlement.source_holiday_name: normalized_name},
+        synchronize_session=False,
+    )
+    reconcile_floating_holiday_entitlements([normalized_date])
+    return row
+
+
+def delete_qualifying_holiday(holiday, user):
+    """Remove configuration while conservatively preserving durable awards."""
+    if not can_manage_vacation_settings(user):
+        raise ValueError("NeoStaffing Master access is required to edit holidays.")
+    row = StaffingVacationQualifyingHoliday.query.filter_by(
+        id=_positive_int(getattr(holiday, "id", holiday), "holiday")
+    ).with_for_update().first()
+    if not row:
+        raise ValueError("The qualifying holiday was not found.")
+    db.session.delete(row)
+    db.session.flush()
+    return row
+
+
+def reconcile_floating_holiday_entitlements(holiday_dates=None):
+    """Bounded reconciliation of configured dates against approved whole weeks."""
+    holiday_query = StaffingVacationQualifyingHoliday.query
+    if holiday_dates is not None:
+        normalized = {
+            value if isinstance(value, date) else date.fromisoformat(str(value))
+            for value in holiday_dates
+        }
+        if not normalized:
+            return []
+        holiday_query = holiday_query.filter(
+            StaffingVacationQualifyingHoliday.holiday_date.in_(normalized)
+        )
+    holidays = holiday_query.order_by(
+        StaffingVacationQualifyingHoliday.holiday_date,
+        StaffingVacationQualifyingHoliday.id,
+    ).all()
+    if not holidays:
+        return []
+    dates = {holiday.holiday_date for holiday in holidays}
+    candidate_years = {day.year for day in dates} | {day.year + 1 for day in dates}
+    management = StaffingVacationManagementSelection.query.filter(
+        StaffingVacationManagementSelection.vacation_year.in_(candidate_years),
+        StaffingVacationManagementSelection.cancelled_at.is_(None),
+    ).all()
+    union = StaffingVacationUnionSelection.query.filter(
+        StaffingVacationUnionSelection.vacation_year.in_(candidate_years),
+        StaffingVacationUnionSelection.status == "approved",
+    ).all()
+    holiday_values = [(holiday.holiday_date, holiday.name) for holiday in holidays]
+    awarded = _award_floating_entitlements(management, "management", holiday_values)
+    awarded.extend(_award_floating_entitlements(union, "union", holiday_values))
+    return awarded
+
+
+def _award_floating_entitlements(selections, program, holiday_values):
+    selections = list(selections)
+    normalized_holidays = []
+    for raw_day, raw_name in holiday_values:
+        holiday_day = (
+            raw_day if isinstance(raw_day, date) else date.fromisoformat(str(raw_day))
+        )
         holiday_name = str(raw_name or "").strip()
         if not holiday_name:
             raise ValueError("A qualifying holiday must have a name.")
-        entitlement = StaffingVacationDayEntitlement.query.filter_by(
-            source_program=program,
-            source_selection_id=row.id,
-            source_holiday_date=holiday_day,
-        ).first()
+        normalized_holidays.append((holiday_day, holiday_name))
+    matches = [
+        (selection, holiday_day, holiday_name)
+        for selection in selections
+        for holiday_day, holiday_name in normalized_holidays
+        if selection.week_ending - timedelta(days=6)
+        <= holiday_day
+        <= selection.week_ending
+    ]
+    if not matches:
+        return []
+    selection_ids = {selection.id for selection, _day, _name in matches}
+    holiday_dates = {day for _selection, day, _name in matches}
+    existing = {
+        (row.source_selection_id, row.source_holiday_date): row
+        for row in StaffingVacationDayEntitlement.query.filter(
+            StaffingVacationDayEntitlement.source_program == program,
+            StaffingVacationDayEntitlement.source_selection_id.in_(selection_ids),
+            StaffingVacationDayEntitlement.source_holiday_date.in_(holiday_dates),
+        ).all()
+    }
+    result = []
+    for selection, holiday_day, holiday_name in matches:
+        key = (selection.id, holiday_day)
+        entitlement = existing.get(key)
         if not entitlement:
             entitlement = StaffingVacationDayEntitlement(
-                staffing_person_id=row.staffing_person_id,
-                vacation_year=row.vacation_year,
+                staffing_person_id=selection.staffing_person_id,
+                vacation_year=selection.vacation_year,
                 entitlement_type="floating_holiday",
                 source_program=program,
-                source_selection_id=row.id,
+                source_selection_id=selection.id,
                 source_holiday_date=holiday_day,
                 source_holiday_name=holiday_name,
             )
             db.session.add(entitlement)
-        holiday_rows.append(entitlement)
+            existing[key] = entitlement
+        result.append(entitlement)
     db.session.flush()
-    return holiday_rows
+    return result
 
 
 def schedule_vacation_entitlement_day(
@@ -1920,6 +2102,8 @@ def review_union_selection(selection, approve, user, *, capacity_override=False)
     row.reviewed_at = now
     row.updated_at = now
     db.session.flush()
+    if approve:
+        _award_configured_floating_holidays([row], "union")
     return row
 
 

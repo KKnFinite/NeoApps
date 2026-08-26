@@ -17,6 +17,8 @@ from app.models import (
     StaffingVacationManagementTurnState,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
+    StaffingVacationDayEntitlement,
+    StaffingVacationQualifyingHoliday,
     User,
 )
 from app.services import neostaffing_vacation as vacation_service
@@ -135,6 +137,35 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             - 1,
             self._remaining(senior),
         )
+
+    def test_management_week_automatically_earns_configured_floating_holiday(self):
+        person, user = self._management_user(
+            "MVF1", "Floating", "Supervisor", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 2)
+        db.session.add(
+            StaffingVacationQualifyingHoliday(
+                holiday_date=date(self.YEAR, 7, 4),
+                name="Configured Holiday",
+                created_by_user_id=user.id,
+                updated_by_user_id=user.id,
+            )
+        )
+        db.session.commit()
+
+        selection = vacation_service.add_management_week(
+            person,
+            self.YEAR,
+            date(self.YEAR, 7, 10),
+            user,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+
+        award = StaffingVacationDayEntitlement.query.one()
+        self.assertEqual(award.source_program, "management")
+        self.assertEqual(award.source_selection_id, selection.id)
+        self.assertEqual(award.source_holiday_date, date(self.YEAR, 7, 4))
 
     def test_manual_pass_authority_allows_ft_and_manager_but_not_pt(self):
         current, _current_user = self._management_user(

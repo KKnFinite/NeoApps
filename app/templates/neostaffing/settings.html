@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}NeoStaffing Settings{% endblock %}
+
+{% block content %}
+<section class="neostaffing-settings-console theme-staffing" aria-labelledby="neostaffing-settings-title">
+    {% include "neostaffing/_section_nav.html" %}
+    <main class="neostaffing-settings-workspace">
+        <header class="neostaffing-settings-header">
+            <div><h1 id="neostaffing-settings-title">SETTINGS</h1><span>NEOSTAFFING OPERATIONAL CONFIGURATION</span></div>
+            <strong>{{ app_role|role_label }}</strong>
+        </header>
+
+        <section class="neostaffing-settings-panel" aria-labelledby="floating-holidays-title">
+            <header>
+                <div><h2 id="floating-holidays-title">FLOATING HOLIDAYS</h2><p>Qualifying dates award one Floating Holiday when they fall within an approved whole vacation week.</p></div>
+                <span>{{ holidays|length }} CONFIGURED</span>
+            </header>
+
+            {% if can_edit_settings %}
+            <form class="neostaffing-settings-add" method="post" action="{{ url_for('neostaffing.save_floating_holiday_setting') }}">
+                <label><span>Date</span><input type="date" name="holiday_date" required></label>
+                <label><span>Holiday</span><input type="text" name="name" maxlength="80" required placeholder="Holiday name"></label>
+                <button class="action-button" type="submit">ADD DATE</button>
+            </form>
+            {% endif %}
+
+            <div class="neostaffing-settings-holidays" role="list" aria-label="Configured Floating Holiday dates">
+                {% for holiday in holidays %}
+                <article role="listitem">
+                    <form method="post" action="{{ url_for('neostaffing.save_floating_holiday_setting') }}">
+                        <input type="hidden" name="holiday_id" value="{{ holiday.id }}">
+                        <label><span>Date</span><input type="date" name="holiday_date" value="{{ holiday.holiday_date.isoformat() }}" required {% if not can_edit_settings %}disabled{% endif %}></label>
+                        <label><span>Holiday</span><input type="text" name="name" maxlength="80" value="{{ holiday.name }}" required {% if not can_edit_settings %}disabled{% endif %}></label>
+                        {% if can_edit_settings %}<button type="submit">SAVE</button>{% endif %}
+                    </form>
+                    {% if can_edit_settings %}<form method="post" action="{{ url_for('neostaffing.delete_floating_holiday_setting', holiday_id=holiday.id) }}"><button class="is-danger" type="submit">REMOVE</button></form>{% endif %}
+                </article>
+                {% else %}
+                <p class="neostaffing-settings-empty">No qualifying Floating Holiday dates are configured.</p>
+                {% endfor %}
+            </div>
+            <p class="neostaffing-settings-note">Removing or changing configuration never silently removes an already earned Floating Holiday.</p>
+        </section>
+    </main>
+</section>
+{% endblock %}

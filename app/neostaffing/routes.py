@@ -96,7 +96,10 @@ def inject_neostaffing_navigation():
     return {
         "neostaffing_nav": notification_service.notification_navigation_state(
             current_user
-        )
+        ),
+        "neostaffing_settings_visible": user_can_access_app(
+            current_user, "neostaffing", minimum_role="master"
+        ),
     }
 
 
@@ -1283,6 +1286,51 @@ def vacation_union_calendar_edit(calendar_id):
                 )
             )
     return _render_vacation_union_editor(calendar, calendar.vacation_year)
+
+
+@bp.route("/settings")
+@neostaffing_app_required(minimum_role="master")
+def settings():
+    contract = vacation_service.qualifying_holiday_settings(current_user)
+    return render_template(
+        "neostaffing/settings.html",
+        app_role=get_user_app_role(current_user, "neostaffing"),
+        holidays=contract["holidays"],
+        can_edit_settings=contract["can_edit"],
+    )
+
+
+@bp.route("/settings/floating-holidays", methods=["POST"])
+@neostaffing_app_required(minimum_role="master")
+def save_floating_holiday_setting():
+    try:
+        vacation_service.save_qualifying_holiday(
+            request.form.get("holiday_id"),
+            request.form.get("holiday_date"),
+            request.form.get("name"),
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Floating Holiday date saved.", "success")
+    return redirect(url_for("neostaffing.settings"))
+
+
+@bp.route("/settings/floating-holidays/<int:holiday_id>/delete", methods=["POST"])
+@neostaffing_app_required(minimum_role="master")
+def delete_floating_holiday_setting(holiday_id):
+    try:
+        vacation_service.delete_qualifying_holiday(holiday_id, current_user)
+        db.session.commit()
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+    else:
+        flash("Floating Holiday date removed; existing earned awards were preserved.", "success")
+    return redirect(url_for("neostaffing.settings"))
 
 
 @bp.route("/permissions", methods=["GET", "POST"])

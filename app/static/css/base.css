@@ -28692,3 +28692,27 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 .neostaffing-vacation-management-config[open] > summary { margin-bottom:6px; }
 @media (max-width:1100px) { .neostaffing-vacation-management-row { grid-template-columns:minmax(170px,.7fr) minmax(240px,1fr); } .neostaffing-vacation-management-config { grid-column:1/-1; } .neostaffing-vacation-union-editor { grid-template-columns:minmax(220px,.7fr) minmax(340px,1.3fr); } .neostaffing-vacation-editor-help { grid-column:1/-1; } }
 @media (max-width:800px) { .neostaffing-vacation-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-vacation-console > .neostaffing-rail { display:none; } .neostaffing-vacation-workspace { overflow:visible; } .neostaffing-vacation-entry-grid,.neostaffing-vacation-foundation,.neostaffing-vacation-management-row,.neostaffing-vacation-union-editor { grid-template-columns:1fr; } .neostaffing-vacation-management-config,.neostaffing-vacation-editor-help { grid-column:auto; } .neostaffing-vacation-capacity-form,.neostaffing-vacation-week-form,.neostaffing-vacation-header { flex-wrap:wrap; } .neostaffing-vacation-roster { overflow-x:auto; } .neostaffing-vacation-roster-head,.neostaffing-vacation-roster-row { min-width:720px; } .neostaffing-vacation-management-footer { grid-template-columns:1fr; } }
+
+/* NeoStaffing Settings console */
+.neostaffing-settings-console { display:grid; grid-template-columns:clamp(144px,10vw,184px) minmax(0,1fr); width:calc(100vw - 32px); height:calc(100vh - 122px); min-height:520px; margin:-18px calc(50% - 50vw + 16px) -54px; overflow:hidden; border:1px solid #18333a; border-radius:7px; background:#071317; color:#d3e5e6; }
+body:has(.neostaffing-settings-console) { overflow-x:clip; }
+.neostaffing-settings-console > .neostaffing-rail { box-sizing:border-box; width:auto; min-width:0; height:100%; overflow-y:auto; border-right:1px solid #19353c; background:#0a161c; }
+.neostaffing-settings-workspace { min-width:0; overflow:auto; padding:10px 12px 18px; }
+.neostaffing-settings-header,.neostaffing-settings-panel > header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.neostaffing-settings-header { min-height:45px; padding-bottom:8px; border-bottom:1px solid #1c3c43; }
+.neostaffing-settings-header h1,.neostaffing-settings-panel h2 { margin:0; color:#e1f2f2; font-size:.92rem; letter-spacing:.08em; }
+.neostaffing-settings-header span,.neostaffing-settings-header > strong,.neostaffing-settings-panel > header > span { color:#6dbdb9; font-size:.57rem; font-weight:900; letter-spacing:.07em; }
+.neostaffing-settings-panel { margin-top:10px; border:1px solid #1c4047; border-radius:5px; background:#0a1b21; }
+.neostaffing-settings-panel > header { padding:9px 10px; border-bottom:1px solid #1c4047; background:#0d2228; }
+.neostaffing-settings-panel > header p,.neostaffing-settings-note { margin:2px 0 0; color:#78979b; font-size:.62rem; }
+.neostaffing-settings-add,.neostaffing-settings-holidays article { display:grid; grid-template-columns:minmax(155px,.35fr) minmax(240px,1fr) auto; align-items:end; gap:7px; padding:7px 10px; }
+.neostaffing-settings-add { border-bottom:1px solid #193a41; }
+.neostaffing-settings-add label,.neostaffing-settings-holidays label { display:grid; gap:3px; color:#76989c; font-size:.53rem; font-weight:900; text-transform:uppercase; }
+.neostaffing-settings-add input,.neostaffing-settings-holidays input { box-sizing:border-box; width:100%; min-height:28px; padding:4px 7px; border:1px solid #28545b; border-radius:3px; background:#10272d; color:#e3eeee; color-scheme:dark; font-size:.66rem; }
+.neostaffing-settings-holidays article { grid-template-columns:minmax(0,1fr) auto; border-bottom:1px solid rgba(35,72,79,.68); }
+.neostaffing-settings-holidays article > form:first-child { display:grid; grid-template-columns:minmax(155px,.35fr) minmax(240px,1fr) auto; align-items:end; gap:7px; }
+.neostaffing-settings-holidays button { min-height:27px; padding:4px 8px; border:1px solid #2b6267; border-radius:3px; background:#12343a; color:#9cdbd7; font-size:.56rem; font-weight:900; cursor:pointer; }
+.neostaffing-settings-holidays button.is-danger { border-color:#6d4647; background:#302023; color:#e9aeb0; }
+.neostaffing-settings-empty { margin:0; padding:18px 10px; color:#78979b; font-size:.65rem; text-align:center; }
+.neostaffing-settings-note { padding:7px 10px 9px; }
+@media (max-width:800px) { .neostaffing-settings-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-settings-console > .neostaffing-rail { display:none; } .neostaffing-settings-workspace { overflow:visible; } .neostaffing-settings-add,.neostaffing-settings-holidays article,.neostaffing-settings-holidays article > form:first-child { grid-template-columns:1fr; } }

@@ -329,6 +329,38 @@ class StaffingVacationDayEntitlement(db.Model):
     person = db.relationship("StaffingPerson")
 
 
+class StaffingVacationQualifyingHoliday(db.Model):
+    """Year-specific authoritative date eligible to earn a Floating Holiday."""
+
+    __tablename__ = "staffing_vacation_qualifying_holidays"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "holiday_date",
+            name="uq_staffing_vacation_qualifying_holidays_date",
+        ),
+        db.Index(
+            "ix_staffing_vacation_qualifying_holidays_date",
+            "holiday_date",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    holiday_date = db.Column(db.Date, nullable=False)
+    name = db.Column(db.String(80), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user = db.relationship("User", foreign_keys=[updated_by_user_id])
+
+
 class StaffingVacationManagementCapacity(db.Model):
     """Whole-week Management limits for one hierarchy area and vacation year."""
 
