@@ -226,6 +226,197 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertIn(employee.employee_id, str(conflict.exception))
         self.assertIn("Blue Ramp", str(conflict.exception))
 
+    def test_official_overlap_uses_every_active_employee_assignment(self):
+        grandmaster = self._user("multi_assignment_gm", "grandmaster")
+        employee = self._union_person(
+            "OC-MULTI", "Multiple", "Assignments", self.units["blue_area"]
+        )
+        second_assignment = StaffingWorkAssignment(
+            person_id=employee.id,
+            work_area_unit_id=self.units["brown_area"].id,
+            active=True,
+        )
+        blue = self._calendar(grandmaster, [self.units["blue_area"].id])
+        db.session.commit()
+        assignment_rows = [
+            (employee, employee.work_assignment),
+            (employee, second_assignment),
+        ]
+
+        brown_values = {
+            "vacation_year": self.YEAR,
+            "calendar_type": "official",
+            "operation_unit_id": self.units["ramp"].id,
+            "include_part_time": "1",
+            "staffing_unit_ids": [self.units["brown_area"].id],
+            "active": "1",
+        }
+        with patch.object(
+            vacation_service,
+            "_active_union_people_with_assignments",
+            return_value=assignment_rows,
+        ):
+            with self.assertRaisesRegex(ValueError, "only one Official") as conflict:
+                vacation_service.create_union_calendar(brown_values, grandmaster)
+        self.assertIn(employee.employee_id, str(conflict.exception))
+        self.assertIn("Blue Ramp", str(conflict.exception))
+        self.assertIn("Brown Ramp", str(conflict.exception))
+        db.session.rollback()
+
+        hub_values = dict(brown_values)
+        hub_values["operation_unit_id"] = self.units["other_operation"].id
+        hub_values["staffing_unit_ids"] = [self.units["other_area"].id]
+        hub = vacation_service.create_union_calendar(hub_values, grandmaster)
+        db.session.commit()
+        self.assertNotEqual(blue.id, hub.id)
+
+        view_values = dict(brown_values)
+        view_values.update(
+            calendar_type="view_only",
+            name="Overlapping Read Only View",
+        )
+        view_only = vacation_service.create_union_calendar(
+            view_values, grandmaster
+        )
+        db.session.commit()
+        self.assertEqual(view_only.calendar_type, "view_only")
+
+    def test_official_multi_assignment_overlap_check_is_bounded(self):
+        grandmaster = self._user("bounded_overlap_gm", "grandmaster")
+        person_ids = []
+        for index in range(12):
+            person = self._union_person(
+                f"OC-B{index}", "Bounded", f"Person{index}", self.units["blue_area"]
+            )
+            person_ids.append(person.id)
+        self._calendar(grandmaster, [self.units["blue_area"].id])
+        db.session.commit()
+        people = StaffingPerson.query.filter(
+            StaffingPerson.id.in_(person_ids)
+        ).order_by(StaffingPerson.id).all()
+        assignments = {
+            row.person_id: row
+            for row in StaffingWorkAssignment.query.filter(
+                StaffingWorkAssignment.person_id.in_(person_ids)
+            ).all()
+        }
+        assignment_rows = []
+        for person in people:
+            assignment_rows.extend(
+                [
+                    (person, assignments[person.id]),
+                    (
+                        person,
+                        StaffingWorkAssignment(
+                            person_id=person.id,
+                            work_area_unit_id=self.units["brown_area"].id,
+                            active=True,
+                        ),
+                    ),
+                ]
+            )
+        selects = []
+
+        def record_select(_conn, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", record_select)
+        try:
+            with patch.object(
+                vacation_service,
+                "_active_union_people_with_assignments",
+                return_value=assignment_rows,
+            ):
+                conflicts = vacation_service.official_calendar_overlap_conflicts(
+                    self.YEAR,
+                    {self.units["brown_area"].id},
+                    True,
+                    False,
+                )
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record_select)
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(len(conflicts[0]["employee_ids"]), 12)
+        self.assertLessEqual(len(selects), 4)
+
+    def test_watcher_can_view_vacation_but_cannot_mutate(self):
+        watcher = self._management_user(
+            "vacation_read_only", "watcher", self.units["blue_department"]
+        )
+        person = StaffingPerson.query.filter_by(
+            employee_id=watcher.employee_id
+        ).one()
+        db.session.commit()
+        self._login(watcher)
+        page = self.client.get(
+            f"/neostaffing/vacation-selection/management?year={self.YEAR}"
+        )
+        self.assertEqual(page.status_code, 200)
+        context = vacation_service.management_vacation_context(
+            self.YEAR, watcher, today=date(self.YEAR - 1, 11, 1)
+        )
+        self.assertFalse(
+            any(
+                person_row["can_select"]
+                or person_row["can_pass"]
+                or person_row["can_request_week_changes"]
+                for area_row in context["areas"]
+                for person_row in area_row["person_rows"]
+            )
+        )
+        union_context = vacation_service.union_calendars_context(
+            self.YEAR, watcher
+        )
+        self.assertFalse(union_context["can_create_official"])
+        self.assertFalse(union_context["can_create_view"])
+
+        mutation_calls = (
+            lambda: vacation_service.add_management_weeks(
+                person, self.YEAR, [], watcher, today=date(self.YEAR - 1, 11, 1)
+            ),
+            lambda: vacation_service.pass_management_turn(
+                self.YEAR, self.units["blue_department"].id, person, watcher
+            ),
+            lambda: vacation_service.create_union_calendar({}, watcher),
+            lambda: vacation_service.schedule_split_vacation_day(
+                999999, date(self.YEAR, 1, 2), watcher
+            ),
+            lambda: vacation_service.save_qualifying_holiday(
+                None, date(self.YEAR, 1, 1), "Forbidden", watcher
+            ),
+            lambda: vacation_service.reset_management_vacation_area(
+                self.units["blue_department"], self.YEAR, watcher
+            ),
+        )
+        for mutation in mutation_calls:
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(ValueError, "read-only"):
+                    mutation()
+                db.session.rollback()
+
+    def test_writable_role_still_requires_hierarchy_and_master_sideways(self):
+        operator = self._union_actor(
+            "write_operator", "operator", "full_time_supervisor"
+        )
+        master = self._union_actor(
+            "write_master", "master", "full_time_supervisor"
+        )
+        values = {
+            "vacation_year": self.YEAR,
+            "calendar_type": "official",
+            "operation_unit_id": self.units["ramp"].id,
+            "include_part_time": "1",
+            "staffing_unit_ids": [self.units["brown_area"].id],
+            "active": "1",
+        }
+        with self.assertRaisesRegex(ValueError, "FT Supervisor or Manager"):
+            vacation_service.create_union_calendar(values, operator)
+        db.session.rollback()
+        calendar = vacation_service.create_union_calendar(values, master)
+        db.session.commit()
+        self.assertEqual(calendar.calendar_type, "official")
+
     def test_official_name_truncation_scope_edit_and_delete_preserves_selection(self):
         grandmaster = self._user("official_admin_gm", "grandmaster")
         extra_units = []
@@ -1526,7 +1717,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
                 None, date(self.YEAR, 12, 25), "Duplicate", master
             )
         db.session.rollback()
-        with self.assertRaisesRegex(ValueError, "Master access"):
+        with self.assertRaisesRegex(ValueError, "read-only|Master access"):
             vacation_service.save_qualifying_holiday(
                 None, date(self.YEAR, 1, 1), "Forbidden", watcher
             )

@@ -98,6 +98,7 @@ VACATION_PINNED_RECIPIENT_CLASSIFICATIONS = frozenset(
 )
 D_DAY_ENTITLEMENT = 5
 OPTIONAL_DAY_ENTITLEMENT = 4
+VACATION_MINIMUM_WRITABLE_APP_ROLE = "operator"
 
 
 @dataclass(frozen=True)
@@ -375,7 +376,29 @@ def vacation_actor(user, hierarchy=None, leadership_rows=None):
     )
 
 
+def require_vacation_mutation_access(user):
+    """Reject read-only app roles before evaluating workflow-specific authority."""
+    app_role = get_user_app_role(user, "neostaffing") or "watcher"
+    if (
+        getattr(user, "role", None) != "grandmaster"
+        and ROLE_LEVELS.get(app_role, 0)
+        < ROLE_LEVELS[VACATION_MINIMUM_WRITABLE_APP_ROLE]
+    ):
+        raise ValueError("NeoStaffing Watcher access is read-only.")
+    return app_role
+
+
+def _actor_has_vacation_mutation_access(actor):
+    return bool(
+        actor.is_grandmaster
+        or ROLE_LEVELS.get(actor.app_role, 0)
+        >= ROLE_LEVELS[VACATION_MINIMUM_WRITABLE_APP_ROLE]
+    )
+
+
 def can_edit_union_scope(actor, scope_ids):
+    if not _actor_has_vacation_mutation_access(actor):
+        return False
     requested = set(scope_ids)
     allowed = (
         actor.sideways_scope_ids
@@ -387,12 +410,17 @@ def can_edit_union_scope(actor, scope_ids):
 
 def can_edit_management_capacity(actor, area_id):
     return bool(
-        actor.is_grandmaster
-        or int(area_id) in actor.management_capacity_ids
+        _actor_has_vacation_mutation_access(actor)
+        and (
+            actor.is_grandmaster
+            or int(area_id) in actor.management_capacity_ids
+        )
     )
 
 
 def operation_has_editable_union_scope(actor, operation_id, hierarchy):
+    if not _actor_has_vacation_mutation_access(actor):
+        return False
     allowed = (
         actor.sideways_scope_ids
         if ROLE_LEVELS.get(actor.app_role, 0) >= ROLE_LEVELS["master"]
@@ -584,8 +612,11 @@ def management_vacation_context(vacation_year, user, today=None):
             person_conversions = conversions_by_person.get(person.id, [])
             remaining = max(0, remaining - len(person_conversions))
             owner_can_write = bool(
-                actor.is_grandmaster
-                or (actor.person and actor.person.id == person.id)
+                _actor_has_vacation_mutation_access(actor)
+                and (
+                    actor.is_grandmaster
+                    or (actor.person and actor.person.id == person.id)
+                )
             )
             person_rows.append(
                 {
@@ -606,7 +637,9 @@ def management_vacation_context(vacation_year, user, today=None):
                         )
                     },
                     "can_request_week_changes": bool(
-                        actor.person and actor.person.id == person.id
+                        _actor_has_vacation_mutation_access(actor)
+                        and actor.person
+                        and actor.person.id == person.id
                     ),
                     "can_manage_week_changes": can_manage_week_changes,
                     "split_conversions": [
@@ -659,7 +692,8 @@ def management_vacation_context(vacation_year, user, today=None):
                     and _turn_allows_person(turn, person, current_person)
                     and remaining > 0,
                     "can_pass": bool(
-                        actor.person
+                        _actor_has_vacation_mutation_access(actor)
+                        and actor.person
                         and actor.person.id == person.id
                         and person.id == turn.current_person_id
                     ),
@@ -850,6 +884,7 @@ def add_management_weeks(
     today=None,
 ):
     """Atomically reserve one or more whole weeks against bank and capacity."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     today = today or date.today()
     if today < vacation_selection_opens_on(year):
@@ -1029,6 +1064,7 @@ def add_division_manager_weeks(
     today=None,
 ):
     """Directly add Division Manager weeks without consuming a Manager pool slot."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     today = today or date.today()
     if today < vacation_selection_opens_on(year):
@@ -1103,6 +1139,7 @@ def request_management_selection_change(
     today=None,
 ):
     """Create one employee-owned pending move/cancel request without releasing capacity."""
+    require_vacation_mutation_access(user)
     today = today or date.today()
     selection = _locked_management_selection(selection)
     person = _locked_management_person(selection.staffing_person_id)
@@ -1155,6 +1192,7 @@ def request_management_selection_change(
 
 
 def cancel_management_selection_change_request(change_request, user):
+    require_vacation_mutation_access(user)
     row = _locked_management_change_request(change_request)
     if row.status != "pending":
         raise ValueError("This vacation change request is no longer pending.")
@@ -1177,6 +1215,7 @@ def review_management_selection_change_request(
     capacity_override=False,
     today=None,
 ):
+    require_vacation_mutation_access(user)
     today = today or date.today()
     row = _locked_management_change_request(change_request)
     if row.status != "pending":
@@ -1229,6 +1268,7 @@ def move_management_selection(
     capacity_override=False,
     today=None,
 ):
+    require_vacation_mutation_access(user)
     today = today or date.today()
     selection = _locked_management_selection(selection)
     person = _locked_management_person(selection.staffing_person_id)
@@ -1266,6 +1306,7 @@ def cancel_management_selection(
     correction=False,
     today=None,
 ):
+    require_vacation_mutation_access(user)
     today = today or date.today()
     selection = _locked_management_selection(selection)
     person = _locked_management_person(selection.staffing_person_id)
@@ -1297,6 +1338,7 @@ def pass_management_turn(
     administrative=False,
     today=None,
 ):
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     today = today or date.today()
     if today < vacation_selection_opens_on(year):
@@ -1404,6 +1446,7 @@ def reconcile_management_person_state(person, user=None, *, today=None):
 
 
 def save_management_capacity(vacation_year, area_id, values, user):
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     hierarchy = vacation_hierarchy()
     area = hierarchy["by_id"].get(_positive_int(area_id, "Management area"))
@@ -1440,6 +1483,7 @@ def save_management_capacity(vacation_year, area_id, values, user):
 
 
 def initialize_management_capacity_year(vacation_year, area_ids, user):
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     normalized_ids = {_positive_int(value, "Management area") for value in area_ids}
     hierarchy = vacation_hierarchy()
@@ -1501,6 +1545,7 @@ def reduced_capacity_enabled(vacation_year, area_id, week_ending):
 
 
 def set_reduced_capacity_enabled(vacation_year, area_id, week_ending, enabled, user):
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     week = normalize_week_ending(year, week_ending)
     hierarchy = vacation_hierarchy()
@@ -1563,6 +1608,7 @@ def update_union_calendar(calendar, values, user):
 
 
 def _save_union_calendar(calendar, values, user):
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(values.get("vacation_year"))
     calendar_type = str(
         values.get("calendar_type")
@@ -1613,7 +1659,8 @@ def _save_union_calendar(calendar, values, user):
         if conflicts:
             summary = "; ".join(
                 f"{row['calendar_name']} [{row['scope_label']}]: "
-                f"{', '.join(row['employee_labels'][:5]) or 'overlapping organizational scope'}"
+                f"{', '.join(row['employee_labels'][:5])}; areas: "
+                f"{', '.join(row['area_labels']) or 'configured scope'}"
                 for row in conflicts
             )
             raise ValueError(
@@ -1667,6 +1714,7 @@ def _save_union_calendar(calendar, values, user):
 
 def delete_union_calendar(calendar, user):
     """Delete one definition without touching employee/year selections."""
+    require_vacation_mutation_access(user)
     row = _locked_union_calendar_definition(calendar)
     hierarchy = vacation_hierarchy()
     actor = vacation_actor(user, hierarchy)
@@ -1763,22 +1811,26 @@ def official_calendar_overlap_conflicts(
     }
     conflicts = []
     for row in calendars:
-        overlapping_area_ids = (
-            proposed["work_area_ids"] & definitions[row.id]["work_area_ids"]
-        )
-        overlapping_classifications = (
-            proposed["classifications"] & definitions[row.id]["classifications"]
-        )
-        if not overlapping_area_ids or not overlapping_classifications:
-            continue
         member_ids = {
             person.id
             for person, assignment in people
             if _membership_matches(person, assignment, definitions[row.id])
         }
+        overlapping_person_ids = proposed_people.keys() & member_ids
         overlapping = _seniority_order(
-            [proposed_people[person_id] for person_id in proposed_people.keys() & member_ids]
+            [proposed_people[person_id] for person_id in overlapping_person_ids]
         )
+        if not overlapping:
+            continue
+        conflicting_area_ids = {
+            assignment.work_area_unit_id
+            for person, assignment in people
+            if person.id in overlapping_person_ids
+            and (
+                _membership_matches(person, assignment, proposed)
+                or _membership_matches(person, assignment, definitions[row.id])
+            )
+        }
         conflicts.append(
             {
                 "calendar_id": row.id,
@@ -1786,7 +1838,7 @@ def official_calendar_overlap_conflicts(
                 "scope_label": union_calendar_scope_label(row, hierarchy),
                 "area_labels": [
                     hierarchy["by_id"][area_id].name
-                    for area_id in sorted(overlapping_area_ids)
+                    for area_id in sorted(conflicting_area_ids)
                     if area_id in hierarchy["by_id"]
                 ],
                 "employee_ids": [person.id for person in overlapping],
@@ -1800,6 +1852,7 @@ def official_calendar_overlap_conflicts(
 
 
 def update_view_calendar_shares(calendar, recipient_user_ids, user):
+    require_vacation_mutation_access(user)
     row = _locked_union_calendar_definition(calendar)
     if row.calendar_type != "view_only":
         raise ValueError("Only View Only calendars can be shared.")
@@ -1860,6 +1913,7 @@ def search_management_calendar_users(search, *, exclude_user_id=None, limit=30):
 
 
 def copy_shared_view_calendar(calendar, name, user):
+    require_vacation_mutation_access(user)
     source = _locked_union_calendar_definition(calendar)
     if source.calendar_type != "view_only" or not can_view_union_calendar(source, user):
         raise ValueError("The shared View Only calendar is not available.")
@@ -2030,6 +2084,7 @@ def official_calendar_carry_forward_candidates(user, today=None):
 
 def carry_forward_official_calendar(calendar, user, today=None):
     """Create one next-year Official definition without copying transactional state."""
+    require_vacation_mutation_access(user)
     today = _as_date(today or date.today())
     if today < date(today.year, 11, 1):
         raise ValueError("Official calendar carry-forward opens November 1.")
@@ -2155,6 +2210,7 @@ def union_calendar_admin_context(user):
 
 def reset_union_vacation_calendar(calendar, vacation_year, user):
     """Reset one Official pool/year while preserving its durable definition."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     actor = vacation_actor(user)
     if not actor.is_grandmaster:
@@ -2172,6 +2228,7 @@ def reset_union_vacation_calendar(calendar, vacation_year, user):
 
 def reset_management_vacation_area(area, vacation_year, user):
     """Reset one dynamic Management area/year to its derived fresh state."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     actor = vacation_actor(user)
     if not actor.is_grandmaster:
@@ -2369,6 +2426,7 @@ def add_union_week(
     capacity_override=False,
 ):
     """Atomically reserve one Official-pool whole week from a Union bank."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     week = normalize_week_ending(year, week_ending)
     bank_type = str(bank_type or "").strip().casefold()
@@ -2477,6 +2535,7 @@ def split_management_week(
     today=None,
 ):
     """Convert one Management week (selected future or unused bank) into five days."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     today = today or date.today()
     person = _locked_management_person(person)
@@ -2542,6 +2601,7 @@ def split_union_optional_week(
     today=None,
 ):
     """Convert only one Union Optional Week into five split vacation days."""
+    require_vacation_mutation_access(user)
     year = normalize_vacation_year(vacation_year)
     today = today or date.today()
     calendar = _locked_union_calendar(calendar, year)
@@ -2614,6 +2674,7 @@ def schedule_split_vacation_day(
     capacity_override=False,
 ):
     """Schedule one split day with reusable person/day exclusivity."""
+    require_vacation_mutation_access(user)
     conversion = _locked_active_conversion(conversion)
     day = _normalize_vacation_date(conversion.vacation_year, vacation_date)
     person = _locked_person(conversion.staffing_person_id)
@@ -2659,6 +2720,7 @@ def schedule_split_vacation_day(
 
 def cancel_split_vacation_day(day_selection, user):
     """Cancel or correct one split day, including an erroneous past entry."""
+    require_vacation_mutation_access(user)
     row = (
         StaffingVacationDaySelection.query.filter_by(
             id=_positive_int(getattr(day_selection, "id", day_selection), "split day"),
@@ -2851,12 +2913,17 @@ def can_manage_vacation_settings(user):
     app_role = get_user_app_role(user, "neostaffing") or "watcher"
     return bool(
         getattr(user, "role", None) == "grandmaster"
-        or ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["master"]
+        or (
+            ROLE_LEVELS.get(app_role, 0)
+            >= ROLE_LEVELS[VACATION_MINIMUM_WRITABLE_APP_ROLE]
+            and ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["master"]
+        )
     )
 
 
 def save_qualifying_holiday(holiday, holiday_date, name, user):
     """Create/edit one authoritative date and reconcile approved weeks."""
+    require_vacation_mutation_access(user)
     if not can_manage_vacation_settings(user):
         raise ValueError("NeoStaffing Master access is required to edit holidays.")
     try:
@@ -2911,6 +2978,7 @@ def save_qualifying_holiday(holiday, holiday_date, name, user):
 
 def delete_qualifying_holiday(holiday, user):
     """Remove configuration while conservatively preserving durable awards."""
+    require_vacation_mutation_access(user)
     if not can_manage_vacation_settings(user):
         raise ValueError("NeoStaffing Master access is required to edit holidays.")
     row = StaffingVacationQualifyingHoliday.query.filter_by(
@@ -3022,6 +3090,7 @@ def schedule_vacation_entitlement_day(
     today=None,
 ):
     """Consume one derived or durable day entitlement transactionally."""
+    require_vacation_mutation_access(user)
     day = vacation_date if isinstance(vacation_date, date) else date.fromisoformat(str(vacation_date))
     item_type = str(item_type or "").strip().casefold()
     program = str(program or "").strip().casefold()
@@ -3106,6 +3175,7 @@ def schedule_vacation_entitlement_day(
 
 def cancel_vacation_entitlement_day(day_selection, user, *, today=None):
     """Correct a day entry and restore its derived or durable entitlement."""
+    require_vacation_mutation_access(user)
     row = StaffingVacationDaySelection.query.filter(
         StaffingVacationDaySelection.id
         == _positive_int(getattr(day_selection, "id", day_selection), "vacation day"),
@@ -3155,6 +3225,7 @@ def schedule_management_availability_day(
     user,
 ):
     """Persist one exclusive Special Assignment or Corporate Class day."""
+    require_vacation_mutation_access(user)
     day = (
         availability_date
         if isinstance(availability_date, date)
@@ -3184,6 +3255,7 @@ def schedule_management_availability_day(
 
 def cancel_management_availability_day(day_selection, user):
     """Remove an availability entry, including a past correction."""
+    require_vacation_mutation_access(user)
     row = StaffingVacationDaySelection.query.filter(
         StaffingVacationDaySelection.id
         == _positive_int(getattr(day_selection, "id", day_selection), "availability day"),
@@ -3207,6 +3279,7 @@ def cancel_management_availability_day(day_selection, user):
 
 def recombine_split_vacation_week(conversion, user):
     """Return an untouched five-day conversion to a generic unused week bank."""
+    require_vacation_mutation_access(user)
     conversion = _locked_active_conversion(conversion)
     person = _locked_person(conversion.staffing_person_id)
     actor, _calendar = _authorize_split_day_write(
@@ -3228,6 +3301,7 @@ def recombine_split_vacation_week(conversion, user):
 
 def review_union_selection(selection, approve, user, *, capacity_override=False):
     """Approve or deny one PT-entered pending selection in its current Official pool."""
+    require_vacation_mutation_access(user)
     selection_id = getattr(selection, "id", selection)
     row = (
         StaffingVacationUnionSelection.query.filter_by(
@@ -3294,6 +3368,7 @@ def move_union_selection(
     today=None,
 ):
     """Atomically move one approved future Union week within its Official pool."""
+    require_vacation_mutation_access(user)
     today = _as_date(today or date.today())
     selection_id = getattr(selection, "id", selection)
     row = (
@@ -3382,6 +3457,7 @@ def move_union_selection(
 
 def cancel_union_selection(selection, user, *, correction=False, today=None):
     """Cancel an active Union selection without deleting its durable history."""
+    require_vacation_mutation_access(user)
     today = _as_date(today or date.today())
     selection_id = getattr(selection, "id", selection)
     row = (
@@ -4516,8 +4592,11 @@ def union_calendars_context(vacation_year, user, today=None):
                 "members": view_members.get(calendar.id, []),
                 "payroll_count": len(view_members.get(calendar.id, [])),
                 "can_edit": bool(
-                    actor.is_grandmaster
-                    or getattr(owner, "id", None) == getattr(user, "id", None)
+                    _actor_has_vacation_mutation_access(actor)
+                    and (
+                        actor.is_grandmaster
+                        or getattr(owner, "id", None) == getattr(user, "id", None)
+                    )
                 ),
                 "shared_recipients": [share.recipient for share in calendar.shares],
             }
@@ -4546,12 +4625,15 @@ def union_calendars_context(vacation_year, user, today=None):
         "my_view_calendars": my_view_rows,
         "shared_view_calendars": shared_view_rows,
         "can_create_official": bool(
-            actor.is_grandmaster
-            or (
-                actor.person
-                and actor.person.classification
-                in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
-                and actor.sideways_scope_ids
+            _actor_has_vacation_mutation_access(actor)
+            and (
+                actor.is_grandmaster
+                or (
+                    actor.person
+                    and actor.person.classification
+                    in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
+                    and actor.sideways_scope_ids
+                )
             )
         ),
         "can_create_view": bool(
@@ -4561,7 +4643,10 @@ def union_calendars_context(vacation_year, user, today=None):
         "owned_view_count": owned_view_count,
         "view_limit": VACATION_VIEW_CALENDAR_LIMIT,
         "is_grandmaster": actor.is_grandmaster,
-        "can_create": bool(actor.is_grandmaster or actor.sideways_scope_ids),
+        "can_create": bool(
+            _actor_has_vacation_mutation_access(actor)
+            and (actor.is_grandmaster or actor.sideways_scope_ids)
+        ),
         "carry_forward_candidates": official_calendar_carry_forward_candidates(
             user, today=today
         ),
@@ -5051,28 +5136,38 @@ def _locked_union_calendar_definition(calendar):
 
 def _can_manage_official_calendar(actor, scope_ids):
     return bool(
-        actor.is_grandmaster
-        or (
-            actor.person
-            and actor.person.classification
-            in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
-            and can_edit_union_scope(actor, scope_ids)
+        _actor_has_vacation_mutation_access(actor)
+        and (
+            actor.is_grandmaster
+            or (
+                actor.person
+                and actor.person.classification
+                in VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS
+                and can_edit_union_scope(actor, scope_ids)
+            )
         )
     )
 
 
 def _can_own_view_calendar(actor):
     return bool(
-        actor.is_grandmaster
-        or (
-            actor.person
-            and actor.person.classification
-            in VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS
+        _actor_has_vacation_mutation_access(actor)
+        and (
+            actor.is_grandmaster
+            or (
+                actor.person
+                and actor.person.classification
+                in VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS
+            )
         )
     )
 
 
 def _can_edit_view_calendar(calendar, user):
+    try:
+        require_vacation_mutation_access(user)
+    except ValueError:
+        return False
     if getattr(user, "role", None) == "grandmaster" or get_user_app_role(
         user, "neostaffing"
     ) == "grandmaster":
@@ -5115,10 +5210,7 @@ def _active_union_people_with_assignments():
         )
         .all()
     )
-    by_person = {}
-    for person, assignment in rows:
-        by_person.setdefault(person.id, (person, assignment))
-    return list(by_person.values())
+    return rows
 
 
 def _members_by_calendar(calendars, hierarchy):
@@ -5135,11 +5227,11 @@ def _members_by_calendar(calendars, hierarchy):
     people = _active_union_people_with_assignments() if calendars else []
     for calendar in calendars:
         result[calendar.id] = _seniority_order(
-            [
-                person
+            {
+                person.id: person
                 for person, assignment in people
                 if _membership_matches(person, assignment, definitions[calendar.id])
-            ]
+            }.values()
         )
     return result
 
