@@ -1,5 +1,5 @@
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, time
 from unittest.mock import patch
 
 from sqlalchemy import event
@@ -8,6 +8,7 @@ from app import create_app
 from app.extensions import db
 from app.models import (
     GatewayMembership,
+    GatewaySortMatrix,
     GatewayNodeRole,
     LiveScreenRefreshSetting,
     NeoNode,
@@ -18,6 +19,8 @@ from app.models import (
     SortDateMission,
     SortDateOperation,
     SortDateTailState,
+    SortTimelineSettings,
+    SortTimelineSortSetting,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -78,6 +81,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
 
     def test_revision_endpoint_is_one_fingerprint_query_and_never_writes(self):
         operator = self._add_user("query_operator", "operator")
+        self._configure_active_night_sort()
         operation, _mission = self._add_operation_with_mission()
         db.session.commit()
         self._login(operator)
@@ -108,8 +112,7 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         fingerprint_queries = [
             statement
             for statement in statements
-            if "sort_date_operations" in statement.lower()
-            and "neoscorpion_sort_asset_states" in statement.lower()
+            if "neoscorpion_sort_asset_states" in statement.lower()
         ]
         self.assertEqual(len(fingerprint_queries), 1)
         self.assertFalse(
@@ -121,8 +124,68 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
             )
         )
 
+    def test_fuel_dispatch_revision_authorization_and_no_current_sort(self):
+        operator = self._add_user("dispatch_operator", "operator")
+        watcher = self._add_user("dispatch_watcher", "watcher")
+        db.session.commit()
+
+        self._login(operator)
+        response = self.client.get("/neoscorpion/fuel-dispatch/revision")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "current_operation": False,
+                "operation_id": None,
+                "revision": 0,
+            },
+        )
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+        self._login(watcher)
+        response = self.client.get("/neoscorpion/fuel-dispatch/revision")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.get_json()["error"], "Access denied.")
+
+    def test_fuel_dispatch_revision_active_operation_is_read_only_and_bounded(self):
+        operator = self._add_user("dispatch_query_operator", "operator")
+        self._configure_active_night_sort()
+        operation, _mission = self._add_operation_with_mission()
+        db.session.commit()
+        self._login(operator)
+        statements = []
+
+        def capture_statement(_connection, _cursor, statement, _params, _context, _many):
+            statements.append(statement.strip())
+
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        try:
+            response = self.client.get("/neoscorpion/fuel-dispatch/revision")
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["operation_id"], operation.id)
+        self.assertEqual(response.get_json()["revision"], 0)
+        self.assertFalse(
+            any(
+                statement.lstrip().upper().startswith(
+                    ("INSERT", "UPDATE", "DELETE")
+                )
+                for statement in statements
+            )
+        )
+        self.assertLessEqual(
+            sum(
+                statement.lstrip().upper().startswith("SELECT")
+                for statement in statements
+            ),
+            8,
+        )
+
     def test_revision_and_assignment_identifiers_render_for_current_fueler(self):
         operator = self._add_user("assigned_operator", "operator")
+        self._configure_active_night_sort()
         operation, mission = self._add_operation_with_mission()
         assignment = NeoScorpionFuelAssignment(
             sort_date_operation_id=operation.id,
@@ -228,6 +291,37 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         )
         db.session.flush()
         return operation, mission
+
+    def _configure_active_night_sort(self):
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 8, 17, 22, 0
+        )
+        settings = SortTimelineSettings(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+        )
+        db.session.add(settings)
+        db.session.flush()
+        db.session.add_all(
+            [
+                GatewaySortMatrix(
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    day_of_week="monday",
+                    sort_name="night",
+                    is_active=True,
+                ),
+                SortTimelineSortSetting(
+                    timeline_settings=settings,
+                    gateway_id=self.gateway.id,
+                    gateway_code=self.gateway.code,
+                    sort_name="night",
+                    planning_start_local=time(18, 0),
+                    sort_window_start_local=time(20, 0),
+                    sort_window_end_local=time(4, 0),
+                ),
+            ]
+        )
 
     def _add_user(self, username, role):
         user = User(
