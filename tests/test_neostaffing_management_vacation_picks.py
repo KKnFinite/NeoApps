@@ -1321,6 +1321,108 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_managers_manage_division_manager_availability_and_pinned_capacity(self):
+        manager, manager_user = self._management_user(
+            "MVDMA1", "Area", "Manager", "1980-01-01", "manager",
+            unit=self.units["ramp"],
+        )
+        _peer, peer_user = self._management_user(
+            "MVDMA2", "Peer", "Manager", "1981-01-01", "manager",
+            unit=self.units["hub"],
+        )
+        division_manager, _division_user = self._management_user(
+            "MVDMA3", "Division", "Manager", "1970-01-01", "division_manager",
+            unit=self.units["night"],
+        )
+        _ft, ft_user = self._management_user(
+            "MVDMA4", "Lower", "FT", "1985-01-01", "full_time_supervisor",
+            unit=self.units["blue_department"],
+        )
+        self._capacity(self.units["night"], 3)
+        capacity = StaffingVacationManagementCapacity.query.filter_by(
+            area_unit_id=self.units["night"].id
+        ).one()
+        capacity.one_pinned_limit = 1
+        capacity.two_plus_pinned_limit = 0
+        db.session.commit()
+
+        special = vacation_service.schedule_management_availability_day(
+            division_manager,
+            date(self.YEAR, 5, 3),
+            "special_assignment",
+            manager_user,
+        )
+        with self.assertRaisesRegex(ValueError, "already has a time-off item"):
+            vacation_service.schedule_management_availability_day(
+                division_manager,
+                date(self.YEAR, 5, 3),
+                "corporate_class",
+                peer_user,
+            )
+        db.session.rollback()
+        special = StaffingVacationDaySelection.query.filter_by(
+            staffing_person_id=division_manager.id,
+            item_type="special_assignment",
+            status="scheduled",
+        ).first()
+        self.assertIsNone(special)
+
+        special = vacation_service.schedule_management_availability_day(
+            division_manager,
+            date(self.YEAR, 5, 3),
+            "special_assignment",
+            manager_user,
+        )
+        db.session.commit()
+        vacation_service.cancel_management_availability_day(special, peer_user)
+        corporate = vacation_service.schedule_management_availability_day(
+            division_manager,
+            date(self.YEAR, 5, 4),
+            "corporate_class",
+            peer_user,
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "do not have authority"):
+            vacation_service.schedule_management_availability_day(
+                division_manager,
+                date(self.YEAR, 5, 5),
+                "special_assignment",
+                ft_user,
+            )
+        db.session.rollback()
+        corporate = StaffingVacationDaySelection.query.filter_by(
+            staffing_person_id=division_manager.id,
+            item_type="corporate_class",
+            status="scheduled",
+        ).one()
+
+        context = vacation_service.management_vacation_context(
+            self.YEAR, manager_user, today=self.OPEN_DAY
+        )
+        area = self._area_row(context, self.units["night"])
+        week = next(
+            row
+            for row in area["week_rows"]
+            if row["week"].week_ending == date(self.YEAR, 5, 8)
+        )
+        self.assertEqual(week["pinned_unavailable_count"], 1)
+        self.assertEqual(week["limit"], 1)
+        self.assertEqual(
+            area["pinned_rows"][0]["availability"][0]["kind"],
+            "corporate_class",
+        )
+        vacation_service.cancel_management_availability_day(
+            corporate, manager_user
+        )
+        db.session.flush()
+        self.assertEqual(
+            StaffingVacationDaySelection.query.filter_by(
+                staffing_person_id=division_manager.id,
+                status="scheduled",
+            ).count(),
+            0,
+        )
+
     def test_grandmaster_management_reset_restores_fresh_year_only(self):
         person, user = self._management_user(
             "MRESET1",
@@ -1497,6 +1599,109 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self.assertFalse(area["turn"].completed)
         self.assertEqual(area["turn"].resolved_person_ids, frozenset())
         self.assertNotIn(date(self.YEAR, 7, 10), area["off_week_endings"])
+
+    def test_manager_pool_reset_excludes_pinned_division_manager(self):
+        manager, _manager_user = self._management_user(
+            "MREX1", "Pool", "Manager", "1980-01-01", "manager",
+            unit=self.units["ramp"],
+        )
+        division_manager, _division_user = self._management_user(
+            "MREX2", "Pinned", "Division", "1970-01-01", "division_manager",
+            unit=self.units["night"],
+        )
+        day_sort = StaffingUnit(unit_type="sort", name="Day", display_order=2)
+        day_operation = StaffingUnit(
+            unit_type="operation", name="Day Ramp", parent=day_sort, display_order=1
+        )
+        db.session.add_all([day_sort, day_operation])
+        db.session.flush()
+        other_manager, _other_user = self._management_user(
+            "MREX3", "Other", "Manager", "1982-01-01", "manager",
+            unit=day_operation,
+        )
+        _grand_person, grandmaster = self._management_user(
+            "MREX4", "Grand", "Master", "1960-01-01", "manager",
+            unit=self.units["ramp"], app_role="grandmaster",
+        )
+        rows = {
+            "pool_selection": StaffingVacationManagementSelection(
+                staffing_person_id=manager.id,
+                vacation_year=self.YEAR,
+                week_ending=date(self.YEAR, 6, 12),
+            ),
+            "pinned_selection": StaffingVacationManagementSelection(
+                staffing_person_id=division_manager.id,
+                vacation_year=self.YEAR,
+                week_ending=date(self.YEAR, 6, 19),
+            ),
+            "other_selection": StaffingVacationManagementSelection(
+                staffing_person_id=other_manager.id,
+                vacation_year=self.YEAR,
+                week_ending=date(self.YEAR, 6, 26),
+            ),
+            "later_selection": StaffingVacationManagementSelection(
+                staffing_person_id=manager.id,
+                vacation_year=self.YEAR + 1,
+                week_ending=date(self.YEAR + 1, 6, 10),
+            ),
+            "pool_day": StaffingVacationDaySelection(
+                staffing_person_id=manager.id,
+                vacation_year=self.YEAR,
+                vacation_date=date(self.YEAR, 5, 10),
+                item_type="special_assignment",
+                status="scheduled",
+            ),
+            "pinned_day": StaffingVacationDaySelection(
+                staffing_person_id=division_manager.id,
+                vacation_year=self.YEAR,
+                vacation_date=date(self.YEAR, 5, 11),
+                item_type="corporate_class",
+                status="scheduled",
+            ),
+            "other_day": StaffingVacationDaySelection(
+                staffing_person_id=other_manager.id,
+                vacation_year=self.YEAR,
+                vacation_date=date(self.YEAR, 5, 12),
+                item_type="special_assignment",
+                status="scheduled",
+            ),
+        }
+        db.session.add_all(rows.values())
+        db.session.commit()
+        ids = {name: row.id for name, row in rows.items()}
+        select_count = 0
+
+        def count_selects(_connection, _cursor, statement, _parameters, _context, _many):
+            nonlocal select_count
+            if statement.lstrip().upper().startswith("SELECT"):
+                select_count += 1
+
+        event.listen(db.engine, "before_cursor_execute", count_selects)
+        try:
+            vacation_service.reset_management_vacation_area(
+                self.units["night"], self.YEAR, grandmaster
+            )
+            db.session.commit()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", count_selects)
+
+        self.assertIsNone(
+            db.session.get(
+                StaffingVacationManagementSelection, ids["pool_selection"]
+            )
+        )
+        self.assertIsNone(
+            db.session.get(StaffingVacationDaySelection, ids["pool_day"])
+        )
+        for name, model in (
+            ("pinned_selection", StaffingVacationManagementSelection),
+            ("other_selection", StaffingVacationManagementSelection),
+            ("later_selection", StaffingVacationManagementSelection),
+            ("pinned_day", StaffingVacationDaySelection),
+            ("other_day", StaffingVacationDaySelection),
+        ):
+            self.assertIsNotNone(db.session.get(model, ids[name]), name)
+        self.assertLessEqual(select_count, 14)
 
     def test_managers_directly_manage_division_manager_weeks_with_actor_history(self):
         division_manager, _division_user = self._management_user(

@@ -107,7 +107,7 @@ VACATION_AVAILABILITY_ITEM_TYPES = frozenset(
     {"special_assignment", "corporate_class"}
 )
 VACATION_PINNED_RECIPIENT_CLASSIFICATIONS = frozenset(
-    {"full_time_supervisor", "manager"}
+    {"full_time_supervisor", "manager", "division_manager"}
 )
 D_DAY_ENTITLEMENT = 5
 OPTIONAL_DAY_ENTITLEMENT = 4
@@ -2258,18 +2258,15 @@ def reset_management_vacation_area(area, vacation_year, user):
     )
     if not area_row:
         raise ValueError("The selected Management vacation area was not found.")
-    primary, _secondary = _primary_and_secondary_assignments(
-        _management_leadership_rows()
-    )
-    person_ids = set()
-    for person_id, assignment in primary.items():
-        assigned_area = management_area_for_assignment(
-            assignment.person,
-            hierarchy["by_id"].get(assignment.unit_id),
+    leadership_rows = _management_leadership_rows()
+    person_ids = {
+        person.id
+        for person in _management_people_for_area(
+            area_row.id,
             hierarchy,
+            leadership_rows=leadership_rows,
         )
-        if assigned_area and assigned_area.id == area_row.id:
-            person_ids.add(person_id)
+    }
     result = _reset_vacation_person_year_state(
         person_ids,
         year,
@@ -3828,7 +3825,8 @@ def _authorize_vacation_day_write(person, program, user, *, vacation_year):
 def _authorize_management_availability_write(person, user):
     if person.classification not in VACATION_PINNED_RECIPIENT_CLASSIFICATIONS:
         raise ValueError(
-            "Only an FT Supervisor or Manager may receive this availability status."
+            "Only an FT Supervisor or Manager/Division Manager may receive "
+            "this availability status."
         )
     hierarchy = vacation_hierarchy()
     actor = vacation_actor(user, hierarchy)
@@ -3837,12 +3835,16 @@ def _authorize_management_availability_write(person, user):
         raise ValueError("The selected person has no active primary Management area.")
     if actor.is_grandmaster:
         return actor
-    if not (
-        actor.person
-        and actor.person.classification
-        in {"full_time_supervisor", "manager"}
-        and can_edit_management_capacity(actor, area.id)
-    ):
+    if person.classification == "division_manager":
+        allowed = _can_manage_division_manager_vacation(actor, area.id)
+    else:
+        allowed = bool(
+            actor.person
+            and actor.person.classification
+            in {"full_time_supervisor", "manager"}
+            and can_edit_management_capacity(actor, area.id)
+        )
+    if not allowed:
         raise ValueError("You do not have authority to manage this person's availability.")
     return actor
 
