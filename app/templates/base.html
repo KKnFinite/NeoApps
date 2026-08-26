@@ -228,6 +228,9 @@
                 </nav>
                 {% endif %}
                 {% else %}
+                {% if is_neostaffing_page %}
+                <a class="neostaffing-portal-link neo-menu-text" href="{{ url_for('auth.portal_dashboard') }}">Back to NeoPortal</a>
+                {% endif %}
                 {% if is_rfd_hub_page %}
                 {% set rfd_sort_operations = gateway_active_sort_operations if gateway_active_sort_operations is defined else [] %}
                 {% if rfd_sort_operations|length > 1 %}
@@ -328,6 +331,9 @@
                 {% endif %}
             </div>
             <div class="mobile-topbar-actions">
+                {% if is_neostaffing_page %}
+                <a class="neostaffing-mobile-portal-link" href="{{ url_for('auth.portal_dashboard') }}">PORTAL</a>
+                {% endif %}
                 {% if my_alert_tray %}
                 {% include "_my_alert_tray.html" %}
                 {% endif %}

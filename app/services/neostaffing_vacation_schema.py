@@ -18,6 +18,7 @@ from app.models import (
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
     StaffingVacationQualifyingHoliday,
+    StaffingVacationHolidayRule,
 )
 
 
@@ -35,6 +36,7 @@ NEOSTAFFING_VACATION_MODELS = (
     StaffingVacationWeekConversion,
     StaffingVacationDayEntitlement,
     StaffingVacationQualifyingHoliday,
+    StaffingVacationHolidayRule,
     StaffingVacationDaySelection,
     StaffingVacationManagementTurnState,
     StaffingVacationManagementTurnResolution,
@@ -61,6 +63,28 @@ def ensure_neostaffing_vacation_tables(app):
             )
             for model in NEOSTAFFING_VACATION_MODELS:
                 model.__table__.create(bind=connection, checkfirst=True)
+            connection.execute(
+                text(
+                    "INSERT INTO staffing_vacation_holiday_rules "
+                    "(name, rule_type, month, day_of_month, weekday, occurrence, definition_key, "
+                    "created_by_user_id, updated_by_user_id, created_at, updated_at) "
+                    "SELECT DISTINCT ON (EXTRACT(MONTH FROM legacy.holiday_date), "
+                    "EXTRACT(DAY FROM legacy.holiday_date)) legacy.name, 'fixed_date', "
+                    "EXTRACT(MONTH FROM legacy.holiday_date)::INTEGER, "
+                    "EXTRACT(DAY FROM legacy.holiday_date)::INTEGER, NULL, NULL, "
+                    "'fixed_date:' || EXTRACT(MONTH FROM legacy.holiday_date)::INTEGER || ':' || "
+                    "EXTRACT(DAY FROM legacy.holiday_date)::INTEGER, "
+                    "legacy.created_by_user_id, legacy.updated_by_user_id, "
+                    "legacy.created_at, legacy.updated_at "
+                    "FROM staffing_vacation_qualifying_holidays legacy "
+                    "WHERE NOT EXISTS (SELECT 1 FROM staffing_vacation_holiday_rules rule "
+                    "WHERE rule.rule_type = 'fixed_date' "
+                    "AND rule.month = EXTRACT(MONTH FROM legacy.holiday_date)::INTEGER "
+                    "AND rule.day_of_month = EXTRACT(DAY FROM legacy.holiday_date)::INTEGER) "
+                    "ORDER BY EXTRACT(MONTH FROM legacy.holiday_date), "
+                    "EXTRACT(DAY FROM legacy.holiday_date), legacy.updated_at DESC, legacy.id DESC"
+                )
+            )
             connection.execute(
                 text(
                     "ALTER TABLE staffing_vacation_union_calendars "

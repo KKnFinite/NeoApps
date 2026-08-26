@@ -13,31 +13,40 @@
 
         <section class="neostaffing-settings-panel" aria-labelledby="floating-holidays-title">
             <header>
-                <div><h2 id="floating-holidays-title">FLOATING HOLIDAYS</h2><p>Qualifying dates award one Floating Holiday when they fall within an approved whole vacation week.</p></div>
+                <div><h2 id="floating-holidays-title">FLOATING HOLIDAYS</h2><p>Recurring rules resolve qualifying dates automatically for every vacation year.</p></div>
                 <span>{{ holidays|length }} CONFIGURED</span>
             </header>
 
             {% if can_edit_settings %}
             <form class="neostaffing-settings-add" method="post" action="{{ url_for('neostaffing.save_floating_holiday_setting') }}">
-                <label><span>Date</span><input type="date" name="holiday_date" required></label>
                 <label><span>Holiday</span><input type="text" name="name" maxlength="80" required placeholder="Holiday name"></label>
-                <button class="action-button" type="submit">ADD DATE</button>
+                <label><span>Rule</span><select name="rule_type" required><option value="fixed_date">Fixed date</option><option value="nth_weekday">Nth weekday</option><option value="last_weekday">Last weekday</option></select></label>
+                <label><span>Month</span><select name="month" required>{% for value, label in holiday_month_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                <label><span>Day</span><input type="number" name="day_of_month" min="1" max="31" value="1"></label>
+                <label><span>Weekday</span><select name="weekday">{% for value, label in holiday_weekday_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                <label><span>Occurrence</span><select name="occurrence">{% for value, label in holiday_occurrence_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+                <button class="action-button" type="submit">ADD RULE</button>
             </form>
             {% endif %}
 
-            <div class="neostaffing-settings-holidays" role="list" aria-label="Configured Floating Holiday dates">
+            <div class="neostaffing-settings-holidays" role="list" aria-label="Configured recurring Floating Holiday rules">
                 {% for holiday in holidays %}
                 <article role="listitem">
                     <form method="post" action="{{ url_for('neostaffing.save_floating_holiday_setting') }}">
                         <input type="hidden" name="holiday_id" value="{{ holiday.id }}">
-                        <label><span>Date</span><input type="date" name="holiday_date" value="{{ holiday.holiday_date.isoformat() }}" required {% if not can_edit_settings %}disabled{% endif %}></label>
                         <label><span>Holiday</span><input type="text" name="name" maxlength="80" value="{{ holiday.name }}" required {% if not can_edit_settings %}disabled{% endif %}></label>
+                        <label><span>Rule</span><select name="rule_type" required {% if not can_edit_settings %}disabled{% endif %}>{% for value, label in [('fixed_date', 'Fixed date'), ('nth_weekday', 'Nth weekday'), ('last_weekday', 'Last weekday')] %}<option value="{{ value }}" {% if holiday.rule_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                        <label><span>Month</span><select name="month" required {% if not can_edit_settings %}disabled{% endif %}>{% for value, label in holiday_month_choices %}<option value="{{ value }}" {% if holiday.month == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                        <label><span>Day</span><input type="number" name="day_of_month" min="1" max="31" value="{{ holiday.day_of_month or '' }}" {% if not can_edit_settings %}disabled{% endif %}></label>
+                        <label><span>Weekday</span><select name="weekday" {% if not can_edit_settings %}disabled{% endif %}><option value="">—</option>{% for value, label in holiday_weekday_choices %}<option value="{{ value }}" {% if holiday.weekday == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                        <label><span>Occurrence</span><select name="occurrence" {% if not can_edit_settings %}disabled{% endif %}><option value="">—</option>{% for value, label in holiday_occurrence_choices %}<option value="{{ value }}" {% if holiday.occurrence == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                        <output>{{ holiday_rule_label(holiday) }}</output>
                         {% if can_edit_settings %}<button type="submit">SAVE</button>{% endif %}
                     </form>
                     {% if can_edit_settings %}<form method="post" action="{{ url_for('neostaffing.delete_floating_holiday_setting', holiday_id=holiday.id) }}"><button class="is-danger" type="submit">REMOVE</button></form>{% endif %}
                 </article>
                 {% else %}
-                <p class="neostaffing-settings-empty">No qualifying Floating Holiday dates are configured.</p>
+                <p class="neostaffing-settings-empty">No recurring Floating Holiday rules are configured.</p>
                 {% endfor %}
             </div>
             <p class="neostaffing-settings-note">Removing or changing configuration never silently removes an already earned Floating Holiday.</p>

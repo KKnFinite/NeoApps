@@ -411,6 +411,69 @@ class StaffingVacationQualifyingHoliday(db.Model):
     updated_by_user = db.relationship("User", foreign_keys=[updated_by_user_id])
 
 
+class StaffingVacationHolidayRule(db.Model):
+    """Reusable recurring definition for Floating Holiday qualification."""
+
+    __tablename__ = "staffing_vacation_holiday_rules"
+    __table_args__ = (
+        db.CheckConstraint(
+            "rule_type IN ('fixed_date', 'nth_weekday', 'last_weekday')",
+            name="ck_staffing_vacation_holiday_rules_type",
+        ),
+        db.CheckConstraint(
+            "month >= 1 AND month <= 12",
+            name="ck_staffing_vacation_holiday_rules_month",
+        ),
+        db.CheckConstraint(
+            "day_of_month IS NULL OR (day_of_month >= 1 AND day_of_month <= 31)",
+            name="ck_staffing_vacation_holiday_rules_day",
+        ),
+        db.CheckConstraint(
+            "weekday IS NULL OR (weekday >= 0 AND weekday <= 6)",
+            name="ck_staffing_vacation_holiday_rules_weekday",
+        ),
+        db.CheckConstraint(
+            "occurrence IS NULL OR (occurrence >= 1 AND occurrence <= 5)",
+            name="ck_staffing_vacation_holiday_rules_occurrence",
+        ),
+        db.CheckConstraint(
+            "(rule_type = 'fixed_date' AND day_of_month IS NOT NULL "
+            "AND weekday IS NULL AND occurrence IS NULL) OR "
+            "(rule_type = 'nth_weekday' AND day_of_month IS NULL "
+            "AND weekday IS NOT NULL AND occurrence IS NOT NULL) OR "
+            "(rule_type = 'last_weekday' AND day_of_month IS NULL "
+            "AND weekday IS NOT NULL AND occurrence IS NULL)",
+            name="ck_staffing_vacation_holiday_rules_fields",
+        ),
+        db.Index(
+            "ix_staffing_vacation_holiday_rules_rule",
+            "rule_type", "month", "day_of_month", "weekday", "occurrence",
+        ),
+        db.UniqueConstraint(
+            "definition_key",
+            name="uq_staffing_vacation_holiday_rules_definition",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), nullable=False)
+    rule_type = db.Column(db.String(24), nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    day_of_month = db.Column(db.Integer, nullable=True)
+    weekday = db.Column(db.Integer, nullable=True)
+    occurrence = db.Column(db.Integer, nullable=True)
+    definition_key = db.Column(db.String(40), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user = db.relationship("User", foreign_keys=[updated_by_user_id])
+
+
 class StaffingVacationManagementCapacity(db.Model):
     """Whole-week Management limits for one hierarchy area and vacation year."""
 

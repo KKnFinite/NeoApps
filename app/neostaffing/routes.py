@@ -1695,6 +1695,10 @@ def settings():
         app_role=get_user_app_role(current_user, "neostaffing"),
         holidays=contract["holidays"],
         can_edit_settings=contract["can_edit"],
+        holiday_month_choices=contract["month_choices"],
+        holiday_weekday_choices=contract["weekday_choices"],
+        holiday_occurrence_choices=contract["occurrence_choices"],
+        holiday_rule_label=contract["rule_label"],
     )
 
 
@@ -1704,16 +1708,20 @@ def save_floating_holiday_setting():
     try:
         vacation_service.save_qualifying_holiday(
             request.form.get("holiday_id"),
-            request.form.get("holiday_date"),
-            request.form.get("name"),
-            current_user,
+            name=request.form.get("name"),
+            user=current_user,
+            rule_type=request.form.get("rule_type"),
+            month=request.form.get("month"),
+            day_of_month=request.form.get("day_of_month"),
+            weekday=request.form.get("weekday"),
+            occurrence=request.form.get("occurrence"),
         )
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
         flash(str(getattr(error, "orig", None) or error), "error")
     else:
-        flash("Floating Holiday date saved.", "success")
+        flash("Floating Holiday rule saved.", "success")
     return redirect(url_for("neostaffing.settings"))
 
 
@@ -1727,7 +1735,7 @@ def delete_floating_holiday_setting(holiday_id):
         db.session.rollback()
         flash(str(error), "error")
     else:
-        flash("Floating Holiday date removed; existing earned awards were preserved.", "success")
+        flash("Floating Holiday rule removed; existing earned awards were preserved.", "success")
     return redirect(url_for("neostaffing.settings"))
 
 

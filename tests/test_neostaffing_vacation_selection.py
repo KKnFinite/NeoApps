@@ -25,6 +25,7 @@ from app.models import (
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
+    StaffingVacationHolidayRule,
     StaffingVacationQualifyingHoliday,
     StaffingWorkAssignment,
     User,
@@ -76,6 +77,114 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertTrue(all(row.week_ending.weekday() == 5 for row in weeks))
         self.assertTrue(all((row.week_ending - row.start_date).days == 6 for row in weeks))
         self.assertEqual(vacation_service.vacation_selection_opens_on(2027), date(2026, 11, 1))
+
+    def test_recurring_holiday_rules_resolve_across_vacation_years(self):
+        fixed = Mock(
+            rule_type="fixed_date", month=12, day_of_month=25,
+            weekday=None, occurrence=None,
+        )
+        labor = Mock(
+            rule_type="nth_weekday", month=9, day_of_month=None,
+            weekday=0, occurrence=1,
+        )
+        thanksgiving = Mock(
+            rule_type="nth_weekday", month=11, day_of_month=None,
+            weekday=3, occurrence=4,
+        )
+        memorial = Mock(
+            rule_type="last_weekday", month=5, day_of_month=None,
+            weekday=0, occurrence=None,
+        )
+
+        self.assertEqual(
+            vacation_service.resolve_holiday_rule_date(fixed, 2027),
+            date(2027, 12, 25),
+        )
+        self.assertEqual(
+            vacation_service.resolve_holiday_rule_date(labor, 2027),
+            date(2027, 9, 6),
+        )
+        self.assertEqual(
+            vacation_service.resolve_holiday_rule_date(labor, 2028),
+            date(2028, 9, 4),
+        )
+        self.assertEqual(
+            vacation_service.resolve_holiday_rule_date(thanksgiving, 2027),
+            date(2027, 11, 25),
+        )
+        self.assertEqual(
+            vacation_service.resolve_holiday_rule_date(memorial, 2028),
+            date(2028, 5, 29),
+        )
+
+    def test_recurring_holiday_settings_add_edit_delete_and_reject_duplicate(self):
+        master = self._user("recurring_holiday_master", "master")
+        rule = vacation_service.save_qualifying_holiday(
+            None,
+            name="Labor Day",
+            user=master,
+            rule_type="nth_weekday",
+            month=9,
+            weekday=0,
+            occurrence=1,
+        )
+        self.assertEqual(vacation_service.holiday_rule_label(rule), "First Monday in September")
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "equivalent"):
+            vacation_service.save_qualifying_holiday(
+                None,
+                name="Duplicate Labor Day",
+                user=master,
+                rule_type="nth_weekday",
+                month=9,
+                weekday=0,
+                occurrence=1,
+            )
+        db.session.rollback()
+        rule = StaffingVacationHolidayRule.query.one()
+        vacation_service.save_qualifying_holiday(
+            rule,
+            name="Memorial Day",
+            user=master,
+            rule_type="last_weekday",
+            month=5,
+            weekday=0,
+        )
+        self.assertEqual(vacation_service.holiday_rule_label(rule), "Last Monday in May")
+        vacation_service.delete_qualifying_holiday(rule, master)
+        db.session.flush()
+        self.assertEqual(StaffingVacationHolidayRule.query.count(), 0)
+
+    def test_recurring_and_legacy_holiday_dates_do_not_duplicate_awards(self):
+        grandmaster = self._user("recurring_legacy_gm", "grandmaster")
+        vacation_service.save_qualifying_holiday(
+            None, date(self.YEAR, 7, 4), "Recurring Independence Day", grandmaster
+        )
+        db.session.add(
+            StaffingVacationQualifyingHoliday(
+                holiday_date=date(self.YEAR, 7, 4),
+                name="Legacy Independence Day",
+                created_by_user_id=grandmaster.id,
+                updated_by_user_id=grandmaster.id,
+            )
+        )
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        person = self._union_person(
+            "RLG1", "Recurring", "Legacy", self.units["blue_area"]
+        )
+        vacation_service.add_union_week(
+            calendar, person, self.YEAR, date(self.YEAR, 7, 10), "regular", grandmaster
+        )
+        db.session.flush()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 1)
+
+    def test_neostaffing_header_has_compact_portal_actions(self):
+        user = self._user("holiday_portal_gm", "grandmaster")
+        self._login(user)
+        page = self.client.get("/neostaffing/settings")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"Back to NeoPortal", page.data)
+        self.assertIn(b'class="neostaffing-mobile-portal-link"', page.data)
 
     def test_management_context_is_dynamic_and_primary_assignment_owns_pool(self):
         primary = self._person("M100", "Alpha", "Supervisor", "2000-01-01", "full_time_supervisor")
@@ -1728,11 +1837,34 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"FLOATING HOLIDAYS", page.data)
         self.assertIn(b"Holiday", page.data)
+        self.assertIn(b"Fixed date", page.data)
+        token = re.search(
+            r'<meta name="csrf-token" content="([^"]+)">',
+            page.get_data(as_text=True),
+        ).group(1)
         missing = self.client.post(
             "/neostaffing/settings/floating-holidays",
-            data={"holiday_date": f"{self.YEAR}-11-27", "name": "No CSRF"},
+            data={
+                "name": "No CSRF",
+                "rule_type": "fixed_date",
+                "month": "11",
+                "day_of_month": "27",
+            },
         )
         self.assertEqual(missing.status_code, 400)
+        saved = self.client.post(
+            "/neostaffing/settings/floating-holidays",
+            data={
+                "csrf_token": token,
+                "name": "Thanksgiving",
+                "rule_type": "nth_weekday",
+                "month": "11",
+                "weekday": "3",
+                "occurrence": "4",
+            },
+        )
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(StaffingVacationHolidayRule.query.count(), 1)
         with self.client.session_transaction() as session:
             session.clear()
         self._login(watcher)
@@ -1774,7 +1906,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             db.session.flush()
         finally:
             event.remove(db.engine, "before_cursor_execute", record_select)
-        self.assertLessEqual(len(selects), 4)
+        self.assertLessEqual(len(selects), 5)
         self.assertEqual(StaffingVacationDayEntitlement.query.count(), 12)
 
     def test_vacation_routes_render_separate_workspaces_and_navigation(self):
