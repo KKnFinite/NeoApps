@@ -133,11 +133,15 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         self.assertLess(sektor_route.index('"ebm": "East Ballmat"'), sektor_route.index('"wbm": "West Ballmat"'))
         self.assertIn("ATTENDANCE HERE", manage_template)
         self.assertIn("COMING TO THESE DOORS", manage_template)
+        self.assertNotIn("<small>READ ONLY</small>", manage_template)
         self.assertIn("attendance.status_choices", manage_template)
         self.assertIn("Employee</th><th>Attendance</th><th>Flow", manage_template)
         self.assertIn("neostaffing-operational-status is-readonly", manage_template)
         self.assertIn("data-operational-manage-employees", manage_template)
         self.assertIn("attendance_scope_label", ermac_route)
+        self.assertIn('title="EMPLOYEE ATTENDANCE"', ermac_route)
+        self.assertIn("theme-ermac", manage_template)
+        self.assertIn("attendance_workspace == 'ermac'", manage_template)
         self.assertIn("attendance_scope_label", sektor_route)
         self.assertIn('{"dis": "DISCHARGE", "ebm": "EBM", "wbm": "WBM"}', sektor_route)
         manage_css = base_css.split(
@@ -147,6 +151,11 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr)", manage_css)
         self.assertIn("width: 100%;", manage_css.split("body:has", 1)[0])
         self.assertNotIn("width: 100vw;", manage_css.split("body:has", 1)[0])
+        self.assertIn(".neostaffing-operational-attendance--ermac", manage_css)
+        mobile_css = manage_css.split("@media (max-width: 720px)", 1)[1]
+        self.assertIn(".neostaffing-operational-table { min-width: 0;", mobile_css)
+        self.assertNotIn("min-width: 620px", mobile_css)
+        self.assertIn("overflow-wrap: anywhere", mobile_css)
         response = self.client.get(
             f"/neostaffing/attendance?work_area_ids={self.door_one.id}",
             follow_redirects=False,

@@ -548,7 +548,7 @@ def manage_employees():
     )
     return render_template(
         "neostaffing/operational_manage_employees.html",
-        title="MANAGE EMPLOYEES",
+        title="EMPLOYEE ATTENDANCE",
         attendance=context,
         can_edit_attendance=can_edit,
         show_coming=True,

@@ -2,7 +2,7 @@
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
 <section
-    class="theme-staffing neostaffing-operational-attendance neostaffing-operational-attendance--{{ attendance_workspace }}"
+    class="{{ 'theme-ermac' if attendance_workspace == 'ermac' else 'theme-staffing' }} neostaffing-operational-attendance neostaffing-operational-attendance--{{ attendance_workspace }}"
     data-operational-manage-employees
 >
     <header class="neostaffing-operational-head">
@@ -76,7 +76,7 @@
         {% if show_coming %}
         <section class="neostaffing-operational-roster is-coming" aria-labelledby="coming-later-title">
             <header>
-                <div><h2 id="coming-later-title">COMING TO THESE DOORS</h2><small>READ ONLY</small></div>
+                <h2 id="coming-later-title">COMING TO THESE DOORS</h2>
                 <span>{{ attendance.coming|length }} employees</span>
             </header>
             <div class="neostaffing-operational-table-wrap">

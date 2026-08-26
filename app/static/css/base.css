@@ -27367,15 +27367,65 @@ body:has(.neostaffing-operational-attendance) { overflow-x: clip; }
 .neostaffing-operational-empty { color: #7f9293; font-size: .7rem; text-align: center; }
 .neostaffing-operational-empty { display: grid; place-items: center; min-height: 240px; }
 
+/* Ermac's Door View attendance integration keeps the shared roster behavior but
+   inherits Ermac's established red/green node palette. */
+.neostaffing-operational-attendance--ermac {
+    --node-primary: var(--node-ermac-primary);
+    --node-secondary: var(--node-ermac-secondary);
+    --node-highlight: var(--node-ermac-highlight);
+    --node-rgb: var(--node-ermac-primary-rgb);
+    --node-secondary-rgb: var(--node-ermac-secondary-rgb);
+    --node-highlight-rgb: var(--node-ermac-highlight-rgb);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-heading p,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-summary > strong span,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-summary > span strong,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-flow {
+    color: var(--node-ermac-highlight);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-back,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster button,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table select {
+    border-color: rgba(var(--node-ermac-secondary-rgb), .55);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster {
+    border-top-color: var(--node-ermac-secondary);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster.is-coming {
+    border-top-color: var(--node-ermac-primary);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster button {
+    background: var(--node-ermac-primary);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-back:hover,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster button:hover,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table select:hover,
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table select:focus {
+    border-color: var(--node-ermac-highlight);
+}
+
 @media (max-width: 1100px) {
     .neostaffing-operational-head { grid-template-columns: auto minmax(0, 1fr); }
     .neostaffing-operational-summary { grid-column: 1 / -1; }
     .neostaffing-operational-rosters.has-coming { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
-    .neostaffing-operational-attendance { width: 100%; margin: 0; padding: 10px; }
+    .neostaffing-operational-attendance { width: 100%; min-width: 0; margin: 0; padding: 8px; }
+    .neostaffing-operational-head { gap: 7px; }
+    .neostaffing-operational-heading p { overflow: visible; text-overflow: initial; white-space: normal; }
+    .neostaffing-operational-summary { gap: 3px 8px; }
     .neostaffing-operational-tabs { overflow-x: auto; }
-    .neostaffing-operational-table { min-width: 620px; }
+    .neostaffing-operational-table-wrap { width: 100%; overflow-x: visible; }
+    .neostaffing-operational-table { min-width: 0; table-layout: fixed; }
+    .neostaffing-operational-table th:nth-child(1) { width: 28%; }
+    .neostaffing-operational-table th:nth-child(2) { width: 38%; }
+    .neostaffing-operational-table th:nth-child(3) { width: 34%; }
+    .neostaffing-operational-table th,
+    .neostaffing-operational-table td { height: auto; min-width: 0; padding: 5px 4px; overflow-wrap: anywhere; }
+    .neostaffing-operational-table td strong { overflow: visible; text-overflow: initial; white-space: normal; }
+    .neostaffing-operational-table select { width: 100%; min-width: 0; padding-right: 18px; font-size: .68rem; }
+    .neostaffing-operational-flow { overflow-wrap: anywhere; }
+    .neostaffing-operational-status.is-readonly { max-width: 100%; height: auto; white-space: normal; }
 }
 
 /* NeoStaffing Attendance full-width operations console. */
