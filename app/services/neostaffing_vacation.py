@@ -1832,6 +1832,135 @@ def resolve_union_calendar_owner(
     return owner
 
 
+def reconcile_union_calendar_owners(vacation_year=None):
+    """Persist deterministic replacement owners in one bounded request-driven pass."""
+    hierarchy = vacation_hierarchy()
+    query = StaffingVacationUnionCalendar.query.options(
+        selectinload(StaffingVacationUnionCalendar.scopes),
+    )
+    if vacation_year is not None:
+        query = query.filter_by(vacation_year=normalize_vacation_year(vacation_year))
+    calendars = query.order_by(StaffingVacationUnionCalendar.id).all()
+    candidates = management_calendar_users(hierarchy=hierarchy) if calendars else []
+    changed = []
+    for calendar in calendars:
+        previous_owner_id = calendar.owner_user_id
+        owner = resolve_union_calendar_owner(
+            calendar,
+            persist=True,
+            candidates=candidates,
+            hierarchy=hierarchy,
+        )
+        if previous_owner_id != getattr(owner, "id", None):
+            changed.append(calendar)
+    return changed
+
+
+def official_calendar_carry_forward_candidates(user, today=None):
+    """Return owned current-year Official calendars eligible for a Nov 1 copy."""
+    today = _as_date(today or date.today())
+    if today < date(today.year, 11, 1):
+        return []
+    source_year = today.year
+    target_year = source_year + 1
+    hierarchy = vacation_hierarchy()
+    sources = (
+        StaffingVacationUnionCalendar.query.options(
+            selectinload(StaffingVacationUnionCalendar.scopes),
+        )
+        .filter_by(
+            vacation_year=source_year,
+            calendar_type="official",
+            active=True,
+        )
+        .order_by(StaffingVacationUnionCalendar.id)
+        .all()
+    )
+    targets = (
+        StaffingVacationUnionCalendar.query.options(
+            selectinload(StaffingVacationUnionCalendar.scopes),
+        )
+        .filter_by(vacation_year=target_year, calendar_type="official")
+        .order_by(StaffingVacationUnionCalendar.id)
+        .all()
+    )
+    candidates = management_calendar_users(hierarchy=hierarchy) if sources else []
+    actor = vacation_actor(user, hierarchy)
+    user_id = getattr(user, "id", None)
+    target_keys = {_official_calendar_definition_key(row) for row in targets}
+    result = []
+    for source in sources:
+        owner = resolve_union_calendar_owner(
+            source,
+            candidates=candidates,
+            hierarchy=hierarchy,
+        )
+        if not actor.is_grandmaster and getattr(owner, "id", None) != user_id:
+            continue
+        if _official_calendar_definition_key(source) in target_keys:
+            continue
+        result.append(
+            {
+                "calendar": source,
+                "owner": owner,
+                "target_year": target_year,
+                "display_name": generated_official_calendar_name(
+                    {scope.staffing_unit_id for scope in source.scopes},
+                    source.include_part_time,
+                    source.include_full_time,
+                    hierarchy,
+                ),
+                "scope_label": union_calendar_scope_label(source, hierarchy),
+            }
+        )
+    return result
+
+
+def carry_forward_official_calendar(calendar, user, today=None):
+    """Create one next-year Official definition without copying transactional state."""
+    today = _as_date(today or date.today())
+    if today < date(today.year, 11, 1):
+        raise ValueError("Official calendar carry-forward opens November 1.")
+    source = _locked_union_calendar_definition(calendar)
+    if (
+        source.calendar_type != "official"
+        or not source.active
+        or source.vacation_year != today.year
+    ):
+        raise ValueError("Choose an active current-year Official calendar.")
+    hierarchy = vacation_hierarchy()
+    owner = resolve_union_calendar_owner(source, persist=True, hierarchy=hierarchy)
+    actor = vacation_actor(user, hierarchy)
+    if not actor.is_grandmaster and getattr(owner, "id", None) != getattr(user, "id", None):
+        raise ValueError("Only the calendar owner may carry this calendar forward.")
+    target_year = today.year + 1
+    target_rows = (
+        StaffingVacationUnionCalendar.query.options(
+            selectinload(StaffingVacationUnionCalendar.scopes),
+        )
+        .filter_by(vacation_year=target_year, calendar_type="official")
+        .with_for_update()
+        .all()
+    )
+    source_key = _official_calendar_definition_key(source)
+    if any(_official_calendar_definition_key(row) == source_key for row in target_rows):
+        raise ValueError("This Official calendar was already carried forward.")
+    return create_union_calendar(
+        {
+            "vacation_year": target_year,
+            "calendar_type": "official",
+            "operation_unit_id": source.operation_unit_id,
+            "include_part_time": source.include_part_time,
+            "include_full_time": source.include_full_time,
+            "staffing_unit_ids": [
+                scope.staffing_unit_id for scope in source.scopes
+            ],
+            "active": True,
+        },
+        user,
+    )
+
+
 def management_calendar_users(*, hierarchy=None):
     """Load eligible management accounts, people, access, and authority in bounded reads."""
     hierarchy = hierarchy or vacation_hierarchy()
@@ -1910,6 +2039,180 @@ def union_calendar_admin_context(user):
             for calendar in calendars
         ]
     }
+
+
+def reset_union_vacation_calendar(calendar, vacation_year, user):
+    """Reset one Official pool/year while preserving its durable definition."""
+    year = normalize_vacation_year(vacation_year)
+    actor = vacation_actor(user)
+    if not actor.is_grandmaster:
+        raise ValueError("Grandmaster access is required to reset a calendar.")
+    row = _locked_union_calendar_definition(calendar)
+    if row.calendar_type != "official" or row.vacation_year != year:
+        raise ValueError("Choose an Official calendar for the selected year.")
+    person_ids = {person.id for person in union_calendar_members(row)}
+    return _reset_vacation_person_year_state(
+        person_ids,
+        year,
+        program="union",
+    )
+
+
+def reset_management_vacation_area(area, vacation_year, user):
+    """Reset one dynamic Management area/year to its derived fresh state."""
+    year = normalize_vacation_year(vacation_year)
+    actor = vacation_actor(user)
+    if not actor.is_grandmaster:
+        raise ValueError("Grandmaster access is required to reset a calendar.")
+    area_id = _positive_int(getattr(area, "id", area), "Management area")
+    hierarchy = vacation_hierarchy()
+    area_row = (
+        StaffingUnit.query.filter(
+            StaffingUnit.id == area_id,
+            StaffingUnit.unit_type.in_(VACATION_MANAGEMENT_AREA_TYPES),
+        )
+        .with_for_update()
+        .first()
+    )
+    if not area_row:
+        raise ValueError("The selected Management vacation area was not found.")
+    primary, _secondary = _primary_and_secondary_assignments(
+        _management_leadership_rows()
+    )
+    person_ids = set()
+    for person_id, assignment in primary.items():
+        assigned_area = management_area_for_assignment(
+            assignment.person,
+            hierarchy["by_id"].get(assignment.unit_id),
+            hierarchy,
+        )
+        if assigned_area and assigned_area.id == area_row.id:
+            person_ids.add(person_id)
+    result = _reset_vacation_person_year_state(
+        person_ids,
+        year,
+        program="management",
+    )
+    state_ids = [
+        state_id
+        for (state_id,) in db.session.query(StaffingVacationManagementTurnState.id)
+        .filter_by(vacation_year=year, area_unit_id=area_row.id)
+        .all()
+    ]
+    result["turn_resolutions"] = _bulk_delete(
+        StaffingVacationManagementTurnResolution,
+        StaffingVacationManagementTurnResolution.turn_state_id.in_(
+            state_ids or {-1}
+        ),
+    )
+    result["turn_states"] = _bulk_delete(
+        StaffingVacationManagementTurnState,
+        StaffingVacationManagementTurnState.id.in_(state_ids or {-1}),
+    )
+    result["week_overrides"] = _bulk_delete(
+        StaffingVacationManagementWeekOverride,
+        StaffingVacationManagementWeekOverride.vacation_year == year,
+        StaffingVacationManagementWeekOverride.area_unit_id == area_row.id,
+    )
+    db.session.flush()
+    return result
+
+
+def _reset_vacation_person_year_state(
+    person_ids,
+    vacation_year,
+    *,
+    program,
+):
+    """Target durable transaction rows for one resolved pool; caller owns commit."""
+    person_ids = set(person_ids)
+    ids = person_ids or {-1}
+    result = {}
+    conversion_ids = [
+        conversion_id
+        for (conversion_id,) in db.session.query(StaffingVacationWeekConversion.id)
+        .filter(
+            StaffingVacationWeekConversion.vacation_year == vacation_year,
+            StaffingVacationWeekConversion.staffing_person_id.in_(ids),
+            StaffingVacationWeekConversion.program == program,
+        )
+        .all()
+    ]
+    entitlement_ids = [
+        entitlement_id
+        for (entitlement_id,) in db.session.query(StaffingVacationDayEntitlement.id)
+        .filter(
+            StaffingVacationDayEntitlement.vacation_year == vacation_year,
+            StaffingVacationDayEntitlement.staffing_person_id.in_(ids),
+            StaffingVacationDayEntitlement.source_program == program,
+        )
+        .all()
+    ]
+    direct_item_types = (
+        {"optional_day", "anniversary_day"}
+        if program == "union"
+        else {
+            "d_day",
+            "anniversary_day",
+            "special_assignment",
+            "corporate_class",
+        }
+    )
+    result["day_selections"] = _bulk_delete(
+        StaffingVacationDaySelection,
+        StaffingVacationDaySelection.vacation_year == vacation_year,
+        StaffingVacationDaySelection.staffing_person_id.in_(ids),
+        or_(
+            StaffingVacationDaySelection.conversion_id.in_(conversion_ids or {-1}),
+            StaffingVacationDaySelection.entitlement_id.in_(entitlement_ids or {-1}),
+            StaffingVacationDaySelection.item_type.in_(direct_item_types),
+        ),
+    )
+    result["day_entitlements"] = _bulk_delete(
+        StaffingVacationDayEntitlement,
+        StaffingVacationDayEntitlement.vacation_year == vacation_year,
+        StaffingVacationDayEntitlement.staffing_person_id.in_(ids),
+        StaffingVacationDayEntitlement.source_program == program,
+    )
+    result["week_conversions"] = _bulk_delete(
+        StaffingVacationWeekConversion,
+        StaffingVacationWeekConversion.id.in_(conversion_ids or {-1}),
+    )
+    if program == "union":
+        result["union_selections"] = _bulk_delete(
+            StaffingVacationUnionSelection,
+            StaffingVacationUnionSelection.vacation_year == vacation_year,
+            StaffingVacationUnionSelection.staffing_person_id.in_(ids),
+        )
+    else:
+        selection_ids = [
+            selection_id
+            for (selection_id,) in db.session.query(
+                StaffingVacationManagementSelection.id
+            )
+            .filter(
+                StaffingVacationManagementSelection.vacation_year
+                == vacation_year,
+                StaffingVacationManagementSelection.staffing_person_id.in_(ids),
+            )
+            .all()
+        ]
+        result["change_requests"] = _bulk_delete(
+            StaffingVacationManagementChangeRequest,
+            StaffingVacationManagementChangeRequest.selection_id.in_(
+                selection_ids or {-1}
+            ),
+        )
+        result["management_selections"] = _bulk_delete(
+            StaffingVacationManagementSelection,
+            StaffingVacationManagementSelection.id.in_(selection_ids or {-1}),
+        )
+    db.session.flush()
+    return result
+
+
+def _bulk_delete(model, *criteria):
+    return model.query.filter(*criteria).delete(synchronize_session=False)
 
 
 def union_calendar_members(calendar):
@@ -3542,7 +3845,7 @@ def _available_floating_entitlements(entitlements, day_rows):
     return [row for row in entitlements if row.id not in used]
 
 
-def union_calendars_context(vacation_year, user):
+def union_calendars_context(vacation_year, user, today=None):
     year = normalize_vacation_year(vacation_year)
     hierarchy = vacation_hierarchy()
     actor = vacation_actor(user, hierarchy)
@@ -3881,6 +4184,9 @@ def union_calendars_context(vacation_year, user):
         "view_limit": VACATION_VIEW_CALENDAR_LIMIT,
         "is_grandmaster": actor.is_grandmaster,
         "can_create": bool(actor.is_grandmaster or actor.sideways_scope_ids),
+        "carry_forward_candidates": official_calendar_carry_forward_candidates(
+            user, today=today
+        ),
     }
 
 
@@ -3920,6 +4226,14 @@ def normalize_vacation_year(value):
     if year < VACATION_YEAR_MIN or year > VACATION_YEAR_MAX:
         raise ValueError("Vacation year must be valid.")
     return year
+
+
+def _as_date(value):
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    raise ValueError("Choose a valid lifecycle date.")
 
 
 def normalize_week_ending(vacation_year, value):
@@ -4325,6 +4639,15 @@ def _replace_union_scopes(calendar, scope_ids):
         calendar.scopes.append(
             StaffingVacationUnionCalendarScope(staffing_unit_id=unit_id)
         )
+
+
+def _official_calendar_definition_key(calendar):
+    return (
+        calendar.operation_unit_id,
+        bool(calendar.include_part_time),
+        bool(calendar.include_full_time),
+        frozenset(scope.staffing_unit_id for scope in calendar.scopes),
+    )
 
 
 def _locked_union_calendar_definition(calendar):

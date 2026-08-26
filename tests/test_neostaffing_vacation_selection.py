@@ -447,6 +447,239 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
             grandmaster.id,
         )
 
+    def test_november_official_carry_forward_copies_definition_only(self):
+        owner = self._union_actor(
+            "carry_owner", "simulator", "full_time_supervisor"
+        )
+        person = self._union_person(
+            "CF1", "Carry", "Employee", self.units["blue_area"]
+        )
+        source = self._calendar(owner, [self.units["blue_area"].id])
+        db.session.add(
+            StaffingVacationUnionSelection(
+                staffing_person_id=person.id,
+                vacation_year=self.YEAR,
+                week_ending=date(self.YEAR, 7, 10),
+                bank_type="regular",
+                status="approved",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(
+            vacation_service.official_calendar_carry_forward_candidates(
+                owner, today=date(self.YEAR, 10, 31)
+            ),
+            [],
+        )
+        candidates = vacation_service.official_calendar_carry_forward_candidates(
+            owner, today=date(self.YEAR, 11, 1)
+        )
+        self.assertEqual([row["calendar"].id for row in candidates], [source.id])
+        self.assertEqual(candidates[0]["target_year"], self.YEAR + 1)
+        self.assertEqual(StaffingVacationUnionCalendar.query.count(), 1)
+
+        created = vacation_service.carry_forward_official_calendar(
+            source, owner, today=date(self.YEAR, 11, 1)
+        )
+        db.session.commit()
+        self.assertEqual(created.vacation_year, self.YEAR + 1)
+        self.assertEqual(created.calendar_type, "official")
+        self.assertEqual(created.operation_unit_id, source.operation_unit_id)
+        self.assertEqual(
+            {scope.staffing_unit_id for scope in created.scopes},
+            {scope.staffing_unit_id for scope in source.scopes},
+        )
+        self.assertEqual(
+            (created.include_part_time, created.include_full_time),
+            (source.include_part_time, source.include_full_time),
+        )
+        self.assertEqual(
+            StaffingVacationUnionSelection.query.filter_by(
+                vacation_year=self.YEAR + 1
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            vacation_service.official_calendar_carry_forward_candidates(
+                owner, today=date(self.YEAR, 11, 1)
+            ),
+            [],
+        )
+        with self.assertRaisesRegex(ValueError, "already carried forward"):
+            vacation_service.carry_forward_official_calendar(
+                source, owner, today=date(self.YEAR, 11, 1)
+            )
+
+    def test_owner_reconciliation_is_bounded_and_inherited_limit_applies(self):
+        first_owner = self._union_actor(
+            "fallback_first", "simulator", "part_time_supervisor"
+        )
+        second_owner = self._union_actor(
+            "fallback_second", "simulator", "part_time_supervisor"
+        )
+        replacement = self._union_actor(
+            "fallback_receiver", "simulator", "manager"
+        )
+        calendars = []
+        for index in range(5):
+            calendars.append(
+                vacation_service.create_union_calendar(
+                    {
+                        "vacation_year": self.YEAR,
+                        "calendar_type": "view_only",
+                        "name": f"Inherited {index + 1}",
+                        "operation_unit_id": self.units["ramp"].id,
+                        "include_part_time": "1",
+                        "staffing_unit_ids": [self.units["blue_area"].id],
+                        "active": "1",
+                    },
+                    first_owner,
+                )
+            )
+        calendars.append(
+            vacation_service.create_union_calendar(
+                {
+                    "vacation_year": self.YEAR,
+                    "calendar_type": "view_only",
+                    "name": "Inherited 6",
+                    "operation_unit_id": self.units["ramp"].id,
+                    "include_part_time": "1",
+                    "staffing_unit_ids": [self.units["blue_area"].id],
+                    "active": "1",
+                },
+                second_owner,
+            )
+        )
+        first_owner.is_active = False
+        second_owner.is_active = False
+        db.session.commit()
+        selects = []
+
+        def record(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", record)
+        try:
+            changed = vacation_service.reconcile_union_calendar_owners(self.YEAR)
+            db.session.commit()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record)
+        self.assertEqual(len(changed), 6)
+        self.assertLessEqual(len(selects), 8)
+        self.assertTrue(
+            all(calendar.owner_user_id == replacement.id for calendar in calendars)
+        )
+        context = vacation_service.union_calendars_context(self.YEAR, replacement)
+        self.assertEqual(context["owned_view_count"], 6)
+        self.assertFalse(context["can_create_view"])
+
+    def test_grandmaster_union_reset_is_pool_and_year_scoped_and_rolls_back(self):
+        grandmaster = self._user("reset_union_gm", "grandmaster")
+        lower = self._user("reset_union_lower", "master")
+        person = self._union_person(
+            "UR1", "Reset", "Union", self.units["blue_area"]
+        )
+        other = self._union_person(
+            "UR2", "Other", "Union", self.units["brown_area"]
+        )
+        calendar = self._calendar(grandmaster, [self.units["blue_area"].id])
+        other_calendar = self._calendar(
+            grandmaster, [self.units["brown_area"].id], name="Other"
+        )
+        selection = StaffingVacationUnionSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 7, 10),
+            bank_type="optional",
+            status="pending",
+        )
+        other_selection = StaffingVacationUnionSelection(
+            staffing_person_id=other.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 7, 17),
+            bank_type="regular",
+            status="approved",
+        )
+        later_selection = StaffingVacationUnionSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR + 1,
+            week_ending=date(self.YEAR + 1, 7, 8),
+            bank_type="regular",
+            status="approved",
+        )
+        db.session.add_all([selection, other_selection, later_selection])
+        db.session.flush()
+        conversion = StaffingVacationWeekConversion(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            program="union",
+            source_union_selection_id=selection.id,
+        )
+        db.session.add(conversion)
+        db.session.flush()
+        db.session.add(
+            StaffingVacationDaySelection(
+                conversion_id=conversion.id,
+                staffing_person_id=person.id,
+                vacation_year=self.YEAR,
+                vacation_date=date(self.YEAR, 8, 2),
+                item_type="split_vacation",
+                status="scheduled",
+            )
+        )
+        holiday = StaffingVacationQualifyingHoliday(
+            holiday_date=date(self.YEAR, 7, 4), name="Preserved Holiday"
+        )
+        db.session.add(holiday)
+        db.session.commit()
+        selection_id = selection.id
+        other_selection_id = other_selection.id
+        later_selection_id = later_selection.id
+        calendar_id = calendar.id
+        other_calendar_id = other_calendar.id
+        holiday_id = holiday.id
+
+        with self.assertRaisesRegex(ValueError, "Grandmaster"):
+            vacation_service.reset_union_vacation_calendar(
+                calendar, self.YEAR, lower
+            )
+        db.session.rollback()
+        vacation_service.reset_union_vacation_calendar(
+            calendar, self.YEAR, grandmaster
+        )
+        db.session.rollback()
+        self.assertIsNotNone(db.session.get(StaffingVacationUnionSelection, selection_id))
+
+        reset_selects = []
+
+        def record_reset(_conn, _cursor, statement, _params, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                reset_selects.append(statement)
+
+        event.listen(db.engine, "before_cursor_execute", record_reset)
+        try:
+            vacation_service.reset_union_vacation_calendar(
+                calendar, self.YEAR, grandmaster
+            )
+            db.session.commit()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record_reset)
+        self.assertLessEqual(len(reset_selects), 12)
+        self.assertIsNone(db.session.get(StaffingVacationUnionSelection, selection_id))
+        self.assertIsNotNone(db.session.get(StaffingVacationUnionSelection, other_selection_id))
+        self.assertIsNotNone(db.session.get(StaffingVacationUnionSelection, later_selection_id))
+        self.assertIsNotNone(db.session.get(StaffingVacationUnionCalendar, calendar_id))
+        self.assertIsNotNone(db.session.get(StaffingVacationUnionCalendar, other_calendar_id))
+        self.assertIsNotNone(db.session.get(StaffingVacationQualifyingHoliday, holiday_id))
+        self.assertEqual(
+            StaffingVacationDaySelection.query.filter_by(
+                staffing_person_id=person.id, vacation_year=self.YEAR
+            ).count(),
+            0,
+        )
+
     def test_grandmaster_calendar_admin_and_context_queries_are_bounded(self):
         grandmaster = self._user("calendar_admin_gm", "grandmaster")
         owner = self._union_actor(
@@ -1085,6 +1318,60 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertIn(b"data-vacation-union-editor", editor.data)
         self.assertIn(b"SELECTING A PARENT SELECTS ALL CHILDREN", editor.data)
         self.assertIn(b'aria-current="page"', union.data)
+
+    def test_lifecycle_controls_render_and_reset_requires_csrf(self):
+        grandmaster = self._user("lifecycle_route_gm", "grandmaster")
+        person = self._union_person(
+            "LR1", "Lifecycle", "Employee", self.units["blue_area"]
+        )
+        calendar = self._calendar(
+            grandmaster, [self.units["blue_area"].id]
+        )
+        selection = StaffingVacationUnionSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 7, 10),
+            bank_type="regular",
+            status="approved",
+        )
+        db.session.add(selection)
+        db.session.commit()
+        selection_id = selection.id
+        self._login(grandmaster)
+
+        with patch.object(
+            vacation_service,
+            "official_calendar_carry_forward_candidates",
+            return_value=[
+                {
+                    "calendar": calendar,
+                    "owner": grandmaster,
+                    "target_year": self.YEAR + 1,
+                    "display_name": calendar.name,
+                    "scope_label": "Night / Ramp / Blue Outbound / Blue Ramp",
+                }
+            ],
+        ):
+            page = self.client.get(
+                f"/neostaffing/vacation-selection/union?year={self.YEAR + 1}"
+            )
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"NEXT VACATION YEAR", page.data)
+        self.assertIn(f"CREATE {self.YEAR + 1}".encode(), page.data)
+        self.assertIn(b"NOT NOW", page.data)
+        admin = self.client.get("/neostaffing/vacation-selection/union/admin")
+        self.assertEqual(admin.status_code, 200)
+        self.assertIn(b"RESET CALENDAR", admin.data)
+
+        self.app.config["CSRF_PROTECT_TESTING"] = True
+        response = self.client.post(
+            f"/neostaffing/vacation-selection/union/{calendar.id}/reset",
+            data={"vacation_year": self.YEAR},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIsNotNone(
+            db.session.get(StaffingVacationUnionSelection, selection_id)
+        )
 
     def test_route_mutations_require_csrf_and_server_authority(self):
         grandmaster = self._user("csrf_gm", "grandmaster")

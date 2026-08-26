@@ -1193,6 +1193,14 @@ def vacation_management_pass():
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_union_calendars():
     vacation_year = _vacation_year_arg()
+    try:
+        owner_changes = vacation_service.reconcile_union_calendar_owners(
+            vacation_year
+        )
+        if owner_changes:
+            db.session.commit()
+    except (ValueError, IntegrityError):
+        db.session.rollback()
     return render_template(
         "neostaffing/vacation_union.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
@@ -1201,6 +1209,27 @@ def vacation_union_calendars():
             current_user,
         ),
         vacation_years=_vacation_year_options(vacation_year),
+    )
+
+
+@bp.post("/vacation-selection/union/<int:calendar_id>/carry-forward")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_carry_forward(calendar_id):
+    try:
+        created = vacation_service.carry_forward_official_calendar(
+            calendar_id, current_user
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+        return redirect(url_for("neostaffing.vacation_union_calendars"))
+    flash(f"Created {created.name} for {created.vacation_year}.", "success")
+    return redirect(
+        url_for(
+            "neostaffing.vacation_union_calendars",
+            year=created.vacation_year,
+        )
     )
 
 
@@ -1579,6 +1608,10 @@ def vacation_union_calendar_copy(calendar_id):
 def vacation_union_calendar_admin():
     try:
         admin = vacation_service.union_calendar_admin_context(current_user)
+        owner_changes = vacation_service.reconcile_union_calendar_owners()
+        if owner_changes:
+            db.session.commit()
+            admin = vacation_service.union_calendar_admin_context(current_user)
     except ValueError as error:
         flash(str(error), "error")
         return redirect(url_for("neostaffing.vacation_union_calendars"))
@@ -1586,6 +1619,44 @@ def vacation_union_calendar_admin():
         "neostaffing/vacation_union_admin.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         admin=admin,
+    )
+
+
+@bp.post("/vacation-selection/union/<int:calendar_id>/reset")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_union_calendar_reset(calendar_id):
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.reset_union_vacation_calendar(
+            calendar_id, vacation_year, current_user
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Official Union calendar reset to its fresh-year state.", "success")
+    return redirect(url_for("neostaffing.vacation_union_calendar_admin"))
+
+
+@bp.post("/vacation-selection/management/reset")
+@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+def vacation_management_reset():
+    vacation_year = request.form.get("vacation_year")
+    try:
+        vacation_service.reset_management_vacation_area(
+            request.form.get("area_unit_id"),
+            vacation_year,
+            current_user,
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as error:
+        db.session.rollback()
+        flash(str(getattr(error, "orig", None) or error), "error")
+    else:
+        flash("Management calendar reset to its fresh-year state.", "success")
+    return redirect(
+        url_for("neostaffing.vacation_management", year=vacation_year)
     )
 
 

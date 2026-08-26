@@ -16,6 +16,7 @@ from app.models import (
     StaffingVacationManagementSelection,
     StaffingVacationManagementTurnResolution,
     StaffingVacationManagementTurnState,
+    StaffingVacationManagementWeekOverride,
     StaffingVacationWeekConversion,
     StaffingVacationDaySelection,
     StaffingVacationDayEntitlement,
@@ -1109,6 +1110,183 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_grandmaster_management_reset_restores_fresh_year_only(self):
+        person, user = self._management_user(
+            "MRESET1",
+            "Reset",
+            "Supervisor",
+            "1990-01-01",
+            "full_time_supervisor",
+        )
+        _other_person, lower = self._management_user(
+            "MRESET2",
+            "Lower",
+            "Supervisor",
+            "1991-01-01",
+            "full_time_supervisor",
+        )
+        grand_person, grandmaster = self._management_user(
+            "MRESET3",
+            "Grand",
+            "Master",
+            "1980-01-01",
+            "manager",
+            app_role="grandmaster",
+        )
+        self._capacity(self.units["ramp"], 3)
+        selection = StaffingVacationManagementSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            week_ending=date(self.YEAR, 7, 10),
+            selected_by_user_id=user.id,
+        )
+        later = StaffingVacationManagementSelection(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR + 1,
+            week_ending=date(self.YEAR + 1, 7, 8),
+            selected_by_user_id=user.id,
+        )
+        db.session.add_all([selection, later])
+        db.session.flush()
+        request = StaffingVacationManagementChangeRequest(
+            selection_id=selection.id,
+            request_type="cancel",
+            status="pending",
+            requested_by_user_id=user.id,
+        )
+        conversion = StaffingVacationWeekConversion(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            program="management",
+            source_management_selection_id=selection.id,
+            converted_by_user_id=user.id,
+        )
+        db.session.add_all([request, conversion])
+        db.session.flush()
+        entitlement = StaffingVacationDayEntitlement(
+            staffing_person_id=person.id,
+            vacation_year=self.YEAR,
+            entitlement_type="floating_holiday",
+            source_program="management",
+            source_selection_id=selection.id,
+            source_holiday_date=date(self.YEAR, 7, 4),
+            source_holiday_name="Preserved Setting",
+        )
+        db.session.add(entitlement)
+        db.session.flush()
+        db.session.add_all(
+            [
+                StaffingVacationDaySelection(
+                    conversion_id=conversion.id,
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 8, 2),
+                    item_type="split_vacation",
+                    status="scheduled",
+                ),
+                StaffingVacationDaySelection(
+                    entitlement_id=entitlement.id,
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 8, 3),
+                    item_type="floating_holiday",
+                    status="scheduled",
+                ),
+            ]
+        )
+        state = StaffingVacationManagementTurnState(
+            vacation_year=self.YEAR,
+            area_unit_id=self.units["ramp"].id,
+            current_person_id=person.id,
+        )
+        db.session.add(state)
+        db.session.flush()
+        db.session.add(
+            StaffingVacationManagementTurnResolution(
+                turn_state_id=state.id,
+                staffing_person_id=grand_person.id,
+                outcome="passed",
+                resolved_by_user_id=grandmaster.id,
+            )
+        )
+        db.session.add(
+            StaffingVacationManagementWeekOverride(
+                vacation_year=self.YEAR,
+                area_unit_id=self.units["ramp"].id,
+                week_ending=date(self.YEAR, 7, 10),
+                created_by_user_id=grandmaster.id,
+            )
+        )
+        holiday = StaffingVacationQualifyingHoliday(
+            holiday_date=date(self.YEAR, 12, 25),
+            name="Preserved Holiday",
+        )
+        db.session.add(holiday)
+        db.session.commit()
+        selection_id = selection.id
+        later_id = later.id
+        holiday_id = holiday.id
+
+        with self.assertRaisesRegex(ValueError, "Grandmaster"):
+            vacation_service.reset_management_vacation_area(
+                self.units["ramp"], self.YEAR, lower
+            )
+        db.session.rollback()
+        vacation_service.reset_management_vacation_area(
+            self.units["ramp"], self.YEAR, grandmaster
+        )
+        db.session.rollback()
+        self.assertIsNotNone(
+            db.session.get(StaffingVacationManagementSelection, selection_id)
+        )
+
+        vacation_service.reset_management_vacation_area(
+            self.units["ramp"], self.YEAR, grandmaster
+        )
+        db.session.commit()
+        self.assertIsNone(
+            db.session.get(StaffingVacationManagementSelection, selection_id)
+        )
+        self.assertIsNotNone(
+            db.session.get(StaffingVacationManagementSelection, later_id)
+        )
+        self.assertEqual(
+            StaffingVacationManagementCapacity.query.filter_by(
+                vacation_year=self.YEAR,
+                area_unit_id=self.units["ramp"].id,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            StaffingVacationManagementWeekOverride.query.filter_by(
+                vacation_year=self.YEAR,
+                area_unit_id=self.units["ramp"].id,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            StaffingVacationManagementTurnState.query.filter_by(
+                vacation_year=self.YEAR,
+                area_unit_id=self.units["ramp"].id,
+            ).count(),
+            0,
+        )
+        self.assertEqual(StaffingVacationManagementChangeRequest.query.count(), 0)
+        self.assertEqual(
+            StaffingVacationDaySelection.query.filter_by(
+                staffing_person_id=person.id, vacation_year=self.YEAR
+            ).count(),
+            0,
+        )
+        self.assertIsNotNone(db.session.get(StaffingVacationQualifyingHoliday, holiday_id))
+        context = vacation_service.management_vacation_context(
+            self.YEAR, grandmaster, today=self.OPEN_DAY
+        )
+        area = self._area_row(context, self.units["ramp"])
+        self.assertFalse(area["turn"].completed)
+        self.assertEqual(area["turn"].resolved_person_ids, frozenset())
+        self.assertNotIn(date(self.YEAR, 7, 10), area["off_week_endings"])
 
     def _management_user(
         self,

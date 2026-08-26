@@ -28795,6 +28795,15 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 @media (max-width:800px) { .neostaffing-vacation-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-vacation-console > .neostaffing-rail { display:none; } .neostaffing-vacation-workspace { overflow:visible; } .neostaffing-vacation-entry-grid,.neostaffing-vacation-foundation,.neostaffing-vacation-management-row,.neostaffing-vacation-union-editor { grid-template-columns:1fr; } .neostaffing-vacation-management-config,.neostaffing-vacation-editor-help { grid-column:auto; } .neostaffing-vacation-capacity-form,.neostaffing-vacation-week-form,.neostaffing-vacation-header { flex-wrap:wrap; } .neostaffing-vacation-roster { overflow-x:auto; } .neostaffing-vacation-roster-head,.neostaffing-vacation-roster-row { min-width:720px; } .neostaffing-vacation-management-footer { grid-template-columns:1fr; } }
 .neostaffing-vacation-calendar-warning { margin:7px 0 0; padding:6px 8px; border-left:3px solid #cc9b53; background:#231e15; color:#e5c899; font-size:.62rem; }
 .neostaffing-vacation-calendar-sections { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:7px 0; }
+.neostaffing-vacation-carry-forward { margin:7px 0; border:1px solid #286267; background:#0a2025; }
+.neostaffing-vacation-carry-forward > header,.neostaffing-vacation-carry-forward article { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 8px; }
+.neostaffing-vacation-carry-forward > header { border-bottom:1px solid #21474d; color:#79d1cb; font-size:.59rem; }
+.neostaffing-vacation-carry-forward article + article { border-top:1px solid #18383e; }
+.neostaffing-vacation-carry-forward article div { display:grid; min-width:0; gap:2px; }
+.neostaffing-vacation-carry-forward article strong { color:#dcebec; font-size:.66rem; }
+.neostaffing-vacation-carry-forward article span { overflow:hidden; color:#78999d; font-size:.55rem; text-overflow:ellipsis; white-space:nowrap; }
+.neostaffing-vacation-carry-forward form,.neostaffing-vacation-admin-table td form { display:inline-flex; gap:4px; margin-left:5px; }
+.neostaffing-vacation-carry-forward button,.neostaffing-vacation-admin-table button { padding:4px 6px; border:1px solid #2b6668; background:#12383c; color:#9bded9; font-size:.54rem; font-weight:900; cursor:pointer; }
 .neostaffing-vacation-calendar-sections > section { min-width:0; border:1px solid #1d4148; background:#091a20; }
 .neostaffing-vacation-calendar-sections > section > header,.neostaffing-vacation-sharing > header,.neostaffing-vacation-view-roster > header { display:flex; justify-content:space-between; gap:8px; padding:6px 8px; border-bottom:1px solid #1d4148; background:#0d242a; color:#79d1cb; font-size:.59rem; }
 .neostaffing-vacation-calendar-sections > section > div { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:5px; padding:6px; }
