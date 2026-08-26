@@ -804,6 +804,19 @@ def _inject_csp_nonce(response, nonce):
 def register_pwa_assets(app):
     manifest_definitions = _pwa_manifest_definitions()
 
+    @app.after_request
+    def cache_current_versioned_static_assets(response):
+        if (
+            request.endpoint == "static"
+            and response.status_code == 200
+            and request.args.get("v")
+            == str(app.config.get("STATIC_ASSET_VERSION") or "")
+        ):
+            response.headers["Cache-Control"] = (
+                "public, max-age=31536000, immutable"
+            )
+        return response
+
     def send_pwa_image(filename):
         response = send_from_directory(
             app.static_folder,
@@ -841,6 +854,13 @@ def register_pwa_assets(app):
             "service-worker.js",
             mimetype="application/javascript",
             max_age=0,
+        )
+        response.direct_passthrough = False
+        response.set_data(
+            response.get_data(as_text=True).replace(
+                "__STATIC_ASSET_VERSION__",
+                json.dumps(str(app.config["STATIC_ASSET_VERSION"])),
+            )
         )
         response.headers["Cache-Control"] = "no-cache"
         response.headers["Service-Worker-Allowed"] = "/"

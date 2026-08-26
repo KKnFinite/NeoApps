@@ -489,8 +489,20 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         service_worker = response.get_data(as_text=True)
         self.assertIn("CACHE_NAME", service_worker)
         self.assertIn('CACHE_PREFIX = "neogateway-"', service_worker)
-        self.assertIn("neogateway-static-v20260623-3", service_worker)
-        self.assertIn("/static/css/base.css?v=20260623-3", service_worker)
+        configured_version = self.app.config["STATIC_ASSET_VERSION"]
+        self.assertIn(
+            f'const STATIC_ASSET_VERSION = "{configured_version}";',
+            service_worker,
+        )
+        self.assertIn(
+            "const CACHE_NAME = `neogateway-static-v${STATIC_ASSET_VERSION}`;",
+            service_worker,
+        )
+        self.assertIn(
+            "`/static/css/base.css?v=${STATIC_ASSET_VERSION}`",
+            service_worker,
+        )
+        self.assertNotIn("__STATIC_ASSET_VERSION__", service_worker)
         self.assertIn('request.mode === "navigate"', service_worker)
         self.assertIn('event.respondWith(fetch(request, { cache: "no-store" }));', service_worker)
         self.assertIn("caches.delete(cacheName)", service_worker)
@@ -504,6 +516,55 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("/static/images/neogateway_logo3_large.png", service_worker)
         self.assertNotIn("NeoRFD", service_worker)
         self.assertNotIn("neorfd", service_worker.lower())
+
+    def test_current_versioned_static_asset_has_immutable_cache_control(self):
+        version = self.app.config["STATIC_ASSET_VERSION"]
+
+        response = self.client.get(f"/static/css/base.css?v={version}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["Cache-Control"],
+            "public, max-age=31536000, immutable",
+        )
+
+    def test_unversioned_and_old_static_assets_are_not_immutable(self):
+        for path in (
+            "/static/css/base.css",
+            "/static/css/base.css?v=old-version",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn("immutable", response.headers.get("Cache-Control", ""))
+
+    def test_service_worker_uses_custom_configured_static_asset_version(self):
+        self.app.config["STATIC_ASSET_VERSION"] = "custom-test-version"
+
+        response = self.client.get("/service-worker.js")
+        service_worker = response.get_data(as_text=True)
+
+        self.assertIn(
+            'const STATIC_ASSET_VERSION = "custom-test-version";',
+            service_worker,
+        )
+        self.assertIn("no-cache", response.headers["Cache-Control"])
+        self.assertEqual(response.headers["Service-Worker-Allowed"], "/")
+
+    def test_version_query_does_not_change_pwa_route_cache_behavior(self):
+        version = self.app.config["STATIC_ASSET_VERSION"]
+
+        for path in (
+            "/manifest/neoapps.webmanifest",
+            "/service-worker.js",
+            "/favicon.ico",
+            "/apple-touch-icon.png",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(f"{path}?v={version}")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("no-cache", response.headers["Cache-Control"])
+                self.assertNotIn("immutable", response.headers["Cache-Control"])
 
     def test_security_headers_are_applied(self):
         response = self.client.get("/login")
