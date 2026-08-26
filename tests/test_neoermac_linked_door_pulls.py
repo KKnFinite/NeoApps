@@ -240,6 +240,20 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         self.assertIn("window.localStorage.getItem(scopeStorageKey)", template)
         self.assertIn("Browser storage is optional; THIS DOOR remains the safe fallback.", template)
 
+    def test_scope_control_uses_visible_ermac_selected_and_unselected_states(self):
+        css = Path("app/static/css/base.css").read_text()
+        scope_css = css.split(".neoermac-pull-scope {", 1)[1].split(
+            ".neoermac-door-selector > label", 1
+        )[0]
+
+        self.assertIn("background: var(--node-ermac-primary);", scope_css)
+        self.assertIn("color: var(--node-ermac-highlight);", scope_css)
+        self.assertIn('button[aria-pressed="true"]', scope_css)
+        self.assertIn("color: #fff;", scope_css)
+        self.assertIn("button:focus-visible", scope_css)
+        self.assertNotIn("--node-ermac-accent", scope_css)
+        self.assertNotIn("--node-ermac-panel", scope_css)
+
     def test_inactive_tab_is_green_during_pull_now_period(self):
         self._supervise("D1", "D4")
         self._set_planned_pulls(time(23, 0), time(23, 30))
