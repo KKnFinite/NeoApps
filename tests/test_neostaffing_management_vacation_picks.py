@@ -1,6 +1,7 @@
 from datetime import date, datetime
 import re
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import event
 
@@ -735,6 +736,215 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         )
         db.session.commit()
         self.assertEqual(direct_source.week_ending, destination)
+
+    def test_management_moves_reject_destination_day_entries_and_keep_source(self):
+        person, person_user = self._management_user(
+            "MVC15", "Day", "Conflict", "2000-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVC16", "Move", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 3)
+        direct_source = self._selection(person, date(self.YEAR, 2, 6))
+        requested_source = self._selection(person, date(self.YEAR, 2, 13))
+        direct_destination = date(self.YEAR, 3, 6)
+        request_destination = date(self.YEAR, 3, 13)
+        db.session.add_all(
+            [
+                StaffingVacationDaySelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 3, 2),
+                    item_type="d_day",
+                    status="scheduled",
+                ),
+                StaffingVacationDaySelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    vacation_date=date(self.YEAR, 3, 9),
+                    item_type="special_assignment",
+                    status="scheduled",
+                ),
+            ]
+        )
+        db.session.commit()
+
+        with self.assertRaisesRegex(ValueError, "day-level vacation"):
+            vacation_service.move_management_selection(
+                direct_source,
+                direct_destination,
+                admin_user,
+                today=self.OPEN_DAY,
+            )
+        db.session.rollback()
+        direct_source = db.session.get(
+            StaffingVacationManagementSelection, direct_source.id
+        )
+        self.assertEqual(direct_source.week_ending, date(self.YEAR, 2, 6))
+
+        request_row = vacation_service.request_management_selection_change(
+            requested_source,
+            "move",
+            person_user,
+            requested_week_ending=request_destination,
+            today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "day-level vacation"):
+            vacation_service.review_management_selection_change_request(
+                request_row,
+                "approve",
+                admin_user,
+                today=self.OPEN_DAY,
+            )
+        db.session.rollback()
+        request_row = db.session.get(
+            StaffingVacationManagementChangeRequest, request_row.id
+        )
+        requested_source = db.session.get(
+            StaffingVacationManagementSelection, requested_source.id
+        )
+        self.assertEqual(request_row.status, "pending")
+        self.assertEqual(requested_source.week_ending, date(self.YEAR, 2, 13))
+
+    def test_floating_holidays_reconcile_on_move_without_duplicates(self):
+        person, _person_user = self._management_user(
+            "MVF2", "Holiday", "Mover", "2000-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVF3", "Holiday", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 3)
+        source_week = date(self.YEAR, 7, 10)
+        destination_week = date(self.YEAR, 8, 7)
+        db.session.add_all(
+            [
+                StaffingVacationQualifyingHoliday(
+                    holiday_date=date(self.YEAR, 7, 4), name="Source Holiday"
+                ),
+                StaffingVacationQualifyingHoliday(
+                    holiday_date=date(self.YEAR, 8, 2), name="Destination Holiday"
+                ),
+            ]
+        )
+        selection = self._selection(person, source_week)
+        db.session.commit()
+        vacation_service.award_floating_holidays_for_selection(
+            selection, "management"
+        )
+        db.session.commit()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 1)
+
+        vacation_service.move_management_selection(
+            selection, destination_week, admin_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        awards = StaffingVacationDayEntitlement.query.all()
+        self.assertEqual(len(awards), 1)
+        self.assertEqual(awards[0].source_selection_id, selection.id)
+        self.assertEqual(awards[0].source_holiday_date, date(self.YEAR, 8, 2))
+        self.assertNotEqual(
+            awards[0].source_holiday_date,
+            date(self.YEAR, 7, 4),
+        )
+
+        vacation_service.move_management_selection(
+            selection, date(self.YEAR, 8, 14), admin_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 0)
+
+    def test_cancellation_revokes_unused_award_but_preserves_consumed_award(self):
+        unused_person, _unused_user = self._management_user(
+            "MVF4", "Unused", "Award", "2000-01-01", "full_time_supervisor"
+        )
+        used_person, _used_user = self._management_user(
+            "MVF5", "Consumed", "Award", "2001-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVF6", "Cancel", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 3)
+        db.session.add(
+            StaffingVacationQualifyingHoliday(
+                holiday_date=date(self.YEAR, 7, 4), name="Configured Holiday"
+            )
+        )
+        unused = self._selection(unused_person, date(self.YEAR, 7, 10))
+        used = self._selection(used_person, date(self.YEAR, 7, 10))
+        db.session.commit()
+        vacation_service.award_floating_holidays_for_selection(unused, "management")
+        vacation_service.award_floating_holidays_for_selection(used, "management")
+        db.session.flush()
+        used_award = StaffingVacationDayEntitlement.query.filter_by(
+            staffing_person_id=used_person.id
+        ).one()
+        db.session.add(
+            StaffingVacationDaySelection(
+                entitlement_id=used_award.id,
+                staffing_person_id=used_person.id,
+                vacation_year=self.YEAR,
+                vacation_date=date(self.YEAR, 9, 1),
+                item_type="floating_holiday",
+                status="scheduled",
+            )
+        )
+        db.session.commit()
+
+        vacation_service.cancel_management_selection(
+            unused, admin_user, today=self.OPEN_DAY
+        )
+        vacation_service.cancel_management_selection(
+            used, admin_user, today=self.OPEN_DAY
+        )
+        db.session.commit()
+        remaining = StaffingVacationDayEntitlement.query.all()
+        self.assertEqual([row.id for row in remaining], [used_award.id])
+
+    def test_floating_holiday_move_reconciliation_rolls_back_atomically(self):
+        person, _person_user = self._management_user(
+            "MVF7", "Atomic", "Holiday", "2000-01-01", "full_time_supervisor"
+        )
+        _admin, admin_user = self._management_user(
+            "MVF8", "Atomic", "Admin", "1990-01-01", "full_time_supervisor"
+        )
+        self._capacity(self.units["ramp"], 3)
+        source_week = date(self.YEAR, 7, 10)
+        destination_week = date(self.YEAR, 8, 7)
+        db.session.add_all(
+            [
+                StaffingVacationQualifyingHoliday(
+                    holiday_date=date(self.YEAR, 7, 4), name="Source Holiday"
+                ),
+                StaffingVacationQualifyingHoliday(
+                    holiday_date=date(self.YEAR, 8, 2), name="Destination Holiday"
+                ),
+            ]
+        )
+        selection = self._selection(person, source_week)
+        db.session.commit()
+        vacation_service.award_floating_holidays_for_selection(
+            selection, "management"
+        )
+        db.session.commit()
+        old_award_id = StaffingVacationDayEntitlement.query.one().id
+
+        with patch.object(
+            vacation_service,
+            "_award_floating_entitlements",
+            side_effect=RuntimeError("simulated award failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "simulated award failure"):
+                vacation_service.move_management_selection(
+                    selection,
+                    destination_week,
+                    admin_user,
+                    today=self.OPEN_DAY,
+                )
+        db.session.rollback()
+        selection = db.session.get(StaffingVacationManagementSelection, selection.id)
+        self.assertEqual(selection.week_ending, source_week)
+        self.assertEqual(StaffingVacationDayEntitlement.query.one().id, old_award_id)
 
     def test_approved_cancel_and_direct_actions_restore_bank(self):
         person, person_user = self._management_user(

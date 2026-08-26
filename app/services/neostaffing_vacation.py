@@ -1398,6 +1398,8 @@ def reconcile_management_person_state(person, user=None, *, today=None):
             row.cancellation_reason = "left_management"
             row.updated_at = now
     db.session.flush()
+    if cancelled:
+        _reconcile_selection_floating_holidays(cancelled, "management")
     return {"advanced_turns": len(states), "cancelled_future_picks": len(cancelled)}
 
 
@@ -2525,6 +2527,8 @@ def split_management_week(
     )
     db.session.add(conversion)
     db.session.flush()
+    if source:
+        _reconcile_selection_floating_holidays([source], "management")
     return conversion
 
 
@@ -2597,6 +2601,8 @@ def split_union_optional_week(
     )
     db.session.add(conversion)
     db.session.flush()
+    if source:
+        _reconcile_selection_floating_holidays([source], "union")
     return conversion
 
 
@@ -2730,6 +2736,102 @@ def _award_configured_floating_holidays(selections, program):
         selections,
         program,
         [(holiday.holiday_date, holiday.name) for holiday in holidays],
+    )
+
+
+def _reconcile_selection_floating_holidays(selections, program):
+    """Reconcile durable Floating Holidays after whole-week state changes.
+
+    An award remains durable once it has been consumed by a scheduled day. An
+    unused award is removed when its source selection is no longer active or
+    its qualifying date is no longer inside the source week. Cancelled day
+    history is retained, but detached from an award that is no longer valid.
+    """
+    selections = list(selections)
+    if not selections:
+        return []
+    program = str(program or "").strip().casefold()
+    if program not in {"management", "union"}:
+        raise ValueError("Choose a valid vacation program.")
+    selection_ids = {row.id for row in selections}
+    entitlements = (
+        StaffingVacationDayEntitlement.query.filter(
+            StaffingVacationDayEntitlement.entitlement_type == "floating_holiday",
+            StaffingVacationDayEntitlement.source_program == program,
+            StaffingVacationDayEntitlement.source_selection_id.in_(selection_ids),
+        )
+        .with_for_update()
+        .all()
+    )
+    active_selections = [
+        row
+        for row in selections
+        if (
+            row.cancelled_at is None
+            if program == "management"
+            else row.status == "approved"
+        )
+    ]
+    holiday_values = []
+    valid_sources = set()
+    if active_selections:
+        first_day = min(
+            row.week_ending - timedelta(days=6) for row in active_selections
+        )
+        last_day = max(row.week_ending for row in active_selections)
+        holidays = StaffingVacationQualifyingHoliday.query.filter(
+            StaffingVacationQualifyingHoliday.holiday_date.between(
+                first_day, last_day
+            )
+        ).order_by(
+            StaffingVacationQualifyingHoliday.holiday_date,
+            StaffingVacationQualifyingHoliday.id,
+        ).all()
+        holiday_values = [
+            (holiday.holiday_date, holiday.name) for holiday in holidays
+        ]
+        valid_sources = {
+            (selection.id, holiday_day)
+            for selection in active_selections
+            for holiday_day, _holiday_name in holiday_values
+            if selection.week_ending - timedelta(days=6)
+            <= holiday_day
+            <= selection.week_ending
+        }
+
+    invalid = [
+        row
+        for row in entitlements
+        if (row.source_selection_id, row.source_holiday_date) not in valid_sources
+    ]
+    invalid_ids = {row.id for row in invalid}
+    if invalid_ids:
+        consumed_ids = {
+            entitlement_id
+            for (entitlement_id,) in db.session.query(
+                StaffingVacationDaySelection.entitlement_id
+            ).filter(
+                StaffingVacationDaySelection.entitlement_id.in_(invalid_ids),
+                StaffingVacationDaySelection.status == "scheduled",
+            ).all()
+        }
+        revocable_ids = invalid_ids - consumed_ids
+        if revocable_ids:
+            StaffingVacationDaySelection.query.filter(
+                StaffingVacationDaySelection.entitlement_id.in_(revocable_ids),
+                StaffingVacationDaySelection.status == "cancelled",
+            ).update(
+                {StaffingVacationDaySelection.entitlement_id: None},
+                synchronize_session=False,
+            )
+            for entitlement in invalid:
+                if entitlement.id in revocable_ids:
+                    db.session.delete(entitlement)
+    db.session.flush()
+    return _award_floating_entitlements(
+        active_selections,
+        program,
+        holiday_values,
     )
 
 
@@ -3025,6 +3127,24 @@ def cancel_vacation_entitlement_day(day_selection, user, *, today=None):
     row.cancelled_at = now
     row.updated_at = now
     db.session.flush()
+    if row.entitlement_id:
+        entitlement = StaffingVacationDayEntitlement.query.filter_by(
+            id=row.entitlement_id,
+            entitlement_type="floating_holiday",
+        ).first()
+        if entitlement:
+            selection_model = (
+                StaffingVacationManagementSelection
+                if entitlement.source_program == "management"
+                else StaffingVacationUnionSelection
+            )
+            source = selection_model.query.filter_by(
+                id=entitlement.source_selection_id
+            ).first()
+            if source:
+                _reconcile_selection_floating_holidays(
+                    [source], entitlement.source_program
+                )
     return row
 
 
@@ -3253,7 +3373,10 @@ def move_union_selection(
         row.updated_at = now
         result = row
     db.session.flush()
-    _award_configured_floating_holidays([result], "union")
+    _reconcile_selection_floating_holidays(
+        [row] if result is row else [row, result],
+        "union",
+    )
     return result
 
 
@@ -3301,6 +3424,7 @@ def cancel_union_selection(selection, user, *, correction=False, today=None):
     row.cancelled_at = now
     row.updated_at = now
     db.session.flush()
+    _reconcile_selection_floating_holidays([row], "union")
     return row
 
 
@@ -3836,6 +3960,7 @@ def _move_management_selection_row(
         destination,
         exclude_selection_id=selection.id,
     )
+    _ensure_weeks_have_no_split_days(person.id, [destination])
     if person.classification != "division_manager":
         _validate_management_move_capacity(
             person,
@@ -3874,7 +3999,10 @@ def _move_management_selection_row(
         selection.updated_at = now
         result = selection
     db.session.flush()
-    _award_configured_floating_holidays([result], "management")
+    _reconcile_selection_floating_holidays(
+        [selection] if result is selection else [selection, result],
+        "management",
+    )
     return result
 
 
@@ -3883,6 +4011,8 @@ def _cancel_management_selection_row(selection, user, now, *, reason):
     selection.cancelled_by_user_id = getattr(user, "id", None)
     selection.cancellation_reason = reason
     selection.updated_at = now
+    db.session.flush()
+    _reconcile_selection_floating_holidays([selection], "management")
 
 
 def _resolve_management_change_request(row, status, user, now):
@@ -3985,7 +4115,9 @@ def _ensure_weeks_have_no_split_days(person_id, week_endings):
         StaffingVacationDaySelection.status == "scheduled",
         or_(*ranges),
     ).first():
-        raise ValueError("A split vacation day already exists within the selected week.")
+        raise ValueError(
+            "A day-level vacation or availability entry already exists within the selected week."
+        )
 
 
 def _union_actor_entry_status(actor, calendar):
