@@ -178,6 +178,93 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         db.session.flush()
         self.assertEqual(StaffingVacationDayEntitlement.query.count(), 1)
 
+    def test_recurring_rule_mutations_reconcile_only_exact_affected_weeks(self):
+        grandmaster = self._user("bounded_rule_gm", "grandmaster")
+        person = self._union_person(
+            "BRH1", "Bounded", "Holiday", self.units["blue_area"]
+        )
+        old_week = date(self.YEAR, 7, 10)
+        new_week = date(self.YEAR, 9, 11)
+        unrelated_historical_week = date(2005, 2, 5)
+        db.session.add_all(
+            [
+                StaffingVacationUnionSelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    week_ending=old_week,
+                    bank_type="regular",
+                    status="approved",
+                    entered_by_user_id=grandmaster.id,
+                ),
+                StaffingVacationUnionSelection(
+                    staffing_person_id=person.id,
+                    vacation_year=self.YEAR,
+                    week_ending=new_week,
+                    bank_type="optional",
+                    status="approved",
+                    entered_by_user_id=grandmaster.id,
+                ),
+                StaffingVacationUnionSelection(
+                    staffing_person_id=person.id,
+                    vacation_year=2005,
+                    week_ending=unrelated_historical_week,
+                    bank_type="regular",
+                    status="approved",
+                    entered_by_user_id=grandmaster.id,
+                ),
+            ]
+        )
+        db.session.commit()
+        selects = []
+
+        def record_select(_conn, _cursor, statement, parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects.append((statement, parameters))
+
+        event.listen(db.engine, "before_cursor_execute", record_select)
+        try:
+            rule = vacation_service.save_qualifying_holiday(
+                None,
+                name="Independence Day",
+                user=grandmaster,
+                rule_type="fixed_date",
+                month=7,
+                day_of_month=4,
+            )
+            db.session.flush()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", record_select)
+
+        selection_reads = [
+            statement
+            for statement, _parameters in selects
+            if "staffing_vacation_union_selections" in statement
+            and "staffing_vacation_union_selections.id" in statement
+        ]
+        self.assertTrue(selection_reads)
+        self.assertTrue(all("week_ending IN" in statement for statement in selection_reads))
+        self.assertLessEqual(len(selects), 14)
+        award = StaffingVacationDayEntitlement.query.one()
+        self.assertEqual(award.source_holiday_date, date(self.YEAR, 7, 4))
+
+        vacation_service.save_qualifying_holiday(
+            rule,
+            name="Labor Day",
+            user=grandmaster,
+            rule_type="nth_weekday",
+            month=9,
+            weekday=0,
+            occurrence=1,
+        )
+        db.session.flush()
+        awards = StaffingVacationDayEntitlement.query.all()
+        self.assertEqual(len(awards), 1)
+        self.assertEqual(awards[0].source_holiday_date, date(self.YEAR, 9, 6))
+
+        vacation_service.delete_qualifying_holiday(rule, grandmaster)
+        db.session.flush()
+        self.assertEqual(StaffingVacationDayEntitlement.query.count(), 0)
+
     def test_neostaffing_header_has_compact_portal_actions(self):
         user = self._user("holiday_portal_gm", "grandmaster")
         self._login(user)

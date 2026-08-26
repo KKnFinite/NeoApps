@@ -2993,6 +2993,78 @@ def _delete_matching_legacy_holiday_dates(rule_type, month, day_of_month):
             db.session.delete(legacy)
 
 
+@dataclass(frozen=True)
+class _HolidayRuleDefinition:
+    rule_type: str
+    month: int
+    day_of_month: int | None
+    weekday: int | None
+    occurrence: int | None
+
+
+def _floating_holiday_reconciliation_years():
+    """Return only years with active source weeks or durable awards."""
+    years = {
+        year
+        for (year,) in StaffingVacationManagementSelection.query.with_entities(
+            StaffingVacationManagementSelection.vacation_year
+        ).filter(
+            StaffingVacationManagementSelection.cancelled_at.is_(None)
+        ).distinct().all()
+    }
+    years.update(
+        year
+        for (year,) in StaffingVacationUnionSelection.query.with_entities(
+            StaffingVacationUnionSelection.vacation_year
+        ).filter(
+            StaffingVacationUnionSelection.status == "approved"
+        ).distinct().all()
+    )
+    years.update(
+        year
+        for (year,) in StaffingVacationDayEntitlement.query.with_entities(
+            StaffingVacationDayEntitlement.vacation_year
+        ).filter(
+            StaffingVacationDayEntitlement.entitlement_type == "floating_holiday"
+        ).distinct().all()
+    )
+    return sorted(years)
+
+
+def _holiday_rule_dates(definition, vacation_years):
+    return {
+        holiday_day
+        for vacation_year in vacation_years
+        if (holiday_day := resolve_holiday_rule_date(definition, vacation_year))
+    }
+
+
+def _configured_holiday_values_for_dates(holiday_dates):
+    """Resolve names for an exact bounded set of dates."""
+    dates = set(holiday_dates)
+    if not dates:
+        return []
+    rules = StaffingVacationHolidayRule.query.order_by(
+        StaffingVacationHolidayRule.id
+    ).all()
+    values = {}
+    years = {holiday_day.year for holiday_day in dates}
+    for rule in rules:
+        for vacation_year in years:
+            holiday_day = resolve_holiday_rule_date(rule, vacation_year)
+            if holiday_day in dates:
+                values.setdefault(holiday_day, rule.name)
+    legacy = StaffingVacationQualifyingHoliday.query.filter(
+        StaffingVacationQualifyingHoliday.holiday_date.in_(dates)
+    ).order_by(
+        StaffingVacationQualifyingHoliday.holiday_date,
+        StaffingVacationQualifyingHoliday.id,
+    ).all()
+    for holiday in legacy:
+        values.setdefault(holiday.holiday_date, holiday.name)
+    return sorted(values.items())
+
+
 def qualifying_holiday_settings(user):
     """Return the compact Settings contract and authorization state."""
     return {
@@ -3097,7 +3169,6 @@ def save_qualifying_holiday(
         raise ValueError("Holiday name must be 80 characters or fewer.")
     holiday_id = getattr(holiday, "id", holiday)
     row = None
-    matching_awards = []
     old_definition = None
     if holiday_id:
         row = StaffingVacationHolidayRule.query.filter_by(
@@ -3112,14 +3183,18 @@ def save_qualifying_holiday(
             row.weekday,
             row.occurrence,
         )
-        matching_awards = [
-            award
-            for award in StaffingVacationDayEntitlement.query.filter_by(
-                entitlement_type="floating_holiday"
-            ).all()
-            if award.source_holiday_date
-            == resolve_holiday_rule_date(row, award.source_holiday_date.year)
-        ]
+    vacation_years = _floating_holiday_reconciliation_years()
+    old_rule = _HolidayRuleDefinition(*old_definition) if old_definition else None
+    new_rule = _HolidayRuleDefinition(
+        normalized_rule,
+        normalized_month,
+        normalized_day,
+        normalized_weekday,
+        normalized_occurrence,
+    )
+    affected_dates = _holiday_rule_dates(new_rule, vacation_years)
+    if old_rule:
+        affected_dates.update(_holiday_rule_dates(old_rule, vacation_years))
     definition_key = _holiday_rule_key(
         normalized_rule,
         normalized_month,
@@ -3158,12 +3233,7 @@ def save_qualifying_holiday(
         normalized_occurrence,
     ):
         _delete_matching_legacy_holiday_dates(*old_definition[:3])
-    for award in matching_awards:
-        if award.source_holiday_date == resolve_holiday_rule_date(
-            row, award.source_holiday_date.year
-        ):
-            award.source_holiday_name = normalized_name
-    reconcile_floating_holiday_entitlements()
+    reconcile_floating_holiday_entitlements(affected_dates)
     return row
 
 
@@ -3177,16 +3247,53 @@ def delete_qualifying_holiday(holiday, user):
     ).with_for_update().first()
     if not row:
         raise ValueError("The qualifying holiday was not found.")
+    vacation_years = _floating_holiday_reconciliation_years()
+    affected_dates = _holiday_rule_dates(
+        _HolidayRuleDefinition(
+            row.rule_type,
+            row.month,
+            row.day_of_month,
+            row.weekday,
+            row.occurrence,
+        ),
+        vacation_years,
+    )
     _delete_matching_legacy_holiday_dates(
         row.rule_type, row.month, row.day_of_month
     )
     db.session.delete(row)
     db.session.flush()
+    reconcile_floating_holiday_entitlements(affected_dates)
     return row
 
 
 def reconcile_floating_holiday_entitlements(holiday_dates=None):
     """Bounded reconciliation of configured dates against approved whole weeks."""
+    if holiday_dates is not None:
+        normalized = {
+            value if isinstance(value, date) else date.fromisoformat(str(value))
+            for value in holiday_dates
+        }
+        if not normalized:
+            return []
+        week_endings = {
+            holiday_day + timedelta(days=(5 - holiday_day.weekday()) % 7)
+            for holiday_day in normalized
+        }
+        management = StaffingVacationManagementSelection.query.filter(
+            StaffingVacationManagementSelection.cancelled_at.is_(None),
+            StaffingVacationManagementSelection.week_ending.in_(week_endings),
+        ).all()
+        union = StaffingVacationUnionSelection.query.filter(
+            StaffingVacationUnionSelection.status == "approved",
+            StaffingVacationUnionSelection.week_ending.in_(week_endings),
+        ).all()
+        return _reconcile_floating_holiday_dates(
+            management,
+            union,
+            normalized,
+        )
+
     management = StaffingVacationManagementSelection.query.filter(
         StaffingVacationManagementSelection.cancelled_at.is_(None),
     ).all()
@@ -3209,6 +3316,73 @@ def reconcile_floating_holiday_entitlements(holiday_dates=None):
         return []
     awarded = _award_floating_entitlements(management, "management", holiday_values)
     awarded.extend(_award_floating_entitlements(union, "union", holiday_values))
+    return awarded
+
+
+def _reconcile_floating_holiday_dates(management, union, holiday_dates):
+    """Reconcile awards for exact dates without loading unrelated weeks."""
+    holiday_values = _configured_holiday_values_for_dates(holiday_dates)
+    configured_names = dict(holiday_values)
+    selections_by_program = {
+        "management": {row.id: row for row in management},
+        "union": {row.id: row for row in union},
+    }
+    entitlements = StaffingVacationDayEntitlement.query.filter(
+        StaffingVacationDayEntitlement.entitlement_type == "floating_holiday",
+        StaffingVacationDayEntitlement.source_holiday_date.in_(holiday_dates),
+    ).with_for_update().all()
+    invalid = []
+    for entitlement in entitlements:
+        source = selections_by_program.get(entitlement.source_program, {}).get(
+            entitlement.source_selection_id
+        )
+        holiday_name = configured_names.get(entitlement.source_holiday_date)
+        if (
+            not source
+            or not holiday_name
+            or not (
+                source.week_ending - timedelta(days=6)
+                <= entitlement.source_holiday_date
+                <= source.week_ending
+            )
+        ):
+            invalid.append(entitlement)
+        else:
+            entitlement.source_holiday_name = holiday_name
+
+    invalid_ids = {row.id for row in invalid}
+    if invalid_ids:
+        consumed_ids = {
+            entitlement_id
+            for (entitlement_id,) in db.session.query(
+                StaffingVacationDaySelection.entitlement_id
+            ).filter(
+                StaffingVacationDaySelection.entitlement_id.in_(invalid_ids),
+                StaffingVacationDaySelection.status == "scheduled",
+            ).all()
+        }
+        revocable_ids = invalid_ids - consumed_ids
+        if revocable_ids:
+            StaffingVacationDaySelection.query.filter(
+                StaffingVacationDaySelection.entitlement_id.in_(revocable_ids),
+                StaffingVacationDaySelection.status == "cancelled",
+            ).update(
+                {StaffingVacationDaySelection.entitlement_id: None},
+                synchronize_session=False,
+            )
+            for entitlement in invalid:
+                if entitlement.id in revocable_ids:
+                    db.session.delete(entitlement)
+
+    db.session.flush()
+    awarded = _award_floating_entitlements(
+        management,
+        "management",
+        holiday_values,
+    )
+    awarded.extend(
+        _award_floating_entitlements(union, "union", holiday_values)
+    )
     return awarded
 
 
