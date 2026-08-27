@@ -2441,6 +2441,38 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(pt.status_code, 302)
         self.assertEqual(twenty_c.status_code, 302)
 
+    def test_people_interaction_script_contracts_remain_parse_separated(self):
+        simulator = self._user("staffing_people_script_contract")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        db.session.commit()
+        page = self._logged_in_client(simulator.username).get(
+            f"/neostaffing/people?work_area_id={work_area.id}"
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(
+            b"x.oninput()});document.querySelectorAll('[data-people-smart-form]')",
+            page.data,
+        )
+        self.assertNotIn(
+            b"x.oninput()})document.querySelectorAll('[data-people-smart-form]')",
+            page.data,
+        )
+        self.assertIn(b"[data-people-tree-toggle]", page.data)
+        self.assertIn(b"setAttribute('aria-expanded',on)", page.data)
+        self.assertIn(b"localStorage.getItem(key)", page.data)
+        self.assertIn(b"localStorage.setItem(key", page.data)
+        self.assertIn(b"[data-people-open-add]", page.data)
+        self.assertIn(b"data-people-add-drawer=", page.data)
+        self.assertIn(b"[data-neostaffing-close-drawer]", page.data)
+        self.assertIn(b"e.key==='Escape'", page.data)
+        self.assertIn(b".neostaffing-people-bulk-create-form", page.data)
+        self.assertIn(b"x.oninput=", page.data)
+        self.assertIn(b"[data-people-smart-form]", page.data)
+        self.assertIn(b"classification.addEventListener('change',sync)", page.data)
+        self.assertIn(b"sync()});})();", page.data)
+
     def test_people_normalizes_names_and_phone_numbers(self):
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
         person = staffing_service.create_person(
