@@ -16,6 +16,7 @@ from app.models import (
     StaffingPerson,
     StaffingShiftFlowPlan,
     StaffingReportingRelationship,
+    StaffingTwentyCAffiliation,
     StaffingUnit,
     StaffingWorkAssignment,
     User,
@@ -948,7 +949,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         ):
             self.assertNotIn(stale_label, response.data)
         self.assertIn(b"data-people-tree-scroll", response.data)
-        self.assertIn(b"ADD EMPLOYEE", response.data)
+        self.assertIn(b"ADD PERSON", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
         self.assertIn(b"All statuses", response.data)
         self.assertNotIn(b'action-button action-button-secondary" href="/neostaffing/attendance"', response.data)
@@ -1096,7 +1097,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         people_page = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}")
         self.assertEqual(people_page.status_code, 200)
         self.assertIn(b"data-people-tree-scroll", people_page.data)
-        self.assertIn(b"ADD EMPLOYEE", people_page.data)
+        self.assertIn(b"ADD PERSON", people_page.data)
         self.assertIn(b"neostaffing-people-roster-table", people_page.data)
         self.assertIn(b"neostaffing-people-detail-drawer", people_page.data)
         self.assertNotIn(b"PEOPLE CONTROL DECK", people_page.data)
@@ -1553,24 +1554,24 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"data-people-tree-item", initial.data)
         self.assertNotIn(b"Step 1", initial.data)
         self.assertNotIn(b"LOAD ROSTER", initial.data)
-        self.assertNotIn(b"ADD EMPLOYEE", initial.data)
+        self.assertIn(b"+ ADD PERSON", initial.data)
+        self.assertNotIn(b"BULK ADD EMPLOYEES", initial.data)
 
         self.assertEqual(by_sort.status_code, 200)
         self.assertIn(b"Shift Operation", by_sort.data)
-        self.assertNotIn(b"ADD EMPLOYEE", by_sort.data)
+        self.assertIn(b"+ ADD PERSON", by_sort.data)
 
         self.assertEqual(by_operation.status_code, 200)
         self.assertIn(b"East Shift Department", by_operation.data)
         self.assertIn(b"Load Planning", by_operation.data)
-        self.assertNotIn(b"ADD EMPLOYEE", by_operation.data)
+        self.assertIn(b"+ ADD PERSON", by_operation.data)
 
         self.assertEqual(by_department.status_code, 200)
         self.assertIn(b"EBM", by_department.data)
-        self.assertNotIn(b"ADD EMPLOYEE", by_department.data)
+        self.assertIn(b"+ ADD PERSON", by_department.data)
 
         self.assertEqual(by_direct_work_area.status_code, 200)
-        self.assertIn(b"ADD EMPLOYEE", by_direct_work_area.data)
-        self.assertIn(b"data-people-add-menu", by_direct_work_area.data)
+        self.assertIn(b"ADD PERSON", by_direct_work_area.data)
         self.assertIn(b'data-people-open-add="single"', by_direct_work_area.data)
         self.assertIn(b'data-people-open-add="bulk"', by_direct_work_area.data)
         self.assertIn(b"neostaffing-people-roster-actions", by_direct_work_area.data)
@@ -1655,7 +1656,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neostaffing-people-detail-drawer", response.data)
         self.assertIn(b"REMOVE FROM WORK AREA", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
-        self.assertIn(b"ADD EMPLOYEE", response.data)
+        self.assertIn(b"ADD PERSON", response.data)
         self.assertNotIn(b"OPEN IN APP MANAGEMENT", response.data)
         self.assertIn(b"All statuses", response.data)
         self.assertNotIn(b"Roster Status", response.data)
@@ -2248,7 +2249,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         client = self._logged_in_client(simulator.username)
 
         page = client.get(f"/neostaffing/people?work_area_id={work_area.id}")
-        self.assertIn(b"ADD EMPLOYEE", page.data)
+        self.assertIn(b"ADD PERSON", page.data)
         self.assertIn(b"BULK ADD EMPLOYEES", page.data)
 
         single = client.post(
@@ -2285,6 +2286,160 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         for employee_id in ("PEOPLE-ONE", "PEOPLE-TWO", "PEOPLE-THREE"):
             person = StaffingPerson.query.filter_by(employee_id=employee_id).one()
             self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
+
+    def test_people_global_smart_creation_assignments_and_atomic_rollback(self):
+        admin = self._user("staffing_smart_people_admin")
+        self._grant_app_access(admin, "neostaffing", "grandmaster")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        second_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Smart Area", "parent_id": department.id}
+        )
+        second_department = staffing_service.create_unit(
+            {"unit_type": "department", "name": "Smart Department", "parent_id": operation.id}
+        )
+        ft_supervisor = staffing_service.create_person(
+            {
+                "employee_id": "SMART-FT",
+                "first_name": "Primary",
+                "last_name": "Supervisor",
+                "seniority_date": "2010-01-01",
+                "classification": "full_time_supervisor",
+            }
+        )
+        self._link_user_for_person(ft_supervisor, "smart_primary_ft")
+        staffing_service.create_leadership_assignment(ft_supervisor, department)
+        for username, employee_id in (
+            ("smart_pt_identity", "SMART-PT"),
+            ("smart_20c_identity", "SMART-20C"),
+            ("smart_bad_identity", "SMART-BAD"),
+        ):
+            linked = self._user(username)
+            linked.employee_id = employee_id
+        db.session.commit()
+        client = self._logged_in_client(admin.username)
+
+        global_page = client.get("/neostaffing/people")
+        scoped_page = client.get(f"/neostaffing/people?work_area_id={work_area.id}")
+        no_assignment = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-NONE",
+                "first_name": "No",
+                "last_name": "Assignment",
+                "seniority_date": "2020-01-01",
+                "classification": "manager",
+                "employee_status": "active",
+            },
+            follow_redirects=True,
+        )
+        hourly = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-HOURLY",
+                "first_name": "Hourly",
+                "last_name": "Worker",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+                "employee_status": "active",
+                "initial_assignment_unit_ids": str(work_area.id),
+            },
+        )
+        pt = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-PT",
+                "first_name": "Part Time",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+                "employee_status": "active",
+                "initial_assignment_unit_ids": [str(work_area.id), str(second_area.id)],
+            },
+        )
+        twenty_c = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-20C",
+                "first_name": "Twenty C",
+                "last_name": "Supervisor",
+                "seniority_date": "2016-01-01",
+                "classification": "twenty_c_full_time_supervisor",
+                "employee_status": "active",
+                "initial_assignment_unit_ids": [str(work_area.id), str(second_department.id)],
+                "twenty_c_primary": f"{sort.id}:{ft_supervisor.id}",
+            },
+        )
+        invalid = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-BAD",
+                "first_name": "Invalid",
+                "last_name": "Manager",
+                "seniority_date": "2015-01-01",
+                "classification": "manager",
+                "employee_status": "active",
+                "initial_assignment_unit_ids": [str(operation.id), str(work_area.id)],
+            },
+            follow_redirects=True,
+        )
+        unlinked = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-UNLINKED",
+                "first_name": "Unlinked",
+                "last_name": "Supervisor",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+                "employee_status": "active",
+                "initial_assignment_unit_ids": str(work_area.id),
+            },
+            follow_redirects=True,
+        )
+
+        self.assertEqual(global_page.status_code, 200)
+        self.assertIn(b"+ ADD PERSON", global_page.data)
+        self.assertIn(b"INITIAL ASSIGNMENT", global_page.data)
+        self.assertNotIn(b"BULK ADD EMPLOYEES", global_page.data)
+        self.assertIn(
+            f'value="{work_area.id}" data-scope-preselected'.encode(), scoped_page.data
+        )
+        self.assertIn(b"Person added.", no_assignment.data)
+        self.assertIsNone(
+            StaffingPerson.query.filter_by(employee_id="SMART-NONE").one().work_assignment
+        )
+        hourly_person = StaffingPerson.query.filter_by(employee_id="SMART-HOURLY").one()
+        self.assertEqual(hourly_person.work_assignment.work_area_unit_id, work_area.id)
+        pt_person = StaffingPerson.query.filter_by(employee_id="SMART-PT").one()
+        self.assertEqual(
+            {row.unit_id for row in pt_person.leadership_assignments if row.active},
+            {work_area.id, second_area.id},
+        )
+        self.assertIsNone(pt_person.work_assignment)
+        twenty_c_person = StaffingPerson.query.filter_by(employee_id="SMART-20C").one()
+        self.assertEqual(
+            {row.unit_id for row in twenty_c_person.leadership_assignments if row.active},
+            {work_area.id, second_department.id},
+        )
+        self.assertIsNone(twenty_c_person.work_assignment)
+        affiliation = StaffingTwentyCAffiliation.query.filter_by(
+            twenty_c_person_id=twenty_c_person.id,
+            affiliation_type="primary",
+            active=True,
+        ).one()
+        self.assertEqual(affiliation.ft_supervisor_person_id, ft_supervisor.id)
+        relationship = StaffingReportingRelationship.query.filter_by(
+            person_id=twenty_c_person.id, active=True
+        ).one()
+        self.assertEqual(relationship.reports_to_person_id, ft_supervisor.id)
+        self.assertIn(b"cannot lead the selected unit", invalid.data)
+        self.assertIsNone(StaffingPerson.query.filter_by(employee_id="SMART-BAD").first())
+        self.assertIn(b"matching NeoApps user account", unlinked.data)
+        self.assertIsNone(
+            StaffingPerson.query.filter_by(employee_id="SMART-UNLINKED").first()
+        )
+        self.assertEqual(hourly.status_code, 302)
+        self.assertEqual(pt.status_code, 302)
+        self.assertEqual(twenty_c.status_code, 302)
 
     def test_people_normalizes_names_and_phone_numbers(self):
         _sort, _operation, _department, work_area = self._staffing_hierarchy()

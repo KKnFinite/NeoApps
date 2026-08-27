@@ -216,6 +216,7 @@ def people():
         current_user if not can_manage else None,
       )
     shift_flow_areas = staffing_service.shift_flow_area_options(context.get("selected_work_area")) if can_edit_people else []
+    creation_context = staffing_service.people_creation_context(context.get("selected_unit")) if can_edit_people else None
     return render_template(
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
@@ -223,6 +224,7 @@ def people():
         can_edit_people=can_edit_people,
         can_bulk_people=can_bulk_people,
         shift_flow_areas=shift_flow_areas,
+        creation_context=creation_context,
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         shift_work_area_type=staffing_service.shift_work_area_type,
@@ -2065,14 +2067,62 @@ def create_person():
     person = None
     try:
         person = staffing_service.create_person(request.form)
-        initial_work_area_id = request.form.get("initial_work_area_unit_id", "").strip()
-        initial_work_area = _get_unit(initial_work_area_id) if initial_work_area_id else None
-        if initial_work_area:
-            staffing_service.assign_work_area(person, initial_work_area)
-        staffing_service.create_shift_flow_plan(person, request.form, initial_work_area)
+        raw_unit_ids = request.form.getlist("initial_assignment_unit_ids")
+        legacy_work_area_id = request.form.get("initial_work_area_unit_id", "").strip()
+        if legacy_work_area_id:
+            raw_unit_ids.append(legacy_work_area_id)
+        try:
+            unit_ids = list(dict.fromkeys(int(value) for value in raw_unit_ids if str(value).strip()))
+        except (TypeError, ValueError):
+            raise ValueError("Select valid initial assignment units.")
+        units = (
+            StaffingUnit.query.filter(
+                StaffingUnit.id.in_(unit_ids or {-1}),
+                StaffingUnit.active.is_(True),
+            )
+            .order_by(StaffingUnit.id)
+            .all()
+        )
+        if len(units) != len(unit_ids):
+            raise ValueError("Select active initial assignment units.")
+        if units and person.classification not in staffing_service.NON_MANAGEMENT_CLASSIFICATIONS:
+            if not (
+                user_can(MANAGEMENT_ASSIGN_PERMISSION)
+                and _can_directly_change_management_relationships()
+            ):
+                raise ValueError("You do not have permission to assign management.")
+        staffing_service.create_initial_person_assignments(person, units)
+
+        primary_value = request.form.get("twenty_c_primary", "").strip()
+        if primary_value:
+            if person.classification != "twenty_c_full_time_supervisor":
+                raise ValueError("Primary FT Supervisor applies only to a 20C Full-Time Supervisor.")
+            try:
+                sort_id, ft_supervisor_id = (int(value) for value in primary_value.split(":", 1))
+            except (TypeError, ValueError):
+                raise ValueError("Select a valid Primary FT Supervisor.")
+            sort_unit = db.session.get(StaffingUnit, sort_id)
+            ft_supervisor = db.session.get(StaffingPerson, ft_supervisor_id)
+            staffing_service.create_twenty_c_affiliation(
+                person, ft_supervisor, sort_unit, "primary"
+            )
+            staffing_service.update_reporting_relationship(
+                person.id, ft_supervisor.id, "none"
+            )
+
+        shift_flow_context_id = request.form.get(
+            "shift_flow_context_work_area_id", ""
+        ).strip()
+        shift_flow_context = (
+            _get_unit(shift_flow_context_id) if shift_flow_context_id else None
+        )
+        if shift_flow_context is None and len(units) == 1 and units[0].unit_type == "work_area":
+            shift_flow_context = units[0]
+        staffing_service.create_shift_flow_plan(person, request.form, shift_flow_context)
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
+        person = None
         flash(str(getattr(error, "orig", None) or error), "error")
     else:
         flash("Person added.", "success")

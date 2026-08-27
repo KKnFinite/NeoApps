@@ -1744,7 +1744,10 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
 def create_leadership_assignment(person, unit, leadership_level=None):
     level = leadership_level or default_leadership_level_for(person, unit)
     validate_leadership_assignment(person, unit, level)
+    return _persist_leadership_assignment(person, unit, level)
 
+
+def _persist_leadership_assignment(person, unit, level):
     existing = StaffingLeadershipAssignment.query.filter_by(
         person_id=person.id,
         unit_id=unit.id,
@@ -1778,6 +1781,43 @@ def validate_leadership_assignment(person, unit, leadership_level=None):
     level = leadership_level or default_leadership_level_for(person, unit)
     _validate_leadership_assignment(person, unit, level)
     return level
+
+
+def create_initial_person_assignments(person, units):
+    """Create validated initial assignments without conflating workers and management."""
+    units = list(units or ())
+    if not units:
+        return []
+    if len({unit.id for unit in units}) != len(units):
+        raise ValueError("Initial assignment units must be unique.")
+    if person.classification in NON_MANAGEMENT_CLASSIFICATIONS:
+        if len(units) != 1:
+            raise ValueError("Hourly employees may have one initial Work Area assignment.")
+        return [assign_work_area(person, units[0])]
+
+    linked_user = linked_user_for_person(person)
+    if not linked_user:
+        raise ValueError("Management assignments require a matching NeoApps user account.")
+    validated = []
+    for unit in units:
+        level = default_leadership_level_for(person, unit)
+        _validate_leadership_assignment_scope(person, unit, level)
+        validated.append((unit, level))
+    result = [
+        StaffingLeadershipAssignment(
+            person=person,
+            unit=unit,
+            leadership_level=level,
+            active=True,
+        )
+        for unit, level in validated
+    ]
+    db.session.add_all(result)
+    db.session.flush()
+    from app.services.neostaffing_vacation import reconcile_management_person_state
+
+    reconcile_management_person_state(person)
+    return result
 
 
 def delete_leadership_assignment(assignment):
@@ -3737,6 +3777,74 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
     }
 
 
+def people_creation_context(selected_unit=None):
+    """Return bounded hierarchy choices for the global smart Add Person form."""
+    units = (
+        StaffingUnit.query.filter_by(active=True)
+        .order_by(StaffingUnit.display_order, StaffingUnit.name, StaffingUnit.id)
+        .all()
+    )
+    units_by_id = {unit.id: unit for unit in units}
+    type_order = {"sort": 0, "operation": 1, "department": 2, "work_area": 3}
+
+    def bounded_path(unit):
+        names = []
+        current = unit
+        seen = set()
+        while current and current.id not in seen:
+            seen.add(current.id)
+            names.append(current.name)
+            current = units_by_id.get(current.parent_id)
+        return " / ".join(reversed(names))
+
+    unit_rows = [{"unit": unit, "path": bounded_path(unit)} for unit in units]
+    unit_rows.sort(
+        key=lambda row: (
+            type_order[row["unit"].unit_type],
+            row["path"].lower(),
+            row["unit"].id,
+        )
+    )
+
+    ft_rows = (
+        db.session.query(StaffingPerson, StaffingLeadershipAssignment)
+        .join(
+            StaffingLeadershipAssignment,
+            StaffingLeadershipAssignment.person_id == StaffingPerson.id,
+        )
+        .filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification == "full_time_supervisor",
+            StaffingLeadershipAssignment.active.is_(True),
+            StaffingLeadershipAssignment.leadership_level == "department",
+        )
+        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
+        .all()
+    )
+    primary_options = []
+    seen = set()
+    for supervisor, assignment in ft_rows:
+        department = units_by_id.get(assignment.unit_id)
+        operation = units_by_id.get(department.parent_id) if department else None
+        sort_unit = units_by_id.get(operation.parent_id) if operation else None
+        key = (supervisor.id, getattr(sort_unit, "id", None))
+        if not sort_unit or key in seen:
+            continue
+        seen.add(key)
+        primary_options.append(
+            {
+                "person": supervisor,
+                "sort": sort_unit,
+                "value": f"{sort_unit.id}:{supervisor.id}",
+            }
+        )
+    return {
+        "units": unit_rows,
+        "selected_unit_id": getattr(selected_unit, "id", None),
+        "twenty_c_primary_options": primary_options,
+    }
+
+
 def save_attendance(values, user):
     gateway = _attendance_gateway()
     current_operation = current_night_attendance_operation(gateway)
@@ -5083,9 +5191,13 @@ def _validate_work_assignment(person, work_area):
 
 
 def _validate_leadership_assignment(person, unit, leadership_level):
-    _normalize_choice(leadership_level, STAFFING_LEADERSHIP_LEVELS, "leadership level")
     if not linked_user_for_person(person):
         raise ValueError("Management assignments require a matching NeoApps user account.")
+    _validate_leadership_assignment_scope(person, unit, leadership_level)
+
+
+def _validate_leadership_assignment_scope(person, unit, leadership_level):
+    _normalize_choice(leadership_level, STAFFING_LEADERSHIP_LEVELS, "leadership level")
     if leadership_level != unit.unit_type:
         raise ValueError("Leadership level must match the selected unit scope.")
     expected_level = default_leadership_level_for(person, unit)
