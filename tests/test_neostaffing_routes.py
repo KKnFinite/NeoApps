@@ -2515,6 +2515,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(
             ".neostaffing-people-drawer-panel label > span,", css
         )
+        self.assertRegex(
+            css,
+            r"\.neostaffing-people-drawer-panel,\.neostaffing-people-detail-drawer \{ position: fixed; z-index: 70;",
+        )
+        self.assertIn(
+            ".neostaffing-people-roster-actions { position: relative; z-index: 60; }",
+            css,
+        )
+        self.assertIn(
+            ".neostaffing-people-detail-drawer { z-index: 65; }",
+            css,
+        )
 
     def test_people_normalizes_names_and_phone_numbers(self):
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
