@@ -2876,7 +2876,6 @@ def people_context(filters=None, user=None):
         "selected_work_area": selected_work_area,
         "selected_unit": selected_unit,
         "selected_unit_leadership": _leadership_assignments_for_unit(selected_unit),
-        "management_candidates": management_candidates_for_unit(selected_unit),
         "rows": paginated_rows,
         "all_rows": rows,
         "counts": counts,

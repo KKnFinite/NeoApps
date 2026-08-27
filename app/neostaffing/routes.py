@@ -223,10 +223,6 @@ def people():
         can_edit_people=can_edit_people,
         can_bulk_people=can_bulk_people,
         shift_flow_areas=shift_flow_areas,
-        can_assign_management=bool(
-            user_can(MANAGEMENT_ASSIGN_PERMISSION)
-            and _can_directly_change_management_relationships()
-        ),
         classification_choices=staffing_service.classification_choices(),
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         shift_work_area_type=staffing_service.shift_work_area_type,

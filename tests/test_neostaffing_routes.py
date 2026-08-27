@@ -553,7 +553,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"scrollTop", sort_response.data)
         self.assertIn(b"+ Operation", sort_response.data)
         self.assertIn(b"Add Operation", sort_response.data)
-        self.assertIn(b"Assign Division Manager", sort_response.data)
+        self.assertEqual(sort_response.data.count(b"<h3>MANAGEMENT</h3>"), 1)
+        self.assertNotIn(b"#management-editor", sort_response.data)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Night Sort", response.data)
         self.assertIn(b"Shift Operation", response.data)
@@ -568,12 +569,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"+ Work Area", response.data)
         self.assertIn(b"Add Department", response.data)
         self.assertIn(b"Add Work Area", response.data)
-        self.assertIn(b"Assign Manager", response.data)
+        self.assertEqual(response.data.count(b"<h3>MANAGEMENT</h3>"), 1)
         self.assertEqual(department_response.status_code, 200)
         self.assertIn(b"EBM", department_response.data)
         self.assertIn(b"+ Work Area", department_response.data)
         self.assertIn(b"Add Work Area", department_response.data)
-        self.assertIn(b"Assign FT Supervisor", department_response.data)
+        self.assertEqual(department_response.data.count(b"<h3>MANAGEMENT</h3>"), 1)
         self.assertEqual(work_area_response.status_code, 200)
         self.assertIn(b'data-org-chart-workspace', work_area_response.data)
         self.assertNotIn(b'data-org-chart-workspace-empty', work_area_response.data)
@@ -599,7 +600,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"+ People", work_area_response.data)
         self.assertNotIn(b"+ PT Sup", work_area_response.data)
         self.assertNotIn(b"Add/Assign People", work_area_response.data)
-        self.assertIn(b"ASSIGN PT SUPERVISOR", work_area_response.data)
+        self.assertEqual(work_area_response.data.count(b"<h3>MANAGEMENT</h3>"), 1)
+        self.assertNotIn(b"#management-editor", work_area_response.data)
         self.assertIn(b"Set Headcount", work_area_response.data)
         self.assertIn(b"1", work_area_response.data)
         self.assertIsNotNone(direct_work_area)
@@ -1314,8 +1316,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
 
         self.assertEqual(watcher_page.status_code, 200)
-        self.assertNotIn(b"ASSIGN MANAGEMENT", watcher_page.data)
-        self.assertNotIn(b"ASSIGN PT SUPERVISOR", watcher_page.data)
+        self.assertNotIn(b'name="person_id"', watcher_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", watcher_page.data)
         self.assertNotIn(b"+ People", watcher_page.data)
         self.assertNotIn(b"+ PT Sup", watcher_page.data)
@@ -1323,8 +1324,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(watcher_tree.status_code, 200)
         self.assertNotIn(b"+ Sort", watcher_tree.data)
         self.assertEqual(simulator_page.status_code, 200)
-        self.assertIn(b"ASSIGN PT SUPERVISOR", simulator_page.data)
-        self.assertIn(b"ASSIGN MANAGEMENT", simulator_page.data)
+        self.assertEqual(simulator_page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
+        self.assertIn(b'name="person_id"', simulator_page.data)
+        self.assertIn(b">ASSIGN</button>", simulator_page.data)
+        self.assertNotIn(b"#management-editor", simulator_page.data)
         self.assertNotIn(b"+ People", simulator_page.data)
         self.assertNotIn(b"+ PT Sup", simulator_page.data)
         self.assertNotIn(b"Add/Assign People", simulator_page.data)
@@ -1735,9 +1738,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         client = self._logged_in_client(editor_user.username)
 
-        page = client.get(
+        people_page = client.get(
             f"/neostaffing/people?work_area_id={work_area.id}&search=fueling"
         )
+        page = client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
         watcher = self._user("staffing_pt_candidate_watcher")
         self._grant_app_access(watcher, "neostaffing", "watcher")
         db.session.commit()
@@ -1759,10 +1763,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "person_id": str(eligible.id),
                 "unit_id": str(work_area.id),
                 "leadership_level": "work_area",
-                "return_people": "1",
-                "work_area_id": str(work_area.id),
-                "search": "fueling",
-                "leadership_only": "1",
+                "return_unit_id": str(work_area.id),
             },
             follow_redirects=False,
         )
@@ -1776,18 +1777,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         removed = client.post(
             f"/neostaffing/app-management/management-assignments/{assignment.id}/delete",
             data={
-                "return_people": "1",
-                "work_area_id": str(work_area.id),
-                "search": "fueling",
-                "leadership_only": "1",
+                "return_unit_id": str(work_area.id),
             },
             follow_redirects=False,
         )
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"MANAGEMENT", page.data)
-        self.assertIn(b"PT SUPERVISOR", page.data)
-        self.assertIn(b"ASSIGN MANAGEMENT", page.data)
+        self.assertEqual(page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
+        self.assertIn(b">ASSIGN</button>", page.data)
+        self.assertNotIn(b"#management-editor", page.data)
         self.assertIn(b"PTC-100", page.data)
         self.assertNotIn(b"PTC-EDITOR", page.data)
         self.assertNotIn(b"PTC-UNION", page.data)
@@ -1796,15 +1795,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(blocked.status_code, 302)
         self.assertEqual(blocked.location, "/neostaffing")
         self.assertEqual(assigned.status_code, 302)
-        self.assertIn(f"work_area_id={work_area.id}", assigned.location)
-        self.assertIn("search=fueling", assigned.location)
-        self.assertIn("leadership_only=1", assigned.location)
+        self.assertEqual(assigned.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
         self.assertIn(b"Fueling Supervisor", assigned_page.data)
         self.assertIn(b"REMOVE", assigned_page.data)
         self.assertEqual(removed.status_code, 302)
-        self.assertIn(f"work_area_id={work_area.id}", removed.location)
-        self.assertIn("search=fueling", removed.location)
-        self.assertIn("leadership_only=1", removed.location)
+        self.assertEqual(removed.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertIn(b"MANAGEMENT", people_page.data)
+        self.assertNotIn(b"ASSIGN MANAGEMENT", people_page.data)
+        self.assertNotIn(b"management-assignments", people_page.data)
         self.assertFalse(db.session.get(StaffingLeadershipAssignment, assignment.id).active)
         self.assertIsNone(
             StaffingWorkAssignment.query.filter_by(
@@ -1813,7 +1811,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             ).first()
         )
 
-    def test_people_management_candidates_follow_selected_hierarchy_level(self):
+    def test_org_chart_management_candidates_follow_selected_hierarchy_level(self):
         admin = self._user("staffing_people_management_admin")
         self._grant_app_access(admin, "neostaffing", "grandmaster")
         sort, operation, department, work_area = self._staffing_hierarchy()
@@ -1840,24 +1838,24 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         pages = {
             "part_time_supervisor": client.get(
-                f"/neostaffing/people?work_area_id={work_area.id}"
+                f"/neostaffing/org-chart?unit_id={work_area.id}"
             ),
             "full_time_supervisor": client.get(
-                f"/neostaffing/people?department_id={department.id}"
+                f"/neostaffing/org-chart?unit_id={department.id}"
             ),
             "manager": client.get(
-                f"/neostaffing/people?operation_id={operation.id}"
+                f"/neostaffing/org-chart?unit_id={operation.id}"
             ),
             "division_manager": client.get(
-                f"/neostaffing/people?sort_id={sort.id}"
+                f"/neostaffing/org-chart?unit_id={sort.id}"
             ),
         }
 
         expected_labels = {
-            "part_time_supervisor": b"PT SUPERVISOR",
-            "full_time_supervisor": b"FT SUPERVISOR",
-            "manager": b"MANAGER",
-            "division_manager": b"DIVISION MANAGER",
+            "part_time_supervisor": b"Part Time Supervisor",
+            "full_time_supervisor": b"Full Time Supervisor",
+            "manager": b"Manager",
+            "division_manager": b"Division Manager",
         }
         for classification, response in pages.items():
             with self.subTest(classification=classification):
@@ -1867,6 +1865,54 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 for other_classification, employee_id in candidates.items():
                     if other_classification != classification:
                         self.assertNotIn(employee_id, response.data)
+
+    def test_org_chart_work_area_and_department_render_twenty_c_candidates(self):
+        admin = self._user("staffing_org_twenty_c_admin")
+        self._grant_app_access(admin, "neostaffing", "grandmaster")
+        _sort, _operation, department, work_area = self._staffing_hierarchy()
+        pt = staffing_service.create_person(
+            {
+                "employee_id": "ORG-PT-CAND",
+                "first_name": "Part Time",
+                "last_name": "Candidate",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        twenty_c = staffing_service.create_person(
+            {
+                "employee_id": "ORG-20C-CAND",
+                "first_name": "Twenty C",
+                "last_name": "Candidate",
+                "seniority_date": "2017-01-01",
+                "classification": "twenty_c_full_time_supervisor",
+            }
+        )
+        wrong = staffing_service.create_person(
+            {
+                "employee_id": "ORG-WRONG-CAND",
+                "first_name": "Wrong",
+                "last_name": "Candidate",
+                "seniority_date": "2019-01-01",
+                "classification": "manager",
+            }
+        )
+        self._link_user_for_person(pt)
+        self._link_user_for_person(twenty_c)
+        self._link_user_for_person(wrong)
+        db.session.commit()
+        client = self._logged_in_client(admin.username)
+
+        work_area_page = client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        department_page = client.get(f"/neostaffing/org-chart?unit_id={department.id}")
+
+        self.assertEqual(work_area_page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
+        self.assertIn(b"ORG-PT-CAND", work_area_page.data)
+        self.assertIn(b"ORG-20C-CAND", work_area_page.data)
+        self.assertNotIn(b"ORG-WRONG-CAND", work_area_page.data)
+        self.assertIn(b"ORG-20C-CAND", department_page.data)
+        self.assertNotIn(b"ORG-PT-CAND", department_page.data)
+        self.assertNotIn(b"#management-editor", work_area_page.data)
 
     def test_people_view_is_work_area_roster_with_secondary_filters(self):
         user = self._user("staffing_people_filters")

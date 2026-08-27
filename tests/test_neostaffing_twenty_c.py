@@ -266,6 +266,23 @@ class NeoStaffingTwentyCFoundationTest(unittest.TestCase):
         self.assertEqual(leadership["pt_supervisors"], 1)
         self.assertEqual(leadership["ft_supervisors"], 1)
 
+    def test_direct_leadership_changes_do_not_mutate_affiliations(self):
+        primary, secondary = self._affiliations()
+        direct = staffing_service.create_leadership_assignment(
+            self.twenty_c, self.area_a
+        )
+
+        staffing_service.delete_leadership_assignment(direct)
+        db.session.flush()
+
+        self.assertFalse(direct.active)
+        self.assertTrue(db.session.get(StaffingTwentyCAffiliation, primary.id).active)
+        self.assertTrue(db.session.get(StaffingTwentyCAffiliation, secondary.id).active)
+        self.assertEqual(
+            StaffingWorkAssignment.query.filter_by(person_id=self.twenty_c.id).count(),
+            0,
+        )
+
     def test_work_area_candidates_accept_pt_and_twenty_c_only(self):
         pt = self._person("PT-SUP", "part_time_supervisor")
         manager = self._person("MGR-CAND", "manager")
