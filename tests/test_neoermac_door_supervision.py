@@ -2,6 +2,7 @@ import json
 import unittest
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
@@ -96,6 +97,58 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         }
         self.assertEqual(selections[self.user.id], ["D1"])
         self.assertEqual(selections[second_user.id], ["D4"])
+
+    def test_employee_attendance_action_follows_supervised_door_selection(self):
+        empty = self.client.get("/neoermac/door-view")
+
+        self.assertEqual(empty.status_code, 200)
+        self.assertNotIn(b"EMPLOYEE ATTENDANCE", empty.data)
+        self.assertNotIn(b'href="/neoermac/door-view/manage-employees"', empty.data)
+
+        supervision = NeoErmacDoorSupervision(
+            user_id=self.user.id,
+            sort_date_operation_id=self.operation.id,
+            selected_doors_json=json.dumps(["D1"]),
+            active_door="D1",
+        )
+        db.session.add(supervision)
+        db.session.commit()
+        with patch(
+            "app.neonodes.neoermac.routes.current_door_view_operation",
+            return_value=self.operation,
+        ):
+            selected = self.client.get("/neoermac/door-view")
+        supervision.selected_doors_json = json.dumps(["D1", "D4"])
+        supervision.active_door = "D4"
+        db.session.commit()
+        with patch(
+            "app.neonodes.neoermac.routes.current_door_view_operation",
+            return_value=self.operation,
+        ):
+            additional = self.client.get("/neoermac/door-view")
+
+        self.assertIn(b"EMPLOYEE ATTENDANCE", selected.data)
+        self.assertIn(b'href="/neoermac/door-view/manage-employees"', selected.data)
+        self.assertIn(b"EMPLOYEE ATTENDANCE", additional.data)
+        self.assertNotIn(b"MANAGE EMPLOYEES", additional.data)
+        self.assertEqual(
+            json.loads(NeoErmacDoorSupervision.query.one().selected_doors_json),
+            ["D1", "D4"],
+        )
+
+        supervision.selected_doors_json = "[]"
+        supervision.active_door = None
+        db.session.commit()
+        with patch(
+            "app.neonodes.neoermac.routes.current_door_view_operation",
+            return_value=self.operation,
+        ):
+            cleared = self.client.get("/neoermac/door-view")
+
+        self.assertEqual(cleared.status_code, 200)
+        self.assertNotIn(b"EMPLOYEE ATTENDANCE", cleared.data)
+        self.assertNotIn(b'href="/neoermac/door-view/manage-employees"', cleared.data)
+        self.assertEqual(json.loads(NeoErmacDoorSupervision.query.one().selected_doors_json), [])
 
     def test_new_sort_starts_with_a_fresh_selection(self):
         self.client.get("/neoermac/door-view?door=D9")

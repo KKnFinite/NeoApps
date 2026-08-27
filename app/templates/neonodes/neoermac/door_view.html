@@ -105,10 +105,12 @@
             type="button"
             data-door-supervision-open
         >{{ "EDIT DOORS" if supervised_doors else "+ ADD DOOR" }}</button>
+        {% if supervised_doors %}
         <a
             class="neoermac-menu-link neoermac-door-supervision-edit"
             href="{{ url_for('neoermac.manage_employees') }}"
-        >MANAGE EMPLOYEES</a>
+        >EMPLOYEE ATTENDANCE</a>
+        {% endif %}
         </nav>
         {% endif %}
     </div>
