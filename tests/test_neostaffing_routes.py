@@ -1726,7 +1726,6 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "part_time_supervisor",
             }
         )
-        staffing_service.create_leadership_assignment(editor, department)
         db.session.add(
             StaffingReportingRelationship(
                 person=eligible,
@@ -1736,32 +1735,138 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         client = self._logged_in_client(editor_user.username)
 
-        page = client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        page = client.get(
+            f"/neostaffing/people?work_area_id={work_area.id}&search=fueling"
+        )
+        watcher = self._user("staffing_pt_candidate_watcher")
+        self._grant_app_access(watcher, "neostaffing", "watcher")
+        db.session.commit()
+        blocked = self._logged_in_client(watcher.username).post(
+            "/neostaffing/app-management/management-assignments",
+            data={
+                "person_id": str(eligible.id),
+                "unit_id": str(work_area.id),
+                "leadership_level": "work_area",
+                "return_people": "1",
+                "work_area_id": str(work_area.id),
+            },
+            follow_redirects=False,
+        )
+        client = self._logged_in_client(editor_user.username)
         assigned = client.post(
             "/neostaffing/app-management/management-assignments",
             data={
                 "person_id": str(eligible.id),
                 "unit_id": str(work_area.id),
                 "leadership_level": "work_area",
-                "return_unit_id": str(work_area.id),
+                "return_people": "1",
+                "work_area_id": str(work_area.id),
+                "search": "fueling",
+                "leadership_only": "1",
+            },
+            follow_redirects=False,
+        )
+        assignment = StaffingLeadershipAssignment.query.filter_by(
+            person_id=eligible.id,
+            unit_id=work_area.id,
+            leadership_level="work_area",
+            active=True,
+        ).one()
+        assigned_page = client.get(assigned.location)
+        removed = client.post(
+            f"/neostaffing/app-management/management-assignments/{assignment.id}/delete",
+            data={
+                "return_people": "1",
+                "work_area_id": str(work_area.id),
+                "search": "fueling",
+                "leadership_only": "1",
             },
             follow_redirects=False,
         )
 
         self.assertEqual(page.status_code, 200)
+        self.assertIn(b"MANAGEMENT", page.data)
+        self.assertIn(b"PT SUPERVISOR", page.data)
+        self.assertIn(b"ASSIGN MANAGEMENT", page.data)
         self.assertIn(b"PTC-100", page.data)
+        self.assertNotIn(b"PTC-EDITOR", page.data)
         self.assertNotIn(b"PTC-UNION", page.data)
         self.assertNotIn(b"PTC-INACTIVE", page.data)
         self.assertNotIn(b"PTC-UNLINKED", page.data)
+        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(blocked.location, "/neostaffing")
         self.assertEqual(assigned.status_code, 302)
-        self.assertTrue(
-            StaffingLeadershipAssignment.query.filter_by(
+        self.assertIn(f"work_area_id={work_area.id}", assigned.location)
+        self.assertIn("search=fueling", assigned.location)
+        self.assertIn("leadership_only=1", assigned.location)
+        self.assertIn(b"Fueling Supervisor", assigned_page.data)
+        self.assertIn(b"REMOVE", assigned_page.data)
+        self.assertEqual(removed.status_code, 302)
+        self.assertIn(f"work_area_id={work_area.id}", removed.location)
+        self.assertIn("search=fueling", removed.location)
+        self.assertIn("leadership_only=1", removed.location)
+        self.assertFalse(db.session.get(StaffingLeadershipAssignment, assignment.id).active)
+        self.assertIsNone(
+            StaffingWorkAssignment.query.filter_by(
                 person_id=eligible.id,
-                unit_id=work_area.id,
-                leadership_level="work_area",
                 active=True,
-            ).one_or_none()
+            ).first()
         )
+
+    def test_people_management_candidates_follow_selected_hierarchy_level(self):
+        admin = self._user("staffing_people_management_admin")
+        self._grant_app_access(admin, "neostaffing", "grandmaster")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        candidates = {}
+        for employee_id, classification in (
+            ("PEOPLE-PT-SUP", "part_time_supervisor"),
+            ("PEOPLE-FT-SUP", "full_time_supervisor"),
+            ("PEOPLE-MANAGER", "manager"),
+            ("PEOPLE-DIVISION", "division_manager"),
+        ):
+            person = staffing_service.create_person(
+                {
+                    "employee_id": employee_id,
+                    "first_name": classification.split("_")[0].title(),
+                    "last_name": "Candidate",
+                    "seniority_date": "2018-01-01",
+                    "classification": classification,
+                }
+            )
+            self._link_user_for_person(person)
+            candidates[classification] = employee_id.encode()
+        db.session.commit()
+        client = self._logged_in_client(admin.username)
+
+        pages = {
+            "part_time_supervisor": client.get(
+                f"/neostaffing/people?work_area_id={work_area.id}"
+            ),
+            "full_time_supervisor": client.get(
+                f"/neostaffing/people?department_id={department.id}"
+            ),
+            "manager": client.get(
+                f"/neostaffing/people?operation_id={operation.id}"
+            ),
+            "division_manager": client.get(
+                f"/neostaffing/people?sort_id={sort.id}"
+            ),
+        }
+
+        expected_labels = {
+            "part_time_supervisor": b"PT SUPERVISOR",
+            "full_time_supervisor": b"FT SUPERVISOR",
+            "manager": b"MANAGER",
+            "division_manager": b"DIVISION MANAGER",
+        }
+        for classification, response in pages.items():
+            with self.subTest(classification=classification):
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(expected_labels[classification], response.data)
+                self.assertIn(candidates[classification], response.data)
+                for other_classification, employee_id in candidates.items():
+                    if other_classification != classification:
+                        self.assertNotIn(employee_id, response.data)
 
     def test_people_view_is_work_area_roster_with_secondary_filters(self):
         user = self._user("staffing_people_filters")

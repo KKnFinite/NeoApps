@@ -2251,9 +2251,7 @@ def delete_management_assignment(assignment_id):
     if not assignment:
         flash("Management assignment was not found.", "error")
         return redirect(url_for("neostaffing.management_assignments"))
-    return_unit_id = request.form.get("return_unit_id", "").strip()
-    redirect_endpoint = "neostaffing.org_chart" if return_unit_id else "neostaffing.management_assignments"
-    redirect_values = {"unit_id": return_unit_id} if return_unit_id else None
+    redirect_endpoint, redirect_values = _management_assignment_return_target()
     if not _can_directly_change_management_relationships():
         flash(
             "Direct management assignment changes require an eligible FT Supervisor, Manager, "
@@ -2357,6 +2355,7 @@ def _management_assignment_return_target():
                 "search",
                 "page",
                 "per_page",
+                "leadership_only",
             )
             if request.form.get(key, "").strip()
         }
@@ -2380,6 +2379,7 @@ def _review_return_target():
             "search",
             "page",
             "per_page",
+            "leadership_only",
         },
         "neostaffing.org_chart": {"unit_id"},
         "neostaffing.management_assignments": set(),
