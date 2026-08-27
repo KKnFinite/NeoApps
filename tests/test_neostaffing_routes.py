@@ -2563,6 +2563,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(f'name="initial_work_area_unit_id" value="{work_area.id}"', employee)
         self.assertIn("SHIFT FLOW ", employee)
         self.assertIn('placeholder="MM/DD/YYYY"', management)
+        self.assertIn("data-people-seniority-date", management)
+        self.assertIn("data-people-seniority-date", employee)
         self.assertNotIn('type="date"', management)
         field_order = [
             'data-person-field="employee-id"',
@@ -2581,6 +2583,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn("button.append(name)", html)
         self.assertIn("row.append(name,remove,input)", html)
         self.assertNotIn("button.append(type,name,path)", html)
+        self.assertIn("fmtDate=v=>", html)
+        self.assertIn("replace(/\\D/g,'').slice(0,8)", html)
+        self.assertIn("`${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}`", html)
+        self.assertIn("x.addEventListener('input'", html)
+        self.assertIn("x.addEventListener('keydown'", html)
 
         created = client.post(
             "/neostaffing/app-management/people",
@@ -2619,14 +2626,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "employee_id": "SPLIT-DATE",
                 "first_name": "Date",
                 "last_name": "Employee",
-                "seniority_date": "10/03/2002",
+                "seniority_date": "02/03/2026",
                 "classification": "part_time",
                 "employee_status": "active",
             },
         )
         person = StaffingPerson.query.filter_by(employee_id="SPLIT-DATE").one()
         self.assertEqual(created.status_code, 302)
-        self.assertEqual(person.seniority_date, date(2002, 10, 3))
+        self.assertEqual(person.seniority_date, date(2026, 2, 3))
         self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
 
         updated = client.post(
@@ -2635,19 +2642,22 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "employee_id": person.employee_id,
                 "first_name": person.first_name,
                 "last_name": person.last_name,
-                "seniority_date": "11/04/2003",
+                "seniority_date": "02/03/2026",
                 "classification": person.classification,
                 "employee_status": person.employee_status,
                 "active": "1",
             },
         )
         self.assertEqual(updated.status_code, 302)
-        self.assertEqual(person.seniority_date, date(2003, 11, 4))
+        self.assertEqual(person.seniority_date, date(2026, 2, 3))
         edit_page = client.get(
             f"/neostaffing/people?work_area_id={work_area.id}&person_id={person.id}"
         )
-        self.assertIn(b'name="seniority_date" value="11/04/2003"', edit_page.data)
-        self.assertIn(b">11/04/2003</td>", edit_page.data)
+        self.assertIn(
+            b'name="seniority_date" value="02/03/2026" placeholder="MM/DD/YYYY" inputmode="numeric" maxlength="10" data-people-seniority-date',
+            edit_page.data,
+        )
+        self.assertIn(b">02/03/2026</td>", edit_page.data)
 
         invalid_date = client.post(
             f"/neostaffing/app-management/people/{person.id}/update",
@@ -2655,7 +2665,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "employee_id": person.employee_id,
                 "first_name": person.first_name,
                 "last_name": person.last_name,
-                "seniority_date": "02/30/2004",
+                "seniority_date": "02/30/2026",
                 "classification": person.classification,
                 "employee_status": person.employee_status,
                 "active": "1",
@@ -2663,7 +2673,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertIn(b"valid date in MM/DD/YYYY format", invalid_date.data)
-        self.assertEqual(person.seniority_date, date(2003, 11, 4))
+        self.assertEqual(person.seniority_date, date(2026, 2, 3))
 
         short_year = client.post(
             "/neostaffing/app-management/people",
