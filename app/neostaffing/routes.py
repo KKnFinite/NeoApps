@@ -2143,7 +2143,8 @@ def create_person():
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
         person = None
-        flash(str(getattr(error, "orig", None) or error), "error")
+        message = str(getattr(error, "orig", None) or error)
+        flash(f"Person was not created: {message}", "error")
     else:
         flash("Person added.", "success")
     return redirect(_people_return_url(person.id if person else None))
@@ -2287,15 +2288,6 @@ def create_management_assignment():
             request.form.get("unit_id"),
             request.form.get("leadership_level"),
         )
-        review = management_review_service.prepare_management_relationship_review(
-            mutation
-        )
-        if review["required"]:
-            return _render_management_relationship_review(
-                review,
-                redirect_endpoint,
-                redirect_values,
-            )
         staffing_service.create_leadership_assignment(
             _get_person(mutation["person_id"]),
             _get_unit(mutation["unit_id"]),

@@ -429,7 +429,7 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         self.assertIn(b"Direct management assignment changes require", response.data)
         self.assertEqual(StaffingLeadershipAssignment.query.count(), 0)
 
-    def test_direct_editor_receives_review_and_views_remain_operational(self):
+    def test_direct_editor_assignment_persists_without_relationship_review(self):
         _sort, _operation, department, work_area = self._hierarchy("Route")
         subject = self._person("MR900", "part_time_supervisor", "Review", "Subject")
         owner = self._person("MR901", "full_time_supervisor", "Review", "Owner")
@@ -454,18 +454,21 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
             f"/neostaffing/org-chart?view=management&person_id={subject.id}"
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Management Relationships Affected", response.data)
-        self.assertIn(b"neostaffing-relationship-review-console", response.data)
-        self.assertIn(b"neostaffing-relationship-review-table", response.data)
-        self.assertNotIn(b"neostaffing-dashboard-shell", response.data)
-        self.assertIn(b"Current Reports To", response.data)
-        self.assertIn(b"Suggested Reports To", response.data)
-        self.assertIn(b"UNASSIGNED", response.data)
-        self.assertIn(b"Keep Current", response.data)
-        self.assertIn(b"Change to Suggested", response.data)
-        self.assertIn(b"Choose Different Valid Supervisor", response.data)
-        self.assertEqual(StaffingLeadershipAssignment.query.filter_by(person_id=subject.id).count(), 0)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.location,
+            f"/neostaffing/org-chart?unit_id={work_area.id}",
+        )
+        self.assertEqual(
+            StaffingLeadershipAssignment.query.filter_by(
+                person_id=subject.id,
+                unit_id=work_area.id,
+                active=True,
+            ).count(),
+            1,
+        )
+        self.assertNotIn(b"Management Relationships Affected", operational.data)
+        self.assertIn(subject.full_name.encode(), operational.data)
         self.assertIn(b"FULL TREE", operational.data)
         self.assertIn(b"MANAGEMENT TREE", management.data)
 

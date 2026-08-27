@@ -1041,11 +1041,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(db.session.get(StaffingPerson, person.id).last_name, "Updated")
         self.assertEqual(management_page.status_code, 302)
         self.assertEqual(management_page.location, "/neostaffing/org-chart")
-        self.assertEqual(management.status_code, 200)
-        self.assertIn(b"Management Relationships Affected", management.data)
+        self.assertEqual(management.status_code, 302)
+        self.assertEqual(
+            management.location,
+            "/neostaffing/app-management/management-assignments",
+        )
         self.assertEqual(
             StaffingLeadershipAssignment.query.filter_by(person_id=supervisor.id, unit_id=work_area.id).count(),
-            0,
+            1,
         )
         self.assertEqual(blocked_structure.status_code, 302)
         self.assertEqual(blocked_structure.location, "/neostaffing")
@@ -1339,14 +1342,38 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Linked User", simulator_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)
         self.assertNotIn(b"SAVE UNIT", simulator_page.data)
-        self.assertEqual(assigned.status_code, 200)
-        self.assertIn(b"Management Relationships Affected", assigned.data)
+        self.assertEqual(assigned.status_code, 302)
+        self.assertEqual(
+            assigned.location,
+            f"/neostaffing/org-chart?unit_id={work_area.id}",
+        )
         self.assertEqual(
             StaffingLeadershipAssignment.query.filter_by(
                 person_id=supervisor.id,
                 unit_id=work_area.id,
             ).count(),
-            0,
+            1,
+        )
+        assigned_page = simulator_client.get(assigned.location)
+        self.assertIn(b"Org Supervisor", assigned_page.data)
+        self.assertNotIn(b"Management Relationships Affected", assigned_page.data)
+        duplicate = simulator_client.post(
+            "/neostaffing/app-management/management-assignments",
+            data={
+                "person_id": str(supervisor.id),
+                "unit_id": str(work_area.id),
+                "return_unit_id": str(work_area.id),
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(
+            StaffingLeadershipAssignment.query.filter_by(
+                person_id=supervisor.id,
+                unit_id=work_area.id,
+                active=True,
+            ).count(),
+            1,
         )
         self.assertEqual(blocked_structure.status_code, 302)
         self.assertEqual(blocked_structure.location, "/neostaffing")
@@ -2316,6 +2343,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         staffing_service.create_leadership_assignment(ft_supervisor, department)
         for username, employee_id in (
             ("smart_pt_identity", "SMART-PT"),
+            ("smart_one_identity", "SMART-ONE"),
             ("smart_20c_identity", "SMART-20C"),
             ("smart_bad_identity", "SMART-BAD"),
         ):
@@ -2363,6 +2391,19 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "employee_status": "active",
                 "creation_flow": "management",
                 "initial_assignment_unit_ids": [str(work_area.id), str(second_area.id)],
+            },
+        )
+        one_assignment = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "employee_id": "SMART-ONE",
+                "first_name": "One",
+                "last_name": "Supervisor",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time_supervisor",
+                "employee_status": "active",
+                "creation_flow": "management",
+                "initial_assignment_unit_ids": str(work_area.id),
             },
         )
         twenty_c = client.post(
@@ -2415,9 +2456,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(f'data-unit-id="{work_area.id}"'.encode(), scoped_page.data)
         self.assertIn(b"data-scope-preselected", scoped_page.data)
         self.assertIn(b"Person added.", no_assignment.data)
-        self.assertIsNone(
-            StaffingPerson.query.filter_by(employee_id="SMART-NONE").one().work_assignment
-        )
+        no_assignment_person = StaffingPerson.query.filter_by(
+            employee_id="SMART-NONE"
+        ).one()
+        self.assertIsNone(no_assignment_person.work_assignment)
+        self.assertEqual(no_assignment_person.leadership_assignments, [])
         hourly_person = StaffingPerson.query.filter_by(employee_id="SMART-HOURLY").one()
         self.assertEqual(hourly_person.work_assignment.work_area_unit_id, work_area.id)
         pt_person = StaffingPerson.query.filter_by(employee_id="SMART-PT").one()
@@ -2426,6 +2469,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             {work_area.id, second_area.id},
         )
         self.assertIsNone(pt_person.work_assignment)
+        self.assertEqual(one_assignment.status_code, 302)
+        one_assignment_person = StaffingPerson.query.filter_by(
+            employee_id="SMART-ONE"
+        ).one()
+        self.assertEqual(
+            [
+                row.unit_id
+                for row in one_assignment_person.leadership_assignments
+                if row.active
+            ],
+            [work_area.id],
+        )
         twenty_c_person = StaffingPerson.query.filter_by(employee_id="SMART-20C").one()
         self.assertEqual(
             {row.unit_id for row in twenty_c_person.leadership_assignments if row.active},
@@ -2442,6 +2497,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             person_id=twenty_c_person.id, active=True
         ).one()
         self.assertEqual(relationship.reports_to_person_id, ft_supervisor.id)
+        self.assertIn(b"Person was not created:", invalid.data)
         self.assertIn(b"cannot lead the selected unit", invalid.data)
         self.assertIsNone(StaffingPerson.query.filter_by(employee_id="SMART-BAD").first())
         self.assertIn(b"matching NeoApps user account", unlinked.data)
