@@ -186,6 +186,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"SHIFT FLOW", response.data)
         self.assertIn(b"FLOW NOT SET", response.data)
         self.assertIn(b"Shift Employee", response.data)
+        self.assertIn(
+            b'class="neo-segmented-control neostaffing-shift-flow-sides"',
+            response.data,
+        )
 
     def test_shift_flow_final_door_move_requires_simulator_and_csrf(self):
         simulator = self._user("shift_drag_simulator")

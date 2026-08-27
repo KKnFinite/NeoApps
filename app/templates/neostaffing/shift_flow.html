@@ -18,7 +18,7 @@
       <strong><span data-shift-flow-planned-count>{{ shift_flow.planned_count }}</span> planned</strong>
       {% if shift_flow.phase == 'final_door' %}
         {% set header_composite = shift_flow.final_composite %}
-        <nav class="neostaffing-shift-flow-sides" aria-label="Final Door side">
+        <nav class="neo-segmented-control neostaffing-shift-flow-sides" aria-label="Final Door side">
           {% for value,label in header_composite.sides %}<a href="{{ url_for('neostaffing.shift_flow', phase='final_door', side=value) }}" {% if header_composite.side == value %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
         </nav>
       {% endif %}

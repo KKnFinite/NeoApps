@@ -235,6 +235,10 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
     def test_scope_client_contract_is_operation_scoped_and_safe(self):
         template = Path("app/templates/neonodes/neoermac/door_view.html").read_text()
 
+        self.assertIn(
+            'class="neo-segmented-control neoermac-pull-scope-options"',
+            template,
+        )
         self.assertIn("neoermac.pull-scope.${userId}.${operationId}", template)
         self.assertIn('body.set("apply_to_both"', template)
         self.assertIn("window.localStorage.getItem(scopeStorageKey)", template)
@@ -246,11 +250,22 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
             ".neoermac-door-selector > label", 1
         )[0]
 
-        self.assertIn("background: var(--node-ermac-primary);", scope_css)
-        self.assertIn("color: var(--node-ermac-highlight);", scope_css)
+        self.assertIn(".neo-segmented-control", scope_css)
+        self.assertIn(
+            "--segmented-control-active-background: var(--node-ermac-primary);",
+            scope_css,
+        )
+        self.assertIn(
+            "--segmented-control-color: var(--node-ermac-highlight);",
+            scope_css,
+        )
         self.assertIn('button[aria-pressed="true"]', scope_css)
-        self.assertIn("color: #fff;", scope_css)
-        self.assertIn("button:focus-visible", scope_css)
+        self.assertIn("--segmented-control-hover-color: #fff;", scope_css)
+        self.assertIn(
+            "--segmented-control-focus: var(--node-ermac-highlight);",
+            scope_css,
+        )
+        self.assertIn(":is(a, button):focus-visible", scope_css)
         self.assertNotIn("--node-ermac-accent", scope_css)
         self.assertNotIn("--node-ermac-panel", scope_css)
 
