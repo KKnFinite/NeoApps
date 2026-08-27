@@ -11549,11 +11549,69 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
 .neostaffing-people-drawer-panel button:hover,
 .neostaffing-people-detail-drawer button:hover { background: rgba(var(--node-rgb), .2); }
 .neostaffing-people-drawer-panel label,
-.neostaffing-people-detail-drawer label { position: relative; pointer-events: none; }
+.neostaffing-people-detail-drawer label { position: relative; pointer-events: auto; }
 .neostaffing-people-drawer-panel label > input,
 .neostaffing-people-drawer-panel label > select,
 .neostaffing-people-detail-drawer label > input,
-.neostaffing-people-detail-drawer label > select { width: 100%; pointer-events: auto; }
+.neostaffing-people-detail-drawer label > select {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    pointer-events: auto;
+}
+.neostaffing-people-drawer-panel label > span,
+.neostaffing-people-detail-drawer label > span { pointer-events: none; }
+.neostaffing-people-assignment-picker {
+    position: relative;
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 7px;
+}
+.neostaffing-people-assignment-results {
+    position: absolute;
+    z-index: 3;
+    top: 53px;
+    right: 0;
+    left: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid rgba(var(--node-rgb), .42);
+    border-radius: 5px;
+    background: #101d24;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, .38);
+}
+.neostaffing-people-assignment-results button {
+    display: grid;
+    width: 100%;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    text-align: left;
+}
+.neostaffing-people-assignment-results button:hover,
+.neostaffing-people-assignment-results button:focus-visible { background: rgba(var(--node-rgb), .16); }
+.neostaffing-people-assignment-results span,
+.neostaffing-people-assignment-chip span { color: var(--node-primary); font-size: .6rem; font-weight: 850; }
+.neostaffing-people-assignment-results strong,
+.neostaffing-people-assignment-chip strong { color: #e8f5f3; font-size: .74rem; }
+.neostaffing-people-assignment-results small,
+.neostaffing-people-assignment-chip small { overflow: hidden; color: var(--muted); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
+.neostaffing-people-assignment-results p { margin: 6px; color: var(--muted); font-size: .7rem; }
+.neostaffing-people-assignment-selected { display: grid; gap: 5px; }
+.neostaffing-people-assignment-chip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid rgba(var(--node-rgb), .24);
+    border-radius: 4px;
+    background: rgba(var(--node-rgb), .07);
+}
+.neostaffing-people-assignment-chip > div { display: grid; min-width: 0; }
+.neostaffing-people-assignment-chip > button { grid-column: auto; padding: 2px 7px; justify-self: auto; }
 .neostaffing-people-drawer-panel table,
 .neostaffing-people-detail-drawer table { color: #dfeef1; background: #0d171d; }
 .neostaffing-people-destination-picker { position: relative; min-width: 180px; }

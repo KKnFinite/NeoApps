@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 import re
 import unittest
 
@@ -2398,11 +2399,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(global_page.status_code, 200)
         self.assertIn(b"+ ADD PERSON", global_page.data)
-        self.assertIn(b"INITIAL ASSIGNMENT", global_page.data)
+        self.assertIn(b"Initial Assignment", global_page.data)
         self.assertNotIn(b"BULK ADD EMPLOYEES", global_page.data)
-        self.assertIn(
-            f'value="{work_area.id}" data-scope-preselected'.encode(), scoped_page.data
-        )
+        self.assertIn(f'data-unit-id="{work_area.id}"'.encode(), scoped_page.data)
+        self.assertIn(b"data-scope-preselected", scoped_page.data)
         self.assertIn(b"Person added.", no_assignment.data)
         self.assertIsNone(
             StaffingPerson.query.filter_by(employee_id="SMART-NONE").one().work_assignment
@@ -2472,6 +2472,49 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"[data-people-smart-form]", page.data)
         self.assertIn(b"classification.addEventListener('change',sync)", page.data)
         self.assertIn(b"sync()});})();", page.data)
+
+    def test_people_add_person_uses_local_assignment_search_picker(self):
+        simulator = self._user("staffing_people_assignment_picker")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        db.session.commit()
+
+        page = self._logged_in_client(simulator.username).get(
+            f"/neostaffing/people?work_area_id={work_area.id}"
+        )
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"data-assignment-search", page.data)
+        self.assertIn(
+            b"Search work area, department, or operation...", page.data
+        )
+        self.assertIn(b"data-assignment-results", page.data)
+        self.assertIn(b"data-assignment-selected", page.data)
+        self.assertIn(b"data-scope-preselected", page.data)
+        self.assertNotIn(b"data-initial-assignment-options", page.data)
+        self.assertNotIn(
+            b'type="checkbox" name="initial_assignment_unit_ids"', page.data
+        )
+        self.assertIn(b"input.name='initial_assignment_unit_ids'", page.data)
+        self.assertIn(b"isHourly(classification.value)?[item]", page.data)
+        self.assertIn(b"selected.filter(item=>allowed", page.data)
+        self.assertIn(b"rank(a,query)-rank(b,query)", page.data)
+        self.assertIn(b"No matching assignments", page.data)
+        self.assertIn(b'name="twenty_c_primary"', page.data)
+
+    def test_people_drawer_fields_use_full_control_hitboxes(self):
+        css = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "css" / "base.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            ".neostaffing-people-detail-drawer label { position: relative; pointer-events: auto; }",
+            css,
+        )
+        self.assertIn("display: block;\n    box-sizing: border-box;", css)
+        self.assertIn(
+            ".neostaffing-people-drawer-panel label > span,", css
+        )
 
     def test_people_normalizes_names_and_phone_numbers(self):
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
