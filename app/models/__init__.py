@@ -70,6 +70,7 @@ from app.models.staffing_operation_schedule import StaffingOperationSchedule
 from app.models.staffing_person import StaffingPerson
 from app.models.staffing_shift_flow_plan import StaffingShiftFlowPlan
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship
+from app.models.staffing_twenty_c_affiliation import StaffingTwentyCAffiliation
 from app.models.staffing_unit import StaffingUnit
 from app.models.staffing_work_assignment import StaffingWorkAssignment
 from app.models.staffing_vacation import (
@@ -154,6 +155,7 @@ __all__ = [
     "StaffingPerson",
     "StaffingShiftFlowPlan",
     "StaffingReportingRelationship",
+    "StaffingTwentyCAffiliation",
     "StaffingUnit",
     "StaffingWorkAssignment",
     "StaffingVacationManagementCapacity",

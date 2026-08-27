@@ -17,6 +17,7 @@ ROLE_LEVELS = {
 MANAGEMENT_LEVELS = (
     "part_time_supervisor",
     "full_time_supervisor",
+    "twenty_c_full_time_supervisor",
     "full_time_specialist",
     "manager",
     "division_manager",
@@ -33,6 +34,7 @@ class User(UserMixin, db.Model):
         db.CheckConstraint(
             "management_level IS NULL OR management_level IN ("
             "'part_time_supervisor', 'full_time_supervisor', "
+            "'twenty_c_full_time_supervisor', "
             "'full_time_specialist', 'manager', 'division_manager')",
             name="ck_users_management_level_supported",
         ),

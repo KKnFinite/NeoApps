@@ -93,6 +93,9 @@ from app.services.neostaffing_operation_schedule_schema import (
 from app.services.neostaffing_reporting_schema import (
     ensure_neostaffing_reporting_relationship_table,
 )
+from app.services.neostaffing_twenty_c_schema import (
+    ensure_neostaffing_twenty_c_affiliation_table,
+)
 from app.services.neostaffing_change_request_schema import (
     ensure_neostaffing_change_request_tables,
 )
@@ -151,6 +154,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neostaffing_classification_constraint(app)
     ensure_neostaffing_operation_schedule_table(app)
     ensure_neostaffing_reporting_relationship_table(app)
+    ensure_neostaffing_twenty_c_affiliation_table(app)
     ensure_neostaffing_change_request_tables(app)
     ensure_neostaffing_staffing_group_tables(app)
     ensure_neostaffing_notification_table(app)

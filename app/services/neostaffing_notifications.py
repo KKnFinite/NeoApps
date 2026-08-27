@@ -60,7 +60,10 @@ def notify_new_requests(change_requests, now=None):
     }
     people = _active_people(
         routed_person_ids,
-        classifications={"full_time_supervisor"},
+        classifications={
+            "full_time_supervisor",
+            "twenty_c_full_time_supervisor",
+        },
     )
     user_ids_by_person = _linked_user_ids_by_person(people)
     rows = []
@@ -299,7 +302,11 @@ def _resolve_notification_navigation_state(user):
         StaffingPerson.active.is_(True),
         func.lower(StaffingPerson.employee_id) == employee_id,
     ).first()
-    if not person or person.classification not in {"full_time_supervisor", "manager"}:
+    if not person or person.classification not in {
+        "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
+        "manager",
+    }:
         return {"unread_notifications": unread, "actionable_requests": 0}
 
     pending = db.session.query(
@@ -308,7 +315,10 @@ def _resolve_notification_navigation_state(user):
         StaffingChangeRequest.source_work_area_unit_id,
         StaffingChangeRequest.destination_work_area_unit_id,
     ).filter(StaffingChangeRequest.status == "pending").all()
-    if person.classification == "full_time_supervisor":
+    if person.classification in {
+        "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
+    }:
         actionable = sum(
             1
             for row in pending
@@ -389,7 +399,10 @@ def _materialize_overdue_notifications(now):
                 change_request.routed_approver_person_ids_json
             )
             if people_by_id.get(person_id)
-            and people_by_id[person_id].classification == "full_time_supervisor"
+            and people_by_id[person_id].classification in {
+                "full_time_supervisor",
+                "twenty_c_full_time_supervisor",
+            }
         }
         for unit_id in (
             change_request.source_work_area_unit_id,

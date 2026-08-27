@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from app import create_app
 from app.extensions import db
 from app.models import StaffingPerson
+from app.models.user import MANAGEMENT_LEVELS
 from app.models.staffing_person import (
     STAFFING_CLASSIFICATIONS,
     STAFFING_DATABASE_CLASSIFICATIONS,
@@ -180,9 +181,14 @@ class NeoStaffingClassificationSchemaTest(unittest.TestCase):
             f"'{classification}'"
             for classification in STAFFING_DATABASE_CLASSIFICATIONS
         ) + "))"
+        full_management_constraint = "CHECK (management_level IS NULL OR management_level IN (" + ", ".join(
+            f"'{classification}'" for classification in MANAGEMENT_LEVELS
+        ) + "))"
         connection.execute.return_value.scalar.side_effect = [
             "CHECK (classification IN ('part_time', 'full_time_combo'))",
+            "CHECK (management_level IS NULL OR management_level IN ('part_time_supervisor'))",
             full_constraint,
+            full_management_constraint,
         ]
         with (
             patch(

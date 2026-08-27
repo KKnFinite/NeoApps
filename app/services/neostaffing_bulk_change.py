@@ -12,6 +12,7 @@ from app.models import (
     StaffingLeadershipAssignment,
     StaffingPerson,
     StaffingReportingRelationship,
+    StaffingTwentyCAffiliation,
     StaffingUnit,
     StaffingWorkAssignment,
 )
@@ -61,6 +62,7 @@ ASSIGNMENT_UNIT_TYPES = {
     "part_time_supervisor": {"work_area"},
     "full_time_specialist": {"department", "operation"},
     "full_time_supervisor": {"department"},
+    "twenty_c_full_time_supervisor": {"work_area", "department"},
     "manager": {"operation"},
     "division_manager": {"sort"},
 }
@@ -85,6 +87,12 @@ class BulkChangeDataBundle:
         self.reporting_relationships = _load_rows(
             StaffingReportingRelationship.query.filter_by(active=True).order_by(
                 StaffingReportingRelationship.id
+            ),
+            lock,
+        )
+        self.twenty_c_affiliations = _load_rows(
+            StaffingTwentyCAffiliation.query.filter_by(active=True).order_by(
+                StaffingTwentyCAffiliation.id
             ),
             lock,
         )
@@ -1109,6 +1117,17 @@ def _actor_context(user, bundle):
         row.unit_id
         for row in bundle.leadership_by_person.get(getattr(person, "id", None), [])
     }
+    if person and person.classification == "twenty_c_full_time_supervisor":
+        affiliated_supervisor_ids = {
+            row.ft_supervisor_person_id
+            for row in bundle.twenty_c_affiliations
+            if row.twenty_c_person_id == person.id and row.active
+        }
+        owned_roots.update(
+            row.unit_id
+            for supervisor_id in affiliated_supervisor_ids
+            for row in bundle.leadership_by_person.get(supervisor_id, ())
+        )
     allowed_unit_ids = set(bundle.units_by_id) if can_cross_area else _descendant_ids(owned_roots, bundle)
     return {
         "app_role": app_role,
@@ -1435,6 +1454,18 @@ def _bundle_revision(bundle):
         "reporting": [
             [row.id, row.person_id, row.reports_to_person_id, _timestamp(row.updated_at)]
             for row in bundle.reporting_relationships
+        ],
+        "twenty_c_affiliations": [
+            [
+                row.id,
+                row.twenty_c_person_id,
+                row.ft_supervisor_person_id,
+                row.sort_unit_id,
+                row.affiliation_type,
+                bool(row.active),
+                _timestamp(row.updated_at),
+            ]
+            for row in bundle.twenty_c_affiliations
         ],
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()

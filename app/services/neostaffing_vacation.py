@@ -14,6 +14,7 @@ from app.models import (
     PortalAppAccess,
     StaffingLeadershipAssignment,
     StaffingPerson,
+    StaffingTwentyCAffiliation,
     StaffingUnit,
     StaffingVacationManagementCapacity,
     StaffingVacationManagementChangeRequest,
@@ -64,15 +65,16 @@ HOLIDAY_OCCURRENCE_CHOICES = (
 VACATION_UNION_ACTIVE_SELECTION_STATUSES = frozenset({"pending", "approved"})
 VACATION_UNION_PENDING_ENTRY_CLASSIFICATIONS = frozenset({"part_time_supervisor"})
 VACATION_UNION_DIRECT_ENTRY_CLASSIFICATIONS = frozenset(
-    {"full_time_supervisor", "manager", "division_manager"}
+    {"full_time_supervisor", "twenty_c_full_time_supervisor", "manager", "division_manager"}
 )
 VACATION_OFFICIAL_CALENDAR_OWNER_CLASSIFICATIONS = frozenset(
-    {"full_time_supervisor", "manager", "division_manager"}
+    {"full_time_supervisor", "twenty_c_full_time_supervisor", "manager", "division_manager"}
 )
 VACATION_VIEW_CALENDAR_OWNER_CLASSIFICATIONS = frozenset(
     {
         "part_time_supervisor",
         "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
         "full_time_specialist",
         "manager",
         "division_manager",
@@ -84,6 +86,7 @@ VACATION_MANAGEMENT_CLASSIFICATIONS = frozenset(
     {
         "part_time_supervisor",
         "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
         "full_time_specialist",
         "manager",
         "division_manager",
@@ -92,13 +95,14 @@ VACATION_MANAGEMENT_CLASSIFICATIONS = frozenset(
 VACATION_MANAGEMENT_PASS_ADMIN_CLASSIFICATIONS = frozenset(
     {
         "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
         "manager",
         "division_manager",
     }
 )
 VACATION_SPLIT_MANAGER_CLASSIFICATIONS = frozenset({"manager", "division_manager"})
 VACATION_SPLIT_ADMIN_CLASSIFICATIONS = frozenset(
-    {"full_time_supervisor", "manager", "division_manager"}
+    {"full_time_supervisor", "twenty_c_full_time_supervisor", "manager", "division_manager"}
 )
 VACATION_DAY_ITEM_TYPES = frozenset(
     {"d_day", "optional_day", "anniversary_day", "floating_holiday"}
@@ -371,6 +375,19 @@ def vacation_actor(user, hierarchy=None, leadership_rows=None):
             person_id=person.id,
             active=True,
         ).all()
+    if person.classification == "twenty_c_full_time_supervisor":
+        supervisor_ids = {
+            row.ft_supervisor_person_id
+            for row in StaffingTwentyCAffiliation.query.filter_by(
+                twenty_c_person_id=person.id,
+                active=True,
+            ).all()
+        }
+        affiliated_leadership = StaffingLeadershipAssignment.query.filter(
+            StaffingLeadershipAssignment.active.is_(True),
+            StaffingLeadershipAssignment.person_id.in_(supervisor_ids or {-1}),
+        ).all()
+        leadership_rows = list(leadership_rows) + affiliated_leadership
     roots = {
         row.unit_id
         for row in leadership_rows
@@ -822,7 +839,11 @@ def management_area_for_assignment(person, unit, hierarchy):
     classification = person.classification
     if classification == "part_time_supervisor":
         return _ancestor_of_type(unit, "department", hierarchy)
-    if classification in {"full_time_supervisor", "full_time_specialist"}:
+    if classification in {
+        "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
+        "full_time_specialist",
+    }:
         return _ancestor_of_type(unit, "operation", hierarchy)
     if classification in {"manager", "division_manager"}:
         return _ancestor_of_type(unit, "sort", hierarchy) or (
@@ -841,6 +862,26 @@ def management_primary_area(person, hierarchy=None):
     ):
         return None
     hierarchy = hierarchy or vacation_hierarchy()
+    if person.classification == "twenty_c_full_time_supervisor":
+        primary = StaffingTwentyCAffiliation.query.filter_by(
+            twenty_c_person_id=person.id,
+            affiliation_type="primary",
+            active=True,
+        ).order_by(StaffingTwentyCAffiliation.id).first()
+        if not primary:
+            return None
+        assignment = StaffingLeadershipAssignment.query.filter_by(
+            person_id=primary.ft_supervisor_person_id,
+            active=True,
+            leadership_level="department",
+        ).order_by(StaffingLeadershipAssignment.id).first()
+        if not assignment:
+            return None
+        return management_area_for_assignment(
+            person,
+            hierarchy["by_id"].get(assignment.unit_id),
+            hierarchy,
+        )
     assignment = (
         StaffingLeadershipAssignment.query.filter_by(
             person_id=person.id,
@@ -5714,6 +5755,7 @@ def _calendar_owner_priority(candidate):
         "manager": 4,
         "full_time_specialist": 3,
         "full_time_supervisor": 2,
+        "twenty_c_full_time_supervisor": 2,
         "part_time_supervisor": 1,
     }
     return (
@@ -5768,7 +5810,10 @@ def _scope_work_area_ids(scope_ids, hierarchy):
 
 def _management_capacity_ids_for_assignment(person, unit, hierarchy):
     result = set()
-    if person.classification == "full_time_supervisor":
+    if person.classification in {
+        "full_time_supervisor",
+        "twenty_c_full_time_supervisor",
+    }:
         if unit.unit_type == "department":
             result.add(unit.id)
             operation = _ancestor_of_type(unit, "operation", hierarchy)

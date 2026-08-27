@@ -8,6 +8,7 @@ STAFFING_WRITABLE_CLASSIFICATIONS = (
     "full_time_combo",
     "part_time_supervisor",
     "full_time_supervisor",
+    "twenty_c_full_time_supervisor",
     "full_time_specialist",
     "manager",
     "division_manager",
@@ -43,7 +44,8 @@ class StaffingPerson(db.Model):
     __table_args__ = (
         db.CheckConstraint(
             "classification IN ('part_time', 'full_time_combo', 'part_time_supervisor', "
-            "'full_time_supervisor', 'full_time_specialist', 'manager', 'division_manager', "
+            "'full_time_supervisor', 'twenty_c_full_time_supervisor', "
+            "'full_time_specialist', 'manager', 'division_manager', "
             "'seasonal', 'domiciled_full_time_combo', "
             "'non_domiciled_full_time_combo')",
             name="ck_staffing_people_classification",
@@ -100,6 +102,16 @@ class StaffingPerson(db.Model):
         "StaffingReportingRelationship",
         foreign_keys="StaffingReportingRelationship.reports_to_person_id",
         back_populates="reports_to_person",
+    )
+    twenty_c_affiliations = db.relationship(
+        "StaffingTwentyCAffiliation",
+        foreign_keys="StaffingTwentyCAffiliation.twenty_c_person_id",
+        back_populates="twenty_c_person",
+    )
+    twenty_c_supervisor_affiliations = db.relationship(
+        "StaffingTwentyCAffiliation",
+        foreign_keys="StaffingTwentyCAffiliation.ft_supervisor_person_id",
+        back_populates="ft_supervisor_person",
     )
     daily_attendance_records = db.relationship(
         "StaffingDailyAttendance",

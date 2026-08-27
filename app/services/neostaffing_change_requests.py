@@ -14,6 +14,7 @@ from app.models import (
     StaffingNotification,
     StaffingPerson,
     StaffingReportingRelationship,
+    StaffingTwentyCAffiliation,
     StaffingUnit,
     StaffingWorkAssignment,
     User,
@@ -60,6 +61,7 @@ REQUESTABLE_FORM_FIELDS = {
 }
 APPROVER_CLASSIFICATIONS = {
     "full_time_supervisor",
+    "twenty_c_full_time_supervisor",
     "manager",
     "division_manager",
 }
@@ -126,6 +128,10 @@ def change_request_context(filters, user):
     leadership_by_person = {}
     for assignment in leadership_assignments:
         leadership_by_person.setdefault(assignment.person_id, []).append(assignment)
+    affiliations = StaffingTwentyCAffiliation.query.filter_by(active=True).all()
+    authority_unit_ids_by_person = _management_authority_unit_ids_from_rows(
+        leadership_by_person, affiliations
+    )
 
     requests_query = StaffingChangeRequest.query
     if view == "active":
@@ -194,7 +200,7 @@ def change_request_context(filters, user):
             queue_scope,
             current_person,
             routed_ids,
-            leadership_by_person,
+            authority_unit_ids_by_person,
             units_by_id,
         ):
             continue
@@ -550,6 +556,7 @@ def submit_bulk_change_requests(packages, user):
     units = StaffingUnit.query.order_by(StaffingUnit.id).all()
     units_by_id = {row.id: row for row in units}
     leadership = StaffingLeadershipAssignment.query.filter_by(active=True).all()
+    affiliations = StaffingTwentyCAffiliation.query.filter_by(active=True).all()
     management_people = StaffingPerson.query.filter(
         StaffingPerson.active.is_(True),
         StaffingPerson.classification.in_(APPROVER_CLASSIFICATIONS | {"part_time_supervisor"}),
@@ -663,6 +670,7 @@ def submit_bulk_change_requests(packages, user):
             leadership,
             management_by_id,
             relationship,
+            affiliations,
         )
         change_request = StaffingChangeRequest(
             person_id=person.id,
@@ -1231,6 +1239,17 @@ def _route_approver_person_ids(source_area_id, destination_area_id, submitter_pe
                 .all()
             )
         ]
+    ft_supervisor_ids = set(approver_ids)
+    if ft_supervisor_ids:
+        approver_ids.extend(
+            row.twenty_c_person_id
+            for row in StaffingTwentyCAffiliation.query.filter(
+                StaffingTwentyCAffiliation.active.is_(True),
+                StaffingTwentyCAffiliation.ft_supervisor_person_id.in_(
+                    ft_supervisor_ids
+                ),
+            ).all()
+        )
     if not approver_ids and submitter_person:
         relationship = StaffingReportingRelationship.query.join(
             StaffingPerson,
@@ -1254,6 +1273,7 @@ def _route_approvers_from_loaded_rows(
     leadership,
     people_by_id,
     submitter_relationship,
+    affiliations=(),
 ):
     area_ids = {
         area_id
@@ -1279,6 +1299,12 @@ def _route_approvers_from_loaded_rows(
         and people_by_id[row.person_id].active
         and people_by_id[row.person_id].classification == "full_time_supervisor"
     }
+    ft_supervisor_ids = set(approver_ids)
+    approver_ids.update(
+        row.twenty_c_person_id
+        for row in affiliations
+        if row.active and row.ft_supervisor_person_id in ft_supervisor_ids
+    )
     if not approver_ids and submitter_person and submitter_relationship:
         target = people_by_id.get(submitter_relationship.reports_to_person_id)
         if (
@@ -1359,6 +1385,8 @@ def _default_queue_scope(person):
         return "all"
     if person.classification == "full_time_supervisor":
         return "routed"
+    if person.classification == "twenty_c_full_time_supervisor":
+        return "purview"
     if person.classification in {"manager", "division_manager"}:
         return "purview"
     return "all"
@@ -1369,7 +1397,7 @@ def _request_matches_queue(
     queue_scope,
     current_person,
     routed_ids,
-    leadership_by_person,
+    authority_unit_ids_by_person,
     units_by_id,
 ):
     if queue_scope == "all":
@@ -1380,9 +1408,7 @@ def _request_matches_queue(
         return bool(current_person and current_person.id in routed_ids)
     if not current_person:
         return False
-    led_unit_ids = {
-        row.unit_id for row in leadership_by_person.get(current_person.id, [])
-    }
+    led_unit_ids = authority_unit_ids_by_person.get(current_person.id, set())
     return any(
         _unit_is_within(unit_id, led_unit_ids, units_by_id)
         for unit_id in (
@@ -1402,6 +1428,24 @@ def _unit_is_within(unit_id, ancestor_ids, units_by_id):
         visited.add(current.id)
         current = units_by_id.get(current.parent_id)
     return False
+
+
+def _management_authority_unit_ids_from_rows(leadership_by_person, affiliations):
+    authority = {
+        person_id: {row.unit_id for row in rows if row.active}
+        for person_id, rows in leadership_by_person.items()
+    }
+    for affiliation in affiliations:
+        if not affiliation.active:
+            continue
+        authority.setdefault(affiliation.twenty_c_person_id, set()).update(
+            row.unit_id
+            for row in leadership_by_person.get(
+                affiliation.ft_supervisor_person_id, ()
+            )
+            if row.active
+        )
+    return authority
 
 
 def _require_approver(user):

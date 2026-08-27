@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 import re
 
 from flask import current_app
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -17,6 +17,7 @@ from app.models import (
     StaffingPerson,
     StaffingShiftFlowPlan,
     StaffingReportingRelationship,
+    StaffingTwentyCAffiliation,
     SortDateOperation,
     StaffingUnit,
     StaffingWorkAssignment,
@@ -41,6 +42,7 @@ CLASSIFICATION_LABELS = {
     "full_time_combo": "Full Time Combo",
     "part_time_supervisor": "Part Time Supervisor",
     "full_time_supervisor": "Full Time Supervisor",
+    "twenty_c_full_time_supervisor": "20C Full-Time Supervisor",
     "full_time_specialist": "Full Time Specialist",
     "manager": "Manager",
     "division_manager": "Division Manager",
@@ -132,6 +134,7 @@ MANAGEMENT_CLASSIFICATIONS = frozenset(
 SUPERVISOR_CLASSIFICATIONS = {
     "part_time_supervisor",
     "full_time_supervisor",
+    "twenty_c_full_time_supervisor",
     "full_time_specialist",
 }
 MANAGER_CLASSIFICATIONS = {"manager", "division_manager"}
@@ -149,12 +152,14 @@ ATTENDANCE_OPERATION_MISSING_MESSAGE = "NIGHT SORT HAS NOT BEEN CREATED YET."
 REPORTING_TARGET_CLASSIFICATION = {
     "part_time_supervisor": "full_time_supervisor",
     "full_time_specialist": "full_time_supervisor",
+    "twenty_c_full_time_supervisor": "full_time_supervisor",
     "full_time_supervisor": "manager",
     "manager": "division_manager",
 }
 REPORTING_HISTORY_RETENTION_DAYS = 30
 DIRECT_REPORTING_EDITOR_CLASSIFICATIONS = {
     "full_time_supervisor",
+    "twenty_c_full_time_supervisor",
     "manager",
     "division_manager",
 }
@@ -162,8 +167,9 @@ MANAGEMENT_TREE_CLASSIFICATION_ORDER = {
     "division_manager": 0,
     "manager": 1,
     "full_time_supervisor": 2,
-    "part_time_supervisor": 3,
-    "full_time_specialist": 4,
+    "twenty_c_full_time_supervisor": 3,
+    "part_time_supervisor": 4,
+    "full_time_specialist": 5,
 }
 
 SHIFT_FLOW_DOOR = "Door"
@@ -1456,7 +1462,7 @@ def update_person(person, values, is_new=False):
 
     if old_classification and old_classification != person_values["classification"]:
         remove_invalid_assignments_for_person(person)
-    if person.id and (
+    if person.id and person.classification != "twenty_c_full_time_supervisor" and (
         old_classification != person_values["classification"]
         or old_active != person_values["active"]
     ):
@@ -1558,6 +1564,16 @@ def _apply_person_values(person, person_values):
 
 
 def delete_person(person):
+    affiliation_count = StaffingTwentyCAffiliation.query.filter(
+        or_(
+            StaffingTwentyCAffiliation.twenty_c_person_id == person.id,
+            StaffingTwentyCAffiliation.ft_supervisor_person_id == person.id,
+        )
+    ).count()
+    if affiliation_count:
+        raise ValueError(
+            "This person has 20C affiliation history and cannot be deleted. Deactivate the person instead."
+        )
     reporting_count = StaffingReportingRelationship.query.filter(
         or_(
             StaffingReportingRelationship.person_id == person.id,
@@ -1587,7 +1603,8 @@ def delete_person(person):
 
 def toggle_person_active(person):
     person.active = not person.active
-    end_invalid_reporting_relationships_for_person(person)
+    if person.classification != "twenty_c_full_time_supervisor":
+        end_invalid_reporting_relationships_for_person(person)
     return person
 
 
@@ -1777,6 +1794,206 @@ def delete_leadership_assignment(assignment):
     reconcile_management_person_state(person)
 
 
+def create_twenty_c_affiliation(
+    twenty_c_person,
+    ft_supervisor_person,
+    sort_unit,
+    affiliation_type,
+    effective_date=None,
+):
+    """Create one active, history-preserving 20C affiliation."""
+    normalized_type = str(affiliation_type or "").strip().lower()
+    _validate_twenty_c_affiliation_people(
+        twenty_c_person, ft_supervisor_person, sort_unit, normalized_type
+    )
+    active_rows = (
+        StaffingTwentyCAffiliation.query.filter_by(
+            twenty_c_person_id=twenty_c_person.id,
+            sort_unit_id=sort_unit.id,
+            active=True,
+        )
+        .order_by(StaffingTwentyCAffiliation.id)
+        .with_for_update()
+        .all()
+    )
+    if any(
+        row.ft_supervisor_person_id == ft_supervisor_person.id
+        for row in active_rows
+    ):
+        raise ValueError("This 20C FT Supervisor affiliation is already active for the Sort.")
+    primary_rows = [row for row in active_rows if row.affiliation_type == "primary"]
+    if normalized_type == "primary" and primary_rows:
+        raise ValueError("A 20C may have only one active Primary FT Supervisor per Sort.")
+    if normalized_type == "secondary" and not primary_rows:
+        raise ValueError("Assign the Primary FT Supervisor before adding Secondary affiliations.")
+    row = StaffingTwentyCAffiliation(
+        twenty_c_person=twenty_c_person,
+        ft_supervisor_person=ft_supervisor_person,
+        sort_unit=sort_unit,
+        affiliation_type=normalized_type,
+        active=True,
+        effective_start=effective_date or date.today(),
+    )
+    db.session.add(row)
+    db.session.flush()
+    return row
+
+
+def replace_twenty_c_primary_affiliation(
+    twenty_c_person,
+    ft_supervisor_person,
+    sort_unit,
+    effective_date=None,
+):
+    """Explicitly replace Primary affiliation without rewriting formal Reports To."""
+    _validate_twenty_c_affiliation_people(
+        twenty_c_person, ft_supervisor_person, sort_unit, "primary"
+    )
+    as_of = effective_date or date.today()
+    active_rows = (
+        StaffingTwentyCAffiliation.query.filter_by(
+            twenty_c_person_id=twenty_c_person.id,
+            sort_unit_id=sort_unit.id,
+            active=True,
+        )
+        .order_by(StaffingTwentyCAffiliation.id)
+        .with_for_update()
+        .all()
+    )
+    current = next(
+        (row for row in active_rows if row.affiliation_type == "primary"), None
+    )
+    if current and current.ft_supervisor_person_id == ft_supervisor_person.id:
+        return {"affiliation": current, "changed": False, "reports_to_review_required": False}
+    duplicate = next(
+        (
+            row
+            for row in active_rows
+            if row.ft_supervisor_person_id == ft_supervisor_person.id
+        ),
+        None,
+    )
+    if duplicate:
+        duplicate.active = False
+        duplicate.effective_end = as_of
+        duplicate.updated_at = datetime.utcnow()
+    if current:
+        current.active = False
+        current.effective_end = as_of
+        current.updated_at = datetime.utcnow()
+    replacement = StaffingTwentyCAffiliation(
+        twenty_c_person=twenty_c_person,
+        ft_supervisor_person=ft_supervisor_person,
+        sort_unit=sort_unit,
+        affiliation_type="primary",
+        active=True,
+        effective_start=as_of,
+    )
+    db.session.add(replacement)
+    db.session.flush()
+    relationship = StaffingReportingRelationship.query.filter_by(
+        person_id=twenty_c_person.id, active=True
+    ).first()
+    return {
+        "affiliation": replacement,
+        "changed": True,
+        "reports_to_review_required": bool(
+            not relationship
+            or relationship.reports_to_person_id != ft_supervisor_person.id
+        ),
+    }
+
+
+def deactivate_twenty_c_affiliation(affiliation, effective_date=None):
+    if not affiliation or not affiliation.active:
+        raise ValueError("The selected 20C affiliation is not active.")
+    if affiliation.affiliation_type == "primary":
+        raise ValueError("Replace the Primary affiliation instead of leaving the Sort without one.")
+    affiliation.active = False
+    affiliation.effective_end = effective_date or date.today()
+    affiliation.updated_at = datetime.utcnow()
+    db.session.flush()
+    return affiliation
+
+
+def twenty_c_effective_scope_unit_ids(person, sort_unit=None, *, include_direct=True):
+    """Return the deduplicated union of affiliated FT scope and direct leadership."""
+    if not person or person.classification != "twenty_c_full_time_supervisor":
+        return set()
+    units = StaffingUnit.query.filter_by(active=True).order_by(StaffingUnit.id).all()
+    units_by_id = {unit.id: unit for unit in units}
+    children_by_parent = {}
+    for unit in units:
+        children_by_parent.setdefault(unit.parent_id, []).append(unit.id)
+    affiliation_query = StaffingTwentyCAffiliation.query.filter_by(
+        twenty_c_person_id=person.id, active=True
+    )
+    if sort_unit is not None:
+        affiliation_query = affiliation_query.filter_by(sort_unit_id=sort_unit.id)
+    affiliations = affiliation_query.order_by(
+        StaffingTwentyCAffiliation.affiliation_type,
+        StaffingTwentyCAffiliation.id,
+    ).all()
+    supervisor_ids = {row.ft_supervisor_person_id for row in affiliations}
+    leadership_rows = StaffingLeadershipAssignment.query.filter(
+        StaffingLeadershipAssignment.active.is_(True),
+        StaffingLeadershipAssignment.person_id.in_(supervisor_ids or {-1}),
+    ).all()
+    allowed_sort_ids = {row.sort_unit_id for row in affiliations}
+    root_ids = {
+        row.unit_id
+        for row in leadership_rows
+        if _sort_id_from_unit_id(row.unit_id, units_by_id) in allowed_sort_ids
+    }
+    if include_direct:
+        direct_rows = StaffingLeadershipAssignment.query.filter_by(
+            person_id=person.id, active=True
+        ).all()
+        root_ids.update(
+            row.unit_id
+            for row in direct_rows
+            if sort_unit is None
+            or _sort_id_from_unit_id(row.unit_id, units_by_id) == sort_unit.id
+        )
+    result = set()
+    pending = list(root_ids)
+    while pending:
+        unit_id = pending.pop()
+        if unit_id in result:
+            continue
+        result.add(unit_id)
+        pending.extend(children_by_parent.get(unit_id, ()))
+    return result
+
+
+def _sort_id_from_unit_id(unit_id, units_by_id):
+    current = units_by_id.get(unit_id)
+    seen = set()
+    while current and current.id not in seen:
+        if current.unit_type == "sort":
+            return current.id
+        seen.add(current.id)
+        current = units_by_id.get(current.parent_id)
+    return None
+
+
+def _validate_twenty_c_affiliation_people(
+    twenty_c_person, ft_supervisor_person, sort_unit, affiliation_type
+):
+    if not twenty_c_person or twenty_c_person.classification != "twenty_c_full_time_supervisor":
+        raise ValueError("Select a 20C Full-Time Supervisor.")
+    if not twenty_c_person.active:
+        raise ValueError("Select an active 20C Full-Time Supervisor.")
+    if not ft_supervisor_person or ft_supervisor_person.classification != "full_time_supervisor":
+        raise ValueError("A 20C affiliation requires a Full-Time Supervisor.")
+    if not ft_supervisor_person.active:
+        raise ValueError("A 20C affiliation requires an active Full-Time Supervisor.")
+    if not sort_unit or sort_unit.unit_type != "sort":
+        raise ValueError("A 20C affiliation requires a Sort.")
+    if affiliation_type not in {"primary", "secondary"}:
+        raise ValueError("Choose Primary or Secondary affiliation.")
+
+
 def remove_invalid_assignments_for_person(person):
     if person.classification not in NON_MANAGEMENT_CLASSIFICATIONS:
         clear_work_assignment(person)
@@ -1816,6 +2033,17 @@ def validate_reporting_relationship(person, reports_to_person):
         raise ValueError(
             f"{CLASSIFICATION_LABELS[person.classification]} must report to a {required_label}."
         )
+    if person.classification == "twenty_c_full_time_supervisor":
+        primary = StaffingTwentyCAffiliation.query.filter_by(
+            twenty_c_person_id=person.id,
+            ft_supervisor_person_id=reports_to_person.id,
+            affiliation_type="primary",
+            active=True,
+        ).first()
+        if not primary:
+            raise ValueError(
+                "A 20C Full-Time Supervisor must formally report to its Primary FT Supervisor."
+            )
     return True
 
 
@@ -1943,6 +2171,16 @@ def end_invalid_reporting_relationships_for_person(person, as_of=None):
         supervisor = people_by_id.get(relationship.reports_to_person_id)
         if _reporting_tiers_are_valid(subject, supervisor):
             continue
+        if (
+            subject
+            and supervisor
+            and subject.classification == "twenty_c_full_time_supervisor"
+            and supervisor.classification == "full_time_supervisor"
+            and subject.id != supervisor.id
+        ):
+            # Availability/employment status does not dissolve a 20C's formal
+            # relationship; classification changes still invalidate the tier.
+            continue
         relationship.active = False
         relationship.effective_end = ended_on
         relationship.updated_at = now
@@ -1979,6 +2217,11 @@ def default_leadership_level_for(person, unit):
         return "work_area"
     if classification == "full_time_supervisor" and unit.unit_type == "department":
         return "department"
+    if classification == "twenty_c_full_time_supervisor" and unit.unit_type in {
+        "work_area",
+        "department",
+    }:
+        return unit.unit_type
     if classification == "manager" and unit.unit_type == "operation":
         return "operation"
     if classification == "division_manager" and unit.unit_type == "sort":
@@ -2379,9 +2622,13 @@ def parent_chain_for_work_area(work_area):
 
 
 def _board_work_area_leadership_counts(index, sort, operation, department, work_area):
+    work_area_index = index.get(work_area.id if work_area else None, {})
+    department_index = index.get(department.id if department else None, {})
     return {
-        "pt_supervisors": int(index.get(work_area.id if work_area else None, {}).get("part_time_supervisor", 0)),
-        "ft_supervisors": int(index.get(department.id if department else None, {}).get("full_time_supervisor", 0)),
+        "pt_supervisors": int(work_area_index.get("part_time_supervisor", 0))
+        + int(work_area_index.get("twenty_c_full_time_supervisor", 0)),
+        "ft_supervisors": int(department_index.get("full_time_supervisor", 0))
+        + int(department_index.get("twenty_c_full_time_supervisor", 0)),
         "managers": int(index.get(operation.id if operation else None, {}).get("manager", 0)),
         "division_managers": int(index.get(sort.id if sort else None, {}).get("division_manager", 0)),
     }
@@ -2829,6 +3076,29 @@ def management_org_chart_context(selected_person_id=None):
         StaffingLeadershipAssignment.active.is_(True),
         StaffingLeadershipAssignment.person_id.in_(person_ids or {-1}),
     ).all()
+    affiliations = StaffingTwentyCAffiliation.query.filter(
+        StaffingTwentyCAffiliation.active.is_(True),
+        StaffingTwentyCAffiliation.twenty_c_person_id.in_(person_ids or {-1}),
+        StaffingTwentyCAffiliation.ft_supervisor_person_id.in_(person_ids or {-1}),
+    ).order_by(
+        StaffingTwentyCAffiliation.affiliation_type,
+        StaffingTwentyCAffiliation.id,
+    ).all()
+    affiliations_by_twenty_c = {}
+    secondary_by_supervisor = {}
+    for affiliation in affiliations:
+        affiliations_by_twenty_c.setdefault(
+            affiliation.twenty_c_person_id, []
+        ).append(affiliation)
+        if affiliation.affiliation_type == "secondary":
+            secondary_by_supervisor.setdefault(
+                affiliation.ft_supervisor_person_id, []
+            ).append(affiliation)
+    primary_supervisor_by_twenty_c = {
+        row.twenty_c_person_id: row.ft_supervisor_person_id
+        for row in affiliations
+        if row.affiliation_type == "primary"
+    }
     units = StaffingUnit.query.order_by(
         StaffingUnit.display_order,
         StaffingUnit.name,
@@ -2872,10 +3142,10 @@ def management_org_chart_context(selected_person_id=None):
     for child_ids in children_by_supervisor.values():
         child_ids.sort(key=lambda row_id: _management_person_sort_key(people_by_id[row_id]))
 
-    def build_tree(person, ancestors=None):
+    def build_tree(person, ancestors=None, affiliation_type=None):
         ancestors = set(ancestors or ())
         if person.id in ancestors:
-            return {"person": person, "children": [], "mismatch": True}
+            return {"person": person, "children": [], "mismatch": True, "affiliation_type": affiliation_type}
         next_ancestors = ancestors | {person.id}
         relationship = relationship_by_person.get(person.id)
         alignment = None
@@ -2886,14 +3156,34 @@ def management_org_chart_context(selected_person_id=None):
                 people_by_id,
                 assignments_by_person,
                 units_by_id,
+                primary_supervisor_by_twenty_c,
             )
+        if person.classification == "twenty_c_full_time_supervisor" and relationship:
+            matching = next(
+                (
+                    row
+                    for row in affiliations_by_twenty_c.get(person.id, ())
+                    if row.ft_supervisor_person_id == relationship.reports_to_person_id
+                ),
+                None,
+            )
+            affiliation_type = matching.affiliation_type if matching else None
         return {
             "person": person,
             "children": [
                 build_tree(people_by_id[child_id], next_ancestors)
                 for child_id in children_by_supervisor.get(person.id, [])
             ],
+            "affiliation_aliases": [
+                {
+                    "person": people_by_id[row.twenty_c_person_id],
+                    "affiliation_type": "secondary",
+                }
+                for row in secondary_by_supervisor.get(person.id, ())
+                if row.twenty_c_person_id in people_by_id
+            ],
             "mismatch": alignment is False,
+            "affiliation_type": affiliation_type,
         }
 
     division_managers = sorted(
@@ -2938,6 +3228,7 @@ def management_org_chart_context(selected_person_id=None):
                 people_by_id,
                 assignments_by_person,
                 units_by_id,
+                primary_supervisor_by_twenty_c,
             )
         target_classification = REPORTING_TARGET_CLASSIFICATION.get(
             selected_person.classification
@@ -2953,6 +3244,7 @@ def management_org_chart_context(selected_person_id=None):
                     people_by_id,
                     assignments_by_person,
                     units_by_id,
+                    primary_supervisor_by_twenty_c,
                 )
                 candidates.append(
                     {
@@ -2980,6 +3272,18 @@ def management_org_chart_context(selected_person_id=None):
                 }
                 for assignment in assignments_by_person.get(selected_person.id, [])
                 if assignment.unit_id in units_by_id
+            ],
+            "ft_supervisor_affiliations": [
+                {
+                    "affiliation": affiliation,
+                    "supervisor": people_by_id.get(
+                        affiliation.ft_supervisor_person_id
+                    ),
+                    "sort": units_by_id.get(affiliation.sort_unit_id),
+                }
+                for affiliation in affiliations_by_twenty_c.get(
+                    selected_person.id, ()
+                )
             ],
             "mismatch": alignment is False,
             "comparison_available": alignment is not None,
@@ -3034,6 +3338,7 @@ def _operational_reporting_alignment(
     people_by_id,
     assignments_by_person,
     units_by_id,
+    primary_supervisor_by_twenty_c=None,
 ):
     person = people_by_id.get(person_id)
     reports_to_person = people_by_id.get(reports_to_person_id)
@@ -3076,6 +3381,19 @@ def _operational_reporting_alignment(
                 if specialist_unit.unit_type == "operation" and supervisor_unit.parent_id == specialist_unit.id:
                     return True
         return False
+    if person.classification == "twenty_c_full_time_supervisor":
+        if primary_supervisor_by_twenty_c is None:
+            primary = StaffingTwentyCAffiliation.query.filter_by(
+                twenty_c_person_id=person.id,
+                ft_supervisor_person_id=reports_to_person.id,
+                affiliation_type="primary",
+                active=True,
+            ).first()
+            return True if primary else False
+        return (
+            primary_supervisor_by_twenty_c.get(person.id)
+            == reports_to_person.id
+        )
     if person.classification == "full_time_supervisor":
         expected_operation_ids = {
             unit.parent_id
@@ -3140,20 +3458,72 @@ def management_attendance_context_for_user(user):
             "assignments": [],
             "message": "Create a matching PEOPLE record before assigned staffing scope can resolve.",
         }
-    assignments = [
-        assignment
-        for assignment in person.leadership_assignments
-        if assignment.active and assignment.unit and assignment.unit.active
-    ]
+    assignments = (
+        StaffingLeadershipAssignment.query.options(
+            joinedload(StaffingLeadershipAssignment.unit)
+        )
+        .filter_by(person_id=person.id, active=True)
+        .order_by(StaffingLeadershipAssignment.id)
+        .all()
+    )
+    scoped_assignments = [(assignment, None) for assignment in assignments]
+    if person.classification == "twenty_c_full_time_supervisor":
+        affiliations = (
+            StaffingTwentyCAffiliation.query.filter_by(
+                twenty_c_person_id=person.id,
+                active=True,
+            )
+            .order_by(
+                case(
+                    (StaffingTwentyCAffiliation.affiliation_type == "primary", 0),
+                    else_=1,
+                ),
+                StaffingTwentyCAffiliation.id,
+            )
+            .all()
+        )
+        supervisor_ids = {row.ft_supervisor_person_id for row in affiliations}
+        supervisor_assignments = (
+            StaffingLeadershipAssignment.query.options(
+                joinedload(StaffingLeadershipAssignment.unit)
+            )
+            .filter(
+                StaffingLeadershipAssignment.active.is_(True),
+                StaffingLeadershipAssignment.person_id.in_(supervisor_ids or {-1}),
+            )
+            .order_by(StaffingLeadershipAssignment.id)
+            .all()
+        )
+        assignments_by_supervisor = {}
+        for assignment in supervisor_assignments:
+            assignments_by_supervisor.setdefault(assignment.person_id, []).append(
+                assignment
+            )
+        scoped_assignments = [
+            (assignment, affiliation.affiliation_type)
+            for affiliation in affiliations
+            for assignment in assignments_by_supervisor.get(
+                affiliation.ft_supervisor_person_id, ()
+            )
+        ] + scoped_assignments
+    seen_unit_ids = set()
     cards = [
         {
             "assignment": assignment,
             "unit": assignment.unit,
             "path": unit_path(assignment.unit),
-            "label": _attendance_scope_label(assignment),
+            "label": (
+                f"{affiliation_type.title()} FT Affiliation"
+                if affiliation_type
+                else _attendance_scope_label(assignment)
+            ),
             "scope_key": _attendance_scope_key(assignment.unit),
         }
-        for assignment in assignments
+        for assignment, affiliation_type in scoped_assignments
+        if assignment.unit
+        and assignment.unit.active
+        and assignment.unit_id not in seen_unit_ids
+        and not seen_unit_ids.add(assignment.unit_id)
     ]
     return {
         "is_management": True,
