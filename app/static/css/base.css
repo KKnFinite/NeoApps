@@ -11567,6 +11567,42 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
     grid-column: 1 / -1;
     gap: 7px;
 }
+.neostaffing-people-management-form {
+    grid-template-areas:
+        "employee-id employee-status"
+        "first-name last-name"
+        "seniority-date classification"
+        "assignment phone"
+        "primary primary"
+        "save save";
+    align-items: start;
+}
+.neostaffing-people-management-form [data-person-field="employee-id"] { grid-area: employee-id; }
+.neostaffing-people-management-form [data-person-field="employee-status"] { grid-area: employee-status; }
+.neostaffing-people-management-form [data-person-field="first-name"] { grid-area: first-name; }
+.neostaffing-people-management-form [data-person-field="last-name"] { grid-area: last-name; }
+.neostaffing-people-management-form [data-person-field="seniority-date"] { grid-area: seniority-date; }
+.neostaffing-people-management-form [data-person-field="classification"] { grid-area: classification; }
+.neostaffing-people-management-form [data-person-field="phone"] { grid-area: phone; }
+.neostaffing-people-management-form [data-assignment-picker] { grid-area: assignment; }
+.neostaffing-people-management-form [data-twenty-c-primary] { grid-area: primary; }
+.neostaffing-people-management-form > button[type="submit"] { grid-area: save; }
+.neostaffing-people-management-form [data-person-field] > input,
+.neostaffing-people-management-form [data-person-field] > select { height: 32px; min-height: 32px; }
+.neostaffing-people-management-form [data-assignment-search],
+.neostaffing-people-management-form [data-twenty-c-primary] > select { height: 32px; min-height: 32px; }
+.neostaffing-people-employee-scope {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 3px;
+    padding: 7px 9px;
+    border: 1px solid rgba(var(--node-rgb), .24);
+    border-radius: 3px;
+    background: rgba(var(--node-rgb), .07);
+}
+.neostaffing-people-employee-scope span { color: var(--muted); font-size: .62rem; font-weight: 850; }
+.neostaffing-people-employee-scope strong { color: #e8f5f3; font-size: .74rem; }
+.neostaffing-people-employee-form .neostaffing-shift-flow-optional { grid-column: 1 / -1; }
 .neostaffing-people-assignment-results {
     position: absolute;
     z-index: 3;
@@ -11592,12 +11628,8 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
 }
 .neostaffing-people-assignment-results button:hover,
 .neostaffing-people-assignment-results button:focus-visible { background: rgba(var(--node-rgb), .16); }
-.neostaffing-people-assignment-results span,
-.neostaffing-people-assignment-chip span { color: var(--node-primary); font-size: .6rem; font-weight: 850; }
 .neostaffing-people-assignment-results strong,
 .neostaffing-people-assignment-chip strong { color: #e8f5f3; font-size: .74rem; }
-.neostaffing-people-assignment-results small,
-.neostaffing-people-assignment-chip small { overflow: hidden; color: var(--muted); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
 .neostaffing-people-assignment-results p { margin: 6px; color: var(--muted); font-size: .7rem; }
 .neostaffing-people-assignment-selected { display: grid; gap: 5px; }
 .neostaffing-people-assignment-chip {
@@ -11610,8 +11642,23 @@ body:has(.neostaffing-people-console) { overflow-x: clip; }
     border-radius: 4px;
     background: rgba(var(--node-rgb), .07);
 }
-.neostaffing-people-assignment-chip > div { display: grid; min-width: 0; }
 .neostaffing-people-assignment-chip > button { grid-column: auto; padding: 2px 7px; justify-self: auto; }
+@media (max-width: 560px) {
+    .neostaffing-people-management-form {
+        grid-template-areas:
+            "employee-id"
+            "employee-status"
+            "first-name"
+            "last-name"
+            "seniority-date"
+            "classification"
+            "assignment"
+            "phone"
+            "primary"
+            "save";
+        grid-template-columns: 1fr;
+    }
+}
 .neostaffing-people-drawer-panel table,
 .neostaffing-people-detail-drawer table { color: #dfeef1; background: #0d171d; }
 .neostaffing-people-destination-picker { position: relative; min-width: 180px; }

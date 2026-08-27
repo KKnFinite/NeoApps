@@ -5269,10 +5269,18 @@ def _parse_date(value, label):
     text = str(value or "").strip()
     if not text:
         raise ValueError(f"{label} is required.")
-    try:
-        return date.fromisoformat(text)
-    except ValueError as exc:
-        raise ValueError(f"{label} must be a valid date.") from exc
+    formats = (
+        (r"\d{2}/\d{2}/\d{4}", "%m/%d/%Y"),
+        (r"\d{4}-\d{2}-\d{2}", "%Y-%m-%d"),
+    )
+    for pattern, value_format in formats:
+        if not re.fullmatch(pattern, text):
+            continue
+        try:
+            return datetime.strptime(text, value_format).date()
+        except ValueError:
+            break
+    raise ValueError(f"{label} must be a valid date in MM/DD/YYYY format.")
 
 
 def _parse_optional_date(value):

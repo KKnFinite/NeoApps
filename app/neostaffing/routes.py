@@ -217,6 +217,7 @@ def people():
       )
     shift_flow_areas = staffing_service.shift_flow_area_options(context.get("selected_work_area")) if can_edit_people else []
     creation_context = staffing_service.people_creation_context(context.get("selected_unit")) if can_edit_people else None
+    all_classification_choices = staffing_service.classification_choices()
     return render_template(
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
@@ -225,7 +226,17 @@ def people():
         can_bulk_people=can_bulk_people,
         shift_flow_areas=shift_flow_areas,
         creation_context=creation_context,
-        classification_choices=staffing_service.classification_choices(),
+        classification_choices=all_classification_choices,
+        management_classification_choices=[
+            choice
+            for choice in all_classification_choices
+            if choice[0] in staffing_service.MANAGEMENT_CLASSIFICATIONS
+        ],
+        employee_classification_choices=[
+            choice
+            for choice in all_classification_choices
+            if choice[0] in staffing_service.WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS
+        ],
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
         shift_work_area_type=staffing_service.shift_work_area_type,
         employee_status_choices=staffing_service.employee_status_choices(),
@@ -2067,10 +2078,20 @@ def create_person():
     person = None
     try:
         person = staffing_service.create_person(request.form)
-        raw_unit_ids = request.form.getlist("initial_assignment_unit_ids")
-        legacy_work_area_id = request.form.get("initial_work_area_unit_id", "").strip()
-        if legacy_work_area_id:
-            raw_unit_ids.append(legacy_work_area_id)
+        creation_flow = request.form.get("creation_flow", "").strip().lower()
+        if creation_flow == "management":
+            if person.classification not in staffing_service.MANAGEMENT_CLASSIFICATIONS:
+                raise ValueError("Add Management requires a management classification.")
+            raw_unit_ids = request.form.getlist("initial_assignment_unit_ids")
+        elif creation_flow == "employee":
+            if person.classification not in staffing_service.WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS:
+                raise ValueError("Add Employee requires a writable employee classification.")
+            work_area_id = request.form.get("initial_work_area_unit_id", "").strip()
+            if not work_area_id:
+                raise ValueError("Add Employee requires a selected Work Area.")
+            raw_unit_ids = [work_area_id]
+        else:
+            raise ValueError("Select a valid People creation workflow.")
         try:
             unit_ids = list(dict.fromkeys(int(value) for value in raw_unit_ids if str(value).strip()))
         except (TypeError, ValueError):
@@ -2085,6 +2106,10 @@ def create_person():
         )
         if len(units) != len(unit_ids):
             raise ValueError("Select active initial assignment units.")
+        if creation_flow == "employee" and (
+            len(units) != 1 or units[0].unit_type != "work_area"
+        ):
+            raise ValueError("Add Employee requires one active Work Area.")
         if units and person.classification not in staffing_service.NON_MANAGEMENT_CLASSIFICATIONS:
             if not (
                 user_can(MANAGEMENT_ASSIGN_PERMISSION)
@@ -2095,6 +2120,8 @@ def create_person():
 
         primary_value = request.form.get("twenty_c_primary", "").strip()
         if primary_value:
+            if creation_flow != "management":
+                raise ValueError("Primary FT Supervisor applies only to Add Management.")
             if person.classification != "twenty_c_full_time_supervisor":
                 raise ValueError("Primary FT Supervisor applies only to a 20C Full-Time Supervisor.")
             try:
@@ -2110,15 +2137,8 @@ def create_person():
                 person.id, ft_supervisor.id, "none"
             )
 
-        shift_flow_context_id = request.form.get(
-            "shift_flow_context_work_area_id", ""
-        ).strip()
-        shift_flow_context = (
-            _get_unit(shift_flow_context_id) if shift_flow_context_id else None
-        )
-        if shift_flow_context is None and len(units) == 1 and units[0].unit_type == "work_area":
-            shift_flow_context = units[0]
-        staffing_service.create_shift_flow_plan(person, request.form, shift_flow_context)
+        if creation_flow == "employee":
+            staffing_service.create_shift_flow_plan(person, request.form, units[0])
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()

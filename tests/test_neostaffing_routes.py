@@ -950,7 +950,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         ):
             self.assertNotIn(stale_label, response.data)
         self.assertIn(b"data-people-tree-scroll", response.data)
-        self.assertIn(b"ADD PERSON", response.data)
+        self.assertIn(b"ADD MANAGEMENT", response.data)
+        self.assertIn(b"ADD EMPLOYEE", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
         self.assertIn(b"All statuses", response.data)
         self.assertNotIn(b'action-button action-button-secondary" href="/neostaffing/attendance"', response.data)
@@ -995,6 +996,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2020-01-01",
                 "classification": "part_time",
                 "employee_status": "active",
+                "creation_flow": "employee",
+                "initial_work_area_unit_id": str(work_area.id),
             },
             follow_redirects=False,
         )
@@ -2250,7 +2253,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         client = self._logged_in_client(simulator.username)
 
         page = client.get(f"/neostaffing/people?work_area_id={work_area.id}")
-        self.assertIn(b"ADD PERSON", page.data)
+        self.assertIn(b"ADD MANAGEMENT", page.data)
+        self.assertIn(b"ADD EMPLOYEE", page.data)
         self.assertIn(b"BULK ADD EMPLOYEES", page.data)
 
         single = client.post(
@@ -2263,6 +2267,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "phone_number": "555-555-0100",
                 "classification": "part_time",
                 "employee_status": "active",
+                "creation_flow": "employee",
                 "initial_work_area_unit_id": str(work_area.id),
             },
             follow_redirects=True,
@@ -2330,6 +2335,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2020-01-01",
                 "classification": "manager",
                 "employee_status": "active",
+                "creation_flow": "management",
             },
             follow_redirects=True,
         )
@@ -2342,7 +2348,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2020-01-01",
                 "classification": "part_time",
                 "employee_status": "active",
-                "initial_assignment_unit_ids": str(work_area.id),
+                "creation_flow": "employee",
+                "initial_work_area_unit_id": str(work_area.id),
             },
         )
         pt = client.post(
@@ -2354,6 +2361,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2018-01-01",
                 "classification": "part_time_supervisor",
                 "employee_status": "active",
+                "creation_flow": "management",
                 "initial_assignment_unit_ids": [str(work_area.id), str(second_area.id)],
             },
         )
@@ -2366,6 +2374,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2016-01-01",
                 "classification": "twenty_c_full_time_supervisor",
                 "employee_status": "active",
+                "creation_flow": "management",
                 "initial_assignment_unit_ids": [str(work_area.id), str(second_department.id)],
                 "twenty_c_primary": f"{sort.id}:{ft_supervisor.id}",
             },
@@ -2379,6 +2388,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2015-01-01",
                 "classification": "manager",
                 "employee_status": "active",
+                "creation_flow": "management",
                 "initial_assignment_unit_ids": [str(operation.id), str(work_area.id)],
             },
             follow_redirects=True,
@@ -2392,13 +2402,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "seniority_date": "2018-01-01",
                 "classification": "part_time_supervisor",
                 "employee_status": "active",
+                "creation_flow": "management",
                 "initial_assignment_unit_ids": str(work_area.id),
             },
             follow_redirects=True,
         )
 
         self.assertEqual(global_page.status_code, 200)
-        self.assertIn(b"+ ADD PERSON", global_page.data)
+        self.assertIn(b"+ ADD MANAGEMENT", global_page.data)
         self.assertIn(b"Initial Assignment", global_page.data)
         self.assertNotIn(b"BULK ADD EMPLOYEES", global_page.data)
         self.assertIn(f'data-unit-id="{work_area.id}"'.encode(), scoped_page.data)
@@ -2496,11 +2507,212 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             b'type="checkbox" name="initial_assignment_unit_ids"', page.data
         )
         self.assertIn(b"input.name='initial_assignment_unit_ids'", page.data)
-        self.assertIn(b"isHourly(classification.value)?[item]", page.data)
+        self.assertIn(b"selected=[...selected,item]", page.data)
         self.assertIn(b"selected.filter(item=>allowed", page.data)
         self.assertIn(b"rank(a,query)-rank(b,query)", page.data)
         self.assertIn(b"No matching assignments", page.data)
         self.assertIn(b'name="twenty_c_primary"', page.data)
+
+    def test_people_creation_drawers_separate_management_and_employees(self):
+        simulator = self._user("staffing_people_split_drawers")
+        self._grant_app_access(simulator, "neostaffing", "simulator")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+        sort.name = "Night"
+        operation.name = "Ramp"
+        department.name = "Shift"
+        work_area.name = "Door 13"
+        ballmat = StaffingUnit(unit_type="work_area", name="Ballmat A", parent=department)
+        discharge = StaffingUnit(unit_type="work_area", name="Discharge", parent=department)
+        db.session.add_all([ballmat, discharge])
+        db.session.commit()
+
+        client = self._logged_in_client(simulator.username)
+        page = client.get(
+            f"/neostaffing/people?work_area_id={work_area.id}"
+        )
+        html = page.data.decode()
+        management_start = html.index('data-people-add-drawer="management"')
+        employee_start = html.index('data-people-add-drawer="employee"')
+        bulk_start = html.index('data-people-add-drawer="bulk"')
+        management = html[management_start:employee_start]
+        employee = html[employee_start:bulk_start]
+
+        self.assertIn("+ ADD MANAGEMENT", html)
+        self.assertIn("+ ADD EMPLOYEE", html)
+        self.assertIn("BULK ADD", html)
+        for classification in (
+            "part_time_supervisor",
+            "twenty_c_full_time_supervisor",
+            "full_time_supervisor",
+            "full_time_specialist",
+            "manager",
+            "division_manager",
+        ):
+            self.assertIn(f'option value="{classification}"', management)
+        self.assertNotIn('option value="part_time"', management)
+        self.assertNotIn('option value="full_time_combo"', management)
+        management_classification = management.index('data-person-field="classification"')
+        self.assertIn(
+            '<select name="classification" required data-person-classification><option value="part_time_supervisor"',
+            management[management_classification:],
+        )
+        self.assertIn('option value="part_time"', employee)
+        self.assertIn('option value="full_time_combo"', employee)
+        self.assertNotIn('option value="part_time_supervisor"', employee)
+        self.assertNotIn("data-assignment-search", employee)
+        self.assertIn(f'name="initial_work_area_unit_id" value="{work_area.id}"', employee)
+        self.assertIn("SHIFT FLOW ", employee)
+        self.assertIn('placeholder="MM/DD/YYYY"', management)
+        self.assertNotIn('type="date"', management)
+        field_order = [
+            'data-person-field="employee-id"',
+            'data-person-field="employee-status"',
+            'data-person-field="first-name"',
+            'data-person-field="last-name"',
+            'data-person-field="seniority-date"',
+            'data-person-field="classification"',
+            "data-assignment-picker",
+            'data-person-field="phone"',
+            "data-twenty-c-primary",
+            "SAVE MANAGEMENT",
+        ]
+        positions = [management.index(marker) for marker in field_order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("button.append(name)", html)
+        self.assertIn("row.append(name,remove,input)", html)
+        self.assertNotIn("button.append(type,name,path)", html)
+
+        created = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "creation_flow": "employee",
+                "initial_work_area_unit_id": str(work_area.id),
+                "employee_id": "SPLIT-SHIFT",
+                "first_name": "Shift",
+                "last_name": "Employee",
+                "seniority_date": "10/03/2002",
+                "classification": "part_time",
+                "employee_status": "active",
+                "shift_flow_setup_work_area_id": str(ballmat.id),
+                "shift_flow_sort_start_work_area_id": str(discharge.id),
+                "shift_flow_final_door_work_area_id": str(work_area.id),
+            },
+        )
+        shift_person = StaffingPerson.query.filter_by(employee_id="SPLIT-SHIFT").one()
+        self.assertEqual(created.status_code, 302)
+        self.assertEqual(shift_person.work_assignment.work_area_unit_id, work_area.id)
+        self.assertEqual(shift_person.shift_flow_plan.setup_work_area_id, ballmat.id)
+        self.assertEqual(shift_person.shift_flow_plan.sort_start_work_area_id, discharge.id)
+
+    def test_people_creation_flow_and_seniority_date_are_server_authoritative(self):
+        admin = self._user("staffing_people_split_server")
+        self._grant_app_access(admin, "neostaffing", "grandmaster")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        db.session.commit()
+        client = self._logged_in_client(admin.username)
+
+        created = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "creation_flow": "employee",
+                "initial_work_area_unit_id": str(work_area.id),
+                "employee_id": "SPLIT-DATE",
+                "first_name": "Date",
+                "last_name": "Employee",
+                "seniority_date": "10/03/2002",
+                "classification": "part_time",
+                "employee_status": "active",
+            },
+        )
+        person = StaffingPerson.query.filter_by(employee_id="SPLIT-DATE").one()
+        self.assertEqual(created.status_code, 302)
+        self.assertEqual(person.seniority_date, date(2002, 10, 3))
+        self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
+
+        updated = client.post(
+            f"/neostaffing/app-management/people/{person.id}/update",
+            data={
+                "employee_id": person.employee_id,
+                "first_name": person.first_name,
+                "last_name": person.last_name,
+                "seniority_date": "11/04/2003",
+                "classification": person.classification,
+                "employee_status": person.employee_status,
+                "active": "1",
+            },
+        )
+        self.assertEqual(updated.status_code, 302)
+        self.assertEqual(person.seniority_date, date(2003, 11, 4))
+        edit_page = client.get(
+            f"/neostaffing/people?work_area_id={work_area.id}&person_id={person.id}"
+        )
+        self.assertIn(b'name="seniority_date" value="11/04/2003"', edit_page.data)
+        self.assertIn(b">11/04/2003</td>", edit_page.data)
+
+        invalid_date = client.post(
+            f"/neostaffing/app-management/people/{person.id}/update",
+            data={
+                "employee_id": person.employee_id,
+                "first_name": person.first_name,
+                "last_name": person.last_name,
+                "seniority_date": "02/30/2004",
+                "classification": person.classification,
+                "employee_status": person.employee_status,
+                "active": "1",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn(b"valid date in MM/DD/YYYY format", invalid_date.data)
+        self.assertEqual(person.seniority_date, date(2003, 11, 4))
+
+        short_year = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "creation_flow": "employee",
+                "initial_work_area_unit_id": str(work_area.id),
+                "employee_id": "SPLIT-SHORT-YEAR",
+                "first_name": "Short",
+                "last_name": "Year",
+                "seniority_date": "10/03/02",
+                "classification": "part_time",
+                "employee_status": "active",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn(b"valid date in MM/DD/YYYY format", short_year.data)
+        self.assertIsNone(StaffingPerson.query.filter_by(employee_id="SPLIT-SHORT-YEAR").first())
+
+        forged_employee = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "creation_flow": "employee",
+                "initial_work_area_unit_id": str(work_area.id),
+                "employee_id": "SPLIT-FORGED-MANAGER",
+                "first_name": "Forged",
+                "last_name": "Manager",
+                "seniority_date": "01/01/2010",
+                "classification": "manager",
+                "employee_status": "active",
+            },
+            follow_redirects=True,
+        )
+        forged_management = client.post(
+            "/neostaffing/app-management/people",
+            data={
+                "creation_flow": "management",
+                "employee_id": "SPLIT-FORGED-HOURLY",
+                "first_name": "Forged",
+                "last_name": "Hourly",
+                "seniority_date": "01/01/2010",
+                "classification": "part_time",
+                "employee_status": "active",
+            },
+            follow_redirects=True,
+        )
+        self.assertIn(b"Add Employee requires", forged_employee.data)
+        self.assertIn(b"Add Management requires", forged_management.data)
+        self.assertIsNone(StaffingPerson.query.filter_by(employee_id="SPLIT-FORGED-MANAGER").first())
+        self.assertIsNone(StaffingPerson.query.filter_by(employee_id="SPLIT-FORGED-HOURLY").first())
 
     def test_people_drawer_fields_use_full_control_hitboxes(self):
         css = (
@@ -2525,6 +2737,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         self.assertIn(
             ".neostaffing-people-detail-drawer { z-index: 65; }",
+            css,
+        )
+        self.assertIn("grid-template-areas:", css)
+        self.assertIn('"employee-id employee-status"', css)
+        self.assertIn(
+            '.neostaffing-people-management-form [data-person-field] > select { height: 32px; min-height: 32px; }',
             css,
         )
 
