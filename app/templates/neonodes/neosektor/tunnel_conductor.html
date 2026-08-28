@@ -48,8 +48,8 @@
         <section class="tunnel-wave-grid" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <div class="tunnel-wave-workspace" data-tunnel-wave-workspace="{{ wave_key }}">
-                <h2 class="tunnel-desktop-wave-heading">{{ wave.name }}</h2>
                 <article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="{{ wave_key }}">
+                    <h2 class="tunnel-desktop-wave-heading">{{ wave.name }}</h2>
                     <h2>{{ wave.name }}</h2>
                     <div class="tunnel-metric tunnel-arrive-control tunnel-editable">
                         <span>Left to Arrive</span>

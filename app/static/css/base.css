@@ -25750,8 +25750,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-workspace {
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-        gap: 8px;
+        grid-template-rows: minmax(0, 1fr);
+        gap: 0;
         min-height: 0;
         height: 100%;
     }
@@ -25769,7 +25769,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel {
-        grid-template-rows: repeat(2, minmax(0, 1fr));
+        grid-template-rows: auto repeat(2, minmax(0, 1fr));
         gap: 4px;
         padding: 6px;
     }
