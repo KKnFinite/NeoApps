@@ -1455,6 +1455,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'class="tunnel-desktop-wave-heading"', response.data)
         self.assertEqual(response.data.count(b'class="tunnel-desktop-wave-heading"'), 6)
         self.assertEqual(response.data.count(b'class="tunnel-desktop-wave-heading tunnel-ballmat-wave-heading"'), 4)
+        self.assertEqual(response.data.count(b'class="tunnel-ballmat-wave-workspace"'), 4)
+        self.assertNotIn(
+            b'<article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="first">\n                    <h2 class="tunnel-desktop-wave-heading"',
+            response.data,
+        )
         self.assertIn("color: var(--neo-bright-silver);", desktop_css)
         self.assertIn("font-size: 1.4rem;", desktop_css)
         self.assertIn("font-size: 0.8rem;", desktop_css)

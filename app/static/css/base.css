@@ -25624,6 +25624,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     display: none;
 }
 
+.blueprint-neosektor .tunnel-ballmat-wave-workspace {
+    display: contents;
+}
+
 @media (min-width: 901px) {
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .content {
         height: 100vh;
@@ -25717,11 +25721,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         grid-area: wave-second;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="east"] .tunnel-ballmat-card[data-wave="first"] {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="east"] .tunnel-ballmat-wave-workspace[data-tunnel-ballmat-wave-workspace="first"] {
         grid-area: east-first;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="east"] .tunnel-ballmat-card[data-wave="second"] {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="east"] .tunnel-ballmat-wave-workspace[data-tunnel-ballmat-wave-workspace="second"] {
         grid-area: east-second;
     }
 
@@ -25729,11 +25733,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         grid-area: east-open;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="west"] .tunnel-ballmat-card[data-wave="first"] {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="west"] .tunnel-ballmat-wave-workspace[data-tunnel-ballmat-wave-workspace="first"] {
         grid-area: west-first;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="west"] .tunnel-ballmat-card[data-wave="second"] {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-column[data-tunnel-side="west"] .tunnel-ballmat-wave-workspace[data-tunnel-ballmat-wave-workspace="second"] {
         grid-area: west-second;
     }
 
@@ -25748,10 +25752,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         overflow: hidden;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-workspace {
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-workspace,
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-wave-workspace {
         display: grid;
-        grid-template-rows: minmax(0, 1fr);
-        gap: 0;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 4px;
         min-height: 0;
         height: 100%;
     }
@@ -25769,7 +25774,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel {
-        grid-template-rows: auto repeat(2, minmax(0, 1fr));
+        grid-template-rows: repeat(2, minmax(0, 1fr));
         gap: 4px;
         padding: 6px;
     }
@@ -25860,14 +25865,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card {
-        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
         align-content: stretch;
         gap: 3px;
         padding: 5px 6px;
-    }
-
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-wave-heading {
-        align-self: start;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control {

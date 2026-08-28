@@ -48,8 +48,8 @@
         <section class="tunnel-wave-grid" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <div class="tunnel-wave-workspace" data-tunnel-wave-workspace="{{ wave_key }}">
+                <h2 class="tunnel-desktop-wave-heading">{{ wave.name }}</h2>
                 <article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="{{ wave_key }}">
-                    <h2 class="tunnel-desktop-wave-heading">{{ wave.name }}</h2>
                     <h2>{{ wave.name }}</h2>
                     <div class="tunnel-metric tunnel-arrive-control tunnel-editable">
                         <span>Left to Arrive</span>
@@ -92,8 +92,9 @@
                 <section class="tunnel-ballmat-column" data-tunnel-side="{{ side.key }}">
                     <h3 class="tunnel-mobile-side-title">{{ side.label.title() }} Ballmat</h3>
                     {% for wave in side.waves %}
+                    <div class="tunnel-ballmat-wave-workspace" data-tunnel-ballmat-wave-workspace="{{ wave.key }}">
+                        <h2 class="tunnel-desktop-wave-heading tunnel-ballmat-wave-heading">{{ wave.name }}</h2>
                     <article class="tunnel-readonly-card tunnel-ballmat-card" data-wave="{{ wave.key }}">
-                        <span class="tunnel-desktop-wave-heading tunnel-ballmat-wave-heading">{{ wave.name }}</span>
                         <span class="tunnel-mobile-label">{{ wave.name }}</span>
                         <span class="tunnel-desktop-label">{{ side.label.title() }} Ballmat Count</span>
                         {% if can_edit %}
@@ -116,6 +117,7 @@
                         <strong data-wave-count="{{ wave.key }}">{{ wave.count }}</strong>
                         {% endif %}
                     </article>
+                    </div>
                     {% endfor %}
                     <article class="tunnel-readonly-card tunnel-ballmat-card tunnel-open-bays-card">
                         <span class="tunnel-mobile-label">Open Bays</span>
