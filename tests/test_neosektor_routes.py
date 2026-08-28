@@ -1461,7 +1461,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             response.data,
         )
         self.assertIn("color: var(--neo-bright-silver);", desktop_css)
-        self.assertIn("font-size: 1.4rem;", desktop_css)
+        self.assertIn("font-size: 2.8rem;", desktop_css)
         self.assertIn("font-size: 0.8rem;", desktop_css)
         self.assertIn("font-size: 0.78rem;", desktop_css)
         self.assertIn("grid-template-columns: auto auto;", desktop_css)
@@ -1471,15 +1471,15 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: clamp(0.98rem, 1.3vw, 1.24rem);", desktop_css)
         self.assertIn("width: min(100%, 240px);", desktop_css)
         self.assertIn("grid-template-columns: 40px minmax(112px, 1fr) 40px;", desktop_css)
-        self.assertIn("width: min(100%, 204px);", desktop_css)
-        self.assertIn("grid-template-columns: 44px minmax(72px, 96px) 44px;", desktop_css)
+        self.assertIn("width: min(100%, 244px);", desktop_css)
+        self.assertIn("grid-template-columns: 44px minmax(112px, 132px) 44px;", desktop_css)
         self.assertIn("inline-size: 44px;", desktop_css)
         self.assertIn("block-size: 44px;", desktop_css)
         self.assertIn("justify-content: center;", desktop_css)
         self.assertIn("gap: 12px;", desktop_css)
         self.assertIn("background: transparent;", desktop_css)
         self.assertIn("background: rgba(5, 7, 11, 0.88);", desktop_css)
-        self.assertIn("min-height: 52px;", desktop_css)
+        self.assertIn("min-height: 76px;", desktop_css)
         self.assertIn("min-width: 112px;", desktop_css)
         self.assertIn("grid-row: 1 / -1;", desktop_css)
         self.assertIn("font-size: clamp(5rem, 5.5vw, 6.2rem);", desktop_css)
@@ -1488,6 +1488,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".tunnel-arrive-control input.counter-number[data-metric=\"left_to_arrive\"]",
             css,
         )
+        self.assertIn(
+            ".tunnel-arrive-control strong.counter-number[data-metric=\"left_to_arrive\"]",
+            css,
+        )
+        self.assertIn("font-size: clamp(3.45rem, 5.175vw, 5.25rem);", desktop_css)
         self.assertIn("color: var(--neo-bright-silver);", css)
 
     def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):

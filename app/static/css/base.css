@@ -25684,7 +25684,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
             "wave-first east-first west-first"
             "wave-second east-second west-second"
             "operations east-open west-open";
-        gap: 10px;
+        gap: 8px;
         min-height: 0;
         height: 100%;
     }
@@ -25756,7 +25756,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-wave-workspace {
         display: grid;
         grid-template-rows: auto minmax(0, 1fr);
-        gap: 4px;
+        gap: 6px;
         min-height: 0;
         height: 100%;
     }
@@ -25765,7 +25765,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         display: block;
         margin: 0;
         color: var(--neo-bright-silver);
-        font-size: 1.4rem;
+        font-size: 2.8rem;
         font-weight: 950;
         letter-spacing: 0.1em;
         line-height: 1.1;
@@ -25775,8 +25775,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel {
         grid-template-rows: repeat(2, minmax(0, 1fr));
-        gap: 4px;
-        padding: 6px;
+        gap: 3px;
+        padding: 5px;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel > h2 {
@@ -25796,7 +25796,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control {
         grid-template-columns: 44px minmax(0, 1fr) 44px;
-        min-height: 52px;
+        min-height: 76px;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control.tunnel-editable,
@@ -25807,8 +25807,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control .counter-control {
-        width: min(100%, 204px);
-        grid-template-columns: 44px minmax(72px, 96px) 44px;
+        width: min(100%, 244px);
+        grid-template-columns: 44px minmax(112px, 132px) 44px;
         justify-self: center;
         justify-content: center;
         gap: 12px;
@@ -25849,19 +25849,19 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-number {
         box-sizing: border-box;
-        block-size: 52px;
-        min-height: 52px;
+        block-size: 76px;
+        min-height: 76px;
         padding: 0;
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"],
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel [data-metric="left_to_unload"] {
         font-size: clamp(1.55rem, 2.3vw, 2.35rem);
     }
 
-    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"] {
-        font-size: clamp(2.3rem, 3.45vw, 3.5rem);
-        line-height: 0.9;
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control input.counter-number[data-metric="left_to_arrive"],
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control strong.counter-number[data-metric="left_to_arrive"] {
+        font-size: clamp(3.45rem, 5.175vw, 5.25rem);
+        line-height: 0.82;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card {
