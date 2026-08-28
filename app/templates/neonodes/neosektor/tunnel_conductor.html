@@ -93,6 +93,7 @@
                     <h3 class="tunnel-mobile-side-title">{{ side.label.title() }} Ballmat</h3>
                     {% for wave in side.waves %}
                     <article class="tunnel-readonly-card tunnel-ballmat-card" data-wave="{{ wave.key }}">
+                        <span class="tunnel-desktop-wave-heading tunnel-ballmat-wave-heading">{{ wave.name }}</span>
                         <span class="tunnel-mobile-label">{{ wave.name }}</span>
                         <span class="tunnel-desktop-label">{{ side.label.title() }} Ballmat Count</span>
                         {% if can_edit %}
