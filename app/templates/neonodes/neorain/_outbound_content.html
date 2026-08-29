@@ -37,7 +37,8 @@
         <tbody>
             {% for row in rows %}
             {% set collapse_eligible = row.ramp_load_complete and row.crew_load_complete and row.official_block_out %}
-            <tr data-neorain-collapsed-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not collapse_eligible %}hidden{% endif %}>
+            {% set final_collapse_eligible = collapse_eligible and row.no_return %}
+            <tr data-neorain-collapsed-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not collapse_eligible or final_collapse_eligible %}hidden{% endif %}>
                 <td colspan="14">
                     <div class="neorain-collapsed-summary">
                         <span><strong>{{ row.flight_number or '-' }}</strong></span>
@@ -55,7 +56,7 @@
                             <span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>
                             {% endif %}
                         </span>
-                        <span>{{ row.no_return or '-' }}</span>
+                        <span data-neorain-display="no_return">{{ row.no_return or '-' }}</span>
                         {% if can_edit_timestamp_milestones %}
                         <span class="neorain-collapsed-no-return-editor" data-neorain-no-return-editor>
                             <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="set" {% if row.no_return %}hidden{% endif %}>SET NO RETURN</button>
@@ -67,7 +68,33 @@
                     </div>
                 </td>
             </tr>
-            <tr data-neorain-outbound-row data-neorain-full-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if collapse_eligible %}hidden{% endif %}>
+            <tr data-neorain-final-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not final_collapse_eligible %}hidden{% endif %}>
+                <td colspan="14">
+                    <div class="neorain-final-summary">
+                        <span><strong>{{ row.flight_number or '-' }}</strong></span>
+                        <span>{{ row.destination or '-' }}</span>
+                        <span>{{ row.official_block_out or '-' }}</span>
+                        <span>{{ row.departure_variance }}</span>
+                        <span data-neorain-late-inclusion-cell>
+                            {% if can_edit %}
+                            <button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button>
+                            <output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>
+                            {% else %}
+                            <span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>
+                            {% endif %}
+                        </span>
+                        <span data-neorain-display="no_return">NO RETURN</span>
+                        {% if can_edit_timestamp_milestones %}
+                        <span class="neorain-collapsed-no-return-editor" data-neorain-no-return-editor>
+                            <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="reverse">REVERSE</button>
+                            <output class="neorain-no-return-message" data-neorain-no-return-message aria-live="polite" hidden></output>
+                        </span>
+                        {% endif %}
+                        <button type="button" class="neorain-reopen-control" data-neorain-reopen>REOPEN</button>
+                    </div>
+                </td>
+            </tr>
+            <tr data-neorain-outbound-row data-neorain-full-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if collapse_eligible %}hidden{% endif %}>
                 <td data-label="Wave">{{ row.wave }}</td>
                 <td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td>
                 <td data-label="Tail">{{ row.tail or '-' }}</td>

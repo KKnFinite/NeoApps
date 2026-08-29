@@ -468,6 +468,12 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
         self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
         self.assertIn(b'data-neorain-no-return-action="set"', response.data)
+        self.assertIn(b'data-neorain-final-row', response.data)
+        final = response.data.split(b'data-neorain-final-row', 1)[1].split(b'data-neorain-full-row', 1)[0]
+        for value in (b"UPS630", b"SDF", b"NO RETURN", b"REOPEN", b"INCLUDED"):
+            self.assertIn(value, final)
+        for omitted in (b"N630UP", b"Crew Load Complete", b"Ramp Load Complete", b"Parking"):
+            self.assertNotIn(omitted, final)
         self.assertIn(b'data-neorain-field="ramp_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="crew_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="official_block_out"', response.data)

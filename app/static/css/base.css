@@ -29624,6 +29624,26 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     white-space: nowrap;
 }
 
+.neorain-final-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #aeb9c7;
+    font-size: 0.62rem;
+    white-space: nowrap;
+}
+
+.neorain-final-summary span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.neorain-final-summary span:nth-child(2) {
+    color: #d6dee8;
+    font-weight: 700;
+}
+
 .neorain-collapsed-summary span {
     overflow: hidden;
     text-overflow: ellipsis;
