@@ -280,9 +280,53 @@ class NeoRainOutboundTest(unittest.TestCase):
                 self.assertIn(b'field: "no_return"', response.data)
                 self.assertIn(b'value: desired', response.data)
                 self.assertIn(b'"Reverse No Return for this mission?"', response.data)
+                self.assertIn(b'data-neorain-reopen', response.data)
+                self.assertIn(b'data-neorain-collapsed-row', response.data)
+                self.assertIn(b'neorain-collapsed-summary', response.data)
+                self.assertNotIn(b'data-neorain-field="ramp_load_complete"', response.data.split(b'data-neorain-collapsed-row', 1)[1].split(b'data-neorain-full-row', 1)[0])
                 self.assertIn(b"expected_version", response.data)
                 self.assertIn(b"stale_version", response.data)
                 self.assertIn(b"neorainRefreshDeferred", response.data)
+
+    def test_incomplete_row_stays_full_and_ready_row_has_compact_first_stage_view(self):
+        operation = self._operation()
+        incomplete = self._mission(
+            operation,
+            "UPS640",
+            "SDF",
+            planned=datetime(2026, 8, 30, 6, 40),
+        )
+        ready = self._mission(
+            operation,
+            "UPS641",
+            "ONT",
+            planned=datetime(2026, 8, 30, 6, 41),
+        )
+        ready.ramp_load_completed_at_utc = datetime(2026, 8, 30, 6, 42)
+        ready.crew_load_completed_at_utc = datetime(2026, 8, 30, 6, 43)
+        ready.actual_block_out_datetime_utc = datetime(2026, 8, 30, 6, 44)
+        db.session.commit()
+        editor = self._user("rain_collapse_editor", "simulator")
+        self._login(editor)
+        set_rain_integration_mode(self.gateway, operation.sort_name, NEO_ONLY)
+        db.session.commit()
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.get("/neorain/outbound")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.data
+        self.assertIn(b'data-neorain-mission-id="%d"' % incomplete.id, body)
+        self.assertIn(b'data-neorain-mission-id="%d"' % ready.id, body)
+        self.assertIn(b'data-neorain-full-row', body)
+        self.assertIn(b'data-neorain-collapsed-row', body)
+        self.assertIn(b'REOPEN', body)
+        self.assertIn(b'Ramp Load Complete', body)
+        compact = body.split(b'data-neorain-collapsed-row', 1)[1].split(b'data-neorain-full-row', 1)[0]
+        self.assertNotIn(b'Ramp Load Complete', compact)
 
     def test_departed_row_shows_no_return_and_reverse_for_authorized_editor(self):
         operation = self._operation()

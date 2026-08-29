@@ -93,29 +93,62 @@
 
     const rawTime = (value) => String(value || "").replace(":", "");
 
+    const missionViews = (missionId) => Array.from(root.querySelectorAll(
+        "[data-neorain-mission-id]"
+    )).filter((view) => view.dataset.neorainMissionId === String(missionId));
+
     const applyRow = (row, nextRow, protectedInput = null) => {
         if (!row || !nextRow) return;
-        row.dataset.missionVersion = nextRow.version || row.dataset.missionVersion || "";
-        displayFields.forEach((field) => {
-            const value = nextRow[field] || "-";
-            const input = row.querySelector(`[data-neorain-hhmm][data-neorain-field="${field}"]`);
-            if (input) {
-                if (input === protectedInput || input.dataset.neorainDirty === "true" || input.dataset.neorainSaving === "true") {
+        const views = missionViews(row.dataset.missionId);
+        views.forEach((view) => {
+            view.dataset.missionVersion = nextRow.version || view.dataset.missionVersion || "";
+            displayFields.forEach((field) => {
+                const value = nextRow[field] || "-";
+                const input = view.querySelector(`[data-neorain-hhmm][data-neorain-field="${field}"]`);
+                if (input) {
+                    if (input === protectedInput || input.dataset.neorainDirty === "true" || input.dataset.neorainSaving === "true") {
+                        return;
+                    }
+                    const nextRawValue = rawTime(nextRow[field]);
+                    input.value = nextRawValue;
+                    input.dataset.neorainSavedValue = nextRawValue;
                     return;
                 }
-                const nextRawValue = rawTime(nextRow[field]);
-                input.value = nextRawValue;
-                input.dataset.neorainSavedValue = nextRawValue;
-                return;
+                const display = view.querySelector(`[data-neorain-display="${field}"]`);
+                if (display) display.textContent = value;
+            });
+            const noReturnEditor = view.querySelector("[data-neorain-no-return-editor]");
+            if (noReturnEditor) {
+                const isNoReturn = Boolean(nextRow.no_return);
+                noReturnEditor.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn);
+                noReturnEditor.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn);
             }
-            const display = row.querySelector(`[data-neorain-display="${field}"]`);
-            if (display) display.textContent = value;
         });
-        const noReturnEditor = row.querySelector("[data-neorain-no-return-editor]");
-        if (noReturnEditor) {
-            const isNoReturn = Boolean(nextRow.no_return);
-            noReturnEditor.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn);
-            noReturnEditor.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn);
+    };
+
+    const isEligible = (row) => Boolean(
+        row.querySelector('[data-neorain-field="ramp_load_complete"]')?.value &&
+        row.querySelector('[data-neorain-field="crew_load_complete"]')?.value &&
+        row.querySelector('[data-neorain-field="official_block_out"]')?.value
+    );
+
+    const hasRowAttention = (row) => Boolean(row.querySelector(
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], .neorain-milestone-editor.is-error, [data-neorain-no-return-editor].is-error, [data-neorain-no-return-saving='true']"
+    ));
+
+    const setCollapsed = (row, collapsed) => {
+        const views = missionViews(row.dataset.missionId);
+        const full = views.find((view) => view.matches("[data-neorain-full-row]"));
+        const compact = views.find((view) => view.matches("[data-neorain-collapsed-row]"));
+        if (!full || !compact) return;
+        full.hidden = collapsed;
+        compact.hidden = !collapsed;
+        full.dataset.neorainReopened = collapsed ? "false" : "true";
+    };
+
+    const collapseIfReady = (row) => {
+        if (isEligible(row) && !hasRowAttention(row)) {
+            setCollapsed(row, true);
         }
     };
 
@@ -201,7 +234,16 @@
             }));
         }
         if (advance && input.value === input.dataset.neorainSavedValue) {
-            nextEditor(input)?.focus({ preventScroll: true });
+            if (input.dataset.neorainField === "official_block_out") {
+                const next = nextEditor(input);
+                collapseIfReady(row);
+                const compactSet = missionViews(row.dataset.missionId)
+                    .find((view) => view.matches("[data-neorain-collapsed-row]"))
+                    ?.querySelector("[data-neorain-no-return-action='set']:not([hidden])");
+                (compactSet || next)?.focus({ preventScroll: true });
+            } else {
+                nextEditor(input)?.focus({ preventScroll: true });
+            }
         }
     };
 
@@ -291,4 +333,32 @@
 })();
 </script>
 {% endif %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-outbound-live]");
+    if (!root) return;
+    const viewsFor = (missionId) => Array.from(root.querySelectorAll("[data-neorain-mission-id]"))
+        .filter((view) => view.dataset.neorainMissionId === String(missionId));
+    const setCollapsed = (row, collapsed) => {
+        const views = viewsFor(row.dataset.neorainMissionId);
+        const full = views.find((view) => view.matches("[data-neorain-full-row]"));
+        const compact = views.find((view) => view.matches("[data-neorain-collapsed-row]"));
+        if (!full || !compact) return;
+        full.hidden = collapsed;
+        compact.hidden = !collapsed;
+    };
+    const hasAttention = (row) => Boolean(row.querySelector(
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], .neorain-milestone-editor.is-error, [data-neorain-no-return-editor].is-error, [data-neorain-no-return-saving='true']"
+    ));
+    root.querySelectorAll("[data-neorain-reopen]").forEach((button) => {
+        button.addEventListener("click", () => setCollapsed(button.closest("[data-neorain-collapsed-row]"), false));
+    });
+    root.querySelectorAll("[data-neorain-full-row]").forEach((row) => {
+        row.addEventListener("focusout", (event) => {
+            if (event.relatedTarget && row.contains(event.relatedTarget)) return;
+            if (row.dataset.neorainCollapseEligible === "true" && !hasAttention(row)) setCollapsed(row, true);
+        });
+    });
+})();
+</script>
 {% endblock %}

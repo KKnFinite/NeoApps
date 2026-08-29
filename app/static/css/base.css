@@ -29537,6 +29537,46 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     opacity: 0.68;
 }
 
+.neorain-collapsed-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: var(--node-text);
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+.neorain-collapsed-summary span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.neorain-collapsed-no-return-editor {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    overflow: visible !important;
+}
+
+.neorain-reopen-control {
+    margin-left: auto;
+    padding: 2px 6px;
+    border: 1px solid var(--node-highlight);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--node-highlight);
+    font-size: 0.58rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.neorain-reopen-control:hover,
+.neorain-reopen-control:focus-visible {
+    background: var(--node-highlight);
+    color: var(--node-bg);
+}
+
 .neorain-milestone-editor.is-saving .neorain-milestone-message {
     color: var(--node-highlight);
 }
