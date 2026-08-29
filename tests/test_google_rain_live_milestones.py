@@ -119,24 +119,26 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertIsNone(first.crew_load_completed_at_utc)
         self.assertIsNone(second.crew_load_completed_at_utc)
 
-    def test_elmac_is_audited_without_advancing_departure_status(self):
+    def test_legacy_google_rain_elmac_is_relinquished_without_touching_other_sources(self):
         mission = self._mission("UPS0910", "LAX")
+        mission.elmac_completed_at_utc = datetime(2026, 8, 11, 4, 55)
+        mission.elmac_completed_source = GOOGLE_RAIN_SOURCE
+        db.session.commit()
 
-        self._apply(self._row("UPS0910", elmac="8/10 23:55"))
+        self._apply(self._row("UPS0910", ramp_load_complete="2:22"))
 
-        self.assertEqual(mission.elmac_completed_at_utc, datetime(2026, 8, 11, 4, 55))
-        self.assertEqual(mission.elmac_completed_source, GOOGLE_RAIN_SOURCE)
-        self.assertEqual(mission.departure_status, "scheduled")
+        self.assertIsNone(mission.elmac_completed_at_utc)
+        self.assertEqual(mission.elmac_completed_source, "unknown")
+        self.assertEqual(mission.departure_status, "ramp_load_complete")
 
-    def test_r_lc_is_not_applied_as_part_of_the_rain_bundle(self):
-        mission = self._mission("UPS0910", "LAX")
+    def test_ramp_and_crew_can_advance_without_earlier_milestones(self):
+        ramp = self._mission("UPS0910", "LAX")
         crew = self._mission("UPS0948", "OAK")
 
         self._apply(self._row("UPS0910", ramp_load_complete="2:22"))
         self._apply(self._row("UPS0948", crew_load_complete="2:24"))
 
-        self.assertIsNone(mission.ramp_load_completed_at_utc)
-        self.assertEqual(mission.departure_status, "scheduled")
+        self.assertEqual(ramp.departure_status, "ramp_load_complete")
         self.assertIsNone(crew.ramp_load_completed_at_utc)
         self.assertEqual(crew.departure_status, "crew_load_complete")
 
@@ -160,6 +162,8 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self._apply(
             self._row(
                 "UPS0910",
+                ramp_load_complete="8/11 2:22",
+                crew_load_complete="8/11 2:24",
                 block="8/11 2:29",
                 no_return="TRUE",
             )
@@ -174,12 +178,42 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertEqual(mission.departure_status, "blocked_out")
         self.assertEqual(mission.departure_status_source, "unknown")
 
-    def test_rain_owned_timestamps_can_be_corrected_and_cleared(self):
+    def test_no_return_requires_ramp_crew_and_block_out(self):
+        mission = self._mission("UPS0910", "LAX")
+
+        result = self._apply(
+            self._row(
+                "UPS0910",
+                block="8/11 2:29",
+                no_return="TRUE",
+            )
+        )
+
+        self.assertEqual(mission.departure_status, "blocked_out")
+        self.assertIn("requires Ramp Load Complete", result["results"][0]["warnings"][0])
+
+    def test_clearing_no_return_and_block_out_recomputes_remaining_progress(self):
         mission = self._mission("UPS0910", "LAX")
         self._apply(
             self._row(
                 "UPS0910",
-                elmac="1:40",
+                ramp_load_complete="1:50",
+                crew_load_complete="2:00",
+                block="2:10",
+                no_return="TRUE",
+            )
+        )
+
+        self._apply(self._row("UPS0910", block="", no_return="FALSE"))
+
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
+        self.assertEqual(mission.departure_status, "crew_load_complete")
+
+    def test_rain_owned_milestones_can_be_corrected_and_cleared(self):
+        mission = self._mission("UPS0910", "LAX")
+        self._apply(
+            self._row(
+                "UPS0910",
                 ramp_load_complete="1:50",
                 crew_load_complete="2:00",
                 block="2:10",
@@ -189,13 +223,15 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self._apply(
             self._row(
                 "UPS0910",
-                elmac="1:41",
                 ramp_load_complete="1:51",
                 crew_load_complete="2:01",
                 block="2:11",
             )
         )
-        self.assertEqual(mission.elmac_completed_at_utc, datetime(2026, 8, 11, 6, 41))
+        self.assertEqual(
+            mission.ramp_load_completed_at_utc,
+            datetime(2026, 8, 11, 6, 51),
+        )
         self.assertEqual(
             mission.actual_block_out_datetime_utc,
             datetime(2026, 8, 11, 7, 11),
@@ -204,17 +240,14 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self._apply(
             self._row(
                 "UPS0910",
-                elmac="",
                 ramp_load_complete="-",
                 crew_load_complete="",
                 block="",
             )
         )
-        self.assertIsNone(mission.elmac_completed_at_utc)
         self.assertIsNone(mission.ramp_load_completed_at_utc)
         self.assertIsNone(mission.crew_load_completed_at_utc)
         self.assertIsNone(mission.actual_block_out_datetime_utc)
-        self.assertEqual(mission.elmac_completed_source, "unknown")
         self.assertEqual(mission.actual_block_out_source, "unknown")
         self.assertEqual(mission.departure_status, "scheduled")
 
@@ -274,7 +307,6 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         result = self._apply(
             self._row(
                 "UPS0910",
-                elmac="",
                 ramp_load_complete="2:30",
                 crew_load_complete="",
                 block="2:45",

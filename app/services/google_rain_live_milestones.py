@@ -33,10 +33,10 @@ _DEPARTURE_STATUS_RANK = {
 }
 _MILESTONE_SPECS = (
     (
-        "elmac",
-        "elmac_completed_at_utc",
-        "elmac_completed_source",
-        None,
+        "ramp_load_complete",
+        "ramp_load_completed_at_utc",
+        "ramp_load_completed_source",
+        "ramp_load_complete",
     ),
     (
         "crew_load_complete",
@@ -107,6 +107,8 @@ def apply_google_rain_departure_milestones(operation, rows=(), now=None):
 def _apply_row(operation, mission, row):
     changed_fields = []
     warnings = []
+    if _relinquish_legacy_google_rain_elmac(mission):
+        changed_fields.extend(("elmac_completed_at_utc", "elmac_completed_source"))
     for row_key, timestamp_attr, source_attr, target_status in _MILESTONE_SPECS:
         raw_value = row[row_key]
         if raw_value is _MISSING:
@@ -154,7 +156,14 @@ def _apply_row(operation, mission, row):
         if no_return is None:
             warnings.append("Rain No Return value is invalid and was ignored.")
         elif no_return:
-            if _advance_departure_status(
+            missing = _missing_no_return_prerequisites(mission)
+            if missing:
+                warnings.append(
+                    "Rain No Return ignored: requires " + ", ".join(missing) + "."
+                )
+                if _clear_google_rain_no_return(mission):
+                    changed_fields.append("departure_status")
+            elif _advance_departure_status(
                 mission,
                 "departed",
                 source=GOOGLE_RAIN_SOURCE,
@@ -215,6 +224,23 @@ def _clear_google_rain_no_return(mission):
     return True
 
 
+def _relinquish_legacy_google_rain_elmac(mission):
+    if _normalized_source(mission.elmac_completed_source) != GOOGLE_RAIN_SOURCE:
+        return False
+    mission.elmac_completed_at_utc = None
+    mission.elmac_completed_source = "unknown"
+    return True
+
+
+def _missing_no_return_prerequisites(mission):
+    required = (
+        ("Ramp Load Complete", mission.ramp_load_completed_at_utc),
+        ("Crew Load Complete", mission.crew_load_completed_at_utc),
+        ("Official Block-Out", mission.actual_block_out_datetime_utc),
+    )
+    return tuple(label for label, value in required if value is None)
+
+
 def _matching_departure(operation, row, candidates):
     if not row["flight_key"]:
         return None, "Rain flight number is missing or invalid."
@@ -268,7 +294,9 @@ def _normalize_row(supplied_row):
             _first_value(supplied_row, "destination", "DEST", "C") or ""
         ).strip().upper(),
         "std": _first_supplied(supplied_row, "std", "STD", "E"),
-        "elmac": _first_supplied(supplied_row, "elmac", "eLMAC", "L"),
+        "ramp_load_complete": _first_supplied(
+            supplied_row, "ramp_load_complete", "r_lc", "R-LC", "M"
+        ),
         "crew_load_complete": _first_supplied(
             supplied_row, "crew_load_complete", "c_lc", "C-LC", "N"
         ),
@@ -297,7 +325,7 @@ def _first_supplied(row, *keys):
 
 def _field_label(row_key):
     return {
-        "elmac": "Rain eLMAC",
+        "ramp_load_complete": "Rain Ramp Load Complete",
         "crew_load_complete": "Rain C-LC",
         "block": "Rain Official Block-Out",
         "no_return": "Rain No Return",

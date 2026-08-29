@@ -319,6 +319,8 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
                         "flight_number": "UPS0910",
                         "destination": "LAX",
                         "std": "2:24",
+                        "ramp_load_complete": "2:22",
+                        "crew_load_complete": "2:24",
                         "block": "2:29",
                         "no_return": "TRUE",
                     }
