@@ -167,9 +167,9 @@ class ShellMetadataTest(unittest.TestCase):
                 )
 
         rain_request = SimpleNamespace(
-            path="/neorain",
+            path="/neorain/outbound",
             blueprint="neorain",
-            endpoint="neorain.index",
+            endpoint="neorain.outbound",
             args={},
         )
         self.assertTrue(
@@ -179,6 +179,25 @@ class ShellMetadataTest(unittest.TestCase):
                 default_gateway_code="RFD",
             )["uses_google_live_poll_heartbeat"]
         )
+        for path, endpoint in (
+            ("/neorain/inbound", "neorain.inbound"),
+            ("/neorain/load-planner-lineup", "neorain.load_planner_lineup"),
+            ("/neorain/settings", "neorain.settings"),
+        ):
+            with self.subTest(path=path):
+                placeholder_request = SimpleNamespace(
+                    path=path,
+                    blueprint="neorain",
+                    endpoint=endpoint,
+                    args={},
+                )
+                self.assertFalse(
+                    resolve_shell_metadata(
+                        placeholder_request,
+                        is_authenticated=True,
+                        default_gateway_code="RFD",
+                    )["uses_google_live_poll_heartbeat"]
+                )
 
     def test_base_template_consumes_context_metadata_without_path_classifier(self):
         with open("app/templates/base.html", encoding="utf-8") as template_file:

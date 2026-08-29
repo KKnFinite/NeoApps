@@ -1,0 +1,21 @@
+{% if not operation %}
+<p class="neorain-outbound-empty">No current sort.</p>
+{% elif not rows %}
+<p class="neorain-outbound-empty">No outbound departure missions for the current sort.</p>
+{% else %}
+<div class="neorain-outbound-table-wrap">
+    <table class="neorain-outbound-table">
+        <caption class="visually-hidden">Current-sort outbound departures</caption>
+        <thead><tr>
+            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>No Return</th>
+        </tr></thead>
+        <tbody>
+            {% for row in rows %}
+            <tr data-neorain-outbound-row data-mission-id="{{ row.mission_id }}">
+                <td data-label="Wave">{{ row.wave }}</td><td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td><td data-label="Tail">{{ row.tail or '-' }}</td><td data-label="Destination">{{ row.destination or '-' }}</td><td data-label="Parking">{{ row.parking or '-' }}</td><td data-label="STD/ETD">{{ row.planned_time or '-' }}</td><td data-label="Status">{{ row.status }}</td><td data-label="eLMAC">{{ row.elmac or '-' }}</td><td data-label="Ramp Load Complete">{{ row.ramp_load_complete or '-' }}</td><td data-label="Crew Load Complete">{{ row.crew_load_complete or '-' }}</td><td data-label="Official Block-Out">{{ row.official_block_out or '-' }}</td><td data-label="No Return">{{ row.no_return or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

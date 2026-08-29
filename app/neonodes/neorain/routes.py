@@ -1,7 +1,14 @@
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import flash, jsonify, redirect, render_template, request, session, url_for
 
 from app.auth.decorators import gateway_node_required
 from app.neonodes.neorain import bp
+from app.services.access_control import get_current_gateway
+from app.neonodes.neorain.services import (
+    current_neorain_outbound_operation,
+    neorain_outbound_context,
+    neorain_outbound_refresh_status,
+    neorain_outbound_revision,
+)
 from app.services.permission_rules import permission_access, preload_permission_rules, user_can
 
 
@@ -50,7 +57,51 @@ def inbound():
 @bp.route("/outbound")
 @gateway_node_required("rain")
 def outbound():
-    return _render_neorain_page("neorain.outbound")
+    page = _neorain_page("neorain.outbound")
+    access = permission_access(page[2], page[3])
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neorain.index"))
+
+    session[NEORAIN_LAST_PAGE_SESSION_KEY] = page[1]
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    context = neorain_outbound_context(gateway, operation=operation)
+    return render_template(
+        "neonodes/neorain/outbound.html",
+        can_edit=access["can_edit"],
+        can_view=access["can_view"],
+        gateway=gateway,
+        outbound_revision=neorain_outbound_revision(gateway, operation=operation),
+        **context,
+    )
+
+
+@bp.route("/outbound/revision")
+@gateway_node_required("rain")
+def outbound_revision():
+    page = _neorain_page("neorain.outbound")
+    access = permission_access(page[2], page[3])
+    if not access["can_view"]:
+        response = jsonify({"ok": False, "error": "Access denied."})
+        response.status_code = 403
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    revision = neorain_outbound_revision(gateway, operation=operation)
+    refresh = neorain_outbound_refresh_status(gateway, operation=operation)
+    response = jsonify(
+        {
+            "ok": True,
+            "changed": str(request.args.get("revision") or "") != revision,
+            "revision": revision,
+            "refresh": refresh,
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route("/load-planner-lineup")

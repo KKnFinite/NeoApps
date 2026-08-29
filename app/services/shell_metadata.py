@@ -378,6 +378,7 @@ def resolve_shell_metadata(
         or is_neoermac_page
         or is_neosektor_page
         or is_neoscorpion_page
+        or (is_neorain_page and path.startswith("/neorain/outbound"))
     )
     mobile_node_icon = (
         "images/icons/neogateway/inapp/neogateway-inapp-128.png"

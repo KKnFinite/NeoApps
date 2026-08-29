@@ -29362,3 +29362,95 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
 .neostaffing-portal-link,.neostaffing-mobile-portal-link { color:#8dd8d3; font-size:.62rem; font-weight:900; letter-spacing:.05em; text-decoration:none; }
 .neostaffing-portal-link { padding:5px 8px; border:1px solid #28545b; border-radius:3px; background:#10272d; }
 .neostaffing-mobile-portal-link { padding:5px 6px; }
+/* NeoRain current-sort outbound board. */
+.neorain-outbound-shell {
+    max-width: none;
+    color: #d6dee8;
+}
+
+.neorain-outbound-head {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    border: 1px solid rgba(var(--node-rgb), 0.28);
+    border-left: 3px solid var(--node-primary);
+    background: linear-gradient(90deg, #101722, #0b1018);
+}
+
+.neorain-outbound-head p {
+    margin: 0 0 3px;
+    color: var(--node-highlight);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+.neorain-outbound-head h1,
+.neorain-outbound-head strong {
+    margin: 0;
+}
+
+.neorain-outbound-head h1 {
+    color: #edf2f7;
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+}
+
+.neorain-outbound-head strong {
+    color: #b9c4d0;
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+}
+
+.neorain-outbound-table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    background: #0b1018;
+}
+
+.neorain-outbound-table {
+    width: 100%;
+    min-width: 1160px;
+    border-collapse: collapse;
+    color: #d6dee8;
+    font-size: 0.76rem;
+}
+
+.neorain-outbound-table th,
+.neorain-outbound-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid rgba(var(--node-rgb), 0.14);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.neorain-outbound-table th {
+    color: var(--node-highlight);
+    background: #111a26;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neorain-outbound-table tbody tr:hover {
+    background: rgba(var(--node-rgb), 0.09);
+}
+
+.neorain-outbound-empty {
+    margin: 0;
+    padding: 18px;
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    color: #b9c4d0;
+    background: #0b1018;
+}
+
+@media (max-width: 760px) {
+    .neorain-outbound-head {
+        align-items: start;
+        flex-direction: column;
+        gap: 5px;
+    }
+}
