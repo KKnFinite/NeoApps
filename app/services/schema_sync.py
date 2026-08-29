@@ -57,6 +57,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
         "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
         "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "late_metrics_included_override": "BOOLEAN",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",

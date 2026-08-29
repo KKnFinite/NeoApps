@@ -164,6 +164,45 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["row"]["departure_variance"], "+7")
 
+    def test_late_inclusion_is_neo_only_across_modes_and_after_no_return(self):
+        self.mission.wave = "1"
+        self.mission.departure_status = "departed"
+        self.mission.departure_status_source = "neorain"
+        db.session.commit()
+        for mode, included in (("google_primary", False), (NEO_PRIMARY_GOOGLE_MIRROR, True), (NEO_ONLY, False)):
+            with self.subTest(mode=mode):
+                self._set_mode(mode)
+                with self._current_operation(), patch(
+                    "app.neonodes.neorain.routes.write_google_rain_departure_milestone"
+                ) as writer:
+                    response = self._post_late_inclusion(included)
+
+                self.assertEqual(response.status_code, 200)
+                payload = response.get_json()
+                self.assertEqual(payload["row"]["late_metrics_included"], included)
+                self.assertEqual(payload["row"]["late_metrics_inclusion_source"], "override")
+                self.assertEqual(payload["row"]["departure_status"], "departed")
+                writer.assert_not_called()
+
+    def test_late_inclusion_stale_and_wrong_sort_missions_are_rejected(self):
+        self._set_mode(NEO_ONLY)
+        stale_version = entity_version(self.mission)
+        self.mission.destination = "ONT"
+        db.session.commit()
+        with self._current_operation():
+            stale = self._post_late_inclusion(True, expected_version=stale_version)
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.get_json()["code"], "stale_version")
+        self.assertIsNone(self.mission.late_metrics_included_override)
+
+        other_operation = self._operation(date(2026, 6, 19))
+        other_mission = self._mission(other_operation, "UPS0999")
+        db.session.commit()
+        with self._current_operation():
+            wrong_sort = self._post_late_inclusion(True, mission_id=other_mission.id)
+        self.assertEqual(wrong_sort.status_code, 404)
+        self.assertEqual(wrong_sort.get_json()["code"], "mission_not_found")
+
     def test_stale_version_returns_current_row_without_neo_or_google_changes(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
         expected_version = entity_version(self.mission)
@@ -259,6 +298,19 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
                 "mission_id": target_id,
                 "field": field,
                 "value": value,
+                "expected_version": expected_version,
+            },
+        )
+
+    def _post_late_inclusion(self, included, *, mission_id=None, expected_version=None):
+        target_id = mission_id or self.mission.id
+        if expected_version is None:
+            expected_version = entity_version(db.session.get(SortDateMission, target_id))
+        return self.client.post(
+            "/neorain/outbound/late-inclusion",
+            json={
+                "mission_id": target_id,
+                "included": included,
                 "expected_version": expected_version,
             },
         )

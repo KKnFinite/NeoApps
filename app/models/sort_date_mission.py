@@ -95,6 +95,7 @@ class SortDateMission(db.Model):
     departure_status_source = db.Column(
         db.String(32), nullable=False, default="unknown"
     )
+    late_metrics_included_override = db.Column(db.Boolean, nullable=True)
     last_uld_enroute_at_utc = db.Column(db.DateTime, nullable=True)
     elmac_completed_at_utc = db.Column(db.DateTime, nullable=True)
     elmac_completed_source = db.Column(

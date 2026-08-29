@@ -26,6 +26,7 @@ from app.neonodes.neorain.services import (
     neorain_outbound_row,
     neorain_outbound_refresh_status,
     neorain_outbound_revision,
+    set_neorain_late_metrics_included,
 )
 from app.services.google_rain_integration_mode import (
     GOOGLE_PRIMARY,
@@ -312,6 +313,98 @@ def outbound_milestone():
             "changed": mutation["changed"],
             "field": field,
             "source": mutation["source"],
+            "version": entity_version(mission),
+            "row": row,
+            "revision": neorain_outbound_revision(gateway, operation=operation),
+        }
+    )
+
+
+@bp.route("/outbound/late-inclusion", methods=["POST"])
+@gateway_node_required("rain")
+def outbound_late_inclusion():
+    """Persist one current-sort departure's Neo-only late-metrics override."""
+    page = _neorain_page("neorain.outbound")
+    access = permission_access(page[2], page[3])
+    if not access["can_edit"]:
+        return _json_error("access_denied", "Edit access denied.", 403)
+
+    payload = request.get_json(silent=True)
+    expected_keys = {"mission_id", "included", "expected_version"}
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != expected_keys
+        or type(payload.get("included")) is not bool
+    ):
+        return _json_error(
+            "invalid_request",
+            "Provide only mission_id, included, and expected_version.",
+            400,
+        )
+    expected_version = str(payload["expected_version"] or "").strip()
+    if not expected_version:
+        return _json_error(
+            "invalid_request", "Provide the current mission version.", 400
+        )
+    mission_id = _positive_integer(payload["mission_id"])
+    if mission_id is None:
+        return _json_error("invalid_mission", "Choose a valid departure mission.", 400)
+
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    if operation is None or operation.gateway_id != gateway.id:
+        return _json_error("no_current_sort", "No current sort.", 409)
+    mission = (
+        SortDateMission.query.filter_by(
+            id=mission_id,
+            sort_date_operation_id=operation.id,
+            gateway_code=gateway.code,
+            mission_type="departure",
+        )
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if mission is None:
+        return _json_error(
+            "mission_not_found", "Departure mission is not in the current sort.", 404
+        )
+    conflict = version_conflict(mission, expected_version)
+    if conflict:
+        row = neorain_outbound_row(mission, operation)
+        db.session.rollback()
+        return jsonify(
+            {
+                "ok": False,
+                "code": "stale_version",
+                "error": conflict["message"],
+                "row": row,
+            }
+        ), 409
+
+    result = set_neorain_late_metrics_included(mission, payload["included"])
+    if result["changed"]:
+        try:
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.exception(
+                "NeoRain late-inclusion commit failed safely: mission_id=%s error=%s",
+                mission_id,
+                type(exc).__name__,
+            )
+            return _json_error(
+                "save_failed", "NeoRain could not save late-metrics inclusion.", 500
+            )
+    row = neorain_outbound_row(mission, operation)
+    if not result["changed"]:
+        db.session.rollback()
+    return jsonify(
+        {
+            "ok": True,
+            "changed": result["changed"],
+            "late_metrics_included": result["included"],
+            "late_metrics_inclusion_source": result["source"],
             "version": entity_version(mission),
             "row": row,
             "revision": neorain_outbound_revision(gateway, operation=operation),

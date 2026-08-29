@@ -15,7 +15,7 @@ from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.operation_scope import current_operational_sort_operation
-from app.services.sort_date_operations import mission_display_timing_data
+from app.services.sort_date_operations import mission_display_timing_data, normalize_wave
 from app.services.time_display import format_local_hhmm
 from app.services.departure_progress import (
     DEPARTURE_STATUS_RANK,
@@ -140,6 +140,28 @@ def neorain_departure_milestone_value(mission, field):
     if specification is None:
         raise NeoRainMilestoneError("Choose a valid NeoRain milestone.")
     return getattr(mission, specification["timestamp_attr"])
+
+
+def neorain_late_metrics_inclusion(mission):
+    """Return the effective Neo-owned late-metrics eligibility for one mission."""
+    override = mission.late_metrics_included_override
+    if override is not None:
+        return {"included": bool(override), "source": "override"}
+    return {
+        "included": normalize_wave(mission.wave) in {"1", "2"},
+        "source": "default",
+    }
+
+
+def set_neorain_late_metrics_included(mission, included):
+    """Persist an explicit Neo-only late-metrics inclusion override without commit."""
+    if type(included) is not bool:
+        raise ValueError("Late-metrics inclusion must be true or false.")
+    changed = mission.late_metrics_included_override is not included
+    if changed:
+        mission.late_metrics_included_override = included
+    inclusion = neorain_late_metrics_inclusion(mission)
+    return {"changed": changed, **inclusion}
 
 
 def _mutate_no_return(mission, value):
@@ -391,6 +413,7 @@ def _outbound_row(mission, operation, parking_by_tail):
     planned = timing.get("adjusted_planned_departure_time") or mission.planned_datetime_local
     timezone_name = mission.timezone or None
     status = str(mission.departure_status or "scheduled").strip().lower()
+    late_metrics = neorain_late_metrics_inclusion(mission)
     return {
         "wave": timing.get("wave") or "-",
         "flight_number": _text(mission.flight_number),
@@ -410,6 +433,8 @@ def _outbound_row(mission, operation, parking_by_tail):
             mission.actual_block_out_datetime_utc, timezone_name
         ),
         "departure_variance": _departure_variance(mission),
+        "late_metrics_included": late_metrics["included"],
+        "late_metrics_inclusion_source": late_metrics["source"],
         "no_return": "NO RETURN" if status == "departed" else "",
         "sort_time": planned,
         "mission_id": mission.id,

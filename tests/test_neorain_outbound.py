@@ -15,6 +15,7 @@ from app.models import (
 from app.neonodes.neorain.services import (
     neorain_outbound_context,
     neorain_outbound_revision,
+    set_neorain_late_metrics_included,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.google_rain_integration_mode import (
@@ -110,6 +111,8 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(rows[0]["departure_variance"], "+310")
         self.assertEqual(rows[0]["no_return"], "NO RETURN")
         self.assertEqual(rows[0]["version"], entity_version(earlier))
+        self.assertTrue(rows[0]["late_metrics_included"])
+        self.assertEqual(rows[0]["late_metrics_inclusion_source"], "default")
         self.assertEqual(rows[1]["no_return"], "")
         self.assertEqual(rows[1]["status"], "BLOCKED OUT")
         self.assertEqual(later.id, rows[1]["mission_id"])
@@ -163,6 +166,21 @@ class NeoRainOutboundTest(unittest.TestCase):
             "-",
         )
         self.assertEqual(neorain_outbound_context(self.gateway, operation=None)["rows"], [])
+
+    def test_late_metrics_defaults_and_explicit_overrides_are_canonical(self):
+        operation = self._operation()
+        wave_one = self._mission(operation, "UPS310", "ONT", planned=datetime(2026, 8, 30, 3), wave="1")
+        wave_two = self._mission(operation, "UPS311", "ONT", planned=datetime(2026, 8, 30, 4), wave="2")
+        no_wave = self._mission(operation, "UPS312", "ONT", planned=datetime(2026, 8, 30, 5), wave=None)
+        db.session.commit()
+
+        self.assertTrue(neorain_outbound_context(self.gateway, operation=operation)["rows"][0]["late_metrics_included"])
+        self.assertTrue(neorain_outbound_context(self.gateway, operation=operation)["rows"][1]["late_metrics_included"])
+        self.assertFalse(neorain_outbound_context(self.gateway, operation=operation)["rows"][2]["late_metrics_included"])
+        self.assertEqual(set_neorain_late_metrics_included(wave_one, False), {"changed": True, "included": False, "source": "override"})
+        self.assertEqual(set_neorain_late_metrics_included(no_wave, True), {"changed": True, "included": True, "source": "override"})
+        with self.assertRaises(ValueError):
+            set_neorain_late_metrics_included(wave_two, "true")
 
     def test_revision_changes_for_mission_and_parking_changes_without_writes(self):
         operation = self._operation()

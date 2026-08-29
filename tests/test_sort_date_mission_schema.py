@@ -7,7 +7,7 @@ from app.extensions import db
 from app.models import SortDateMission
 from app.services.sort_date_mission_schema import (
     DEPARTURE_STATUS_CONSTRAINT_NAME,
-    GOOGLE_RAIN_MILESTONE_COLUMNS,
+    SORT_DATE_MISSION_ADDITIVE_COLUMNS,
     SORT_DATE_MISSION_SCHEMA_LOCK_KEY,
     _model_constraint_sql,
     _schema_state,
@@ -58,12 +58,14 @@ class SortDateMissionSchemaTest(unittest.TestCase):
             with self.subTest(status=status):
                 self.assertIn(f"'{status}'", constraint_sql)
 
-    def test_model_exposes_google_rain_milestone_and_source_columns(self):
+    def test_model_exposes_targeted_additive_columns(self):
         model_columns = SortDateMission.__table__.columns
 
-        for column_name in GOOGLE_RAIN_MILESTONE_COLUMNS:
+        for column_name in SORT_DATE_MISSION_ADDITIVE_COLUMNS:
             with self.subTest(column_name=column_name):
                 self.assertIn(column_name, model_columns)
+
+        self.assertTrue(model_columns["late_metrics_included_override"].nullable)
 
     def test_testing_and_sqlite_skip_targeted_postgresql_ensure(self):
         with patch(
@@ -118,7 +120,7 @@ class SortDateMissionSchemaTest(unittest.TestCase):
             SORT_DATE_MISSION_SCHEMA_LOCK_KEY,
         )
         self.assertIn(f"ADD COLUMN {missing} TIMESTAMP", statements)
-        for column_name in set(GOOGLE_RAIN_MILESTONE_COLUMNS) - {missing}:
+        for column_name in set(SORT_DATE_MISSION_ADDITIVE_COLUMNS) - {missing}:
             self.assertNotIn(f"ADD COLUMN {column_name}", statements)
         self.assertNotIn("DROP CONSTRAINT", statements)
         calls["commit"].assert_called_once_with()
@@ -138,7 +140,7 @@ class SortDateMissionSchemaTest(unittest.TestCase):
         statements = self._statements(connection)
         for column_name in missing:
             self.assertIn(f"ADD COLUMN {column_name}", statements)
-        for column_name in set(GOOGLE_RAIN_MILESTONE_COLUMNS) - set(missing):
+        for column_name in set(SORT_DATE_MISSION_ADDITIVE_COLUMNS) - set(missing):
             self.assertNotIn(f"ADD COLUMN {column_name}", statements)
 
     def test_outdated_or_missing_constraint_is_repaired_without_column_ddl(self):
@@ -193,7 +195,7 @@ class SortDateMissionSchemaTest(unittest.TestCase):
             with self.subTest(definition=definition):
                 columns_result = Mock()
                 columns_result.scalars.return_value.all.return_value = list(
-                    GOOGLE_RAIN_MILESTONE_COLUMNS
+                    SORT_DATE_MISSION_ADDITIVE_COLUMNS
                 )
                 definition_result = Mock()
                 definition_result.scalar.return_value = definition

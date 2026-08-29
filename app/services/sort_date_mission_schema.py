@@ -11,17 +11,18 @@ from app.models import SortDateMission
 SORT_DATE_MISSION_SCHEMA_LOCK_KEY = 7_483_327_341_903
 SORT_DATE_MISSION_SCHEMA_LOCK_TIMEOUT = "5s"
 DEPARTURE_STATUS_CONSTRAINT_NAME = "ck_sort_date_missions_departure_status"
-GOOGLE_RAIN_MILESTONE_COLUMNS = {
+SORT_DATE_MISSION_ADDITIVE_COLUMNS = {
     "elmac_completed_at_utc": "TIMESTAMP",
     "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     "departure_status_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+    "late_metrics_included_override": "BOOLEAN",
 }
 
 
 def ensure_sort_date_mission_departure_status_constraint(app):
-    """Ensure only the active departure constraint and additive Rain columns."""
+    """Ensure only the active departure constraint and targeted additive columns."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 
@@ -50,7 +51,7 @@ def ensure_sort_date_mission_departure_status_constraint(app):
             )
             missing_columns, constraint_is_current = _schema_state(connection)
             for column_name in missing_columns:
-                column_sql = GOOGLE_RAIN_MILESTONE_COLUMNS[column_name]
+                column_sql = SORT_DATE_MISSION_ADDITIVE_COLUMNS[column_name]
                 connection.execute(
                     text(
                         f"ALTER TABLE {SortDateMission.__tablename__} "
@@ -95,12 +96,12 @@ def _schema_state(connection):
             "AND attnum > 0 AND NOT attisdropped "
             "AND attname IN :column_names"
         ).bindparams(bindparam("column_names", expanding=True)),
-        {"column_names": tuple(GOOGLE_RAIN_MILESTONE_COLUMNS)},
+        {"column_names": tuple(SORT_DATE_MISSION_ADDITIVE_COLUMNS)},
     )
     existing_columns = set(column_result.scalars().all())
     missing_columns = tuple(
         column_name
-        for column_name in GOOGLE_RAIN_MILESTONE_COLUMNS
+        for column_name in SORT_DATE_MISSION_ADDITIVE_COLUMNS
         if column_name not in existing_columns
     )
     definition = connection.execute(
