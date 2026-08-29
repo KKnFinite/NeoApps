@@ -166,6 +166,9 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"GOOGLE LIVE POLLING", response.data)
+        self.assertIn(b"NEORAIN GOOGLE / NEO TRANSITION", response.data)
+        self.assertIn(b'data-neorain-mode="google_primary"', response.data)
+        self.assertIn(b"STATUS ONLY", response.data)
         self.assertIn(b'data-google-live-polling-state="off"', response.data)
         self.assertIn(b"VIEW ONLY", response.data)
         self.assertNotIn(b"ENABLE LIVE POLLING</button>", response.data)

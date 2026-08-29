@@ -82,6 +82,11 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "google_mirror_last_error": "VARCHAR(255)",
         "google_mirror_failed_at_utc": "DATETIME",
     },
+    "motherbrain_google_integration_settings": {
+        "rain_integration_mode": (
+            "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
+        ),
+    },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
@@ -259,6 +264,11 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "google_mirror_sync_needed": "BOOLEAN NOT NULL DEFAULT FALSE",
         "google_mirror_last_error": "VARCHAR(255)",
         "google_mirror_failed_at_utc": "TIMESTAMP",
+    },
+    "motherbrain_google_integration_settings": {
+        "rain_integration_mode": (
+            "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
+        ),
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",

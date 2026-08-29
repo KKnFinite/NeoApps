@@ -35,6 +35,11 @@ from app.services.google_motherbrain_live_poll_lease import (
 from app.services.google_motherbrain_live_polling import (
     set_google_motherbrain_live_polling_enabled,
 )
+from app.services.google_rain_integration_mode import (
+    NEO_ONLY,
+    NEO_PRIMARY_GOOGLE_MIRROR,
+    set_rain_integration_mode,
+)
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -358,6 +363,14 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         state = self._state(db.session.get(SortDateOperation, result["operation_id"]))
         self.assertEqual(state.last_success_at_utc, self.NOW)
         self.assertIsNone(state.last_error)
+
+    def test_neo_primary_mirror_skips_rain_read_but_keeps_primary_poll(self):
+        self._assert_neo_authoritative_mode_skips_rain(
+            NEO_PRIMARY_GOOGLE_MIRROR
+        )
+
+    def test_neo_only_skips_rain_read_but_keeps_primary_poll(self):
+        self._assert_neo_authoritative_mode_skips_rain(NEO_ONLY)
 
     def test_successful_poll_applies_formatted_google_datetime_rows(self):
         self._enable()
@@ -868,6 +881,31 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         return ensure_operational_sort_operations(self.gateway, now=self.NOW)["eligible"][0][
             "operation"
         ]
+
+    def _assert_neo_authoritative_mode_skips_rain(self, mode):
+        self._enable()
+        set_rain_integration_mode(self.gateway, "night", mode)
+        db.session.commit()
+        primary_reader = Mock(
+            return_value={"inbound_rows": [], "outbound_rows": []}
+        )
+        rain_reader = Mock()
+        rain_applier = Mock()
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=self.NOW,
+            reader=primary_reader,
+            rain_reader=rain_reader,
+            rain_applier=rain_applier,
+        )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["rain_status"], "skipped_neo_authoritative")
+        self.assertEqual(result["rain_mode"], mode)
+        primary_reader.assert_called_once_with()
+        rain_reader.assert_not_called()
+        rain_applier.assert_not_called()
 
     def _state(self, operation):
         return MotherBrainGoogleLivePollState.query.filter_by(

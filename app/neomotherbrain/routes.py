@@ -184,6 +184,7 @@ from app.services.google_motherbrain_live_poll_execution import (
 from app.services.google_motherbrain_live_poll_health import (
     google_motherbrain_live_poll_health,
 )
+from app.services.google_rain_integration_mode import rain_integration_status
 from app.services.my_alerts import my_alert_context
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
@@ -491,6 +492,7 @@ def _render_system_settings(gateway, can_edit):
         gateway=gateway,
         can_edit_system_settings=can_edit,
         neosektor_status=neosektor_integration_status(gateway),
+        neorain_status=rain_integration_status(gateway, "night"),
         google_live_polling_status=google_motherbrain_live_polling_status(
             gateway,
             "night",

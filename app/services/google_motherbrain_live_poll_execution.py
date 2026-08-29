@@ -33,6 +33,10 @@ from app.services.google_rain_live_milestones import (
     apply_google_rain_departure_milestones,
 )
 from app.services.google_rain_sheets import read_google_rain_outbound_milestones
+from app.services.google_rain_integration_mode import (
+    GOOGLE_PRIMARY,
+    rain_integration_mode,
+)
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_settings_by_name
 
@@ -119,6 +123,7 @@ def execute_google_motherbrain_live_poll(
         return {"status": "lease_lost", "operation_id": operation.id}
     rain_result = _run_google_rain_best_effort(
         operation,
+        gateway=gateway,
         now=now,
         reader=rain_reader,
         applier=rain_applier,
@@ -129,6 +134,7 @@ def execute_google_motherbrain_live_poll(
         "applied_count": application.get("applied_count", 0),
         "skipped_count": application.get("skipped_count", 0),
         "rain_status": rain_result["status"],
+        "rain_mode": rain_result.get("mode", GOOGLE_PRIMARY),
         "rain_applied_count": rain_result.get("applied_count", 0),
         "rain_skipped_count": rain_result.get("skipped_count", 0),
     }
@@ -183,10 +189,28 @@ def google_motherbrain_live_poll_preflight(gateway, now=None):
     return {"status": "outside_window", "sort_date": None}
 
 
-def _run_google_rain_best_effort(operation, *, now=None, reader=None, applier=None):
+def _run_google_rain_best_effort(
+    operation,
+    *,
+    gateway=None,
+    now=None,
+    reader=None,
+    applier=None,
+):
     """Run Rain after the primary poll is durable; never undo that success."""
+    mode = rain_integration_mode(
+        gateway or operation.gateway,
+        operation.sort_name,
+    )
+    if mode != GOOGLE_PRIMARY:
+        return {
+            "status": "skipped_neo_authoritative",
+            "mode": mode,
+            "applied_count": 0,
+            "skipped_count": 0,
+        }
     if current_app.config.get("TESTING") and reader is None and applier is None:
-        return {"status": "not_run"}
+        return {"status": "not_run", "mode": mode}
 
     reader = reader or read_google_rain_outbound_milestones
     applier = applier or apply_google_rain_departure_milestones
@@ -205,6 +229,7 @@ def _run_google_rain_best_effort(operation, *, now=None, reader=None, applier=No
 
     return {
         "status": "success",
+        "mode": mode,
         "applied_count": application.get("applied_count", 0),
         "skipped_count": application.get("skipped_count", 0),
     }
