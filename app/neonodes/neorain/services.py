@@ -12,6 +12,7 @@ from sqlalchemy import func, literal, select, union_all
 from app.extensions import db
 from app.models import SortDateMission, SortDateParkingAssignment
 from app.services.live_screen_refresh import live_screen_refresh_value
+from app.services.live_collaboration import entity_version
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data
@@ -382,8 +383,6 @@ def neorain_outbound_row(mission, operation):
     row = _outbound_row(mission, operation, parking_by_tail)
     row.pop("sort_time", None)
     row["departure_status"] = _normalized_status(mission.departure_status)
-    if mission.updated_at:
-        row["version"] = mission.updated_at.isoformat()
     return row
 
 
@@ -413,6 +412,7 @@ def _outbound_row(mission, operation, parking_by_tail):
         "no_return": "NO RETURN" if status == "departed" else "",
         "sort_time": planned,
         "mission_id": mission.id,
+        "version": entity_version(mission),
     }
 
 

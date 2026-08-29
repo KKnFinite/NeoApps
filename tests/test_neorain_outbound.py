@@ -18,6 +18,7 @@ from app.neonodes.neorain.services import (
 )
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
+from app.services.live_collaboration import entity_version
 
 
 class NeoRainOutboundTest(unittest.TestCase):
@@ -102,6 +103,7 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(rows[0]["crew_load_complete"], "01:10")
         self.assertEqual(rows[0]["official_block_out"], "01:15")
         self.assertEqual(rows[0]["no_return"], "NO RETURN")
+        self.assertEqual(rows[0]["version"], entity_version(earlier))
         self.assertEqual(rows[1]["no_return"], "")
         self.assertEqual(rows[1]["status"], "BLOCKED OUT")
         self.assertEqual(later.id, rows[1]["mission_id"])

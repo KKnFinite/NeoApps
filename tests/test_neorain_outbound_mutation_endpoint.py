@@ -12,6 +12,7 @@ from app.services.google_rain_integration_mode import (
     set_rain_integration_mode,
 )
 from app.services.google_rain_sheets import GoogleRainWriterError
+from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
 
 
@@ -91,6 +92,7 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
 
     def test_phase_two_writes_canonical_value_then_commits_neo(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        expected_version = entity_version(self.mission)
         mirrored = []
 
         def capture_write(mission, field, value, *, operation):
@@ -102,7 +104,11 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
             "app.neonodes.neorain.routes.write_google_rain_departure_milestone",
             side_effect=capture_write,
         ):
-            response = self._post("ramp_load_complete", "0237")
+            response = self._post(
+                "ramp_load_complete",
+                "0237",
+                expected_version=expected_version,
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -110,6 +116,8 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.assertEqual(payload["mode"], NEO_PRIMARY_GOOGLE_MIRROR)
         self.assertEqual(payload["row"]["ramp_load_complete"], "02:37")
         self.assertEqual(payload["row"]["departure_status"], "ramp_load_complete")
+        self.assertEqual(payload["version"], payload["row"]["version"])
+        self.assertNotEqual(payload["version"], expected_version)
         self.assertEqual(len(mirrored), 1)
         db.session.expire_all()
         persisted = db.session.get(SortDateMission, self.mission.id)
@@ -144,6 +152,49 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         persisted = db.session.get(SortDateMission, self.mission.id)
         self.assertIsNotNone(persisted.crew_load_completed_at_utc)
         self.assertEqual(persisted.crew_load_completed_source, "neorain")
+
+    def test_stale_version_returns_current_row_without_neo_or_google_changes(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        expected_version = entity_version(self.mission)
+        self.mission.destination = "ONT"
+        db.session.commit()
+
+        with self._current_operation(), patch(
+            "app.neonodes.neorain.routes.mutate_neorain_departure_milestone"
+        ) as mutate, patch(
+            "app.neonodes.neorain.routes.write_google_rain_departure_milestone"
+        ) as writer:
+            response = self._post(
+                "ramp_load_complete",
+                "0237",
+                expected_version=expected_version,
+            )
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json()
+        self.assertEqual(payload["code"], "stale_version")
+        self.assertEqual(payload["row"]["destination"], "ONT")
+        self.assertNotEqual(payload["row"]["version"], expected_version)
+        mutate.assert_not_called()
+        writer.assert_not_called()
+        db.session.expire_all()
+        persisted = db.session.get(SortDateMission, self.mission.id)
+        self.assertIsNone(persisted.ramp_load_completed_at_utc)
+
+    def test_missing_expected_version_is_rejected(self):
+        self._set_mode(NEO_ONLY)
+        with self._current_operation():
+            response = self.client.post(
+                "/neorain/outbound/milestone",
+                json={
+                    "mission_id": self.mission.id,
+                    "field": "ramp_load_complete",
+                    "value": "0237",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["code"], "invalid_request")
 
     def test_service_validation_and_elmac_rejection_are_safe(self):
         self._set_mode(NEO_ONLY)
@@ -186,13 +237,18 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         persisted = db.session.get(SortDateMission, self.mission.id)
         self.assertIsNone(persisted.ramp_load_completed_at_utc)
 
-    def _post(self, field, value, *, mission_id=None):
+    def _post(self, field, value, *, mission_id=None, expected_version=None):
+        target_id = mission_id or self.mission.id
+        if expected_version is None:
+            target = db.session.get(SortDateMission, target_id)
+            expected_version = entity_version(target)
         return self.client.post(
             "/neorain/outbound/milestone",
             json={
-                "mission_id": mission_id or self.mission.id,
+                "mission_id": target_id,
                 "field": field,
                 "value": value,
+                "expected_version": expected_version,
             },
         )
 

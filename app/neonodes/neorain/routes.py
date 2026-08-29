@@ -42,6 +42,7 @@ from app.services.live_screen_refresh import (
     live_screen_refresh_value,
     save_live_screen_refresh_override,
 )
+from app.services.live_collaboration import entity_version, version_conflict
 from app.services.permission_rules import permission_access, preload_permission_rules, user_can
 
 
@@ -149,11 +150,19 @@ def outbound_milestone():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return _json_error("invalid_request", "A JSON milestone request is required.", 400)
-    unexpected_keys = set(payload) - {"mission_id", "field", "value"}
-    if unexpected_keys or not {"mission_id", "field", "value"}.issubset(payload):
+    expected_keys = {"mission_id", "field", "value", "expected_version"}
+    unexpected_keys = set(payload) - expected_keys
+    if unexpected_keys or not expected_keys.issubset(payload):
         return _json_error(
             "invalid_request",
-            "Provide only mission_id, field, and value.",
+            "Provide only mission_id, field, value, and expected_version.",
+            400,
+        )
+    expected_version = str(payload.get("expected_version") or "").strip()
+    if not expected_version:
+        return _json_error(
+            "invalid_request",
+            "Provide the current mission version.",
             400,
         )
 
@@ -173,12 +182,16 @@ def outbound_milestone():
     if operation is None or operation.gateway_id != gateway.id:
         return _json_error("no_current_sort", "No current sort.", 409)
 
-    mission = SortDateMission.query.filter_by(
+    mission_query = SortDateMission.query.filter_by(
         id=mission_id,
         sort_date_operation_id=operation.id,
         gateway_code=gateway.code,
         mission_type="departure",
-    ).one_or_none()
+    )
+    mode = rain_integration_mode(gateway, operation.sort_name)
+    if mode != GOOGLE_PRIMARY:
+        mission_query = mission_query.populate_existing().with_for_update()
+    mission = mission_query.one_or_none()
     if mission is None:
         return _json_error(
             "mission_not_found",
@@ -186,13 +199,25 @@ def outbound_milestone():
             404,
         )
 
-    mode = rain_integration_mode(gateway, operation.sort_name)
     if mode == GOOGLE_PRIMARY:
         return _json_error(
             "google_primary",
             "Google Rain is authoritative for outbound milestones.",
             409,
         )
+
+    conflict = version_conflict(mission, expected_version)
+    if conflict:
+        row = neorain_outbound_row(mission, operation)
+        db.session.rollback()
+        return jsonify(
+            {
+                "ok": False,
+                "code": "stale_version",
+                "error": conflict["message"],
+                "row": row,
+            }
+        ), 409
 
     previous_value = neorain_departure_milestone_value(mission, field)
     try:
@@ -277,6 +302,7 @@ def outbound_milestone():
             "changed": mutation["changed"],
             "field": field,
             "source": mutation["source"],
+            "version": entity_version(mission),
             "row": row,
         }
     )
