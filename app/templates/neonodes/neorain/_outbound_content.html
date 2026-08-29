@@ -48,7 +48,16 @@
                 {{ milestone_cell(row, 'ramp_load_complete', 'Ramp Load Complete') }}
                 {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
                 {{ milestone_cell(row, 'official_block_out', 'Official Block-Out') }}
-                <td data-label="No Return" data-neorain-display="no_return">{{ row.no_return or '-' }}</td>
+                <td data-label="No Return" data-neorain-field-cell="no_return">
+                    <span data-neorain-display="no_return">{{ row.no_return or '-' }}</span>
+                    {% if can_edit_timestamp_milestones %}
+                    <div class="neorain-no-return-editor" data-neorain-no-return-editor>
+                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="set" {% if row.no_return %}hidden{% endif %}>SET NO RETURN</button>
+                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="reverse" {% if not row.no_return %}hidden{% endif %}>REVERSE</button>
+                        <output class="neorain-no-return-message" data-neorain-no-return-message aria-live="polite" hidden></output>
+                    </div>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

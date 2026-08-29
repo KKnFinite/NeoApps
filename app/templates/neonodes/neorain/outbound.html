@@ -29,7 +29,7 @@
     if (!root || !window.NeoLiveUpdates) return;
     let revision = root.dataset.outboundRevision || "";
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true']"
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true']"
     ));
     root.addEventListener("neorain:revision", (event) => {
         const nextRevision = event.detail?.revision;
@@ -111,12 +111,23 @@
             const display = row.querySelector(`[data-neorain-display="${field}"]`);
             if (display) display.textContent = value;
         });
+        const noReturnEditor = row.querySelector("[data-neorain-no-return-editor]");
+        if (noReturnEditor) {
+            const isNoReturn = Boolean(nextRow.no_return);
+            noReturnEditor.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn);
+            noReturnEditor.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn);
+        }
     };
 
     const nextEditor = (input) => {
         const editors = Array.from(input.closest("tr")?.querySelectorAll("[data-neorain-hhmm]") || []);
         const index = editors.indexOf(input);
-        return index >= 0 ? editors[index + 1] : null;
+        if (index >= 0 && editors[index + 1]) return editors[index + 1];
+        if (input.dataset.neorainField === "official_block_out") {
+            const setNoReturn = input.closest("tr")?.querySelector("[data-neorain-no-return-action='set']:not([hidden])");
+            if (setNoReturn) return setNoReturn;
+        }
+        return null;
     };
 
     const focusWithError = (input, message) => {
@@ -194,6 +205,64 @@
         }
     };
 
+    const setNoReturnMessage = (editor, message = "", state = "") => {
+        const output = editor.querySelector("[data-neorain-no-return-message]");
+        if (output) {
+            output.textContent = message;
+            output.hidden = !message;
+        }
+        editor.classList.toggle("is-error", state === "error");
+        editor.classList.toggle("is-saving", state === "saving");
+    };
+
+    const saveNoReturn = async (button, desired) => {
+        const editor = button.closest("[data-neorain-no-return-editor]");
+        const row = button.closest("[data-neorain-outbound-row]");
+        if (!editor || !row?.dataset.missionId || !row.dataset.missionVersion) return;
+        if (editor.dataset.neorainNoReturnSaving === "true") return;
+        if (!desired && !window.confirm("Reverse No Return for this mission?")) return;
+        editor.removeAttribute("data-neorain-no-return-stale");
+        editor.dataset.neorainNoReturnSaving = "true";
+        editor.querySelectorAll("button").forEach((control) => { control.disabled = true; });
+        setNoReturnMessage(editor, "SAVING", "saving");
+        let payload;
+        try {
+            const response = await fetch(mutationUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    mission_id: Number(row.dataset.missionId),
+                    field: "no_return",
+                    value: desired,
+                    expected_version: row.dataset.missionVersion,
+                }),
+            });
+            payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                if (response.status === 409 && payload.code === "stale_version" && payload.row) {
+                    applyRow(row, payload.row);
+                    editor.dataset.neorainNoReturnStale = "true";
+                    setNoReturnMessage(editor, payload.error || "This mission changed while you were editing.", "error");
+                    return;
+                }
+                throw new Error(payload.error || "NeoRain No Return save failed.");
+            }
+        } catch (error) {
+            setNoReturnMessage(editor, error.message || "NeoRain No Return save failed.", "error");
+            return;
+        } finally {
+            editor.dataset.neorainNoReturnSaving = "false";
+            editor.querySelectorAll("button").forEach((control) => { control.disabled = false; });
+            editor.classList.remove("is-saving");
+        }
+        applyRow(row, payload.row);
+        setNoReturnMessage(editor);
+        if (payload.revision) {
+            root.dispatchEvent(new CustomEvent("neorain:revision", { detail: { revision: payload.revision } }));
+        }
+    };
+
     root.querySelectorAll("[data-neorain-hhmm]").forEach((input) => {
         input.addEventListener("input", () => {
             input.removeAttribute("data-neorain-stale");
@@ -215,6 +284,9 @@
                 focusWithError(input, "Use four-digit HHMM.");
             }
         });
+    });
+    root.querySelectorAll("[data-neorain-no-return-action]").forEach((button) => {
+        button.addEventListener("click", () => saveNoReturn(button, button.dataset.neorainNoReturnAction === "set"));
     });
 })();
 </script>

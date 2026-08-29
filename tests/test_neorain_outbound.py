@@ -212,6 +212,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             b'data-neorain-field="ramp_load_complete"',
             google_primary.data,
         )
+        self.assertNotIn(b'data-neorain-no-return-action', google_primary.data)
 
         self.client.get("/logout")
         viewer = self._user("rain_neo_viewer", "watcher")
@@ -229,6 +230,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             b'data-neorain-field="ramp_load_complete"',
             neo_viewer.data,
         )
+        self.assertNotIn(b'data-neorain-no-return-action', neo_viewer.data)
 
     def test_authorized_neo_mode_renders_three_hhmm_editors_only(self):
         operation = self._operation()
@@ -273,9 +275,46 @@ class NeoRainOutboundTest(unittest.TestCase):
                     self.assertIn(value, response.data)
                 self.assertNotIn(b'data-neorain-field="elmac"', response.data)
                 self.assertNotIn(b'data-neorain-field="no_return"', response.data)
+                self.assertIn(b'data-neorain-no-return-action="set"', response.data)
+                self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
+                self.assertIn(b'field: "no_return"', response.data)
+                self.assertIn(b'value: desired', response.data)
+                self.assertIn(b'"Reverse No Return for this mission?"', response.data)
                 self.assertIn(b"expected_version", response.data)
                 self.assertIn(b"stale_version", response.data)
                 self.assertIn(b"neorainRefreshDeferred", response.data)
+
+    def test_departed_row_shows_no_return_and_reverse_for_authorized_editor(self):
+        operation = self._operation()
+        mission = self._mission(
+            operation,
+            "UPS630",
+            "SDF",
+            planned=datetime(2026, 8, 30, 6, 30),
+            status="departed",
+        )
+        mission.ramp_load_completed_at_utc = datetime(2026, 8, 30, 6, 37)
+        mission.crew_load_completed_at_utc = datetime(2026, 8, 30, 6, 45)
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 30, 6, 55)
+        db.session.commit()
+        editor = self._user("rain_no_return_editor", "simulator")
+        self._login(editor)
+        set_rain_integration_mode(self.gateway, operation.sort_name, NEO_ONLY)
+        db.session.commit()
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.get("/neorain/outbound")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b">NO RETURN<", response.data)
+        self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
+        self.assertIn(b'data-neorain-no-return-action="set"', response.data)
+        self.assertIn(b'data-neorain-field="ramp_load_complete"', response.data)
+        self.assertIn(b'data-neorain-field="crew_load_complete"', response.data)
+        self.assertIn(b'data-neorain-field="official_block_out"', response.data)
 
     def _operation(self):
         operation = SortDateOperation(
