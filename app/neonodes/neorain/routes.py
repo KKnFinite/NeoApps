@@ -8,6 +8,7 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -15,6 +16,7 @@ from app.models import SortDateMission
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
+    NEORAIN_OUTBOUND_REFRESH_KEY,
     NEORAIN_MUTABLE_MILESTONE_FIELDS,
     NeoRainMilestoneError,
     current_neorain_outbound_operation,
@@ -34,6 +36,11 @@ from app.services.google_rain_integration_mode import (
 from app.services.google_rain_sheets import (
     GoogleRainWriterError,
     write_google_rain_departure_milestone,
+)
+from app.services.live_screen_refresh import (
+    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    live_screen_refresh_value,
+    save_live_screen_refresh_override,
 )
 from app.services.permission_rules import permission_access, preload_permission_rules, user_can
 
@@ -281,10 +288,99 @@ def load_planner_lineup():
     return _render_neorain_page("neorain.load_planner_lineup")
 
 
-@bp.route("/settings")
+NEORAIN_REFRESH_SETTINGS_EDIT_PERMISSION = "neorain.refresh_settings.edit"
+
+
+@bp.route("/settings", methods=["GET", "POST"])
 @gateway_node_required("rain")
 def settings():
-    return _render_neorain_page("neorain.settings")
+    page = _neorain_page("neorain.settings")
+    access = permission_access(page[2], page[3])
+    can_edit_refresh_settings = user_can(NEORAIN_REFRESH_SETTINGS_EDIT_PERMISSION)
+    gateway = get_current_gateway()
+
+    if request.method == "POST":
+        if not access["can_view"] or not can_edit_refresh_settings:
+            db.session.rollback()
+            response = _render_neorain_settings(
+                gateway,
+                access,
+                can_edit_refresh_settings,
+                status_code=403,
+                message=("Access denied.", "error"),
+            )
+            return response
+        if request.form.get("action") != "save_live_refresh":
+            return _render_neorain_settings(
+                gateway,
+                access,
+                can_edit_refresh_settings,
+                status_code=400,
+                message=("Choose a valid NeoRain settings action.", "error"),
+            )
+        try:
+            result = save_live_screen_refresh_override(
+                gateway,
+                request.form.get("screen_key"),
+                request.form.get("refresh_interval_seconds"),
+                allowed_screen_keys=(NEORAIN_OUTBOUND_REFRESH_KEY,),
+            )
+        except (IntegrityError, ValueError) as exc:
+            db.session.rollback()
+            message = (
+                str(exc)
+                if isinstance(exc, ValueError)
+                else "Unable to save live refresh setting."
+            )
+            return _render_neorain_settings(
+                gateway,
+                access,
+                can_edit_refresh_settings,
+                status_code=400,
+                message=(message, "error"),
+            )
+        if result.changed:
+            db.session.commit()
+            flash("LIVE REFRESH SETTING SAVED.", "success")
+        else:
+            db.session.rollback()
+            flash("NO LIVE REFRESH SETTING CHANGES.", "info")
+        return redirect(url_for("neorain.settings"))
+
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neorain.index"))
+    return _render_neorain_settings(
+        gateway,
+        access,
+        can_edit_refresh_settings,
+    )
+
+
+def _render_neorain_settings(
+    gateway,
+    access,
+    can_edit_refresh_settings,
+    *,
+    status_code=200,
+    message=None,
+):
+    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.settings"
+    if message:
+        flash(*message)
+    response = render_template(
+        "neonodes/neorain/settings.html",
+        can_edit=access["can_edit"],
+        can_view=access["can_view"],
+        page_label="Settings",
+        can_edit_refresh_settings=can_edit_refresh_settings,
+        refresh_setting=live_screen_refresh_value(
+            gateway,
+            NEORAIN_OUTBOUND_REFRESH_KEY,
+        ),
+        live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    )
+    return response, status_code
 
 
 def _render_neorain_page(endpoint):

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | NeoRain{% endblock %}
+
+{% block content %}
+<section class="neorain-outbound-shell" aria-labelledby="neorain-settings-title">
+    <header class="neorain-outbound-head mobile-shell-duplicate-title">
+        <div>
+            <p>NEORAIN WORKSPACE</p>
+            <h1 id="neorain-settings-title">SETTINGS</h1>
+        </div>
+    </header>
+
+    <section class="neorain-settings-panel" aria-labelledby="neorain-refresh-title">
+        <header>
+            <div>
+                <h2 id="neorain-refresh-title">LIVE AUTO-REFRESH</h2>
+                <p>Configure the refresh interval for active NeoRain live screens.</p>
+            </div>
+        </header>
+        <div class="neorain-refresh-row">
+            <div class="neorain-refresh-screen">
+                <strong>Outbound</strong>
+                <small>{{ refresh_setting.screen_key }}</small>
+            </div>
+            <dl class="neorain-refresh-status">
+                <div><dt>Configured</dt><dd>{{ refresh_setting.configured_label }}</dd></div>
+                <div><dt>Effective</dt><dd>{{ refresh_setting.effective_label }}</dd></div>
+                <div><dt>Source</dt><dd>{{ refresh_setting.source_label }}</dd></div>
+            </dl>
+            <form method="post" class="neorain-refresh-form">
+                <input type="hidden" name="action" value="save_live_refresh">
+                <input type="hidden" name="screen_key" value="{{ refresh_setting.screen_key }}">
+                <label for="neorain-refresh-interval" class="sr-only">Outbound refresh interval</label>
+                <select id="neorain-refresh-interval" name="refresh_interval_seconds" {% if not can_edit_refresh_settings %}disabled{% endif %}>
+                    <option value="default" {% if refresh_setting.override_seconds is none %}selected{% endif %}>Render default</option>
+                    {% for seconds in live_refresh_allowed_seconds %}
+                    <option value="{{ seconds }}" {% if refresh_setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
+                    {% endfor %}
+                </select>
+                {% if can_edit_refresh_settings %}
+                <button type="submit">SAVE</button>
+                {% endif %}
+            </form>
+        </div>
+    </section>
+</section>
+{% endblock %}

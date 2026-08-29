@@ -29447,10 +29447,119 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     background: #0b1018;
 }
 
+.neorain-settings-panel {
+    border: 1px solid rgba(var(--node-rgb), 0.22);
+    background: #0b1018;
+}
+
+.neorain-settings-panel > header {
+    padding: 11px 14px;
+    border-bottom: 1px solid rgba(var(--node-rgb), 0.18);
+}
+
+.neorain-settings-panel h2 {
+    margin: 0;
+    color: var(--node-highlight);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+}
+
+.neorain-settings-panel p {
+    margin: 4px 0 0;
+    color: #8f9eae;
+    font-size: 0.68rem;
+}
+
+.neorain-refresh-row {
+    display: grid;
+    grid-template-columns: minmax(130px, 0.8fr) minmax(240px, 1.5fr) minmax(210px, auto);
+    align-items: center;
+    gap: 16px;
+    padding: 12px 14px;
+}
+
+.neorain-refresh-screen {
+    display: grid;
+    gap: 3px;
+}
+
+.neorain-refresh-screen strong {
+    color: #edf2f7;
+    font-size: 0.78rem;
+}
+
+.neorain-refresh-screen small {
+    color: #728194;
+    font-size: 0.6rem;
+}
+
+.neorain-refresh-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin: 0;
+}
+
+.neorain-refresh-status div {
+    display: grid;
+    gap: 2px;
+}
+
+.neorain-refresh-status dt {
+    color: #728194;
+    font-size: 0.56rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.neorain-refresh-status dd {
+    margin: 0;
+    color: #d6dee8;
+    font-size: 0.68rem;
+}
+
+.neorain-refresh-form {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.neorain-refresh-form select,
+.neorain-refresh-form button {
+    min-height: 29px;
+    border: 1px solid rgba(var(--node-rgb), 0.45);
+    border-radius: 3px;
+    background: #111a26;
+    color: #e5edf5;
+    font-size: 0.65rem;
+}
+
+.neorain-refresh-form select {
+    min-width: 128px;
+    padding: 4px 7px;
+}
+
+.neorain-refresh-form button {
+    padding: 4px 9px;
+    color: var(--node-highlight);
+    font-weight: 800;
+    cursor: pointer;
+}
+
 @media (max-width: 760px) {
     .neorain-outbound-head {
         align-items: start;
         flex-direction: column;
         gap: 5px;
+    }
+
+    .neorain-refresh-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .neorain-refresh-form {
+        justify-content: flex-start;
     }
 }

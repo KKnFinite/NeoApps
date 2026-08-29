@@ -452,6 +452,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoRain Settings workspace.",
     ),
     (
+        "neorain.refresh_settings.edit",
+        "grandmaster",
+        "Edit NeoRain live-screen refresh intervals.",
+    ),
+    (
         "neostaffing.board.view",
         "watcher",
         "View the NeoStaffing Board dashboard.",
@@ -661,6 +666,9 @@ LEGACY_PERMISSION_DESCRIPTIONS = {
     },
     "neoscorpion.refresh_settings.edit": {
         "Edit NeoScorpion live-screen refresh intervals.",
+    },
+    "neorain.refresh_settings.edit": {
+        "Edit NeoRain live-screen refresh intervals.",
     },
     "neostaffing.hierarchy.edit": {
         "Edit NeoStaffing hierarchy units.",
