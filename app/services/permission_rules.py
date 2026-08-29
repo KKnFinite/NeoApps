@@ -412,6 +412,46 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoScorpion completed fuel history.",
     ),
     (
+        "neorain.inbound.view",
+        "watcher",
+        "View NeoRain Inbound workspace.",
+    ),
+    (
+        "neorain.inbound.edit",
+        "simulator",
+        "Edit NeoRain Inbound workspace.",
+    ),
+    (
+        "neorain.outbound.view",
+        "watcher",
+        "View NeoRain Outbound workspace.",
+    ),
+    (
+        "neorain.outbound.edit",
+        "simulator",
+        "Edit NeoRain Outbound workspace.",
+    ),
+    (
+        "neorain.load_planner_lineup.view",
+        "watcher",
+        "View NeoRain Load Planner Lineup workspace.",
+    ),
+    (
+        "neorain.load_planner_lineup.edit",
+        "operator",
+        "Edit NeoRain Load Planner Lineup workspace.",
+    ),
+    (
+        "neorain.settings.view",
+        "watcher",
+        "View NeoRain Settings workspace.",
+    ),
+    (
+        "neorain.settings.edit",
+        "simulator",
+        "Edit NeoRain Settings workspace.",
+    ),
+    (
         "neostaffing.board.view",
         "watcher",
         "View the NeoStaffing Board dashboard.",
@@ -1106,6 +1146,46 @@ PERMISSION_RULE_ITEMS = (
         "NeoScorpion completed fuel history.",
         {
             "view": "neoscorpion.history.view",
+        },
+    ),
+    (
+        "rain",
+        "neorain.inbound",
+        "Inbound",
+        "NeoRain Inbound workspace.",
+        {
+            "view": "neorain.inbound.view",
+            "edit": "neorain.inbound.edit",
+        },
+    ),
+    (
+        "rain",
+        "neorain.outbound",
+        "Outbound",
+        "NeoRain Outbound workspace.",
+        {
+            "view": "neorain.outbound.view",
+            "edit": "neorain.outbound.edit",
+        },
+    ),
+    (
+        "rain",
+        "neorain.load_planner_lineup",
+        "Load Planner Lineup",
+        "NeoRain Load Planner Lineup workspace.",
+        {
+            "view": "neorain.load_planner_lineup.view",
+            "edit": "neorain.load_planner_lineup.edit",
+        },
+    ),
+    (
+        "rain",
+        "neorain.settings",
+        "Settings",
+        "NeoRain Settings workspace.",
+        {
+            "view": "neorain.settings.view",
+            "edit": "neorain.settings.edit",
         },
     ),
     (

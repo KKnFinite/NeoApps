@@ -1007,8 +1007,8 @@ def _pwa_manifest_definitions():
         "rain": {
             "name": "NeoRain",
             "short_name": "NeoRain",
-            "description": "NeoRain placeholder.",
-            "start_url": "/nodes/",
+            "description": "NeoRain load planning workspace.",
+            "start_url": "/neorain",
             "theme_color": "#7f4dff",
             "icon_folder": "rain",
         },
@@ -1077,6 +1077,7 @@ def register_blueprints(app):
     from app.neomotherbrain import bp as neomotherbrain_bp
     from app.neonodes import bp as neonodes_bp
     from app.neonodes.neoermac import bp as neoermac_bp
+    from app.neonodes.neorain import bp as neorain_bp
     from app.neonodes.neosektor import bp as neosektor_bp
     from app.neonodes.neoscorpion import bp as neoscorpion_bp
     from app.neostaffing import bp as neostaffing_bp
@@ -1086,6 +1087,7 @@ def register_blueprints(app):
     app.register_blueprint(neomotherbrain_bp)
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")
+    app.register_blueprint(neorain_bp, url_prefix="/neorain")
     app.register_blueprint(neosektor_bp, url_prefix="/neosektor")
     app.register_blueprint(neoscorpion_bp, url_prefix="/neoscorpion")
     app.register_blueprint(neostaffing_bp, url_prefix="/neostaffing")

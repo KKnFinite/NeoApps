@@ -169,8 +169,8 @@ PWA_INSTALL_TARGETS = (
         "manifest_key": "rain",
         "icon_folder": "rain",
         "name": "NeoRain",
-        "description": "Future NeoRain workspace.",
-        "start_url": "/nodes/",
+        "description": "NeoRain load planning workspace.",
+        "start_url": "/neorain",
         "minimum_role": "watcher",
     },
 )

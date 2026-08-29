@@ -76,6 +76,14 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(rules["neosektor.settings.edit"], "master")
         self.assertEqual(rules["neoscorpion.dashboard.view"], "watcher")
         self.assertEqual(rules["neoscorpion.hanzo.view"], "operator")
+        self.assertEqual(rules["neorain.inbound.view"], "watcher")
+        self.assertEqual(rules["neorain.inbound.edit"], "simulator")
+        self.assertEqual(rules["neorain.outbound.view"], "watcher")
+        self.assertEqual(rules["neorain.outbound.edit"], "simulator")
+        self.assertEqual(rules["neorain.load_planner_lineup.view"], "watcher")
+        self.assertEqual(rules["neorain.load_planner_lineup.edit"], "operator")
+        self.assertEqual(rules["neorain.settings.view"], "watcher")
+        self.assertEqual(rules["neorain.settings.edit"], "simulator")
 
     def test_role_order_is_watcher_to_grandmaster(self):
         self.assertLess(ROLE_LEVELS["watcher"], ROLE_LEVELS["operator"])
@@ -134,6 +142,12 @@ class PermissionRulesTest(unittest.TestCase):
                 "neoscorpion.truck_manager.view",
                 "neoscorpion.settings.view",
                 "neoscorpion.history.view",
+            },
+            "NeoRain": {
+                "neorain.inbound.view",
+                "neorain.outbound.view",
+                "neorain.load_planner_lineup.view",
+                "neorain.settings.view",
             },
             "NeoStaffing": {
                 "neostaffing.board.view",

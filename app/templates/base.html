@@ -89,9 +89,11 @@
         {% if not public_landing|default(false) and not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
+            {% if not is_neorain_page %}
             <a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
                 <img class="motherbrain-header-logo{% if is_neoermac_page %} neoermac-header-logo{% endif %}{% if is_neosektor_page %} neosektor-header-logo{% endif %}" src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}">
             </a>
+            {% endif %}
             <div class="motherbrain-header-identity" aria-label="{{ node_header_name }} current area">
                 <span>
                     {% if uses_motherbrain_header %}
@@ -444,6 +446,10 @@
                         {% if user_can('neoermac.settings.view') %}<a class="mobile-shell-menu-link{% if request.path.startswith('/neoermac/settings') %} is-active{% endif %}" href="{{ url_for('neoermac.settings') }}" role="menuitem" {% if request.path.startswith('/neoermac/settings') %}aria-current="page"{% endif %}>Settings</a>{% endif %}
                     {% elif is_neoscorpion_page %}
                         {% for item in neoscorpion_internal_menu_items() %}
+                        <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                        {% endfor %}
+                    {% elif is_neorain_page %}
+                        {% for item in neorain_menu_items() %}
                         <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
                         {% endfor %}
                     {% elif uses_motherbrain_header %}

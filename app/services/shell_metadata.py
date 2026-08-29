@@ -195,6 +195,7 @@ def resolve_shell_metadata(
         path, is_neoermac_view_outbound_page
     )
     neoscorpion_current_label, neoscorpion_mobile_label = _neoscorpion_labels(path)
+    neorain_current_label, neorain_mobile_label = _neorain_labels(path)
 
     is_neosektor_ebm_page = path.startswith("/neosektor/ebm") or (
         path.startswith("/neosektor/ballmat") and ballmat_side == "east"
@@ -226,8 +227,11 @@ def resolve_shell_metadata(
         is_neosektor_live_counts_page=is_neosektor_live_counts_page,
     )
 
-    uses_node_desktop_shell = is_neoermac_page or is_neoscorpion_page or (
-        is_neosektor_page and not is_neosektor_driver_page
+    uses_node_desktop_shell = (
+        is_neoermac_page
+        or is_neoscorpion_page
+        or is_neorain_page
+        or (is_neosektor_page and not is_neosektor_driver_page)
     )
     is_neosektor_landing = is_neosektor_page and normalized_path == "/neosektor"
     uses_node_header = (
@@ -281,6 +285,8 @@ def resolve_shell_metadata(
         if is_neoermac_page
         else neoscorpion_current_label
         if is_neoscorpion_page
+        else neorain_current_label
+        if is_neorain_page
         else motherbrain_current_label
     )
     has_node_shell_identity = (
@@ -329,6 +335,8 @@ def resolve_shell_metadata(
         if is_neosektor_page
         else neoscorpion_mobile_label
         if is_neoscorpion_page
+        else neorain_mobile_label
+        if is_neorain_page
         else node_current_label
         if has_node_shell_identity
         else default_gateway_code
@@ -370,7 +378,6 @@ def resolve_shell_metadata(
         or is_neoermac_page
         or is_neosektor_page
         or is_neoscorpion_page
-        or is_neorain_page
     )
     mobile_node_icon = (
         "images/icons/neogateway/inapp/neogateway-inapp-128.png"
@@ -532,6 +539,16 @@ def _neoscorpion_labels(path):
     ):
         return "FUEL HISTORY", "HISTORY"
     return "DASHBOARD", "DASHBOARD"
+
+
+def _neorain_labels(path):
+    if path.startswith("/neorain/outbound"):
+        return "OUTBOUND", "OUTBOUND"
+    if path.startswith("/neorain/load-planner-lineup"):
+        return "LOAD PLANNER LINEUP", "LINEUP"
+    if path.startswith("/neorain/settings"):
+        return "SETTINGS", "SETTINGS"
+    return "INBOUND", "INBOUND"
 
 
 def _neosektor_labels(

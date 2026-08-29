@@ -1,7 +1,9 @@
 {% from "_neo_brand.html" import neo_brand %}
 <aside class="motherbrain-desktop-side-nav node-desktop-side-nav node-{{ node_header_key }}" aria-label="{{ node_header_name }} desktop navigation" data-node-desktop-side-nav data-node-desktop-shell="{{ node_header_key }}">
-    <a class="motherbrain-desktop-side-brand node-desktop-side-brand" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} dashboard">
+    <a class="motherbrain-desktop-side-brand node-desktop-side-brand" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} {{ 'home' if is_neorain_page else 'dashboard' }}">
+        {% if not is_neorain_page %}
         <img src="{{ url_for('static', filename=node_desktop_sidebar_logo) }}" alt="{{ node_header_alt }}" width="256" height="256" decoding="async">
+        {% endif %}
         {% if is_neoermac_page %}
         {% with neoermac_brand_class="motherbrain-sidebar-brand-title" %}
         {% include "neonodes/neoermac/_brand_title.html" %}
@@ -46,6 +48,10 @@
         {% elif is_neoscorpion_page %}
         <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neoscorpion.index' %} is-active{% endif %}" href="{{ url_for('neoscorpion.index') }}" {% if request.endpoint == 'neoscorpion.index' %}aria-current="page"{% endif %}>Dashboard</a>
         {% for item in neoscorpion_internal_menu_items() %}
+        <a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
+        {% endfor %}
+        {% elif is_neorain_page %}
+        {% for item in neorain_menu_items() %}
         <a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}
         {% endif %}
