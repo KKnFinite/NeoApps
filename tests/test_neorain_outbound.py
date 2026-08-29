@@ -107,11 +107,51 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(rows[0]["ramp_load_complete"], "01:05")
         self.assertEqual(rows[0]["crew_load_complete"], "01:10")
         self.assertEqual(rows[0]["official_block_out"], "01:15")
+        self.assertEqual(rows[0]["departure_variance"], "+310")
         self.assertEqual(rows[0]["no_return"], "NO RETURN")
         self.assertEqual(rows[0]["version"], entity_version(earlier))
         self.assertEqual(rows[1]["no_return"], "")
         self.assertEqual(rows[1]["status"], "BLOCKED OUT")
         self.assertEqual(later.id, rows[1]["mission_id"])
+
+    def test_departure_variance_uses_canonical_std_and_handles_midnight(self):
+        operation = self._operation()
+        late = self._mission(
+            operation,
+            "UPS110",
+            "SDF",
+            planned=datetime(2026, 8, 30, 23, 55),
+        )
+        early = self._mission(
+            operation,
+            "UPS111",
+            "ONT",
+            planned=datetime(2026, 8, 30, 2, 0),
+        )
+        exact = self._mission(
+            operation,
+            "UPS112",
+            "OAK",
+            planned=datetime(2026, 8, 30, 3, 0),
+        )
+        missing = self._mission(
+            operation,
+            "UPS113",
+            "LAX",
+            planned=datetime(2026, 8, 30, 4, 0),
+        )
+        late.actual_block_out_datetime_utc = datetime(2026, 8, 31, 0, 7)
+        early.actual_block_out_datetime_utc = datetime(2026, 8, 30, 1, 56)
+        exact.actual_block_out_datetime_utc = datetime(2026, 8, 30, 3, 0)
+        db.session.commit()
+
+        rows = neorain_outbound_context(self.gateway, operation=operation)["rows"]
+        variances = {row["flight_number"]: row["departure_variance"] for row in rows}
+
+        self.assertEqual(variances[late.flight_number], "+12")
+        self.assertEqual(variances[early.flight_number], "-4")
+        self.assertEqual(variances[exact.flight_number], "0")
+        self.assertEqual(variances[missing.flight_number], "-")
 
     def test_wave_fallback_and_no_current_sort_are_clean(self):
         operation = self._operation()
@@ -170,6 +210,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             b">Ramp Load Complete<",
             b">Crew Load Complete<",
             b">Official Block-Out<",
+            b">+/-<",
             b">No Return<",
         ):
             self.assertIn(column, response.data)
@@ -283,6 +324,7 @@ class NeoRainOutboundTest(unittest.TestCase):
                 self.assertIn(b'data-neorain-reopen', response.data)
                 self.assertIn(b'data-neorain-collapsed-row', response.data)
                 self.assertIn(b'neorain-collapsed-summary', response.data)
+                self.assertIn(b'data-neorain-display="departure_variance"', response.data)
                 self.assertNotIn(b'data-neorain-field="ramp_load_complete"', response.data.split(b'data-neorain-collapsed-row', 1)[1].split(b'data-neorain-full-row', 1)[0])
                 self.assertIn(b"expected_version", response.data)
                 self.assertIn(b"stale_version", response.data)

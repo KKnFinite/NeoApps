@@ -153,6 +153,17 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.assertIsNotNone(persisted.crew_load_completed_at_utc)
         self.assertEqual(persisted.crew_load_completed_source, "neorain")
 
+    def test_block_out_mutation_response_includes_derived_variance(self):
+        self._set_mode(NEO_ONLY)
+        self.mission.planned_datetime_utc = datetime(2026, 6, 19, 7, 30)
+        db.session.commit()
+
+        with self._current_operation():
+            response = self._post("official_block_out", "0237")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["row"]["departure_variance"], "+7")
+
     def test_stale_version_returns_current_row_without_neo_or_google_changes(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
         expected_version = entity_version(self.mission)

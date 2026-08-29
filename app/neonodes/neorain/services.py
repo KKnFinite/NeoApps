@@ -409,11 +409,22 @@ def _outbound_row(mission, operation, parking_by_tail):
         "official_block_out": format_local_hhmm(
             mission.actual_block_out_datetime_utc, timezone_name
         ),
+        "departure_variance": _departure_variance(mission),
         "no_return": "NO RETURN" if status == "departed" else "",
         "sort_time": planned,
         "mission_id": mission.id,
         "version": entity_version(mission),
     }
+
+
+def _departure_variance(mission):
+    """Return signed whole minutes from canonical STD to official Block-Out."""
+    scheduled_departure = mission.planned_datetime_utc
+    official_block_out = mission.actual_block_out_datetime_utc
+    if scheduled_departure is None or official_block_out is None:
+        return "-"
+    minutes = int((official_block_out - scheduled_departure).total_seconds() / 60)
+    return f"+{minutes}" if minutes > 0 else str(minutes)
 
 
 def _revision_aggregate(source, model, timestamp_column, *criteria):
