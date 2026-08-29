@@ -101,11 +101,21 @@ def outbound():
     gateway = get_current_gateway()
     operation = current_neorain_outbound_operation(gateway)
     context = neorain_outbound_context(gateway, operation=operation)
+    integration_mode = (
+        rain_integration_mode(gateway, operation.sort_name)
+        if operation is not None
+        else GOOGLE_PRIMARY
+    )
     return render_template(
         "neonodes/neorain/outbound.html",
         can_edit=access["can_edit"],
         can_view=access["can_view"],
+        can_edit_timestamp_milestones=(
+            access["can_edit"]
+            and integration_mode in {NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY}
+        ),
         gateway=gateway,
+        rain_integration_mode=integration_mode,
         outbound_revision=neorain_outbound_revision(gateway, operation=operation),
         **context,
     )
@@ -304,6 +314,7 @@ def outbound_milestone():
             "source": mutation["source"],
             "version": entity_version(mission),
             "row": row,
+            "revision": neorain_outbound_revision(gateway, operation=operation),
         }
     )
 

@@ -29447,6 +29447,60 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     background: #0b1018;
 }
 
+.neorain-milestone-editor {
+    display: grid;
+    gap: 3px;
+    min-width: 58px;
+}
+
+.neorain-milestone-input {
+    box-sizing: border-box;
+    width: 58px;
+    min-height: 27px;
+    padding: 3px 5px;
+    border: 1px solid rgba(var(--node-rgb), 0.48);
+    border-radius: 3px;
+    background: #111a26;
+    color: #edf2f7;
+    font: inherit;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-align: center;
+}
+
+.neorain-milestone-input::placeholder {
+    color: #728194;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.neorain-milestone-input:focus {
+    outline: 1px solid var(--node-highlight);
+    border-color: var(--node-highlight);
+}
+
+.neorain-milestone-editor.is-saving .neorain-milestone-input {
+    opacity: 0.68;
+}
+
+.neorain-milestone-editor.is-error .neorain-milestone-input {
+    border-color: #d97474;
+}
+
+.neorain-milestone-message {
+    max-width: 92px;
+    color: #df8c8c;
+    font-size: 0.55rem;
+    font-weight: 700;
+    line-height: 1.15;
+    white-space: normal;
+}
+
+.neorain-milestone-editor.is-saving .neorain-milestone-message {
+    color: var(--node-highlight);
+}
+
 .neorain-settings-panel {
     border: 1px solid rgba(var(--node-rgb), 0.22);
     background: #0b1018;

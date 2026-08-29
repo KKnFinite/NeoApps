@@ -8,7 +8,9 @@
     aria-labelledby="neorain-outbound-title"
     data-neorain-outbound-live
     data-revision-url="{{ url_for('neorain.outbound_revision') }}"
+    data-mutation-url="{{ url_for('neorain.outbound_milestone') }}"
     data-outbound-revision="{{ outbound_revision }}"
+    data-neorain-integration-mode="{{ rain_integration_mode }}"
 >
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div>
@@ -26,6 +28,16 @@
     const root = document.querySelector("[data-neorain-outbound-live]");
     if (!root || !window.NeoLiveUpdates) return;
     let revision = root.dataset.outboundRevision || "";
+    const hasPendingEdit = () => Boolean(root.querySelector(
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true']"
+    ));
+    root.addEventListener("neorain:revision", (event) => {
+        const nextRevision = event.detail?.revision;
+        if (nextRevision) {
+            revision = nextRevision;
+            root.dataset.outboundRevision = nextRevision;
+        }
+    });
     const controller = window.NeoLiveUpdates.create({
         intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
         poll: async () => {
@@ -34,8 +46,14 @@
             const response = await fetch(url, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) throw new Error("NeoRain Outbound refresh failed.");
             const payload = await response.json();
-            revision = payload.revision || revision;
             controller.setServerStatus(payload.refresh || {});
+            if (payload.changed && hasPendingEdit()) {
+                root.dataset.neorainRefreshDeferred = "true";
+                return;
+            }
+            revision = payload.revision || revision;
+            root.dataset.outboundRevision = revision;
+            root.removeAttribute("data-neorain-refresh-deferred");
             if (payload.changed) window.location.reload();
         },
         continuousWhileVisible: true,
@@ -43,4 +61,162 @@
     controller.setServerStatus({{ refresh_status|tojson }});
 })();
 </script>
+{% if can_edit_timestamp_milestones %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-outbound-live]");
+    const mutationUrl = root?.dataset.mutationUrl;
+    const validHhmm = /^(?:[01]\d|2[0-3])[0-5]\d$/;
+    const displayFields = [
+        "status",
+        "ramp_load_complete",
+        "crew_load_complete",
+        "official_block_out",
+        "no_return",
+    ];
+
+    if (!root || !mutationUrl) return;
+
+    const messageFor = (input) => input.closest(".neorain-milestone-editor")
+        ?.querySelector("[data-neorain-milestone-message]");
+
+    const setMessage = (input, message = "", state = "") => {
+        const editor = input.closest(".neorain-milestone-editor");
+        const output = messageFor(input);
+        if (output) {
+            output.textContent = message;
+            output.hidden = !message;
+        }
+        editor?.classList.toggle("is-error", state === "error");
+        editor?.classList.toggle("is-saving", state === "saving");
+    };
+
+    const rawTime = (value) => String(value || "").replace(":", "");
+
+    const applyRow = (row, nextRow, protectedInput = null) => {
+        if (!row || !nextRow) return;
+        row.dataset.missionVersion = nextRow.version || row.dataset.missionVersion || "";
+        displayFields.forEach((field) => {
+            const value = nextRow[field] || "-";
+            const input = row.querySelector(`[data-neorain-hhmm][data-neorain-field="${field}"]`);
+            if (input) {
+                if (input === protectedInput || input.dataset.neorainDirty === "true" || input.dataset.neorainSaving === "true") {
+                    return;
+                }
+                const nextRawValue = rawTime(nextRow[field]);
+                input.value = nextRawValue;
+                input.dataset.neorainSavedValue = nextRawValue;
+                return;
+            }
+            const display = row.querySelector(`[data-neorain-display="${field}"]`);
+            if (display) display.textContent = value;
+        });
+    };
+
+    const nextEditor = (input) => {
+        const editors = Array.from(input.closest("tr")?.querySelectorAll("[data-neorain-hhmm]") || []);
+        const index = editors.indexOf(input);
+        return index >= 0 ? editors[index + 1] : null;
+    };
+
+    const focusWithError = (input, message) => {
+        setMessage(input, message, "error");
+        window.setTimeout(() => input.focus({ preventScroll: true }), 0);
+    };
+
+    const saveInput = async (input, { advance = false } = {}) => {
+        if (input.dataset.neorainSaving === "true" || input.dataset.neorainStale === "true") return;
+        const value = input.value;
+        const savedValue = input.dataset.neorainSavedValue || "";
+        if (value === savedValue) {
+            input.dataset.neorainDirty = "false";
+            return;
+        }
+        if (value && !validHhmm.test(value)) {
+            focusWithError(input, "Use four-digit HHMM.");
+            return;
+        }
+
+        const row = input.closest("[data-neorain-outbound-row]");
+        if (!row?.dataset.missionId || !row.dataset.missionVersion) return;
+        const submittedValue = value;
+        input.dataset.neorainSaving = "true";
+        input.disabled = true;
+        setMessage(input, "SAVING", "saving");
+        let payload;
+        try {
+            const response = await fetch(mutationUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    mission_id: Number(row.dataset.missionId),
+                    field: input.dataset.neorainField,
+                    value: submittedValue,
+                    expected_version: row.dataset.missionVersion,
+                }),
+            });
+            payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) {
+                if (response.status === 409 && payload.code === "stale_version" && payload.row) {
+                    applyRow(row, payload.row, input);
+                    input.dataset.neorainStale = "true";
+                    focusWithError(input, payload.error || "This mission changed while you were editing.");
+                    return;
+                }
+                throw new Error(payload.error || "NeoRain milestone save failed.");
+            }
+        } catch (error) {
+            focusWithError(input, error.message || "NeoRain milestone save failed.");
+            return;
+        } finally {
+            input.disabled = false;
+            input.dataset.neorainSaving = "false";
+            input.closest(".neorain-milestone-editor")?.classList.remove("is-saving");
+        }
+
+        applyRow(row, payload.row, input);
+        if (input.value === submittedValue) {
+            const nextRawValue = rawTime(payload.row?.[input.dataset.neorainField]);
+            input.value = nextRawValue;
+            input.dataset.neorainSavedValue = nextRawValue;
+            input.dataset.neorainDirty = "false";
+            input.removeAttribute("data-neorain-stale");
+            setMessage(input);
+        }
+        if (payload.revision) {
+            root.dispatchEvent(new CustomEvent("neorain:revision", {
+                detail: { revision: payload.revision },
+            }));
+        }
+        if (advance && input.value === input.dataset.neorainSavedValue) {
+            nextEditor(input)?.focus({ preventScroll: true });
+        }
+    };
+
+    root.querySelectorAll("[data-neorain-hhmm]").forEach((input) => {
+        input.addEventListener("input", () => {
+            input.removeAttribute("data-neorain-stale");
+            input.dataset.neorainDirty = input.value !== (input.dataset.neorainSavedValue || "") ? "true" : "false";
+            setMessage(input);
+            if (input.value.length === 4) {
+                if (validHhmm.test(input.value)) {
+                    saveInput(input, { advance: true });
+                } else {
+                    focusWithError(input, "Use four-digit HHMM.");
+                }
+            }
+        });
+        input.addEventListener("blur", () => {
+            if (input.dataset.neorainStale === "true") return;
+            if (!input.value && input.value !== (input.dataset.neorainSavedValue || "")) {
+                saveInput(input);
+            } else if (input.value && !validHhmm.test(input.value)) {
+                focusWithError(input, "Use four-digit HHMM.");
+            }
+        });
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -17,6 +17,11 @@ from app.neonodes.neorain.services import (
     neorain_outbound_revision,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
+from app.services.google_rain_integration_mode import (
+    NEO_ONLY,
+    NEO_PRIMARY_GOOGLE_MIRROR,
+    set_rain_integration_mode,
+)
 from app.services.password_policy import set_user_password
 from app.services.live_collaboration import entity_version
 
@@ -188,6 +193,89 @@ class NeoRainOutboundTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"No current sort.", response.data)
+
+    def test_google_primary_and_viewer_render_timestamp_milestones_read_only(self):
+        operation = self._operation()
+        self._mission(operation, "UPS610", "SDF", planned=datetime(2026, 8, 30, 6))
+        db.session.commit()
+        simulator = self._user("rain_google_primary", "simulator")
+        self._login(simulator)
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            google_primary = self.client.get("/neorain/outbound")
+
+        self.assertEqual(google_primary.status_code, 200)
+        self.assertNotIn(
+            b'data-neorain-field="ramp_load_complete"',
+            google_primary.data,
+        )
+
+        self.client.get("/logout")
+        viewer = self._user("rain_neo_viewer", "watcher")
+        self._login(viewer)
+        set_rain_integration_mode(self.gateway, operation.sort_name, NEO_ONLY)
+        db.session.commit()
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            neo_viewer = self.client.get("/neorain/outbound")
+
+        self.assertEqual(neo_viewer.status_code, 200)
+        self.assertNotIn(
+            b'data-neorain-field="ramp_load_complete"',
+            neo_viewer.data,
+        )
+
+    def test_authorized_neo_mode_renders_three_hhmm_editors_only(self):
+        operation = self._operation()
+        mission = self._mission(
+            operation,
+            "UPS620",
+            "ONT",
+            planned=datetime(2026, 8, 30, 6, 20),
+        )
+        mission.ramp_load_completed_at_utc = datetime(2026, 8, 30, 6, 37)
+        mission.crew_load_completed_at_utc = datetime(2026, 8, 30, 6, 45)
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 30, 6, 55)
+        db.session.commit()
+        simulator = self._user("rain_neo_editor", "simulator")
+        self._login(simulator)
+
+        for mode in (NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY):
+            with self.subTest(mode=mode):
+                set_rain_integration_mode(self.gateway, operation.sort_name, mode)
+                db.session.commit()
+                with patch(
+                    "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+                    return_value=operation,
+                ):
+                    response = self.client.get("/neorain/outbound")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'data-mutation-url="/neorain/outbound/milestone"', response.data)
+                self.assertIn(b'inputmode="numeric"', response.data)
+                self.assertIn(b'maxlength="4"', response.data)
+                self.assertIn(b'placeholder="HHMM"', response.data)
+                self.assertIn(
+                    f'data-mission-version="{entity_version(mission)}"'.encode(),
+                    response.data,
+                )
+                for field, value in (
+                    ("ramp_load_complete", b'value="0137"'),
+                    ("crew_load_complete", b'value="0145"'),
+                    ("official_block_out", b'value="0155"'),
+                ):
+                    self.assertIn(f'data-neorain-field="{field}"'.encode(), response.data)
+                    self.assertIn(value, response.data)
+                self.assertNotIn(b'data-neorain-field="elmac"', response.data)
+                self.assertNotIn(b'data-neorain-field="no_return"', response.data)
+                self.assertIn(b"expected_version", response.data)
+                self.assertIn(b"stale_version", response.data)
+                self.assertIn(b"neorainRefreshDeferred", response.data)
 
     def _operation(self):
         operation = SortDateOperation(

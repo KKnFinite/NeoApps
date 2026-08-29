@@ -3,6 +3,31 @@
 {% elif not rows %}
 <p class="neorain-outbound-empty">No outbound departure missions for the current sort.</p>
 {% else %}
+{% macro milestone_cell(row, field, label) -%}
+<td data-label="{{ label }}" data-neorain-field-cell="{{ field }}">
+    {% set displayed_value = row[field] or '' %}
+    {% if can_edit_timestamp_milestones %}
+    <div class="neorain-milestone-editor">
+        <input
+            class="neorain-milestone-input"
+            type="text"
+            value="{{ displayed_value|replace(':', '') }}"
+            inputmode="numeric"
+            maxlength="4"
+            placeholder="HHMM"
+            aria-label="{{ label }} for {{ row.flight_number or 'departure mission' }}"
+            aria-describedby="neorain-milestone-error-{{ row.mission_id }}-{{ field }}"
+            data-neorain-hhmm
+            data-neorain-field="{{ field }}"
+            data-neorain-saved-value="{{ displayed_value|replace(':', '') }}"
+        >
+        <output id="neorain-milestone-error-{{ row.mission_id }}-{{ field }}" class="neorain-milestone-message" data-neorain-milestone-message aria-live="polite" hidden></output>
+    </div>
+    {% else %}
+    <span data-neorain-display="{{ field }}">{{ displayed_value or '-' }}</span>
+    {% endif %}
+</td>
+{%- endmacro %}
 <div class="neorain-outbound-table-wrap">
     <table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
@@ -11,8 +36,19 @@
         </tr></thead>
         <tbody>
             {% for row in rows %}
-            <tr data-neorain-outbound-row data-mission-id="{{ row.mission_id }}">
-                <td data-label="Wave">{{ row.wave }}</td><td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td><td data-label="Tail">{{ row.tail or '-' }}</td><td data-label="Destination">{{ row.destination or '-' }}</td><td data-label="Parking">{{ row.parking or '-' }}</td><td data-label="STD/ETD">{{ row.planned_time or '-' }}</td><td data-label="Status">{{ row.status }}</td><td data-label="eLMAC">{{ row.elmac or '-' }}</td><td data-label="Ramp Load Complete">{{ row.ramp_load_complete or '-' }}</td><td data-label="Crew Load Complete">{{ row.crew_load_complete or '-' }}</td><td data-label="Official Block-Out">{{ row.official_block_out or '-' }}</td><td data-label="No Return">{{ row.no_return or '-' }}</td>
+            <tr data-neorain-outbound-row data-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}">
+                <td data-label="Wave">{{ row.wave }}</td>
+                <td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td>
+                <td data-label="Tail">{{ row.tail or '-' }}</td>
+                <td data-label="Destination">{{ row.destination or '-' }}</td>
+                <td data-label="Parking">{{ row.parking or '-' }}</td>
+                <td data-label="STD/ETD">{{ row.planned_time or '-' }}</td>
+                <td data-label="Status" data-neorain-display="status">{{ row.status }}</td>
+                <td data-label="eLMAC">{{ row.elmac or '-' }}</td>
+                {{ milestone_cell(row, 'ramp_load_complete', 'Ramp Load Complete') }}
+                {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
+                {{ milestone_cell(row, 'official_block_out', 'Official Block-Out') }}
+                <td data-label="No Return" data-neorain-display="no_return">{{ row.no_return or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
