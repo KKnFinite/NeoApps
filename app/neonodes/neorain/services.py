@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+import re
+from datetime import datetime, time
 
 from sqlalchemy import func, literal, select, union_all
 
@@ -15,10 +16,44 @@ from app.services.node_refresh import node_auto_refresh_status
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data
 from app.services.time_display import format_local_hhmm
+from app.services.departure_progress import (
+    DEPARTURE_STATUS_RANK,
+    recompute_departure_status_after_external_clear,
+)
+from app.services.google_motherbrain_live_missions import (
+    _parse_optional_live_datetime,
+)
 
 
 NEORAIN_OUTBOUND_REFRESH_KEY = "neorain.outbound"
 _OPERATION_UNSET = object()
+NEORAIN_MILESTONE_SOURCE = "neorain"
+_UNOWNED_SOURCES = {"", "unknown"}
+_HHMM_INPUT_PATTERN = re.compile(r"^\d{4}$")
+_RAIN_MILESTONES = {
+    "ramp_load_complete": {
+        "label": "Ramp Load Complete",
+        "timestamp_attr": "ramp_load_completed_at_utc",
+        "source_attr": "ramp_load_completed_source",
+        "status": "ramp_load_complete",
+    },
+    "crew_load_complete": {
+        "label": "Crew Load Complete",
+        "timestamp_attr": "crew_load_completed_at_utc",
+        "source_attr": "crew_load_completed_source",
+        "status": "crew_load_complete",
+    },
+    "official_block_out": {
+        "label": "Official Block-Out",
+        "timestamp_attr": "actual_block_out_datetime_utc",
+        "source_attr": "actual_block_out_source",
+        "status": "blocked_out",
+    },
+}
+
+
+class NeoRainMilestoneError(ValueError):
+    """Safe validation/conflict error for a later NeoRain mutation route."""
 
 
 def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
@@ -36,6 +71,205 @@ def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
 def current_neorain_outbound_operation(gateway):
     """Return an existing lifecycle-current operation, never a historical fallback."""
     return current_operational_sort_operation(gateway)
+
+
+def mutate_neorain_departure_milestone(mission, operation, field, value):
+    """Mutate one Rain-owned departure fact without committing the transaction.
+
+    Timestamp inputs are strict operational HHMM values; an empty string clears
+    only a NeoRain-owned timestamp. No Return is a separate explicit boolean
+    action so changing a factual timestamp never silently reverses departure.
+    """
+    _validate_departure_mission(mission, operation)
+    normalized_field = str(field or "").strip().lower()
+    if normalized_field == "no_return":
+        return _mutate_no_return(mission, value)
+    specification = _RAIN_MILESTONES.get(normalized_field)
+    if specification is None:
+        raise NeoRainMilestoneError("Choose a valid NeoRain milestone.")
+
+    timestamp_utc = _parse_operational_hhmm(value, operation, specification["label"])
+    timestamp_attr = specification["timestamp_attr"]
+    source_attr = specification["source_attr"]
+    current_timestamp = getattr(mission, timestamp_attr)
+    current_source = _normalized_source(getattr(mission, source_attr))
+    if not _neorain_may_mutate_timestamp(current_timestamp, current_source):
+        raise NeoRainMilestoneError(
+            f"{specification['label']} is owned by {current_source} and cannot be changed in NeoRain."
+        )
+
+    next_source = NEORAIN_MILESTONE_SOURCE if timestamp_utc else "unknown"
+    changed = (
+        current_timestamp != timestamp_utc or current_source != next_source
+    )
+    if changed:
+        setattr(mission, timestamp_attr, timestamp_utc)
+        setattr(mission, source_attr, next_source)
+
+    status_changed = False
+    if timestamp_utc is not None:
+        status_changed = _advance_departure_status(
+            mission,
+            specification["status"],
+        )
+    elif current_timestamp is not None:
+        status_changed = recompute_departure_status_after_external_clear(
+            mission,
+            specification["status"],
+        )
+
+    return _mutation_result(
+        mission,
+        normalized_field,
+        changed=changed or status_changed,
+        value=getattr(mission, timestamp_attr),
+        source=getattr(mission, source_attr),
+    )
+
+
+def _mutate_no_return(mission, value):
+    desired = _parse_no_return(value)
+    current_status = _normalized_status(mission.departure_status)
+    current_source = _normalized_source(mission.departure_status_source)
+
+    if desired:
+        missing = _missing_no_return_prerequisites(mission)
+        if missing:
+            raise NeoRainMilestoneError(
+                "No Return requires " + ", ".join(missing) + "."
+            )
+        if current_status == "departed":
+            return _mutation_result(
+                mission,
+                "no_return",
+                changed=False,
+                value=True,
+                source=mission.departure_status_source,
+            )
+        mission.departure_status = "departed"
+        mission.departure_status_source = NEORAIN_MILESTONE_SOURCE
+        return _mutation_result(
+            mission,
+            "no_return",
+            changed=True,
+            value=True,
+            source=NEORAIN_MILESTONE_SOURCE,
+        )
+
+    if current_status != "departed":
+        return _mutation_result(
+            mission,
+            "no_return",
+            changed=False,
+            value=False,
+            source=mission.departure_status_source,
+        )
+    if current_source != NEORAIN_MILESTONE_SOURCE:
+        raise NeoRainMilestoneError("No Return is not owned by NeoRain.")
+    changed = recompute_departure_status_after_external_clear(mission, "departed")
+    return _mutation_result(
+        mission,
+        "no_return",
+        changed=changed,
+        value=False,
+        source=mission.departure_status_source,
+    )
+
+
+def _parse_operational_hhmm(value, operation, field_label):
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    raw_value = str(value).strip()
+    if not _HHMM_INPUT_PATTERN.fullmatch(raw_value):
+        raise NeoRainMilestoneError(
+            f"{field_label} must use four-digit HHMM time."
+        )
+    hour = int(raw_value[:2])
+    minute = int(raw_value[2:])
+    if hour > 23 or minute > 59:
+        raise NeoRainMilestoneError(f"{field_label} is not a valid time.")
+    _local_value, timestamp_utc = _parse_optional_live_datetime(
+        time(hour, minute),
+        operation,
+        field_label,
+    )
+    return timestamp_utc
+
+
+def _parse_no_return(value):
+    if value is True or str(value or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+        "set",
+    }:
+        return True
+    if value is False or str(value or "").strip().lower() in {
+        "0",
+        "false",
+        "no",
+        "off",
+        "clear",
+        "",
+    }:
+        return False
+    raise NeoRainMilestoneError("No Return must be set or cleared.")
+
+
+def _validate_departure_mission(mission, operation):
+    if mission is None or operation is None:
+        raise NeoRainMilestoneError("A current departure mission is required.")
+    if mission.mission_type != "departure":
+        raise NeoRainMilestoneError("NeoRain milestones apply only to departures.")
+    if mission.sort_date_operation_id != operation.id:
+        raise NeoRainMilestoneError("Departure mission is outside the current sort.")
+
+
+def _neorain_may_mutate_timestamp(current_timestamp, current_source):
+    return current_source == NEORAIN_MILESTONE_SOURCE or (
+        current_timestamp is None and current_source in _UNOWNED_SOURCES
+    )
+
+
+def _advance_departure_status(mission, target_status):
+    current_status = _normalized_status(mission.departure_status)
+    if current_status == "cancelled":
+        return False
+    if DEPARTURE_STATUS_RANK.get(current_status, -1) >= DEPARTURE_STATUS_RANK[
+        target_status
+    ]:
+        return False
+    mission.departure_status = target_status
+    mission.departure_status_source = NEORAIN_MILESTONE_SOURCE
+    return True
+
+
+def _missing_no_return_prerequisites(mission):
+    required = (
+        ("Ramp Load Complete", mission.ramp_load_completed_at_utc),
+        ("Crew Load Complete", mission.crew_load_completed_at_utc),
+        ("Official Block-Out", mission.actual_block_out_datetime_utc),
+    )
+    return tuple(label for label, value in required if value is None)
+
+
+def _mutation_result(mission, field, *, changed, value, source):
+    return {
+        "changed": bool(changed),
+        "field": field,
+        "departure_status": _normalized_status(mission.departure_status),
+        "value": value,
+        "source": _normalized_source(source),
+    }
+
+
+def _normalized_status(value):
+    return str(value or "").strip().lower()
+
+
+def _normalized_source(value):
+    return str(value or "").strip().lower()
 
 
 def neorain_outbound_refresh_status(gateway, *, operation=None):
