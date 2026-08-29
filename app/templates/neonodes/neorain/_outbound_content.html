@@ -32,13 +32,13 @@
     <table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
         <thead><tr>
-            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>No Return</th>
+            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th>
         </tr></thead>
         <tbody>
             {% for row in rows %}
             {% set collapse_eligible = row.ramp_load_complete and row.crew_load_complete and row.official_block_out %}
             <tr data-neorain-collapsed-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not collapse_eligible %}hidden{% endif %}>
-                <td colspan="13">
+                <td colspan="14">
                     <div class="neorain-collapsed-summary">
                         <span><strong>{{ row.flight_number or '-' }}</strong></span>
                         <span>{{ row.tail or '-' }}</span>
@@ -47,6 +47,14 @@
                         <span>{{ row.crew_load_complete or '-' }}</span>
                         <span>{{ row.official_block_out or '-' }}</span>
                         <span data-neorain-display="departure_variance">{{ row.departure_variance }}</span>
+                        <span data-neorain-late-inclusion-cell>
+                            {% if can_edit %}
+                            <button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button>
+                            <output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>
+                            {% else %}
+                            <span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>
+                            {% endif %}
+                        </span>
                         <span>{{ row.no_return or '-' }}</span>
                         {% if can_edit_timestamp_milestones %}
                         <span class="neorain-collapsed-no-return-editor" data-neorain-no-return-editor>
@@ -72,6 +80,14 @@
                 {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
                 {{ milestone_cell(row, 'official_block_out', 'Official Block-Out') }}
                 <td data-label="+/-" data-neorain-display="departure_variance">{{ row.departure_variance }}</td>
+                <td data-label="Include/Exclude" data-neorain-late-inclusion-cell>
+                    {% if can_edit %}
+                    <button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button>
+                    <output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>
+                    {% else %}
+                    <span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>
+                    {% endif %}
+                </td>
                 <td data-label="No Return" data-neorain-field-cell="no_return">
                     <span data-neorain-display="no_return">{{ row.no_return or '-' }}</span>
                     {% if can_edit_timestamp_milestones %}

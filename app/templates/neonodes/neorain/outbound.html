@@ -9,6 +9,7 @@
     data-neorain-outbound-live
     data-revision-url="{{ url_for('neorain.outbound_revision') }}"
     data-mutation-url="{{ url_for('neorain.outbound_milestone') }}"
+    data-late-inclusion-url="{{ url_for('neorain.outbound_late_inclusion') }}"
     data-outbound-revision="{{ outbound_revision }}"
     data-neorain-integration-mode="{{ rain_integration_mode }}"
 >
@@ -29,7 +30,7 @@
     if (!root || !window.NeoLiveUpdates) return;
     let revision = root.dataset.outboundRevision || "";
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true']"
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true']"
     ));
     root.addEventListener("neorain:revision", (event) => {
         const nextRevision = event.detail?.revision;
@@ -260,7 +261,7 @@
 
     const saveNoReturn = async (button, desired) => {
         const editor = button.closest("[data-neorain-no-return-editor]");
-        const row = button.closest("[data-neorain-outbound-row]");
+        const row = button.closest("[data-neorain-mission-id]");
         if (!editor || !row?.dataset.missionId || !row.dataset.missionVersion) return;
         if (editor.dataset.neorainNoReturnSaving === "true") return;
         if (!desired && !window.confirm("Reverse No Return for this mission?")) return;
@@ -330,6 +331,65 @@
     });
     root.querySelectorAll("[data-neorain-no-return-action]").forEach((button) => {
         button.addEventListener("click", () => saveNoReturn(button, button.dataset.neorainNoReturnAction === "set"));
+    });
+})();
+</script>
+{% endif %}
+{% if can_edit %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-outbound-live]");
+    const url = root?.dataset.lateInclusionUrl;
+    if (!root || !url) return;
+    const viewsFor = (id) => Array.from(root.querySelectorAll("[data-neorain-mission-id]"))
+        .filter((view) => view.dataset.neorainMissionId === String(id));
+    const update = (row, next) => viewsFor(row.dataset.neorainMissionId).forEach((view) => {
+        view.dataset.missionVersion = next.version || view.dataset.missionVersion || "";
+        const included = Boolean(next.late_metrics_included);
+        view.querySelectorAll("[data-neorain-late-inclusion-toggle]").forEach((button) => {
+            button.textContent = included ? "INCLUDED" : "EXCLUDED";
+            button.dataset.neorainIncluded = String(included);
+        });
+        view.querySelector("[data-neorain-display='late_metrics_included']")?.replaceChildren(
+            document.createTextNode(included ? "INCLUDED" : "EXCLUDED")
+        );
+    });
+    const message = (cell, text = "", error = false) => {
+        const output = cell.querySelector("[data-neorain-late-inclusion-message]");
+        if (output) { output.textContent = text; output.hidden = !text; }
+        cell.classList.toggle("is-error", error);
+    };
+    root.querySelectorAll("[data-neorain-late-inclusion-toggle]").forEach((button) => {
+        button.addEventListener("click", async () => {
+            const cell = button.closest("[data-neorain-late-inclusion-cell]");
+            const row = button.closest("[data-neorain-mission-id]");
+            if (!cell || !row || cell.dataset.neorainLateInclusionSaving === "true") return;
+            const desired = button.dataset.neorainIncluded !== "true";
+            const views = viewsFor(row.dataset.neorainMissionId);
+            views.forEach((view) => view.querySelector("[data-neorain-late-inclusion-cell]")?.setAttribute("data-neorain-late-inclusion-saving", "true"));
+            button.disabled = true;
+            message(cell, "SAVING");
+            try {
+                const response = await fetch(url, {
+                    method: "POST", credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mission_id: Number(row.dataset.missionId), included: desired, expected_version: row.dataset.missionVersion }),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.ok) {
+                    if (response.status === 409 && payload.code === "stale_version" && payload.row) update(row, payload.row);
+                    throw new Error(payload.error || "NeoRain late-metrics inclusion save failed.");
+                }
+                update(row, payload.row);
+                if (payload.revision) root.dispatchEvent(new CustomEvent("neorain:revision", { detail: { revision: payload.revision } }));
+                message(cell);
+            } catch (error) {
+                message(cell, error.message, true);
+            } finally {
+                views.forEach((view) => view.querySelector("[data-neorain-late-inclusion-cell]")?.removeAttribute("data-neorain-late-inclusion-saving"));
+                button.disabled = false;
+            }
+        });
     });
 })();
 </script>

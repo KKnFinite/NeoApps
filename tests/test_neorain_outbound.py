@@ -271,6 +271,8 @@ class NeoRainOutboundTest(unittest.TestCase):
             b'data-neorain-field="ramp_load_complete"',
             google_primary.data,
         )
+        self.assertIn(b">INCLUDED<", google_primary.data)
+        self.assertIn(b'data-late-inclusion-url="/neorain/outbound/late-inclusion"', google_primary.data)
         self.assertNotIn(b'data-neorain-no-return-action', google_primary.data)
 
         self.client.get("/logout")
@@ -289,6 +291,8 @@ class NeoRainOutboundTest(unittest.TestCase):
             b'data-neorain-field="ramp_load_complete"',
             neo_viewer.data,
         )
+        self.assertIn(b'data-neorain-display="late_metrics_included"', neo_viewer.data)
+        self.assertNotIn(b'data-neorain-late-inclusion-toggle', neo_viewer.data)
         self.assertNotIn(b'data-neorain-no-return-action', neo_viewer.data)
 
     def test_authorized_neo_mode_renders_three_hhmm_editors_only(self):
@@ -343,6 +347,11 @@ class NeoRainOutboundTest(unittest.TestCase):
                 self.assertIn(b'data-neorain-collapsed-row', response.data)
                 self.assertIn(b'neorain-collapsed-summary', response.data)
                 self.assertIn(b'data-neorain-display="departure_variance"', response.data)
+                self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
+                self.assertIn(b'included: desired', response.data)
+                self.assertIn(b'data-neorain-late-inclusion-saving', response.data)
+                self.assertLess(response.data.index(b">+/-<"), response.data.index(b">Include/Exclude<"))
+                self.assertLess(response.data.index(b">Include/Exclude<"), response.data.index(b">No Return<"))
                 self.assertNotIn(b'data-neorain-field="ramp_load_complete"', response.data.split(b'data-neorain-collapsed-row', 1)[1].split(b'data-neorain-full-row', 1)[0])
                 self.assertIn(b"expected_version", response.data)
                 self.assertIn(b"stale_version", response.data)
@@ -415,6 +424,7 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b">NO RETURN<", response.data)
         self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
+        self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
         self.assertIn(b'data-neorain-no-return-action="set"', response.data)
         self.assertIn(b'data-neorain-field="ramp_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="crew_load_complete"', response.data)

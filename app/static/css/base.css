@@ -29537,6 +29537,41 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     opacity: 0.68;
 }
 
+.neorain-late-inclusion-control {
+    min-width: 66px;
+    padding: 3px 6px;
+    border: 1px solid var(--node-highlight);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--node-highlight);
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+}
+
+.neorain-late-inclusion-control[data-neorain-included="false"] {
+    border-color: #728194;
+    color: #aeb9c7;
+}
+
+.neorain-late-inclusion-control:hover,
+.neorain-late-inclusion-control:focus-visible {
+    background: var(--node-highlight);
+    color: var(--node-bg);
+}
+
+.neorain-late-inclusion-message {
+    display: block;
+    max-width: 130px;
+    color: #df8c8c;
+    font-size: 0.58rem;
+}
+
+[data-neorain-late-inclusion-cell][data-neorain-late-inclusion-saving="true"] .neorain-late-inclusion-control {
+    opacity: 0.68;
+}
+
 .neorain-collapsed-summary {
     display: flex;
     align-items: center;
