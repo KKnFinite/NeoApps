@@ -184,7 +184,11 @@ from app.services.google_motherbrain_live_poll_execution import (
 from app.services.google_motherbrain_live_poll_health import (
     google_motherbrain_live_poll_health,
 )
-from app.services.google_rain_integration_mode import rain_integration_status
+from app.services.google_rain_integration_mode import (
+    RainIntegrationTransitionError,
+    change_rain_integration_mode,
+    rain_integration_status,
+)
 from app.services.my_alerts import my_alert_context
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
@@ -459,6 +463,16 @@ def system_settings():
                     f"NeoSektor integration mode is now {status['mode_label']}.",
                     "success",
                 )
+            elif action == "set_neorain_mode":
+                status = change_rain_integration_mode(
+                    gateway,
+                    "night",
+                    request.form.get("integration_mode"),
+                )
+                flash(
+                    f"NeoRain integration mode is now {status['mode_label']}.",
+                    "success",
+                )
             elif action in {"enable_google_live_polling", "disable_google_live_polling"}:
                 enabled = action == "enable_google_live_polling"
                 set_google_motherbrain_live_polling_enabled(
@@ -476,6 +490,13 @@ def system_settings():
                 flash("NeoSektor Google mirror is current.", "success")
             else:
                 raise ValueError("Choose a valid System Settings action.")
+        except RainIntegrationTransitionError:
+            db.session.rollback()
+            flash(
+                "NeoRain authority change failed; the previous mode remains active.",
+                "error",
+            )
+            return _render_system_settings(gateway, can_edit=True), 400
         except (NeoSektorGoogleError, ValueError) as error:
             db.session.rollback()
             flash(str(error), "error")

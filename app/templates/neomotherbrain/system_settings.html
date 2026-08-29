@@ -58,21 +58,36 @@
             <div class="system-settings-section-heading">
                 <div>
                     <h2 id="neorain-transition-title">NEORAIN GOOGLE / NEO TRANSITION</h2>
-                    <p>Read-only authority status for the Rain-owned outbound milestone bundle.</p>
+                    <p>Authority for the Rain-owned outbound milestone bundle.</p>
                 </div>
                 <strong class="system-settings-mode-badge" data-neorain-mode="{{ neorain_status.mode }}">{{ neorain_status.mode_label }}</strong>
             </div>
+            <form method="post" class="system-settings-form" data-neorain-mode-form>
+                <input type="hidden" name="action" value="set_neorain_mode">
+                <div class="system-settings-mode-options" role="radiogroup" aria-label="NeoRain integration mode">
+                    {% for mode in neorain_status.modes %}
+                    <label class="system-settings-mode-option">
+                        <input type="radio" name="integration_mode" value="{{ mode.value }}" {% if mode.value == neorain_status.mode %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}>
+                        <span>{{ mode.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
             <div class="system-settings-mode-help">
                 {% if neorain_status.mode == "google_primary" %}
-                <p>Ramp Load Complete, Crew Load Complete, Official Block-Out, and No Return remain Google-owned while this mode is active.</p>
+                <p><strong>GOOGLE PRIMARY:</strong> Google owns Ramp Load Complete, Crew Load Complete, Official Block-Out, and No Return.</p>
                 {% elif neorain_status.mode == "neo_primary_google_mirror" %}
-                <p>Neo owns the Rain milestone bundle; Google readback is disabled. Neo editing and mirroring are not enabled yet.</p>
+                <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> NeoRain owns those fields and mirrors Neo edits to Google.</p>
                 {% else %}
-                <p>Neo owns the Rain milestone bundle and Rain-specific Google readback is disabled.</p>
+                <p><strong>NEO ONLY:</strong> NeoRain owns those fields and performs no Rain-specific Google read/write traffic.</p>
                 {% endif %}
-                <p>NeoRain editing and Google mirror controls are not enabled yet.</p>
+                <p>eLMAC is not part of the Rain bundle. Changing authority may perform a current-sort handoff.</p>
             </div>
-            <p class="view-only-pill">STATUS ONLY</p>
+                {% if can_edit_system_settings %}
+                <button class="action-button primary-action" type="submit">SAVE NEORAIN MODE</button>
+                {% else %}
+                <p class="view-only-pill">VIEW ONLY</p>
+                {% endif %}
+            </form>
         </section>
 
         <section class="system-settings-section" aria-labelledby="google-live-polling-title" data-google-live-polling-control>
