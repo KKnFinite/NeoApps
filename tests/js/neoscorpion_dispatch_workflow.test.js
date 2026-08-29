@@ -27,6 +27,7 @@ test("dispatch autosave adopts its own revision and excludes autosave fields fro
     assert.match(script, /data-autosave-failed/);
     assert.match(script, /event\.preventDefault\(\)/);
     assert.match(script, /data-dispatch-assignment-submit/);
+    assert.match(script, /button\?\.form \|\| button\?\.closest\("\[data-dispatch-assignment-form\]"\)/);
     assert.match(script, /window\.location\.reload\(\)/);
 });
 

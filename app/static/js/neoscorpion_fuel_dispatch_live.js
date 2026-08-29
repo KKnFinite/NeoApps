@@ -322,7 +322,7 @@
         const button = event.submitter?.matches("[data-dispatch-assignment-submit]")
             ? event.submitter
             : null;
-        const form = button?.closest("[data-dispatch-assignment-form]");
+        const form = button?.form || button?.closest("[data-dispatch-assignment-form]");
         if (!form) {
             return;
         }

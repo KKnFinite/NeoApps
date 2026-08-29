@@ -133,8 +133,13 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertEqual(assignment.fueler_update_version, 2)
         self.assertIn("Inbound Fuel: 12.0 K LBS -> 13.0 K LBS", assignment.fueler_update_message)
 
-    def test_assign_and_update_assignment_use_json_without_navigation(self):
+    @patch("app.services.neoscorpion.current_sort_operation")
+    def test_assign_and_update_assignment_use_json_without_navigation(
+        self,
+        current_sort_operation,
+    ):
         operation, mission = self._operation_and_mission()
+        current_sort_operation.return_value = operation
         fueler = self._add_user("assignment_fueler", "operator")
         truck_a = self._truck("TRUCK A")
         truck_b = self._truck("TRUCK B")
@@ -153,11 +158,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         page = self.client.get("/neoscorpion/fuel-dispatch").get_data(as_text=True)
         self.assertIn("data-dispatch-autosave", page)
         self.assertIn(">ASSIGN</button>", page)
-        assigned = self._save_assignment(
-            mission,
-            fueler_id=fueler.id,
-            truck_id=truck_a.id,
-        )
+        assigned = self._save_assignment(mission, fueler_id=fueler.id)
         self.assertEqual(assigned.status_code, 200)
         self.assertEqual(assigned.get_json()["button_label"], "UPDATE ASSIGNMENT")
         self.assertEqual(assigned.get_json()["revision"], 1)
@@ -165,21 +166,73 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
             sort_date_mission_id=mission.id
         ).one()
         self.assertEqual(assignment.assigned_fueler_user_id, fueler.id)
-        self.assertEqual(assignment.assigned_truck_id, truck_a.id)
+        self.assertIsNone(assignment.assigned_truck_id)
         self.assertEqual(assignment.fueler_update_version, 0)
+
+        added_truck = self._save_assignment(
+            mission,
+            assignment=assignment,
+            fueler_id=fueler.id,
+            truck_id=truck_a.id,
+        )
+        self.assertEqual(added_truck.status_code, 200)
+        self.assertEqual(added_truck.get_json()["revision"], 2)
+        db.session.refresh(assignment)
+        self.assertEqual(assignment.assigned_truck_id, truck_a.id)
 
         updated = self._save_assignment(
             mission,
             assignment=assignment,
             fueler_id=fueler.id,
             truck_id=truck_b.id,
+            review_status="review",
         )
         self.assertEqual(updated.status_code, 200)
-        self.assertEqual(updated.get_json()["revision"], 2)
+        self.assertEqual(updated.get_json()["revision"], 3)
         db.session.refresh(assignment)
         self.assertEqual(assignment.assigned_truck_id, truck_b.id)
-        self.assertEqual(assignment.fueler_update_version, 1)
+        self.assertEqual(assignment.review_status, "review")
+        self.assertEqual(assignment.fueler_update_version, 2)
         self.assertIn("Truck:", assignment.fueler_update_message)
+
+    @patch("app.services.neoscorpion.current_sort_operation")
+    def test_read_only_user_cannot_update_a_sent_assignment(
+        self,
+        current_sort_operation,
+    ):
+        operation, mission = self._operation_and_mission()
+        current_sort_operation.return_value = operation
+        fueler = self._add_user("sent_assignment_fueler", "operator")
+        truck = self._truck("SENT ASSIGNMENT TRUCK")
+        read_only_user = self._add_user("sent_assignment_viewer", "watcher")
+        db.session.add_all(
+            [
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=operation.id,
+                    user_id=fueler.id,
+                ),
+                self._nightly_truck(operation, truck),
+            ]
+        )
+        db.session.commit()
+
+        sent = self._save_assignment(mission, fueler_id=fueler.id)
+        self.assertEqual(sent.status_code, 200)
+        assignment = NeoScorpionFuelAssignment.query.filter_by(
+            sort_date_mission_id=mission.id
+        ).one()
+
+        self._login(read_only_user)
+        denied = self._save_assignment(
+            mission,
+            assignment=assignment,
+            fueler_id=fueler.id,
+            truck_id=truck.id,
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.get_json()["error"], "Access denied.")
+        db.session.refresh(assignment)
+        self.assertIsNone(assignment.assigned_truck_id)
 
     def test_fueler_acknowledges_current_update_and_later_change_alerts_again(self):
         operation, mission = self._operation_and_mission()
@@ -479,6 +532,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         assignment=None,
         fueler_id=None,
         truck_id=None,
+        review_status=None,
         extra=None,
     ):
         data = {
@@ -496,7 +550,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
             ),
             "assigned_fueler_user_id": str(fueler_id or ""),
             "assigned_truck_id": str(truck_id or ""),
-            "review_status": "assigned" if fueler_id or truck_id else "pending",
+            "review_status": review_status or ("assigned" if fueler_id or truck_id else "pending"),
             "load_planning_note": "",
         }
         data.update(extra or {})
