@@ -25678,8 +25678,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-desktop-left {
         display: grid;
-        grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 0.9fr));
-        grid-template-rows: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-rows: repeat(2, minmax(0, 1fr)) minmax(0, 0.55fr);
         grid-template-areas:
             "wave-first east-first west-first"
             "wave-second east-second west-second"
@@ -25755,8 +25755,10 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-workspace,
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-wave-workspace {
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-        gap: 6px;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: max-content minmax(0, 1fr);
+        gap: 8px;
+        min-width: 0;
         min-height: 0;
         height: 100%;
     }
@@ -25765,12 +25767,16 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         display: block;
         margin: 0;
         color: var(--neo-bright-silver);
-        font-size: 2.8rem;
+        font-size: 5.6rem;
         font-weight: 950;
         letter-spacing: 0.1em;
-        line-height: 1.1;
+        line-height: 1;
+        width: 142.857%;
+        margin-inline: -21.4285%;
         text-align: center;
         text-transform: uppercase;
+        transform: scaleX(0.7);
+        white-space: nowrap;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel {
@@ -25796,7 +25802,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control {
         grid-template-columns: 44px minmax(0, 1fr) 44px;
-        min-height: 76px;
+        min-height: 104px;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control.tunnel-editable,
@@ -25807,8 +25813,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control .counter-control {
-        width: min(100%, 244px);
-        grid-template-columns: 44px minmax(112px, 132px) 44px;
+        width: min(100%, 322px);
+        grid-template-columns: 44px minmax(190px, 210px) 44px;
         justify-self: center;
         justify-content: center;
         gap: 12px;
@@ -25849,8 +25855,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-number {
         box-sizing: border-box;
-        block-size: 76px;
-        min-height: 76px;
+        block-size: 104px;
+        min-height: 104px;
         padding: 0;
     }
 
@@ -25860,8 +25866,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control input.counter-number[data-metric="left_to_arrive"],
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control strong.counter-number[data-metric="left_to_arrive"] {
-        font-size: clamp(3.45rem, 5.175vw, 5.25rem);
-        line-height: 0.82;
+        font-size: clamp(5.175rem, 7.7625vw, 7.875rem);
+        line-height: 0.72;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card {
