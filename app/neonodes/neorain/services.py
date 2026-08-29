@@ -50,6 +50,9 @@ _RAIN_MILESTONES = {
         "status": "blocked_out",
     },
 }
+NEORAIN_MUTABLE_MILESTONE_FIELDS = frozenset(
+    (*_RAIN_MILESTONES, "no_return")
+)
 
 
 class NeoRainMilestoneError(ValueError):
@@ -125,6 +128,17 @@ def mutate_neorain_departure_milestone(mission, operation, field, value):
         value=getattr(mission, timestamp_attr),
         source=getattr(mission, source_attr),
     )
+
+
+def neorain_departure_milestone_value(mission, field):
+    """Return the canonical value accepted by the focused Google writer."""
+    normalized_field = str(field or "").strip().lower()
+    if normalized_field == "no_return":
+        return _normalized_status(mission.departure_status) == "departed"
+    specification = _RAIN_MILESTONES.get(normalized_field)
+    if specification is None:
+        raise NeoRainMilestoneError("Choose a valid NeoRain milestone.")
+    return getattr(mission, specification["timestamp_attr"])
 
 
 def _mutate_no_return(mission, value):
@@ -354,6 +368,23 @@ def _outbound_rows(operation):
     ).all()
     rows = [_outbound_row(mission, operation, parking_by_tail) for mission in missions]
     return sorted(rows, key=_row_sort_key)
+
+
+def neorain_outbound_row(mission, operation):
+    """Format one updated mission with the same canonical Outbound presentation."""
+    parking_by_tail = {
+        _tail_key(assignment.tail_number): _text(assignment.position_code)
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).all()
+        if _tail_key(assignment.tail_number)
+    }
+    row = _outbound_row(mission, operation, parking_by_tail)
+    row.pop("sort_time", None)
+    row["departure_status"] = _normalized_status(mission.departure_status)
+    if mission.updated_at:
+        row["version"] = mission.updated_at.isoformat()
+    return row
 
 
 def _outbound_row(mission, operation, parking_by_tail):
