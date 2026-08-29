@@ -575,6 +575,7 @@ def pending_users():
         "auth/pending_users.html",
         gateway=gateway,
         memberships=memberships,
+        approval_node_rows=_approval_node_role_rows(),
         role_choices=ROLE_CHOICES,
     )
 
@@ -737,7 +738,7 @@ def user_roles(user_id):
 
         db.session.commit()
         flash("Node roles updated.", "info")
-        return redirect(url_for("auth.edit_user", user_id=target_user.id))
+        return redirect(url_for("auth.user_roles", user_id=target_user.id))
 
     return render_template(
         "auth/user_roles.html",
@@ -769,10 +770,16 @@ def update_user_gateway_membership(user_id):
 
     try:
         if action == "approve":
+            node_role_values = _approval_node_role_values_from_form()
             _approve_membership(
                 membership,
                 request.form.get("approval_notes", "").strip() or None,
-                seed_role=request.form.get("role", "watcher").strip().lower() or "watcher",
+                seed_role=(
+                    "watcher"
+                    if node_role_values is not None
+                    else request.form.get("role", "watcher").strip().lower() or "watcher"
+                ),
+                node_role_values=node_role_values,
             )
             flash("Access request approved.", "info")
         elif action == "deny":
@@ -808,6 +815,7 @@ def access_requests():
         "auth/access_requests.html",
         gateway=gateway,
         memberships=memberships,
+        approval_node_rows=_approval_node_role_rows(),
         role_choices=ROLE_CHOICES,
     )
 
@@ -818,12 +826,19 @@ def access_requests():
 def approve_access_request(membership_id):
     membership = _membership_or_404(membership_id)
     try:
+        node_role_values = _approval_node_role_values_from_form()
         _approve_membership(
             membership,
             request.form.get("approval_notes", "").strip() or None,
-            seed_role=request.form.get("role", "watcher").strip().lower() or "watcher",
+            seed_role=(
+                "watcher"
+                if node_role_values is not None
+                else request.form.get("role", "watcher").strip().lower() or "watcher"
+            ),
+            node_role_values=node_role_values,
         )
     except ValueError as error:
+        db.session.rollback()
         flash(str(error), "error")
         return redirect(url_for("auth.access_requests"))
 
@@ -1620,6 +1635,20 @@ def _node_role_rows(user, membership):
     ]
 
 
+def _approval_node_role_rows():
+    return [
+        {
+            "node": node,
+            "effective_role": "watcher",
+            "role_choices": _role_choices_for_node(None, effective_role="watcher"),
+        }
+        for node in NeoNode.query.filter_by(is_active=True).order_by(
+            NeoNode.sort_order.asc(),
+            NeoNode.name.asc(),
+        ).all()
+    ]
+
+
 def _neogateway_seed_role_for_membership(user, membership):
     if not _membership_is_approved_active(membership):
         return "watcher"
@@ -1641,7 +1670,11 @@ def _apply_node_role_form(target_user, membership):
     }
 
     for node in nodes:
-        selected_role = request.form.get(f"node_{node.id}", "watcher").strip().lower()
+        field_name = f"node_{node.id}"
+        if field_name not in request.form:
+            continue
+
+        selected_role = request.form.get(field_name, "").strip().lower()
         if selected_role not in ROLE_CHOICES:
             raise ValueError("Unsupported node role selected.")
 
@@ -1666,6 +1699,20 @@ def _apply_node_role_form(target_user, membership):
 
         existing_role.role = selected_role
         existing_role.is_active = True
+
+
+def _approval_node_role_values_from_form():
+    if not _has_node_role_form_fields():
+        return None
+
+    values = {}
+    for node in NeoNode.query.filter_by(is_active=True).all():
+        selected_role = request.form.get(f"node_{node.id}", "watcher").strip().lower()
+        if selected_role not in ROLE_CHOICES:
+            raise ValueError("Unsupported node role selected.")
+        _guard_role_assignment_allowed(selected_role, None)
+        values[node.id] = selected_role
+    return values
 
 
 def _apply_permission_rule_form():
@@ -1801,7 +1848,12 @@ def _membership_is_approved_active(membership):
     )
 
 
-def _approve_membership(membership, notes, seed_role="watcher"):
+def _approve_membership(
+    membership,
+    notes,
+    seed_role="watcher",
+    node_role_values=None,
+):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
     if seed_role not in ROLE_CHOICES:
@@ -1832,6 +1884,19 @@ def _approve_membership(membership, notes, seed_role="watcher"):
         app_access.denied_at = None
         app_access.denial_notes = None
         seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
+        if node_role_values is not None:
+            node_roles = {
+                role.node_id: role
+                for role in GatewayNodeRole.query.filter_by(
+                    gateway_membership_id=membership.id,
+                ).all()
+            }
+            for node_id, selected_role in node_role_values.items():
+                node_role = node_roles.get(node_id)
+                if not node_role:
+                    continue
+                node_role.role = selected_role
+                node_role.is_active = True
 
     if not was_approved:
         send_result = email_service.send_access_approved(membership.user, membership.gateway)

@@ -3,27 +3,31 @@
 {% block title %}Node Roles | User Management{% endblock %}
 
 {% block content %}
-<section class="panel compact-panel centered-command-page user-role-page">
+<section class="panel centered-command-page user-role-page access-management-page">
     <div class="section-heading">
+        <p class="access-management-kicker">USER ACCESS</p>
         <h1>{{ gateway.code }} NeoNode ROLES</h1>
-        <p class="muted">{{ target_user.display_name }} - Approved {{ gateway.code }} membership gives Watcher access by default.</p>
+        <p class="muted">{{ target_user.display_name }} · Change one node without affecting the others.</p>
     </div>
 
-    <form class="operation-form user-role-form" method="post">
+    <div class="user-role-grid">
         {% for row in node_rows %}
-        <label class="user-role-field">
-            <span>{{ row.node.name }}</span>
-            <span class="role-select-wrap">
+        <form class="user-role-card" method="post">
+            <label class="node-role-control user-role-field">
+                <span>{{ row.node.name }}</span>
+                <span class="role-select-wrap">
                 <select name="node_{{ row.node.id }}">
                     {% for role in row.role_choices %}
                     <option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role|role_label }}</option>
                     {% endfor %}
                 </select>
-            </span>
-        </label>
+                </span>
+            </label>
+            <p class="muted">Current: {{ row.effective_role|role_label }}</p>
+            <button type="submit">SAVE ROLE</button>
+        </form>
         {% endfor %}
-        <button type="submit">SAVE NODE ROLES</button>
-    </form>
+    </div>
 
     <div class="action-row">
         <a class="action-button action-button-secondary" href="{{ url_for('auth.edit_user', user_id=target_user.id) }}">BACK TO EDIT USER</a>

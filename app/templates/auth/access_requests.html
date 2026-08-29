@@ -3,72 +3,55 @@
 {% block title %}Access Requests | NeoApps Portal{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page">
-    <div class="section-heading">
-        <h1>Pending Access Requests</h1>
+<section class="panel centered-command-page access-management-page">
+    <div class="section-heading access-management-heading">
+        <div>
+            <p class="access-management-kicker">USER ACCESS</p>
+            <h1>PENDING ACCESS REQUESTS</h1>
+            <p class="muted">Assign each NeoNode role independently when approving access.</p>
+        </div>
     </div>
 
-    <div class="table-wrap">
-        <table class="data-table wide-data-table">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Employee ID</th>
-                    <th>Supervisor</th>
-                    <th>Email</th>
-                    <th>Verified</th>
-                    <th>Work Area</th>
-                    <th>Reason</th>
-                    <th>Gateway</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for membership in memberships %}
-                <tr>
-                    <td>{{ membership.user.display_name }}</td>
-                    <td>{{ membership.user.employee_id or "" }}</td>
-                    <td>{{ membership.user.supervisor_name or "" }}</td>
-                    <td>{{ membership.user.email or "" }}</td>
-                    <td>{{ "Yes" if membership.user.email_verified_at else "Email not verified yet" }}</td>
-                    <td>{{ membership.user.work_area or "" }}</td>
-                    <td>{{ membership.user.access_reason or "" }}</td>
-                    <td>{{ membership.gateway.code }}</td>
-                    <td>{{ membership.created_at.strftime("%Y-%m-%d %H:%M") if membership.created_at else "" }}</td>
-                    <td>
-                        <div class="table-actions">
-                            {% if can_manage_system(current_user) %}
-                            <a href="{{ url_for('auth.user_detail', user_id=membership.user.id) }}">View Details</a>
-                            {% endif %}
-                            {% if membership.user.email_verified_at %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('auth.approve_access_request', membership_id=membership.id) }}">
-                                <span class="muted compact-access-note">Seed RFD NeoNode role</span>
-                                <select class="compact-action-input" name="role" aria-label="Seed RFD NeoNode role">
-                                    {% for role in role_choices %}
-                                    <option value="{{ role }}">{{ role|role_label }}</option>
-                                    {% endfor %}
+    <div class="access-request-list">
+        {% for membership in memberships %}
+        <article class="access-request-card">
+            <header class="access-request-summary">
+                <div><h2>{{ membership.user.display_name }}</h2><p>{{ membership.user.employee_id or "No employee ID" }} · {{ membership.user.email or "No email" }}</p></div>
+                <span class="access-verification-status{% if membership.user.email_verified_at %} is-verified{% endif %}">{{ "VERIFIED" if membership.user.email_verified_at else "EMAIL NOT VERIFIED" }}</span>
+            </header>
+            <dl class="access-request-facts">
+                <div><dt>SUPERVISOR</dt><dd>{{ membership.user.supervisor_name or "—" }}</dd></div>
+                <div><dt>WORK AREA</dt><dd>{{ membership.user.work_area or "—" }}</dd></div>
+                <div class="access-request-reason"><dt>REASON</dt><dd>{{ membership.user.access_reason or "—" }}</dd></div>
+            </dl>
+            {% if can_manage_system(current_user) %}<a class="access-request-detail-link" href="{{ url_for('auth.user_detail', user_id=membership.user.id) }}">VIEW FULL USER DETAILS</a>{% endif %}
+            <div class="access-request-actions">
+                {% if membership.user.email_verified_at %}
+                <form class="access-approval-form" method="post" action="{{ url_for('auth.approve_access_request', membership_id=membership.id) }}">
+                    <fieldset class="node-role-fieldset">
+                        <legend>NEONODE ROLES</legend>
+                        <div class="node-role-grid">
+                            {% for row in approval_node_rows %}
+                            <label class="node-role-control">
+                                <span>{{ row.node.name }}</span>
+                                <select name="node_{{ row.node.id }}" aria-label="{{ row.node.name }} role">
+                                    {% for role in row.role_choices %}<option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role|role_label }}</option>{% endfor %}
                                 </select>
-                                <input class="compact-action-input" name="approval_notes" placeholder="Approval notes">
-                                <button type="submit">Approve</button>
-                            </form>
-                            {% else %}
-                            <span class="muted">Email not verified yet</span>
-                            {% endif %}
-                            <form class="inline-button-form" method="post" action="{{ url_for('auth.deny_access_request', membership_id=membership.id) }}">
-                                <input class="compact-action-input" name="denial_notes" placeholder="Denial notes">
-                                <button type="submit">Deny</button>
-                            </form>
+                            </label>
+                            {% endfor %}
                         </div>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="10">No pending requests.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </fieldset>
+                    <label class="access-notes-field"><span>APPROVAL NOTES</span><input name="approval_notes" placeholder="Optional notes"></label>
+                    <button type="submit">APPROVE ACCESS</button>
+                </form>
+                {% else %}<p class="muted access-approval-blocked">Approval is available after email verification.</p>{% endif %}
+                <form class="access-denial-form" method="post" action="{{ url_for('auth.deny_access_request', membership_id=membership.id) }}">
+                    <label class="access-notes-field"><span>DENIAL NOTES</span><input name="denial_notes" placeholder="Optional notes"></label>
+                    <button type="submit">DENY</button>
+                </form>
+            </div>
+        </article>
+        {% else %}<div class="access-empty-state">No pending requests.</div>{% endfor %}
     </div>
 </section>
 {% endblock %}

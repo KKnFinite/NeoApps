@@ -428,6 +428,108 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             len(DEFAULT_NEONODES),
         )
 
+    def test_pending_approval_assigns_roles_per_registered_neonode(self):
+        grandmaster = self._admin("per_node_approver", "grandmaster")
+        user, membership = self._pending_user(
+            "per_node_pending",
+            "pernode@example.com",
+            verified=True,
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        ermac = NeoNode.query.filter_by(code="ermac").one()
+
+        page = self.client.get("/admin/users/pending")
+        response = self.client.post(
+            f"/admin/users/{user.id}/gateway-membership",
+            data={
+                "action": "approve",
+                f"node_{sektor.id}": "operator",
+                f"node_{ermac.id}": "simulator",
+            },
+            follow_redirects=False,
+        )
+
+        roles = {
+            role.node_id: role.role
+            for role in GatewayNodeRole.query.filter_by(
+                gateway_membership_id=membership.id,
+            ).all()
+        }
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"NEONODE ROLES", page.data)
+        self.assertIn(f'name="node_{sektor.id}"'.encode(), page.data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "approved")
+        self.assertEqual(roles[sektor.id], "operator")
+        self.assertEqual(roles[ermac.id], "simulator")
+        self.assertTrue(
+            all(
+                role == "watcher"
+                for node_id, role in roles.items()
+                if node_id not in {sektor.id, ermac.id}
+            )
+        )
+
+    def test_partial_node_role_update_leaves_other_nodes_unchanged(self):
+        grandmaster = self._admin("partial_role_grandmaster", "grandmaster")
+        user, membership = self._approved_user("partial_role_user", "partial@example.com")
+        backfill_default_gateway_node_roles(user, role="watcher")
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        ermac = NeoNode.query.filter_by(code="ermac").one()
+        sektor_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=sektor.id,
+        ).one()
+        ermac_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=ermac.id,
+        ).one()
+        sektor_role.role = "operator"
+        ermac_role.role = "simulator"
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.post(
+            f"/admin/users/{user.id}/roles",
+            data={f"node_{sektor.id}": "master"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.session.get(GatewayNodeRole, sektor_role.id).role, "master")
+        self.assertEqual(db.session.get(GatewayNodeRole, ermac_role.id).role, "simulator")
+        self.assertTrue(user_can_access_node(user, "RFD", "sektor", "master"))
+        self.assertTrue(user_can_access_node(user, "RFD", "ermac", "simulator"))
+
+    def test_approval_role_authority_is_enforced_per_node(self):
+        grandmaster = self._admin("approval_guard_grandmaster", "grandmaster")
+        user, membership = self._pending_user(
+            "approval_guard_user",
+            "approvalguard@example.com",
+            verified=True,
+        )
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.post(
+            f"/admin/users/{user.id}/gateway-membership",
+            data={
+                "action": "approve",
+                f"node_{motherbrain.id}": "grandmaster",
+            },
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "pending")
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
+            0,
+        )
+
     def test_denial_sets_metadata_and_sends_no_email(self):
         grandmaster = self._admin("deny_grandmaster", "grandmaster")
         user, membership = self._pending_user("deny_pending", "deny@example.com", verified=True)
