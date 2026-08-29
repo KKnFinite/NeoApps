@@ -65,9 +65,11 @@ def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
     if operation is _OPERATION_UNSET:
         operation = current_neorain_outbound_operation(gateway)
     refresh = neorain_outbound_refresh_status(gateway, operation=operation)
+    missions = _outbound_departure_missions(operation)
     return {
         "operation": operation,
-        "rows": _outbound_rows(operation),
+        "rows": _outbound_rows(operation, missions=missions),
+        "late_summary": _outbound_late_summary(missions),
         "refresh_status": refresh,
     }
 
@@ -375,7 +377,7 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _outbound_rows(operation):
+def _outbound_rows(operation, *, missions=None):
     if operation is None:
         return []
     parking_by_tail = {
@@ -385,12 +387,61 @@ def _outbound_rows(operation):
         ).all()
         if _tail_key(assignment.tail_number)
     }
-    missions = SortDateMission.query.filter_by(
+    if missions is None:
+        missions = _outbound_departure_missions(operation)
+    rows = [_outbound_row(mission, operation, parking_by_tail) for mission in missions]
+    return sorted(rows, key=_row_sort_key)
+
+
+def neorain_outbound_late_summary(operation):
+    """Return derived late metrics for current-sort departure missions only."""
+    return _outbound_late_summary(_outbound_departure_missions(operation))
+
+
+def _outbound_departure_missions(operation):
+    if operation is None:
+        return []
+    return SortDateMission.query.filter_by(
         sort_date_operation_id=operation.id,
         mission_type="departure",
     ).all()
-    rows = [_outbound_row(mission, operation, parking_by_tail) for mission in missions]
-    return sorted(rows, key=_row_sort_key)
+
+
+def _outbound_late_summary(missions):
+    summary = {
+        "first_wave": {"aircraft_late": 0, "late_minutes": 0},
+        "second_wave": {"aircraft_late": 0, "late_minutes": 0},
+        "total": {"aircraft_late": 0, "late_minutes": 0},
+    }
+    for mission in missions:
+        minutes = _departure_variance_minutes(mission)
+        if (
+            minutes is None
+            or minutes <= 0
+            or not neorain_late_metrics_inclusion(mission)["included"]
+        ):
+            continue
+        buckets = ["total"]
+        wave = normalize_wave(mission.wave)
+        if wave == "1":
+            buckets.insert(0, "first_wave")
+        elif wave == "2":
+            buckets.insert(0, "second_wave")
+        for bucket in buckets:
+            summary[bucket]["aircraft_late"] += 1
+            summary[bucket]["late_minutes"] += minutes
+    for values in summary.values():
+        count = values["aircraft_late"]
+        minutes = values["late_minutes"]
+        values["average"] = _late_average_display(minutes, count)
+    return summary
+
+
+def _late_average_display(minutes, count):
+    if not count:
+        return "0"
+    quotient, remainder = divmod(minutes, count)
+    return str(quotient) if remainder == 0 else f"{minutes / count:.1f}"
 
 
 def neorain_outbound_row(mission, operation):
@@ -444,12 +495,18 @@ def _outbound_row(mission, operation, parking_by_tail):
 
 def _departure_variance(mission):
     """Return signed whole minutes from canonical STD to official Block-Out."""
+    minutes = _departure_variance_minutes(mission)
+    if minutes is None:
+        return "-"
+    return f"+{minutes}" if minutes > 0 else str(minutes)
+
+
+def _departure_variance_minutes(mission):
     scheduled_departure = mission.planned_datetime_utc
     official_block_out = mission.actual_block_out_datetime_utc
     if scheduled_departure is None or official_block_out is None:
-        return "-"
-    minutes = int((official_block_out - scheduled_departure).total_seconds() / 60)
-    return f"+{minutes}" if minutes > 0 else str(minutes)
+        return None
+    return int((official_block_out - scheduled_departure).total_seconds() / 60)
 
 
 def _revision_aggregate(source, model, timestamp_column, *criteria):

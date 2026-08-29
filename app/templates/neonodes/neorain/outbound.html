@@ -20,6 +20,13 @@
         </div>
         <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }} · {{ operation.sort_date.strftime('%m/%d/%y') }}{% else %}NO CURRENT SORT{% endif %}</strong>
     </header>
+    {% if operation %}
+    <section class="neorain-outbound-late-summary" aria-label="Outbound late statistics" data-neorain-late-summary>
+        <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
+        <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
+        <div><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
+    </section>
+    {% endif %}
     <div data-neorain-outbound-content>
         {% include "neonodes/neorain/_outbound_content.html" %}
     </div>
@@ -27,8 +34,16 @@
 <script>
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
-    if (!root || !window.NeoLiveUpdates) return;
+    if (!root) return;
     let revision = root.dataset.outboundRevision || "";
+    const updateLateSummary = (summary) => {
+        Object.entries(summary || {}).forEach(([group, values]) => {
+            Object.entries(values || {}).forEach(([metric, value]) => {
+                root.querySelectorAll(`[data-neorain-late-summary-value="${group}.${metric}"]`)
+                    .forEach((element) => { element.textContent = String(value ?? 0); });
+            });
+        });
+    };
     const hasPendingEdit = () => Boolean(root.querySelector(
         "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true']"
     ));
@@ -39,6 +54,10 @@
             root.dataset.outboundRevision = nextRevision;
         }
     });
+    root.addEventListener("neorain:late-summary", (event) => {
+        updateLateSummary(event.detail?.lateSummary);
+    });
+    if (!window.NeoLiveUpdates) return;
     const controller = window.NeoLiveUpdates.create({
         intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
         poll: async () => {
@@ -235,6 +254,11 @@
                 detail: { revision: payload.revision },
             }));
         }
+        if (payload.late_summary) {
+            root.dispatchEvent(new CustomEvent("neorain:late-summary", {
+                detail: { lateSummary: payload.late_summary },
+            }));
+        }
         if (advance && input.value === input.dataset.neorainSavedValue) {
             if (input.dataset.neorainField === "official_block_out") {
                 const next = nextEditor(input);
@@ -304,6 +328,11 @@
         setNoReturnMessage(editor);
         if (payload.revision) {
             root.dispatchEvent(new CustomEvent("neorain:revision", { detail: { revision: payload.revision } }));
+        }
+        if (payload.late_summary) {
+            root.dispatchEvent(new CustomEvent("neorain:late-summary", {
+                detail: { lateSummary: payload.late_summary },
+            }));
         }
     };
 
@@ -382,6 +411,7 @@
                 }
                 update(row, payload.row);
                 if (payload.revision) root.dispatchEvent(new CustomEvent("neorain:revision", { detail: { revision: payload.revision } }));
+                if (payload.late_summary) root.dispatchEvent(new CustomEvent("neorain:late-summary", { detail: { lateSummary: payload.late_summary } }));
                 message(cell);
             } catch (error) {
                 message(cell, error.message, true);

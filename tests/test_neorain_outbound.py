@@ -13,6 +13,7 @@ from app.models import (
     User,
 )
 from app.neonodes.neorain.services import (
+    neorain_outbound_late_summary,
     neorain_outbound_context,
     neorain_outbound_revision,
     set_neorain_late_metrics_included,
@@ -182,6 +183,41 @@ class NeoRainOutboundTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             set_neorain_late_metrics_included(wave_two, "true")
 
+    def test_late_summary_groups_included_late_departures_without_persisting_totals(self):
+        operation = self._operation()
+        wave_one_late = self._mission(operation, "UPS320", "ONT", planned=datetime(2026, 8, 30, 1), wave="1")
+        wave_one_on_time = self._mission(operation, "UPS321", "ONT", planned=datetime(2026, 8, 30, 2), wave="1")
+        wave_one_excluded = self._mission(operation, "UPS322", "ONT", planned=datetime(2026, 8, 30, 3), wave="1")
+        wave_two_late = self._mission(operation, "UPS323", "ONT", planned=datetime(2026, 8, 30, 4), wave="2")
+        no_wave_late = self._mission(operation, "UPS324", "ONT", planned=datetime(2026, 8, 30, 5), wave=None)
+        wave_one_late.actual_block_out_datetime_utc = datetime(2026, 8, 30, 1, 1)
+        wave_one_on_time.actual_block_out_datetime_utc = datetime(2026, 8, 30, 2)
+        wave_one_excluded.actual_block_out_datetime_utc = datetime(2026, 8, 30, 3, 9)
+        wave_two_late.actual_block_out_datetime_utc = datetime(2026, 8, 30, 4, 4)
+        no_wave_late.actual_block_out_datetime_utc = datetime(2026, 8, 30, 5, 3)
+        set_neorain_late_metrics_included(wave_one_excluded, False)
+        set_neorain_late_metrics_included(no_wave_late, True)
+        db.session.commit()
+
+        summary = neorain_outbound_late_summary(operation)
+
+        self.assertEqual(summary["first_wave"], {"aircraft_late": 1, "late_minutes": 1, "average": "1"})
+        self.assertEqual(summary["second_wave"], {"aircraft_late": 1, "late_minutes": 4, "average": "4"})
+        self.assertEqual(summary["total"], {"aircraft_late": 3, "late_minutes": 8, "average": "2.7"})
+        self.assertEqual(neorain_outbound_context(self.gateway, operation=operation)["late_summary"], summary)
+
+    def test_late_summary_zero_case_is_explicit(self):
+        operation = self._operation()
+
+        self.assertEqual(
+            neorain_outbound_late_summary(operation),
+            {
+                "first_wave": {"aircraft_late": 0, "late_minutes": 0, "average": "0"},
+                "second_wave": {"aircraft_late": 0, "late_minutes": 0, "average": "0"},
+                "total": {"aircraft_late": 0, "late_minutes": 0, "average": "0"},
+            },
+        )
+
     def test_revision_changes_for_mission_and_parking_changes_without_writes(self):
         operation = self._operation()
         mission = self._mission(operation, "UPS400", "OAK", planned=datetime(2026, 8, 30, 4))
@@ -229,9 +265,15 @@ class NeoRainOutboundTest(unittest.TestCase):
             b">Crew Load Complete<",
             b">Official Block-Out<",
             b">+/-<",
+            b">Include/Exclude<",
             b">No Return<",
         ):
             self.assertIn(column, response.data)
+        self.assertIn(b'data-neorain-late-summary', response.data)
+        self.assertLess(
+            response.data.index(b'data-neorain-late-summary'),
+            response.data.index(b'neorain-outbound-table'),
+        )
         self.assertEqual(revision.status_code, 200)
         self.assertTrue(revision.get_json()["ok"])
 

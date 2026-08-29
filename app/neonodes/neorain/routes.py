@@ -23,6 +23,7 @@ from app.neonodes.neorain.services import (
     mutate_neorain_departure_milestone,
     neorain_departure_milestone_value,
     neorain_outbound_context,
+    neorain_outbound_late_summary,
     neorain_outbound_row,
     neorain_outbound_refresh_status,
     neorain_outbound_revision,
@@ -315,6 +316,7 @@ def outbound_milestone():
             "source": mutation["source"],
             "version": entity_version(mission),
             "row": row,
+            "late_summary": neorain_outbound_late_summary(operation),
             "revision": neorain_outbound_revision(gateway, operation=operation),
         }
     )
@@ -407,6 +409,7 @@ def outbound_late_inclusion():
             "late_metrics_inclusion_source": result["source"],
             "version": entity_version(mission),
             "row": row,
+            "late_summary": neorain_outbound_late_summary(operation),
             "revision": neorain_outbound_revision(gateway, operation=operation),
         }
     )

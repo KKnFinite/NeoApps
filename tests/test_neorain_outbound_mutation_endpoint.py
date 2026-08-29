@@ -155,6 +155,7 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
 
     def test_block_out_mutation_response_includes_derived_variance(self):
         self._set_mode(NEO_ONLY)
+        self.mission.wave = "1"
         self.mission.planned_datetime_utc = datetime(2026, 6, 19, 7, 30)
         db.session.commit()
 
@@ -162,7 +163,20 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
             response = self._post("official_block_out", "0237")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["row"]["departure_variance"], "+7")
+        payload = response.get_json()
+        self.assertEqual(payload["row"]["departure_variance"], "+7")
+        self.assertEqual(payload["late_summary"]["first_wave"]["late_minutes"], 7)
+        self.assertEqual(payload["late_summary"]["total"]["aircraft_late"], 1)
+
+        with self._current_operation():
+            inclusion = self._post_late_inclusion(False)
+
+        self.assertEqual(inclusion.status_code, 200)
+        self.assertEqual(inclusion.get_json()["late_summary"]["total"], {
+            "aircraft_late": 0,
+            "late_minutes": 0,
+            "average": "0",
+        })
 
     def test_late_inclusion_is_neo_only_across_modes_and_after_no_return(self):
         self.mission.wave = "1"
