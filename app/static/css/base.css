@@ -25767,7 +25767,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         display: block;
         margin: 0;
         color: var(--neo-bright-silver);
-        font-size: 4.76rem;
+        font-size: 3.81rem;
         font-weight: 950;
         letter-spacing: 0.1em;
         line-height: 1;
@@ -25868,7 +25868,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control input.counter-number[data-metric="left_to_arrive"],
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control strong.counter-number[data-metric="left_to_arrive"] {
-        font-size: clamp(5.175rem, 7.7625vw, 7.875rem);
+        font-size: clamp(4.14rem, 6.21vw, 6.3rem);
         line-height: 0.72;
         text-align: center;
     }

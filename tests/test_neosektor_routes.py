@@ -1464,7 +1464,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-rows: max-content minmax(0, 1fr);", desktop_css)
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", desktop_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr);", desktop_css)
-        self.assertIn("font-size: 4.76rem;", desktop_css)
+        self.assertIn("font-size: 3.81rem;", desktop_css)
         self.assertIn("transform: scaleX(0.7);", desktop_css)
         self.assertIn("white-space: nowrap;", desktop_css)
         self.assertIn("font-size: 0.8rem;", desktop_css)
@@ -1499,7 +1499,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".tunnel-arrive-control strong.counter-number[data-metric=\"left_to_arrive\"]",
             css,
         )
-        self.assertIn("font-size: clamp(5.175rem, 7.7625vw, 7.875rem);", desktop_css)
+        self.assertIn("font-size: clamp(4.14rem, 6.21vw, 6.3rem);", desktop_css)
         self.assertIn("padding-bottom: 10px;", desktop_css)
         self.assertIn("text-align: center;", desktop_css)
         self.assertIn("color: var(--neo-bright-silver);", css)
