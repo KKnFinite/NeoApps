@@ -23,7 +23,10 @@ GOOGLE_RAIN_OUTBOUND_RANGE_SPECS = (
     ("flight_number", "Outbound!A3:A50", 1),
     ("destination", "Outbound!C3:C50", 1),
     ("std", "Outbound!E3:E50", 1),
-    ("milestones", "Outbound!L3:O50", 4),
+    ("elmac", "Outbound!L3:L50", 1),
+    ("crew_load_complete", "Outbound!N3:N50", 1),
+    ("block", "Outbound!O3:O50", 1),
+    ("no_return", "Outbound!S3:S50", 1),
 )
 
 
@@ -53,15 +56,31 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
     flight_rows = _padded_rows(values[0], row_count, 1)
     destination_rows = _padded_rows(values[1], row_count, 1)
     std_rows = _padded_rows(values[2], row_count, 1)
-    milestone_rows = _padded_rows(values[3], row_count, 4)
+    elmac_rows = _padded_rows(values[3], row_count, 1)
+    crew_load_complete_rows = _padded_rows(values[4], row_count, 1)
+    block_rows = _padded_rows(values[5], row_count, 1)
+    no_return_rows = _padded_rows(values[6], row_count, 1)
 
     rows = []
     for offset in range(row_count):
         flight_number = _cell(flight_rows[offset], 0)
         destination = _cell(destination_rows[offset], 0)
         std = _cell(std_rows[offset], 0)
-        milestones = [_cell(milestone_rows[offset], index) for index in range(4)]
-        if not any((flight_number, destination, std, *milestones)):
+        elmac = _cell(elmac_rows[offset], 0)
+        crew_load_complete = _cell(crew_load_complete_rows[offset], 0)
+        block = _cell(block_rows[offset], 0)
+        no_return = _cell(no_return_rows[offset], 0)
+        if not any(
+            (
+                flight_number,
+                destination,
+                std,
+                elmac,
+                crew_load_complete,
+                block,
+                no_return,
+            )
+        ):
             continue
         rows.append(
             {
@@ -70,10 +89,10 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
                 "flight_number": flight_number,
                 "destination": destination,
                 "std": std,
-                "elmac": milestones[0],
-                "ramp_load_complete": milestones[1],
-                "crew_load_complete": milestones[2],
-                "block": milestones[3],
+                "elmac": elmac,
+                "crew_load_complete": crew_load_complete,
+                "block": block,
+                "no_return": no_return,
             }
         )
     return rows

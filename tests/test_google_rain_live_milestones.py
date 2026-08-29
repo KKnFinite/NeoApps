@@ -52,18 +52,18 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
                 "UPS0910",
                 destination="LAX",
                 tail="N999UP",
-                ramp_load_complete="8/11 2:28",
+                crew_load_complete="8/11 2:28",
             )
         )
 
         self.assertEqual(result["applied_count"], 1)
         self.assertEqual(mission.assigned_tail_number, "N343UP")
         self.assertEqual(
-            mission.ramp_load_completed_at_utc,
+            mission.crew_load_completed_at_utc,
             datetime(2026, 8, 11, 7, 28),
         )
-        self.assertEqual(mission.ramp_load_completed_source, GOOGLE_RAIN_SOURCE)
-        self.assertEqual(mission.departure_status, "ramp_load_complete")
+        self.assertEqual(mission.crew_load_completed_source, GOOGLE_RAIN_SOURCE)
+        self.assertEqual(mission.departure_status, "crew_load_complete")
 
     def test_ambiguous_duplicate_flight_is_skipped_without_guessing(self):
         first = self._mission("UPS1000", "LAX", std=datetime(2026, 8, 11, 1, 0))
@@ -128,19 +128,19 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertEqual(mission.elmac_completed_source, GOOGLE_RAIN_SOURCE)
         self.assertEqual(mission.departure_status, "scheduled")
 
-    def test_ramp_and_crew_can_advance_without_earlier_milestones(self):
-        ramp = self._mission("UPS0910", "LAX")
+    def test_r_lc_is_not_applied_as_part_of_the_rain_bundle(self):
+        mission = self._mission("UPS0910", "LAX")
         crew = self._mission("UPS0948", "OAK")
 
         self._apply(self._row("UPS0910", ramp_load_complete="2:22"))
         self._apply(self._row("UPS0948", crew_load_complete="2:24"))
 
-        self.assertIsNone(ramp.elmac_completed_at_utc)
-        self.assertEqual(ramp.departure_status, "ramp_load_complete")
+        self.assertIsNone(mission.ramp_load_completed_at_utc)
+        self.assertEqual(mission.departure_status, "scheduled")
         self.assertIsNone(crew.ramp_load_completed_at_utc)
         self.assertEqual(crew.departure_status, "crew_load_complete")
 
-    def test_block_sets_departed_without_fabricating_earlier_events(self):
+    def test_official_block_out_sets_blocked_out_without_fabricating_earlier_events(self):
         mission = self._mission("UPS0910", "LAX")
 
         self._apply(self._row("UPS0910", block="8/11 2:29"))
@@ -150,9 +150,29 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
             datetime(2026, 8, 11, 7, 29),
         )
         self.assertEqual(mission.actual_block_out_source, GOOGLE_RAIN_SOURCE)
-        self.assertEqual(mission.departure_status, "departed")
+        self.assertEqual(mission.departure_status, "blocked_out")
         self.assertIsNone(mission.ramp_load_completed_at_utc)
         self.assertIsNone(mission.crew_load_completed_at_utc)
+
+    def test_no_return_checkbox_advances_to_departed_and_can_clear_back_to_blocked_out(self):
+        mission = self._mission("UPS0910", "LAX")
+
+        self._apply(
+            self._row(
+                "UPS0910",
+                block="8/11 2:29",
+                no_return="TRUE",
+            )
+        )
+
+        self.assertEqual(mission.departure_status, "departed")
+        self.assertEqual(mission.departure_status_source, GOOGLE_RAIN_SOURCE)
+
+        self._apply(self._row("UPS0910", no_return="FALSE"))
+
+        self.assertEqual(mission.actual_block_out_source, GOOGLE_RAIN_SOURCE)
+        self.assertEqual(mission.departure_status, "blocked_out")
+        self.assertEqual(mission.departure_status_source, "unknown")
 
     def test_rain_owned_timestamps_can_be_corrected_and_cleared(self):
         mission = self._mission("UPS0910", "LAX")
@@ -215,15 +235,28 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertEqual(mission.actual_block_out_source, "unknown")
         self.assertEqual(mission.departure_status, "crew_load_complete")
 
-    def test_blank_rain_block_repairs_departed_state_stranded_by_old_adapter(self):
+    def test_blank_rain_block_preserves_non_google_departed_state(self):
         mission = self._mission("UPS0910", "LAX", status="departed")
         mission.actual_block_out_datetime_utc = None
         mission.actual_block_out_source = "unknown"
+        mission.departure_status_source = "manual"
         db.session.commit()
 
         self._apply(self._row("UPS0910", block=""))
 
-        self.assertEqual(mission.departure_status, "scheduled")
+        self.assertEqual(mission.departure_status, "departed")
+
+    def test_cleared_no_return_preserves_non_google_departed_state(self):
+        mission = self._mission("UPS0910", "LAX", status="departed")
+        mission.actual_block_out_datetime_utc = datetime(2026, 8, 11, 7, 29)
+        mission.actual_block_out_source = "manual"
+        mission.departure_status_source = "manual"
+        db.session.commit()
+
+        self._apply(self._row("UPS0910", no_return="FALSE"))
+
+        self.assertEqual(mission.departure_status, "departed")
+        self.assertEqual(mission.actual_block_out_source, "manual")
 
     def test_native_and_unattributed_milestones_are_protected(self):
         native_time = datetime(2026, 8, 11, 7, 0)
@@ -256,15 +289,15 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertTrue(result["results"][0]["warnings"])
 
     def test_stronger_progress_never_regresses_when_rain_event_clears(self):
-        mission = self._mission("UPS0910", "LAX", status="crew_load_complete")
-        mission.ramp_load_completed_at_utc = datetime(2026, 8, 11, 7, 0)
-        mission.ramp_load_completed_source = GOOGLE_RAIN_SOURCE
+        mission = self._mission("UPS0910", "LAX", status="blocked_out")
+        mission.crew_load_completed_at_utc = datetime(2026, 8, 11, 7, 0)
+        mission.crew_load_completed_source = GOOGLE_RAIN_SOURCE
         db.session.commit()
 
-        self._apply(self._row("UPS0910", ramp_load_complete=""))
+        self._apply(self._row("UPS0910", crew_load_complete=""))
 
-        self.assertIsNone(mission.ramp_load_completed_at_utc)
-        self.assertEqual(mission.departure_status, "crew_load_complete")
+        self.assertIsNone(mission.crew_load_completed_at_utc)
+        self.assertEqual(mission.departure_status, "blocked_out")
 
     def test_cancelled_mission_is_not_uncancelled(self):
         mission = self._mission("UPS0910", "LAX", status="cancelled")

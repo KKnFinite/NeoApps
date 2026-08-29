@@ -33,6 +33,8 @@ def recompute_departure_status_after_external_clear(mission, cleared_status):
         return False
 
     mission.departure_status = next_status
+    if hasattr(mission, "departure_status_source"):
+        mission.departure_status_source = "unknown"
     return True
 
 
@@ -54,7 +56,7 @@ def repair_orphaned_external_departed_status(mission):
 
 def _strongest_factual_departure_status(mission, current_status):
     if mission.actual_block_out_datetime_utc is not None:
-        return "blocked_out" if current_status == "blocked_out" else "departed"
+        return "blocked_out"
     if mission.crew_load_completed_at_utc is not None:
         return "crew_load_complete"
     if mission.ramp_load_completed_at_utc is not None:

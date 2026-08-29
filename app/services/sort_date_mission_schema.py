@@ -16,6 +16,7 @@ GOOGLE_RAIN_MILESTONE_COLUMNS = {
     "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
     "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+    "departure_status_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
 }
 
 

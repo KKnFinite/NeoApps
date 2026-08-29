@@ -23,16 +23,16 @@ SERVICE_ACCOUNT = {
 
 
 class GoogleRainSheetsTest(unittest.TestCase):
-    def test_reader_fetches_only_locked_outbound_milestone_columns_in_one_batch(self):
+    def test_reader_fetches_the_locked_l_n_o_s_outbound_bundle_in_one_batch(self):
         spreadsheet = _FakeSpreadsheet(
             {
                 "Outbound!A3:A50": [["UPS9992"], ["UPS7831"]],
                 "Outbound!C3:C50": [["SPARE"], ["SDF"]],
                 "Outbound!E3:E50": [[""], ["1:15"]],
-                "Outbound!L3:O50": [
-                    ["-", "", "", ""],
-                    ["", "2:22", "2:24", "2:29"],
-                ],
+                "Outbound!L3:L50": [["-"], [""]],
+                "Outbound!N3:N50": [[""], ["2:24"]],
+                "Outbound!O3:O50": [[""], ["2:29"]],
+                "Outbound!S3:S50": [["FALSE"], ["TRUE"]],
             }
         )
         client = _FakeClient(spreadsheet)
@@ -65,11 +65,13 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "destination": "SDF",
                 "std": "1:15",
                 "elmac": "",
-                "ramp_load_complete": "2:22",
                 "crew_load_complete": "2:24",
                 "block": "2:29",
+                "no_return": "TRUE",
             },
         )
+        self.assertNotIn("Outbound!M3:M50", spreadsheet.batch_calls[0][0])
+        self.assertNotIn("ramp_load_complete", rows[1])
         self.assertNotIn("tail", rows[1])
 
     def test_reader_source_has_no_google_write_calls(self):

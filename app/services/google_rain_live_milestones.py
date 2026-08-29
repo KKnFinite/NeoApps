@@ -12,7 +12,6 @@ from app.models import SortDateMission
 from app.services.alp_import import alp_flight_key, normalize_alp_flight_number
 from app.services.departure_progress import (
     recompute_departure_status_after_external_clear,
-    repair_orphaned_external_departed_status,
 )
 from app.services.google_motherbrain_live_missions import (
     GoogleMotherBrainMissionError,
@@ -40,12 +39,6 @@ _MILESTONE_SPECS = (
         None,
     ),
     (
-        "ramp_load_complete",
-        "ramp_load_completed_at_utc",
-        "ramp_load_completed_source",
-        "ramp_load_complete",
-    ),
-    (
         "crew_load_complete",
         "crew_load_completed_at_utc",
         "crew_load_completed_source",
@@ -55,7 +48,7 @@ _MILESTONE_SPECS = (
         "block",
         "actual_block_out_datetime_utc",
         "actual_block_out_source",
-        "departed",
+        "blocked_out",
     ),
 )
 
@@ -114,7 +107,6 @@ def apply_google_rain_departure_milestones(operation, rows=(), now=None):
 def _apply_row(operation, mission, row):
     changed_fields = []
     warnings = []
-    block_supplied_blank = False
     for row_key, timestamp_attr, source_attr, target_status in _MILESTONE_SPECS:
         raw_value = row[row_key]
         if raw_value is _MISSING:
@@ -156,11 +148,20 @@ def _apply_row(operation, mission, row):
         if timestamp_utc is not None and target_status:
             if _advance_departure_status(mission, target_status):
                 changed_fields.append("departure_status")
-        if row_key == "block" and timestamp_utc is None:
-            block_supplied_blank = True
 
-    if block_supplied_blank and repair_orphaned_external_departed_status(mission):
-        changed_fields.append("departure_status")
+    if row["no_return"] is not _MISSING:
+        no_return = _google_checkbox_state(row["no_return"])
+        if no_return is None:
+            warnings.append("Rain No Return value is invalid and was ignored.")
+        elif no_return:
+            if _advance_departure_status(
+                mission,
+                "departed",
+                source=GOOGLE_RAIN_SOURCE,
+            ):
+                changed_fields.append("departure_status")
+        elif _clear_google_rain_no_return(mission):
+            changed_fields.append("departure_status")
 
     return {
         "status": "applied",
@@ -188,7 +189,7 @@ def _apply_owned_timestamp(mission, timestamp_attr, source_attr, incoming_utc):
     return "changed"
 
 
-def _advance_departure_status(mission, target_status):
+def _advance_departure_status(mission, target_status, *, source=None):
     current_status = str(mission.departure_status or "").strip().lower()
     if current_status == "cancelled":
         return False
@@ -197,6 +198,20 @@ def _advance_departure_status(mission, target_status):
     if current_rank >= target_rank:
         return False
     mission.departure_status = target_status
+    if source is not None:
+        mission.departure_status_source = source
+    return True
+
+
+def _clear_google_rain_no_return(mission):
+    if (
+        _normalized_status(mission.departure_status) != "departed"
+        or _normalized_source(mission.departure_status_source) != GOOGLE_RAIN_SOURCE
+    ):
+        return False
+    if not recompute_departure_status_after_external_clear(mission, "departed"):
+        return False
+    mission.departure_status_source = "unknown"
     return True
 
 
@@ -254,13 +269,17 @@ def _normalize_row(supplied_row):
         ).strip().upper(),
         "std": _first_supplied(supplied_row, "std", "STD", "E"),
         "elmac": _first_supplied(supplied_row, "elmac", "eLMAC", "L"),
-        "ramp_load_complete": _first_supplied(
-            supplied_row, "ramp_load_complete", "r_lc", "R-LC", "M"
-        ),
         "crew_load_complete": _first_supplied(
             supplied_row, "crew_load_complete", "c_lc", "C-LC", "N"
         ),
         "block": _first_supplied(supplied_row, "block", "BLOCK", "O"),
+        "no_return": _first_supplied(
+            supplied_row,
+            "no_return",
+            "NO_RETURN",
+            "No Return",
+            "S",
+        ),
     }
 
 
@@ -279,9 +298,9 @@ def _first_supplied(row, *keys):
 def _field_label(row_key):
     return {
         "elmac": "Rain eLMAC",
-        "ramp_load_complete": "Rain R-LC",
         "crew_load_complete": "Rain C-LC",
-        "block": "Rain BLOCK",
+        "block": "Rain Official Block-Out",
+        "no_return": "Rain No Return",
     }[row_key]
 
 
@@ -295,6 +314,21 @@ def _same_minute(left, right):
 
 def _normalized_source(value):
     return str(value or "unknown").strip().lower()
+
+
+def _normalized_status(value):
+    return str(value or "").strip().lower()
+
+
+def _google_checkbox_state(value):
+    if isinstance(value, bool):
+        return value
+    normalized = str(value if value is not None else "").strip().lower()
+    if normalized in {"1", "true", "yes", "on", "checked"}:
+        return True
+    if normalized in {"", "-", "0", "false", "no", "off", "unchecked"}:
+        return False
+    return None
 
 
 def _positive_int(value):

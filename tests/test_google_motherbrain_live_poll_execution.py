@@ -320,6 +320,7 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
                         "destination": "LAX",
                         "std": "2:24",
                         "block": "2:29",
+                        "no_return": "TRUE",
                     }
                 ]
             ),
