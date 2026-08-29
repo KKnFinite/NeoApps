@@ -1,10 +1,11 @@
 """Gateway/sort authority for the NeoRain Google migration bundle."""
 
-from flask import has_app_context
+from flask import current_app, has_app_context
 
 from app.extensions import db
 from app.models import MotherBrainGoogleIntegrationSetting
 from app.services.access_control import get_current_gateway
+from app.services.operation_scope import current_operational_sort_operation
 
 
 GOOGLE_PRIMARY = "google_primary"
@@ -22,6 +23,10 @@ RAIN_INTEGRATION_MODE_LABELS = {
     NEO_ONLY: "NEO ONLY",
 }
 DEFAULT_RAIN_SORT = "night"
+
+
+class RainIntegrationTransitionError(RuntimeError):
+    """Safe failure from an atomic NeoRain authority handoff."""
 
 
 def rain_integration_mode(gateway=None, sort_name=None, *, setting=None):
@@ -83,8 +88,103 @@ def set_rain_integration_mode(gateway, sort_name, mode):
     return setting
 
 
+def change_rain_integration_mode(gateway, sort_name, requested_mode):
+    """Perform a current-sort authority handoff, then persist its Rain mode."""
+    if gateway is None:
+        raise RainIntegrationTransitionError("NeoRain gateway is unavailable.")
+    normalized_sort = _normalize_sort_name(sort_name)
+    target_mode = _validated_mode(requested_mode)
+    current_mode = rain_integration_mode(gateway, normalized_sort)
+    if current_mode == target_mode:
+        return _transition_status(
+            gateway,
+            normalized_sort,
+            handoff_performed=False,
+            handoff_direction=None,
+        )
+
+    neo_to_neo = (
+        current_mode in {NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY}
+        and target_mode in {NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY}
+    )
+    operation = None if neo_to_neo else current_operational_sort_operation(gateway)
+    if (
+        operation is not None
+        and _normalize_sort_name(operation.sort_name) != normalized_sort
+    ):
+        operation = None
+
+    handoff_direction = None
+    try:
+        if operation is not None:
+            if current_mode == GOOGLE_PRIMARY:
+                handoff_direction = "google_to_neo"
+            elif target_mode == GOOGLE_PRIMARY:
+                handoff_direction = "neo_to_google"
+            _apply_current_google_rain_handoff(operation, handoff_direction)
+
+        set_rain_integration_mode(gateway, normalized_sort, target_mode)
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        current_app.logger.warning(
+            "NeoRain authority handoff failed safely: gateway=%s sort=%s direction=%s error=%s",
+            gateway.code,
+            normalized_sort,
+            handoff_direction or "none",
+            type(error).__name__,
+        )
+        if isinstance(error, RainIntegrationTransitionError):
+            raise
+        raise RainIntegrationTransitionError(
+            "NeoRain authority could not be changed. The previous mode remains active."
+        ) from error
+
+    return _transition_status(
+        gateway,
+        normalized_sort,
+        handoff_performed=operation is not None,
+        handoff_direction=handoff_direction,
+    )
+
+
 def rain_google_read_enabled(gateway=None, sort_name=None):
     return rain_integration_mode(gateway, sort_name) == GOOGLE_PRIMARY
+
+
+def _apply_current_google_rain_handoff(operation, direction):
+    from app.services.google_rain_live_milestones import (
+        GOOGLE_TO_NEO_AUTHORITY_HANDOFF,
+        NEO_TO_GOOGLE_AUTHORITY_HANDOFF,
+        apply_google_rain_departure_milestones,
+    )
+    from app.services.google_rain_sheets import read_google_rain_outbound_milestones
+
+    handoff_mode = {
+        "google_to_neo": GOOGLE_TO_NEO_AUTHORITY_HANDOFF,
+        "neo_to_google": NEO_TO_GOOGLE_AUTHORITY_HANDOFF,
+    }.get(direction)
+    if handoff_mode is None:
+        raise RainIntegrationTransitionError("NeoRain authority handoff is invalid.")
+    rows = read_google_rain_outbound_milestones()
+    return apply_google_rain_departure_milestones(
+        operation,
+        rows=rows,
+        authority_handoff=handoff_mode,
+    )
+
+
+def _transition_status(
+    gateway,
+    sort_name,
+    *,
+    handoff_performed,
+    handoff_direction,
+):
+    status = rain_integration_status(gateway, sort_name)
+    status["handoff_performed"] = bool(handoff_performed)
+    status["handoff_direction"] = handoff_direction
+    return status
 
 
 def _existing_setting(gateway=None, sort_name=None):

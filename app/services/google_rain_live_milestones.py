@@ -20,6 +20,12 @@ from app.services.google_motherbrain_live_missions import (
 
 
 GOOGLE_RAIN_SOURCE = "google_rain"
+GOOGLE_TO_NEO_AUTHORITY_HANDOFF = "google_to_neo"
+NEO_TO_GOOGLE_AUTHORITY_HANDOFF = "neo_to_google"
+_AUTHORITY_HANDOFFS = {
+    GOOGLE_TO_NEO_AUTHORITY_HANDOFF,
+    NEO_TO_GOOGLE_AUTHORITY_HANDOFF,
+}
 _UNOWNED_SOURCES = {"", "unknown"}
 _MISSING = object()
 _DEPARTURE_STATUS_RANK = {
@@ -53,10 +59,18 @@ _MILESTONE_SPECS = (
 )
 
 
-def apply_google_rain_departure_milestones(operation, rows=(), now=None):
+def apply_google_rain_departure_milestones(
+    operation,
+    rows=(),
+    now=None,
+    *,
+    authority_handoff=None,
+):
     """Apply Rain rows without creating missions, changing tails, or committing."""
     del now
     _validate_operation(operation)
+    if authority_handoff not in {None, *_AUTHORITY_HANDOFFS}:
+        raise ValueError("Choose a valid Google Rain authority handoff.")
     missions = SortDateMission.query.filter_by(
         sort_date_operation_id=operation.id,
         mission_type="departure",
@@ -87,9 +101,16 @@ def apply_google_rain_departure_milestones(operation, rows=(), now=None):
 
         try:
             with db.session.begin_nested():
-                result = _apply_row(operation, mission, row)
+                result = _apply_row(
+                    operation,
+                    mission,
+                    row,
+                    authority_handoff=authority_handoff,
+                )
                 db.session.flush()
         except SQLAlchemyError as error:
+            if authority_handoff is not None:
+                raise
             reason = type(error).__name__
             result = _skipped_result(row, reason)
             _log_skipped(operation, row, reason)
@@ -104,11 +125,12 @@ def apply_google_rain_departure_milestones(operation, rows=(), now=None):
     }
 
 
-def _apply_row(operation, mission, row):
+def _apply_row(operation, mission, row, *, authority_handoff=None):
     changed_fields = []
     warnings = []
-    if _relinquish_legacy_google_rain_elmac(mission):
+    if authority_handoff is None and _relinquish_legacy_google_rain_elmac(mission):
         changed_fields.extend(("elmac_completed_at_utc", "elmac_completed_source"))
+    replace_neorain_owned = authority_handoff == NEO_TO_GOOGLE_AUTHORITY_HANDOFF
     for row_key, timestamp_attr, source_attr, target_status in _MILESTONE_SPECS:
         raw_value = row[row_key]
         if raw_value is _MISSING:
@@ -120,6 +142,8 @@ def _apply_row(operation, mission, row):
                 _field_label(row_key),
             )
         except GoogleMotherBrainMissionError as error:
+            if authority_handoff is not None:
+                raise
             warnings.append(str(error))
             continue
 
@@ -130,6 +154,7 @@ def _apply_row(operation, mission, row):
             timestamp_attr,
             source_attr,
             timestamp_utc,
+            replace_neorain_owned=replace_neorain_owned,
         )
         if ownership == "protected":
             warnings.append(f"Protected {_field_label(row_key)} preserved.")
@@ -140,7 +165,10 @@ def _apply_row(operation, mission, row):
                 target_status
                 and timestamp_utc is None
                 and previous_timestamp is not None
-                and previous_source == GOOGLE_RAIN_SOURCE
+                and _rain_handoff_owned_source(
+                    previous_source,
+                    include_neorain=replace_neorain_owned,
+                )
                 and recompute_departure_status_after_external_clear(
                     mission,
                     target_status,
@@ -154,22 +182,50 @@ def _apply_row(operation, mission, row):
     if row["no_return"] is not _MISSING:
         no_return = _google_checkbox_state(row["no_return"])
         if no_return is None:
+            if authority_handoff is not None:
+                raise ValueError("Rain No Return value is invalid.")
             warnings.append("Rain No Return value is invalid and was ignored.")
         elif no_return:
             missing = _missing_no_return_prerequisites(mission)
             if missing:
+                if authority_handoff is not None:
+                    raise ValueError(
+                        "Rain No Return requires " + ", ".join(missing) + "."
+                    )
                 warnings.append(
                     "Rain No Return ignored: requires " + ", ".join(missing) + "."
                 )
-                if _clear_google_rain_no_return(mission):
+                if _clear_google_rain_no_return(
+                    mission,
+                    include_neorain=replace_neorain_owned,
+                ):
                     changed_fields.append("departure_status")
+            elif (
+                replace_neorain_owned
+                and _normalized_status(mission.departure_status) == "departed"
+            ):
+                departure_source = _normalized_source(
+                    mission.departure_status_source
+                )
+                if _rain_handoff_owned_source(
+                    departure_source,
+                    include_neorain=True,
+                ):
+                    if departure_source != GOOGLE_RAIN_SOURCE:
+                        mission.departure_status_source = GOOGLE_RAIN_SOURCE
+                        changed_fields.append("departure_status")
+                else:
+                    warnings.append("Protected No Return preserved.")
             elif _advance_departure_status(
                 mission,
                 "departed",
                 source=GOOGLE_RAIN_SOURCE,
             ):
                 changed_fields.append("departure_status")
-        elif _clear_google_rain_no_return(mission):
+        elif _clear_google_rain_no_return(
+            mission,
+            include_neorain=replace_neorain_owned,
+        ):
             changed_fields.append("departure_status")
 
     return {
@@ -182,10 +238,20 @@ def _apply_row(operation, mission, row):
     }
 
 
-def _apply_owned_timestamp(mission, timestamp_attr, source_attr, incoming_utc):
+def _apply_owned_timestamp(
+    mission,
+    timestamp_attr,
+    source_attr,
+    incoming_utc,
+    *,
+    replace_neorain_owned=False,
+):
     current_timestamp = getattr(mission, timestamp_attr)
     current_source = _normalized_source(getattr(mission, source_attr))
-    rain_owned = current_source == GOOGLE_RAIN_SOURCE
+    rain_owned = _rain_handoff_owned_source(
+        current_source,
+        include_neorain=replace_neorain_owned,
+    )
     unowned_empty = current_timestamp is None and current_source in _UNOWNED_SOURCES
     if not rain_owned and not unowned_empty:
         return "protected"
@@ -212,16 +278,23 @@ def _advance_departure_status(mission, target_status, *, source=None):
     return True
 
 
-def _clear_google_rain_no_return(mission):
+def _clear_google_rain_no_return(mission, *, include_neorain=False):
     if (
         _normalized_status(mission.departure_status) != "departed"
-        or _normalized_source(mission.departure_status_source) != GOOGLE_RAIN_SOURCE
+        or not _rain_handoff_owned_source(
+            _normalized_source(mission.departure_status_source),
+            include_neorain=include_neorain,
+        )
     ):
         return False
     if not recompute_departure_status_after_external_clear(mission, "departed"):
         return False
     mission.departure_status_source = "unknown"
     return True
+
+
+def _rain_handoff_owned_source(source, *, include_neorain=False):
+    return source == GOOGLE_RAIN_SOURCE or (include_neorain and source == "neorain")
 
 
 def _relinquish_legacy_google_rain_elmac(mission):
