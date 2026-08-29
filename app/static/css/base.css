@@ -25767,7 +25767,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         display: block;
         margin: 0;
         color: var(--neo-bright-silver);
-        font-size: 5.6rem;
+        font-size: 4.76rem;
         font-weight: 950;
         letter-spacing: 0.1em;
         line-height: 1;
@@ -25829,6 +25829,8 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-unload-metric {
+        align-content: end;
+        gap: 1px;
         border: 0;
         border-radius: 0;
         background: transparent;
@@ -25868,6 +25870,11 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control strong.counter-number[data-metric="left_to_arrive"] {
         font-size: clamp(5.175rem, 7.7625vw, 7.875rem);
         line-height: 0.72;
+        text-align: center;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wave-panel .tunnel-arrive-control input.counter-number[data-metric="left_to_arrive"] {
+        padding-bottom: 10px;
     }
 
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-ballmat-card {

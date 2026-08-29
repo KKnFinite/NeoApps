@@ -1464,7 +1464,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-rows: max-content minmax(0, 1fr);", desktop_css)
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", desktop_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr);", desktop_css)
-        self.assertIn("font-size: 5.6rem;", desktop_css)
+        self.assertIn("font-size: 4.76rem;", desktop_css)
         self.assertIn("transform: scaleX(0.7);", desktop_css)
         self.assertIn("white-space: nowrap;", desktop_css)
         self.assertIn("font-size: 0.8rem;", desktop_css)
@@ -1484,6 +1484,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("gap: 12px;", desktop_css)
         self.assertIn("background: transparent;", desktop_css)
         self.assertIn("background: rgba(5, 7, 11, 0.88);", desktop_css)
+        self.assertIn("align-content: end;", desktop_css)
+        self.assertIn("gap: 1px;", desktop_css)
         self.assertIn("min-height: 104px;", desktop_css)
         self.assertIn("min-width: 112px;", desktop_css)
         self.assertIn("grid-row: 1 / -1;", desktop_css)
@@ -1498,6 +1500,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             css,
         )
         self.assertIn("font-size: clamp(5.175rem, 7.7625vw, 7.875rem);", desktop_css)
+        self.assertIn("padding-bottom: 10px;", desktop_css)
+        self.assertIn("text-align: center;", desktop_css)
         self.assertIn("color: var(--neo-bright-silver);", css)
 
     def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
