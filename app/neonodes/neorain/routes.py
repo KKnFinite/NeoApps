@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import MasterFlightSchedule, SortDateMission, StaffingPerson
+from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation, StaffingPerson
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
@@ -50,6 +50,10 @@ from app.services.live_screen_refresh import (
     save_live_screen_refresh_override,
 )
 from app.services.live_collaboration import entity_version, version_conflict
+from app.services.load_planning_contact import (
+    current_load_planning_contact,
+    set_load_planning_contact,
+)
 from app.services.permission_rules import permission_access, preload_permission_rules, user_can
 
 
@@ -445,8 +449,12 @@ def load_planner_lineup():
                 status_code=403,
                 message=("Edit access denied.", "error"),
             )
+        is_contact = request.form.get("action") == "save_contact"
         try:
-            departure = _save_load_planner_assignment(gateway, operation)
+            if is_contact:
+                departure = _save_load_planning_contact(gateway, operation)
+            else:
+                departure = _save_load_planner_assignment(gateway, operation)
             db.session.commit()
         except _LoadPlannerStaleError as exc:
             db.session.rollback()
@@ -479,10 +487,10 @@ def load_planner_lineup():
                 status_code=500,
                 message=("NeoRain could not save the Load Planner assignment.", "error"),
             )
-        flash(
-            f"LOAD PLANNER ASSIGNMENT SAVED FOR {departure.flight_number}.",
-            "success",
-        )
+        if is_contact:
+            flash("LOAD PLANNING CONTACT SAVED.", "success")
+        else:
+            flash(f"LOAD PLANNER ASSIGNMENT SAVED FOR {departure.flight_number}.", "success")
         return redirect(url_for("neorain.load_planner_lineup"))
 
     return _render_load_planner_lineup(gateway, operation, access)
@@ -550,6 +558,37 @@ def _save_load_planner_assignment(gateway, operation):
     return departure
 
 
+def _save_load_planning_contact(gateway, operation):
+    """Lock and stage the current sort's shared Load Planning contact."""
+    if operation is None or operation.gateway_id != gateway.id:
+        raise ValueError("No current sort.")
+    expected_version = str(request.form.get("expected_version") or "").strip()
+    if not expected_version:
+        raise ValueError("Provide the current sort version.")
+    if "extension" not in request.form or "radio_channel" not in request.form:
+        raise ValueError("Provide both Extension and Radio Channel.")
+    locked = (
+        SortDateOperation.query.filter_by(
+            id=operation.id,
+            gateway_id=gateway.id,
+            gateway_code=gateway.code,
+        )
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if locked is None:
+        raise ValueError("No current sort.")
+    conflict = version_conflict(locked, expected_version)
+    if conflict:
+        raise _LoadPlannerStaleError(conflict["message"])
+    return set_load_planning_contact(
+        locked,
+        extension=request.form.get("extension"),
+        radio_channel=request.form.get("radio_channel"),
+    )
+
+
 def _render_load_planner_lineup(
     gateway,
     operation,
@@ -567,6 +606,8 @@ def _render_load_planner_lineup(
         can_view=access["can_view"],
         gateway=gateway,
         operation=operation,
+        load_planning_contact=current_load_planning_contact(operation),
+        contact_version=entity_version(operation) if operation is not None else "",
         eligible_load_planners=eligible_neorain_load_planners(),
         lineup=neorain_load_planner_lineup(gateway, operation),
     ), status_code

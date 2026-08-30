@@ -152,6 +152,88 @@ class NeoRainLoadPlannerRoutesTest(unittest.TestCase):
         db.session.expire_all()
         self.assertIsNone(db.session.get(MasterFlightSchedule, self.master.id).load_planner_person_id)
 
+    def test_contact_carry_forward_can_be_saved(self):
+        editor = self._user("contact_editor", "operator")
+        self._login(editor)
+        prior = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code=self.gateway.code,
+            sort_name="night",
+            sort_date=date(2026, 8, 31),
+            load_planner_extension="4123",
+            load_planner_radio_channel="OPS",
+        )
+        db.session.add(prior)
+        db.session.commit()
+        with self._current_operation(self.operation):
+            page = self.client.get("/neorain/load-planner-lineup")
+            saved = self._post(
+                action="save_contact",
+                extension="4555",
+                radio_channel="RAMP 1",
+                expected_version=entity_version(self.operation),
+            )
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"4123", page.data)
+        self.assertIn(b"OPS", page.data)
+        self.assertEqual(saved.status_code, 302)
+        db.session.expire_all()
+        current = db.session.get(SortDateOperation, self.operation.id)
+        self.assertEqual(current.load_planner_extension, "4555")
+        self.assertEqual(current.load_planner_radio_channel, "RAMP 1")
+
+    def test_contact_explicit_blank_is_saved_and_viewer_cannot_save(self):
+        editor = self._user("contact_blank_editor", "operator")
+        self._login(editor)
+        with self._current_operation(self.operation):
+            response = self._post(
+                action="save_contact",
+                extension="",
+                radio_channel="",
+                expected_version=entity_version(self.operation),
+            )
+        self.assertEqual(response.status_code, 302)
+        db.session.expire_all()
+        current = db.session.get(SortDateOperation, self.operation.id)
+        self.assertEqual(current.load_planner_extension, "")
+        self.assertEqual(current.load_planner_radio_channel, "")
+
+        viewer = self._user("contact_viewer", "watcher")
+        self._login(viewer)
+        with self._current_operation(self.operation):
+            denied = self._post(
+                action="save_contact",
+                extension="9999",
+                radio_channel="X",
+                expected_version=entity_version(self.operation),
+            )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_contact_stale_version_is_rejected(self):
+        editor = self._user("contact_conflict_editor", "operator")
+        self._login(editor)
+        expected = entity_version(self.operation)
+        self.operation.window_minutes = 10
+        db.session.commit()
+        with self._current_operation(self.operation):
+            response = self._post(
+                action="save_contact",
+                extension="1234",
+                radio_channel="OPS",
+                expected_version=expected,
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn(b"changed while you were editing", response.data)
+
+    def test_contact_is_read_only_without_current_sort(self):
+        viewer = self._user("contact_no_sort_viewer", "watcher")
+        self._login(viewer)
+        with self._current_operation(None):
+            page = self.client.get("/neorain/load-planner-lineup")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"LOAD PLANNING CONTACT", page.data)
+        self.assertNotIn(b'name="action" value="save_contact"', page.data)
+
     def _post(self, **data):
         return self.client.post(
             "/neorain/load-planner-lineup",

@@ -32,6 +32,28 @@
         <strong>{{ gateway.code }} · {{ operation.sort_name|upper if operation else 'NIGHT MASTER' }}</strong>
     </header>
 
+    <section class="neorain-load-planning-contact" aria-labelledby="neorain-load-planning-contact-title">
+        <h2 id="neorain-load-planning-contact-title">LOAD PLANNING CONTACT</h2>
+        {% if operation and can_edit %}
+        <form method="post" class="neorain-load-planning-contact-form">
+            <input type="hidden" name="action" value="save_contact">
+            <input type="hidden" name="expected_version" value="{{ contact_version }}">
+            <label>Extension
+                <input type="text" name="extension" value="{{ load_planning_contact.extension }}" maxlength="64">
+            </label>
+            <label>Radio Channel
+                <input type="text" name="radio_channel" value="{{ load_planning_contact.radio_channel }}" maxlength="64">
+            </label>
+            <button type="submit">SAVE</button>
+        </form>
+        {% else %}
+        <div class="neorain-load-planning-contact-readonly" aria-label="Load Planning contact">
+            <span><b>Extension</b> {{ load_planning_contact.extension or '—' }}</span>
+            <span><b>Radio Channel</b> {{ load_planning_contact.radio_channel or '—' }}</span>
+        </div>
+        {% endif %}
+    </section>
+
     <section class="neorain-load-planner-section" aria-labelledby="neorain-master-departures-title">
         <h2 id="neorain-master-departures-title">MASTER DEPARTURES</h2>
         <div class="neorain-outbound-table-wrap">
