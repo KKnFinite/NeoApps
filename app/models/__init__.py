@@ -29,6 +29,7 @@ from app.models.neosektor_bay_status import NeoSektorBayStatus
 from app.models.neosektor_driver_route_setting import NeoSektorDriverRouteSetting
 from app.models.neosektor_open_bay_state import NeoSektorOpenBayState
 from app.models.neosektor_operational_setting import NeoSektorOperationalSetting
+from app.models.neorain_operational_setting import NeoRainOperationalSetting
 from app.models.neosektor_sort_state import NeoSektorSortState
 from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
@@ -130,6 +131,7 @@ __all__ = [
     "NeoSektorBallmatWaveCount",
     "NeoSektorOpenBayState",
     "NeoSektorOperationalSetting",
+    "NeoRainOperationalSetting",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
     "NeoSektorUldOnTheWayEvent",
