@@ -341,7 +341,7 @@ def rfd_hub():
     prime_user_node_roles_for_request(
         current_user,
         gateway.code,
-        ("motherbrain", "sektor", "ermac", "scorpion"),
+        ("motherbrain", "sektor", "ermac", "scorpion", "rain"),
     )
 
     current_state = _current_sort_state(gateway)
@@ -371,6 +371,7 @@ def rfd_hub():
         can_launch_sektor=user_can_access_node(current_user, gateway.code, "sektor"),
         can_launch_ermac=user_can_access_node(current_user, gateway.code, "ermac"),
         can_launch_scorpion=user_can_access_node(current_user, gateway.code, "scorpion"),
+        can_launch_rain=user_can_access_node(current_user, gateway.code, "rain"),
     )
 
 

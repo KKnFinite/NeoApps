@@ -1058,7 +1058,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("rfd-gateway-brand-strip", html)
         self.assertIn('class="rfd-node-tile rfd-node-motherbrain', html)
         self.assertIn('class="rfd-node-tile rfd-node-sektor"', html)
-        self.assertEqual(html.count('class="rfd-node-availability">Coming Soon</span>'), 3)
+        self.assertEqual(html.count('class="rfd-node-availability">Coming Soon</span>'), 2)
+        self.assertIn('href="/neorain"', html)
         self.assertIn("Compact desktop RFD application launcher", css)
         self.assertIn("grid-template-columns: repeat(8, minmax(0, 1fr));", css)
         self.assertIn("width: min(100%, 1480px);", css)
@@ -1121,7 +1122,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         generic_node_icon = 'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"'
 
         self.assertEqual(response.status_code, 200)
-        for node in ("reptile", "rain", "subzero"):
+        for node in ("reptile", "subzero"):
             with self.subTest(node=node):
                 card_start = html.index(f'class="rfd-node-tile rfd-node-placeholder rfd-node-{node}"')
                 card_end = html.index("</article>", card_start)

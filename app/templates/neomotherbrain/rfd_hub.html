@@ -68,9 +68,15 @@
                 <article class="rfd-node-tile rfd-node-placeholder rfd-node-reptile" aria-disabled="true" aria-label="NeoReptile">
                     {{ node_card("reptile", "Reptile", coming_soon=true) }}
                 </article>
-                <article class="rfd-node-tile rfd-node-placeholder rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
-                    {{ node_card("rain", "Rain", coming_soon=true) }}
+                {% if can_launch_rain %}
+                <a class="rfd-node-tile rfd-node-rain" href="{{ url_for('neorain.index') }}" aria-label="NeoRain">
+                    {{ node_card("rain", "Rain") }}
+                </a>
+                {% else %}
+                <article class="rfd-node-tile rfd-node-disabled rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
+                    {{ node_card("rain", "Rain") }}
                 </article>
+                {% endif %}
             </div>
 
             <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.code }} right NeoNodes">
