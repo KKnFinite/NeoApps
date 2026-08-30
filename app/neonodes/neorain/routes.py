@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation, StaffingPerson, NeoRainCrewAdminAssignment
+from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation, StaffingPerson, NeoRainCrewAdminAssignment, NeoRainDelayInfo
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
@@ -69,6 +69,10 @@ from app.services.neorain_crew_admin import (
     NeoRainCrewAdminError, add_neorain_crew_admin_assignment,
     eligible_neorain_crew_admins, neorain_crew_admin_assignments,
     remove_neorain_crew_admin_assignment, update_neorain_crew_admin_assignment,
+)
+from app.services.neorain_delay_info import (
+    NeoRainDelayInfoError, add_neorain_delay_info, update_neorain_delay_info,
+    delete_neorain_delay_info,
 )
 
 
@@ -170,6 +174,42 @@ def inbound_crew_admin():
     except (NeoRainCrewAdminError, IntegrityError) as exc:
         db.session.rollback(); flash(str(exc) if isinstance(exc, NeoRainCrewAdminError) else "Unable to save Crew Admin.", "error")
     return redirect(url_for("neorain.inbound"))
+
+
+@bp.route("/delay-info", methods=["POST"])
+@gateway_node_required("rain")
+def delay_info():
+    """One bounded form mutation shared by the two current-sort Rain boards."""
+    board = str(request.form.get("board") or "").strip().lower()
+    mission_type, endpoint, permission = {
+        "inbound": ("arrival", "neorain.inbound", "neorain.inbound.edit"),
+        "outbound": ("departure", "neorain.outbound", "neorain.outbound.edit"),
+    }.get(board, (None, None, None))
+    if permission is None or not user_can(permission):
+        return "Access denied.", 403
+    gateway = get_current_gateway(); operation = current_neorain_outbound_operation(gateway)
+    mission_id = request.form.get("mission_id", type=int)
+    if operation is None:
+        flash("No current sort.", "error"); return redirect(url_for(endpoint))
+    mission = SortDateMission.query.filter_by(id=mission_id, sort_date_operation_id=operation.id, gateway_code=gateway.code, mission_type=mission_type).one_or_none()
+    if mission is None:
+        flash("Mission is not in the current sort.", "error"); return redirect(url_for(endpoint))
+    action = request.form.get("action")
+    try:
+        if action == "add":
+            add_neorain_delay_info(mission, request.form.get("minutes"), request.form.get("code"), request.form.get("notes"))
+        else:
+            row = db.session.execute(db.select(NeoRainDelayInfo).where(NeoRainDelayInfo.id == request.form.get("delay_id", type=int), NeoRainDelayInfo.sort_date_mission_id == mission.id).with_for_update()).scalar_one_or_none()
+            if row is None: raise NeoRainDelayInfoError("Delay Info was not found for this mission.")
+            conflict = version_conflict(row, request.form.get("expected_version"))
+            if conflict: raise NeoRainDelayInfoError(conflict["message"])
+            if action == "update": update_neorain_delay_info(mission, row, request.form.get("minutes"), request.form.get("code"), request.form.get("notes"))
+            elif action == "delete": delete_neorain_delay_info(mission, row)
+            else: raise NeoRainDelayInfoError("Choose a valid Delay Info action.")
+        db.session.commit(); flash("DELAY INFO SAVED.", "success")
+    except (NeoRainDelayInfoError, IntegrityError) as exc:
+        db.session.rollback(); flash(str(exc) if isinstance(exc, NeoRainDelayInfoError) else "Unable to save Delay Info.", "error")
+    return redirect(f"{url_for(endpoint)}#delay-info-{mission_id}")
 
 
 @bp.route("/inbound/revision")

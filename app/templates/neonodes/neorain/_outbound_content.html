@@ -28,18 +28,23 @@
     {% endif %}
 </td>
 {%- endmacro %}
+{% macro delay_info(row) -%}
+<details class="neorain-delay-info" id="delay-info-{{ row.mission_id }}"><summary>DELAY INFO ({{ row.delay_info|length }})</summary>
+{% for delay in row.delay_info %}<div class="neorain-delay-row">{% if can_edit %}<form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="update"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><input name="minutes" value="{{ delay.minutes }}"><input name="code" maxlength="2" value="{{ delay.code }}"><textarea name="notes">{{ delay.notes }}</textarea><button type="submit">SAVE</button></form><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="delete"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><button type="submit">DELETE</button></form>{% else %}<strong>{{ delay.minutes }}</strong> {{ delay.code }} {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}{% endif %}</div>{% endfor %}
+{% if can_edit %}<form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="add"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input required name="minutes" inputmode="numeric" placeholder="Minutes"><input required name="code" maxlength="2" placeholder="Code"><textarea name="notes" placeholder="Notes"></textarea><button type="submit">ADD</button></form>{% endif %}</details>
+{%- endmacro %}
 <div class="neorain-outbound-table-wrap">
     <table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
         <thead><tr>
-            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>Load Planner</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th>
+            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>Load Planner</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th><th>Delay Info</th>
         </tr></thead>
         <tbody>
             {% for row in rows %}
             {% set collapse_eligible = row.ramp_load_complete and row.crew_load_complete and row.official_block_out %}
             {% set final_collapse_eligible = collapse_eligible and row.no_return %}
             <tr data-neorain-collapsed-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not collapse_eligible or final_collapse_eligible %}hidden{% endif %}>
-                <td colspan="15">
+                <td colspan="16">
                     <div class="neorain-collapsed-summary">
                         <span><strong>{{ row.flight_number or '-' }}</strong></span>
                         <span>{{ row.tail or '-' }}</span>
@@ -65,11 +70,12 @@
                         </span>
                         {% endif %}
                         <button type="button" class="neorain-reopen-control" data-neorain-reopen>REOPEN</button>
+                        {{ delay_info(row) }}
                     </div>
                 </td>
             </tr>
             <tr data-neorain-final-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not final_collapse_eligible %}hidden{% endif %}>
-                <td colspan="15">
+                <td colspan="16">
                     <div class="neorain-final-summary">
                         <span><strong>{{ row.flight_number or '-' }}</strong></span>
                         <span>{{ row.destination or '-' }}</span>
@@ -91,6 +97,7 @@
                         </span>
                         {% endif %}
                         <button type="button" class="neorain-reopen-control" data-neorain-reopen>REOPEN</button>
+                        {{ delay_info(row) }}
                     </div>
                 </td>
             </tr>
@@ -126,6 +133,7 @@
                     </div>
                     {% endif %}
                 </td>
+                <td data-label="Delay Info">{{ delay_info(row) }}</td>
             </tr>
             {% endfor %}
         </tbody>
