@@ -316,7 +316,6 @@ def outbound():
         gateway=gateway,
         rain_integration_mode=integration_mode,
         outbound_revision=neorain_outbound_revision(gateway, operation=operation),
-        refresh_status=neorain_outbound_refresh_status(gateway, operation=operation),
         **context,
     )
 
