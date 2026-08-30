@@ -12,14 +12,18 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import SortDateMission
+from app.models import MasterFlightSchedule, SortDateMission, StaffingPerson
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
     NEORAIN_OUTBOUND_REFRESH_KEY,
     NEORAIN_MUTABLE_MILESTONE_FIELDS,
+    LoadPlannerAssignmentError,
     NeoRainMilestoneError,
+    assign_current_sort_only_departure_load_planner,
+    assign_master_departure_load_planner,
     current_neorain_outbound_operation,
+    eligible_neorain_load_planners,
     mutate_neorain_departure_milestone,
     neorain_departure_milestone_value,
     neorain_outbound_context,
@@ -27,6 +31,7 @@ from app.neonodes.neorain.services import (
     neorain_outbound_row,
     neorain_outbound_refresh_status,
     neorain_outbound_revision,
+    neorain_load_planner_lineup,
     set_neorain_late_metrics_included,
 )
 from app.services.google_rain_integration_mode import (
@@ -49,6 +54,10 @@ from app.services.permission_rules import permission_access, preload_permission_
 
 
 NEORAIN_LAST_PAGE_SESSION_KEY = "neorain.last_page"
+
+
+class _LoadPlannerStaleError(ValueError):
+    """Keep form stale-edit failures distinct without exposing row internals."""
 
 NEORAIN_PAGES = (
     ("Inbound", "neorain.inbound", "neorain.inbound.view", "neorain.inbound.edit"),
@@ -415,10 +424,152 @@ def outbound_late_inclusion():
     )
 
 
-@bp.route("/load-planner-lineup")
+@bp.route("/load-planner-lineup", methods=["GET", "POST"])
 @gateway_node_required("rain")
 def load_planner_lineup():
-    return _render_neorain_page("neorain.load_planner_lineup")
+    page = _neorain_page("neorain.load_planner_lineup")
+    access = permission_access(page[2], page[3])
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neorain.index"))
+
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    if request.method == "POST":
+        if not access["can_edit"]:
+            db.session.rollback()
+            return _render_load_planner_lineup(
+                gateway,
+                operation,
+                access,
+                status_code=403,
+                message=("Edit access denied.", "error"),
+            )
+        try:
+            departure = _save_load_planner_assignment(gateway, operation)
+            db.session.commit()
+        except _LoadPlannerStaleError as exc:
+            db.session.rollback()
+            return _render_load_planner_lineup(
+                gateway,
+                operation,
+                access,
+                status_code=409,
+                message=(str(exc), "error"),
+            )
+        except (LoadPlannerAssignmentError, ValueError) as exc:
+            db.session.rollback()
+            return _render_load_planner_lineup(
+                gateway,
+                operation,
+                access,
+                status_code=400,
+                message=(str(exc), "error"),
+            )
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.exception(
+                "NeoRain Load Planner save failed safely: error=%s",
+                type(exc).__name__,
+            )
+            return _render_load_planner_lineup(
+                gateway,
+                operation,
+                access,
+                status_code=500,
+                message=("NeoRain could not save the Load Planner assignment.", "error"),
+            )
+        flash(
+            f"LOAD PLANNER ASSIGNMENT SAVED FOR {departure.flight_number}.",
+            "success",
+        )
+        return redirect(url_for("neorain.load_planner_lineup"))
+
+    return _render_load_planner_lineup(gateway, operation, access)
+
+
+def _save_load_planner_assignment(gateway, operation):
+    scope = str(request.form.get("assignment_scope") or "").strip()
+    departure_id = _positive_integer(request.form.get("departure_id"))
+    expected_version = str(request.form.get("expected_version") or "").strip()
+    planner_value = str(request.form.get("planner_person_id") or "").strip()
+    if scope not in {"master", "current_sort"}:
+        raise ValueError("Choose a valid Load Planner assignment scope.")
+    if departure_id is None or not expected_version:
+        raise ValueError("Choose a valid current departure assignment.")
+    planner_id = None
+    if planner_value:
+        planner_id = _positive_integer(planner_value)
+        if planner_id is None:
+            raise ValueError("Choose a valid Load Planner.")
+    planner = db.session.get(StaffingPerson, planner_id) if planner_id else None
+    if planner_id and planner is None:
+        raise ValueError("Choose an eligible Load Planner.")
+
+    if scope == "master":
+        departure = (
+            MasterFlightSchedule.query.filter_by(
+                id=departure_id,
+                gateway_code=gateway.code,
+                sort_name="night",
+                mission_type="departure",
+                active=True,
+            )
+            .populate_existing()
+            .with_for_update()
+            .one_or_none()
+        )
+        if departure is None:
+            raise ValueError("Master departure is not available for this gateway.")
+        conflict = version_conflict(departure, expected_version)
+        if conflict:
+            raise _LoadPlannerStaleError(conflict["message"])
+        assign_master_departure_load_planner(departure, planner)
+        return departure
+
+    if operation is None or operation.gateway_id != gateway.id:
+        raise ValueError("No current sort.")
+    departure = (
+        SortDateMission.query.filter_by(
+            id=departure_id,
+            sort_date_operation_id=operation.id,
+            gateway_code=gateway.code,
+            mission_type="departure",
+            master_flight_schedule_id=None,
+        )
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if departure is None:
+        raise ValueError("Current-sort-only departure is not available.")
+    conflict = version_conflict(departure, expected_version)
+    if conflict:
+        raise _LoadPlannerStaleError(conflict["message"])
+    assign_current_sort_only_departure_load_planner(departure, planner)
+    return departure
+
+
+def _render_load_planner_lineup(
+    gateway,
+    operation,
+    access,
+    *,
+    status_code=200,
+    message=None,
+):
+    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.load_planner_lineup"
+    if message:
+        flash(*message)
+    return render_template(
+        "neonodes/neorain/load_planner_lineup.html",
+        can_edit=access["can_edit"],
+        can_view=access["can_view"],
+        gateway=gateway,
+        operation=operation,
+        eligible_load_planners=eligible_neorain_load_planners(),
+        lineup=neorain_load_planner_lineup(gateway, operation),
+    ), status_code
 
 
 NEORAIN_REFRESH_SETTINGS_EDIT_PERMISSION = "neorain.refresh_settings.edit"

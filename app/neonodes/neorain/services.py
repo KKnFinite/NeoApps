@@ -481,20 +481,17 @@ def assign_current_sort_only_departure_load_planner(mission, planner=None):
     return mission
 
 
-def neorain_load_planner_lineup(gateway, operation):
+def neorain_load_planner_lineup(gateway, operation=None):
     """Build bounded persistent and current-sort-only Load Planner sections."""
-    empty = {"master_departures": (), "current_sort_only_departures": ()}
-    if operation is None:
-        return empty
-
     eligible_person_ids = _eligible_load_planner_person_ids()
+    sort_name = operation.sort_name if operation is not None else "night"
     master_departures = (
         MasterFlightSchedule.query.options(
             joinedload(MasterFlightSchedule.load_planner_person)
         )
         .filter_by(
             gateway_code=gateway.code,
-            sort_name=operation.sort_name,
+            sort_name=sort_name,
             mission_type="departure",
             active=True,
         )
@@ -505,20 +502,22 @@ def neorain_load_planner_lineup(gateway, operation):
         )
         .all()
     )
-    current_sort_only = (
-        SortDateMission.query.options(joinedload(SortDateMission.load_planner_person))
-        .filter_by(
-            sort_date_operation_id=operation.id,
-            mission_type="departure",
-            master_flight_schedule_id=None,
+    current_sort_only = []
+    if operation is not None:
+        current_sort_only = (
+            SortDateMission.query.options(joinedload(SortDateMission.load_planner_person))
+            .filter_by(
+                sort_date_operation_id=operation.id,
+                mission_type="departure",
+                master_flight_schedule_id=None,
+            )
+            .order_by(
+                SortDateMission.planned_datetime_utc,
+                SortDateMission.flight_number,
+                SortDateMission.id,
+            )
+            .all()
         )
-        .order_by(
-            SortDateMission.planned_datetime_utc,
-            SortDateMission.flight_number,
-            SortDateMission.id,
-        )
-        .all()
-    )
     return {
         "master_departures": tuple(
             {
@@ -528,6 +527,8 @@ def neorain_load_planner_lineup(gateway, operation):
                     if departure.load_planner_person_id in eligible_person_ids
                     else None
                 ),
+                "planned_time": _time_value(departure.planned_time_local),
+                "version": entity_version(departure),
             }
             for departure in master_departures
         ),
@@ -538,6 +539,13 @@ def neorain_load_planner_lineup(gateway, operation):
                     mission,
                     eligible_person_ids=eligible_person_ids,
                 ),
+                "planned_time": _time_value(
+                    mission_display_timing_data(mission, operation).get(
+                        "adjusted_planned_departure_time"
+                    )
+                    or mission.planned_datetime_local
+                ),
+                "version": entity_version(mission),
             }
             for mission in current_sort_only
         ),

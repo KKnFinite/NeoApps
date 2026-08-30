@@ -124,10 +124,12 @@ class NeoRainLoadPlannerTest(unittest.TestCase):
             ["5X401"],
         )
         self.assertEqual(lineup["current_sort_only_departures"][0]["planner"], self.eligible)
+        no_current_sort = neorain_load_planner_lineup(self.gateway, None)
         self.assertEqual(
-            neorain_load_planner_lineup(self.gateway, None),
-            {"master_departures": (), "current_sort_only_departures": ()},
+            [row["departure"].flight_number for row in no_current_sort["master_departures"]],
+            ["5X400"],
         )
+        self.assertEqual(no_current_sort["current_sort_only_departures"], ())
 
     def test_only_departures_can_receive_load_planner_assignments(self):
         arrival_master = self._master("5X500", mission_type="arrival")
