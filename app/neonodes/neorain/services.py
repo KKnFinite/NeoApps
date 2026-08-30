@@ -8,9 +8,17 @@ import re
 from datetime import datetime, time
 
 from sqlalchemy import func, literal, select, union_all
+from sqlalchemy.orm import aliased, joinedload
 
 from app.extensions import db
-from app.models import SortDateMission, SortDateParkingAssignment
+from app.models import (
+    MasterFlightSchedule,
+    SortDateMission,
+    SortDateParkingAssignment,
+    StaffingPerson,
+    StaffingUnit,
+    StaffingWorkAssignment,
+)
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
 from app.services.neostaffing import attendance_operation_department_counts
@@ -55,10 +63,15 @@ _RAIN_MILESTONES = {
 NEORAIN_MUTABLE_MILESTONE_FIELDS = frozenset(
     (*_RAIN_MILESTONES, "no_return")
 )
+_LOAD_PLANNER_UNIT_PATH = ("night", "ramp", "load planning", "load planners")
 
 
 class NeoRainMilestoneError(ValueError):
     """Safe validation/conflict error for a later NeoRain mutation route."""
+
+
+class LoadPlannerAssignmentError(ValueError):
+    """Safe validation error for canonical NeoRain Load Planner assignments."""
 
 
 def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
@@ -402,6 +415,176 @@ def _outbound_rows(operation, *, missions=None):
 def neorain_outbound_late_summary(operation):
     """Return derived late metrics for current-sort departure missions only."""
     return _outbound_late_summary(_outbound_departure_missions(operation))
+
+
+def eligible_neorain_load_planners():
+    """Return active people assigned to the canonical Load Planners Work Area."""
+    work_area_ids = _load_planner_work_area_ids()
+    if not work_area_ids:
+        return []
+    return (
+        StaffingPerson.query.join(StaffingWorkAssignment)
+        .filter(
+            StaffingPerson.active.is_(True),
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(work_area_ids),
+        )
+        .order_by(
+            StaffingPerson.last_name,
+            StaffingPerson.first_name,
+            StaffingPerson.id,
+        )
+        .all()
+    )
+
+
+def effective_neorain_load_planner(mission, *, eligible_person_ids=None):
+    """Resolve a departure's valid master or current-sort-only planner."""
+    if mission is None or mission.mission_type != "departure":
+        return None
+    if mission.master_flight_schedule_id:
+        planner = getattr(
+            getattr(mission, "master_flight_schedule", None),
+            "load_planner_person",
+            None,
+        )
+    else:
+        planner = getattr(mission, "load_planner_person", None)
+    if planner is None:
+        return None
+    if eligible_person_ids is None:
+        eligible_person_ids = _eligible_load_planner_person_ids()
+    return planner if planner.id in eligible_person_ids else None
+
+
+def assign_master_departure_load_planner(master_departure, planner=None):
+    """Stage the long-term planner assignment for one Master departure."""
+    if master_departure is None or master_departure.mission_type != "departure":
+        raise LoadPlannerAssignmentError(
+            "Load Planner assignments apply only to departure Master Schedule rows."
+        )
+    master_departure.load_planner_person_id = _validated_load_planner_id(planner)
+    return master_departure
+
+
+def assign_current_sort_only_departure_load_planner(mission, planner=None):
+    """Stage a temporary planner assignment for one unlinked departure mission."""
+    if mission is None or mission.mission_type != "departure":
+        raise LoadPlannerAssignmentError(
+            "Load Planner assignments apply only to departure missions."
+        )
+    if mission.master_flight_schedule_id:
+        raise LoadPlannerAssignmentError(
+            "Master-linked departures use their Master Schedule Load Planner."
+        )
+    mission.load_planner_person_id = _validated_load_planner_id(planner)
+    return mission
+
+
+def neorain_load_planner_lineup(gateway, operation):
+    """Build bounded persistent and current-sort-only Load Planner sections."""
+    empty = {"master_departures": (), "current_sort_only_departures": ()}
+    if operation is None:
+        return empty
+
+    eligible_person_ids = _eligible_load_planner_person_ids()
+    master_departures = (
+        MasterFlightSchedule.query.options(
+            joinedload(MasterFlightSchedule.load_planner_person)
+        )
+        .filter_by(
+            gateway_code=gateway.code,
+            sort_name=operation.sort_name,
+            mission_type="departure",
+            active=True,
+        )
+        .order_by(
+            MasterFlightSchedule.planned_time_local,
+            MasterFlightSchedule.flight_number,
+            MasterFlightSchedule.id,
+        )
+        .all()
+    )
+    current_sort_only = (
+        SortDateMission.query.options(joinedload(SortDateMission.load_planner_person))
+        .filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            master_flight_schedule_id=None,
+        )
+        .order_by(
+            SortDateMission.planned_datetime_utc,
+            SortDateMission.flight_number,
+            SortDateMission.id,
+        )
+        .all()
+    )
+    return {
+        "master_departures": tuple(
+            {
+                "departure": departure,
+                "planner": (
+                    departure.load_planner_person
+                    if departure.load_planner_person_id in eligible_person_ids
+                    else None
+                ),
+            }
+            for departure in master_departures
+        ),
+        "current_sort_only_departures": tuple(
+            {
+                "departure": mission,
+                "planner": effective_neorain_load_planner(
+                    mission,
+                    eligible_person_ids=eligible_person_ids,
+                ),
+            }
+            for mission in current_sort_only
+        ),
+    }
+
+
+def _validated_load_planner_id(planner):
+    if planner is None:
+        return None
+    if not isinstance(planner, StaffingPerson) or planner.id is None:
+        raise LoadPlannerAssignmentError("Choose an eligible Load Planner.")
+    if planner.id not in _eligible_load_planner_person_ids():
+        raise LoadPlannerAssignmentError("Choose an active eligible Load Planner.")
+    return planner.id
+
+
+def _eligible_load_planner_person_ids():
+    return {person.id for person in eligible_neorain_load_planners()}
+
+
+def _load_planner_work_area_ids():
+    work_area = aliased(StaffingUnit)
+    department = aliased(StaffingUnit)
+    operation = aliased(StaffingUnit)
+    staffing_sort = aliased(StaffingUnit)
+    return list(
+        db.session.scalars(
+            select(work_area.id)
+            .join(department, work_area.parent_id == department.id)
+            .join(operation, department.parent_id == operation.id)
+            .join(staffing_sort, operation.parent_id == staffing_sort.id)
+            .where(
+                work_area.active.is_(True),
+                department.active.is_(True),
+                operation.active.is_(True),
+                staffing_sort.active.is_(True),
+                work_area.unit_type == "work_area",
+                department.unit_type == "department",
+                operation.unit_type == "operation",
+                staffing_sort.unit_type == "sort",
+                func.lower(work_area.name) == _LOAD_PLANNER_UNIT_PATH[3],
+                func.lower(department.name) == _LOAD_PLANNER_UNIT_PATH[2],
+                func.lower(operation.name) == _LOAD_PLANNER_UNIT_PATH[1],
+                func.lower(staffing_sort.name) == _LOAD_PLANNER_UNIT_PATH[0],
+            )
+        )
+    )
 
 
 def neorain_outbound_staffing_summary(operation):

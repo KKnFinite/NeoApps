@@ -33,6 +33,11 @@ class MasterFlightSchedule(db.Model):
     preferred_parking = db.Column(db.String(64), nullable=True)
     pure_pull_time_local = db.Column(db.Time, nullable=True)
     mix_pull_time_local = db.Column(db.Time, nullable=True)
+    load_planner_person_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_people.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -42,3 +47,4 @@ class MasterFlightSchedule(db.Model):
     )
 
     gateway = db.relationship("Gateway")
+    load_planner_person = db.relationship("StaffingPerson")

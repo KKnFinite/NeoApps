@@ -58,6 +58,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
         "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
         "late_metrics_included_override": "BOOLEAN",
+        "load_planner_person_id": "INTEGER",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
@@ -92,6 +93,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
         "mix_pull_time_local": "TIME",
+        "load_planner_person_id": "INTEGER",
     },
     "neoermac_door_pulls": {
         "sort_date_operation_id": "INTEGER",
@@ -241,6 +243,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "elmac_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
         "ramp_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
         "crew_load_completed_source": "VARCHAR(32) NOT NULL DEFAULT 'unknown'",
+        "load_planner_person_id": "INTEGER",
     },
     "sort_date_operations": {
         "first_wave_window_minutes": "INTEGER",
@@ -275,6 +278,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "aircraft_type": "VARCHAR(16)",
         "wave": "VARCHAR(16)",
         "mix_pull_time_local": "TIME",
+        "load_planner_person_id": "INTEGER",
     },
     "neoermac_door_pulls": {
         "sort_date_operation_id": "INTEGER",

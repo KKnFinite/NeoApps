@@ -58,6 +58,11 @@ class SortDateMission(db.Model):
         nullable=True,
         index=True,
     )
+    load_planner_person_id = db.Column(
+        db.Integer,
+        db.ForeignKey("staffing_people.id"),
+        nullable=True,
+    )
     flight_number = db.Column(db.String(32), nullable=False)
     origin = db.Column(db.String(8), nullable=False)
     destination = db.Column(db.String(8), nullable=False)
@@ -118,6 +123,8 @@ class SortDateMission(db.Model):
     )
 
     sort_date_operation = db.relationship("SortDateOperation", back_populates="missions")
+    master_flight_schedule = db.relationship("MasterFlightSchedule")
+    load_planner_person = db.relationship("StaffingPerson")
     crew_assignments = db.relationship(
         "SortDateCrewAssignment",
         back_populates="sort_date_mission",
