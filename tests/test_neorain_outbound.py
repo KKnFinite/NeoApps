@@ -19,6 +19,7 @@ from app.models import (
 from app.neonodes.neorain.services import (
     neorain_outbound_late_summary,
     neorain_outbound_context,
+    neorain_inbound_context,
     neorain_outbound_revision,
     neorain_outbound_staffing_summary,
     set_neorain_late_metrics_included,
@@ -122,6 +123,33 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(rows[1]["no_return"], "")
         self.assertEqual(rows[1]["status"], "BLOCKED OUT")
         self.assertEqual(later.id, rows[1]["mission_id"])
+
+    def test_inbound_variance_uses_sta_and_exposes_late_metrics_defaults(self):
+        operation = self._operation()
+        arrival = self._mission(
+            operation,
+            "UPS300",
+            "RFD",
+            planned=datetime(2026, 8, 30, 1, 0),
+            mission_type="arrival",
+            wave="1",
+        )
+        arrival.eta_datetime_utc = datetime(2026, 8, 30, 0, 30)
+        arrival.actual_block_in_datetime_utc = datetime(2026, 8, 30, 1, 1)
+        no_wave = self._mission(
+            operation,
+            "UPS301",
+            "RFD",
+            planned=datetime(2026, 8, 30, 2, 0),
+            mission_type="arrival",
+            wave=None,
+        )
+        db.session.commit()
+        rows = neorain_inbound_context(self.gateway, operation=operation)["rows"]
+        self.assertEqual(rows[0]["eta_sta"], "19:30")
+        self.assertEqual(rows[0]["arrival_variance"], "+1")
+        self.assertTrue(rows[0]["late_metrics_included"])
+        self.assertFalse(rows[1]["late_metrics_included"])
 
     def test_departure_variance_uses_canonical_std_and_handles_midnight(self):
         operation = self._operation()

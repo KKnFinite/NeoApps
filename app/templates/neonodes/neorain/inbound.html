@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Inbound | NeoRain{% endblock %}
 {% block content %}
-<section class="neorain-outbound-shell" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-inbound-revision="{{ inbound_revision }}">
+<section class="neorain-outbound-shell" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-late-inclusion-url="{{ url_for('neorain.inbound_late_inclusion') }}" data-inbound-revision="{{ inbound_revision }}">
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div><p>LIVE OPERATIONS</p><h1>INBOUND</h1></div>
         <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }}{% else %}NO CURRENT SORT{% endif %}</strong>
@@ -13,9 +13,10 @@
     {% else %}
     <div class="neorain-outbound-table-wrap"><table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort inbound arrivals</caption>
-        <thead><tr><th>Wave</th><th>Flight #</th><th>Tail</th><th>Origin</th><th>Parking</th><th>ETA/STA</th><th>Status</th><th>Block-In</th></tr></thead>
-        <tbody>{% for row in rows %}<tr>
-            <td data-label="Wave">{{ row.wave }}</td><td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td><td data-label="Tail">{{ row.tail or '-' }}</td><td data-label="Origin">{{ row.origin or '-' }}</td><td data-label="Parking">{{ row.parking or '-' }}</td><td data-label="ETA/STA">{{ row.eta_sta or '-' }}</td><td data-label="Status">{{ row.status }}</td><td data-label="Block-In">{{ row.block_in or '-' }}</td>
+        <thead><tr><th>Wave</th><th>Flight #</th><th>Tail</th><th>Origin</th><th>Parking</th><th>ETA/STA</th><th>Status</th><th>Block-In</th><th>+/-</th><th>Include/Exclude</th></tr></thead>
+        <tbody>{% for row in rows %}<tr data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}">
+            <td data-label="Wave">{{ row.wave }}</td><td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td><td data-label="Tail">{{ row.tail or '-' }}</td><td data-label="Origin">{{ row.origin or '-' }}</td><td data-label="Parking">{{ row.parking or '-' }}</td><td data-label="ETA/STA">{{ row.eta_sta or '-' }}</td><td data-label="Status">{{ row.status }}</td><td data-label="Block-In">{{ row.block_in or '-' }}</td><td data-label="+/-" data-neorain-display="arrival_variance">{{ row.arrival_variance }}</td>
+            <td data-label="Include/Exclude" data-neorain-late-inclusion-cell>{% if can_edit %}<button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button><output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>{% else %}<span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>{% endif %}</td>
         </tr>{% endfor %}</tbody>
     </table></div>
     {% endif %}
@@ -36,10 +37,42 @@
             controller.setServerStatus(payload.refresh || {});
             revision = payload.revision || revision;
             root.dataset.inboundRevision = revision;
-            if (payload.changed) window.location.reload();
+            if (payload.changed && !root.querySelector("[data-neorain-late-inclusion-saving='true']")) window.location.reload();
         }, continuousWhileVisible: true,
     });
     controller.setServerStatus({});
 })();
 </script>
+{% if can_edit %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-inbound-live]");
+    if (!root) return;
+    const applyRow = (row, data) => {
+        row.dataset.missionVersion = data.version || row.dataset.missionVersion;
+        row.querySelectorAll("[data-neorain-display='arrival_variance']").forEach((el) => el.textContent = data.arrival_variance || "-");
+        row.querySelectorAll("[data-neorain-display='late_metrics_included']").forEach((el) => el.textContent = data.late_metrics_included ? "INCLUDED" : "EXCLUDED");
+        row.querySelectorAll("[data-neorain-late-inclusion-toggle]").forEach((button) => { button.dataset.neorainIncluded = data.late_metrics_included ? "true" : "false"; button.textContent = data.late_metrics_included ? "INCLUDED" : "EXCLUDED"; });
+    };
+    root.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-neorain-late-inclusion-toggle]");
+        if (!button || button.dataset.neorainSaving === "true") return;
+        const row = button.closest("[data-neorain-inbound-row]");
+        const message = row.querySelector("[data-neorain-late-inclusion-message]");
+        const included = button.dataset.neorainIncluded !== "true";
+        button.dataset.neorainSaving = "true";
+        row.dataset.neorainLateInclusionSaving = "true";
+        try {
+            const response = await fetch(root.dataset.lateInclusionUrl, { method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify({mission_id: Number(row.dataset.neorainMissionId), included, expected_version: row.dataset.missionVersion}) });
+            const payload = await response.json();
+            if (payload.row) applyRow(row, payload.row);
+            if (!response.ok) { message.textContent = payload.error || "Unable to save inclusion."; message.hidden = false; return; }
+            message.hidden = true;
+            if (payload.revision) root.dataset.inboundRevision = payload.revision;
+        } catch (_) { message.textContent = "Unable to save inclusion."; message.hidden = false; }
+        finally { delete button.dataset.neorainSaving; delete row.dataset.neorainLateInclusionSaving; }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

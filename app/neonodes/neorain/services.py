@@ -707,6 +707,7 @@ def _inbound_arrival_missions(operation):
 
 def _inbound_row(mission, parking_by_tail):
     effective = mission.eta_datetime_utc or mission.planned_datetime_utc
+    late_metrics = neorain_late_metrics_inclusion(mission)
     return {
         "wave": normalize_wave(mission.wave) or "-",
         "flight_number": _text(mission.flight_number),
@@ -716,9 +717,27 @@ def _inbound_row(mission, parking_by_tail):
         "eta_sta": format_local_hhmm(effective, mission.timezone or None),
         "status": _normalized_status(mission.arrival_status or "scheduled").replace("_", " ").upper(),
         "block_in": format_local_hhmm(mission.actual_block_in_datetime_utc, mission.timezone or None),
+        "arrival_variance": _arrival_variance(mission),
+        "late_metrics_included": late_metrics["included"],
+        "late_metrics_inclusion_source": late_metrics["source"],
         "sort_time": effective,
         "mission_id": mission.id,
+        "version": entity_version(mission),
     }
+
+
+def neorain_inbound_row(mission, operation):
+    """Format one arrival for the in-place late-inclusion response."""
+    parking_by_tail = {
+        _tail_key(assignment.tail_number): _text(assignment.position_code)
+        for assignment in SortDateParkingAssignment.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).all()
+        if _tail_key(assignment.tail_number)
+    }
+    row = _inbound_row(mission, parking_by_tail)
+    row.pop("sort_time", None)
+    return row
 
 
 def _outbound_late_summary(missions):
@@ -822,6 +841,17 @@ def _departure_variance(mission):
     minutes = _departure_variance_minutes(mission)
     if minutes is None:
         return "-"
+    return f"+{minutes}" if minutes > 0 else str(minutes)
+
+
+def _arrival_variance(mission):
+    if mission.actual_block_in_datetime_utc is None or mission.planned_datetime_utc is None:
+        return "-"
+    minutes = int(
+        (mission.actual_block_in_datetime_utc - mission.planned_datetime_utc)
+        .total_seconds()
+        / 60
+    )
     return f"+{minutes}" if minutes > 0 else str(minutes)
 
 
