@@ -29615,6 +29615,9 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     font-weight: 700;
 }
 
+.neorain-inbound-collapsed-row { background: rgba(10, 16, 24, .72); }
+.neorain-reopen-control { padding: 3px 7px; font-size: .68rem; }
+
 [data-neorain-late-inclusion-cell][data-neorain-late-inclusion-saving="true"] .neorain-late-inclusion-control {
     opacity: 0.68;
 }
