@@ -17,6 +17,7 @@ from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
     NEORAIN_OUTBOUND_REFRESH_KEY,
+    NEORAIN_INBOUND_REFRESH_KEY,
     NEORAIN_MUTABLE_MILESTONE_FIELDS,
     LoadPlannerAssignmentError,
     NeoRainMilestoneError,
@@ -754,7 +755,7 @@ def settings():
                     gateway,
                     request.form.get("screen_key"),
                     request.form.get("refresh_interval_seconds"),
-                    allowed_screen_keys=(NEORAIN_OUTBOUND_REFRESH_KEY,),
+                    allowed_screen_keys=(NEORAIN_OUTBOUND_REFRESH_KEY, NEORAIN_INBOUND_REFRESH_KEY),
                 )
             else:
                 set_neorain_ground_time_threshold_minutes(
@@ -814,7 +815,10 @@ def _render_neorain_settings(
         page_label="Settings",
         can_edit_refresh_settings=can_edit_refresh_settings,
         can_edit_ground_time=access["can_edit"],
-        refresh_settings=[live_screen_refresh_value(gateway, NEORAIN_OUTBOUND_REFRESH_KEY)],
+        refresh_settings=[
+            live_screen_refresh_value(gateway, NEORAIN_OUTBOUND_REFRESH_KEY),
+            live_screen_refresh_value(gateway, NEORAIN_INBOUND_REFRESH_KEY),
+        ],
         ground_time_threshold_minutes=neorain_ground_time_threshold_minutes(gateway),
         live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )

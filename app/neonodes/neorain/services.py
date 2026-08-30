@@ -38,6 +38,7 @@ from app.services.google_motherbrain_live_missions import (
 
 
 NEORAIN_OUTBOUND_REFRESH_KEY = "neorain.outbound"
+NEORAIN_INBOUND_REFRESH_KEY = "neorain.inbound"
 _OPERATION_UNSET = object()
 NEORAIN_MILESTONE_SOURCE = "neorain"
 _UNOWNED_SOURCES = {"", "unknown"}
@@ -386,7 +387,7 @@ def neorain_outbound_refresh_status(gateway, *, operation=None):
 
 def neorain_inbound_refresh_status(gateway, *, operation=None):
     status = dict(node_auto_refresh_status(gateway, operation=operation))
-    setting = live_screen_refresh_value(gateway, "neorain.inbound")
+    setting = live_screen_refresh_value(gateway, NEORAIN_INBOUND_REFRESH_KEY)
     status["live_screen_refresh_interval_ms"] = setting.effective_interval_ms
     if not setting.enabled:
         status.update({"auto_refresh_enabled": False, "reason": "disabled", "message": "Live updates off", "live_status_label": "Live updates off"})
