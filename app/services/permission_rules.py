@@ -457,6 +457,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoRain live-screen refresh intervals.",
     ),
     (
+        "neorain.crew_admin.edit",
+        "operator",
+        "Edit NeoRain Crew Admin assignments.",
+    ),
+    (
         "neostaffing.board.view",
         "watcher",
         "View the NeoStaffing Board dashboard.",
