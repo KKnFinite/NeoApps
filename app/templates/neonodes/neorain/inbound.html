@@ -13,6 +13,12 @@
         <div><strong>HUB</strong><span>ON PAYROLL <output>{{ staffing_summary.hub.on_payroll }}</output></span><span>WORKED <output>{{ staffing_summary.hub.worked }}</output></span></div>
         <div><strong>RAMP</strong><span>ON PAYROLL <output>{{ staffing_summary.ramp.on_payroll }}</output></span><span>WORKED <output>{{ staffing_summary.ramp.worked }}</output></span></div>
     </section>
+    <section class="neorain-settings-panel" aria-labelledby="crew-admin-title">
+        <header><div><h2 id="crew-admin-title">CREW ADMIN</h2><p>Current-sort nightly assignments.</p></div></header>
+        {% if operation %}<div class="neorain-outbound-table-wrap"><table class="neorain-outbound-table"><thead><tr><th>Name</th><th>Ramp(s)</th><th>Printer #</th><th>Van #</th>{% if can_edit_crew_admin %}<th>Actions</th>{% endif %}</tr></thead><tbody>
+        {% for item in crew_admin_assignments %}<tr><td>{{ item.person.full_name if item.person else 'UNASSIGNED' }}</td><td>{{ item.ramps|join(', ') or '-' }}</td><td>{{ item.assignment.printer_number or '-' }}</td><td>{{ item.assignment.van_number or '-' }}</td>{% if can_edit_crew_admin %}<td><form method="post" action="{{ url_for('neorain.inbound_crew_admin') }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="assignment_id" value="{{ item.assignment.id }}"><input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}"><button type="submit">REMOVE</button></form></td>{% endif %}</tr>{% endfor %}
+        {% if can_edit_crew_admin %}<tr><td colspan="5"><form method="post" action="{{ url_for('neorain.inbound_crew_admin') }}"><input type="hidden" name="action" value="add"><select name="person_id">{% for person in eligible_crew_admins %}<option value="{{ person.id }}">{{ person.full_name }}</option>{% endfor %}</select>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<label><input type="checkbox" name="ramps" value="{{ ramp }}">{{ ramp }}</label>{% endfor %}<input name="printer_number" placeholder="Printer #"><input name="van_number" placeholder="Van #"><button type="submit">ADD CREW ADMIN</button></form></td></tr>{% endif %}</tbody></table></div>{% else %}<p class="muted">No current sort.</p>{% endif %}
+    </section>
     {% if not operation %}
     <p class="neorain-outbound-empty">No current sort.</p>
     {% elif not rows %}

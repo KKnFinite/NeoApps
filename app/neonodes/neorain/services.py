@@ -19,7 +19,7 @@ from app.models import (
     StaffingUnit,
     StaffingWorkAssignment,
 )
-from app.models import NeoRainOperationalSetting
+from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment
 from app.services.neorain_ground_time_settings import neorain_ground_time_threshold_minutes
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
@@ -135,6 +135,7 @@ def neorain_inbound_revision(gateway, *, operation=_OPERATION_UNSET):
         _revision_aggregate("departures", SortDateMission, SortDateMission.updated_at, criterion, SortDateMission.mission_type == "departure"),
         _revision_aggregate("parking", SortDateParkingAssignment, SortDateParkingAssignment.updated_at, parking_criterion),
         _revision_aggregate("ground_time_setting", NeoRainOperationalSetting, NeoRainOperationalSetting.updated_at, NeoRainOperationalSetting.gateway_id == gateway.id),
+        _revision_aggregate("crew_admin", NeoRainCrewAdminAssignment, NeoRainCrewAdminAssignment.updated_at, NeoRainCrewAdminAssignment.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("crew_admin", NeoRainCrewAdminAssignment, NeoRainCrewAdminAssignment.updated_at, NeoRainCrewAdminAssignment.id.is_(None)),
     )).all(), key=lambda row: row.source)
     payload = {"gateway_id": gateway.id, "operation_id": operation_id, "inputs": [{"source": r.source, "row_count": int(r.row_count or 0), "max_id": int(r.max_id or 0), "id_sum": int(r.id_sum or 0), "latest_updated_at": _revision_value(r.latest_updated_at)} for r in rows]}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

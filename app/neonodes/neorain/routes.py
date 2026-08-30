@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation, StaffingPerson
+from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation, StaffingPerson, NeoRainCrewAdminAssignment
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
@@ -65,6 +65,11 @@ from app.services.neorain_ground_time_settings import (
     set_neorain_ground_time_threshold_minutes,
 )
 from app.services.permission_rules import permission_access, preload_permission_rules, user_can
+from app.services.neorain_crew_admin import (
+    NeoRainCrewAdminError, add_neorain_crew_admin_assignment,
+    eligible_neorain_crew_admins, neorain_crew_admin_assignments,
+    remove_neorain_crew_admin_assignment, update_neorain_crew_admin_assignment,
+)
 
 
 NEORAIN_LAST_PAGE_SESSION_KEY = "neorain.last_page"
@@ -124,10 +129,47 @@ def inbound():
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        can_edit_crew_admin=user_can("neorain.crew_admin.edit"),
+        crew_admin_assignments=neorain_crew_admin_assignments(operation),
+        eligible_crew_admins=eligible_neorain_crew_admins(),
         inbound_revision=neorain_inbound_revision(gateway, operation=operation),
         refresh_status=neorain_inbound_refresh_status(gateway, operation=operation),
         **context,
     )
+
+
+@bp.route("/inbound/crew-admin", methods=["POST"])
+@gateway_node_required("rain")
+def inbound_crew_admin():
+    if not user_can("neorain.crew_admin.edit"):
+        return "Access denied.", 403
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    if operation is None:
+        flash("No current sort.", "error")
+        return redirect(url_for("neorain.inbound"))
+    action = request.form.get("action")
+    try:
+        if action == "add":
+            person = db.session.get(StaffingPerson, request.form.get("person_id", type=int))
+            add_neorain_crew_admin_assignment(operation, person, request.form.getlist("ramps"), request.form.get("printer_number"), request.form.get("van_number"))
+        else:
+            row = db.session.execute(db.select(NeoRainCrewAdminAssignment).where(NeoRainCrewAdminAssignment.id == request.form.get("assignment_id", type=int), NeoRainCrewAdminAssignment.sort_date_operation_id == operation.id).with_for_update()).scalar_one_or_none()
+            if row is None:
+                raise NeoRainCrewAdminError("Crew Admin assignment was not found.")
+            if request.form.get("expected_version") != entity_version(row):
+                raise NeoRainCrewAdminError("Crew Admin assignment changed while you were editing.")
+            if action == "remove":
+                remove_neorain_crew_admin_assignment(row)
+            elif action == "update":
+                person = db.session.get(StaffingPerson, request.form.get("person_id", type=int))
+                update_neorain_crew_admin_assignment(row, person, request.form.getlist("ramps"), request.form.get("printer_number"), request.form.get("van_number"))
+            else:
+                raise NeoRainCrewAdminError("Choose a valid Crew Admin action.")
+        db.session.commit(); flash("CREW ADMIN SAVED.", "success")
+    except (NeoRainCrewAdminError, IntegrityError) as exc:
+        db.session.rollback(); flash(str(exc) if isinstance(exc, NeoRainCrewAdminError) else "Unable to save Crew Admin.", "error")
+    return redirect(url_for("neorain.inbound"))
 
 
 @bp.route("/inbound/revision")
