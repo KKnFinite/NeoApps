@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Inbound | NeoRain{% endblock %}
+{% block content %}
+<section class="neorain-outbound-shell" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-inbound-revision="{{ inbound_revision }}">
+    <header class="neorain-outbound-head mobile-shell-duplicate-title">
+        <div><p>LIVE OPERATIONS</p><h1>INBOUND</h1></div>
+        <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }}{% else %}NO CURRENT SORT{% endif %}</strong>
+    </header>
+    {% if not operation %}
+    <p class="neorain-outbound-empty">No current sort.</p>
+    {% elif not rows %}
+    <p class="neorain-outbound-empty">No inbound arrival missions for the current sort.</p>
+    {% else %}
+    <div class="neorain-outbound-table-wrap"><table class="neorain-outbound-table">
+        <caption class="visually-hidden">Current-sort inbound arrivals</caption>
+        <thead><tr><th>Wave</th><th>Flight #</th><th>Tail</th><th>Origin</th><th>Parking</th><th>ETA/STA</th><th>Status</th><th>Block-In</th></tr></thead>
+        <tbody>{% for row in rows %}<tr>
+            <td data-label="Wave">{{ row.wave }}</td><td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td><td data-label="Tail">{{ row.tail or '-' }}</td><td data-label="Origin">{{ row.origin or '-' }}</td><td data-label="Parking">{{ row.parking or '-' }}</td><td data-label="ETA/STA">{{ row.eta_sta or '-' }}</td><td data-label="Status">{{ row.status }}</td><td data-label="Block-In">{{ row.block_in or '-' }}</td>
+        </tr>{% endfor %}</tbody>
+    </table></div>
+    {% endif %}
+</section>
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-inbound-live]");
+    if (!root || !window.NeoLiveUpdates) return;
+    let revision = root.dataset.inboundRevision || "";
+    const controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
+        poll: async () => {
+            const url = new URL(root.dataset.revisionUrl, window.location.origin);
+            url.searchParams.set("revision", revision);
+            const response = await fetch(url, {cache: "no-store", credentials: "same-origin"});
+            if (!response.ok) throw new Error("NeoRain Inbound refresh failed.");
+            const payload = await response.json();
+            controller.setServerStatus(payload.refresh || {});
+            revision = payload.revision || revision;
+            root.dataset.inboundRevision = revision;
+            if (payload.changed) window.location.reload();
+        }, continuousWhileVisible: true,
+    });
+    controller.setServerStatus({});
+})();
+</script>
+{% endblock %}

@@ -94,6 +94,35 @@ def current_neorain_outbound_operation(gateway):
     return current_operational_sort_operation(gateway)
 
 
+def neorain_inbound_context(gateway, *, operation=_OPERATION_UNSET):
+    """Build the bounded current-sort arrival board."""
+    if operation is _OPERATION_UNSET:
+        operation = current_neorain_outbound_operation(gateway)
+    arrivals = _inbound_arrival_missions(operation)
+    parking_by_tail = {
+        _tail_key(a.tail_number): _text(a.position_code)
+        for a in (SortDateParkingAssignment.query.filter_by(sort_date_operation_id=operation.id).all() if operation else [])
+        if _tail_key(a.tail_number)
+    }
+    rows = [_inbound_row(mission, parking_by_tail) for mission in arrivals]
+    rows.sort(key=lambda row: (row["sort_time"] is None, row["sort_time"] or datetime.max, row["flight_number"], row["mission_id"]))
+    return {"operation": operation, "rows": rows}
+
+
+def neorain_inbound_revision(gateway, *, operation=_OPERATION_UNSET):
+    if operation is _OPERATION_UNSET:
+        operation = current_neorain_outbound_operation(gateway)
+    operation_id = operation.id if operation else None
+    criterion = (SortDateMission.sort_date_operation_id == operation_id if operation_id is not None else SortDateMission.sort_date_operation_id.is_(None))
+    parking_criterion = (SortDateParkingAssignment.sort_date_operation_id == operation_id if operation_id is not None else SortDateParkingAssignment.sort_date_operation_id.is_(None))
+    rows = sorted(db.session.execute(union_all(
+        _revision_aggregate("arrivals", SortDateMission, SortDateMission.updated_at, criterion, SortDateMission.mission_type == "arrival"),
+        _revision_aggregate("parking", SortDateParkingAssignment, SortDateParkingAssignment.updated_at, parking_criterion),
+    )).all(), key=lambda row: row.source)
+    payload = {"gateway_id": gateway.id, "operation_id": operation_id, "inputs": [{"source": r.source, "row_count": int(r.row_count or 0), "max_id": int(r.max_id or 0), "id_sum": int(r.id_sum or 0), "latest_updated_at": _revision_value(r.latest_updated_at)} for r in rows]}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def mutate_neorain_departure_milestone(mission, operation, field, value):
     """Mutate one Rain-owned departure fact without committing the transaction.
 
@@ -336,6 +365,15 @@ def neorain_outbound_refresh_status(gateway, *, operation=None):
         status["reason"] = "disabled"
         status["message"] = "Live updates off"
         status["live_status_label"] = "Live updates off"
+    return status
+
+
+def neorain_inbound_refresh_status(gateway, *, operation=None):
+    status = dict(node_auto_refresh_status(gateway, operation=operation))
+    setting = live_screen_refresh_value(gateway, "neorain.inbound")
+    status["live_screen_refresh_interval_ms"] = setting.effective_interval_ms
+    if not setting.enabled:
+        status.update({"auto_refresh_enabled": False, "reason": "disabled", "message": "Live updates off", "live_status_label": "Live updates off"})
     return status
 
 
@@ -656,6 +694,31 @@ def _outbound_departure_missions(operation):
         .filter_by(sort_date_operation_id=operation.id, mission_type="departure")
         .all()
     )
+
+
+def _inbound_arrival_missions(operation):
+    if operation is None:
+        return []
+    return SortDateMission.query.filter_by(
+        sort_date_operation_id=operation.id,
+        mission_type="arrival",
+    ).all()
+
+
+def _inbound_row(mission, parking_by_tail):
+    effective = mission.eta_datetime_utc or mission.planned_datetime_utc
+    return {
+        "wave": normalize_wave(mission.wave) or "-",
+        "flight_number": _text(mission.flight_number),
+        "tail": _text(mission.assigned_tail_number),
+        "origin": _text(mission.origin),
+        "parking": parking_by_tail.get(_tail_key(mission.assigned_tail_number), ""),
+        "eta_sta": format_local_hhmm(effective, mission.timezone or None),
+        "status": _normalized_status(mission.arrival_status or "scheduled").replace("_", " ").upper(),
+        "block_in": format_local_hhmm(mission.actual_block_in_datetime_utc, mission.timezone or None),
+        "sort_time": effective,
+        "mission_id": mission.id,
+    }
 
 
 def _outbound_late_summary(missions):
