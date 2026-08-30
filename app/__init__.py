@@ -60,6 +60,7 @@ from app.services.neorain_load_planner_schema import (
     ensure_neorain_load_planner_columns,
 )
 from app.services.neorain_crew_admin_schema import ensure_neorain_crew_admin_assignments_table
+from app.services.neorain_delay_info_schema import ensure_neorain_delay_info_table
 from app.services.load_planning_contact_schema import (
     ensure_load_planning_contact_columns,
 )
@@ -158,6 +159,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_load_planning_contact_columns(app)
     ensure_neorain_ground_time_settings_table(app)
     ensure_neorain_crew_admin_assignments_table(app)
+    ensure_neorain_delay_info_table(app)
     ensure_motherbrain_alert_user_state_table(app)
     ensure_sort_timeline_sort_setting_columns(app)
     ensure_sort_date_mission_departure_status_constraint(app)
