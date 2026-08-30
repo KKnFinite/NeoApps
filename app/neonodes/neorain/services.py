@@ -13,6 +13,7 @@ from app.extensions import db
 from app.models import SortDateMission, SortDateParkingAssignment
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
+from app.services.neostaffing import attendance_operation_department_counts
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data, normalize_wave
@@ -70,6 +71,7 @@ def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
         "operation": operation,
         "rows": _outbound_rows(operation, missions=missions),
         "late_summary": _outbound_late_summary(missions),
+        "staffing_summary": neorain_outbound_staffing_summary(operation),
         "refresh_status": refresh,
     }
 
@@ -372,6 +374,10 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
             }
             for row in rows
         ],
+        # Keep the live-board revision tied to exactly the canonical staffing
+        # totals displayed by Rain. The helper is bounded to this operation and
+        # does not create or persist any staffing state.
+        "staffing_summary": neorain_outbound_staffing_summary(operation),
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
@@ -396,6 +402,36 @@ def _outbound_rows(operation, *, missions=None):
 def neorain_outbound_late_summary(operation):
     """Return derived late metrics for current-sort departure missions only."""
     return _outbound_late_summary(_outbound_departure_missions(operation))
+
+
+def neorain_outbound_staffing_summary(operation):
+    """Project canonical current-sort Hub/Ramp attendance totals for Rain."""
+    summary = {
+        "hub": {"on_payroll": 0, "worked": 0},
+        "ramp": {"on_payroll": 0, "worked": 0},
+    }
+    if operation is None:
+        return summary
+
+    try:
+        counts = attendance_operation_department_counts(operation)
+    except ValueError:
+        # A gateway without a matching NeoStaffing hierarchy has no applicable
+        # staffing totals; preserve the read-only board with neutral values.
+        return summary
+
+    for scope_count in counts["scopes"]:
+        scope = scope_count["scope"]
+        if scope.unit_type != "operation":
+            continue
+        key = str(scope.name or "").strip().casefold()
+        if key not in summary:
+            continue
+        summary[key] = {
+            "on_payroll": int(scope_count["on_payroll"] or 0),
+            "worked": int(scope_count["working"] or 0),
+        }
+    return summary
 
 
 def _outbound_departure_missions(operation):

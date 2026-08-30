@@ -10,12 +10,17 @@ from app.models import (
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
+    StaffingDailyAttendance,
+    StaffingPerson,
+    StaffingUnit,
+    StaffingWorkAssignment,
     User,
 )
 from app.neonodes.neorain.services import (
     neorain_outbound_late_summary,
     neorain_outbound_context,
     neorain_outbound_revision,
+    neorain_outbound_staffing_summary,
     set_neorain_late_metrics_included,
 )
 from app.services.access_control import backfill_default_gateway_node_roles
@@ -218,6 +223,76 @@ class NeoRainOutboundTest(unittest.TestCase):
             },
         )
 
+    def test_staffing_summary_uses_canonical_current_sort_hub_and_ramp_totals(self):
+        operation = self._operation()
+        staffing = self._staffing_totals(operation)
+        other_operation = SortDateOperation(
+            gateway_id=self.gateway.id,
+            gateway_code="RFD",
+            sort_date=date(2026, 8, 31),
+            sort_name="night",
+        )
+        db.session.add(other_operation)
+        db.session.flush()
+        db.session.add(
+            StaffingDailyAttendance(
+                person_id=staffing["hub_absent"].id,
+                attendance_date=other_operation.sort_date,
+                sort_unit_id=staffing["sort"].id,
+                work_area_unit_id=staffing["hub_area"].id,
+                operation_unit_id=staffing["hub"].id,
+                sort_date_operation_id=other_operation.id,
+                status="here",
+            )
+        )
+        db.session.commit()
+
+        summary = neorain_outbound_staffing_summary(operation)
+
+        self.assertEqual(summary, {
+            "hub": {"on_payroll": 2, "worked": 1},
+            "ramp": {"on_payroll": 2, "worked": 1},
+        })
+        self.assertEqual(
+            neorain_outbound_context(self.gateway, operation=operation)["staffing_summary"],
+            summary,
+        )
+        self.assertEqual(
+            neorain_outbound_context(self.gateway, operation=None)["staffing_summary"],
+            {"hub": {"on_payroll": 0, "worked": 0}, "ramp": {"on_payroll": 0, "worked": 0}},
+        )
+
+    def test_revision_changes_when_displayed_staffing_totals_change(self):
+        operation = self._operation()
+        staffing = self._staffing_totals(operation)
+        db.session.commit()
+        first = neorain_outbound_revision(self.gateway, operation=operation)
+
+        staffing["hub_absent_record"].status = "here"
+        db.session.commit()
+        second = neorain_outbound_revision(self.gateway, operation=operation)
+
+        self.assertNotEqual(first, second)
+
+    def test_outbound_renders_read_only_hub_and_ramp_staffing_totals(self):
+        operation = self._operation()
+        self._staffing_totals(operation)
+        db.session.commit()
+        watcher = self._user("rain_staffing_watcher", "watcher")
+        self._login(watcher)
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.get("/neorain/outbound")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b">HUB<", response.data)
+        self.assertIn(b">RAMP<", response.data)
+        self.assertIn(b"ON PAYROLL", response.data)
+        self.assertIn(b"WORKED", response.data)
+
     def test_revision_changes_for_mission_and_parking_changes_without_writes(self):
         operation = self._operation()
         mission = self._mission(operation, "UPS400", "OAK", planned=datetime(2026, 8, 30, 4))
@@ -294,6 +369,9 @@ class NeoRainOutboundTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"No current sort.", response.data)
+        self.assertIn(b">HUB<", response.data)
+        self.assertIn(b">RAMP<", response.data)
+        self.assertIn(b"<output>0</output>", response.data)
 
     def test_google_primary_and_viewer_render_timestamp_milestones_read_only(self):
         operation = self._operation()
@@ -522,6 +600,77 @@ class NeoRainOutboundTest(unittest.TestCase):
         db.session.add(mission)
         db.session.flush()
         return mission
+
+    def _staffing_totals(self, operation):
+        staffing_sort = StaffingUnit(unit_type="sort", name="Night", active=True)
+        ramp = StaffingUnit(
+            unit_type="operation", name="Ramp", parent=staffing_sort, active=True
+        )
+        hub = StaffingUnit(
+            unit_type="operation", name="Hub", parent=staffing_sort, active=True
+        )
+        ramp_area = StaffingUnit(
+            unit_type="work_area", name="Ramp Direct", parent=ramp, active=True
+        )
+        hub_area = StaffingUnit(
+            unit_type="work_area", name="Hub Direct", parent=hub, active=True
+        )
+        db.session.add_all([staffing_sort, ramp, hub, ramp_area, hub_area])
+        db.session.flush()
+
+        def person(employee_id, area):
+            value = StaffingPerson(
+                employee_id=employee_id,
+                first_name="Staffing",
+                last_name=employee_id,
+                seniority_date=date(2020, 1, 1),
+                classification="part_time",
+                employee_status="active",
+                active=True,
+            )
+            db.session.add(value)
+            db.session.flush()
+            db.session.add(
+                StaffingWorkAssignment(
+                    person_id=value.id,
+                    work_area_unit_id=area.id,
+                    active=True,
+                )
+            )
+            return value
+
+        ramp_here = person("RAIN-RAMP-HERE", ramp_area)
+        ramp_absent = person("RAIN-RAMP-ABSENT", ramp_area)
+        hub_here = person("RAIN-HUB-HERE", hub_area)
+        hub_absent = person("RAIN-HUB-ABSENT", hub_area)
+        db.session.flush()
+
+        def attendance(person_value, area, operation_unit, status):
+            record = StaffingDailyAttendance(
+                person_id=person_value.id,
+                attendance_date=operation.sort_date,
+                sort_unit_id=staffing_sort.id,
+                work_area_unit_id=area.id,
+                operation_unit_id=operation_unit.id,
+                sort_date_operation_id=operation.id,
+                status=status,
+            )
+            db.session.add(record)
+            return record
+
+        attendance(ramp_here, ramp_area, ramp, "here")
+        ramp_absent_record = attendance(ramp_absent, ramp_area, ramp, "call_in")
+        attendance(hub_here, hub_area, hub, "here")
+        hub_absent_record = attendance(hub_absent, hub_area, hub, "call_in")
+        return {
+            "sort": staffing_sort,
+            "ramp": ramp,
+            "hub": hub,
+            "hub_area": hub_area,
+            "hub_absent": hub_absent,
+            "hub_absent_record": hub_absent_record,
+            "ramp_absent_record": ramp_absent_record,
+        }
 
     def _user(self, username, role, *, rain_role="watcher"):
         user = User(
