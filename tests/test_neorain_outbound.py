@@ -169,6 +169,22 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(summary["second_wave"], {"aircraft_late": 1, "late_minutes": 5, "average": "5"})
         self.assertEqual(summary["total"], {"aircraft_late": 3, "late_minutes": 30, "average": "10"})
 
+    def test_inbound_connects_earliest_same_tail_departure_after_arrival(self):
+        operation = self._operation()
+        inbound = self._mission(
+            operation, "UPS400", "RFD", planned=datetime(2026, 8, 30, 1, 0),
+            mission_type="arrival", tail="N400UP",
+        )
+        inbound.actual_block_in_datetime_utc = datetime(2026, 8, 30, 1, 10)
+        self._mission(operation, "UPS401", "SDF", planned=datetime(2026, 8, 30, 1, 5), tail="N400UP")
+        next_departure = self._mission(operation, "UPS402", "ONT", planned=datetime(2026, 8, 30, 1, 57), tail="N400UP")
+        next_departure.actual_block_out_datetime_utc = datetime(2026, 8, 30, 1, 55)
+        self._mission(operation, "UPS403", "LAX", planned=datetime(2026, 8, 30, 2, 30), tail="N999UP")
+        db.session.commit()
+        row = neorain_inbound_context(self.gateway, operation=operation)["rows"][0]
+        self.assertEqual(row["connecting_outbound"], "UPS402")
+        self.assertEqual(row["ground_time"], "0:45")
+
     def test_departure_variance_uses_canonical_std_and_handles_midnight(self):
         operation = self._operation()
         late = self._mission(
