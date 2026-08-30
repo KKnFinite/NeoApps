@@ -59,6 +59,9 @@ from app.services.google_rain_integration_schema import (
 from app.services.neorain_load_planner_schema import (
     ensure_neorain_load_planner_columns,
 )
+from app.services.load_planning_contact_schema import (
+    ensure_load_planning_contact_columns,
+)
 from app.services.motherbrain_alert_user_state_schema import (
     ensure_motherbrain_alert_user_state_table,
 )
@@ -148,6 +151,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_google_motherbrain_live_poll_state_table(app)
     ensure_google_rain_integration_mode_column(app)
     ensure_neorain_load_planner_columns(app)
+    ensure_load_planning_contact_columns(app)
     ensure_motherbrain_alert_user_state_table(app)
     ensure_sort_timeline_sort_setting_columns(app)
     ensure_sort_date_mission_departure_status_constraint(app)

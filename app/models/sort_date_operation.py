@@ -36,6 +36,8 @@ class SortDateOperation(db.Model):
     window_minutes = db.Column(db.Integer, nullable=True)
     first_wave_window_minutes = db.Column(db.Integer, nullable=True)
     second_wave_window_minutes = db.Column(db.Integer, nullable=True)
+    load_planner_extension = db.Column(db.String(64), nullable=True)
+    load_planner_radio_channel = db.Column(db.String(64), nullable=True)
     generated_at_utc = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     generated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     locked_at_utc = db.Column(db.DateTime, nullable=True)

@@ -213,6 +213,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "apu_source_tank_code": "VARCHAR(32)",
         "neo_fuel_lbs": "INTEGER",
         "center_fuel_lbs": "INTEGER",
+        "load_planner_extension": "VARCHAR(64)",
+        "load_planner_radio_channel": "VARCHAR(64)",
     },
 }
 
@@ -257,6 +259,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "flight_api_auto_poll_in_progress_at_utc": "TIMESTAMP",
         "flight_api_auto_poll_lock_token": "VARCHAR(64) DEFAULT ''",
         "flight_api_last_poll_snapshot_json": "TEXT",
+        "load_planner_extension": "VARCHAR(64)",
+        "load_planner_radio_channel": "VARCHAR(64)",
     },
     "neosektor_wave_states": {
         "all_up_started_at": "TIMESTAMP",
