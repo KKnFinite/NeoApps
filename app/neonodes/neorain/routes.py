@@ -31,6 +31,7 @@ from app.neonodes.neorain.services import (
     neorain_inbound_revision,
     neorain_inbound_refresh_status,
     neorain_inbound_row,
+    neorain_inbound_late_summary,
     neorain_outbound_late_summary,
     neorain_outbound_row,
     neorain_outbound_refresh_status,
@@ -194,6 +195,7 @@ def inbound_late_inclusion():
         "late_metrics_inclusion_source": result["source"],
         "version": entity_version(mission),
         "row": row,
+        "late_summary": neorain_inbound_late_summary(operation),
         "revision": neorain_inbound_revision(gateway, operation=operation),
     })
 

@@ -20,6 +20,7 @@ from app.neonodes.neorain.services import (
     neorain_outbound_late_summary,
     neorain_outbound_context,
     neorain_inbound_context,
+    neorain_inbound_late_summary,
     neorain_outbound_revision,
     neorain_outbound_staffing_summary,
     set_neorain_late_metrics_included,
@@ -150,6 +151,23 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(rows[0]["arrival_variance"], "+1")
         self.assertTrue(rows[0]["late_metrics_included"])
         self.assertFalse(rows[1]["late_metrics_included"])
+
+    def test_inbound_late_summary_groups_only_included_positive_block_in_variance(self):
+        operation = self._operation()
+        first = self._mission(operation, "UPS310", "RFD", planned=datetime(2026, 8, 30, 1, 0), mission_type="arrival", wave="1")
+        second = self._mission(operation, "UPS311", "RFD", planned=datetime(2026, 8, 30, 2, 0), mission_type="arrival", wave="2")
+        no_wave = self._mission(operation, "UPS312", "RFD", planned=datetime(2026, 8, 30, 3, 0), mission_type="arrival", wave=None)
+        on_time = self._mission(operation, "UPS313", "RFD", planned=datetime(2026, 8, 30, 4, 0), mission_type="arrival", wave="1")
+        first.actual_block_in_datetime_utc = datetime(2026, 8, 30, 1, 10)
+        second.actual_block_in_datetime_utc = datetime(2026, 8, 30, 2, 5)
+        no_wave.actual_block_in_datetime_utc = datetime(2026, 8, 30, 3, 15)
+        no_wave.late_metrics_included_override = True
+        on_time.actual_block_in_datetime_utc = datetime(2026, 8, 30, 4, 0)
+        db.session.commit()
+        summary = neorain_inbound_late_summary(operation)
+        self.assertEqual(summary["first_wave"], {"aircraft_late": 1, "late_minutes": 10, "average": "10"})
+        self.assertEqual(summary["second_wave"], {"aircraft_late": 1, "late_minutes": 5, "average": "5"})
+        self.assertEqual(summary["total"], {"aircraft_late": 3, "late_minutes": 30, "average": "10"})
 
     def test_departure_variance_uses_canonical_std_and_handles_midnight(self):
         operation = self._operation()

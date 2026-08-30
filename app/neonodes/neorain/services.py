@@ -106,7 +106,12 @@ def neorain_inbound_context(gateway, *, operation=_OPERATION_UNSET):
     }
     rows = [_inbound_row(mission, parking_by_tail) for mission in arrivals]
     rows.sort(key=lambda row: (row["sort_time"] is None, row["sort_time"] or datetime.max, row["flight_number"], row["mission_id"]))
-    return {"operation": operation, "rows": rows}
+    return {
+        "operation": operation,
+        "rows": rows,
+        "late_summary": _inbound_late_summary(arrivals),
+        "staffing_summary": neorain_outbound_staffing_summary(operation),
+    }
 
 
 def neorain_inbound_revision(gateway, *, operation=_OPERATION_UNSET):
@@ -767,6 +772,47 @@ def _outbound_late_summary(missions):
         count = values["aircraft_late"]
         minutes = values["late_minutes"]
         values["average"] = _late_average_display(minutes, count)
+    return summary
+
+
+def neorain_inbound_late_summary(operation):
+    """Return derived Block-In-versus-STA metrics for current-sort arrivals."""
+    return _inbound_late_summary(_inbound_arrival_missions(operation))
+
+
+def _inbound_late_summary(missions):
+    summary = {
+        "first_wave": {"aircraft_late": 0, "late_minutes": 0},
+        "second_wave": {"aircraft_late": 0, "late_minutes": 0},
+        "total": {"aircraft_late": 0, "late_minutes": 0},
+    }
+    for mission in missions:
+        if (
+            mission.actual_block_in_datetime_utc is None
+            or mission.planned_datetime_utc is None
+            or not neorain_late_metrics_inclusion(mission)["included"]
+        ):
+            continue
+        minutes = int(
+            (mission.actual_block_in_datetime_utc - mission.planned_datetime_utc)
+            .total_seconds()
+            / 60
+        )
+        if minutes <= 0:
+            continue
+        buckets = ["total"]
+        wave = normalize_wave(mission.wave)
+        if wave == "1":
+            buckets.insert(0, "first_wave")
+        elif wave == "2":
+            buckets.insert(0, "second_wave")
+        for bucket in buckets:
+            summary[bucket]["aircraft_late"] += 1
+            summary[bucket]["late_minutes"] += minutes
+    for values in summary.values():
+        values["average"] = _late_average_display(
+            values["late_minutes"], values["aircraft_late"]
+        )
     return summary
 
 
