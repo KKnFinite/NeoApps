@@ -368,6 +368,15 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
             SortDateParkingAssignment.updated_at,
             parking_criterion,
         ),
+        _revision_aggregate(
+            "master_planners",
+            MasterFlightSchedule,
+            MasterFlightSchedule.updated_at,
+            MasterFlightSchedule.gateway_code == gateway.code,
+            MasterFlightSchedule.sort_name == (operation.sort_name if operation else "night"),
+            MasterFlightSchedule.mission_type == "departure",
+            MasterFlightSchedule.active.is_(True),
+        ),
     )
     rows = sorted(
         db.session.execute(union_all(*aggregates)).all(),
@@ -408,7 +417,16 @@ def _outbound_rows(operation, *, missions=None):
     }
     if missions is None:
         missions = _outbound_departure_missions(operation)
-    rows = [_outbound_row(mission, operation, parking_by_tail) for mission in missions]
+    eligible_person_ids = _eligible_load_planner_person_ids()
+    rows = [
+        _outbound_row(
+            mission,
+            operation,
+            parking_by_tail,
+            eligible_person_ids=eligible_person_ids,
+        )
+        for mission in missions
+    ]
     return sorted(rows, key=_row_sort_key)
 
 
@@ -628,10 +646,16 @@ def neorain_outbound_staffing_summary(operation):
 def _outbound_departure_missions(operation):
     if operation is None:
         return []
-    return SortDateMission.query.filter_by(
-        sort_date_operation_id=operation.id,
-        mission_type="departure",
-    ).all()
+    return (
+        SortDateMission.query.options(
+            joinedload(SortDateMission.load_planner_person),
+            joinedload(SortDateMission.master_flight_schedule).joinedload(
+                MasterFlightSchedule.load_planner_person
+            ),
+        )
+        .filter_by(sort_date_operation_id=operation.id, mission_type="departure")
+        .all()
+    )
 
 
 def _outbound_late_summary(missions):
@@ -680,18 +704,27 @@ def neorain_outbound_row(mission, operation):
         ).all()
         if _tail_key(assignment.tail_number)
     }
-    row = _outbound_row(mission, operation, parking_by_tail)
+    row = _outbound_row(
+        mission,
+        operation,
+        parking_by_tail,
+        eligible_person_ids=_eligible_load_planner_person_ids(),
+    )
     row.pop("sort_time", None)
     row["departure_status"] = _normalized_status(mission.departure_status)
     return row
 
 
-def _outbound_row(mission, operation, parking_by_tail):
+def _outbound_row(mission, operation, parking_by_tail, *, eligible_person_ids=None):
     timing = mission_display_timing_data(mission, operation)
     planned = timing.get("adjusted_planned_departure_time") or mission.planned_datetime_local
     timezone_name = mission.timezone or None
     status = str(mission.departure_status or "scheduled").strip().lower()
     late_metrics = neorain_late_metrics_inclusion(mission)
+    planner = effective_neorain_load_planner(
+        mission,
+        eligible_person_ids=eligible_person_ids,
+    )
     return {
         "wave": timing.get("wave") or "-",
         "flight_number": _text(mission.flight_number),
@@ -700,6 +733,7 @@ def _outbound_row(mission, operation, parking_by_tail):
         "parking": parking_by_tail.get(_tail_key(mission.assigned_tail_number), ""),
         "planned_time": _time_value(planned),
         "status": status.replace("_", " ").upper(),
+        "load_planner": planner.full_name if planner else "UNASSIGNED",
         "elmac": format_local_hhmm(mission.elmac_completed_at_utc, timezone_name),
         "ramp_load_complete": format_local_hhmm(
             mission.ramp_load_completed_at_utc, timezone_name

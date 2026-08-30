@@ -32,14 +32,14 @@
     <table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
         <thead><tr>
-            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th>
+            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>Load Planner</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th>
         </tr></thead>
         <tbody>
             {% for row in rows %}
             {% set collapse_eligible = row.ramp_load_complete and row.crew_load_complete and row.official_block_out %}
             {% set final_collapse_eligible = collapse_eligible and row.no_return %}
             <tr data-neorain-collapsed-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not collapse_eligible or final_collapse_eligible %}hidden{% endif %}>
-                <td colspan="14">
+                <td colspan="15">
                     <div class="neorain-collapsed-summary">
                         <span><strong>{{ row.flight_number or '-' }}</strong></span>
                         <span>{{ row.tail or '-' }}</span>
@@ -69,7 +69,7 @@
                 </td>
             </tr>
             <tr data-neorain-final-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-collapse-eligible="{{ 'true' if collapse_eligible else 'false' }}" {% if not final_collapse_eligible %}hidden{% endif %}>
-                <td colspan="14">
+                <td colspan="15">
                     <div class="neorain-final-summary">
                         <span><strong>{{ row.flight_number or '-' }}</strong></span>
                         <span>{{ row.destination or '-' }}</span>
@@ -102,6 +102,7 @@
                 <td data-label="Parking">{{ row.parking or '-' }}</td>
                 <td data-label="STD/ETD">{{ row.planned_time or '-' }}</td>
                 <td data-label="Status" data-neorain-display="status">{{ row.status }}</td>
+                <td data-label="Load Planner">{{ row.load_planner or 'UNASSIGNED' }}</td>
                 <td data-label="eLMAC">{{ row.elmac or '-' }}</td>
                 {{ milestone_cell(row, 'ramp_load_complete', 'Ramp Load Complete') }}
                 {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
