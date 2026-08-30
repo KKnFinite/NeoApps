@@ -59,6 +59,10 @@ from app.services.load_planning_contact import (
     current_load_planning_contact,
     set_load_planning_contact,
 )
+from app.services.neorain_ground_time_settings import (
+    neorain_ground_time_threshold_minutes,
+    set_neorain_ground_time_threshold_minutes,
+)
 from app.services.permission_rules import permission_access, preload_permission_rules, user_can
 
 
@@ -722,7 +726,11 @@ def settings():
     gateway = get_current_gateway()
 
     if request.method == "POST":
-        if not access["can_view"] or not can_edit_refresh_settings:
+        action = request.form.get("action")
+        may_edit = (
+            can_edit_refresh_settings if action == "save_live_refresh" else access["can_edit"]
+        )
+        if not access["can_view"] or not may_edit:
             db.session.rollback()
             response = _render_neorain_settings(
                 gateway,
@@ -732,7 +740,7 @@ def settings():
                 message=("Access denied.", "error"),
             )
             return response
-        if request.form.get("action") != "save_live_refresh":
+        if action not in {"save_live_refresh", "save_ground_time_threshold"}:
             return _render_neorain_settings(
                 gateway,
                 access,
@@ -741,12 +749,18 @@ def settings():
                 message=("Choose a valid NeoRain settings action.", "error"),
             )
         try:
-            result = save_live_screen_refresh_override(
-                gateway,
-                request.form.get("screen_key"),
-                request.form.get("refresh_interval_seconds"),
-                allowed_screen_keys=(NEORAIN_OUTBOUND_REFRESH_KEY,),
-            )
+            if action == "save_live_refresh":
+                result = save_live_screen_refresh_override(
+                    gateway,
+                    request.form.get("screen_key"),
+                    request.form.get("refresh_interval_seconds"),
+                    allowed_screen_keys=(NEORAIN_OUTBOUND_REFRESH_KEY,),
+                )
+            else:
+                set_neorain_ground_time_threshold_minutes(
+                    gateway, request.form.get("ground_time_threshold_minutes")
+                )
+                result = type("Result", (), {"changed": True})()
         except (IntegrityError, ValueError) as exc:
             db.session.rollback()
             message = (
@@ -763,7 +777,10 @@ def settings():
             )
         if result.changed:
             db.session.commit()
-            flash("LIVE REFRESH SETTING SAVED.", "success")
+            flash(
+                "LIVE REFRESH SETTING SAVED." if action == "save_live_refresh" else "GROUND TIME THRESHOLD SAVED.",
+                "success",
+            )
         else:
             db.session.rollback()
             flash("NO LIVE REFRESH SETTING CHANGES.", "info")
@@ -796,10 +813,9 @@ def _render_neorain_settings(
         can_view=access["can_view"],
         page_label="Settings",
         can_edit_refresh_settings=can_edit_refresh_settings,
-        refresh_setting=live_screen_refresh_value(
-            gateway,
-            NEORAIN_OUTBOUND_REFRESH_KEY,
-        ),
+        can_edit_ground_time=access["can_edit"],
+        refresh_settings=[live_screen_refresh_value(gateway, NEORAIN_OUTBOUND_REFRESH_KEY)],
+        ground_time_threshold_minutes=neorain_ground_time_threshold_minutes(gateway),
         live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
     return response, status_code

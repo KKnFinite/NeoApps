@@ -18,9 +18,10 @@
                 <p>Configure the refresh interval for active NeoRain live screens.</p>
             </div>
         </header>
+        {% for refresh_setting in refresh_settings %}
         <div class="neorain-refresh-row">
             <div class="neorain-refresh-screen">
-                <strong>Outbound</strong>
+                <strong>{{ 'Outbound' if refresh_setting.screen_key == 'neorain.outbound' else 'Inbound' }}</strong>
                 <small>{{ refresh_setting.screen_key }}</small>
             </div>
             <dl class="neorain-refresh-status">
@@ -31,8 +32,8 @@
             <form method="post" class="neorain-refresh-form">
                 <input type="hidden" name="action" value="save_live_refresh">
                 <input type="hidden" name="screen_key" value="{{ refresh_setting.screen_key }}">
-                <label for="neorain-refresh-interval" class="sr-only">Outbound refresh interval</label>
-                <select id="neorain-refresh-interval" name="refresh_interval_seconds" {% if not can_edit_refresh_settings %}disabled{% endif %}>
+                <label for="neorain-refresh-interval-{{ loop.index }}" class="sr-only">Refresh interval</label>
+                <select id="neorain-refresh-interval-{{ loop.index }}" name="refresh_interval_seconds" {% if not can_edit_refresh_settings %}disabled{% endif %}>
                     <option value="default" {% if refresh_setting.override_seconds is none %}selected{% endif %}>Render default</option>
                     {% for seconds in live_refresh_allowed_seconds %}
                     <option value="{{ seconds }}" {% if refresh_setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
@@ -43,6 +44,17 @@
                 {% endif %}
             </form>
         </div>
+        {% endfor %}
+    </section>
+    <section class="neorain-settings-panel" aria-labelledby="neorain-ground-time-title">
+        <header><div><h2 id="neorain-ground-time-title">GROUND TIME THRESHOLD</h2><p>Flag connected arrivals below this gateway threshold.</p></div></header>
+        <form method="post" class="neorain-refresh-form">
+            <input type="hidden" name="action" value="save_ground_time_threshold">
+            <label for="neorain-ground-time-threshold">Threshold (minutes)</label>
+            <input id="neorain-ground-time-threshold" name="ground_time_threshold_minutes" inputmode="numeric" value="{{ ground_time_threshold_minutes }}" {% if not can_edit_ground_time %}readonly{% endif %}>
+            <output>{{ (ground_time_threshold_minutes // 60) }}:{{ '%02d'|format(ground_time_threshold_minutes % 60) }}</output>
+            {% if can_edit_ground_time %}<button type="submit">SAVE</button>{% endif %}
+        </form>
     </section>
 </section>
 {% endblock %}

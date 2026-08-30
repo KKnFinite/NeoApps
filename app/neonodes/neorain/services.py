@@ -19,6 +19,8 @@ from app.models import (
     StaffingUnit,
     StaffingWorkAssignment,
 )
+from app.models import NeoRainOperationalSetting
+from app.services.neorain_ground_time_settings import neorain_ground_time_threshold_minutes
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
 from app.services.neostaffing import attendance_operation_department_counts
@@ -106,8 +108,9 @@ def neorain_inbound_context(gateway, *, operation=_OPERATION_UNSET):
         if _tail_key(a.tail_number)
     }
     departures_by_tail = _inbound_departures_by_tail(departures, operation)
+    ground_time_threshold = neorain_ground_time_threshold_minutes(gateway)
     rows = [
-        _inbound_row(mission, parking_by_tail, departures_by_tail)
+        _inbound_row(mission, parking_by_tail, departures_by_tail, ground_time_threshold)
         for mission in arrivals
     ]
     rows.sort(key=lambda row: (row["sort_time"] is None, row["sort_time"] or datetime.max, row["flight_number"], row["mission_id"]))
@@ -116,6 +119,7 @@ def neorain_inbound_context(gateway, *, operation=_OPERATION_UNSET):
         "rows": rows,
         "late_summary": _inbound_late_summary(arrivals),
         "staffing_summary": neorain_outbound_staffing_summary(operation),
+        "ground_time_threshold_minutes": ground_time_threshold,
     }
 
 
@@ -129,6 +133,7 @@ def neorain_inbound_revision(gateway, *, operation=_OPERATION_UNSET):
         _revision_aggregate("arrivals", SortDateMission, SortDateMission.updated_at, criterion, SortDateMission.mission_type == "arrival"),
         _revision_aggregate("departures", SortDateMission, SortDateMission.updated_at, criterion, SortDateMission.mission_type == "departure"),
         _revision_aggregate("parking", SortDateParkingAssignment, SortDateParkingAssignment.updated_at, parking_criterion),
+        _revision_aggregate("ground_time_setting", NeoRainOperationalSetting, NeoRainOperationalSetting.updated_at, NeoRainOperationalSetting.gateway_id == gateway.id),
     )).all(), key=lambda row: row.source)
     payload = {"gateway_id": gateway.id, "operation_id": operation_id, "inputs": [{"source": r.source, "row_count": int(r.row_count or 0), "max_id": int(r.max_id or 0), "id_sum": int(r.id_sum or 0), "latest_updated_at": _revision_value(r.latest_updated_at)} for r in rows]}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -716,7 +721,7 @@ def _inbound_arrival_missions(operation):
     ).all()
 
 
-def _inbound_row(mission, parking_by_tail, departures_by_tail=None):
+def _inbound_row(mission, parking_by_tail, departures_by_tail=None, ground_time_threshold_minutes=None):
     effective = mission.eta_datetime_utc or mission.planned_datetime_utc
     arrival_anchor = mission.actual_block_in_datetime_utc or effective
     late_metrics = neorain_late_metrics_inclusion(mission)
@@ -735,6 +740,11 @@ def _inbound_row(mission, parking_by_tail, departures_by_tail=None):
         "late_metrics_inclusion_source": late_metrics["source"],
         "connecting_outbound": connection["flight_number"],
         "ground_time": connection["ground_time"],
+        "ground_time_warning": bool(
+            connection.get("ground_time_minutes") is not None
+            and ground_time_threshold_minutes is not None
+            and connection["ground_time_minutes"] < ground_time_threshold_minutes
+        ),
         "sort_time": effective,
         "mission_id": mission.id,
         "version": entity_version(mission),
@@ -754,6 +764,7 @@ def neorain_inbound_row(mission, operation):
         mission,
         parking_by_tail,
         _inbound_departures_by_tail(_outbound_departure_missions(operation), operation),
+        neorain_ground_time_threshold_minutes(operation.gateway if operation else None),
     )
     row.pop("sort_time", None)
     return row
@@ -775,7 +786,7 @@ def _inbound_departures_by_tail(departures, operation):
 
 def _inbound_connection(mission, arrival_anchor, departures_by_tail):
     if arrival_anchor is None:
-        return {"flight_number": "", "ground_time": ""}
+        return {"flight_number": "", "ground_time": "", "ground_time_minutes": None}
     for departure_time, departure in departures_by_tail.get(_tail_key(mission.assigned_tail_number), ()):
         if departure_time < arrival_anchor:
             continue
@@ -783,8 +794,9 @@ def _inbound_connection(mission, arrival_anchor, departures_by_tail):
         return {
             "flight_number": _text(departure.flight_number),
             "ground_time": _duration_hhmm(minutes),
+            "ground_time_minutes": minutes,
         }
-    return {"flight_number": "", "ground_time": ""}
+    return {"flight_number": "", "ground_time": "", "ground_time_minutes": None}
 
 
 def _duration_hhmm(minutes):

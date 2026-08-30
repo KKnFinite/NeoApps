@@ -29610,6 +29610,11 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     font-size: 0.58rem;
 }
 
+.neorain-ground-time-warning {
+    color: #f3bb5f;
+    font-weight: 700;
+}
+
 [data-neorain-late-inclusion-cell][data-neorain-late-inclusion-saving="true"] .neorain-late-inclusion-control {
     opacity: 0.68;
 }
