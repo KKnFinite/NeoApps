@@ -367,12 +367,14 @@ def clear_neosubzero_ucc_assignments_for_person_all_sorts(person_id):
     return len(rows)
 
 
-def neosubzero_ucc_revision(gateway, operation):
+def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     """Revision covering exactly UCC-visible aircraft, staffing, and fluid inputs."""
     from app.services.neosubzero_departure_deice import departure_deice_revision
 
     operation_id = getattr(operation, "id", None)
     payload = [("departure", departure_deice_revision(gateway, operation))]
+    if weather_revision is not None:
+        payload.append(("weather", weather_revision))
     models = (
         ("ucc", NeoSubZeroUccAssignment, NeoSubZeroUccAssignment.sort_date_operation_id == operation_id),
         ("trucks", NeoSubZeroUccTruckAssignment, NeoSubZeroUccTruckAssignment.sort_date_operation_id == operation_id),

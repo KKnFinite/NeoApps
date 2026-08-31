@@ -8,6 +8,61 @@
     </header>
     {% include "neonodes/neosubzero/_nav.html" %}
 
+    <section class="neosubzero-weather" aria-labelledby="subzero-weather-heading">
+        <header>
+            <div><p>KRFD · ACTUAL OBSERVATION</p><h2 id="subzero-weather-heading">WEATHER OPERATIONS</h2></div>
+            <span>{{ weather.sources.current }} · {{ weather.current.observed_at_label }}{% if weather.current.stale %} · STALE{% endif %}</span>
+        </header>
+        <div class="neosubzero-weather-current">
+            <div class="neosubzero-weather-primary">
+                <strong>{{ weather.current.temperature }}</strong>
+                <span>{{ weather.current.conditions }}</span>
+                <small>{{ weather.current.flight_category }} · {{ weather.current.sky }}</small>
+            </div>
+            <dl>
+                <div><dt>DEW POINT</dt><dd>{{ weather.current.dewpoint }}</dd></div>
+                <div><dt>SPREAD</dt><dd>{{ weather.current.spread }}</dd></div>
+                <div><dt>REL HUMIDITY</dt><dd>{{ weather.current.relative_humidity }}</dd></div>
+                <div><dt>WIND</dt><dd>{{ weather.current.wind }}</dd></div>
+                <div><dt>VISIBILITY</dt><dd>{{ weather.current.visibility }}</dd></div>
+                <div class="is-human-precip"><dt>ACTIVE PRECIPITATION · HUMAN SET</dt><dd>{{ application_context.active_precipitation or 'NOT SET' }}</dd></div>
+            </dl>
+        </div>
+        {% if weather.current.error %}<p class="neosubzero-weather-note">{{ weather.current.error }}</p>{% endif %}
+        <div class="neosubzero-weather-forecast-head">
+            <strong>UPCOMING OPERATIONAL SORT WINDOWS</strong>
+            <span>{{ weather.sources.forecast }} · {{ weather.forecast_status.issued_at_label }}{% if weather.forecast_status.stale %} · STALE{% endif %}</span>
+        </div>
+        {% if weather.forecast %}
+        <div class="neosubzero-weather-forecast">
+            {% for card in weather.forecast %}
+            <details>
+                <summary>
+                    <span><b>{{ card.date_label }}</b><small>{{ card.window_label }}</small></span>
+                    <span><b>{{ card.temperature_range }}</b><small>TEMP</small></span>
+                    <span><b>{{ card.dewpoint_range }}</b><small>DEW</small></span>
+                    <span><b>{{ card.spread_range }}</b><small>SPREAD</small></span>
+                    <span><b>{{ card.precipitation_probability }}</b><small>PRECIP</small></span>
+                    <span><b>{{ card.gust }}</b><small>MAX GUST</small></span>
+                    <em>{{ card.conditions }} · WIND {{ card.wind }}</em>
+                </summary>
+                <div class="neosubzero-weather-hourly" aria-label="{{ card.date_label }} hourly forecast">
+                    {% for hour in card.hours %}
+                    <div>
+                        <time>{{ hour.time }}</time>
+                        <b>{{ hour.temperature }}</b>
+                        <span>Dew {{ hour.dewpoint }} · Spread {{ hour.spread }}</span>
+                        <span>{{ hour.probability }} · {{ hour.condition }}</span>
+                        <span>{{ hour.wind }}{% if hour.gust != '-' %} · {{ hour.gust }}{% endif %}</span>
+                    </div>
+                    {% else %}<p>Hourly forecast unavailable for this sort window.</p>{% endfor %}
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+        {% else %}<p class="neosubzero-weather-note">{{ weather.forecast_status.error or 'No upcoming operational sort forecast is available.' }}</p>{% endif %}
+    </section>
+
     <section class="neosubzero-ucc-fluid" aria-label="Fluid preparation">
         <strong>FLUID PREP</strong>
         <span><b>TYPE I</b> {{ fluid_settings.type_i_concentration_percent }}% · {{ fluid_settings.type_i_fluid_name }}</span>

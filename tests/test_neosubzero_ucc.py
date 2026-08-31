@@ -476,6 +476,14 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertEqual(defaults["neosubzero.ucc.view"], "watcher")
         self.assertEqual(defaults["neosubzero.ucc.edit"], "simulator")
         self.assertIn("neosubzero_ucc_assignments", db.metadata.tables)
+        self.assertNotEqual(
+            neosubzero_ucc_revision(
+                self.gateway, self.operation, weather_revision="weather-r1"
+            ),
+            neosubzero_ucc_revision(
+                self.gateway, self.operation, weather_revision="weather-r2"
+            ),
+        )
 
         watcher = self._user("ucc_watcher", "watcher")
         client = self.app.test_client()
@@ -483,6 +491,9 @@ class NeoSubZeroUccTest(unittest.TestCase):
         with patch(
             "app.neonodes.neosubzero.routes.current_neosubzero_operation",
             return_value=self.operation,
+        ), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+            return_value=self._weather_context_fixture(),
         ):
             page = client.get("/neosubzero/ucc")
             denied = client.post(
@@ -496,6 +507,12 @@ class NeoSubZeroUccTest(unittest.TestCase):
                 },
             )
         self.assertEqual(page.status_code, 200)
+        self.assertIn(b"WEATHER OPERATIONS", page.data)
+        self.assertIn(b"KRFD", page.data)
+        self.assertIn(b"ACTIVE PRECIPITATION", page.data)
+        self.assertIn(b"UPCOMING OPERATIONAL SORT WINDOWS", page.data)
+        self.assertIn(b"28\xc2\xb0F", page.data)
+        self.assertIn(b"CHANCE SNOW", page.data)
         self.assertIn(b"THROAT", page.data)
         self.assertIn(b"WAITING QUEUE", page.data)
         self.assertEqual(denied.status_code, 403)
@@ -753,6 +770,50 @@ class NeoSubZeroUccTest(unittest.TestCase):
         backfill_default_gateway_node_roles(user, role=role)
         db.session.commit()
         return user
+
+    def _weather_context_fixture(self):
+        return {
+            "station": "KRFD",
+            "sources": {
+                "current": "AviationWeather.gov",
+                "forecast": "NOAA / National Weather Service",
+            },
+            "revision": "weather-r1",
+            "current": {
+                "available": True,
+                "observed_at_label": "2026-08-31 23:00Z",
+                "stale": False,
+                "error": None,
+                "temperature": "28\u00b0F",
+                "dewpoint": "25\u00b0F",
+                "spread": "3\u00b0F",
+                "relative_humidity": "88%",
+                "wind": "320\u00b0 12 kt G20 kt",
+                "visibility": "4 SM",
+                "conditions": "-SN",
+                "sky": "OVC 1,500",
+                "flight_category": "IFR",
+            },
+            "forecast_status": {
+                "issued_at_label": "2026-08-31 22:00Z",
+                "stale": False,
+                "error": None,
+            },
+            "forecast": (
+                {
+                    "date_label": "MON AUG 31",
+                    "window_label": "18:00\u201306:00",
+                    "temperature_range": "25\u201330\u00b0F",
+                    "dewpoint_range": "22\u201325\u00b0F",
+                    "spread_range": "3\u20135\u00b0F",
+                    "precipitation_probability": "70%",
+                    "gust": "G25 mph",
+                    "conditions": "CHANCE SNOW",
+                    "wind": "NW 15 mph",
+                    "hours": (),
+                },
+            ),
+        }
 
     def _login(self, client, user):
         return client.post(

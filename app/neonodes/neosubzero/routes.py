@@ -49,6 +49,10 @@ from app.services.neosubzero_ucc import (
     neosubzero_ucc_context,
     neosubzero_ucc_revision,
 )
+from app.services.neosubzero_weather import (
+    neosubzero_weather_context,
+    neosubzero_weather_revision,
+)
 from app.services.neosubzero_spray import (
     DEICER_REFRESH_KEY,
     NeoSubZeroSprayError,
@@ -390,12 +394,19 @@ def ucc():
                 "error",
             )
         return redirect(url_for("neosubzero.ucc"))
+    weather = neosubzero_weather_context(gateway, operation)
     return render_template(
         "neonodes/neosubzero/ucc.html",
         gateway=gateway,
         can_edit=access["can_edit"],
-        revision=neosubzero_ucc_revision(gateway, operation),
+        revision=neosubzero_ucc_revision(
+            gateway,
+            operation,
+            weather_revision=weather["revision"],
+        ),
         refresh_status=subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY),
+        weather=weather,
+        application_context=_application_context(operation),
         **neosubzero_ucc_context(gateway, operation),
     )
 
@@ -407,7 +418,11 @@ def ucc_revision_endpoint():
         return jsonify({"ok": False, "error": "Access denied."}), 403
     gateway = get_current_gateway()
     operation = current_neosubzero_operation(gateway)
-    revision = neosubzero_ucc_revision(gateway, operation)
+    revision = neosubzero_ucc_revision(
+        gateway,
+        operation,
+        weather_revision=neosubzero_weather_revision(),
+    )
     response = jsonify(
         {
             "ok": True,
