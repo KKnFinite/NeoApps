@@ -8,6 +8,42 @@
     const dialog = root.querySelector("[data-ucc-move-dialog]");
     let pendingForm = null;
 
+    const weather = root.querySelector(".neosubzero-weather[data-weather-user-id]");
+    const weatherMotionToggle = weather?.querySelector("[data-weather-motion-toggle]");
+    const weatherMotionKey = weather?.dataset.weatherUserId
+        ? `neosubzero.weather-motion.${weather.dataset.weatherUserId}`
+        : "";
+    const deviceReducesMotion = Boolean(
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    );
+    const applyWeatherMotion = (enabled) => {
+        if (!weather || !weatherMotionToggle) return;
+        weather.dataset.weatherMotion = enabled ? "on" : "off";
+        weather.dataset.weatherReducedMotion = deviceReducesMotion ? "true" : "false";
+        weatherMotionToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+        weatherMotionToggle.textContent = `AMBIENT MOTION ${enabled ? "ON" : "OFF"}${
+            enabled && deviceReducesMotion ? " · DEVICE REDUCED" : ""
+        }`;
+    };
+    let weatherMotionEnabled = true;
+    if (weatherMotionKey) {
+        try {
+            weatherMotionEnabled = window.localStorage.getItem(weatherMotionKey) !== "0";
+        } catch (_error) {
+            weatherMotionEnabled = true;
+        }
+    }
+    applyWeatherMotion(weatherMotionEnabled);
+    weatherMotionToggle?.addEventListener("click", () => {
+        weatherMotionEnabled = !weatherMotionEnabled;
+        applyWeatherMotion(weatherMotionEnabled);
+        try {
+            window.localStorage.setItem(weatherMotionKey, weatherMotionEnabled ? "1" : "0");
+        } catch (_error) {
+            // The visual preference remains active for this page when storage is unavailable.
+        }
+    });
+
     const field = (form, name) => form.querySelector(`[name="${name}"]`);
 
     const sourceFormFor = (personId, destinationForm) => forms.find(

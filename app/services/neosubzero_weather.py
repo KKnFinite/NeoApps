@@ -46,7 +46,7 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
     """Return current KRFD observation and operational-sort forecasts."""
     snapshot = _weather_snapshot(now=now)
     current = parse_aviation_weather_metar(snapshot["metar"].get("value"))
-    forecast = _forecast_cards(
+    forecast_cards = _forecast_cards(
         gateway,
         operation,
         snapshot["forecast"].get("value"),
@@ -65,10 +65,29 @@ def neosubzero_weather_context(gateway, operation=None, *, now=None):
             snapshot["forecast"].get("value")
         ),
     }
+    current_sort = (
+        next(
+            (
+                card
+                for card in forecast_cards
+                if card["sort_date"] == operation.sort_date
+            ),
+            None,
+        )
+        if operation is not None
+        else None
+    )
+    future_forecast = tuple(
+        card
+        for card in forecast_cards
+        if operation is None or card["sort_date"] != operation.sort_date
+    )
     return {
         "station": KRFD_ICAO,
         "current": current,
-        "forecast": forecast,
+        "theme": current_weather_theme(current),
+        "current_sort": current_sort,
+        "future_forecast": future_forecast,
         "forecast_status": forecast_status,
         "revision": _weather_revision(snapshot),
         "sources": {
@@ -113,21 +132,134 @@ def parse_aviation_weather_metar(payload):
         if cover:
             clouds.append(f"{cover} {int(base):,}" if base is not None else cover)
     observed_at = _parse_datetime(row.get("reportTime"))
+    wind_speed = _number(row.get("wspd"))
+    wind_gust = _number(row.get("wgst"))
     return {
         "available": True,
         "observed_at": observed_at,
         "observed_at_label": _utc_label(observed_at),
         "temperature": _degree_label(temperature_f),
+        "temperature_value": temperature_f,
         "dewpoint": _degree_label(dewpoint_f),
+        "dewpoint_value": dewpoint_f,
         "spread": _degree_label(spread),
+        "spread_value": spread,
         "relative_humidity": _percent_label(humidity),
+        "relative_humidity_value": humidity,
         "wind": _metar_wind(row),
+        "wind_speed_value": wind_speed,
+        "wind_gust_value": wind_gust,
         "visibility": _visibility_label(row.get("visib")),
         "conditions": str(row.get("wxString") or "None reported").strip(),
         "sky": " · ".join(clouds) or str(row.get("cover") or "Clear").upper(),
         "flight_category": str(row.get("fltCat") or "-").strip().upper(),
         "raw_observation": str(row.get("rawOb") or "").strip(),
     }
+
+
+def preliminary_frost_risk(
+    *,
+    temperature_f=None,
+    dewpoint_spread_f=None,
+    relative_humidity=None,
+    wind_mph=None,
+    conditions="",
+):
+    """Return a conservative, explainable frost signal for one forecast hour.
+
+    This intentionally small rule set is isolated so a future RFD historical
+    model can replace it without changing the UCC presentation contract.
+    """
+    temperature = _number(temperature_f)
+    spread = _number(dewpoint_spread_f)
+    humidity = _number(relative_humidity)
+    wind = _number(wind_mph)
+    condition_text = str(conditions or "").casefold()
+    score = 0
+    reasons = []
+
+    if temperature is not None:
+        if temperature <= 32:
+            score += 3
+            reasons.append("at/below freezing")
+        elif temperature <= 36:
+            score += 2
+            reasons.append("near freezing")
+        elif temperature <= 40:
+            score += 1
+    if spread is not None:
+        if spread <= 2:
+            score += 3
+            reasons.append("very tight dew-point spread")
+        elif spread <= 5:
+            score += 2
+            reasons.append("tight dew-point spread")
+        elif spread <= 8:
+            score += 1
+    if humidity is not None:
+        if humidity >= 90:
+            score += 2
+            reasons.append("very humid")
+        elif humidity >= 80:
+            score += 1
+            reasons.append("humid")
+    if wind is not None:
+        if wind <= 5:
+            score += 1
+            reasons.append("light wind")
+        elif wind >= 15:
+            score -= 1
+    if temperature is not None and temperature <= 40 and any(
+        token in condition_text for token in ("clear", "sunny", "few clouds")
+    ):
+        score += 1
+        reasons.append("limited cloud cover")
+    elif any(token in condition_text for token in ("overcast", "cloudy")):
+        score -= 1
+        reasons.append("cloud cover limits cooling")
+    if any(token in condition_text for token in ("freezing fog", "frost")):
+        score = max(score, 7)
+        reasons.append("freezing fog/frost reported")
+    elif any(token in condition_text for token in ("fog", "mist")) and (
+        temperature is None or temperature <= 36
+    ):
+        score += 2
+        reasons.append("cold fog/mist")
+
+    level = "HIGH" if score >= 7 else "MEDIUM" if score >= 4 else "LOW"
+    return {
+        "level": level,
+        "score": score,
+        "rationale": ", ".join(dict.fromkeys(reasons)) or "limited frost signals",
+    }
+
+
+def current_weather_theme(current):
+    """Classify ambient UCC styling from the actual KRFD observation only."""
+    current = current or {}
+    text = " ".join(
+        str(current.get(key) or "")
+        for key in ("conditions", "sky", "raw_observation")
+    ).casefold()
+    if any(token in text for token in ("fzra", "fzdz", "freezing rain", "freezing drizzle")):
+        return "freezing-rain"
+    if any(token in text for token in (" snow", "sn", "snow")):
+        return "snow"
+    if any(token in text for token in ("fzfg", "freezing fog")):
+        return "freezing-fog"
+    if any(token in text for token in (" fog", "fg", "mist")):
+        return "fog"
+    if any(token in text for token in (" rain", "drizzle", " ra", " dz")):
+        return "rain"
+    if (_number(current.get("wind_gust_value")) or 0) >= 25 or (
+        _number(current.get("wind_speed_value")) or 0
+    ) >= 20:
+        return "windy"
+    if any(token in text for token in ("ovc", "bkn", "overcast")):
+        return "overcast"
+    if (_number(current.get("temperature_value")) or 99) <= 36:
+        return "clear-cold"
+    return "neutral"
 
 
 def _weather_snapshot(*, now=None):
@@ -297,11 +429,12 @@ def _forecast_hour(period, gust_intervals, zone):
         gust = gust * 0.621371
     probability = _number((period.get("probabilityOfPrecipitation") or {}).get("value"))
     humidity = _number((period.get("relativeHumidity") or {}).get("value"))
+    wind_speed = _wind_speed_mph(period.get("windSpeed"))
     start_local = start.astimezone(zone)
-    return {
+    row = {
         "start": start_local,
         "end": end.astimezone(zone),
-        "time": start_local.strftime("%H:%M"),
+        "time": start_local.strftime("%H%M"),
         "temperature_value": temperature,
         "temperature": _degree_label(temperature),
         "dewpoint_value": dewpoint,
@@ -311,6 +444,7 @@ def _forecast_hour(period, gust_intervals, zone):
         "probability_value": probability,
         "probability": _percent_label(probability),
         "humidity": _percent_label(humidity),
+        "humidity_value": humidity,
         "wind": " ".join(
             piece for piece in (
                 str(period.get("windDirection") or "").strip(),
@@ -321,6 +455,14 @@ def _forecast_hour(period, gust_intervals, zone):
         "gust": f"G{_rounded(gust)} mph" if gust is not None else "-",
         "condition": str(period.get("shortForecast") or "-").strip(),
     }
+    row["frost_risk"] = preliminary_frost_risk(
+        temperature_f=temperature,
+        dewpoint_spread_f=spread,
+        relative_humidity=humidity,
+        wind_mph=wind_speed,
+        conditions=row["condition"],
+    )
+    return row
 
 
 def _forecast_card(sort_date, start, end, hours):
@@ -416,10 +558,16 @@ def _unavailable_current():
         "observed_at": None,
         "observed_at_label": "-",
         "temperature": "-",
+        "temperature_value": None,
         "dewpoint": "-",
+        "dewpoint_value": None,
         "spread": "-",
+        "spread_value": None,
         "relative_humidity": "-",
+        "relative_humidity_value": None,
         "wind": "-",
+        "wind_speed_value": None,
+        "wind_gust_value": None,
         "visibility": "-",
         "conditions": "Unavailable",
         "sky": "-",
@@ -446,6 +594,11 @@ def _metar_wind(row):
 def _visibility_label(value):
     text = str(value or "").strip()
     return f"{text} SM" if text else "-"
+
+
+def _wind_speed_mph(value):
+    match = re.search(r"(\d+(?:\.\d+)?)", str(value or ""))
+    return float(match.group(1)) if match else None
 
 
 def _relative_humidity(temperature_c, dewpoint_c):

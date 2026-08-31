@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
@@ -510,9 +511,16 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b"WEATHER OPERATIONS", page.data)
         self.assertIn(b"KRFD", page.data)
         self.assertIn(b"ACTIVE PRECIPITATION", page.data)
+        self.assertIn(b"CURRENT SORT \xc2\xb7 HOURLY WEATHER", page.data)
+        self.assertIn(b"2300", page.data)
+        self.assertIn(b"FROST RISK \xc2\xb7 PRELIMINARY", page.data)
         self.assertIn(b"UPCOMING OPERATIONAL SORT WINDOWS", page.data)
         self.assertIn(b"28\xc2\xb0F", page.data)
         self.assertIn(b"CHANCE SNOW", page.data)
+        self.assertNotIn(b"FUTURE_HOURLY_SHOULD_NOT_RENDER", page.data)
+        self.assertIn(b"data-weather-motion-toggle", page.data)
+        self.assertIn(b'data-weather-theme="snow"', page.data)
+        self.assertIn(f'data-weather-user-id="{watcher.id}"'.encode(), page.data)
         self.assertIn(b"THROAT", page.data)
         self.assertIn(b"WAITING QUEUE", page.data)
         self.assertEqual(denied.status_code, 403)
@@ -569,6 +577,17 @@ class NeoSubZeroUccTest(unittest.TestCase):
             ).one().interval_seconds,
             10,
         )
+
+    def test_weather_motion_preference_and_reduced_motion_contract(self):
+        root = Path(__file__).resolve().parents[1]
+        javascript = (root / "app/static/js/neosubzero_ucc.js").read_text(encoding="utf-8")
+        stylesheet = (root / "app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertIn("neosubzero.weather-motion.${weather.dataset.weatherUserId}", javascript)
+        self.assertIn("window.localStorage.getItem", javascript)
+        self.assertIn("window.localStorage.setItem", javascript)
+        self.assertIn('window.matchMedia?.("(prefers-reduced-motion: reduce)")', javascript)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", stylesheet)
+        self.assertIn("animation:none !important", stylesheet)
 
     def test_ucc_route_rejects_stale_slot_version(self):
         simulator = self._user("ucc_stale_simulator", "simulator")
@@ -774,6 +793,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
     def _weather_context_fixture(self):
         return {
             "station": "KRFD",
+            "theme": "snow",
             "sources": {
                 "current": "AviationWeather.gov",
                 "forecast": "NOAA / National Weather Service",
@@ -799,9 +819,30 @@ class NeoSubZeroUccTest(unittest.TestCase):
                 "stale": False,
                 "error": None,
             },
-            "forecast": (
+            "current_sort": {
+                "date_label": "MON AUG 31",
+                "window_label": "18:00\u201306:00",
+                "hours": (
+                    {
+                        "time": "2300",
+                        "temperature": "28\u00b0F",
+                        "dewpoint": "25\u00b0F",
+                        "spread": "3\u00b0F",
+                        "probability": "70%",
+                        "humidity": "88%",
+                        "wind": "NW 15 mph",
+                        "gust": "G25 mph",
+                        "condition": "Chance Snow",
+                        "frost_risk": {
+                            "level": "HIGH",
+                            "rationale": "near freezing, tight dew-point spread",
+                        },
+                    },
+                ),
+            },
+            "future_forecast": (
                 {
-                    "date_label": "MON AUG 31",
+                    "date_label": "TUE SEP 01",
                     "window_label": "18:00\u201306:00",
                     "temperature_range": "25\u201330\u00b0F",
                     "dewpoint_range": "22\u201325\u00b0F",
@@ -810,7 +851,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
                     "gust": "G25 mph",
                     "conditions": "CHANCE SNOW",
                     "wind": "NW 15 mph",
-                    "hours": (),
+                    "hours": ({"condition": "FUTURE_HOURLY_SHOULD_NOT_RENDER"},),
                 },
             ),
         }

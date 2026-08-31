@@ -15,7 +15,10 @@ from app.services.neosubzero_weather import (
     _cached_fetch,
     _forecast_cards,
     clear_neosubzero_weather_cache,
+    current_weather_theme,
+    neosubzero_weather_context,
     parse_aviation_weather_metar,
+    preliminary_frost_risk,
 )
 
 
@@ -79,6 +82,54 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         self.assertEqual(current["visibility"], "10+ SM")
         self.assertEqual(current["conditions"], "-SN")
         self.assertEqual(current["sky"], "BKN 1,800 · OVC 3,500")
+        self.assertEqual(current_weather_theme(current), "snow")
+
+    def test_preliminary_frost_risk_is_conservative_and_explainable(self):
+        low = preliminary_frost_risk(
+            temperature_f=48,
+            dewpoint_spread_f=14,
+            relative_humidity=52,
+            wind_mph=10,
+            conditions="Clear",
+        )
+        medium = preliminary_frost_risk(
+            temperature_f=36,
+            dewpoint_spread_f=5,
+            relative_humidity=72,
+            wind_mph=10,
+            conditions="Mostly Clear",
+        )
+        high = preliminary_frost_risk(
+            temperature_f=30,
+            dewpoint_spread_f=2,
+            relative_humidity=92,
+            wind_mph=3,
+            conditions="Clear",
+        )
+        self.assertEqual((low["level"], medium["level"], high["level"]), ("LOW", "MEDIUM", "HIGH"))
+        self.assertIn("dew-point spread", high["rationale"])
+
+    def test_current_theme_uses_observation_not_forecast_conditions(self):
+        metar = [{
+                "reportTime": "2026-09-01T01:00:00Z",
+                "temp": -1,
+                "dewp": -8,
+                "wspd": 4,
+                "wxString": "",
+                "clouds": [{"cover": "SKC"}],
+                "rawOb": "METAR KRFD 010100Z 00004KT 10SM SKC M01/M08",
+            }]
+        snapshot = {
+            "metar": {"value": metar, "stale": False, "error": None},
+            "forecast": {"value": {}, "stale": False, "error": None},
+        }
+        future_snow = ({"sort_date": date(2026, 9, 2), "conditions": "Heavy Snow"},)
+        with patch("app.services.neosubzero_weather._weather_snapshot", return_value=snapshot), patch(
+            "app.services.neosubzero_weather._forecast_cards", return_value=future_snow
+        ):
+            weather = neosubzero_weather_context(self.gateway)
+        self.assertEqual(weather["future_forecast"][0]["conditions"], "Heavy Snow")
+        self.assertEqual(weather["theme"], "clear-cold")
 
     def test_cache_reuses_fresh_data_and_falls_back_to_last_good(self):
         now = datetime(2026, 9, 1, tzinfo=timezone.utc)
@@ -152,11 +203,11 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
             )
         db.session.commit()
         periods = []
-        for day in (1, 2, 3, 7):
+        for day, hour in ((1, 18), (2, 1), (2, 18), (3, 18), (7, 18)):
             periods.append(
                 {
-                    "startTime": f"2026-09-{day:02d}T18:00:00-05:00",
-                    "endTime": f"2026-09-{day:02d}T19:00:00-05:00",
+                    "startTime": f"2026-09-{day:02d}T{hour:02d}:00:00-05:00",
+                    "endTime": f"2026-09-{day:02d}T{hour + 1:02d}:00:00-05:00",
                     "temperature": 30 + day,
                     "temperatureUnit": "F",
                     "dewpoint": {"unitCode": "wmoUnit:degC", "value": -2},
@@ -195,6 +246,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
             [date(2026, 9, 1), date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 7)],
         )
         self.assertTrue(all(card["window_label"] == "18:00–06:00" for card in cards))
-        self.assertTrue(all(len(card["hours"]) == 1 for card in cards))
+        self.assertEqual([hour["time"] for hour in cards[0]["hours"]], ["1800", "0100"])
+        self.assertTrue(all(len(card["hours"]) == 1 for card in cards[1:]))
         self.assertEqual(cards[0]["gust"], "G20 mph")
         self.assertEqual(cards[0]["wind"], "NW 10 mph")
