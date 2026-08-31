@@ -19,6 +19,7 @@ from app.services.neosubzero_weather import (
     neosubzero_weather_context,
     parse_aviation_weather_metar,
     preliminary_frost_risk,
+    preliminary_frost_trends,
 )
 
 
@@ -108,6 +109,24 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         )
         self.assertEqual((low["level"], medium["level"], high["level"]), ("LOW", "MEDIUM", "HIGH"))
         self.assertIn("dew-point spread", high["rationale"])
+        self.assertEqual(
+            high["explanation"],
+            "30°F · spread 2°F · RH 92% · light wind · clear",
+        )
+
+    def test_preliminary_frost_trend_compares_the_next_hour(self):
+        rows = preliminary_frost_trends(
+            (
+                {"frost_risk": {"level": "LOW"}},
+                {"frost_risk": {"level": "MEDIUM"}},
+                {"frost_risk": {"level": "MEDIUM"}},
+                {"frost_risk": {"level": "LOW"}},
+            )
+        )
+        self.assertEqual(
+            [row["frost_risk"]["trend_label"] for row in rows],
+            ["Risk rising", "Risk steady", "Risk falling", ""],
+        )
 
     def test_current_theme_uses_observation_not_forecast_conditions(self):
         metar = [{
@@ -247,6 +266,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         )
         self.assertTrue(all(card["window_label"] == "18:00–06:00" for card in cards))
         self.assertEqual([hour["time"] for hour in cards[0]["hours"]], ["1800", "0100"])
+        self.assertEqual(cards[0]["hours"][0]["frost_risk"]["trend_label"], "Risk steady")
         self.assertTrue(all(len(card["hours"]) == 1 for card in cards[1:]))
         self.assertEqual(cards[0]["gust"], "G20 mph")
         self.assertEqual(cards[0]["wind"], "NW 10 mph")

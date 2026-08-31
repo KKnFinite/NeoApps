@@ -12,6 +12,7 @@ from app.models import (
     NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroPretreatState,
     NeoSubZeroUccAssignment,
+    NeoSubZeroUserPreference,
     SortDateMission,
     SortDateOperation,
     SortDateParkingAssignment,
@@ -38,6 +39,7 @@ from app.services.neosubzero_ucc import (
     neosubzero_ucc_revision,
     set_neosubzero_ucc_assignment,
 )
+from app.services.neosubzero_schema import NEOSUBZERO_TABLES
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import (
     DEFAULT_PERMISSION_RULES,
@@ -514,13 +516,16 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b"CURRENT SORT \xc2\xb7 HOURLY WEATHER", page.data)
         self.assertIn(b"2300", page.data)
         self.assertIn(b"FROST RISK \xc2\xb7 PRELIMINARY", page.data)
+        self.assertIn(b"Risk rising", page.data)
+        self.assertIn(b"28\xc2\xb0F \xc2\xb7 spread 3\xc2\xb0F \xc2\xb7 light wind \xc2\xb7 chance snow", page.data)
         self.assertIn(b"UPCOMING OPERATIONAL SORT WINDOWS", page.data)
         self.assertIn(b"28\xc2\xb0F", page.data)
         self.assertIn(b"CHANCE SNOW", page.data)
         self.assertNotIn(b"FUTURE_HOURLY_SHOULD_NOT_RENDER", page.data)
         self.assertIn(b"data-weather-motion-toggle", page.data)
         self.assertIn(b'data-weather-theme="snow"', page.data)
-        self.assertIn(f'data-weather-user-id="{watcher.id}"'.encode(), page.data)
+        self.assertIn(b'data-weather-motion="on"', page.data)
+        self.assertIn(b"/neosubzero/ucc/weather-preference", page.data)
         self.assertIn(b"THROAT", page.data)
         self.assertIn(b"WAITING QUEUE", page.data)
         self.assertEqual(denied.status_code, 403)
@@ -582,12 +587,46 @@ class NeoSubZeroUccTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         javascript = (root / "app/static/js/neosubzero_ucc.js").read_text(encoding="utf-8")
         stylesheet = (root / "app/static/css/base.css").read_text(encoding="utf-8")
-        self.assertIn("neosubzero.weather-motion.${weather.dataset.weatherUserId}", javascript)
-        self.assertIn("window.localStorage.getItem", javascript)
-        self.assertIn("window.localStorage.setItem", javascript)
+        self.assertNotIn("localStorage", javascript)
+        self.assertIn("weather.dataset.weatherPreferenceUrl", javascript)
+        self.assertIn("JSON.stringify({enabled: requested})", javascript)
         self.assertIn('window.matchMedia?.("(prefers-reduced-motion: reduce)")', javascript)
         self.assertIn("@media (prefers-reduced-motion: reduce)", stylesheet)
         self.assertIn("animation:none !important", stylesheet)
+
+    def test_weather_motion_preference_persists_per_user_across_sessions(self):
+        watcher = self._user("weather_preference_watcher", "watcher")
+        self.assertIn(NeoSubZeroUserPreference.__table__, NEOSUBZERO_TABLES)
+        first_client = self.app.test_client()
+        self._login(first_client, watcher)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+            return_value=self._weather_context_fixture(),
+        ):
+            default_page = first_client.get("/neosubzero/ucc")
+        self.assertIn(b'data-weather-motion="on"', default_page.data)
+        self.assertEqual(NeoSubZeroUserPreference.query.count(), 0)
+        saved = first_client.post(
+            "/neosubzero/ucc/weather-preference",
+            json={"enabled": False},
+        )
+        self.assertEqual(NeoSubZeroUserPreference.query.count(), 1)
+        self.assertFalse(saved.get_json()["enabled"])
+
+        first_client.post("/logout")
+        self._login(first_client, watcher)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+            return_value=self._weather_context_fixture(),
+        ):
+            persisted_page = first_client.get("/neosubzero/ucc")
+        self.assertIn(b'data-weather-motion="off"', persisted_page.data)
 
     def test_ucc_route_rejects_stale_slot_version(self):
         simulator = self._user("ucc_stale_simulator", "simulator")
@@ -836,6 +875,8 @@ class NeoSubZeroUccTest(unittest.TestCase):
                         "frost_risk": {
                             "level": "HIGH",
                             "rationale": "near freezing, tight dew-point spread",
+                            "explanation": "28°F · spread 3°F · light wind · chance snow",
+                            "trend_label": "Risk rising",
                         },
                     },
                 ),

@@ -8,11 +8,8 @@
     const dialog = root.querySelector("[data-ucc-move-dialog]");
     let pendingForm = null;
 
-    const weather = root.querySelector(".neosubzero-weather[data-weather-user-id]");
+    const weather = root.querySelector(".neosubzero-weather[data-weather-preference-url]");
     const weatherMotionToggle = weather?.querySelector("[data-weather-motion-toggle]");
-    const weatherMotionKey = weather?.dataset.weatherUserId
-        ? `neosubzero.weather-motion.${weather.dataset.weatherUserId}`
-        : "";
     const deviceReducesMotion = Boolean(
         window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
     );
@@ -25,22 +22,33 @@
             enabled && deviceReducesMotion ? " · DEVICE REDUCED" : ""
         }`;
     };
-    let weatherMotionEnabled = true;
-    if (weatherMotionKey) {
-        try {
-            weatherMotionEnabled = window.localStorage.getItem(weatherMotionKey) !== "0";
-        } catch (_error) {
-            weatherMotionEnabled = true;
-        }
-    }
+    let weatherMotionEnabled = weather?.dataset.weatherMotion !== "off";
     applyWeatherMotion(weatherMotionEnabled);
-    weatherMotionToggle?.addEventListener("click", () => {
-        weatherMotionEnabled = !weatherMotionEnabled;
-        applyWeatherMotion(weatherMotionEnabled);
+    weatherMotionToggle?.addEventListener("click", async () => {
+        const previous = weatherMotionEnabled;
+        const requested = !previous;
+        weatherMotionToggle.disabled = true;
+        delete weather.dataset.weatherMotionError;
+        weatherMotionToggle.removeAttribute("title");
+        applyWeatherMotion(requested);
         try {
-            window.localStorage.setItem(weatherMotionKey, weatherMotionEnabled ? "1" : "0");
+            const response = await fetch(weather.dataset.weatherPreferenceUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({enabled: requested}),
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Save failed");
+            weatherMotionEnabled = payload.enabled === true;
+            applyWeatherMotion(weatherMotionEnabled);
         } catch (_error) {
-            // The visual preference remains active for this page when storage is unavailable.
+            weatherMotionEnabled = previous;
+            applyWeatherMotion(previous);
+            weather.dataset.weatherMotionError = "true";
+            weatherMotionToggle.title = "Weather animation preference could not be saved.";
+        } finally {
+            weatherMotionToggle.disabled = false;
         }
     });
 

@@ -9,6 +9,7 @@ from app.models import (
     NeoSubZeroPretreatState,
     NeoSubZeroSprayRecord,
     NeoSubZeroSetting,
+    NeoSubZeroUserPreference,
     StaffingPersonQualification,
 )
 
@@ -30,6 +31,7 @@ NEOSUBZERO_TABLES = (
     NeoSubZeroUccAssignment.__table__,
     NeoSubZeroUccTruckAssignment.__table__,
     NeoSubZeroSprayRecord.__table__,
+    NeoSubZeroUserPreference.__table__,
 )
 
 

@@ -231,7 +231,43 @@ def preliminary_frost_risk(
         "level": level,
         "score": score,
         "rationale": ", ".join(dict.fromkeys(reasons)) or "limited frost signals",
+        "explanation": _frost_explanation(
+            temperature,
+            spread,
+            humidity,
+            wind,
+            conditions,
+        ),
     }
+
+
+def preliminary_frost_trends(hours):
+    """Annotate hourly temporary frost results with their next-hour direction."""
+    ranks = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+    rows = []
+    source = tuple(hours or ())
+    for index, row in enumerate(source):
+        copied = dict(row)
+        risk = dict(copied.get("frost_risk") or {})
+        trend = None
+        if index + 1 < len(source):
+            current_rank = ranks.get(risk.get("level"))
+            next_rank = ranks.get(
+                (source[index + 1].get("frost_risk") or {}).get("level")
+            )
+            if current_rank is not None and next_rank is not None:
+                trend = (
+                    "rising"
+                    if next_rank > current_rank
+                    else "falling"
+                    if next_rank < current_rank
+                    else "steady"
+                )
+        risk["trend"] = trend
+        risk["trend_label"] = f"Risk {trend}" if trend else ""
+        copied["frost_risk"] = risk
+        rows.append(copied)
+    return tuple(rows)
 
 
 def current_weather_theme(current):
@@ -466,6 +502,7 @@ def _forecast_hour(period, gust_intervals, zone):
 
 
 def _forecast_card(sort_date, start, end, hours):
+    hours = preliminary_frost_trends(hours)
     temperatures = [row["temperature_value"] for row in hours if row["temperature_value"] is not None]
     dewpoints = [row["dewpoint_value"] for row in hours if row["dewpoint_value"] is not None]
     spreads = [row["spread_value"] for row in hours if row["spread_value"] is not None]
@@ -493,6 +530,28 @@ def _forecast_card(sort_date, start, end, hours):
         "gust": f"G{_rounded(max(gusts))} mph" if gusts else "-",
         "hours": hours,
     }
+
+
+def _frost_explanation(temperature, spread, humidity, wind, conditions):
+    pieces = []
+    if temperature is not None:
+        pieces.append(_degree_label(temperature))
+    if spread is not None:
+        pieces.append(f"spread {_degree_label(spread)}")
+    if humidity is not None and humidity >= 80:
+        pieces.append(f"RH {_percent_label(humidity)}")
+    if wind is not None:
+        pieces.append(
+            "light wind"
+            if wind <= 5
+            else "strong wind"
+            if wind >= 15
+            else f"{_rounded(wind)} mph wind"
+        )
+    condition = str(conditions or "").strip()
+    if condition and condition != "-":
+        pieces.append(condition.casefold())
+    return " · ".join(pieces) or "Forecast inputs unavailable"
 
 
 def _grid_intervals(quantity):

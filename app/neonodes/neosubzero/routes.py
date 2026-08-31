@@ -53,6 +53,10 @@ from app.services.neosubzero_weather import (
     neosubzero_weather_context,
     neosubzero_weather_revision,
 )
+from app.services.neosubzero_preferences import (
+    neosubzero_weather_animations_enabled,
+    set_neosubzero_weather_animations_enabled,
+)
 from app.services.neosubzero_spray import (
     DEICER_REFRESH_KEY,
     NeoSubZeroSprayError,
@@ -406,6 +410,9 @@ def ucc():
         ),
         refresh_status=subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY),
         weather=weather,
+        weather_animations_enabled=neosubzero_weather_animations_enabled(
+            current_user
+        ),
         application_context=_application_context(operation),
         **neosubzero_ucc_context(gateway, operation),
     )
@@ -433,6 +440,36 @@ def ucc_revision_endpoint():
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@bp.route("/ucc/weather-preference", methods=["POST"])
+@gateway_node_required("subzero")
+def ucc_weather_preference():
+    if not user_can("neosubzero.ucc.view"):
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) != {"enabled"}:
+        return jsonify({"ok": False, "error": "Invalid weather preference."}), 400
+    try:
+        preference = set_neosubzero_weather_animations_enabled(
+            current_user,
+            payload.get("enabled"),
+        )
+        db.session.commit()
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        error = (
+            str(exc)
+            if isinstance(exc, ValueError)
+            else "Unable to save weather preference."
+        )
+        return jsonify({"ok": False, "error": error}), 400
+    return jsonify(
+        {
+            "ok": True,
+            "enabled": bool(preference.weather_animations_enabled),
+        }
+    )
 
 
 @bp.route("/truck", methods=["POST"])
