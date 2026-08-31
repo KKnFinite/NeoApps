@@ -58,11 +58,18 @@
                     <h3>POSITION {{ slot.position }}</h3>
                     {% for role in ('driver', 'flyer') %}
                     {% set role_slot = slot.roles[role] %}
-                    <form method="post" data-ucc-assignment-form>
+                    <form method="post" data-ucc-assignment-form
+                          data-current-person-id="{{ role_slot.person.id if role_slot.person else '' }}"
+                          data-current-person-name="{{ role_slot.person.full_name if role_slot.person else '' }}"
+                          data-assignment-id="{{ role_slot.assignment.id if role_slot.assignment else '' }}"
+                          data-assignment-version="{{ role_slot.version }}">
                         <input type="hidden" name="ramp" value="{{ ramp.name }}">
                         <input type="hidden" name="position_number" value="{{ slot.position }}">
                         <input type="hidden" name="team_role" value="{{ role }}">
                         <input type="hidden" name="expected_version" value="{{ role_slot.version }}">
+                        <input type="hidden" name="source_assignment_id" value="">
+                        <input type="hidden" name="source_expected_version" value="">
+                        <input type="hidden" name="move_resolution" value="">
                         <label><span>{{ role|upper }}</span>
                             {% if can_edit %}
                             <select name="person_id" aria-label="{{ ramp.name }} position {{ slot.position }} {{ role }}">
@@ -75,6 +82,13 @@
                             <strong>{{ role_slot.person.full_name if role_slot.person else 'UNASSIGNED' }}</strong>
                             {% endif %}
                         </label>
+                        {% if can_edit and role_slot.person %}
+                        <button type="button" class="neosubzero-ucc-drag-assignee" draggable="true"
+                                data-ucc-drag-assignee data-person-id="{{ role_slot.person.id }}"
+                                aria-label="Move {{ role_slot.person.full_name }} from {{ ramp.name }} position {{ slot.position }} {{ role }}">
+                            MOVE {{ role_slot.person.full_name }}
+                        </button>
+                        {% endif %}
                         {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
                     </form>
                     {% endfor %}
@@ -98,6 +112,18 @@
         </section>
         {% endfor %}
     </div>
+    {% endif %}
+    {% if can_edit %}
+    <dialog class="neosubzero-ucc-move-dialog" data-ucc-move-dialog>
+        <h2>OCCUPIED SLOT</h2>
+        <p><strong data-ucc-move-person></strong> is already assigned here.</p>
+        <p>Remove that employee, swap both employees, or cancel this move.</p>
+        <div>
+            <button type="button" data-ucc-move-choice="remove">REMOVE</button>
+            <button type="button" data-ucc-move-choice="swap">SWAP</button>
+            <button type="button" data-ucc-move-choice="cancel">CANCEL</button>
+        </div>
+    </dialog>
     {% endif %}
 </section>
 <script src="{{ url_for('static', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION) }}" defer></script>

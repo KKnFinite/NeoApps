@@ -136,30 +136,12 @@ def set_neosubzero_ucc_assignment(
     """Stage one Driver/Flyer slot change without committing."""
     if operation is None:
         raise NeoSubZeroUccError("No current sort is available.")
-    ramp = str(ramp or "").strip().title()
-    role = str(team_role or "").strip().casefold()
-    try:
-        position = int(position_number)
-    except (TypeError, ValueError) as exc:
-        raise NeoSubZeroUccError("Choose a valid treatment position.") from exc
-    if ramp not in RAMP_ORDER or position not in UCC_POSITIONS or role not in UCC_ROLES:
-        raise NeoSubZeroUccError("Choose a valid UCC staffing slot.")
-    if assignment is not None and (
-        assignment.sort_date_operation_id != operation.id
-        or assignment.ramp != ramp
-        or assignment.position_number != position
-        or assignment.team_role != role
-    ):
-        raise NeoSubZeroUccError("UCC assignment does not match this slot.")
+    ramp, position, role = _validated_slot(
+        operation, ramp, position_number, team_role, assignment
+    )
 
     if person is not None:
-        eligible_ids = {
-            item["person"].id for item in current_subzero_staffing_pool(operation)
-        }
-        if person.id not in eligible_ids:
-            raise NeoSubZeroUccError(
-                "Choose an available Deice-qualified employee."
-            )
+        _validate_available_person(operation, person)
         duplicate = NeoSubZeroUccAssignment.query.filter(
             NeoSubZeroUccAssignment.sort_date_operation_id == operation.id,
             NeoSubZeroUccAssignment.person_id == person.id,
@@ -183,6 +165,116 @@ def set_neosubzero_ucc_assignment(
     assignment.assigned_by_user_id = user_id if person is not None else None
     assignment.assigned_at = datetime.utcnow() if person is not None else None
     return assignment
+
+
+def move_neosubzero_ucc_assignment(
+    operation,
+    ramp,
+    position_number,
+    team_role,
+    person,
+    *,
+    resolution="remove",
+    user_id=None,
+    destination_assignment=None,
+    source_assignment=None,
+):
+    """Atomically stage an assignment, move, replacement, or slot swap."""
+    if operation is None:
+        raise NeoSubZeroUccError("No current sort is available.")
+    ramp, position, role = _validated_slot(
+        operation,
+        ramp,
+        position_number,
+        team_role,
+        destination_assignment,
+    )
+    resolution = str(resolution or "").strip().casefold()
+    if resolution == "cancel":
+        return {
+            "destination": destination_assignment,
+            "source": source_assignment,
+            "changed": False,
+        }
+    if person is None:
+        destination = set_neosubzero_ucc_assignment(
+            operation,
+            ramp,
+            position,
+            role,
+            None,
+            user_id=user_id,
+            assignment=destination_assignment,
+        )
+        return {"destination": destination, "source": None, "changed": True}
+
+    _validate_available_person(operation, person)
+    if (
+        destination_assignment is not None
+        and destination_assignment.person_id == person.id
+    ):
+        return {
+            "destination": destination_assignment,
+            "source": destination_assignment,
+            "changed": False,
+        }
+
+    if source_assignment is None:
+        source_assignment = NeoSubZeroUccAssignment.query.filter(
+            NeoSubZeroUccAssignment.sort_date_operation_id == operation.id,
+            NeoSubZeroUccAssignment.person_id == person.id,
+            NeoSubZeroUccAssignment.id
+            != (getattr(destination_assignment, "id", None) or -1),
+        ).one_or_none()
+    elif (
+        source_assignment.sort_date_operation_id != operation.id
+        or source_assignment.person_id != person.id
+        or source_assignment.id == getattr(destination_assignment, "id", None)
+    ):
+        raise NeoSubZeroUccError(
+            "The employee's current UCC assignment changed. Reload UCC."
+        )
+
+    displaced_person = (
+        destination_assignment.person
+        if destination_assignment and destination_assignment.person_id
+        else None
+    )
+    if displaced_person is not None:
+        if resolution not in {"remove", "swap"}:
+            raise NeoSubZeroUccError(
+                "Choose Remove, Swap, or Cancel for the occupied destination."
+            )
+        if resolution == "swap" and source_assignment is None:
+            raise NeoSubZeroUccError(
+                "Swap requires the selected employee to have a current UCC slot."
+            )
+
+    destination = destination_assignment
+    if destination is None:
+        destination = NeoSubZeroUccAssignment(
+            sort_date_operation_id=operation.id,
+            ramp=ramp,
+            position_number=position,
+            team_role=role,
+        )
+        db.session.add(destination)
+
+    if source_assignment is not None:
+        _stage_slot_person(source_assignment, None, user_id=None)
+    if displaced_person is not None:
+        _stage_slot_person(destination, None, user_id=None)
+    if source_assignment is not None or displaced_person is not None:
+        db.session.flush()
+
+    _stage_slot_person(destination, person, user_id=user_id)
+    if resolution == "swap" and source_assignment is not None:
+        _stage_slot_person(source_assignment, displaced_person, user_id=user_id)
+    return {
+        "destination": destination,
+        "source": source_assignment,
+        "changed": True,
+    }
 
 
 def clear_neosubzero_ucc_assignments_for_people(
@@ -209,6 +301,40 @@ def clear_neosubzero_ucc_assignments_for_people(
         row.assigned_by_user_id = None
         row.assigned_at = None
     return len(rows)
+
+
+def _validated_slot(operation, ramp, position_number, team_role, assignment):
+    ramp = str(ramp or "").strip().title()
+    role = str(team_role or "").strip().casefold()
+    try:
+        position = int(position_number)
+    except (TypeError, ValueError) as exc:
+        raise NeoSubZeroUccError("Choose a valid treatment position.") from exc
+    if ramp not in RAMP_ORDER or position not in UCC_POSITIONS or role not in UCC_ROLES:
+        raise NeoSubZeroUccError("Choose a valid UCC staffing slot.")
+    if assignment is not None and (
+        assignment.sort_date_operation_id != operation.id
+        or assignment.ramp != ramp
+        or assignment.position_number != position
+        or assignment.team_role != role
+    ):
+        raise NeoSubZeroUccError("UCC assignment does not match this slot.")
+    return ramp, position, role
+
+
+def _validate_available_person(operation, person):
+    eligible_ids = {
+        item["person"].id for item in current_subzero_staffing_pool(operation)
+    }
+    if person.id not in eligible_ids:
+        raise NeoSubZeroUccError("Choose an available Deice-qualified employee.")
+
+
+def _stage_slot_person(assignment, person, *, user_id):
+    assignment.person = person
+    assignment.person_id = getattr(person, "id", None)
+    assignment.assigned_by_user_id = user_id if person is not None else None
+    assignment.assigned_at = datetime.utcnow() if person is not None else None
 
 
 def clear_neosubzero_ucc_assignments_for_person_all_sorts(person_id):

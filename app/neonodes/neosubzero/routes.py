@@ -43,9 +43,9 @@ from app.services.neosubzero_staffing import (
 from app.services.neosubzero_ucc import (
     UCC_REFRESH_KEY,
     NeoSubZeroUccError,
+    move_neosubzero_ucc_assignment,
     neosubzero_ucc_context,
     neosubzero_ucc_revision,
-    set_neosubzero_ucc_assignment,
 )
 from app.services.access_control import get_current_gateway
 from app.services.live_collaboration import version_conflict
@@ -306,17 +306,55 @@ def ucc():
             )
             if person_id and person is None:
                 raise NeoSubZeroUccError("Choose an active employee.")
-            set_neosubzero_ucc_assignment(
+            source_assignment = (
+                NeoSubZeroUccAssignment.query.filter(
+                    NeoSubZeroUccAssignment.sort_date_operation_id
+                    == locked_operation.id,
+                    NeoSubZeroUccAssignment.person_id == person.id,
+                    NeoSubZeroUccAssignment.id
+                    != (getattr(assignment, "id", None) or -1),
+                )
+                .with_for_update()
+                .one_or_none()
+                if person is not None
+                else None
+            )
+            submitted_source_id = request.form.get(
+                "source_assignment_id", type=int
+            )
+            source_expected_version = str(
+                request.form.get("source_expected_version") or ""
+            ).strip()
+            if source_assignment is not None and (
+                submitted_source_id != source_assignment.id
+                or not source_expected_version
+                or version_conflict(source_assignment, source_expected_version)
+            ):
+                raise NeoSubZeroUccError(
+                    "The employee's UCC assignment changed while you were moving them. "
+                    "Review current values."
+                )
+            if source_assignment is None and submitted_source_id is not None:
+                raise NeoSubZeroUccError(
+                    "The employee's UCC assignment changed while you were moving them. "
+                    "Review current values."
+                )
+            result = move_neosubzero_ucc_assignment(
                 locked_operation,
                 ramp,
                 position,
                 role,
                 person,
+                resolution=request.form.get("move_resolution"),
                 user_id=current_user.id,
-                assignment=assignment,
+                destination_assignment=assignment,
+                source_assignment=source_assignment,
             )
             db.session.commit()
-            flash("UCC STAFFING SAVED.", "success")
+            flash(
+                "UCC STAFFING SAVED." if result["changed"] else "UCC STAFFING UNCHANGED.",
+                "success" if result["changed"] else "info",
+            )
         except (NeoSubZeroUccError, IntegrityError) as exc:
             db.session.rollback()
             flash(

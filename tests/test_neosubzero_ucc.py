@@ -32,6 +32,7 @@ from app.services.neosubzero_staffing import (
 from app.services.neosubzero_ucc import (
     UCC_REFRESH_KEY,
     NeoSubZeroUccError,
+    move_neosubzero_ucc_assignment,
     neosubzero_ucc_context,
     neosubzero_ucc_revision,
     set_neosubzero_ucc_assignment,
@@ -308,6 +309,114 @@ class NeoSubZeroUccTest(unittest.TestCase):
             )
         self.assertEqual(NeoSubZeroUccAssignment.query.count(), 2)
 
+    def test_ucc_assignment_moves_to_empty_slot_without_unassign_step(self):
+        source = set_neosubzero_ucc_assignment(
+            self.operation, "Remote", 1, "driver", self.permanent
+        )
+        db.session.commit()
+        result = move_neosubzero_ucc_assignment(
+            self.operation,
+            "Alpha",
+            2,
+            "flyer",
+            self.permanent,
+            destination_assignment=None,
+            source_assignment=source,
+            resolution="",
+        )
+        db.session.commit()
+        self.assertTrue(result["changed"])
+        self.assertIsNone(source.person_id)
+        self.assertEqual(result["destination"].person_id, self.permanent.id)
+
+    def test_ucc_assignment_remove_replaces_occupied_destination_atomically(self):
+        source = set_neosubzero_ucc_assignment(
+            self.operation, "Remote", 1, "driver", self.permanent
+        )
+        destination = set_neosubzero_ucc_assignment(
+            self.operation, "Alpha", 2, "flyer", self.callout
+        )
+        db.session.commit()
+        move_neosubzero_ucc_assignment(
+            self.operation,
+            "Alpha",
+            2,
+            "flyer",
+            self.permanent,
+            destination_assignment=destination,
+            source_assignment=source,
+            resolution="remove",
+        )
+        db.session.commit()
+        self.assertIsNone(source.person_id)
+        self.assertEqual(destination.person_id, self.permanent.id)
+        self.assertEqual(
+            NeoSubZeroUccAssignment.query.filter_by(
+                sort_date_operation_id=self.operation.id,
+                person_id=self.permanent.id,
+            ).count(),
+            1,
+        )
+
+    def test_ucc_assignment_swap_exchanges_both_slots_atomically(self):
+        source = set_neosubzero_ucc_assignment(
+            self.operation, "Remote", 1, "driver", self.permanent
+        )
+        destination = set_neosubzero_ucc_assignment(
+            self.operation, "Alpha", 2, "flyer", self.callout
+        )
+        db.session.commit()
+        move_neosubzero_ucc_assignment(
+            self.operation,
+            "Alpha",
+            2,
+            "flyer",
+            self.permanent,
+            destination_assignment=destination,
+            source_assignment=source,
+            resolution="swap",
+        )
+        db.session.commit()
+        self.assertEqual(source.person_id, self.callout.id)
+        self.assertEqual(destination.person_id, self.permanent.id)
+
+    def test_ucc_assignment_cancel_and_invalid_swap_leave_slots_unchanged(self):
+        source = set_neosubzero_ucc_assignment(
+            self.operation, "Remote", 1, "driver", self.permanent
+        )
+        destination = set_neosubzero_ucc_assignment(
+            self.operation, "Alpha", 2, "flyer", self.callout
+        )
+        db.session.commit()
+        result = move_neosubzero_ucc_assignment(
+            self.operation,
+            "Alpha",
+            2,
+            "flyer",
+            self.permanent,
+            destination_assignment=destination,
+            source_assignment=source,
+            resolution="cancel",
+        )
+        self.assertFalse(result["changed"])
+        self.assertEqual(source.person_id, self.permanent.id)
+        self.assertEqual(destination.person_id, self.callout.id)
+
+        source.person_id = None
+        db.session.commit()
+        with self.assertRaisesRegex(NeoSubZeroUccError, "Swap requires"):
+            move_neosubzero_ucc_assignment(
+                self.operation,
+                "Alpha",
+                2,
+                "flyer",
+                self.permanent,
+                destination_assignment=destination,
+                source_assignment=None,
+                resolution="swap",
+            )
+        self.assertEqual(destination.person_id, self.callout.id)
+
     def test_not_here_callout_clears_ucc_and_here_restores_pool_membership(self):
         slot = set_neosubzero_ucc_assignment(
             self.operation, "Alpha", 2, "flyer", self.callout
@@ -398,6 +507,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
             "app.neonodes.neosubzero.routes.current_neosubzero_operation",
             return_value=self.operation,
         ):
+            editable_page = client.get("/neosubzero/ucc")
             saved = client.post(
                 "/neosubzero/ucc",
                 data={
@@ -408,7 +518,14 @@ class NeoSubZeroUccTest(unittest.TestCase):
                     "expected_version": "",
                 },
             )
+            assigned_page = client.get("/neosubzero/ucc")
             revision = client.get("/neosubzero/ucc/revision?revision=old")
+        self.assertIn(b"data-ucc-move-dialog", editable_page.data)
+        self.assertIn(b'name="source_expected_version"', editable_page.data)
+        self.assertIn(b'data-ucc-move-choice="remove"', editable_page.data)
+        self.assertIn(b'data-ucc-move-choice="swap"', editable_page.data)
+        self.assertIn(b'data-ucc-move-choice="cancel"', editable_page.data)
+        self.assertIn(b"data-ucc-drag-assignee", assigned_page.data)
         self.assertEqual(saved.status_code, 302)
         self.assertEqual(revision.status_code, 200)
         self.assertNotEqual(before, neosubzero_ucc_revision(self.gateway, self.operation))
@@ -466,6 +583,84 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b"changed while you were editing", response.data)
         db.session.refresh(slot)
         self.assertEqual(slot.person_id, self.callout.id)
+
+    def test_ucc_route_rejects_stale_source_during_move(self):
+        simulator = self._user("ucc_move_stale_simulator", "simulator")
+        source = set_neosubzero_ucc_assignment(
+            self.operation, "Remote", 3, "driver", self.permanent
+        )
+        db.session.commit()
+        stale_source_version = entity_version(source)
+        source.assigned_at = source.assigned_at + timedelta(minutes=1)
+        db.session.commit()
+        client = self.app.test_client()
+        self._login(client, simulator)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ):
+            response = client.post(
+                "/neosubzero/ucc",
+                data={
+                    "ramp": "Alpha",
+                    "position_number": 3,
+                    "team_role": "flyer",
+                    "person_id": self.permanent.id,
+                    "expected_version": "",
+                    "source_assignment_id": source.id,
+                    "source_expected_version": stale_source_version,
+                    "move_resolution": "",
+                },
+                follow_redirects=True,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"changed while you were moving", response.data)
+        db.session.refresh(source)
+        self.assertEqual(source.person_id, self.permanent.id)
+        self.assertIsNone(
+            NeoSubZeroUccAssignment.query.filter_by(
+                sort_date_operation_id=self.operation.id,
+                ramp="Alpha",
+                position_number=3,
+                team_role="flyer",
+            ).one_or_none()
+        )
+
+    def test_ucc_route_swaps_two_current_slots_in_one_save(self):
+        simulator = self._user("ucc_move_simulator", "simulator")
+        source = set_neosubzero_ucc_assignment(
+            self.operation, "Remote", 4, "driver", self.permanent
+        )
+        destination = set_neosubzero_ucc_assignment(
+            self.operation, "Alpha", 4, "flyer", self.callout
+        )
+        db.session.commit()
+        client = self.app.test_client()
+        self._login(client, simulator)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ):
+            response = client.post(
+                "/neosubzero/ucc",
+                data={
+                    "ramp": "Alpha",
+                    "position_number": 4,
+                    "team_role": "flyer",
+                    "person_id": self.permanent.id,
+                    "expected_version": entity_version(destination),
+                    "source_assignment_id": source.id,
+                    "source_expected_version": entity_version(source),
+                    "move_resolution": "swap",
+                },
+                follow_redirects=True,
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UCC STAFFING SAVED", response.data)
+        db.session.refresh(source)
+        db.session.refresh(destination)
+        self.assertEqual(source.person_id, self.callout.id)
+        self.assertEqual(destination.person_id, self.permanent.id)
 
     def _departure(self, flight, tail, destination, hour):
         mission = SortDateMission(
