@@ -39,6 +39,7 @@ class NeoSubZeroDepartureDeiceEvent(db.Model):
     status = db.Column(db.String(24), nullable=False, default="deice_planned")
     configured_at_utc = db.Column(db.DateTime, nullable=True)
     treatment_plan = db.Column(db.String(24), nullable=True)
+    reason_for_application = db.Column(db.String(120), nullable=True)
     pass1_surface_area = db.Column(db.String(32), nullable=True)
     pass1_started_at_utc = db.Column(db.DateTime, nullable=True)
     pass1_ended_at_utc = db.Column(db.DateTime, nullable=True)

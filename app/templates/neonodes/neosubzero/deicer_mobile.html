@@ -18,6 +18,7 @@
             <div><dt>Plan</dt><dd>{{ row.plan_label or 'NOT SELECTED' }}</dd></div>
             <div><dt>Tail Status</dt><dd>{{ row.tail_status }}</dd></div>
             <div><dt>Parking</dt><dd>{{ row.parking }}</dd></div>
+            <div><dt>Reason</dt><dd>{{ row.reason_for_application }}</dd></div>
         </dl>
         {% for position_row in row.spray_positions if position_row.position == assignment.position_number %}
         <section class="neosubzero-deicer-truck">

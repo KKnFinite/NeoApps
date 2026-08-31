@@ -19,9 +19,6 @@
 <form method="post" action="{{ url_for('neosubzero.application_context_mutate') }}" class="neosubzero-application-context" data-subzero-operational-form>
     <input type="hidden" name="board" value="{{ board }}">
     <h2>APPLICATION CONTEXT</h2>
-    <label>Reason for Application
-        <input name="reason_for_application" maxlength="120" value="{{ context.get('reason_for_application', '') }}" placeholder="Enter reason">
-    </label>
     <label>Active Precipitation
         <input name="active_precipitation" maxlength="120" value="{{ context.get('active_precipitation', '') }}" placeholder="Enter precipitation">
     </label>
@@ -36,6 +33,23 @@
     </label>
     <button type="submit">SAVE CONTEXT</button>
 </form>
+{% endmacro %}
+
+{% macro spray_reason(row, can_edit, board, selected_ramp='') %}
+<div class="neosubzero-spray-reason">
+    {% if can_edit %}
+    <form method="post" action="{{ url_for('neosubzero.spray_reason_mutate') }}" data-subzero-operational-form>
+        {{ mutation_identity(row, board, selected_ramp) }}
+        <label>Reason for Application
+            <input name="reason_for_application" maxlength="120" value="{{ row.event.reason_for_application or '' }}" placeholder="Frost">
+        </label>
+        <small>{{ 'DEFAULT · FROST' if not row.event.reason_for_application else 'EXPLICIT REASON' }}</small>
+        <button type="submit">SAVE REASON</button>
+    </form>
+    {% else %}
+    <p><span>Reason for Application</span><strong>{{ row.reason_for_application }}</strong></p>
+    {% endif %}
+</div>
 {% endmacro %}
 
 {% macro terminal_summary(row, can_edit, board, selected_ramp='', open=false) %}
@@ -104,6 +118,7 @@
             {% if row.configured %}<span>CONFIGURED {{ row.configured }}</span>{% endif %}
             {% if row.deice_minutes is not none %}<span>DEICE MINUTES {{ row.deice_minutes }}</span>{% endif %}
         </header>
+        {{ spray_reason(row, can_edit, board, selected_ramp) }}
         {% if can_edit and row.event.status != 'cleared' %}
         <div class="neosubzero-action-row">
             <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">

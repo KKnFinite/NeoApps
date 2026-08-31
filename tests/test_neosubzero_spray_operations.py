@@ -27,7 +27,9 @@ from app.services.live_collaboration import entity_version
 from app.services.neosubzero_departure_deice import neosubzero_fluid_settings
 from app.services.neosubzero_spray import (
     NeoSubZeroSprayError,
+    departure_deice_reason,
     neosubzero_deice_log,
+    set_departure_deice_reason,
     set_neosubzero_spray_gallons,
     set_neosubzero_ucc_truck,
 )
@@ -195,7 +197,7 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
             1,
             "19",
             context={
-                "reason_for_application": "Frost",
+                "reason_for_application": "This sort-level value must be ignored",
                 "active_precipitation": "Snow",
                 "ambient_temperature": "21 F",
                 "dew_point": "18 F",
@@ -203,12 +205,13 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
             },
         )
         db.session.flush()
+        set_departure_deice_reason(self.event, "Changed later")
         record = self._set_gallons(
             2,
             1,
             "20",
             record=record,
-            context={"reason_for_application": "Changed later"},
+            context={"active_precipitation": "Rain"},
         )
         self.assertEqual(record.reason_for_application, "Frost")
         self.assertEqual(record.active_precipitation, "Snow")
@@ -216,6 +219,77 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
         self.assertEqual(record.pass_type, "type_iv")
         self.assertEqual(record.concentration_percent_snapshot, 100)
         self.assertEqual(record.gallons, Decimal("20"))
+
+    def test_departure_reason_defaults_to_frost_and_explicit_event_reason_wins(self):
+        self.assertIsNone(self.event.reason_for_application)
+        self.assertEqual(departure_deice_reason(self.event), "Frost")
+        set_neosubzero_ucc_truck(self.operation, "Alpha", 1, "18")
+        db.session.flush()
+        default_record = self._set_gallons(
+            1,
+            1,
+            "6",
+            context={"reason_for_application": "Global reason", "active_precipitation": "Ice"},
+        )
+        self.assertEqual(default_record.reason_for_application, "Frost")
+        self.assertEqual(default_record.active_precipitation, "Ice")
+
+        set_departure_deice_reason(self.event, "  Freezing Fog  ")
+        db.session.commit()
+        db.session.refresh(self.event)
+        self.assertEqual(self.event.reason_for_application, "Freezing Fog")
+        self.assertEqual(departure_deice_reason(self.event), "Freezing Fog")
+
+        explicit_record = self._set_gallons(
+            2,
+            1,
+            "7",
+            context={"active_precipitation": "Snow"},
+        )
+        db.session.flush()
+        self.assertEqual(explicit_record.reason_for_application, "Freezing Fog")
+        self.assertEqual(default_record.reason_for_application, "Frost")
+
+        set_departure_deice_reason(self.event, "")
+        self.assertIsNone(self.event.reason_for_application)
+        self.assertEqual(departure_deice_reason(self.event), "Frost")
+
+    def test_active_precipitation_working_context_persists_separately_from_reason(self):
+        editor = self._user("context_editor", "simulator", "CONTEXT-EDITOR")
+        client = self.app.test_client()
+        self._login(client, editor)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ):
+            response = client.post(
+                "/neosubzero/application-context",
+                data={
+                    "board": "outbound",
+                    "reason_for_application": "Must not become global context",
+                    "active_precipitation": "Light Snow",
+                    "ambient_temperature": "20 F",
+                    "dew_point": "17 F",
+                    "notes": "Working note",
+                },
+            )
+            reason_response = client.post(
+                "/neosubzero/spray-reason",
+                data={
+                    "board": "outbound",
+                    "mission_id": self.mission.id,
+                    "expected_version": entity_version(self.event),
+                    "reason_for_application": "Ice Crystals",
+                },
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(reason_response.status_code, 302)
+        with client.session_transaction() as working_session:
+            context = working_session[f"neosubzero.application_context.{self.operation.id}"]
+        self.assertEqual(context["active_precipitation"], "Light Snow")
+        self.assertNotIn("reason_for_application", context)
+        db.session.refresh(self.event)
+        self.assertEqual(self.event.reason_for_application, "Ice Crystals")
 
     def test_deice_log_groups_type_i_and_iv_by_truck_and_event(self):
         set_neosubzero_ucc_truck(self.operation, "Alpha", 1, "7")
@@ -343,6 +417,13 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
         self.assertIn("neosubzero_spray_records", tables)
         self.assertIn(NeoSubZeroUccTruckAssignment.__table__, NEOSUBZERO_TABLES)
         self.assertIn(NeoSubZeroSprayRecord.__table__, NEOSUBZERO_TABLES)
+        columns = {
+            column["name"]
+            for column in inspect(db.engine).get_columns(
+                "neosubzero_departure_deice_events"
+            )
+        }
+        self.assertIn("reason_for_application", columns)
         defaults = {key: role for key, role, _description in DEFAULT_PERMISSION_RULES}
         self.assertEqual(defaults["neosubzero.deicer_mobile.view"], "operator")
         self.assertEqual(defaults["neosubzero.deice_log.view"], "watcher")

@@ -20,10 +20,27 @@ from app.services.time_display import format_local_hhmm
 
 
 DEICER_REFRESH_KEY = "neosubzero.deicer_mobile"
+DEFAULT_DEPARTURE_REASON = "Frost"
 
 
 class NeoSubZeroSprayError(ValueError):
     """Safe operator-facing truck/gallons validation error."""
+
+
+def departure_deice_reason(event):
+    """Return the event-scoped explicit reason or the departure default."""
+    if event is None:
+        return ""
+    return str(event.reason_for_application or "").strip() or DEFAULT_DEPARTURE_REASON
+
+
+def set_departure_deice_reason(event, reason):
+    """Stage one departure event's explicit reason without committing."""
+    if event is None:
+        raise NeoSubZeroSprayError("Choose a current departure-deice event.")
+    normalized = _short_text(reason, "Reason for Application", 120)
+    event.reason_for_application = normalized or None
+    return event
 
 
 def set_neosubzero_ucc_truck(
@@ -103,6 +120,7 @@ def decorate_departure_rows_with_spray(operation, rows):
                 }
             )
         departure["spray_positions"] = tuple(ownership)
+        departure["reason_for_application"] = departure_deice_reason(event)
         passes = []
         for pass_number, pass_type in enumerate(departure.get("pass_types") or (), 1):
             positions = []
@@ -239,9 +257,7 @@ def set_neosubzero_spray_gallons(
             driver_name_snapshot=getattr(getattr(driver, "person", None), "full_name", None),
             flyer_person_id=getattr(flyer, "person_id", None),
             flyer_name_snapshot=getattr(getattr(flyer, "person", None), "full_name", None),
-            reason_for_application=_short_text(
-                context.get("reason_for_application"), "Reason for Application", 120
-            ) or None,
+            reason_for_application=departure_deice_reason(event),
             active_precipitation=_short_text(
                 context.get("active_precipitation"), "Active Precipitation", 120
             ) or None,

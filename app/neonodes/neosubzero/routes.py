@@ -54,6 +54,7 @@ from app.services.neosubzero_spray import (
     NeoSubZeroSprayError,
     current_user_ucc_assignment,
     neosubzero_deice_log,
+    set_departure_deice_reason,
     set_neosubzero_spray_gallons,
     set_neosubzero_ucc_truck,
 )
@@ -554,9 +555,6 @@ def application_context_mutate():
     else:
         try:
             session[_application_context_key(operation)] = {
-                "reason_for_application": _context_text(
-                    request.form.get("reason_for_application"), 120, "Reason for Application"
-                ),
                 "active_precipitation": _context_text(
                     request.form.get("active_precipitation"), 120, "Active Precipitation"
                 ),
@@ -570,6 +568,47 @@ def application_context_mutate():
             flash("APPLICATION CONTEXT SAVED.", "success")
         except NeoSubZeroSprayError as exc:
             flash(str(exc), "error")
+    return redirect(_subzero_return_url(board, request.form))
+
+
+@bp.route("/spray-reason", methods=["POST"])
+@gateway_node_required("subzero")
+def spray_reason_mutate():
+    board = str(request.form.get("board") or "").strip().casefold()
+    permission = {
+        "outbound": "neosubzero.outbound.edit",
+        "coordinator": "neosubzero.coordinator.edit",
+    }.get(board)
+    if permission is None or not user_can(permission):
+        return "Access denied.", 403
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    mission_id = request.form.get("mission_id", type=int)
+    try:
+        if operation is None:
+            raise NeoSubZeroSprayError("No current sort is available.")
+        mission = SortDateMission.query.filter_by(
+            id=mission_id,
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+        ).one_or_none()
+        event = NeoSubZeroDepartureDeiceEvent.query.filter_by(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission_id,
+        ).with_for_update().one_or_none()
+        if mission is None or event is None:
+            raise NeoSubZeroSprayError("Choose a current departure-deice event.")
+        expected_version = str(request.form.get("expected_version") or "").strip()
+        if not expected_version or version_conflict(event, expected_version):
+            raise NeoSubZeroSprayError(
+                "Departure deice changed while you were editing. Review current values."
+            )
+        set_departure_deice_reason(event, request.form.get("reason_for_application"))
+        db.session.commit()
+        flash("REASON FOR APPLICATION SAVED.", "success")
+    except NeoSubZeroSprayError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
     return redirect(_subzero_return_url(board, request.form))
 
 
@@ -1000,7 +1039,6 @@ def _application_context_key(operation):
 def _application_context(operation):
     if operation is None:
         return {
-            "reason_for_application": "",
             "active_precipitation": "",
             "ambient_temperature": "",
             "dew_point": "",
@@ -1008,7 +1046,6 @@ def _application_context(operation):
         }
     value = session.get(_application_context_key(operation)) or {}
     return {
-        "reason_for_application": str(value.get("reason_for_application") or ""),
         "active_precipitation": str(value.get("active_precipitation") or ""),
         "ambient_temperature": str(value.get("ambient_temperature") or ""),
         "dew_point": str(value.get("dew_point") or ""),
