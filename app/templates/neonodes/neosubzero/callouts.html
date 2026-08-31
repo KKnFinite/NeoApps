@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Callout Management | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell neosubzero-staffing-shell">
+    <header class="neosubzero-head">
+        <div><p>NEOSUB-ZERO</p><h1>CALLOUT MANAGEMENT</h1></div>
+        <strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong>
+    </header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+
+    {% if not operation %}
+        <p class="neosubzero-empty">No current sort.</p>
+    {% else %}
+        <section class="neosubzero-staffing-section">
+            <header><h2>PERMANENT DEICE</h2><span>Aviation Services / Deice</span></header>
+            <div class="neosubzero-staffing-table-wrap">
+                <table class="neosubzero-staffing-table">
+                    <thead><tr><th>Employee</th><th>Normal Work Area</th><th>Attendance</th><th>Available</th></tr></thead>
+                    <tbody>{% for row in permanent %}<tr>
+                        <td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
+                        <td>{{ row.work_area_path }}</td><td>{{ row.attendance_label }}</td>
+                        <td class="{{ 'is-qualified' if row.available else 'is-unqualified' }}">{{ 'YES' if row.available else 'NO' }}</td>
+                    </tr>{% else %}<tr><td colspan="4">No permanent Deice employees found.</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="neosubzero-staffing-section">
+            <header><h2>TONIGHT'S CALLOUT POOL</h2><span>{{ callouts|length }} SELECTED</span></header>
+            <div class="neosubzero-staffing-table-wrap">
+                <table class="neosubzero-staffing-table">
+                    <thead><tr><th>Employee</th><th>Normal Work Area</th><th>Attendance</th><th>Action</th></tr></thead>
+                    <tbody>{% for row in callouts %}<tr>
+                        <td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
+                        <td>{{ row.work_area_path }}</td><td>{{ row.attendance_label }}</td>
+                        <td>{% if can_edit %}<form method="post"><input type="hidden" name="person_id" value="{{ row.person.id }}"><input type="hidden" name="expected_version" value="{{ row.version }}"><button name="action" value="remove">REMOVE</button></form>{% else %}READ ONLY{% endif %}</td>
+                    </tr>{% else %}<tr><td colspan="4">No callouts selected.</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="neosubzero-staffing-section">
+            <header><h2>QUALIFIED CALLOUT CANDIDATES</h2><span>OUTSIDE PERMANENT DEICE</span></header>
+            <div class="neosubzero-staffing-table-wrap">
+                <table class="neosubzero-staffing-table">
+                    <thead><tr><th>Employee</th><th>Normal Work Area</th><th>Attendance</th><th>Action</th></tr></thead>
+                    <tbody>{% for row in candidates %}<tr>
+                        <td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
+                        <td>{{ row.work_area_path }}</td><td>{{ row.attendance_label }}</td>
+                        <td>{% if can_edit and row.available %}<form method="post"><input type="hidden" name="person_id" value="{{ row.person.id }}"><input type="hidden" name="expected_version" value="{{ row.version }}"><button name="action" value="add">ADD CALLOUT</button></form>{% elif not row.available %}<span class="is-unqualified">NOT HERE</span>{% else %}READ ONLY{% endif %}</td>
+                    </tr>{% else %}<tr><td colspan="4">No additional Deice-qualified candidates.</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </section>
+    {% endif %}
+</section>
+{% endblock %}

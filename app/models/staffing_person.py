@@ -118,6 +118,11 @@ class StaffingPerson(db.Model):
         back_populates="person",
         cascade="all, delete-orphan",
     )
+    qualifications = db.relationship(
+        "StaffingPersonQualification",
+        back_populates="person",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def full_name(self):

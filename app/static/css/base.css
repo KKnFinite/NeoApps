@@ -30248,3 +30248,113 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
         min-height: 42px;
     }
 }
+
+.neosubzero-staffing-search {
+    display: grid;
+    grid-template-columns: minmax(210px, 1fr) minmax(240px, 2fr) auto;
+    align-items: end;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 8px;
+    border: 1px solid #29465d;
+    background: #09151f;
+}
+
+.neosubzero-staffing-search label,
+.neosubzero-staffing-section header span {
+    color: #78bde8;
+    font-size: .64rem;
+    letter-spacing: .05em;
+}
+
+.neosubzero-staffing-search input,
+.neosubzero-staffing-search button,
+.neosubzero-staffing-table button {
+    min-height: 34px;
+    border: 1px solid #38627e;
+    border-radius: 3px;
+    background: #101f2c;
+    color: #e2f1fb;
+}
+
+.neosubzero-staffing-search button,
+.neosubzero-staffing-table button {
+    padding: 5px 9px;
+    cursor: pointer;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.neosubzero-staffing-section {
+    margin: 9px 0;
+}
+
+.neosubzero-staffing-section > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.neosubzero-staffing-section h2 {
+    margin: 4px 0;
+    color: #d8ebf7;
+    font-size: .82rem;
+}
+
+.neosubzero-staffing-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #29465d;
+}
+
+.neosubzero-staffing-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #0b1621;
+    color: #d3e4ef;
+    font-size: .75rem;
+}
+
+.neosubzero-staffing-table th,
+.neosubzero-staffing-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #22394b;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.neosubzero-staffing-table th {
+    color: #78bde8;
+    font-size: .61rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.neosubzero-staffing-table td strong,
+.neosubzero-staffing-table td span {
+    display: block;
+}
+
+.neosubzero-staffing-table form {
+    margin: 0;
+}
+
+.neosubzero-staffing-table .is-qualified {
+    color: #79daa4;
+}
+
+.neosubzero-staffing-table .is-unqualified {
+    color: #e58b8b;
+}
+
+@media (max-width: 700px) {
+    .neosubzero-staffing-search {
+        grid-template-columns: 1fr;
+    }
+
+    .neosubzero-staffing-search input,
+    .neosubzero-staffing-search button,
+    .neosubzero-staffing-table button {
+        min-height: 42px;
+    }
+}

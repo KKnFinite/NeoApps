@@ -492,6 +492,26 @@ DEFAULT_PERMISSION_RULES = (
         "Coordinate NeoSub-Zero departure-deice operations.",
     ),
     (
+        "neosubzero.callouts.view",
+        "watcher",
+        "View NeoSub-Zero current-sort Deice staffing and callouts.",
+    ),
+    (
+        "neosubzero.callouts.edit",
+        "master",
+        "Manage NeoSub-Zero current-sort Deice callouts.",
+    ),
+    (
+        "neosubzero.qualifications.view",
+        "watcher",
+        "View employee Deice qualification status.",
+    ),
+    (
+        "neosubzero.qualifications.edit",
+        "master",
+        "Grant or remove shared employee Deice qualifications.",
+    ),
+    (
         "neosubzero.settings.view",
         "watcher",
         "View NeoSub-Zero Settings.",

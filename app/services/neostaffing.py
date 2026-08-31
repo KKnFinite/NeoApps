@@ -1272,6 +1272,7 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             raise ValueError("Attendance includes an employee outside the selected attendance areas.")
     saved = 0
     user_id = getattr(user, "id", None)
+    saved_statuses = {}
     for person_id in sorted(person_ids):
         status_value = str(values.get(f"status_{person_id}") or "").strip()
         record = existing.get(person_id)
@@ -1315,10 +1316,21 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             if record.operation_unit_id is None and operation_unit:
                 record.operation_unit_id = operation_unit.id
         record.status = status
+        saved_statuses[person_id] = status
         if f"note_{person_id}" in values:
             record.note = _optional_text(values.get(f"note_{person_id}"))
         record.updated_by_user_id = user_id
         saved += 1
+    if saved_statuses:
+        from app.services.neosubzero_staffing import (
+            deactivate_neosubzero_callouts_for_attendance,
+        )
+
+        deactivate_neosubzero_callouts_for_attendance(
+            operation,
+            saved_statuses,
+            user_id=user_id,
+        )
     db.session.flush()
     return saved
 
@@ -3893,6 +3905,7 @@ def save_attendance(values, user):
 
     saved = 0
     user_id = getattr(user, "id", None)
+    saved_statuses = {}
     for person_id in sorted(person_ids):
         assignment = assignments_by_person[person_id]
         status_value = "here" if bulk_status else str(
@@ -3941,9 +3954,20 @@ def save_attendance(values, user):
                 if record.operation_unit_id is None and operation_unit:
                     record.operation_unit_id = operation_unit.id
         record.status = status
+        saved_statuses[person_id] = status
         record.note = note
         record.updated_by_user_id = user_id
         saved += 1
+    if saved_statuses:
+        from app.services.neosubzero_staffing import (
+            deactivate_neosubzero_callouts_for_attendance,
+        )
+
+        deactivate_neosubzero_callouts_for_attendance(
+            operation,
+            saved_statuses,
+            user_id=user_id,
+        )
     db.session.flush()
     return saved
 

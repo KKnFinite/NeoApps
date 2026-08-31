@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Qualifications | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell neosubzero-staffing-shell">
+    <header class="neosubzero-head">
+        <div><p>NEOSUB-ZERO</p><h1>QUALIFICATIONS</h1></div>
+        <strong>{{ gateway.code }}</strong>
+    </header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+
+    <form class="neosubzero-staffing-search" method="get">
+        <label for="subzero-qualification-search">ACTIVE NEOSTAFFING EMPLOYEES</label>
+        <input id="subzero-qualification-search" type="search" name="search" value="{{ search }}" placeholder="Search employee ID or name">
+        <button type="submit">SEARCH</button>
+    </form>
+
+    <div class="neosubzero-staffing-table-wrap">
+        <table class="neosubzero-staffing-table">
+            <thead><tr><th>Employee</th><th>Normal Work Area</th><th>Deice Qualified</th><th>Action</th></tr></thead>
+            <tbody>
+            {% for row in rows %}
+                <tr>
+                    <td><strong>{{ row.person.last_name }}, {{ row.person.first_name }}</strong><span>{{ row.person.employee_id }}</span></td>
+                    <td>{{ row.work_area_path }}</td>
+                    <td><strong class="{{ 'is-qualified' if row.qualified else 'is-unqualified' }}">{{ 'YES' if row.qualified else 'NO' }}</strong></td>
+                    <td>
+                        {% if can_edit %}
+                        <form method="post">
+                            <input type="hidden" name="search" value="{{ search }}">
+                            <input type="hidden" name="person_id" value="{{ row.person.id }}">
+                            <input type="hidden" name="expected_version" value="{{ row.version }}">
+                            <button name="action" value="{{ 'unqualify' if row.qualified else 'qualify' }}">{{ 'REMOVE DEICE' if row.qualified else 'QUALIFY DEICE' }}</button>
+                        </form>
+                        {% else %}<span>READ ONLY</span>{% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="4">No active employees match this search.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

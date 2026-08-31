@@ -3,8 +3,10 @@ from sqlalchemy import inspect, text
 from app.extensions import db
 from app.models import (
     NeoSubZeroDepartureDeiceEvent,
+    NeoSubZeroCalloutAssignment,
     NeoSubZeroPretreatState,
     NeoSubZeroSetting,
+    StaffingPersonQualification,
 )
 
 LOCK_KEY = 7_483_327_341_930
@@ -12,6 +14,8 @@ NEOSUBZERO_TABLES = (
     NeoSubZeroPretreatState.__table__,
     NeoSubZeroDepartureDeiceEvent.__table__,
     NeoSubZeroSetting.__table__,
+    StaffingPersonQualification.__table__,
+    NeoSubZeroCalloutAssignment.__table__,
 )
 
 

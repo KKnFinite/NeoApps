@@ -1,12 +1,16 @@
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.models import (
     NeoSubZeroDepartureDeiceEvent,
+    NeoSubZeroCalloutAssignment,
     NeoSubZeroPretreatState,
     SortDateMission,
+    StaffingPerson,
+    StaffingPersonQualification,
 )
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero.services import (
@@ -25,6 +29,14 @@ from app.services.neosubzero_departure_deice import (
     mutate_departure_deice,
     neosubzero_fluid_settings,
     set_neosubzero_fluid_settings,
+)
+from app.services.neosubzero_staffing import (
+    DEICE_QUALIFICATION_KEY,
+    NeoSubZeroStaffingError,
+    neosubzero_callout_context,
+    neosubzero_qualification_people,
+    set_neosubzero_callout_membership,
+    set_staffing_person_qualification,
 )
 from app.services.access_control import get_current_gateway
 from app.services.live_collaboration import version_conflict
@@ -55,6 +67,18 @@ NEOSUBZERO_PAGES = (
         "neosubzero.coordinator",
         "neosubzero.coordinator.view",
         "neosubzero.coordinator.edit",
+    ),
+    (
+        "Callout Management",
+        "neosubzero.callouts",
+        "neosubzero.callouts.view",
+        "neosubzero.callouts.edit",
+    ),
+    (
+        "Qualifications",
+        "neosubzero.qualifications",
+        "neosubzero.qualifications.view",
+        "neosubzero.qualifications.edit",
     ),
     (
         "Settings",
@@ -202,6 +226,146 @@ def coordinator():
 def coordinator_revision_endpoint():
     return _departure_revision_response(
         "neosubzero.coordinator.view", COORDINATOR_REFRESH_KEY
+    )
+
+
+@bp.route("/callouts", methods=["GET", "POST"])
+@gateway_node_required("subzero")
+def callouts():
+    access = permission_access(
+        "neosubzero.callouts.view",
+        "neosubzero.callouts.edit",
+    )
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosubzero.index"))
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    session[LAST_PAGE_KEY] = "neosubzero.callouts"
+    if request.method == "POST":
+        if not access["can_edit"]:
+            return "Access denied.", 403
+        try:
+            if operation is None:
+                raise NeoSubZeroStaffingError("No current sort is available.")
+            person = StaffingPerson.query.filter_by(
+                id=request.form.get("person_id", type=int),
+                active=True,
+            ).with_for_update().one_or_none()
+            assignment = NeoSubZeroCalloutAssignment.query.filter_by(
+                sort_date_operation_id=operation.id,
+                person_id=getattr(person, "id", None),
+            ).with_for_update().one_or_none()
+            expected_version = str(
+                request.form.get("expected_version") or ""
+            ).strip()
+            if assignment and (
+                not expected_version
+                or version_conflict(assignment, expected_version)
+            ):
+                raise NeoSubZeroStaffingError(
+                    "Callout membership changed while you were editing. Review current values."
+                )
+            selected = request.form.get("action") == "add"
+            if request.form.get("action") not in {"add", "remove"}:
+                raise NeoSubZeroStaffingError("Choose a valid callout action.")
+            set_neosubzero_callout_membership(
+                operation,
+                person,
+                selected,
+                user_id=current_user.id,
+                assignment=assignment,
+            )
+            db.session.commit()
+            flash(
+                "CALLOUT ADDED." if selected else "CALLOUT REMOVED.",
+                "success",
+            )
+        except (NeoSubZeroStaffingError, IntegrityError) as exc:
+            db.session.rollback()
+            flash(
+                str(exc)
+                if isinstance(exc, NeoSubZeroStaffingError)
+                else "Unable to save callout membership.",
+                "error",
+            )
+        return redirect(url_for("neosubzero.callouts"))
+    return render_template(
+        "neonodes/neosubzero/callouts.html",
+        gateway=gateway,
+        can_edit=access["can_edit"],
+        **neosubzero_callout_context(operation),
+    )
+
+
+@bp.route("/qualifications", methods=["GET", "POST"])
+@gateway_node_required("subzero")
+def qualifications():
+    access = permission_access(
+        "neosubzero.qualifications.view",
+        "neosubzero.qualifications.edit",
+    )
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosubzero.index"))
+    gateway = get_current_gateway()
+    search = str(request.values.get("search") or "").strip()
+    session[LAST_PAGE_KEY] = "neosubzero.qualifications"
+    if request.method == "POST":
+        if not access["can_edit"]:
+            return "Access denied.", 403
+        try:
+            person = StaffingPerson.query.filter_by(
+                id=request.form.get("person_id", type=int),
+                active=True,
+            ).with_for_update().one_or_none()
+            qualification = StaffingPersonQualification.query.filter_by(
+                person_id=getattr(person, "id", None),
+                qualification_key=DEICE_QUALIFICATION_KEY,
+            ).with_for_update().one_or_none()
+            expected_version = str(
+                request.form.get("expected_version") or ""
+            ).strip()
+            if qualification and (
+                not expected_version
+                or version_conflict(qualification, expected_version)
+            ):
+                raise NeoSubZeroStaffingError(
+                    "Qualification changed while you were editing. Review current values."
+                )
+            action = request.form.get("action")
+            if action not in {"qualify", "unqualify"}:
+                raise NeoSubZeroStaffingError("Choose a valid qualification action.")
+            qualified = action == "qualify"
+            set_staffing_person_qualification(
+                person,
+                DEICE_QUALIFICATION_KEY,
+                qualified,
+                user_id=current_user.id,
+                qualification=qualification,
+            )
+            db.session.commit()
+            flash(
+                "DEICE QUALIFICATION GRANTED."
+                if qualified
+                else "DEICE QUALIFICATION REMOVED.",
+                "success",
+            )
+        except (NeoSubZeroStaffingError, IntegrityError) as exc:
+            db.session.rollback()
+            flash(
+                str(exc)
+                if isinstance(exc, NeoSubZeroStaffingError)
+                else "Unable to save Deice qualification.",
+                "error",
+            )
+        return redirect(url_for("neosubzero.qualifications", search=search))
+    return render_template(
+        "neonodes/neosubzero/qualifications.html",
+        gateway=gateway,
+        can_edit=access["can_edit"],
+        search=search,
+        rows=neosubzero_qualification_people(search),
     )
 
 

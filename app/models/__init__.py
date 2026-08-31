@@ -35,6 +35,7 @@ from app.models.neorain_delay_info import NeoRainDelayInfo
 from app.models.neosubzero_pretreat_state import NeoSubZeroPretreatState
 from app.models.neosubzero_departure_deice_event import NeoSubZeroDepartureDeiceEvent
 from app.models.neosubzero_setting import NeoSubZeroSetting
+from app.models.neosubzero_callout_assignment import NeoSubZeroCalloutAssignment
 from app.models.neosektor_sort_state import NeoSektorSortState
 from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
@@ -74,6 +75,7 @@ from app.models.staffing_group_membership import StaffingGroupMembership
 from app.models.staffing_notification import StaffingNotification
 from app.models.staffing_operation_schedule import StaffingOperationSchedule
 from app.models.staffing_person import StaffingPerson
+from app.models.staffing_person_qualification import StaffingPersonQualification
 from app.models.staffing_shift_flow_plan import StaffingShiftFlowPlan
 from app.models.staffing_reporting_relationship import StaffingReportingRelationship
 from app.models.staffing_twenty_c_affiliation import StaffingTwentyCAffiliation
@@ -142,6 +144,7 @@ __all__ = [
     "NeoSubZeroPretreatState",
     "NeoSubZeroDepartureDeiceEvent",
     "NeoSubZeroSetting",
+    "NeoSubZeroCalloutAssignment",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
     "NeoSektorUldOnTheWayEvent",
@@ -165,6 +168,7 @@ __all__ = [
     "SortDateParkingAssignment",
     "SortDateTailState",
     "StaffingPerson",
+    "StaffingPersonQualification",
     "StaffingShiftFlowPlan",
     "StaffingReportingRelationship",
     "StaffingTwentyCAffiliation",
