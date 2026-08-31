@@ -8,6 +8,7 @@ from app.models import (
     Gateway,
     LiveScreenRefreshSetting,
     NeoSubZeroCalloutAssignment,
+    NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroPretreatState,
     NeoSubZeroUccAssignment,
     SortDateMission,
@@ -19,6 +20,7 @@ from app.models import (
     StaffingWorkAssignment,
     User,
 )
+from app.neonodes.neosubzero.routes import _coordinator_workspace_state
 from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.live_collaboration import entity_version
 from app.services.neosubzero_staffing import (
@@ -133,7 +135,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         context = neosubzero_ucc_context(self.gateway, self.operation)
         self.assertEqual([ramp["name"] for ramp in context["ramps"]], ["Remote", "Alpha"])
-        self.assertEqual(context["ramps"][0]["throat"]["flight"], "5X100")
+        self.assertIsNone(context["ramps"][0]["throat"])
         self.assertEqual(context["ramps"][0]["aircraft"][0]["parking"], "R09")
         self.assertEqual(context["ramps"][0]["aircraft"][0]["visual_state"], "negative")
         self.assertEqual(context["ramps"][1]["aircraft"][0]["visual_state"], "pretreat-planned")
@@ -141,6 +143,142 @@ class NeoSubZeroUccTest(unittest.TestCase):
             {row["person"].id for row in context["staffing_pool"]},
             {self.permanent.id, self.callout.id},
         )
+
+    def test_configured_departure_occupies_throat_without_block_out(self):
+        event = self._deice_event(
+            self.alpha,
+            "configured",
+            configured_at=datetime(2026, 8, 31, 0, 45),
+        )
+        db.session.commit()
+        self.assertIsNone(self.alpha.actual_block_out_datetime_utc)
+        alpha = self._ramp_context("Alpha")
+        self.assertEqual(alpha["throat"]["mission_id"], self.alpha.id)
+        self.assertEqual(alpha["throat"]["event"].id, event.id)
+        self.assertEqual(alpha["throat"]["parking"], "A03")
+
+    def test_configured_aircraft_wins_over_multiple_planned_queue_rows(self):
+        planned_two = self._departure("5X201", "N201", "SLC", 3)
+        configured = self._departure("5X202", "N202", "DEN", 4)
+        db.session.add_all(
+            [
+                SortDateParkingAssignment(
+                    sort_date_operation_id=self.operation.id,
+                    tail_number="N201",
+                    ramp_code="A",
+                    position_code="A04",
+                ),
+                SortDateParkingAssignment(
+                    sort_date_operation_id=self.operation.id,
+                    tail_number="N202",
+                    ramp_code="A",
+                    position_code="A05",
+                ),
+            ]
+        )
+        self._deice_event(self.alpha, "deice_planned")
+        self._deice_event(planned_two, "deice_planned")
+        self._deice_event(
+            configured,
+            "configured",
+            configured_at=datetime(2026, 8, 31, 0, 50),
+        )
+        db.session.commit()
+        alpha = self._ramp_context("Alpha")
+        self.assertEqual(alpha["throat"]["mission_id"], configured.id)
+        self.assertEqual(
+            [row["mission_id"] for row in alpha["waiting_queue"]],
+            [self.alpha.id, planned_two.id],
+        )
+
+    def test_coordinator_selection_never_changes_universal_throat(self):
+        self._deice_event(self.alpha, "deice_planned")
+        configured = self._departure("5X203", "N203", "DFW", 3)
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=self.operation.id,
+                tail_number="N203",
+                ramp_code="A",
+                position_code="A06",
+            )
+        )
+        self._deice_event(
+            configured,
+            "configured",
+            configured_at=datetime(2026, 8, 31, 0, 55),
+        )
+        db.session.commit()
+        before = self._ramp_context("Alpha")["throat"]["mission_id"]
+        departure_rows = self._departure_rows()
+        with self.app.test_request_context(
+            f"/neosubzero/coordinator?ramp=Alpha&mission={self.alpha.id}"
+        ):
+            workspace = _coordinator_workspace_state(self.operation, departure_rows)
+            self.assertEqual(workspace["selected_mission_id"], self.alpha.id)
+            after = self._ramp_context("Alpha")["throat"]["mission_id"]
+        self.assertEqual(before, configured.id)
+        self.assertEqual(after, configured.id)
+
+    def test_cleared_or_reset_event_leaves_throat(self):
+        next_mission = self._departure("5X204", "N204", "PHX", 3)
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=self.operation.id,
+                tail_number="N204",
+                ramp_code="A",
+                position_code="A04",
+            )
+        )
+        next_event = self._deice_event(
+            next_mission,
+            "configured",
+            configured_at=datetime(2026, 8, 31, 0, 55),
+        )
+        event = self._deice_event(
+            self.alpha,
+            "configured",
+            configured_at=datetime(2026, 8, 31, 0, 45),
+        )
+        db.session.commit()
+        self.assertEqual(self._ramp_context("Alpha")["throat"]["mission_id"], self.alpha.id)
+
+        event.status = "finished"
+        db.session.commit()
+        finished = self._ramp_context("Alpha")["throat"]
+        self.assertEqual(finished["mission_id"], self.alpha.id)
+        self.assertEqual(finished["visual_label"], "FINISHED / AWAITING CLEARANCE")
+
+        event.status = "cleared"
+        db.session.commit()
+        self.assertEqual(
+            self._ramp_context("Alpha")["throat"]["mission_id"],
+            next_mission.id,
+        )
+
+        next_event.status = "deice_planned"
+        next_event.configured_at_utc = None
+        db.session.commit()
+        alpha = self._ramp_context("Alpha")
+        self.assertIsNone(alpha["throat"])
+        self.assertEqual(
+            [row["mission_id"] for row in alpha["waiting_queue"]],
+            [next_mission.id],
+        )
+
+    def test_parking_position_and_pretreat_configuration_do_not_imply_throat(self):
+        pretreat = NeoSubZeroPretreatState(
+            sort_date_operation_id=self.operation.id,
+            tail_number="N100",
+            pretreat_planned=True,
+            configured_at_utc=datetime(2026, 8, 31, 0, 30),
+        )
+        db.session.add(pretreat)
+        db.session.commit()
+        self.assertIsNone(self.remote.actual_block_out_datetime_utc)
+        remote = self._ramp_context("Remote")
+        self.assertIsNone(remote["throat"])
+        self.assertEqual(remote["aircraft"][0]["parking"], "R09")
+        self.assertEqual(remote["aircraft"][0]["visual_state"], "configured")
 
     def test_driver_flyer_assignment_and_duplicate_prevention(self):
         driver = set_neosubzero_ucc_assignment(
@@ -238,6 +376,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
             )
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"THROAT", page.data)
+        self.assertIn(b"WAITING QUEUE", page.data)
         self.assertEqual(denied.status_code, 403)
 
         simulator = self._user("ucc_simulator", "simulator")
@@ -336,6 +475,30 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.add(mission)
         db.session.flush()
         return mission
+
+    def _deice_event(self, mission, status, *, configured_at=None):
+        event = NeoSubZeroDepartureDeiceEvent(
+            sort_date_operation_id=self.operation.id,
+            sort_date_mission_id=mission.id,
+            tail_number=mission.assigned_tail_number,
+            status=status,
+            configured_at_utc=configured_at,
+        )
+        db.session.add(event)
+        db.session.flush()
+        return event
+
+    def _ramp_context(self, ramp_name):
+        return next(
+            row
+            for row in neosubzero_ucc_context(self.gateway, self.operation)["ramps"]
+            if row["name"] == ramp_name
+        )
+
+    def _departure_rows(self):
+        from app.services.neosubzero_departure_deice import departure_deice_context
+
+        return departure_deice_context(self.gateway, self.operation)["rows"]
 
     def _unit(self, unit_type, name, parent=None):
         unit = StaffingUnit(unit_type=unit_type, name=name, parent=parent, active=True)

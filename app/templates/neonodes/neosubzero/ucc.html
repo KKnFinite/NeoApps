@@ -31,7 +31,7 @@
                 <div class="neosubzero-ucc-throat {{ 'state-' ~ ramp.throat.visual_state if ramp.throat else 'is-empty' }}">
                     <span class="neosubzero-ucc-aircraft-shape" aria-hidden="true">✈</span>
                     {% if ramp.throat %}
-                    <p>THROAT · {{ ramp.throat.parking }}</p>
+                    <p>ACTIVE THROAT · FROM {{ ramp.throat.parking }}</p>
                     <strong>{{ ramp.throat.tail }}</strong>
                     <span>{{ ramp.throat.flight }} · {{ ramp.throat.destination }}</span>
                     <span>{{ ramp.throat.tail_status }} · {{ ramp.throat.visual_label }}</span>
@@ -39,6 +39,18 @@
                     <p>THROAT / POSITION 9</p><strong>CLEAR</strong>
                     {% endif %}
                 </div>
+
+                <section class="neosubzero-ucc-queue" aria-label="{{ ramp.name }} deice waiting queue">
+                    <h3>WAITING QUEUE</h3>
+                    {% for row in ramp.waiting_queue %}
+                    <div class="state-{{ row.visual_state }}">
+                        <strong>{{ row.flight }}</strong>
+                        <span>{{ row.tail }}</span>
+                        <span>{{ row.parking }}</span>
+                        <b>{{ row.visual_label }}</b>
+                    </div>
+                    {% else %}<p>CLEAR</p>{% endfor %}
+                </section>
 
                 {% for slot in ramp.slots %}
                 <section class="neosubzero-ucc-position position-{{ slot.position }}">

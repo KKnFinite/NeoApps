@@ -78,10 +78,16 @@ def neosubzero_ucc_context(gateway, operation):
         if not aircraft:
             continue
         aircraft.sort(key=_aircraft_sort_key)
-        throat = next(
-            (row for row in aircraft if _position_number(row["parking"]) == 9),
-            None,
-        )
+        active_throat_rows = [row for row in aircraft if _is_active_throat(row)]
+        active_throat_rows.sort(key=_throat_sort_key)
+        throat = active_throat_rows[0] if active_throat_rows else None
+        waiting_rows = [
+            row
+            for row in aircraft
+            if row is not throat and _is_waiting_for_deice(row)
+        ]
+        waiting_rows.sort(key=_queue_sort_key)
+        waiting_queue = tuple(waiting_rows)
         slots = []
         for position in UCC_POSITIONS:
             roles = {}
@@ -103,6 +109,7 @@ def neosubzero_ucc_context(gateway, operation):
                 "name": ramp,
                 "aircraft": tuple(aircraft),
                 "throat": throat,
+                "waiting_queue": waiting_queue,
                 "slots": tuple(slots),
             }
         )
@@ -247,7 +254,9 @@ def _visual_state(row):
         return "cleared"
     if status == "negative" or row.get("collapse_state") == "negative":
         return "negative"
-    if status in {"deice_planned", "finished"}:
+    if status == "finished":
+        return "finished"
+    if status == "deice_planned":
         return "deice-planned"
     if status == "configured":
         return "configured"
@@ -266,6 +275,7 @@ def _visual_label(state):
         "configured": "CONFIGURED",
         "pretreated": "PRETREATED",
         "deice-planned": "DEICE PLANNED",
+        "finished": "FINISHED / AWAITING CLEARANCE",
         "negative": "NEGATIVE DEICE",
         "cleared": "CLEARED",
     }.get(state, "ACTIVE")
@@ -275,6 +285,53 @@ def _position_number(position_code):
     text = str(position_code or "").strip().upper()
     digits = "".join(character for character in text if character.isdigit())
     return int(digits) if digits else None
+
+
+def _departure_event_status(row):
+    return str(getattr(row.get("event"), "status", "") or "").strip().lower()
+
+
+def _is_active_throat(row):
+    event = row.get("event")
+    status = _departure_event_status(row)
+    return status == "finished" or (
+        status == "configured"
+        and getattr(event, "configured_at_utc", None) is not None
+    )
+
+
+def _is_waiting_for_deice(row):
+    return _departure_event_status(row) in {
+        "deice_planned",
+        "configured",
+        "finished",
+    }
+
+
+def _throat_sort_key(row):
+    event = row.get("event")
+    status = _departure_event_status(row)
+    active_at = (
+        getattr(event, "pass1_started_at_utc", None)
+        or getattr(event, "configured_at_utc", None)
+        or row.get("sort_time")
+    )
+    return (
+        0 if status == "finished" else 1,
+        active_at is None,
+        active_at or datetime.max,
+        row.get("sort_time") or datetime.max,
+        row.get("mission_id") or 0,
+    )
+
+
+def _queue_sort_key(row):
+    return (
+        row.get("sort_time") is None,
+        row.get("sort_time") or datetime.max,
+        row.get("flight") or "",
+        row.get("mission_id") or 0,
+    )
 
 
 def _aircraft_sort_key(row):
