@@ -516,7 +516,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b"CURRENT SORT \xc2\xb7 HOURLY WEATHER", page.data)
         self.assertIn(b"2300", page.data)
         self.assertIn(b"FROST RISK \xc2\xb7 PRELIMINARY", page.data)
-        self.assertIn(b"Risk rising", page.data)
+        self.assertIn(b"Risk rising \xe2\x86\x92 HIGH at 0000", page.data)
         self.assertIn(b"28\xc2\xb0F \xc2\xb7 spread 3\xc2\xb0F \xc2\xb7 light wind \xc2\xb7 chance snow", page.data)
         self.assertIn(b"UPCOMING OPERATIONAL SORT WINDOWS", page.data)
         self.assertIn(b"28\xc2\xb0F", page.data)
@@ -876,7 +876,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
                             "level": "HIGH",
                             "rationale": "near freezing, tight dew-point spread",
                             "explanation": "28°F · spread 3°F · light wind · chance snow",
-                            "trend_label": "Risk rising",
+                            "trend_label": "Risk rising → HIGH at 0000",
                         },
                     },
                 ),

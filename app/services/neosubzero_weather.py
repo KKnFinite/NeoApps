@@ -251,9 +251,10 @@ def preliminary_frost_trends(hours):
         risk = dict(copied.get("frost_risk") or {})
         trend = None
         if index + 1 < len(source):
+            next_row = source[index + 1]
             current_rank = ranks.get(risk.get("level"))
             next_rank = ranks.get(
-                (source[index + 1].get("frost_risk") or {}).get("level")
+                (next_row.get("frost_risk") or {}).get("level")
             )
             if current_rank is not None and next_rank is not None:
                 trend = (
@@ -264,7 +265,13 @@ def preliminary_frost_trends(hours):
                     else "steady"
                 )
         risk["trend"] = trend
-        risk["trend_label"] = f"Risk {trend}" if trend else ""
+        if trend in {"rising", "falling"}:
+            next_risk = next_row.get("frost_risk") or {}
+            risk["trend_label"] = (
+                f"Risk {trend} → {next_risk.get('level')} at {next_row.get('time')}"
+            )
+        else:
+            risk["trend_label"] = f"Risk {trend}" if trend else ""
         copied["frost_risk"] = risk
         rows.append(copied)
     return tuple(rows)

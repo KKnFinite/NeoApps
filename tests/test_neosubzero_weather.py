@@ -117,15 +117,20 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
     def test_preliminary_frost_trend_compares_the_next_hour(self):
         rows = preliminary_frost_trends(
             (
-                {"frost_risk": {"level": "LOW"}},
-                {"frost_risk": {"level": "MEDIUM"}},
-                {"frost_risk": {"level": "MEDIUM"}},
-                {"frost_risk": {"level": "LOW"}},
+                {"time": "0100", "frost_risk": {"level": "LOW"}},
+                {"time": "0200", "frost_risk": {"level": "MEDIUM"}},
+                {"time": "0300", "frost_risk": {"level": "MEDIUM"}},
+                {"time": "0400", "frost_risk": {"level": "LOW"}},
             )
         )
         self.assertEqual(
             [row["frost_risk"]["trend_label"] for row in rows],
-            ["Risk rising", "Risk steady", "Risk falling", ""],
+            [
+                "Risk rising → MEDIUM at 0200",
+                "Risk steady",
+                "Risk falling → LOW at 0400",
+                "",
+            ],
         )
 
     def test_current_theme_uses_observation_not_forecast_conditions(self):
@@ -230,10 +235,13 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
                     "temperature": 30 + day,
                     "temperatureUnit": "F",
                     "dewpoint": {"unitCode": "wmoUnit:degC", "value": -2},
-                    "relativeHumidity": {"unitCode": "wmoUnit:percent", "value": 70},
+                    "relativeHumidity": {
+                        "unitCode": "wmoUnit:percent",
+                        "value": 95 if day == 2 and hour == 1 else 70,
+                    },
                     "probabilityOfPrecipitation": {"unitCode": "wmoUnit:percent", "value": day},
                     "windDirection": "NW",
-                    "windSpeed": "10 mph",
+                    "windSpeed": "3 mph" if day == 2 and hour == 1 else "10 mph",
                     "shortForecast": "Chance Snow",
                 }
             )
@@ -266,7 +274,11 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
         )
         self.assertTrue(all(card["window_label"] == "18:00–06:00" for card in cards))
         self.assertEqual([hour["time"] for hour in cards[0]["hours"]], ["1800", "0100"])
-        self.assertEqual(cards[0]["hours"][0]["frost_risk"]["trend_label"], "Risk steady")
+        self.assertEqual(
+            cards[0]["hours"][0]["frost_risk"]["trend_label"],
+            "Risk rising → HIGH at 0100",
+        )
+        self.assertEqual(cards[0]["hours"][-1]["frost_risk"]["trend_label"], "")
         self.assertTrue(all(len(card["hours"]) == 1 for card in cards[1:]))
         self.assertEqual(cards[0]["gust"], "G20 mph")
-        self.assertEqual(cards[0]["wind"], "NW 10 mph")
+        self.assertEqual(cards[0]["wind"], "NW 10 mph → NW 3 mph")
