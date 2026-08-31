@@ -61,6 +61,7 @@ from app.services.neorain_load_planner_schema import (
 )
 from app.services.neorain_crew_admin_schema import ensure_neorain_crew_admin_assignments_table
 from app.services.neorain_delay_info_schema import ensure_neorain_delay_info_table
+from app.services.neosubzero_schema import ensure_neosubzero_pretreat_table
 from app.services.load_planning_contact_schema import (
     ensure_load_planning_contact_columns,
 )
@@ -160,6 +161,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_neorain_ground_time_settings_table(app)
     ensure_neorain_crew_admin_assignments_table(app)
     ensure_neorain_delay_info_table(app)
+    ensure_neosubzero_pretreat_table(app)
     ensure_motherbrain_alert_user_state_table(app)
     ensure_sort_timeline_sort_setting_columns(app)
     ensure_sort_date_mission_departure_status_constraint(app)
@@ -1019,8 +1021,8 @@ def _pwa_manifest_definitions():
         "subzero": {
             "name": "NeoSub-Zero",
             "short_name": "Sub-Zero",
-            "description": "NeoSub-Zero placeholder.",
-            "start_url": "/nodes/",
+            "description": "NeoSub-Zero aircraft pretreat operations.",
+            "start_url": "/neosubzero",
             "theme_color": "#4db7ff",
             "icon_folder": "subzero",
         },
@@ -1098,6 +1100,7 @@ def register_blueprints(app):
     from app.neonodes import bp as neonodes_bp
     from app.neonodes.neoermac import bp as neoermac_bp
     from app.neonodes.neorain import bp as neorain_bp
+    from app.neonodes.neosubzero import bp as neosubzero_bp
     from app.neonodes.neosektor import bp as neosektor_bp
     from app.neonodes.neoscorpion import bp as neoscorpion_bp
     from app.neostaffing import bp as neostaffing_bp
@@ -1108,6 +1111,7 @@ def register_blueprints(app):
     app.register_blueprint(neonodes_bp, url_prefix="/nodes")
     app.register_blueprint(neoermac_bp, url_prefix="/neoermac")
     app.register_blueprint(neorain_bp, url_prefix="/neorain")
+    app.register_blueprint(neosubzero_bp, url_prefix="/neosubzero")
     app.register_blueprint(neosektor_bp, url_prefix="/neosektor")
     app.register_blueprint(neoscorpion_bp, url_prefix="/neoscorpion")
     app.register_blueprint(neostaffing_bp, url_prefix="/neostaffing")

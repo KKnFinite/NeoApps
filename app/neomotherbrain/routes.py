@@ -372,6 +372,7 @@ def rfd_hub():
         can_launch_ermac=user_can_access_node(current_user, gateway.code, "ermac"),
         can_launch_scorpion=user_can_access_node(current_user, gateway.code, "scorpion"),
         can_launch_rain=user_can_access_node(current_user, gateway.code, "rain"),
+        can_launch_subzero=user_can_access_node(current_user, gateway.code, "subzero"),
     )
 
 

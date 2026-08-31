@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Pretreat | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell" data-subzero-live data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.pretreat_revision_endpoint') }}">
+<header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>PRETREAT</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
+<nav class="neosubzero-nav"><a class="active" href="{{ url_for('neosubzero.pretreat') }}">PRETREAT</a><a href="{{ url_for('neosubzero.settings') }}">SETTINGS</a></nav>
+{% if not operation %}<p class="neosubzero-empty">No current sort.</p>{% elif not rows %}<p class="neosubzero-empty">No current or upcoming departure missions.</p>{% else %}
+<div class="neosubzero-desktop"><table class="neosubzero-table"><thead><tr><th>Tail</th><th>Inbound ETA</th><th>Tail Status</th><th>Outbound STD</th><th>Parking</th><th>Ground Time</th><th>Pretreat</th><th>Configured</th><th>Treatment</th></tr></thead><tbody>
+{% for row in rows %}<tr><td><strong>{{ row.tail }}</strong></td><td>{{ row.inbound_eta or '-' }}</td><td>{{ row.tail_status }}</td><td>{{ row.outbound_std or '-' }}</td><td>{{ row.parking }}</td><td>{{ row.ground_time }}</td><td>{{ 'PRETREATED' if row.completed else ('PLANNED' if row.planned else '-') }} · DEICE {{ row.deice_status }}</td><td>{{ row.configured or '-' }}</td><td>{{ pretreat_editor(row) }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="neosubzero-mobile"><section><h2>PLANNED</h2>{% for row in rows if row.planned and not row.completed %}{{ mobile_mission(row) }}{% else %}<p>None planned.</p>{% endfor %}</section><section><h2>COMPLETED</h2>{% for row in rows if row.completed %}{{ mobile_mission(row) }}{% else %}<p>None completed.</p>{% endfor %}</section></div>
+{% endif %}</section>
+<script>
+(() => {
+    const root = document.querySelector("[data-subzero-live]");
+    const canEdit = {{ can_edit|tojson }};
+    const operationalTimezone = {{ gateway_timezone|tojson }};
+
+    const syncDependencies = (form) => {
+        const fields = ["pass1_start", "pass1_end", "pass2_start", "pass2_end"];
+        const unlocked = form.dataset.subzeroUnlocked === "true";
+        const enabled = {
+            pass1_start: unlocked,
+            pass1_end: unlocked && Boolean(form.elements.pass1_start.value),
+            pass2_start: unlocked && Boolean(form.elements.pass1_end.value),
+            pass2_end: unlocked && Boolean(form.elements.pass2_start.value),
+        };
+        fields.forEach((name) => {
+            form.elements[name].readOnly = !enabled[name];
+            const stamp = form.querySelector(`[data-subzero-stamp="${name}"]`);
+            if (stamp) stamp.hidden = !enabled[name];
+        });
+    };
+
+    document.querySelectorAll(".neosubzero-treatment-form").forEach((form) => {
+        form.dataset.subzeroUnlocked = canEdit
+            && !form.querySelector("[data-subzero-edit]:not([hidden])")
+            ? "true"
+            : "false";
+        form.addEventListener("input", () => {
+            if (root) root.dataset.subzeroDirty = "true";
+            syncDependencies(form);
+        });
+        syncDependencies(form);
+    });
+
+    document.querySelectorAll("[data-subzero-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const form = button.closest("form");
+            form.dataset.subzeroUnlocked = "true";
+            form.querySelectorAll("select, textarea").forEach((field) => {
+                field.readOnly = false;
+                field.disabled = false;
+            });
+            button.hidden = true;
+            form.querySelector("button[type=submit]").hidden = false;
+            syncDependencies(form);
+        });
+    });
+
+    document.querySelectorAll("[data-subzero-stamp]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const now = new Date();
+            const parts = Object.fromEntries(
+                new Intl.DateTimeFormat("en-US", {
+                    timeZone: operationalTimezone,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hourCycle: "h23",
+                }).formatToParts(now).map((part) => [part.type, part.value])
+            );
+            const value = parts.hour + parts.minute;
+            const input = button.closest("form").elements[button.dataset.subzeroStamp];
+            input.value = value;
+            input.dispatchEvent(new Event("input", {bubbles: true}));
+        });
+    });
+
+    if (!root || !window.NeoLiveUpdates) return;
+    let revision = root.dataset.revision;
+    const controller = window.NeoLiveUpdates.create({
+        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
+        continuousWhileVisible: true,
+        poll: async () => {
+            const url = new URL(root.dataset.revisionUrl, location.origin);
+            url.searchParams.set("revision", revision);
+            const response = await fetch(url, {cache: "no-store"});
+            const payload = await response.json();
+            controller.setServerStatus(payload.refresh || {});
+            revision = payload.revision || revision;
+            if (
+                payload.changed
+                && root.dataset.subzeroDirty !== "true"
+                && !root.querySelector(":focus")
+            ) {
+                location.reload();
+            }
+        },
+    });
+    controller.setServerStatus({{ refresh_status|tojson }});
+})();
+</script>
+{% endblock %}
+{% macro mobile_mission(row) %}<details class="neosubzero-card"><summary>{{ row.tail }} · ETA {{ row.inbound_eta or '-' }} · {{ 'PRETREATED' if row.completed else 'PLANNED' }}</summary><dl><div><dt>Status</dt><dd>{{ row.tail_status }}</dd></div><div><dt>STD</dt><dd>{{ row.outbound_std or '-' }}</dd></div><div><dt>Parking</dt><dd>{{ row.parking }}</dd></div><div><dt>Ground</dt><dd>{{ row.ground_time }}</dd></div></dl>{{ pretreat_editor(row) }}</details>{% endmacro %}
+{% macro pretreat_editor(row) %}<div class="neosubzero-editor" data-completed="{{ 'true' if row.completed else 'false' }}">
+{% if can_edit %}<form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="expected_version" value="{{ row.version }}"><button name="action" value="toggle_planned">{{ 'UNPLAN' if row.planned else 'PRETREAT PLANNED' }}</button><button name="action" value="toggle_configured">{{ 'CLEAR CONFIGURED' if row.configured else 'CONFIGURED' }}</button></form>{% endif %}
+<form method="post" action="{{ url_for('neosubzero.pretreat_mutate') }}" class="neosubzero-treatment-form"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="expected_version" value="{{ row.version }}"><input type="hidden" name="action" value="save_treatment">
+<fieldset class="neosubzero-pass type-i"><legend>PASS 1 · TYPE I</legend><label>Surface Area<select name="pass1_surface_area" {% if not can_edit or row.completed %}disabled{% endif %}>{% for value,label in surface_labels.items() %}<option value="{{ value }}" {% if row.state and row.state.pass1_surface_area == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><label>Start<input name="pass1_start" value="{{ row.pass1_start|replace(':','') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if not can_edit or row.completed %}readonly{% endif %}><button type="button" data-subzero-stamp="pass1_start" {% if not can_edit or row.completed %}hidden{% endif %}>NOW</button></label><label>End<input name="pass1_end" value="{{ row.pass1_end|replace(':','') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if not can_edit or row.completed or not row.pass1_start %}readonly{% endif %}><button type="button" data-subzero-stamp="pass1_end" {% if not can_edit or row.completed or not row.pass1_start %}hidden{% endif %}>NOW</button></label></fieldset>
+<fieldset class="neosubzero-pass type-iv"><legend>PASS 2 · TYPE IV</legend><label>Surface Area<select name="pass2_surface_area" {% if not can_edit or row.completed %}disabled{% endif %}>{% for value,label in surface_labels.items() %}<option value="{{ value }}" {% if row.state and row.state.pass2_surface_area == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><label>Start<input name="pass2_start" value="{{ row.pass2_start|replace(':','') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if not can_edit or row.completed or not row.pass1_end %}readonly{% endif %}><button type="button" data-subzero-stamp="pass2_start" {% if not can_edit or row.completed or not row.pass1_end %}hidden{% endif %}>NOW</button></label><label>End<input name="pass2_end" value="{{ row.pass2_end|replace(':','') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if not can_edit or row.completed or not row.pass2_start %}readonly{% endif %}><button type="button" data-subzero-stamp="pass2_end" {% if not can_edit or row.completed or not row.pass2_start %}hidden{% endif %}>NOW</button></label></fieldset>
+<label>Notes<textarea name="notes" {% if not can_edit or row.completed %}readonly{% endif %}>{{ row.state.notes if row.state else '' }}</textarea></label>{% if can_edit %}<button type="button" data-subzero-edit {% if not row.completed %}hidden{% endif %}>EDIT</button><button type="submit" {% if row.completed %}hidden{% endif %}>SAVE TREATMENT</button>{% endif %}</form></div>{% endmacro %}

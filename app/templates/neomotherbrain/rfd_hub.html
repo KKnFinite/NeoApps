@@ -89,9 +89,7 @@
                     {{ node_card("ermac", "Ermac") }}
                 </article>
                 {% endif %}
-                <article class="rfd-node-tile rfd-node-placeholder rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">
-                    {{ node_card("subzero", "Sub-Zero", coming_soon=true) }}
-                </article>
+                {% if can_launch_subzero %}<a class="rfd-node-tile rfd-node-subzero" href="{{ url_for('neosubzero.index') }}" aria-label="NeoSub-Zero">{{ node_card("subzero", "Sub-Zero") }}</a>{% else %}<article class="rfd-node-tile rfd-node-disabled rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">{{ node_card("subzero", "Sub-Zero") }}</article>{% endif %}
                 {% if can_launch_scorpion %}
                 <a class="rfd-node-tile rfd-node-scorpion" href="{{ url_for('neoscorpion.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoscorpion.index') }}" aria-label="NeoScorpion">
                     {{ node_card("scorpion", "Scorpion") }}

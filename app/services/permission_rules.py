@@ -462,6 +462,26 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoRain Crew Admin assignments.",
     ),
     (
+        "neosubzero.pretreat.view",
+        "watcher",
+        "View NeoSub-Zero Pretreat workspace.",
+    ),
+    (
+        "neosubzero.pretreat.edit",
+        "simulator",
+        "Edit NeoSub-Zero Pretreat operations.",
+    ),
+    (
+        "neosubzero.settings.view",
+        "watcher",
+        "View NeoSub-Zero Settings.",
+    ),
+    (
+        "neosubzero.settings.edit",
+        "master",
+        "Edit NeoSub-Zero settings and refresh intervals.",
+    ),
+    (
         "neostaffing.board.view",
         "watcher",
         "View the NeoStaffing Board dashboard.",

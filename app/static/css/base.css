@@ -29903,3 +29903,13 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
         justify-content: flex-start;
     }
 }
+.neosubzero-shell { color:#dcecff; background:linear-gradient(180deg,#08121d,#0b1724); min-height:70vh; padding:14px; }
+.neosubzero-head { display:flex; justify-content:space-between; align-items:end; border-bottom:1px solid #2d668c; padding-bottom:8px; }
+.neosubzero-head p,.neosubzero-head h1 { margin:0; }.neosubzero-head p { color:#55bfff; font-size:.72rem; letter-spacing:.12em; }
+.neosubzero-nav { display:flex; gap:8px; padding:10px 0; }.neosubzero-nav a { color:#a9c8df; border:1px solid #31536d; padding:6px 12px; text-decoration:none; }.neosubzero-nav a.active { color:white; border-color:#56bdff; }
+.neosubzero-table { width:100%; border-collapse:collapse; font-size:.78rem; }.neosubzero-table th,.neosubzero-table td { border-bottom:1px solid #23394b; padding:6px; vertical-align:top; }.neosubzero-table th { color:#83cfff; text-align:left; }
+.neosubzero-editor form { display:flex; flex-wrap:wrap; gap:5px; }.neosubzero-editor button,.neosubzero-editor input,.neosubzero-editor select,.neosubzero-editor textarea { min-height:32px; }
+.neosubzero-pass { display:grid; grid-template-columns:repeat(3,minmax(85px,1fr)); gap:5px; margin:4px 0; padding:5px; }.neosubzero-pass label { display:grid; gap:2px; }.neosubzero-pass.type-i { border-color:#e98a32; }.neosubzero-pass.type-i legend { color:#ffab52; }.neosubzero-pass.type-iv { border-color:#3aae72; }.neosubzero-pass.type-iv legend { color:#68d99b; }
+.neosubzero-treatment-form textarea { max-width:320px; min-height:54px; resize:vertical; }.neosubzero-mobile { display:none; }.neosubzero-card { border:1px solid #31536d; margin:7px 0; padding:7px; }.neosubzero-card summary { min-height:38px; cursor:pointer; }.neosubzero-card dl { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.neosubzero-settings { max-width:720px; border-top:1px solid #31536d; padding-top:12px; }.neosubzero-settings form { display:flex; align-items:end; gap:8px; }.neosubzero-settings label { display:grid; gap:4px; }
+@media (max-width:700px) { .neosubzero-desktop { display:none; }.neosubzero-mobile { display:block; }.neosubzero-pass { grid-template-columns:1fr; }.neosubzero-editor form { display:grid; }.neosubzero-editor button,.neosubzero-editor input,.neosubzero-editor select,.neosubzero-editor textarea { width:100%; min-height:42px; }.neosubzero-head { align-items:start; } }
