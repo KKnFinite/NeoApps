@@ -20,6 +20,7 @@ from app.services.parking_plan import tail_operational_status, tail_operational_
 from app.services.time_display import format_local_hhmm
 
 PRETREAT_REFRESH_KEY = "neosubzero.pretreat"
+DEFAULT_PRETREAT_REASON = "Pretreat"
 SURFACE_AREAS = ("wings_only", "wings_tail", "entire_aircraft")
 SURFACE_LABELS = {"wings_only": "Wings Only", "wings_tail": "Wings + Tail", "entire_aircraft": "Entire Aircraft"}
 _HHMM = re.compile(r"^\d{4}$")
@@ -71,6 +72,7 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
             "tail_status": tail_operational_status_label(tail_operational_status(tail_state, assignment=assignment)) or "NORMAL",
             "outbound_std": format_local_hhmm(outbound_std, mission.timezone or None), "parking": assignment.position_code if assignment else "TBD",
             "ground_time": _ground_time(inbound_eta, outbound_std), "state": state, "planned": bool(state and state.pretreat_planned),
+            "reason_for_application": pretreat_reason(state),
             "deice_status": str(getattr(tail_state, "deice_status", "unknown") or "unknown").replace("_", " ").upper(),
             "configured": format_local_hhmm(state.configured_at_utc, mission.timezone or None) if state else "", "completed": completed,
             "pass1_start": _display(state, "pass1_started_at_utc", mission), "pass1_end": _display(state, "pass1_ended_at_utc", mission),
@@ -93,6 +95,10 @@ def mutate_pretreat(operation, mission, action, values, state=None):
     elif action == "toggle_configured":
         state.configured_at_utc = None if state.configured_at_utc else datetime.utcnow().replace(second=0, microsecond=0)
     elif action == "save_treatment":
+        if "reason_for_application" in values or not state.reason_for_application:
+            state.reason_for_application = _pretreat_reason_value(
+                values.get("reason_for_application")
+            )
         state.pass1_surface_area = _surface(values.get("pass1_surface_area"))
         state.pass2_surface_area = _surface(values.get("pass2_surface_area"))
         state.pass1_started_at_utc = _parse_hhmm(values.get("pass1_start"), operation, mission)
@@ -106,6 +112,22 @@ def mutate_pretreat(operation, mission, action, values, state=None):
     if action == "save_treatment":
         _sync_completion(operation, tail, state)
     return state
+
+
+def pretreat_reason(state):
+    return (
+        str(getattr(state, "reason_for_application", "") or "").strip()
+        or DEFAULT_PRETREAT_REASON
+    )
+
+
+def _pretreat_reason_value(value):
+    normalized = str(value or "").strip()
+    if len(normalized) > 120:
+        raise NeoSubZeroPretreatError(
+            "Reason for Application must be 120 characters or fewer."
+        )
+    return normalized or DEFAULT_PRETREAT_REASON
 
 
 def pretreat_revision(gateway, operation=_OPERATION_UNSET):

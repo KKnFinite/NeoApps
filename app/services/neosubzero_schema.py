@@ -13,8 +13,13 @@ from app.models import (
 )
 
 LOCK_KEY = 7_483_327_341_930
-DEPARTURE_EVENT_OPTIONAL_COLUMNS = {
-    "reason_for_application": "VARCHAR(120)",
+NEOSUBZERO_OPTIONAL_COLUMNS = {
+    NeoSubZeroDepartureDeiceEvent.__tablename__: {
+        "reason_for_application": "VARCHAR(120)",
+    },
+    NeoSubZeroPretreatState.__tablename__: {
+        "reason_for_application": "VARCHAR(120)",
+    },
 }
 NEOSUBZERO_TABLES = (
     NeoSubZeroPretreatState.__table__,
@@ -33,17 +38,19 @@ def _missing_tables(connection):
     return tuple(table for table in NEOSUBZERO_TABLES if not inspector.has_table(table.name))
 
 
-def _missing_departure_event_columns(connection):
+def _missing_optional_columns(connection):
     inspector = inspect(connection)
-    table_name = NeoSubZeroDepartureDeiceEvent.__tablename__
-    if not inspector.has_table(table_name):
-        return ()
-    existing = {column["name"] for column in inspector.get_columns(table_name)}
-    return tuple(
-        (column_name, column_type)
-        for column_name, column_type in DEPARTURE_EVENT_OPTIONAL_COLUMNS.items()
-        if column_name not in existing
-    )
+    missing = []
+    for table_name, optional_columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
+        if not inspector.has_table(table_name):
+            continue
+        existing = {column["name"] for column in inspector.get_columns(table_name)}
+        missing.extend(
+            (table_name, column_name, column_type)
+            for column_name, column_type in optional_columns.items()
+            if column_name not in existing
+        )
+    return tuple(missing)
 
 
 def ensure_neosubzero_pretreat_table(app):
@@ -55,7 +62,7 @@ def ensure_neosubzero_pretreat_table(app):
             with db.engine.connect() as read_connection:
                 if (
                     not _missing_tables(read_connection)
-                    and not _missing_departure_event_columns(read_connection)
+                    and not _missing_optional_columns(read_connection)
                 ):
                     return True
             connection = db.session.connection()
@@ -65,11 +72,11 @@ def ensure_neosubzero_pretreat_table(app):
             if missing:
                 for table in missing:
                     table.create(bind=connection, checkfirst=False)
-            missing_columns = _missing_departure_event_columns(connection)
-            for column_name, column_type in missing_columns:
+            missing_columns = _missing_optional_columns(connection)
+            for table_name, column_name, column_type in missing_columns:
                 connection.execute(
                     text(
-                        f"ALTER TABLE {NeoSubZeroDepartureDeiceEvent.__tablename__} "
+                        f"ALTER TABLE {table_name} "
                         f"ADD COLUMN {column_name} {column_type}"
                     )
                 )

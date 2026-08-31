@@ -186,6 +186,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neosubzero_departure_deice_events": {
         "reason_for_application": "VARCHAR(120)",
     },
+    "neosubzero_pretreat_states": {
+        "reason_for_application": "VARCHAR(120)",
+    },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
     },

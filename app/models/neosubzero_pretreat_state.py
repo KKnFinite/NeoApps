@@ -16,6 +16,7 @@ class NeoSubZeroPretreatState(db.Model):
     pass2_surface_area = db.Column(db.String(32), nullable=True)
     pass2_started_at_utc = db.Column(db.DateTime, nullable=True)
     pass2_ended_at_utc = db.Column(db.DateTime, nullable=True)
+    reason_for_application = db.Column(db.String(120), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
