@@ -29913,3 +29913,338 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
 .neosubzero-treatment-form textarea { max-width:320px; min-height:54px; resize:vertical; }.neosubzero-mobile { display:none; }.neosubzero-card { border:1px solid #31536d; margin:7px 0; padding:7px; }.neosubzero-card summary { min-height:38px; cursor:pointer; }.neosubzero-card dl { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
 .neosubzero-settings { max-width:720px; border-top:1px solid #31536d; padding-top:12px; }.neosubzero-settings form { display:flex; align-items:end; gap:8px; }.neosubzero-settings label { display:grid; gap:4px; }
 @media (max-width:700px) { .neosubzero-desktop { display:none; }.neosubzero-mobile { display:block; }.neosubzero-pass { grid-template-columns:1fr; }.neosubzero-editor form { display:grid; }.neosubzero-editor button,.neosubzero-editor input,.neosubzero-editor select,.neosubzero-editor textarea { width:100%; min-height:42px; }.neosubzero-head { align-items:start; } }
+
+.neosubzero-departure-list {
+    display: grid;
+    gap: 7px;
+}
+
+.neosubzero-departure-mission {
+    border: 1px solid #29465d;
+    border-left: 3px solid #4686ae;
+    background: #0b1621;
+}
+
+.neosubzero-departure-mission.is-terminal {
+    border-left-color: #557083;
+    background: #09121a;
+}
+
+.neosubzero-departure-compact {
+    display: grid;
+    grid-template-columns: minmax(70px, .7fr) minmax(70px, .7fr) minmax(130px, 1.5fr) minmax(150px, 1.7fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 5px 8px;
+    color: #c6d7e3;
+    font-size: .74rem;
+}
+
+.neosubzero-departure-compact.is-cleared,
+.neosubzero-departure-compact.is-pretreated {
+    border-color: #32865c;
+    color: #b8f0cf;
+}
+
+.neosubzero-departure-compact.is-negative {
+    border-color: #a54242;
+    color: #ffb1b1;
+}
+
+.neosubzero-mission-workspace {
+    padding: 9px;
+}
+
+.neosubzero-mission-facts {
+    display: grid;
+    grid-template-columns: repeat(11, minmax(70px, 1fr));
+    gap: 1px;
+    margin: 0 0 8px;
+    background: #22384a;
+}
+
+.neosubzero-mission-facts > div {
+    min-width: 0;
+    padding: 5px 6px;
+    background: #0c1a26;
+}
+
+.neosubzero-mission-facts dt {
+    color: #78bde8;
+    font-size: .58rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.neosubzero-mission-facts dd {
+    margin: 2px 0 0;
+    overflow-wrap: anywhere;
+    font-size: .76rem;
+}
+
+.neosubzero-action-row,
+.neosubzero-event-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin: 6px 0;
+}
+
+.neosubzero-action-row form,
+.neosubzero-departure-compact form {
+    margin: 0;
+}
+
+.neosubzero-departure-board button,
+.neosubzero-departure-board select,
+.neosubzero-departure-board input,
+.neosubzero-settings button,
+.neosubzero-settings select,
+.neosubzero-settings input {
+    min-height: 30px;
+    border: 1px solid #38627e;
+    border-radius: 3px;
+    background: #101f2c;
+    color: #e2f1fb;
+}
+
+.neosubzero-departure-board button,
+.neosubzero-settings button {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.neosubzero-departure-board button.is-negative,
+.neosubzero-terminal-label.is-negative {
+    border-color: #9b3f3f;
+    color: #ff9999;
+}
+
+.neosubzero-departure-board button.is-clear {
+    border-color: #3b9c6b;
+    color: #8ce2b2;
+}
+
+.neosubzero-deice-form {
+    display: grid;
+    grid-template-columns: minmax(140px, 210px) 1fr 1fr auto;
+    align-items: end;
+    gap: 7px;
+    margin-top: 8px;
+}
+
+.neosubzero-deice-form > label,
+.neosubzero-deice-pass label,
+.neosubzero-settings-grid label {
+    display: grid;
+    gap: 3px;
+    color: #9fc4dc;
+    font-size: .65rem;
+}
+
+.neosubzero-deice-pass {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 5px;
+}
+
+.neosubzero-deice-pass label span {
+    display: flex;
+}
+
+.neosubzero-deice-pass input {
+    width: 70px;
+}
+
+.neosubzero-deice-pass.type-i {
+    border-color: #db792c;
+}
+
+.neosubzero-deice-pass.type-i legend {
+    color: #ff9d4f;
+}
+
+.neosubzero-deice-pass.type-iv {
+    border-color: #329262;
+}
+
+.neosubzero-deice-pass.type-iv legend {
+    color: #70d7a0;
+}
+
+.neosubzero-pretreat-reference {
+    margin: 5px 0;
+    color: #78dba5;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.neosubzero-radio-script {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 6px 0 10px;
+    padding: 7px 10px;
+    border: 1px solid #3d779d;
+    background: #07111a;
+}
+
+.neosubzero-radio-script h2,
+.neosubzero-radio-script p {
+    margin: 0;
+}
+
+.neosubzero-radio-script h2 {
+    color: #63c2fa;
+    font-size: .68rem;
+}
+
+.neosubzero-radio-script p {
+    color: #eef8ff;
+    font-size: .8rem;
+}
+
+.neosubzero-script-toggle {
+    margin-bottom: 6px;
+}
+
+.neosubzero-ramp-selector {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    padding: 6px 0;
+    background: #08121d;
+}
+
+.neosubzero-ramp-selector a {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border: 1px solid #31536d;
+    color: #a9c8df;
+    text-decoration: none;
+    font-size: .68rem;
+}
+
+.neosubzero-ramp-selector a.active {
+    border-color: #58c0ff;
+    color: #fff;
+}
+
+.neosubzero-ramp-selector a.inactive {
+    opacity: .58;
+}
+
+.neosubzero-coordinator-layout {
+    display: grid;
+    grid-template-columns: minmax(190px, 250px) 1fr;
+    gap: 9px;
+}
+
+.neosubzero-coordinator-list {
+    padding: 7px;
+    border: 1px solid #29465d;
+    background: #09151f;
+}
+
+.neosubzero-coordinator-list h2,
+.neosubzero-coordinator-list h3 {
+    margin: 5px 0;
+    color: #77c8f6;
+    font-size: .72rem;
+}
+
+.neosubzero-coordinator-list a {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 6px;
+    margin: 3px 0;
+    padding: 6px;
+    border: 1px solid #243f53;
+    color: #d5e7f2;
+    text-decoration: none;
+    font-size: .7rem;
+}
+
+.neosubzero-coordinator-list a.selected {
+    border-color: #55bfff;
+}
+
+.neosubzero-coordinator-list em {
+    grid-column: 1 / -1;
+    color: #f0b66c;
+    font-size: .57rem;
+    font-style: normal;
+}
+
+.neosubzero-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
+    align-items: end;
+    gap: 8px;
+}
+
+.neosubzero-refresh-row {
+    display: grid;
+    grid-template-columns: 130px 150px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid #23394b;
+}
+
+@media (max-width: 900px) {
+    .neosubzero-mission-facts {
+        grid-template-columns: repeat(5, minmax(78px, 1fr));
+    }
+
+    .neosubzero-deice-form {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+    .neosubzero-departure-compact {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .neosubzero-mission-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neosubzero-coordinator-layout {
+        display: block;
+    }
+
+    .neosubzero-coordinator-list {
+        margin-bottom: 8px;
+    }
+
+    .neosubzero-deice-pass,
+    .neosubzero-settings-grid,
+    .neosubzero-refresh-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neosubzero-deice-pass input,
+    .neosubzero-deice-pass select,
+    .neosubzero-deice-pass label span,
+    .neosubzero-deice-pass label span input {
+        width: 100%;
+    }
+
+    .neosubzero-departure-board button,
+    .neosubzero-departure-board select,
+    .neosubzero-departure-board input {
+        min-height: 42px;
+    }
+}

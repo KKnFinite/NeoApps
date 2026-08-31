@@ -1,0 +1,154 @@
+{% macro mission_facts(row) %}
+<dl class="neosubzero-mission-facts">
+    <div><dt>Flight</dt><dd>{{ row.flight }}</dd></div>
+    <div><dt>Tail</dt><dd>{{ row.tail }}</dd></div>
+    <div><dt>Destination</dt><dd>{{ row.destination }}</dd></div>
+    <div><dt>Parking</dt><dd>{{ row.parking }}</dd></div>
+    <div><dt>{{ row.departure_time_label }}</dt><dd>{{ row.departure_time }}</dd></div>
+    <div><dt>Tail Status</dt><dd>{{ row.tail_status }}</dd></div>
+    <div><dt>Ramp LC</dt><dd>{{ row.ramp_load_complete or '-' }}</dd></div>
+    <div><dt>Crew LC</dt><dd>{{ row.crew_load_complete or '-' }}</dd></div>
+    <div><dt>Block-Out</dt><dd>{{ row.block_out or '-' }} · {{ row.block_out_variance }}</dd></div>
+    <div><dt>Pretreat</dt><dd>{{ row.pretreat_status }}</dd></div>
+    <div><dt>Deice</dt><dd>{{ row.deice_status }}</dd></div>
+</dl>
+{% endmacro %}
+
+{% macro terminal_summary(row, can_edit, board, selected_ramp='', open=false) %}
+<div class="neosubzero-departure-compact is-{{ row.collapse_state }}" data-subzero-compact {% if open %}hidden{% endif %} {% if row.script %}data-subzero-script="{{ row.script.text }}"{% endif %}>
+    <strong>{{ row.flight }}</strong>
+    <span>{{ row.tail }}</span>
+    {% if row.collapse_state == 'cleared' %}
+        <span>{{ row.final_fluid.concentration }}% {{ row.final_fluid.name }}</span>
+        <span>START TIME {{ row.final_start|replace(':', '') }} LOCAL</span>
+        <button type="button" data-subzero-script="{{ row.script.text if row.script else '' }}">AIR-TO-GROUND</button>
+    {% elif row.collapse_state == 'pretreated' %}
+        <span>PRETREATED</span>
+        {% if row.pretreat_reference %}<span>{{ row.pretreat_reference.concentration }}% {{ row.pretreat_reference.fluid }} · START {{ row.pretreat_reference.start|replace(':', '') }}</span>{% endif %}
+    {% elif row.collapse_state == 'negative' %}
+        <span>NEGATIVE DEICE</span>
+    {% else %}
+        <span>NOT SPRAYED</span>
+    {% endif %}
+    <button type="button" data-subzero-reopen>REOPEN</button>
+    {% if can_edit and row.collapse_state in ('negative', 'not_sprayed') %}
+    <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+        {{ mutation_identity(row, board, selected_ramp) }}
+        <button name="action" value="move_to_planned">MOVE TO DEICE PLANNED</button>
+    </form>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro mission_workspace(row, can_edit, board, selected_ramp='', open=false) %}
+<section class="neosubzero-mission-workspace" data-subzero-workspace {% if row.terminal and not open %}hidden{% endif %}>
+    {{ mission_facts(row) }}
+    {% if row.pretreat_complete and row.pretreat_reference %}
+    <p class="neosubzero-pretreat-reference">PRETREATED · {{ row.pretreat_reference.concentration }}% {{ row.pretreat_reference.fluid }} · START {{ row.pretreat_reference.start|replace(':', '') }} LOCAL</p>
+    {% endif %}
+
+    {% if row.event and row.event.status in ('negative', 'not_sprayed') %}
+        <p class="neosubzero-terminal-label is-{{ row.event.status }}">{{ row.deice_status }}</p>
+        {% if can_edit %}
+        <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+            {{ mutation_identity(row, board, selected_ramp) }}
+            <button name="action" value="move_to_planned">MOVE TO DEICE PLANNED</button>
+        </form>
+        {% endif %}
+    {% elif not row.event %}
+        {% if can_edit %}
+        <div class="neosubzero-action-row">
+            <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" {% if row.pretreat_complete %}data-subzero-confirm="Start a new departure deice event? Pretreat history will remain available."{% endif %}>
+                {{ mutation_identity(row, board, selected_ramp) }}
+                <button name="action" value="initial_contact">INITIAL CONTACT</button>
+            </form>
+            <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+                {{ mutation_identity(row, board, selected_ramp) }}
+                <button class="is-negative" name="action" value="set_negative">NEGATIVE DEICE</button>
+            </form>
+            {% if board == 'coordinator' %}
+            <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+                {{ mutation_identity(row, board, selected_ramp) }}
+                <button name="action" value="manual_not_sprayed">NOT SPRAYED</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+    {% else %}
+        <header class="neosubzero-event-head">
+            <strong>{{ row.deice_status }}</strong>
+            {% if row.configured %}<span>CONFIGURED {{ row.configured }}</span>{% endif %}
+            {% if row.deice_minutes is not none %}<span>DEICE MINUTES {{ row.deice_minutes }}</span>{% endif %}
+        </header>
+        {% if can_edit and row.event.status != 'cleared' %}
+        <div class="neosubzero-action-row">
+            <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+                {{ mutation_identity(row, board, selected_ramp) }}
+                <button name="action" value="toggle_configured">{{ 'CLEAR CONFIGURED' if row.configured else 'CONFIGURED' }}</button>
+            </form>
+            <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+                {{ mutation_identity(row, board, selected_ramp) }}
+                <button class="is-negative" name="action" value="set_negative">NEGATIVE DEICE</button>
+            </form>
+        </div>
+        {% endif %}
+        {{ treatment_form(row, can_edit, board, selected_ramp) }}
+        {% if can_edit and row.event.status == 'finished' %}
+        <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
+            {{ mutation_identity(row, board, selected_ramp) }}
+            <button class="is-clear" name="action" value="clear">CLEAR</button>
+        </form>
+        {% endif %}
+    {% endif %}
+</section>
+{% endmacro %}
+
+{% macro treatment_form(row, can_edit, board, selected_ramp='') %}
+{% set locked = not can_edit or row.event.status == 'cleared' %}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" class="neosubzero-deice-form" data-subzero-deice-form data-locked="{{ 'true' if locked else 'false' }}">
+    {{ mutation_identity(row, board, selected_ramp) }}
+    <input type="hidden" name="action" value="save_treatment">
+    <label>Treatment Plan
+        <select name="treatment_plan" {% if locked %}disabled{% endif %}>
+            <option value="">Select plan</option>
+            {% for value, label in plan_labels.items() %}<option value="{{ value }}" {% if row.plan == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+    </label>
+    <fieldset class="neosubzero-deice-pass type-i" data-subzero-pass="1" {% if not row.plan %}hidden{% endif %}>
+        <legend>PASS 1 · TYPE I</legend>
+        {{ pass_controls(row, 1, locked) }}
+    </fieldset>
+    <fieldset class="neosubzero-deice-pass {{ 'type-iv' if row.pass_types|length > 1 and row.pass_types[1] == 'Type IV' else 'type-i' }}" data-subzero-pass="2" {% if row.pass_types|length < 2 %}hidden{% endif %}>
+        <legend data-subzero-pass2-type>PASS 2 · {{ row.pass_types[1] if row.pass_types|length > 1 else 'TYPE I' }}</legend>
+        {{ pass_controls(row, 2, locked) }}
+    </fieldset>
+    {% if can_edit %}
+        <button type="button" data-subzero-edit {% if row.event.status != 'cleared' %}hidden{% endif %}>EDIT</button>
+        <button type="submit" {% if row.event.status == 'cleared' %}hidden{% endif %}>SAVE TREATMENT</button>
+    {% endif %}
+</form>
+{% endmacro %}
+
+{% macro pass_controls(row, pass_number, locked) %}
+{% set surface = row.pass1_surface if pass_number == 1 else row.pass2_surface %}
+{% set start = row.pass1_start if pass_number == 1 else row.pass2_start %}
+{% set end = row.pass1_end if pass_number == 1 else row.pass2_end %}
+<label>Surface Area
+    <select name="pass{{ pass_number }}_surface_area" {% if locked %}disabled{% endif %}>
+        {% for value, label in surface_labels.items() %}<option value="{{ value }}" {% if surface == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+</label>
+<label>Start
+    <span><input name="pass{{ pass_number }}_start" value="{{ start|replace(':', '') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if locked %}readonly{% endif %}><button type="button" data-subzero-deice-stamp="pass{{ pass_number }}_start" {% if locked %}hidden{% endif %}>NOW</button></span>
+</label>
+<label>End
+    <span><input name="pass{{ pass_number }}_end" value="{{ end|replace(':', '') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if locked or not start %}readonly{% endif %}><button type="button" data-subzero-deice-stamp="pass{{ pass_number }}_end" {% if locked or not start %}hidden{% endif %}>NOW</button></span>
+</label>
+{% endmacro %}
+
+{% macro mutation_identity(row, board, selected_ramp='') %}
+<input type="hidden" name="board" value="{{ board }}">
+<input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+<input type="hidden" name="expected_version" value="{{ row.event_version }}">
+{% if selected_ramp %}<input type="hidden" name="ramp" value="{{ selected_ramp }}">{% endif %}
+{% endmacro %}

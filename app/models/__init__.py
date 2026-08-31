@@ -33,6 +33,8 @@ from app.models.neorain_operational_setting import NeoRainOperationalSetting
 from app.models.neorain_crew_admin_assignment import NeoRainCrewAdminAssignment
 from app.models.neorain_delay_info import NeoRainDelayInfo
 from app.models.neosubzero_pretreat_state import NeoSubZeroPretreatState
+from app.models.neosubzero_departure_deice_event import NeoSubZeroDepartureDeiceEvent
+from app.models.neosubzero_setting import NeoSubZeroSetting
 from app.models.neosektor_sort_state import NeoSektorSortState
 from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
@@ -138,6 +140,8 @@ __all__ = [
     "NeoRainCrewAdminAssignment",
     "NeoRainDelayInfo",
     "NeoSubZeroPretreatState",
+    "NeoSubZeroDepartureDeiceEvent",
+    "NeoSubZeroSetting",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
     "NeoSektorUldOnTheWayEvent",

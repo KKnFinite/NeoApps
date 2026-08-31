@@ -125,8 +125,12 @@ def pretreat_revision(gateway, operation=_OPERATION_UNSET):
 
 
 def pretreat_refresh_status(gateway, operation=None):
+    return subzero_refresh_status(gateway, operation, PRETREAT_REFRESH_KEY)
+
+
+def subzero_refresh_status(gateway, operation, screen_key):
     status = node_auto_refresh_status(gateway, operation=operation)
-    setting = live_screen_refresh_value(gateway, PRETREAT_REFRESH_KEY)
+    setting = live_screen_refresh_value(gateway, screen_key)
     status["live_screen_refresh_interval_ms"] = setting.effective_interval_ms
     if not setting.enabled: status.update({"auto_refresh_enabled": False, "reason": "disabled", "message": "Live updates off", "live_status_label": "Live updates off"})
     return status

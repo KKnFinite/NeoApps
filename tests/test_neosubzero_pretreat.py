@@ -58,7 +58,13 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
 
     def test_routes_and_permission_defaults(self):
         endpoints = {rule.endpoint for rule in self.app.url_map.iter_rules()}
-        self.assertTrue({"neosubzero.index","neosubzero.pretreat","neosubzero.settings","neosubzero.pretreat_revision_endpoint"} <= endpoints)
+        self.assertTrue({
+            "neosubzero.index", "neosubzero.pretreat", "neosubzero.settings",
+            "neosubzero.pretreat_revision_endpoint", "neosubzero.outbound",
+            "neosubzero.coordinator", "neosubzero.departure_deice_mutate",
+            "neosubzero.outbound_revision_endpoint",
+            "neosubzero.coordinator_revision_endpoint",
+        } <= endpoints)
         defaults = {key: role for key, role, _ in DEFAULT_PERMISSION_RULES}
         self.assertEqual(defaults["neosubzero.pretreat.view"], "watcher")
         self.assertEqual(defaults["neosubzero.pretreat.edit"], "simulator")

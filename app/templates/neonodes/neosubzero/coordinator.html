@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "neonodes/neosubzero/_departure_deice.html" import terminal_summary, mission_workspace with context %}
+{% block title %}Coordinator | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell neosubzero-departure-board neosubzero-coordinator" data-subzero-departure-board data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.coordinator_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
+    <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>COORDINATOR</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+
+    <button class="neosubzero-script-toggle" type="button" data-subzero-script-toggle aria-expanded="false">AIR-TO-GROUND SCRIPT</button>
+    <section class="neosubzero-radio-script" data-subzero-script-panel hidden>
+        <p data-subzero-script-output>Select a Cleared departure-deice mission.</p>
+    </section>
+
+    {% if not operation %}<p class="neosubzero-empty">No current sort.</p>
+    {% elif not ramps %}<p class="neosubzero-empty">No ramps currently have departure missions.</p>
+    {% else %}
+    <nav class="neosubzero-ramp-selector" aria-label="Coordinator ramp selector">
+        {% for ramp in ramps %}<a class="{{ 'active' if ramp.name == selected_ramp else '' }} {{ 'inactive' if not ramp.active else '' }}" href="{{ url_for('neosubzero.coordinator', ramp=ramp.name) }}">{{ ramp.name|upper }}{% if not ramp.active %} · COMPLETE{% endif %}</a>{% endfor %}
+    </nav>
+    <div class="neosubzero-coordinator-layout">
+        <aside class="neosubzero-coordinator-list">
+            <h2>{{ selected_ramp|upper }}</h2>
+            {% for row in selected_rows %}
+            <a class="{{ 'selected' if row.mission_id == selected_mission_id else '' }}" href="{{ url_for('neosubzero.coordinator', ramp=selected_ramp, mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.departure_time }}</span><em>IN PROGRESS</em></a>
+            {% else %}<p>No active missions.</p>{% endfor %}
+            <h3>COMPLETED</h3>
+            {% for row in completed_rows %}
+            <a href="{{ url_for('neosubzero.coordinator', ramp=selected_ramp, mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.deice_status }}</span></a>
+            {% else %}<p>None completed.</p>{% endfor %}
+        </aside>
+        <main class="neosubzero-coordinator-detail">
+            {% for row in selected_rows + completed_rows if row.mission_id == selected_mission_id %}
+            <article class="neosubzero-departure-mission {{ 'is-terminal' if row.terminal else 'is-active' }}" data-subzero-mission data-terminal="{{ 'true' if row.terminal else 'false' }}">
+                {% if row.terminal %}{{ terminal_summary(row, can_edit, 'coordinator', selected_ramp, true) }}{% endif %}
+                {{ mission_workspace(row, can_edit, 'coordinator', selected_ramp, true) }}
+            </article>
+            {% else %}<p class="neosubzero-empty">Select a mission.</p>{% endfor %}
+        </main>
+    </div>
+    {% endif %}
+</section>
+<script src="{{ url_for('static', filename='js/neosubzero_departure.js', v=STATIC_ASSET_VERSION) }}" defer></script>
+{% endblock %}

@@ -3,7 +3,7 @@
 {% block content %}
 <section class="neosubzero-shell" data-subzero-live data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.pretreat_revision_endpoint') }}">
 <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>PRETREAT</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
-<nav class="neosubzero-nav"><a class="active" href="{{ url_for('neosubzero.pretreat') }}">PRETREAT</a><a href="{{ url_for('neosubzero.settings') }}">SETTINGS</a></nav>
+{% include "neonodes/neosubzero/_nav.html" %}
 {% if not operation %}<p class="neosubzero-empty">No current sort.</p>{% elif not rows %}<p class="neosubzero-empty">No current or upcoming departure missions.</p>{% else %}
 <div class="neosubzero-desktop"><table class="neosubzero-table"><thead><tr><th>Tail</th><th>Inbound ETA</th><th>Tail Status</th><th>Outbound STD</th><th>Parking</th><th>Ground Time</th><th>Pretreat</th><th>Configured</th><th>Treatment</th></tr></thead><tbody>
 {% for row in rows %}<tr><td><strong>{{ row.tail }}</strong></td><td>{{ row.inbound_eta or '-' }}</td><td>{{ row.tail_status }}</td><td>{{ row.outbound_std or '-' }}</td><td>{{ row.parking }}</td><td>{{ row.ground_time }}</td><td>{{ 'PRETREATED' if row.completed else ('PLANNED' if row.planned else '-') }} · DEICE {{ row.deice_status }}</td><td>{{ row.configured or '-' }}</td><td>{{ pretreat_editor(row) }}</td></tr>{% endfor %}</tbody></table></div>
@@ -75,10 +75,11 @@
         });
     });
 
-    if (!root || !window.NeoLiveUpdates) return;
+    const refreshIntervalMs = {{ refresh_status.live_screen_refresh_interval_ms }};
+    if (!root || !window.NeoLiveUpdates || refreshIntervalMs < 1000) return;
     let revision = root.dataset.revision;
     const controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
+        intervalMs: refreshIntervalMs,
         continuousWhileVisible: true,
         poll: async () => {
             const url = new URL(root.dataset.revisionUrl, location.origin);

@@ -1,1 +1,48 @@
-{% extends "base.html" %}{% block title %}Settings | NeoSub-Zero{% endblock %}{% block content %}<section class="neosubzero-shell"><header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>SETTINGS</h1></div></header><nav class="neosubzero-nav"><a href="{{ url_for('neosubzero.pretreat') }}">PRETREAT</a><a class="active" href="{{ url_for('neosubzero.settings') }}">SETTINGS</a></nav><section class="neosubzero-settings"><h2>LIVE AUTO-REFRESH</h2><form method="post"><label>Pretreat<select name="refresh_interval_seconds" {% if not can_edit %}disabled{% endif %}><option value="default" {% if refresh_setting.override_seconds is none %}selected{% endif %}>Render default</option>{% for seconds in choices %}<option value="{{ seconds }}" {% if refresh_setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>{% endfor %}</select></label>{% if can_edit %}<button>SAVE</button>{% endif %}</form><dl><div><dt>Effective</dt><dd>{{ refresh_setting.effective_label }}</dd></div><div><dt>Source</dt><dd>{{ refresh_setting.source_label }}</dd></div></dl></section></section>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Settings | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell">
+    <header class="neosubzero-head">
+        <div><p>NEOSUB-ZERO</p><h1>SETTINGS</h1></div>
+    </header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+
+    <section class="neosubzero-settings" aria-labelledby="subzero-fluid-settings">
+        <h2 id="subzero-fluid-settings">DEICE FLUIDS</h2>
+        <form method="post" class="neosubzero-settings-grid">
+            <input type="hidden" name="action" value="save_fluids">
+            <label>Type I Fluid Name
+                <input name="type_i_fluid_name" maxlength="80" value="{{ fluid_settings.type_i_fluid_name }}" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>Type I Concentration %
+                <input name="type_i_concentration_percent" type="number" min="1" max="100" value="{{ fluid_settings.type_i_concentration_percent }}" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>Type IV Fluid Name
+                <input name="type_iv_fluid_name" maxlength="80" value="{{ fluid_settings.type_iv_fluid_name }}" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <p>Type IV is always treated and read back as 100%.</p>
+            {% if can_edit %}<button type="submit">SAVE FLUIDS</button>{% endif %}
+        </form>
+    </section>
+
+    <section class="neosubzero-settings" aria-labelledby="subzero-refresh-settings">
+        <h2 id="subzero-refresh-settings">LIVE AUTO-REFRESH</h2>
+        {% for label, screen_key in refresh_rows %}
+        {% set setting = refresh_settings[screen_key] %}
+        <form method="post" class="neosubzero-refresh-row">
+            <input type="hidden" name="action" value="save_refresh">
+            <input type="hidden" name="screen_key" value="{{ screen_key }}">
+            <strong>{{ label }}</strong>
+            <select name="refresh_interval_seconds" {% if not can_edit %}disabled{% endif %}>
+                <option value="default" {% if setting.override_seconds is none %}selected{% endif %}>Render default</option>
+                {% for seconds in choices %}
+                <option value="{{ seconds }}" {% if setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
+                {% endfor %}
+            </select>
+            <span>{{ setting.effective_label }} · {{ setting.source_label }}</span>
+            {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+        </form>
+        {% endfor %}
+    </section>
+</section>
+{% endblock %}

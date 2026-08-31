@@ -472,6 +472,26 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoSub-Zero Pretreat operations.",
     ),
     (
+        "neosubzero.outbound.view",
+        "watcher",
+        "View NeoSub-Zero Outbound operations.",
+    ),
+    (
+        "neosubzero.outbound.edit",
+        "simulator",
+        "Edit NeoSub-Zero departure-deice operations.",
+    ),
+    (
+        "neosubzero.coordinator.view",
+        "simulator",
+        "View the NeoSub-Zero Coordinator workspace.",
+    ),
+    (
+        "neosubzero.coordinator.edit",
+        "simulator",
+        "Coordinate NeoSub-Zero departure-deice operations.",
+    ),
+    (
         "neosubzero.settings.view",
         "watcher",
         "View NeoSub-Zero Settings.",

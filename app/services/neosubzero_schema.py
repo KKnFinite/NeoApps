@@ -1,8 +1,24 @@
 from sqlalchemy import inspect, text
+
 from app.extensions import db
-from app.models import NeoSubZeroPretreatState
+from app.models import (
+    NeoSubZeroDepartureDeiceEvent,
+    NeoSubZeroPretreatState,
+    NeoSubZeroSetting,
+)
 
 LOCK_KEY = 7_483_327_341_930
+NEOSUBZERO_TABLES = (
+    NeoSubZeroPretreatState.__table__,
+    NeoSubZeroDepartureDeiceEvent.__table__,
+    NeoSubZeroSetting.__table__,
+)
+
+
+def _missing_tables(connection):
+    inspector = inspect(connection)
+    return tuple(table for table in NEOSUBZERO_TABLES if not inspector.has_table(table.name))
+
 
 def ensure_neosubzero_pretreat_table(app):
     uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).lower()
@@ -11,13 +27,15 @@ def ensure_neosubzero_pretreat_table(app):
     with app.app_context():
         try:
             with db.engine.connect() as read_connection:
-                if inspect(read_connection).has_table(NeoSubZeroPretreatState.__tablename__):
+                if not _missing_tables(read_connection):
                     return True
             connection = db.session.connection()
             connection.execute(text("SET LOCAL lock_timeout = '5s'"))
             connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LOCK_KEY})
-            if not inspect(connection).has_table(NeoSubZeroPretreatState.__tablename__):
-                NeoSubZeroPretreatState.__table__.create(bind=connection, checkfirst=False)
+            missing = _missing_tables(connection)
+            if missing:
+                for table in missing:
+                    table.create(bind=connection, checkfirst=False)
                 db.session.commit()
             else:
                 db.session.rollback()
