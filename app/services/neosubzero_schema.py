@@ -4,6 +4,7 @@ from app.extensions import db
 from app.models import (
     NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroCalloutAssignment,
+    NeoSubZeroUccAssignment,
     NeoSubZeroPretreatState,
     NeoSubZeroSetting,
     StaffingPersonQualification,
@@ -16,6 +17,7 @@ NEOSUBZERO_TABLES = (
     NeoSubZeroSetting.__table__,
     StaffingPersonQualification.__table__,
     NeoSubZeroCalloutAssignment.__table__,
+    NeoSubZeroUccAssignment.__table__,
 )
 
 

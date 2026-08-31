@@ -121,6 +121,12 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
 
     def test_permanent_detection_callout_add_remove_and_preplanning_pool(self):
         set_staffing_person_qualification(
+            self.permanent,
+            DEICE_QUALIFICATION_KEY,
+            True,
+            user_id=self.recorder.id,
+        )
+        set_staffing_person_qualification(
             self.callout,
             DEICE_QUALIFICATION_KEY,
             True,
@@ -221,7 +227,13 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         db.session.commit()
         self.assertFalse(assignment.active)
 
-    def test_not_here_attendance_removes_callout_without_auto_restore(self):
+    def test_not_here_attendance_suppresses_then_restores_selected_callout(self):
+        set_staffing_person_qualification(
+            self.permanent,
+            DEICE_QUALIFICATION_KEY,
+            True,
+            user_id=self.recorder.id,
+        )
         set_staffing_person_qualification(
             self.callout,
             DEICE_QUALIFICATION_KEY,
@@ -254,7 +266,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         self.assertEqual(assignment.removal_reason, "attendance")
         self.assertEqual(
             [item["person"].id for item in current_subzero_staffing_pool(self.operation)],
-            [self.permanent.id],
+            [],
         )
 
         with patch(
@@ -272,15 +284,59 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
                 self.recorder,
             )
             db.session.commit()
-        self.assertFalse(assignment.active)
+        self.assertTrue(assignment.active)
+        self.assertIsNone(assignment.removal_reason)
         self.assertEqual(
             [item["person"].id for item in current_subzero_staffing_pool(self.operation)],
-            [self.permanent.id],
+            [self.callout.id],
         )
-        candidates = neosubzero_callout_context(self.operation)["candidates"]
-        self.assertTrue(candidates[0]["available"])
+
+    def test_manual_callout_removal_does_not_restore_when_here(self):
+        set_staffing_person_qualification(
+            self.callout,
+            DEICE_QUALIFICATION_KEY,
+            True,
+            user_id=self.recorder.id,
+        )
+        assignment = set_neosubzero_callout_membership(
+            self.operation,
+            self.callout,
+            True,
+            user_id=self.recorder.id,
+        )
+        set_neosubzero_callout_membership(
+            self.operation,
+            self.callout,
+            False,
+            user_id=self.recorder.id,
+            assignment=assignment,
+        )
+        db.session.commit()
+        with patch(
+            "app.services.neostaffing.current_night_attendance_operation",
+            return_value=self.operation,
+        ):
+            staffing_service.save_attendance(
+                MultiDict(
+                    {
+                        "sort_date_operation_id": str(self.operation.id),
+                        "sort_id": str(self.night.id),
+                        f"status_{self.callout.id}": "here",
+                    }
+                ),
+                self.recorder,
+            )
+            db.session.commit()
+        self.assertFalse(assignment.active)
+        self.assertEqual(assignment.removal_reason, "manual")
 
     def test_permanent_employee_attendance_controls_pool_without_callout_row(self):
+        set_staffing_person_qualification(
+            self.permanent,
+            DEICE_QUALIFICATION_KEY,
+            True,
+            user_id=self.recorder.id,
+        )
         db.session.add(
             StaffingDailyAttendance(
                 attendance_date=self.operation.sort_date,

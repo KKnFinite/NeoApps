@@ -133,6 +133,11 @@ def set_staffing_person_qualification(
                 callout.removed_at = now
                 callout.removed_by_user_id = user_id
                 callout.removal_reason = "qualification"
+            from app.services.neosubzero_ucc import (
+                clear_neosubzero_ucc_assignments_for_person_all_sorts,
+            )
+
+            clear_neosubzero_ucc_assignments_for_person_all_sorts(person.id)
     return row
 
 
@@ -218,6 +223,11 @@ def set_neosubzero_callout_membership(
     row.removed_at = now
     row.removed_by_user_id = user_id
     row.removal_reason = "manual"
+    from app.services.neosubzero_ucc import (
+        clear_neosubzero_ucc_assignments_for_people,
+    )
+
+    clear_neosubzero_ucc_assignments_for_people(operation, {person.id})
     return row
 
 
@@ -227,32 +237,69 @@ def deactivate_neosubzero_callouts_for_attendance(
     *,
     user_id=None,
 ):
-    """Stage removal of callouts explicitly marked Not Here in attendance."""
+    """Synchronize attendance-suppressed callouts and clear unavailable UCC slots."""
     if operation is None:
         return 0
-    unavailable_ids = {
-        int(person_id)
+    statuses = {
+        int(person_id): str(status or "").strip().casefold()
         for person_id, status in (attendance_status_by_person_id or {}).items()
-        if str(status or "").strip().casefold() not in {"", "here"}
     }
-    if not unavailable_ids:
+    unavailable_ids = {
+        person_id
+        for person_id, status in statuses.items()
+        if status not in {"", "here"}
+    }
+    relevant_ids = set(statuses)
+    if not relevant_ids:
         return 0
     rows = (
         NeoSubZeroCalloutAssignment.query.filter(
             NeoSubZeroCalloutAssignment.sort_date_operation_id == operation.id,
-            NeoSubZeroCalloutAssignment.person_id.in_(unavailable_ids),
-            NeoSubZeroCalloutAssignment.active.is_(True),
+            NeoSubZeroCalloutAssignment.person_id.in_(relevant_ids),
         )
         .with_for_update()
         .all()
     )
+    restore_ids = _attendance_restore_person_ids(
+        operation,
+        {
+            row.person_id
+            for row in rows
+            if statuses.get(row.person_id) == "here"
+            and not row.active
+            and row.removal_reason == "attendance"
+        },
+    )
     now = datetime.utcnow()
+    changed = 0
     for row in rows:
-        row.active = False
-        row.removed_at = now
-        row.removed_by_user_id = user_id
-        row.removal_reason = "attendance"
-    return len(rows)
+        if row.person_id in unavailable_ids and row.active:
+            row.active = False
+            row.removed_at = now
+            row.removed_by_user_id = user_id
+            row.removal_reason = "attendance"
+            changed += 1
+        elif (
+            statuses.get(row.person_id) == "here"
+            and not row.active
+            and row.removal_reason == "attendance"
+            and row.person_id in restore_ids
+        ):
+            row.active = True
+            row.removed_at = None
+            row.removed_by_user_id = None
+            row.removal_reason = None
+            changed += 1
+    if unavailable_ids:
+        from app.services.neosubzero_ucc import (
+            clear_neosubzero_ucc_assignments_for_people,
+        )
+
+        clear_neosubzero_ucc_assignments_for_people(
+            operation,
+            unavailable_ids,
+        )
+    return changed
 
 
 def permanent_deice_work_area_ids():
@@ -334,6 +381,7 @@ def _subzero_staffing_snapshot(operation):
         set(people_by_id),
         units_by_id,
     )
+    attendance_available = bool(attendance)
     callout_rows = (
         NeoSubZeroCalloutAssignment.query.options(
             joinedload(NeoSubZeroCalloutAssignment.person)
@@ -365,7 +413,7 @@ def _subzero_staffing_snapshot(operation):
             "attendance": attendance_row,
             "attendance_status": status,
             "attendance_label": status.replace("_", " ").title() if status else "Unmarked",
-            "available": not status or status == "here",
+            "available": status == "here" if attendance_available else True,
             "callout": callout_by_person.get(person_id),
             "version": entity_version(callout_by_person.get(person_id)),
         }
@@ -386,7 +434,7 @@ def _subzero_staffing_snapshot(operation):
     staffing_pool = tuple(
         item
         for item in (*permanent, *callouts)
-        if item["available"]
+        if item["available"] and item["person"].id in qualified_ids
     )
     sort_key = lambda item: (
         item["person"].last_name.casefold(),
@@ -398,6 +446,57 @@ def _subzero_staffing_snapshot(operation):
         "callouts": tuple(sorted(callouts, key=sort_key)),
         "candidates": tuple(sorted(candidates, key=sort_key)),
         "staffing_pool": tuple(sorted(staffing_pool, key=sort_key)),
+    }
+
+
+def _attendance_restore_person_ids(operation, person_ids):
+    if not person_ids:
+        return set()
+    qualified_ids = {
+        row.person_id
+        for row in StaffingPersonQualification.query.filter(
+            StaffingPersonQualification.person_id.in_(person_ids),
+            StaffingPersonQualification.qualification_key
+            == DEICE_QUALIFICATION_KEY,
+            StaffingPersonQualification.active.is_(True),
+        ).all()
+    }
+    if not qualified_ids:
+        return set()
+    active_person_ids = {
+        row.id
+        for row in StaffingPerson.query.filter(
+            StaffingPerson.id.in_(qualified_ids),
+            StaffingPerson.active.is_(True),
+        ).all()
+    }
+    qualified_ids &= active_person_ids
+    assignments = {
+        row.person_id: row
+        for row in StaffingWorkAssignment.query.filter(
+            StaffingWorkAssignment.person_id.in_(qualified_ids),
+            StaffingWorkAssignment.active.is_(True),
+        ).all()
+    }
+    units_by_id = _staffing_units_by_id(active_only=True)
+    permanent_ids = {
+        unit.id
+        for unit in units_by_id.values()
+        if unit.unit_type == "work_area"
+        and _normalized(unit.name) == PERMANENT_DEICE_WORK_AREA
+        and _has_named_ancestor(
+            unit,
+            units_by_id,
+            "operation",
+            PERMANENT_DEICE_OPERATION,
+        )
+        and _has_sort_ancestor(unit, units_by_id, operation.sort_name)
+    }
+    return {
+        person_id
+        for person_id in qualified_ids
+        if person_id not in assignments
+        or assignments[person_id].work_area_unit_id not in permanent_ids
     }
 
 

@@ -36,6 +36,7 @@ from app.models.neosubzero_pretreat_state import NeoSubZeroPretreatState
 from app.models.neosubzero_departure_deice_event import NeoSubZeroDepartureDeiceEvent
 from app.models.neosubzero_setting import NeoSubZeroSetting
 from app.models.neosubzero_callout_assignment import NeoSubZeroCalloutAssignment
+from app.models.neosubzero_ucc_assignment import NeoSubZeroUccAssignment
 from app.models.neosektor_sort_state import NeoSektorSortState
 from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
@@ -145,6 +146,7 @@ __all__ = [
     "NeoSubZeroDepartureDeiceEvent",
     "NeoSubZeroSetting",
     "NeoSubZeroCalloutAssignment",
+    "NeoSubZeroUccAssignment",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
     "NeoSektorUldOnTheWayEvent",

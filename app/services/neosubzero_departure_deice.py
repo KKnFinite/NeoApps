@@ -24,6 +24,7 @@ from app.neonodes.neosubzero.services import (
     _tail,
 )
 from app.services.live_collaboration import entity_version
+from app.services.neosubzero_constants import RAMP_ORDER
 from app.services.parking_plan import (
     tail_operational_status,
     tail_operational_status_label,
@@ -34,7 +35,6 @@ from app.services.time_display import format_local_hhmm
 
 OUTBOUND_REFRESH_KEY = "neosubzero.outbound"
 COORDINATOR_REFRESH_KEY = "neosubzero.coordinator"
-RAMP_ORDER = ("Remote", "Alpha", "Bravo", "Charlie", "Delta", "Echo")
 PLAN_LABELS = {
     "one_type_i": "1x Type I",
     "two_type_i": "2x Type I",
@@ -396,6 +396,9 @@ def _departure_row(
         "block_out": format_local_hhmm(block_out, mission.timezone or None),
         "block_out_variance": _variance(mission.planned_datetime_utc, block_out),
         "pretreat_complete": pretreat_complete,
+        "pretreat_configured": bool(
+            pretreat and getattr(pretreat, "configured_at_utc", None)
+        ),
         "pretreat_status": pretreat_status,
         "pretreat_reference": pretreat_reference,
         "deice_status": _status_label(event, collapse_state, tail_state),

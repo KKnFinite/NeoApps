@@ -8,7 +8,9 @@ from app.models import (
     NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroCalloutAssignment,
     NeoSubZeroPretreatState,
+    NeoSubZeroUccAssignment,
     SortDateMission,
+    SortDateOperation,
     StaffingPerson,
     StaffingPersonQualification,
 )
@@ -37,6 +39,13 @@ from app.services.neosubzero_staffing import (
     neosubzero_qualification_people,
     set_neosubzero_callout_membership,
     set_staffing_person_qualification,
+)
+from app.services.neosubzero_ucc import (
+    UCC_REFRESH_KEY,
+    NeoSubZeroUccError,
+    neosubzero_ucc_context,
+    neosubzero_ucc_revision,
+    set_neosubzero_ucc_assignment,
 )
 from app.services.access_control import get_current_gateway
 from app.services.live_collaboration import version_conflict
@@ -69,6 +78,12 @@ NEOSUBZERO_PAGES = (
         "neosubzero.coordinator.edit",
     ),
     (
+        "UCC",
+        "neosubzero.ucc",
+        "neosubzero.ucc.view",
+        "neosubzero.ucc.edit",
+    ),
+    (
         "Callout Management",
         "neosubzero.callouts",
         "neosubzero.callouts.view",
@@ -87,7 +102,12 @@ NEOSUBZERO_PAGES = (
         "neosubzero.settings.edit",
     ),
 )
-REFRESH_KEYS = (PRETREAT_REFRESH_KEY, OUTBOUND_REFRESH_KEY, COORDINATOR_REFRESH_KEY)
+REFRESH_KEYS = (
+    PRETREAT_REFRESH_KEY,
+    OUTBOUND_REFRESH_KEY,
+    COORDINATOR_REFRESH_KEY,
+    UCC_REFRESH_KEY,
+)
 
 
 @bp.context_processor
@@ -227,6 +247,113 @@ def coordinator_revision_endpoint():
     return _departure_revision_response(
         "neosubzero.coordinator.view", COORDINATOR_REFRESH_KEY
     )
+
+
+@bp.route("/ucc", methods=["GET", "POST"])
+@gateway_node_required("subzero")
+def ucc():
+    access = permission_access("neosubzero.ucc.view", "neosubzero.ucc.edit")
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neosubzero.index"))
+    session[LAST_PAGE_KEY] = "neosubzero.ucc"
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    if request.method == "POST":
+        if not access["can_edit"]:
+            return "Access denied.", 403
+        try:
+            if operation is None:
+                raise NeoSubZeroUccError("No current sort is available.")
+            locked_operation = SortDateOperation.query.filter_by(
+                id=operation.id,
+                gateway_code=gateway.code,
+            ).with_for_update().one_or_none()
+            if locked_operation is None:
+                raise NeoSubZeroUccError("The current sort changed. Reload UCC.")
+            ramp = str(request.form.get("ramp") or "").strip().title()
+            active_ramps = {
+                item["name"]
+                for item in neosubzero_ucc_context(gateway, locked_operation)["ramps"]
+            }
+            if ramp not in active_ramps:
+                raise NeoSubZeroUccError(
+                    "Choose a ramp with current departure aircraft."
+                )
+            position = request.form.get("position_number", type=int)
+            role = str(request.form.get("team_role") or "").strip().casefold()
+            assignment = NeoSubZeroUccAssignment.query.filter_by(
+                sort_date_operation_id=locked_operation.id,
+                ramp=ramp,
+                position_number=position,
+                team_role=role,
+            ).with_for_update().one_or_none()
+            expected_version = str(
+                request.form.get("expected_version") or ""
+            ).strip()
+            if assignment and (
+                not expected_version
+                or version_conflict(assignment, expected_version)
+            ):
+                raise NeoSubZeroUccError(
+                    "UCC staffing changed while you were editing. Review current values."
+                )
+            person_id = request.form.get("person_id", type=int)
+            person = (
+                StaffingPerson.query.filter_by(id=person_id, active=True).one_or_none()
+                if person_id
+                else None
+            )
+            if person_id and person is None:
+                raise NeoSubZeroUccError("Choose an active employee.")
+            set_neosubzero_ucc_assignment(
+                locked_operation,
+                ramp,
+                position,
+                role,
+                person,
+                user_id=current_user.id,
+                assignment=assignment,
+            )
+            db.session.commit()
+            flash("UCC STAFFING SAVED.", "success")
+        except (NeoSubZeroUccError, IntegrityError) as exc:
+            db.session.rollback()
+            flash(
+                str(exc)
+                if isinstance(exc, NeoSubZeroUccError)
+                else "Unable to save UCC staffing.",
+                "error",
+            )
+        return redirect(url_for("neosubzero.ucc"))
+    return render_template(
+        "neonodes/neosubzero/ucc.html",
+        gateway=gateway,
+        can_edit=access["can_edit"],
+        revision=neosubzero_ucc_revision(gateway, operation),
+        refresh_status=subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY),
+        **neosubzero_ucc_context(gateway, operation),
+    )
+
+
+@bp.route("/ucc/revision")
+@gateway_node_required("subzero")
+def ucc_revision_endpoint():
+    if not user_can("neosubzero.ucc.view"):
+        return jsonify({"ok": False, "error": "Access denied."}), 403
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    revision = neosubzero_ucc_revision(gateway, operation)
+    response = jsonify(
+        {
+            "ok": True,
+            "revision": revision,
+            "changed": revision != str(request.args.get("revision") or ""),
+            "refresh": subzero_refresh_status(gateway, operation, UCC_REFRESH_KEY),
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @bp.route("/callouts", methods=["GET", "POST"])
@@ -544,6 +671,7 @@ def settings():
             ("Pretreat", PRETREAT_REFRESH_KEY),
             ("Outbound", OUTBOUND_REFRESH_KEY),
             ("Coordinator", COORDINATOR_REFRESH_KEY),
+            ("UCC", UCC_REFRESH_KEY),
         ),
         fluid_settings=neosubzero_fluid_settings(gateway),
         choices=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,

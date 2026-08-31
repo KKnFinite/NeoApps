@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}UCC | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
+    <header class="neosubzero-head">
+        <div><p>NEOSUB-ZERO</p><h1>UCC</h1></div>
+        <strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong>
+    </header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+
+    <section class="neosubzero-ucc-fluid" aria-label="Fluid preparation">
+        <strong>FLUID PREP</strong>
+        <span><b>TYPE I</b> {{ fluid_settings.type_i_concentration_percent }}% · {{ fluid_settings.type_i_fluid_name }}</span>
+        <span><b>TYPE IV</b> 100% · {{ fluid_settings.type_iv_fluid_name }}</span>
+    </section>
+
+    {% if not operation %}
+    <p class="neosubzero-empty">No current sort.</p>
+    {% elif not ramps %}
+    <p class="neosubzero-empty">No ramps currently have departure aircraft.</p>
+    {% else %}
+    <div class="neosubzero-ucc-ramps">
+        {% for ramp in ramps %}
+        <section class="neosubzero-ucc-ramp" data-ucc-ramp="{{ ramp.name }}">
+            <header>
+                <div><p>RAMP</p><h2>{{ ramp.name|upper }}</h2></div>
+                <span>{{ ramp.aircraft|length }} DEPARTURE{{ '' if ramp.aircraft|length == 1 else 'S' }}</span>
+            </header>
+
+            <div class="neosubzero-ucc-treatment-grid">
+                <div class="neosubzero-ucc-throat {{ 'state-' ~ ramp.throat.visual_state if ramp.throat else 'is-empty' }}">
+                    <span class="neosubzero-ucc-aircraft-shape" aria-hidden="true">✈</span>
+                    {% if ramp.throat %}
+                    <p>THROAT · {{ ramp.throat.parking }}</p>
+                    <strong>{{ ramp.throat.tail }}</strong>
+                    <span>{{ ramp.throat.flight }} · {{ ramp.throat.destination }}</span>
+                    <span>{{ ramp.throat.tail_status }} · {{ ramp.throat.visual_label }}</span>
+                    {% else %}
+                    <p>THROAT / POSITION 9</p><strong>CLEAR</strong>
+                    {% endif %}
+                </div>
+
+                {% for slot in ramp.slots %}
+                <section class="neosubzero-ucc-position position-{{ slot.position }}">
+                    <h3>POSITION {{ slot.position }}</h3>
+                    {% for role in ('driver', 'flyer') %}
+                    {% set role_slot = slot.roles[role] %}
+                    <form method="post" data-ucc-assignment-form>
+                        <input type="hidden" name="ramp" value="{{ ramp.name }}">
+                        <input type="hidden" name="position_number" value="{{ slot.position }}">
+                        <input type="hidden" name="team_role" value="{{ role }}">
+                        <input type="hidden" name="expected_version" value="{{ role_slot.version }}">
+                        <label><span>{{ role|upper }}</span>
+                            {% if can_edit %}
+                            <select name="person_id" aria-label="{{ ramp.name }} position {{ slot.position }} {{ role }}">
+                                <option value="">UNASSIGNED</option>
+                                {% for person_row in staffing_pool %}
+                                <option value="{{ person_row.person.id }}" {% if role_slot.person and role_slot.person.id == person_row.person.id %}selected{% endif %}>{{ person_row.person.full_name }} · {{ person_row.source|upper }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <strong>{{ role_slot.person.full_name if role_slot.person else 'UNASSIGNED' }}</strong>
+                            {% endif %}
+                        </label>
+                        {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+                    </form>
+                    {% endfor %}
+                </section>
+                {% endfor %}
+            </div>
+
+            <div class="neosubzero-ucc-aircraft-list" aria-label="{{ ramp.name }} aircraft">
+                {% for row in ramp.aircraft %}
+                <article class="state-{{ row.visual_state }}">
+                    <div><strong>{{ row.parking }}</strong><span>{{ row.flight }}</span></div>
+                    <b>{{ row.tail }}</b>
+                    <span>{{ row.destination }} · {{ row.departure_time_label }} {{ row.departure_time }}</span>
+                    <span>{{ row.tail_status }}</span>
+                    <span>{{ row.pretreat_status }}</span>
+                    <strong>{{ row.visual_label }}</strong>
+                    <span>{{ row.deice_status }}</span>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+<script src="{{ url_for('static', filename='js/neosubzero_ucc.js', v=STATIC_ASSET_VERSION) }}" defer></script>
+{% endblock %}

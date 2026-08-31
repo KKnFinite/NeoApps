@@ -492,6 +492,16 @@ DEFAULT_PERMISSION_RULES = (
         "Coordinate NeoSub-Zero departure-deice operations.",
     ),
     (
+        "neosubzero.ucc.view",
+        "watcher",
+        "View the NeoSub-Zero UCC workspace.",
+    ),
+    (
+        "neosubzero.ucc.edit",
+        "simulator",
+        "Edit NeoSub-Zero UCC Driver and Flyer staffing.",
+    ),
+    (
         "neosubzero.callouts.view",
         "watcher",
         "View NeoSub-Zero current-sort Deice staffing and callouts.",
