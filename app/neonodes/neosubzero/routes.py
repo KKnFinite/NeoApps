@@ -522,6 +522,15 @@ def departure_deice_mutate():
     )
     coordinator_return_to_list = False
     try:
+        if request.form.get("action") == "toggle_configured" and operation:
+            operation = SortDateOperation.query.filter_by(
+                id=operation.id,
+                gateway_code=gateway.code,
+            ).with_for_update().one_or_none()
+            if operation is None:
+                raise NeoSubZeroDepartureDeiceError(
+                    "The current sort changed. Reload departure deice."
+                )
         event = NeoSubZeroDepartureDeiceEvent.query.filter_by(
             sort_date_mission_id=getattr(mission, "id", None),
             sort_date_operation_id=getattr(operation, "id", None),

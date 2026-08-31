@@ -183,12 +183,18 @@ class NeoSubZeroUccTest(unittest.TestCase):
             "configured",
             configured_at=datetime(2026, 8, 31, 0, 50),
         )
+        self.alpha.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 40)
+        planned_two.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 20)
         db.session.commit()
         alpha = self._ramp_context("Alpha")
         self.assertEqual(alpha["throat"]["mission_id"], configured.id)
         self.assertEqual(
             [row["mission_id"] for row in alpha["waiting_queue"]],
-            [self.alpha.id, planned_two.id],
+            [planned_two.id, self.alpha.id],
+        )
+        self.assertEqual(
+            [row["queue_position"] for row in alpha["waiting_queue"]],
+            [1, 2],
         )
 
     def test_coordinator_selection_never_changes_universal_throat(self):
@@ -260,10 +266,16 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         alpha = self._ramp_context("Alpha")
         self.assertIsNone(alpha["throat"])
+        self.assertEqual(alpha["waiting_queue"], ())
+
+        next_mission.actual_block_out_datetime_utc = datetime(2026, 8, 31, 1, 15)
+        db.session.commit()
+        alpha = self._ramp_context("Alpha")
         self.assertEqual(
             [row["mission_id"] for row in alpha["waiting_queue"]],
             [next_mission.id],
         )
+        self.assertEqual(alpha["waiting_queue"][0]["queue_position"], 1)
 
     def test_parking_position_and_pretreat_configuration_do_not_imply_throat(self):
         pretreat = NeoSubZeroPretreatState(

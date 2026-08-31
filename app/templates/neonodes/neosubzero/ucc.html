@@ -44,6 +44,7 @@
                     <h3>WAITING QUEUE</h3>
                     {% for row in ramp.waiting_queue %}
                     <div class="state-{{ row.visual_state }}">
+                        <em>#{{ row.queue_position }}</em>
                         <strong>{{ row.flight }}</strong>
                         <span>{{ row.tail }}</span>
                         <span>{{ row.parking }}</span>

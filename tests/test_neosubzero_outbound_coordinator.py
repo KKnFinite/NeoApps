@@ -205,6 +205,76 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
         self.assertEqual(row["deice_minutes"], 20)
         self.assertEqual(row["final_fluid"]["concentration"], 100)
 
+    def test_only_one_active_departure_can_be_configured_per_ramp(self):
+        alpha_two = self._departure(
+            "5X203", "N203", "DFW", datetime(2026, 9, 1, 3, 0)
+        )
+        db.session.add(
+            SortDateParkingAssignment(
+                sort_date_operation_id=self.operation.id,
+                tail_number="N203",
+                ramp_code="A",
+                position_code="A04",
+            )
+        )
+        first_alpha = mutate_departure_deice(
+            self.operation, self.second, "initial_contact", {}, event=None
+        )
+        second_alpha = mutate_departure_deice(
+            self.operation, alpha_two, "initial_contact", {}, event=None
+        )
+        mutate_departure_deice(
+            self.operation,
+            self.second,
+            "toggle_configured",
+            {},
+            event=first_alpha,
+        )
+        with self.assertRaisesRegex(
+            NeoSubZeroDepartureDeiceError,
+            "Alpha already has an active Configured departure",
+        ):
+            mutate_departure_deice(
+                self.operation,
+                alpha_two,
+                "toggle_configured",
+                {},
+                event=second_alpha,
+            )
+        self.assertIsNone(second_alpha.configured_at_utc)
+        self.assertEqual(second_alpha.status, "deice_planned")
+
+        first_alpha.status = "finished"
+        with self.assertRaises(NeoSubZeroDepartureDeiceError):
+            mutate_departure_deice(
+                self.operation,
+                alpha_two,
+                "toggle_configured",
+                {},
+                event=second_alpha,
+            )
+        first_alpha.status = "cleared"
+        mutate_departure_deice(
+            self.operation,
+            alpha_two,
+            "toggle_configured",
+            {},
+            event=second_alpha,
+        )
+        self.assertEqual(second_alpha.status, "configured")
+
+        remote_event = mutate_departure_deice(
+            self.operation, self.first, "initial_contact", {}, event=None
+        )
+        mutate_departure_deice(
+            self.operation,
+            self.first,
+            "toggle_configured",
+            {},
+            event=remote_event,
+        )
+        self.assertEqual(remote_event.status, "configured")
+
     def test_negative_pretreat_and_not_sprayed_collapse_states(self):
         tail_state = SortDateTailState(
             sort_date=self.operation.sort_date,

@@ -56,6 +56,24 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         mutate_pretreat(self.operation, self.departure, "toggle_planned", {}, None); db.session.commit()
         self.assertNotEqual(before, pretreat_revision(self.gateway, self.operation))
 
+    def test_multiple_pretreat_aircraft_may_remain_configured(self):
+        first = mutate_pretreat(
+            self.operation,
+            self.departure,
+            "toggle_configured",
+            {},
+            None,
+        )
+        second = mutate_pretreat(
+            self.operation,
+            self.future_departure,
+            "toggle_configured",
+            {},
+            None,
+        )
+        self.assertIsNotNone(first.configured_at_utc)
+        self.assertIsNotNone(second.configured_at_utc)
+
     def test_routes_and_permission_defaults(self):
         endpoints = {rule.endpoint for rule in self.app.url_map.iter_rules()}
         self.assertTrue({

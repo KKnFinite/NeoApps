@@ -208,6 +208,8 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None):
                 raise NeoSubZeroDepartureDeiceError(
                     "Move this mission to Deice Planned before configuring it."
                 )
+            if event.configured_at_utc is None:
+                _validate_ramp_configuration_available(operation, mission, event)
             event.configured_at_utc = (
                 None
                 if event.configured_at_utc
@@ -394,6 +396,7 @@ def _departure_row(
             mission.crew_load_completed_at_utc, mission.timezone or None
         ),
         "block_out": format_local_hhmm(block_out, mission.timezone or None),
+        "block_out_at_utc": block_out,
         "block_out_variance": _variance(mission.planned_datetime_utc, block_out),
         "pretreat_complete": pretreat_complete,
         "pretreat_configured": bool(
@@ -619,6 +622,57 @@ def _validate_mission(operation, mission):
     ):
         raise NeoSubZeroDepartureDeiceError(
             "Departure deice applies only to a current mission with an assigned tail."
+        )
+
+
+def _validate_ramp_configuration_available(operation, mission, event):
+    parking_rows = SortDateParkingAssignment.query.filter_by(
+        sort_date_operation_id=operation.id
+    ).all()
+    ramp_by_tail = {
+        _tail(row.tail_number): _ramp_name(row.ramp_code)
+        for row in parking_rows
+        if _tail(row.tail_number) and _ramp_name(row.ramp_code)
+    }
+    mission_ramp = ramp_by_tail.get(_tail(mission.assigned_tail_number))
+    if not mission_ramp:
+        return
+    active_events = (
+        db.session.query(
+            NeoSubZeroDepartureDeiceEvent,
+            SortDateMission.assigned_tail_number,
+        )
+        .join(
+            SortDateMission,
+            SortDateMission.id
+            == NeoSubZeroDepartureDeiceEvent.sort_date_mission_id,
+        )
+        .filter(
+            NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation.id,
+            NeoSubZeroDepartureDeiceEvent.status.in_(("configured", "finished")),
+            SortDateMission.mission_type == "departure",
+            or_(
+                SortDateMission.departure_status.is_(None),
+                SortDateMission.departure_status != "cancelled",
+            ),
+            NeoSubZeroDepartureDeiceEvent.id
+            != (getattr(event, "id", None) or -1),
+        )
+        .all()
+    )
+    conflict = next(
+        (
+            active_event
+            for active_event, active_tail in active_events
+            if ramp_by_tail.get(_tail(active_tail or active_event.tail_number))
+            == mission_ramp
+        ),
+        None,
+    )
+    if conflict is not None:
+        raise NeoSubZeroDepartureDeiceError(
+            f"{mission_ramp} already has an active Configured departure. "
+            "Clear or reset it before configuring another aircraft."
         )
 
 

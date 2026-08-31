@@ -87,6 +87,8 @@ def neosubzero_ucc_context(gateway, operation):
             if row is not throat and _is_waiting_for_deice(row)
         ]
         waiting_rows.sort(key=_queue_sort_key)
+        for queue_position, row in enumerate(waiting_rows, start=1):
+            row["queue_position"] = queue_position
         waiting_queue = tuple(waiting_rows)
         slots = []
         for position in UCC_POSITIONS:
@@ -301,11 +303,10 @@ def _is_active_throat(row):
 
 
 def _is_waiting_for_deice(row):
-    return _departure_event_status(row) in {
-        "deice_planned",
-        "configured",
-        "finished",
-    }
+    return (
+        _departure_event_status(row) == "deice_planned"
+        and row.get("block_out_at_utc") is not None
+    )
 
 
 def _throat_sort_key(row):
@@ -327,8 +328,8 @@ def _throat_sort_key(row):
 
 def _queue_sort_key(row):
     return (
-        row.get("sort_time") is None,
-        row.get("sort_time") or datetime.max,
+        row.get("block_out_at_utc") is None,
+        row.get("block_out_at_utc") or datetime.max,
         row.get("flight") or "",
         row.get("mission_id") or 0,
     )
