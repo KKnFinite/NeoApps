@@ -13,6 +13,8 @@ from app.models import (
     NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroPretreatState,
     NeoSubZeroSetting,
+    NeoSubZeroSprayRecord,
+    NeoSubZeroUccTruckAssignment,
     SortDateMission,
     SortDateParkingAssignment,
     SortDateTailState,
@@ -178,6 +180,9 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             row["mission_id"],
         )
     )
+    from app.services.neosubzero_spray import decorate_departure_rows_with_spray
+
+    decorate_departure_rows_with_spray(operation, rows)
     return {"operation": operation, "rows": rows, "fluid_settings": settings}
 
 
@@ -280,6 +285,18 @@ def departure_deice_revision(gateway, operation):
             NeoSubZeroSetting,
             NeoSubZeroSetting.updated_at,
             NeoSubZeroSetting.gateway_id == gateway.id,
+        ),
+        _aggregate(
+            "ucc_trucks",
+            NeoSubZeroUccTruckAssignment,
+            NeoSubZeroUccTruckAssignment.updated_at,
+            NeoSubZeroUccTruckAssignment.sort_date_operation_id == operation_id,
+        ),
+        _aggregate(
+            "spray_records",
+            NeoSubZeroSprayRecord,
+            NeoSubZeroSprayRecord.updated_at,
+            NeoSubZeroSprayRecord.sort_date_operation_id == operation_id,
         ),
     )
     values = db.session.execute(union_all(*aggregates)).all()

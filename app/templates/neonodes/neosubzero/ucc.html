@@ -56,6 +56,17 @@
                 {% for slot in ramp.slots %}
                 <section class="neosubzero-ucc-position position-{{ slot.position }}">
                     <h3>POSITION {{ slot.position }}</h3>
+                    <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" class="neosubzero-ucc-truck-form" data-ucc-truck-form>
+                        <input type="hidden" name="board" value="ucc">
+                        <input type="hidden" name="ramp" value="{{ ramp.name }}">
+                        <input type="hidden" name="position_number" value="{{ slot.position }}">
+                        <input type="hidden" name="expected_version" value="{{ slot.truck_version }}">
+                        <label><span>TRUCK</span>
+                            {% if can_edit %}<input name="truck_number" maxlength="32" value="{{ slot.truck_number }}" placeholder="Truck #">
+                            {% else %}<strong>{{ slot.truck_number or 'UNASSIGNED' }}</strong>{% endif %}
+                        </label>
+                        {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+                    </form>
                     {% for role in ('driver', 'flyer') %}
                     {% set role_slot = slot.roles[role] %}
                     <form method="post" data-ucc-assignment-form

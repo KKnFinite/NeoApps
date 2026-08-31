@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Deice Log | NeoSub-Zero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell neosubzero-deice-log">
+    <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE LOG</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
+    {% include "neonodes/neosubzero/_nav.html" %}
+    {% if not operation %}<p class="neosubzero-empty">No current sort.</p>
+    {% elif not groups %}<p class="neosubzero-empty">No spray applications recorded.</p>
+    {% else %}
+    <div class="neosubzero-deice-log-groups">
+        {% for group in groups %}
+        <article>
+            <header><div><p>TRUCK</p><h2>{{ group.truck }}</h2></div><div><strong>{{ group.tail }}</strong><span>{{ group.flight }}</span></div></header>
+            <dl>
+                <div><dt>Reason for Application</dt><dd>{{ group.reason }}</dd></div>
+                <div><dt>Active Precipitation</dt><dd>{{ group.precipitation }}</dd></div>
+                <div><dt>Ambient</dt><dd>{{ group.ambient_temperature }}</dd></div>
+                <div><dt>Dew Point</dt><dd>{{ group.dew_point }}</dd></div>
+                <div><dt>Operators</dt><dd>{{ group.operators|join(' / ') or '-' }}</dd></div>
+                <div><dt>Notes</dt><dd class="is-notes">{{ group.notes or '-' }}</dd></div>
+            </dl>
+            <div class="neosubzero-deice-log-table-wrap"><table><thead><tr><th>Pass</th><th>Fluid</th><th>Concentration</th><th>Gallons</th><th>Surface</th><th>Start</th><th>End</th><th>Duration</th><th>Position</th></tr></thead><tbody>
+                {% for application in group.applications %}<tr><td>{{ application.type }} · P{{ application.pass_number }}</td><td>{{ application.fluid }}</td><td>{{ application.concentration }}%</td><td>{{ application.gallons }}</td><td>{{ application.surface }}</td><td>{{ application.start }}</td><td>{{ application.end }}</td><td>{{ application.duration }} min</td><td>{{ application.position }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </article>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

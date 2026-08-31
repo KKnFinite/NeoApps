@@ -502,6 +502,16 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoSub-Zero UCC Driver and Flyer staffing.",
     ),
     (
+        "neosubzero.deicer_mobile.view",
+        "operator",
+        "Use the assigned NeoSub-Zero Deicer Mobile workspace.",
+    ),
+    (
+        "neosubzero.deice_log.view",
+        "watcher",
+        "View the NeoSub-Zero Cryotech-oriented Deice Log.",
+    ),
+    (
         "neosubzero.callouts.view",
         "watcher",
         "View NeoSub-Zero current-sort Deice staffing and callouts.",

@@ -11,6 +11,7 @@ from app.extensions import db
 from app.models import (
     NeoSubZeroCalloutAssignment,
     NeoSubZeroUccAssignment,
+    NeoSubZeroUccTruckAssignment,
     StaffingDailyAttendance,
     StaffingPerson,
     StaffingPersonQualification,
@@ -57,6 +58,12 @@ def neosubzero_ucc_context(gateway, operation):
     assignment_by_slot = {
         (row.ramp, row.position_number, row.team_role): row
         for row in assignment_rows
+    }
+    truck_by_position = {
+        (row.ramp, row.position_number): row
+        for row in NeoSubZeroUccTruckAssignment.query.filter_by(
+            sort_date_operation_id=operation.id
+        ).all()
     }
     staffing_pool = current_subzero_staffing_pool(operation)
     available_people = {
@@ -105,7 +112,16 @@ def neosubzero_ucc_context(gateway, operation):
                     "person": person,
                     "version": entity_version(assignment),
                 }
-            slots.append({"position": position, "roles": roles})
+            truck = truck_by_position.get((ramp, position))
+            slots.append(
+                {
+                    "position": position,
+                    "roles": roles,
+                    "truck": truck,
+                    "truck_number": getattr(truck, "truck_number", None) or "",
+                    "truck_version": entity_version(truck),
+                }
+            )
         ramps.append(
             {
                 "name": ramp,
@@ -359,6 +375,7 @@ def neosubzero_ucc_revision(gateway, operation):
     payload = [("departure", departure_deice_revision(gateway, operation))]
     models = (
         ("ucc", NeoSubZeroUccAssignment, NeoSubZeroUccAssignment.sort_date_operation_id == operation_id),
+        ("trucks", NeoSubZeroUccTruckAssignment, NeoSubZeroUccTruckAssignment.sort_date_operation_id == operation_id),
         ("callouts", NeoSubZeroCalloutAssignment, NeoSubZeroCalloutAssignment.sort_date_operation_id == operation_id),
         ("attendance", StaffingDailyAttendance, StaffingDailyAttendance.sort_date_operation_id == operation_id),
         ("qualifications", StaffingPersonQualification, StaffingPersonQualification.qualification_key == "deice"),

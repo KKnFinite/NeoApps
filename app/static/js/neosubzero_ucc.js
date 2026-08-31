@@ -108,6 +108,11 @@
         });
     });
 
+    root.querySelectorAll("[data-ucc-truck-form]").forEach((form) => {
+        form.addEventListener("input", () => { root.dataset.dirty = "true"; });
+        form.addEventListener("submit", () => { root.dataset.saving = "true"; });
+    });
+
     root.querySelectorAll("[data-ucc-drag-assignee]").forEach((handle) => {
         handle.addEventListener("dragstart", (event) => {
             event.dataTransfer.effectAllowed = "move";

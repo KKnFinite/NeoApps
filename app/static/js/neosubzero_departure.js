@@ -71,6 +71,13 @@
         syncForm(form);
     });
 
+    root.querySelectorAll("[data-subzero-operational-form]").forEach((form) => {
+        form.addEventListener("input", () => {
+            form.dataset.dirty = "true";
+            root.dataset.dirty = "true";
+        });
+    });
+
     root.addEventListener("click", (event) => {
         const edit = event.target.closest("[data-subzero-edit]");
         if (edit) {
@@ -79,6 +86,13 @@
             edit.hidden = true;
             form.querySelector('button[type="submit"]').hidden = false;
             syncForm(form);
+            const mission = edit.closest("[data-subzero-mission]");
+            mission?.querySelectorAll("[data-subzero-spray-control]").forEach((input) => {
+                input.readOnly = input.dataset.sprayReady === "false";
+            });
+            mission?.querySelectorAll("[data-subzero-spray-save]").forEach((button) => {
+                button.hidden = false;
+            });
             return;
         }
         const stamp = event.target.closest("[data-subzero-deice-stamp]");

@@ -14,6 +14,30 @@
 </dl>
 {% endmacro %}
 
+{% macro application_context_form(application_context, board) %}
+{% set context = application_context|default({}, true) %}
+<form method="post" action="{{ url_for('neosubzero.application_context_mutate') }}" class="neosubzero-application-context" data-subzero-operational-form>
+    <input type="hidden" name="board" value="{{ board }}">
+    <h2>APPLICATION CONTEXT</h2>
+    <label>Reason for Application
+        <input name="reason_for_application" maxlength="120" value="{{ context.get('reason_for_application', '') }}" placeholder="Enter reason">
+    </label>
+    <label>Active Precipitation
+        <input name="active_precipitation" maxlength="120" value="{{ context.get('active_precipitation', '') }}" placeholder="Enter precipitation">
+    </label>
+    <label>Ambient Temperature
+        <input name="ambient_temperature" maxlength="32" value="{{ context.get('ambient_temperature', '') }}">
+    </label>
+    <label>Dew Point
+        <input name="dew_point" maxlength="32" value="{{ context.get('dew_point', '') }}">
+    </label>
+    <label class="is-notes">Notes
+        <textarea name="notes" maxlength="2000" rows="2">{{ context.get('notes', '') }}</textarea>
+    </label>
+    <button type="submit">SAVE CONTEXT</button>
+</form>
+{% endmacro %}
+
 {% macro terminal_summary(row, can_edit, board, selected_ramp='', open=false) %}
 <div class="neosubzero-departure-compact is-{{ row.collapse_state }}" data-subzero-compact {% if open %}hidden{% endif %} {% if row.script %}data-subzero-script="{{ row.script.text }}"{% endif %}>
     <strong>{{ row.flight }}</strong>
@@ -93,6 +117,7 @@
         </div>
         {% endif %}
         {{ treatment_form(row, can_edit, board, selected_ramp) }}
+        {{ spray_position_forms(row, can_edit, board, selected_ramp) }}
         {% if can_edit and row.event.status == 'finished' %}
         <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
             {{ mutation_identity(row, board, selected_ramp) }}
@@ -101,6 +126,52 @@
         {% endif %}
     {% endif %}
 </section>
+{% endmacro %}
+
+{% macro spray_position_forms(row, can_edit, board, selected_ramp='') %}
+{% if row.application_passes %}
+{% set spray_locked = not can_edit or row.event.status == 'cleared' %}
+<section class="neosubzero-spray-positions" data-subzero-spray-positions>
+    <h3>TRUCK / POSITION GALLONS</h3>
+    {% for pass_row in row.application_passes %}
+    <section class="neosubzero-spray-pass {{ 'type-iv' if pass_row.type == 'Type IV' else 'type-i' }}">
+        <header><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><span>{{ pass_row.start or '-' }}–{{ pass_row.end or '-' }}</span></header>
+        <div class="neosubzero-spray-position-grid">
+            {% for position_row in pass_row.positions %}
+            <article>
+                <h4>POSITION {{ position_row.position }}</h4>
+                <p>{{ position_row.driver.full_name if position_row.driver else 'NO DRIVER' }} · {{ position_row.flyer.full_name if position_row.flyer else 'NO FLYER' }}</p>
+                <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" data-subzero-operational-form>
+                    <input type="hidden" name="board" value="{{ board }}">
+                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+                    <input type="hidden" name="ramp" value="{{ row.ramp }}">
+                    <input type="hidden" name="position_number" value="{{ position_row.position }}">
+                    <input type="hidden" name="expected_version" value="{{ position_row.truck_version }}">
+                    <label>Truck
+                        <input name="truck_number" maxlength="32" value="{{ position_row.truck_number }}" placeholder="Truck #" data-subzero-spray-control {% if spray_locked %}readonly{% endif %}>
+                    </label>
+                    {% if can_edit %}<button type="submit" data-subzero-spray-save {% if spray_locked %}hidden{% endif %}>SAVE TRUCK</button>{% endif %}
+                </form>
+                <form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-subzero-operational-form>
+                    <input type="hidden" name="board" value="{{ board }}">
+                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+                    <input type="hidden" name="ramp" value="{{ selected_ramp or row.ramp }}">
+                    <input type="hidden" name="pass_number" value="{{ pass_row.number }}">
+                    <input type="hidden" name="position_number" value="{{ position_row.position }}">
+                    <input type="hidden" name="expected_version" value="{{ position_row.record_version }}">
+                    <label>Gallons
+                        <input name="gallons" inputmode="decimal" value="{{ position_row.gallons }}" placeholder="—" data-subzero-spray-control data-spray-ready="{{ 'true' if pass_row.end else 'false' }}" {% if spray_locked or not pass_row.end %}readonly{% endif %}>
+                    </label>
+                    {% if can_edit and pass_row.end %}<button type="submit" data-subzero-spray-save {% if spray_locked %}hidden{% endif %}>SAVE GALLONS</button>{% endif %}
+                </form>
+                {% if position_row.recorded_truck and position_row.recorded_truck != position_row.truck_number %}<small>RECORDED WITH TRUCK {{ position_row.recorded_truck }}</small>{% endif %}
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</section>
+{% endif %}
 {% endmacro %}
 
 {% macro treatment_form(row, can_edit, board, selected_ramp='') %}

@@ -9,6 +9,8 @@ from app.models import (
     NeoSubZeroCalloutAssignment,
     NeoSubZeroPretreatState,
     NeoSubZeroUccAssignment,
+    NeoSubZeroUccTruckAssignment,
+    NeoSubZeroSprayRecord,
     SortDateMission,
     SortDateOperation,
     StaffingPerson,
@@ -47,8 +49,16 @@ from app.services.neosubzero_ucc import (
     neosubzero_ucc_context,
     neosubzero_ucc_revision,
 )
+from app.services.neosubzero_spray import (
+    DEICER_REFRESH_KEY,
+    NeoSubZeroSprayError,
+    current_user_ucc_assignment,
+    neosubzero_deice_log,
+    set_neosubzero_spray_gallons,
+    set_neosubzero_ucc_truck,
+)
 from app.services.access_control import get_current_gateway
-from app.services.live_collaboration import version_conflict
+from app.services.live_collaboration import entity_version, version_conflict
 from app.services.live_screen_refresh import (
     LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     live_screen_refresh_values,
@@ -84,6 +94,18 @@ NEOSUBZERO_PAGES = (
         "neosubzero.ucc.edit",
     ),
     (
+        "Deicer Mobile",
+        "neosubzero.deicer_mobile",
+        "neosubzero.deicer_mobile.view",
+        "neosubzero.deicer_mobile.view",
+    ),
+    (
+        "Deice Log",
+        "neosubzero.deice_log",
+        "neosubzero.deice_log.view",
+        "neosubzero.deice_log.view",
+    ),
+    (
         "Callout Management",
         "neosubzero.callouts",
         "neosubzero.callouts.view",
@@ -107,6 +129,7 @@ REFRESH_KEYS = (
     OUTBOUND_REFRESH_KEY,
     COORDINATOR_REFRESH_KEY,
     UCC_REFRESH_KEY,
+    DEICER_REFRESH_KEY,
 )
 
 
@@ -199,6 +222,7 @@ def outbound():
             gateway, operation, OUTBOUND_REFRESH_KEY
         ),
         gateway_timezone=gateway_timezone(gateway),
+        application_context=_application_context(operation),
         **context,
     )
 
@@ -236,6 +260,7 @@ def coordinator():
             gateway, operation, COORDINATOR_REFRESH_KEY
         ),
         gateway_timezone=gateway_timezone(gateway),
+        application_context=_application_context(operation),
         **context,
         **coordinator_state,
     )
@@ -392,6 +417,218 @@ def ucc_revision_endpoint():
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@bp.route("/truck", methods=["POST"])
+@gateway_node_required("subzero")
+def truck_mutate():
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    board = str(request.form.get("board") or "").strip().casefold()
+    ramp = str(request.form.get("ramp") or "").strip().title()
+    position = request.form.get("position_number", type=int)
+    try:
+        if operation is None:
+            raise NeoSubZeroSprayError("No current sort is available.")
+        locked_operation = SortDateOperation.query.filter_by(
+            id=operation.id,
+            gateway_code=gateway.code,
+        ).with_for_update().one_or_none()
+        if locked_operation is None:
+            raise NeoSubZeroSprayError("The current sort changed. Reload NeoSub-Zero.")
+        if not _can_edit_position(
+            board, locked_operation, ramp, position, allow_ucc=True
+        ):
+            return "Access denied.", 403
+        truck = NeoSubZeroUccTruckAssignment.query.filter_by(
+            sort_date_operation_id=locked_operation.id,
+            ramp=ramp,
+            position_number=position,
+        ).with_for_update().one_or_none()
+        expected_version = str(request.form.get("expected_version") or "").strip()
+        if truck and (
+            not expected_version or version_conflict(truck, expected_version)
+        ):
+            raise NeoSubZeroSprayError(
+                "Truck assignment changed while you were editing. Review current values."
+            )
+        set_neosubzero_ucc_truck(
+            locked_operation,
+            ramp,
+            position,
+            request.form.get("truck_number"),
+            user_id=current_user.id,
+            assignment=truck,
+        )
+        db.session.commit()
+        flash("UCC TRUCK SAVED.", "success")
+    except (NeoSubZeroSprayError, IntegrityError) as exc:
+        db.session.rollback()
+        flash(
+            str(exc) if isinstance(exc, NeoSubZeroSprayError) else "Unable to save truck.",
+            "error",
+        )
+    return redirect(_subzero_return_url(board, request.form))
+
+
+@bp.route("/spray-gallons", methods=["POST"])
+@gateway_node_required("subzero")
+def spray_gallons_mutate():
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    board = str(request.form.get("board") or "").strip().casefold()
+    mission_id = request.form.get("mission_id", type=int)
+    pass_number = request.form.get("pass_number", type=int)
+    position = request.form.get("position_number", type=int)
+    try:
+        if operation is None:
+            raise NeoSubZeroSprayError("No current sort is available.")
+        locked_operation = SortDateOperation.query.filter_by(
+            id=operation.id,
+            gateway_code=gateway.code,
+        ).with_for_update().one_or_none()
+        if locked_operation is None:
+            raise NeoSubZeroSprayError("The current sort changed. Reload NeoSub-Zero.")
+        mission = SortDateMission.query.filter_by(
+            id=mission_id,
+            sort_date_operation_id=locked_operation.id,
+            mission_type="departure",
+        ).one_or_none()
+        event = NeoSubZeroDepartureDeiceEvent.query.filter_by(
+            sort_date_operation_id=locked_operation.id,
+            sort_date_mission_id=mission_id,
+        ).with_for_update().one_or_none()
+        row = _departure_row_for_mission(gateway, locked_operation, mission_id)
+        if mission is None or event is None or row is None:
+            raise NeoSubZeroSprayError("Choose a current departure-deice mission.")
+        if not _can_edit_position(board, locked_operation, row["ramp"], position):
+            return "Access denied.", 403
+        record = NeoSubZeroSprayRecord.query.filter_by(
+            departure_deice_event_id=event.id,
+            pass_number=pass_number,
+            position_number=position,
+        ).with_for_update().one_or_none()
+        expected_version = str(request.form.get("expected_version") or "").strip()
+        if record and (
+            not expected_version or version_conflict(record, expected_version)
+        ):
+            raise NeoSubZeroSprayError(
+                "Gallons changed while you were editing. Review current values."
+            )
+        set_neosubzero_spray_gallons(
+            locked_operation,
+            mission,
+            event,
+            pass_number,
+            position,
+            request.form.get("gallons"),
+            fluid_settings=neosubzero_fluid_settings(gateway),
+            application_context=_application_context(locked_operation),
+            user_id=current_user.id,
+            record=record,
+        )
+        db.session.commit()
+        flash("SPRAY GALLONS SAVED.", "success")
+    except (NeoSubZeroSprayError, IntegrityError) as exc:
+        db.session.rollback()
+        flash(
+            str(exc) if isinstance(exc, NeoSubZeroSprayError) else "Unable to save gallons.",
+            "error",
+        )
+    return redirect(_subzero_return_url(board, request.form))
+
+
+@bp.route("/application-context", methods=["POST"])
+@gateway_node_required("subzero")
+def application_context_mutate():
+    board = str(request.form.get("board") or "").strip().casefold()
+    permission = {
+        "outbound": "neosubzero.outbound.edit",
+        "coordinator": "neosubzero.coordinator.edit",
+    }.get(board)
+    if permission is None or not user_can(permission):
+        return "Access denied.", 403
+    operation = current_neosubzero_operation(get_current_gateway())
+    if operation is None:
+        flash("No current sort is available.", "error")
+    else:
+        try:
+            session[_application_context_key(operation)] = {
+                "reason_for_application": _context_text(
+                    request.form.get("reason_for_application"), 120, "Reason for Application"
+                ),
+                "active_precipitation": _context_text(
+                    request.form.get("active_precipitation"), 120, "Active Precipitation"
+                ),
+                "ambient_temperature": _context_text(
+                    request.form.get("ambient_temperature"), 32, "Ambient temperature"
+                ),
+                "dew_point": _context_text(request.form.get("dew_point"), 32, "Dew point"),
+                "notes": _context_text(request.form.get("notes"), 2000, "Notes"),
+            }
+            session.modified = True
+            flash("APPLICATION CONTEXT SAVED.", "success")
+        except NeoSubZeroSprayError as exc:
+            flash(str(exc), "error")
+    return redirect(_subzero_return_url(board, request.form))
+
+
+@bp.route("/deicer-mobile")
+@gateway_node_required("subzero")
+def deicer_mobile():
+    if not user_can("neosubzero.deicer_mobile.view"):
+        return "Access denied.", 403
+    session[LAST_PAGE_KEY] = "neosubzero.deicer_mobile"
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    assignment = current_user_ucc_assignment(operation, current_user)
+    if operation is not None and assignment is None:
+        return "A current UCC Driver or Flyer assignment is required.", 403
+    context = departure_deice_context(gateway, operation)
+    rows = [
+        row for row in context["rows"]
+        if assignment is not None and row.get("ramp") == assignment.ramp
+    ]
+    selected_id = request.args.get("mission", type=int)
+    if selected_id not in {row["mission_id"] for row in rows}:
+        selected_id = rows[0]["mission_id"] if rows else None
+    return render_template(
+        "neonodes/neosubzero/deicer_mobile.html",
+        gateway=gateway,
+        operation=operation,
+        assignment=assignment,
+        rows=rows,
+        selected_mission_id=selected_id,
+        revision=departure_deice_revision(gateway, operation),
+        refresh_status=subzero_refresh_status(gateway, operation, DEICER_REFRESH_KEY),
+    )
+
+
+@bp.route("/deicer-mobile/revision")
+@gateway_node_required("subzero")
+def deicer_mobile_revision_endpoint():
+    operation = current_neosubzero_operation(get_current_gateway())
+    if operation is not None and current_user_ucc_assignment(operation, current_user) is None:
+        return jsonify({"ok": False, "error": "A current UCC assignment is required."}), 403
+    return _departure_revision_response(
+        "neosubzero.deicer_mobile.view", DEICER_REFRESH_KEY
+    )
+
+
+@bp.route("/deice-log")
+@gateway_node_required("subzero")
+def deice_log():
+    if not user_can("neosubzero.deice_log.view"):
+        return "Access denied.", 403
+    session[LAST_PAGE_KEY] = "neosubzero.deice_log"
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    return render_template(
+        "neonodes/neosubzero/deice_log.html",
+        gateway=gateway,
+        operation=operation,
+        groups=neosubzero_deice_log(operation),
+    )
 
 
 @bp.route("/callouts", methods=["GET", "POST"])
@@ -719,10 +956,83 @@ def settings():
             ("Outbound", OUTBOUND_REFRESH_KEY),
             ("Coordinator", COORDINATOR_REFRESH_KEY),
             ("UCC", UCC_REFRESH_KEY),
+            ("Deicer Mobile", DEICER_REFRESH_KEY),
         ),
         fluid_settings=neosubzero_fluid_settings(gateway),
         choices=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
+
+
+def _can_edit_position(board, operation, ramp, position, *, allow_ucc=False):
+    permission = {
+        "outbound": "neosubzero.outbound.edit",
+        "coordinator": "neosubzero.coordinator.edit",
+    }.get(board)
+    if board == "ucc" and allow_ucc:
+        permission = "neosubzero.ucc.edit"
+    if permission is not None:
+        return user_can(permission)
+    if board != "deicer" or not user_can("neosubzero.deicer_mobile.view"):
+        return False
+    assignment = current_user_ucc_assignment(operation, current_user)
+    return bool(
+        assignment
+        and assignment.ramp == str(ramp or "").strip().title()
+        and assignment.position_number == position
+    )
+
+
+def _departure_row_for_mission(gateway, operation, mission_id):
+    return next(
+        (
+            row
+            for row in departure_deice_context(gateway, operation)["rows"]
+            if row["mission_id"] == mission_id
+        ),
+        None,
+    )
+
+
+def _application_context_key(operation):
+    return f"neosubzero.application_context.{operation.id}"
+
+
+def _application_context(operation):
+    if operation is None:
+        return {
+            "reason_for_application": "",
+            "active_precipitation": "",
+            "ambient_temperature": "",
+            "dew_point": "",
+            "notes": "",
+        }
+    value = session.get(_application_context_key(operation)) or {}
+    return {
+        "reason_for_application": str(value.get("reason_for_application") or ""),
+        "active_precipitation": str(value.get("active_precipitation") or ""),
+        "ambient_temperature": str(value.get("ambient_temperature") or ""),
+        "dew_point": str(value.get("dew_point") or ""),
+        "notes": str(value.get("notes") or ""),
+    }
+
+
+def _context_text(value, maximum, label):
+    normalized = str(value or "").strip()
+    if len(normalized) > maximum:
+        raise NeoSubZeroSprayError(f"{label} must be {maximum} characters or fewer.")
+    return normalized
+
+
+def _subzero_return_url(board, values):
+    mission_id = values.get("mission_id", type=int)
+    ramp = str(values.get("ramp") or "").strip().title()
+    if board == "coordinator":
+        return url_for("neosubzero.coordinator", ramp=ramp or None, mission=mission_id)
+    if board == "deicer":
+        return url_for("neosubzero.deicer_mobile", mission=mission_id)
+    if board == "ucc":
+        return url_for("neosubzero.ucc")
+    return url_for("neosubzero.outbound")
 
 
 def _departure_revision_response(permission, screen_key):

@@ -5,7 +5,9 @@ from app.models import (
     NeoSubZeroDepartureDeiceEvent,
     NeoSubZeroCalloutAssignment,
     NeoSubZeroUccAssignment,
+    NeoSubZeroUccTruckAssignment,
     NeoSubZeroPretreatState,
+    NeoSubZeroSprayRecord,
     NeoSubZeroSetting,
     StaffingPersonQualification,
 )
@@ -18,6 +20,8 @@ NEOSUBZERO_TABLES = (
     StaffingPersonQualification.__table__,
     NeoSubZeroCalloutAssignment.__table__,
     NeoSubZeroUccAssignment.__table__,
+    NeoSubZeroUccTruckAssignment.__table__,
+    NeoSubZeroSprayRecord.__table__,
 )
 
 

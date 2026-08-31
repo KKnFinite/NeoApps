@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% from "neonodes/neosubzero/_departure_deice.html" import mission_facts, terminal_summary, mission_workspace with context %}
+{% from "neonodes/neosubzero/_departure_deice.html" import application_context_form, mission_facts, terminal_summary, mission_workspace with context %}
 {% block title %}Outbound | NeoSub-Zero{% endblock %}
 {% block content %}
 <section class="neosubzero-shell neosubzero-departure-board" data-subzero-departure-board data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.outbound_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
     <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>OUTBOUND</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include "neonodes/neosubzero/_nav.html" %}
+    {% if can_edit %}{{ application_context_form(application_context, 'outbound') }}{% endif %}
 
     <section class="neosubzero-radio-script" data-subzero-script-panel>
         <h2>AIR-TO-GROUND SCRIPT</h2>
