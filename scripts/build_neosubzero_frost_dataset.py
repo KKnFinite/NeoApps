@@ -26,9 +26,10 @@ def main():
         "--exposure-dates",
         type=Path,
         help=(
-            "Optional text file with one YYYY-MM-DD operational-night date per line "
-            "and an optional comma-separated departure count. Only these event-free "
-            "nights may become negative examples."
+            "Optional supplemental exposure file with one YYYY-MM-DD operational-"
+            "night date per line and an optional known comma-separated departure "
+            "count. Normal non-holiday Monday-Thursday nights are reconstructed "
+            "without guessed counts."
         ),
     )
     parser.add_argument("--output", required=True, type=Path)

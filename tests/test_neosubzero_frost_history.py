@@ -9,6 +9,7 @@ from app.services.neosubzero_frost_history import (
     build_frost_training_dataset,
     default_negative_exposure_window,
     group_cryotech_treatment_events,
+    historical_no_sort_dates,
     normal_operational_nights,
     parse_cryotech_csv,
 )
@@ -91,8 +92,8 @@ class NeoSubZeroFrostHistoryTest(unittest.TestCase):
         }
         self.assertNotIn(date(2026, 1, 5), window_rows)
         self.assertNotIn(date(2026, 1, 6), window_rows)
-        self.assertEqual(window_rows[date(2026, 1, 7)].frost_label, "unlabeled")
-        self.assertEqual(window_rows[date(2026, 1, 7)].outcome, "no_exposure")
+        self.assertEqual(window_rows[date(2026, 1, 7)].frost_label, "negative")
+        self.assertEqual(window_rows[date(2026, 1, 7)].outcome, "no_frost_exposure")
         self.assertEqual(window_rows[date(2026, 1, 8)].frost_label, "negative")
         self.assertEqual(window_rows[date(2026, 1, 8)].outcome, "no_frost_exposure")
         evidence = {row.operational_night: row for row in dataset.night_evidence}
@@ -256,20 +257,132 @@ class NeoSubZeroFrostHistoryTest(unittest.TestCase):
         self.assertTrue(evidence.pretreat_before_frost)
         self.assertFalse(evidence.weak_frost_evidence)
 
-    def test_clean_negative_requires_confirmed_departure_exposure(self):
+    def test_normal_sort_nights_reconstruct_clean_negative_without_fake_counts(self):
         dataset = build_frost_history_dataset(
             (),
             None,
             start_date=date(2026, 1, 5),
             end_date=date(2026, 1, 6),
-            departure_opportunities_by_night={date(2026, 1, 5): 8},
         )
         evidence = {row.operational_night: row for row in dataset.night_evidence}
 
         self.assertEqual(evidence[date(2026, 1, 5)].evidence_class, "clean_negative")
-        self.assertEqual(evidence[date(2026, 1, 5)].number_departure_opportunities, 8)
-        self.assertEqual(evidence[date(2026, 1, 5)].frost_treated_percentage, 0.0)
-        self.assertEqual(evidence[date(2026, 1, 6)].evidence_class, "unlabeled")
+        self.assertEqual(evidence[date(2026, 1, 6)].evidence_class, "clean_negative")
+        self.assertIsNone(evidence[date(2026, 1, 5)].number_departure_opportunities)
+        self.assertIsNone(evidence[date(2026, 1, 5)].frost_treated_percentage)
+
+    def test_authoritative_reason_codes_preserve_code_and_description(self):
+        expected = (
+            ("FG", "Fog", "other_spray"),
+            ("FZFG", "Freezing Fog", "other_spray"),
+            ("FZDZ", "Freezing Drizzle", "other_spray"),
+            ("FZRA", "Freezing Rain", "other_spray"),
+            ("GR", "Hail", "other_spray"),
+            ("GS", "Small Hail", "other_spray"),
+            ("GS", "Snow Pellets", "other_spray"),
+            ("PL", "Ice Pellets", "other_spray"),
+            ("IC", "Ice Crystals", "other_spray"),
+            ("SG", "Snow Grains", "other_spray"),
+            ("SN", "Snow", "other_spray"),
+            ("DZ", "Drizzle", "other_spray"),
+            ("CS", "Cold Soak", "other_spray"),
+            ("F", "Frost", "departure_frost"),
+            ("P", "Preventative De-Ice/Anti-Ice", "pretreat"),
+        )
+        lines = ["Application Date,Start Time,Tail,Reason Code,Reason Description"]
+        for index, (code, description, _outcome) in enumerate(expected, start=1):
+            lines.append(f"01/06/2026,02:{index:02d},N{index:03d},{code},{description}")
+
+        result = parse_cryotech_csv("\n".join(lines) + "\n")
+
+        self.assertEqual(len(result.rows), len(expected))
+        for row, (code, description, outcome) in zip(result.rows, expected):
+            with self.subTest(code=code, description=description):
+                self.assertEqual(row.reason_code_raw, code)
+                self.assertEqual(row.reason_description_raw, description)
+                self.assertEqual(row.reason_description_normalized, description)
+                self.assertEqual(row.outcome, outcome)
+        gs_rows = [row for row in result.rows if row.reason_code_raw == "GS"]
+        self.assertEqual(
+            {row.reason_description_normalized for row in gs_rows},
+            {"Small Hail", "Snow Pellets"},
+        )
+
+        ambiguous_events = group_cryotech_treatment_events(
+            parse_cryotech_csv(
+                "Application Date,Start Time,Tail,Reason Code,Reason Description\n"
+                "01/06/2026,02:00,N777,GS,Small Hail\n"
+                "01/06/2026,02:00,N777,GS,Snow Pellets\n"
+            ).rows
+        )
+        self.assertEqual(len(ambiguous_events), 2)
+
+    def test_reason_code_only_maps_frost_and_pretreat_without_guessing_gs(self):
+        result = parse_cryotech_csv(
+            "Application Date,Start Time,Tail,Reason\n"
+            "01/06/2026,02:00,N701,f\n"
+            "01/06/2026,02:30,N702,P\n"
+            "01/06/2026,03:00,N703,GS\n"
+        )
+        frost, pretreat, ambiguous_gs = result.rows
+
+        self.assertEqual(frost.reason_code_raw, "f")
+        self.assertEqual(frost.reason_description_normalized, "Frost")
+        self.assertEqual(frost.reason_for_application, "Frost")
+        self.assertEqual(frost.outcome, "departure_frost")
+        self.assertEqual(pretreat.reason_description_normalized, "Preventative De-Ice/Anti-Ice")
+        self.assertEqual(pretreat.reason_for_application, "Pretreat")
+        self.assertEqual(pretreat.outcome, "pretreat")
+        self.assertEqual(ambiguous_gs.reason_code_raw, "GS")
+        self.assertIsNone(ambiguous_gs.reason_description_normalized)
+        self.assertEqual(ambiguous_gs.reason_for_application, "GS")
+
+    def test_no_sort_calendar_excludes_only_locked_dates(self):
+        no_sort_2026 = historical_no_sort_dates(2026)
+        self.assertIn(date(2026, 5, 25), no_sort_2026)  # Memorial Day
+        self.assertIn(date(2026, 9, 7), no_sort_2026)  # Labor Day
+        self.assertIn(date(2026, 11, 25), no_sort_2026)  # Before Thanksgiving
+        self.assertIn(date(2026, 11, 26), no_sort_2026)  # Thanksgiving
+        self.assertIn(date(2026, 7, 4), no_sort_2026)
+        self.assertIn(date(2026, 12, 25), no_sort_2026)
+        self.assertIn(date(2026, 12, 31), no_sort_2026)
+        self.assertIn(date(2026, 1, 1), no_sort_2026)
+        self.assertIn(date(2026, 12, 24), no_sort_2026)
+        self.assertIn(date(2026, 1, 19), no_sort_2026)  # MLK Day
+        self.assertNotIn(date(2024, 1, 15), historical_no_sort_dates(2024))
+
+        reconstructed = set(
+            normal_operational_nights(date(2026, 2, 16), date(2026, 11, 26))
+        )
+        self.assertIn(date(2026, 2, 16), reconstructed)  # Presidents Day
+        self.assertIn(date(2026, 11, 11), reconstructed)  # Veterans Day
+        self.assertNotIn(date(2026, 5, 25), reconstructed)
+        self.assertNotIn(date(2026, 11, 25), reconstructed)
+        self.assertNotIn(date(2026, 11, 26), reconstructed)
+
+    def test_excluded_no_sort_date_never_becomes_clean_negative(self):
+        no_event = build_frost_history_dataset(
+            (),
+            None,
+            start_date=date(2026, 11, 25),
+            end_date=date(2026, 11, 25),
+            departure_exposure_nights=(date(2026, 11, 25),),
+        )
+        self.assertEqual(no_event.night_evidence, ())
+        self.assertEqual(no_event.training_records, ())
+
+        frost = parse_cryotech_csv(
+            "Application Date,Start Time,Tail,Reason\n"
+            "11/25/2026,23:15,N801,F\n"
+        )
+        positive = build_frost_history_dataset(
+            frost.rows,
+            None,
+            start_date=date(2026, 11, 25),
+            end_date=date(2026, 11, 25),
+        )
+        self.assertEqual(positive.night_evidence[0].evidence_class, "confirmed_positive")
+        self.assertEqual(positive.training_records[0].frost_label, "positive")
 
     def test_weather_provider_is_krfd_scoped_and_accepts_missing_tokens(self):
         weather = CsvHistoricalWeatherProvider(
@@ -301,7 +414,7 @@ class NeoSubZeroFrostHistoryTest(unittest.TestCase):
         self.assertTrue(payload["exposure_timestamp_local"].endswith("-06:00"))
         self.assertIn(payload["frost_label"], {"positive", "negative", "unlabeled"})
         artifact = dataset.to_dict()
-        self.assertEqual(artifact["schema_version"], 2)
+        self.assertEqual(artifact["schema_version"], 3)
         self.assertEqual(len(artifact["raw_application_rows"]), 2)
         self.assertEqual(len(artifact["treatment_events"]), 1)
         self.assertEqual(len(artifact["night_evidence"]), 1)

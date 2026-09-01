@@ -22,6 +22,22 @@ NORMAL_NIGHT_WEEKDAYS = frozenset({0, 1, 2, 3})  # Monday through Thursday.
 DEFAULT_NEGATIVE_WINDOW_START = time(2, 0)
 DEFAULT_NEGATIVE_WINDOW_END = time(4, 0)
 INFERRED_EVENT_MAX_START_SPREAD = timedelta(minutes=30)
+CRYOTECH_REASON_DESCRIPTIONS = {
+    "FG": ("Fog",),
+    "FZFG": ("Freezing Fog",),
+    "FZDZ": ("Freezing Drizzle",),
+    "FZRA": ("Freezing Rain",),
+    "GR": ("Hail",),
+    "GS": ("Small Hail", "Snow Pellets"),
+    "PL": ("Ice Pellets",),
+    "IC": ("Ice Crystals",),
+    "SG": ("Snow Grains",),
+    "SN": ("Snow",),
+    "DZ": ("Drizzle",),
+    "CS": ("Cold Soak",),
+    "F": ("Frost",),
+    "P": ("Preventative De-Ice/Anti-Ice",),
+}
 
 
 class NeoSubZeroFrostHistoryError(ValueError):
@@ -41,6 +57,9 @@ class CryotechApplicationRow:
     truck_number: str | None
     fluid_type: str | None
     surface_area: str | None
+    reason_code_raw: str | None
+    reason_description_raw: str | None
+    reason_description_normalized: str | None
     reason_for_application: str | None
     active_precipitation: str | None
     gallons: float | None
@@ -73,6 +92,9 @@ class CryotechTreatmentEvent:
     start_at_local: datetime
     end_at_local: datetime | None
     tail_number: str | None
+    reason_codes_raw: tuple[str, ...]
+    reason_descriptions_raw: tuple[str, ...]
+    reason_descriptions_normalized: tuple[str, ...]
     reason_for_application: str | None
     outcome: str
     truck_numbers: tuple[str, ...]
@@ -157,6 +179,8 @@ class FrostTrainingRecord:
     truck_number: str | None = None
     fluid_type: str | None = None
     surface_area: str | None = None
+    reason_code: str | None = None
+    reason_description: str | None = None
     reason_for_application: str | None = None
     active_precipitation: str | None = None
     gallons: float | None = None
@@ -215,7 +239,7 @@ class FrostHistoryDataset:
 
     def to_dict(self):
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             "raw_application_rows": [
                 _serialized_dataclass(row) for row in self.raw_application_rows
             ],
@@ -252,6 +276,12 @@ _CRYOTECH_ALIASES = {
     ),
     "reason_for_application": (
         "reason for application", "application reason", "reason",
+    ),
+    "reason_code": (
+        "reason code", "application reason code", "reason abbreviation",
+    ),
+    "reason_description": (
+        "reason description", "application reason description", "reason text",
     ),
     "active_precipitation": (
         "active precipitation", "precipitation", "weather", "precip",
@@ -314,8 +344,11 @@ def parse_cryotech_csv(source, *, source_name=None, timezone_name=RFD_TIMEZONE):
             )
             if end_at is not None and end_at < start_at:
                 end_at += timedelta(days=1)
-            reason = _clean_text(_value(raw, columns, "reason_for_application"))
-            outcome = _application_outcome(reason)
+            reason = _parse_cryotech_reason(
+                _value(raw, columns, "reason_for_application"),
+                _value(raw, columns, "reason_code"),
+                _value(raw, columns, "reason_description"),
+            )
             rows.append(
                 CryotechApplicationRow(
                     source_name=resolved_name,
@@ -329,7 +362,10 @@ def parse_cryotech_csv(source, *, source_name=None, timezone_name=RFD_TIMEZONE):
                     truck_number=_normalize_identifier(_value(raw, columns, "truck_number")),
                     fluid_type=_normalize_fluid(_value(raw, columns, "fluid_type")),
                     surface_area=_clean_text(_value(raw, columns, "surface_area")),
-                    reason_for_application=_normalize_reason(reason),
+                    reason_code_raw=reason["code_raw"],
+                    reason_description_raw=reason["description_raw"],
+                    reason_description_normalized=reason["description_normalized"],
+                    reason_for_application=reason["canonical_reason"],
                     active_precipitation=_clean_text(
                         _value(raw, columns, "active_precipitation")
                     ),
@@ -339,7 +375,7 @@ def parse_cryotech_csv(source, *, source_name=None, timezone_name=RFD_TIMEZONE):
                         strip_percent=True,
                     ),
                     notes=_clean_text(_value(raw, columns, "notes")),
-                    outcome=outcome,
+                    outcome=reason["outcome"],
                 )
             )
         except NeoSubZeroFrostHistoryError as exc:
@@ -429,7 +465,7 @@ class CsvHistoricalWeatherProvider:
 
 
 def normal_operational_nights(start_date, end_date):
-    """Return Monday-through-Thursday operational-night dates inclusively."""
+    """Return reconstructed Monday-through-Thursday sort nights inclusively."""
     start_date = _coerce_date(start_date)
     end_date = _coerce_date(end_date)
     if end_date < start_date:
@@ -439,7 +475,28 @@ def normal_operational_nights(start_date, end_date):
         for offset in range((end_date - start_date).days + 1)
         if (day := start_date + timedelta(days=offset)).weekday()
         in NORMAL_NIGHT_WEEKDAYS
+        and day not in historical_no_sort_dates(day.year)
     )
+
+
+def historical_no_sort_dates(year):
+    """Return the authoritative historical no-sort dates for one year."""
+    year = int(year)
+    thanksgiving = _nth_weekday_of_month(year, 11, 3, 4)
+    dates = {
+        _last_weekday_of_month(year, 5, 0),  # Memorial Day
+        _nth_weekday_of_month(year, 9, 0, 1),  # Labor Day
+        date(year, 7, 4),
+        thanksgiving,
+        thanksgiving - timedelta(days=1),
+        date(year, 12, 24),
+        date(year, 12, 25),
+        date(year, 12, 31),
+        date(year, 1, 1),
+    }
+    if year >= 2025:
+        dates.add(_nth_weekday_of_month(year, 1, 0, 3))  # MLK Day
+    return frozenset(dates)
 
 
 def operational_night_for_timestamp(timestamp):
@@ -576,8 +633,17 @@ def build_frost_history_dataset(
         departure_exposure_nights,
         departure_opportunities_by_night,
     )
+    reconstructed_exposure_nights = set(
+        normal_operational_nights(start_date, end_date)
+    )
+    valid_manifest_nights = {
+        night
+        for night in exposure_nights
+        if night not in historical_no_sort_dates(night.year)
+    }
+    valid_exposure_nights = reconstructed_exposure_nights | valid_manifest_nights
     event_nights = {row.operational_night for row in events}
-    evidence_nights = set(normal_operational_nights(start_date, end_date)) | event_nights
+    evidence_nights = valid_exposure_nights | event_nights
     events_by_night = {
         night: tuple(row for row in events if row.operational_night == night)
         for night in evidence_nights
@@ -586,8 +652,12 @@ def build_frost_history_dataset(
         _night_evidence(
             night,
             events_by_night[night],
-            confirmed_departure_exposure=night in exposure_nights,
-            departure_opportunities=opportunity_counts.get(night),
+            confirmed_departure_exposure=night in valid_exposure_nights,
+            departure_opportunities=(
+                opportunity_counts.get(night)
+                if night in valid_exposure_nights
+                else None
+            ),
         )
         for night in sorted(evidence_nights)
     )
@@ -606,6 +676,8 @@ def build_frost_history_dataset(
 
     for evidence in night_evidence:
         if evidence.number_frost_treated_events or evidence.pretreat_occurred:
+            continue
+        if evidence.operational_night not in valid_exposure_nights:
             continue
         window_start, window_end = default_negative_exposure_window(
             evidence.operational_night,
@@ -663,6 +735,10 @@ def _event_training_record(event, evidence, weather_provider, zone):
         truck_number=" / ".join(event.truck_numbers) or None,
         fluid_type=" / ".join(event.fluid_types) or None,
         surface_area=" / ".join(event.surface_areas) or None,
+        reason_code=" / ".join(event.reason_codes_raw) or None,
+        reason_description=(
+            " / ".join(event.reason_descriptions_normalized) or None
+        ),
         reason_for_application=event.reason_for_application,
         active_precipitation=" / ".join(event.active_precipitation) or None,
         gallons=event.total_gallons,
@@ -720,6 +796,13 @@ def _treatment_event_from_rows(rows, *, event_key, grouping_method):
         start_at_local=min(row.start_at_local for row in ordered),
         end_at_local=max(end_values) if end_values else None,
         tail_number=ordered[0].tail_number,
+        reason_codes_raw=_unique_text(row.reason_code_raw for row in ordered),
+        reason_descriptions_raw=_unique_text(
+            row.reason_description_raw for row in ordered
+        ),
+        reason_descriptions_normalized=_unique_text(
+            row.reason_description_normalized for row in ordered
+        ),
         reason_for_application=reason,
         outcome=outcome,
         truck_numbers=_unique_text(row.truck_number for row in ordered),
@@ -737,6 +820,8 @@ def _treatment_event_from_rows(rows, *, event_key, grouping_method):
 def _reason_group_key(row):
     return (
         row.outcome,
+        str(row.reason_code_raw or "").strip().upper(),
+        str(row.reason_description_normalized or "").strip().casefold(),
         str(row.reason_for_application or "").strip().casefold(),
     )
 
@@ -993,14 +1078,89 @@ def _try_time(value):
     return None
 
 
+def _parse_cryotech_reason(combined_value, code_value, description_value):
+    combined = _clean_text(combined_value)
+    code_raw = _clean_text(code_value)
+    description_raw = _clean_text(description_value)
+    if not code_raw and combined:
+        combined_code = combined.upper()
+        if combined_code in CRYOTECH_REASON_DESCRIPTIONS:
+            code_raw = combined
+        else:
+            combined_match = re.match(
+                r"^([A-Za-z0-9]{1,4})\s*[-–—:]\s*(.+)$",
+                combined,
+            )
+            if (
+                combined_match
+                and combined_match.group(1).upper()
+                in CRYOTECH_REASON_DESCRIPTIONS
+            ):
+                code_raw = combined_match.group(1)
+                if not description_raw:
+                    description_raw = combined_match.group(2)
+            elif not description_raw:
+                description_raw = combined
+    elif code_raw and combined and not description_raw:
+        if combined.strip().upper() != code_raw.strip().upper():
+            description_raw = combined
+
+    code = _normalize_identifier(code_raw)
+    description_normalized = _normalize_reason_description(
+        code,
+        description_raw,
+    )
+    if code == "F" or description_normalized == "Frost":
+        canonical_reason = "Frost"
+    elif code == "P" or _is_pretreat_description(description_normalized):
+        canonical_reason = "Pretreat"
+    else:
+        canonical_reason = description_normalized or code
+    return {
+        "code_raw": code_raw,
+        "description_raw": description_raw,
+        "description_normalized": description_normalized,
+        "canonical_reason": canonical_reason,
+        "outcome": _application_outcome(canonical_reason),
+    }
+
+
+def _normalize_reason_description(code, value):
+    text = _clean_text(value)
+    if text:
+        compact = _compact_reason_text(text)
+        for descriptions in CRYOTECH_REASON_DESCRIPTIONS.values():
+            for description in descriptions:
+                if compact == _compact_reason_text(description):
+                    return description
+        if compact in {"pretreat", "pretreatment", "preventative"}:
+            return "Preventative De-Ice/Anti-Ice"
+        return re.sub(r"\s+", " ", text)
+    descriptions = CRYOTECH_REASON_DESCRIPTIONS.get(code, ())
+    return descriptions[0] if len(descriptions) == 1 else None
+
+
+def _compact_reason_text(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+
+
+def _is_pretreat_description(value):
+    compact = _compact_reason_text(value)
+    return compact in {
+        "pretreat",
+        "pretreatment",
+        "preventative",
+        "preventativedeiceantiice",
+    }
+
+
 def _normalize_reason(value):
     text = _clean_text(value)
     if not text:
         return None
     if re.search(r"\bfrost\b", text, re.IGNORECASE):
         return "Frost"
-    compact = re.sub(r"[^a-z0-9]+", "", text.casefold())
-    if compact in {"pretreat", "pretreatment"}:
+    if _is_pretreat_description(text):
         return "Pretreat"
     return text
 
@@ -1086,6 +1246,21 @@ def _serialize_value(value):
     if isinstance(value, (list, tuple)):
         return [_serialize_value(item) for item in value]
     return value
+
+
+def _nth_weekday_of_month(year, month, weekday, occurrence):
+    first = date(year, month, 1)
+    offset = (weekday - first.weekday()) % 7
+    return first + timedelta(days=offset + 7 * (occurrence - 1))
+
+
+def _last_weekday_of_month(year, month, weekday):
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    last = next_month - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
 
 
 def _coerce_date(value):

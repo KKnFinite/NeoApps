@@ -15,16 +15,33 @@ python scripts/build_neosubzero_frost_dataset.py `
   --output artifacts/neosubzero-frost-training.json
 ```
 
-`departure-exposure-nights.txt` contains one operational-night date per line,
-optionally followed by the known departure-opportunity count, such as
-`2026-01-05,12`. It is the evidence that relevant departure exposure occurred.
-A Monday night entry represents its default Tuesday 0200–0400 local exposure window. An
-event-free night not listed in this file stays `unlabeled`; the pipeline never
-turns absence of a Cryotech spray into a negative by itself.
+The pipeline reconstructs meaningful 0200–0400 local departure exposure for
+normal Monday-through-Thursday operational nights. Exact historical flight
+counts are unknown, so these reconstructed records keep opportunity count and
+treated percentage null. `departure-exposure-nights.txt` is optional additional
+evidence for exceptional nights; a known count may follow the date, such as
+`2026-01-05,12`, but counts must never be guessed.
+
+Reconstruction excludes Memorial Day, Labor Day, July 4, Thanksgiving and the
+day before, Christmas Eve and Day, New Year's Eve and Day, and MLK Day beginning
+in 2025. Presidents Day, Juneteenth, Veterans Day, and unlisted holidays are not
+excluded. An excluded date cannot become a clean-negative record, although an
+actual Frost application on that date remains positive evidence.
 
 The Cryotech parser accepts common header aliases for application ID, date,
 start/end, tail, truck, fluid/type, surface, reason, precipitation, gallons,
-concentration, and notes. Frost applications become positive examples.
+concentration, and notes. It preserves raw Reason code, raw description, and
+normalized description separately. The authoritative Reason mapping includes:
+
+- `F` → Frost and confirmed Frost evidence.
+- `P` → Preventative De-Ice/Anti-Ice and Pretreat evidence.
+- `FG`, `FZFG`, `FZDZ`, `FZRA`, `GR`, `PL`, `IC`, `SG`, `SN`, `DZ`, and `CS`
+  → their observed Fog/freezing precipitation/hail/ice/snow/drizzle/cold-soak
+  descriptions.
+- `GS` → either Small Hail or Snow Pellets. Its supplied description is retained
+  and normalized; the code alone is intentionally not treated as unique.
+
+Frost applications become positive examples.
 The artifact preserves raw truck/application rows, deduplicated aircraft
 treatment events, night-level evidence metadata, and model-ready records.
 Stable application IDs group first. Without one, same-night/tail/reason rows
