@@ -30,6 +30,7 @@ from app.models.neosektor_driver_route_setting import NeoSektorDriverRouteSettin
 from app.models.neosektor_open_bay_state import NeoSektorOpenBayState
 from app.models.neosektor_operational_setting import NeoSektorOperationalSetting
 from app.models.neorain_operational_setting import NeoRainOperationalSetting
+from app.models.neorain_load_planner_contact import NeoRainLoadPlannerContact
 from app.models.neorain_crew_admin_assignment import NeoRainCrewAdminAssignment
 from app.models.neorain_delay_info import NeoRainDelayInfo
 from app.models.neosubzero_pretreat_state import NeoSubZeroPretreatState
@@ -143,6 +144,7 @@ __all__ = [
     "NeoSektorOpenBayState",
     "NeoSektorOperationalSetting",
     "NeoRainOperationalSetting",
+    "NeoRainLoadPlannerContact",
     "NeoRainCrewAdminAssignment",
     "NeoRainDelayInfo",
     "NeoSubZeroPretreatState",

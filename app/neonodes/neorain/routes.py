@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import MasterFlightSchedule, SortDateMission, SortDateOperation, StaffingPerson, NeoRainCrewAdminAssignment, NeoRainDelayInfo
+from app.models import MasterFlightSchedule, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainLoadPlannerContact, SortDateMission, SortDateOperation, StaffingPerson
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
@@ -56,9 +56,10 @@ from app.services.live_screen_refresh import (
     save_live_screen_refresh_override,
 )
 from app.services.live_collaboration import entity_version, version_conflict
-from app.services.load_planning_contact import (
-    current_load_planning_contact,
-    set_load_planning_contact,
+from app.services.neorain_load_planner_contacts import (
+    neorain_load_planner_contact_values,
+    neorain_load_planner_contacts,
+    set_neorain_load_planner_contact,
 )
 from app.services.neorain_ground_time_settings import (
     neorain_ground_time_threshold_minutes,
@@ -633,12 +634,12 @@ def load_planner_lineup():
                 status_code=403,
                 message=("Edit access denied.", "error"),
             )
-        is_contact = request.form.get("action") == "save_contact"
+        is_planner_contact = request.form.get("action") == "save_planner_contact"
         try:
-            if is_contact:
-                departure = _save_load_planning_contact(gateway, operation)
+            if is_planner_contact:
+                saved = _save_neorain_load_planner_contact(gateway)
             else:
-                departure = _save_load_planner_assignment(gateway, operation)
+                saved = _save_load_planner_assignment(gateway, operation)
             db.session.commit()
         except _LoadPlannerStaleError as exc:
             db.session.rollback()
@@ -658,6 +659,15 @@ def load_planner_lineup():
                 status_code=400,
                 message=(str(exc), "error"),
             )
+        except IntegrityError:
+            db.session.rollback()
+            return _render_load_planner_lineup(
+                gateway,
+                operation,
+                access,
+                status_code=409,
+                message=("The Load Planner contact changed. Refresh and try again.", "error"),
+            )
         except Exception as exc:
             db.session.rollback()
             current_app.logger.exception(
@@ -671,10 +681,10 @@ def load_planner_lineup():
                 status_code=500,
                 message=("NeoRain could not save the Load Planner assignment.", "error"),
             )
-        if is_contact:
-            flash("LOAD PLANNING CONTACT SAVED.", "success")
+        if is_planner_contact:
+            flash("LOAD PLANNER CONTACT SAVED.", "success")
         else:
-            flash(f"LOAD PLANNER ASSIGNMENT SAVED FOR {departure.flight_number}.", "success")
+            flash(f"LOAD PLANNER ASSIGNMENT SAVED FOR {saved.flight_number}.", "success")
         return redirect(url_for("neorain.load_planner_lineup"))
 
     return _render_load_planner_lineup(gateway, operation, access)
@@ -742,34 +752,39 @@ def _save_load_planner_assignment(gateway, operation):
     return departure
 
 
-def _save_load_planning_contact(gateway, operation):
-    """Lock and stage the current sort's shared Load Planning contact."""
-    if operation is None or operation.gateway_id != gateway.id:
-        raise ValueError("No current sort.")
+def _save_neorain_load_planner_contact(gateway):
+    """Lock and stage one gateway-scoped eligible planner contact."""
+    planner_id = _positive_integer(request.form.get("planner_person_id"))
     expected_version = str(request.form.get("expected_version") or "").strip()
-    if not expected_version:
-        raise ValueError("Provide the current sort version.")
+    if planner_id is None:
+        raise ValueError("Choose a valid Load Planner.")
     if "extension" not in request.form or "radio_channel" not in request.form:
         raise ValueError("Provide both Extension and Radio Channel.")
+    planner = db.session.get(StaffingPerson, planner_id)
+    if planner is None or planner.id not in {
+        person.id for person in eligible_neorain_load_planners()
+    }:
+        raise ValueError("Choose an active eligible Load Planner.")
     locked = (
-        SortDateOperation.query.filter_by(
-            id=operation.id,
+        NeoRainLoadPlannerContact.query.filter_by(
             gateway_id=gateway.id,
-            gateway_code=gateway.code,
+            staffing_person_id=planner.id,
         )
         .populate_existing()
         .with_for_update()
         .one_or_none()
     )
-    if locked is None:
-        raise ValueError("No current sort.")
-    conflict = version_conflict(locked, expected_version)
-    if conflict:
+    if locked is not None and not expected_version:
+        raise ValueError("Contact version is required.")
+    conflict = version_conflict(locked, expected_version) if locked else None
+    if conflict is not None:
         raise _LoadPlannerStaleError(conflict["message"])
-    return set_load_planning_contact(
-        locked,
+    return set_neorain_load_planner_contact(
+        gateway,
+        planner,
         extension=request.form.get("extension"),
         radio_channel=request.form.get("radio_channel"),
+        contact=locked,
     )
 
 
@@ -784,15 +799,34 @@ def _render_load_planner_lineup(
     session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.load_planner_lineup"
     if message:
         flash(*message)
+    eligible_load_planners = eligible_neorain_load_planners()
+    contact_by_planner_id = neorain_load_planner_contacts(
+        gateway,
+        eligible_load_planners,
+    )
+    planner_contacts = tuple(
+        {
+            "planner": planner,
+            "contact": contact_by_planner_id.get(planner.id),
+            "values": neorain_load_planner_contact_values(
+                contact_by_planner_id.get(planner.id)
+            ),
+            "version": (
+                entity_version(contact_by_planner_id[planner.id])
+                if planner.id in contact_by_planner_id
+                else ""
+            ),
+        }
+        for planner in eligible_load_planners
+    )
     return render_template(
         "neonodes/neorain/load_planner_lineup.html",
         can_edit=access["can_edit"],
         can_view=access["can_view"],
         gateway=gateway,
         operation=operation,
-        load_planning_contact=current_load_planning_contact(operation),
-        contact_version=entity_version(operation) if operation is not None else "",
-        eligible_load_planners=eligible_neorain_load_planners(),
+        eligible_load_planners=eligible_load_planners,
+        planner_contacts=planner_contacts,
         lineup=neorain_load_planner_lineup(gateway, operation),
     ), status_code
 

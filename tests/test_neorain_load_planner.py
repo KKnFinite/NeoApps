@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import (
     Gateway,
     MasterFlightSchedule,
+    NeoRainLoadPlannerContact,
     SortDateMission,
     SortDateOperation,
     StaffingPerson,
@@ -19,6 +20,10 @@ from app.neonodes.neorain.services import (
     effective_neorain_load_planner,
     eligible_neorain_load_planners,
     neorain_load_planner_lineup,
+)
+from app.services.neorain_load_planner_contacts import (
+    neorain_load_planner_contacts,
+    set_neorain_load_planner_contact,
 )
 
 
@@ -111,6 +116,12 @@ class NeoRainLoadPlannerTest(unittest.TestCase):
         self._mission(operation, "5X400", master=master)
         manual = self._mission(operation, "5X401", source="manual")
         assign_current_sort_only_departure_load_planner(manual, self.eligible)
+        set_neorain_load_planner_contact(
+            self.gateway,
+            self.eligible,
+            extension="4101",
+            radio_channel="OPS",
+        )
         db.session.commit()
 
         lineup = neorain_load_planner_lineup(self.gateway, operation)
@@ -124,12 +135,66 @@ class NeoRainLoadPlannerTest(unittest.TestCase):
             ["5X401"],
         )
         self.assertEqual(lineup["current_sort_only_departures"][0]["planner"], self.eligible)
+        self.assertEqual(
+            lineup["master_departures"][0]["planner_contact"],
+            {"extension": "4101", "radio_channel": "OPS"},
+        )
         no_current_sort = neorain_load_planner_lineup(self.gateway, None)
         self.assertEqual(
             [row["departure"].flight_number for row in no_current_sort["master_departures"]],
             ["5X400"],
         )
         self.assertEqual(no_current_sort["current_sort_only_departures"], ())
+
+    def test_planner_contacts_are_independent_and_persist_across_sorts(self):
+        second = self._person("LP-SECOND", self.load_planners)
+        first_contact = set_neorain_load_planner_contact(
+            self.gateway,
+            self.eligible,
+            extension="4101",
+            radio_channel="RAMP A",
+        )
+        set_neorain_load_planner_contact(
+            self.gateway,
+            second,
+            extension="4102",
+            radio_channel="RAMP B",
+        )
+        db.session.commit()
+
+        contacts = neorain_load_planner_contacts(
+            self.gateway,
+            (self.eligible, second),
+        )
+        self.assertEqual(contacts[self.eligible.id].extension, "4101")
+        self.assertEqual(contacts[second.id].radio_channel, "RAMP B")
+
+        set_neorain_load_planner_contact(
+            self.gateway,
+            self.eligible,
+            extension="4199",
+            radio_channel="RAMP A",
+            contact=first_contact,
+        )
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual(
+            db.session.get(NeoRainLoadPlannerContact, first_contact.id).extension,
+            "4199",
+        )
+        self.assertEqual(
+            NeoRainLoadPlannerContact.query.filter_by(
+                gateway_id=self.gateway.id,
+                staffing_person_id=second.id,
+            ).one().extension,
+            "4102",
+        )
+
+        self._operation(sort_date=date(2026, 9, 2))
+        self.assertEqual(
+            neorain_load_planner_contacts(self.gateway, (self.eligible,))[self.eligible.id].extension,
+            "4199",
+        )
 
     def test_only_departures_can_receive_load_planner_assignments(self):
         arrival_master = self._master("5X500", mission_type="arrival")
@@ -181,12 +246,12 @@ class NeoRainLoadPlannerTest(unittest.TestCase):
         )
         return person
 
-    def _operation(self):
+    def _operation(self, *, sort_date=date(2026, 9, 1)):
         operation = SortDateOperation(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
             sort_name="night",
-            sort_date=date(2026, 9, 1),
+            sort_date=sort_date,
         )
         db.session.add(operation)
         db.session.flush()

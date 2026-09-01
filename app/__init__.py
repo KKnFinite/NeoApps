@@ -59,6 +59,9 @@ from app.services.google_rain_integration_schema import (
 from app.services.neorain_load_planner_schema import (
     ensure_neorain_load_planner_columns,
 )
+from app.services.neorain_load_planner_contact_schema import (
+    ensure_neorain_load_planner_contact_table,
+)
 from app.services.neorain_crew_admin_schema import ensure_neorain_crew_admin_assignments_table
 from app.services.neorain_delay_info_schema import ensure_neorain_delay_info_table
 from app.services.neosubzero_schema import ensure_neosubzero_pretreat_table
@@ -157,6 +160,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     ensure_google_motherbrain_live_poll_state_table(app)
     ensure_google_rain_integration_mode_column(app)
     ensure_neorain_load_planner_columns(app)
+    ensure_neorain_load_planner_contact_table(app)
     ensure_load_planning_contact_columns(app)
     ensure_neorain_ground_time_settings_table(app)
     ensure_neorain_crew_admin_assignments_table(app)

@@ -16,9 +16,17 @@
             {% endfor %}
         </select>
         <button type="submit">SAVE</button>
+        {% if row.planner and (row.planner_contact.extension or row.planner_contact.radio_channel) %}
+        <small class="neorain-load-planner-contact-summary">{{ row.planner_contact.extension or '—' }} · {{ row.planner_contact.radio_channel or '—' }}</small>
+        {% endif %}
     </form>
     {% else %}
-    <span class="neorain-load-planner-readonly">{{ row.planner.full_name if row.planner else 'UNASSIGNED' }}</span>
+    <span class="neorain-load-planner-readonly">
+        {{ row.planner.full_name if row.planner else 'UNASSIGNED' }}
+        {% if row.planner and (row.planner_contact.extension or row.planner_contact.radio_channel) %}
+        <small>{{ row.planner_contact.extension or '—' }} · {{ row.planner_contact.radio_channel or '—' }}</small>
+        {% endif %}
+    </span>
     {% endif %}
 {%- endmacro %}
 
@@ -32,26 +40,34 @@
         <strong>{{ gateway.code }} · {{ operation.sort_name|upper if operation else 'NIGHT MASTER' }}</strong>
     </header>
 
-    <section class="neorain-load-planning-contact" aria-labelledby="neorain-load-planning-contact-title">
-        <h2 id="neorain-load-planning-contact-title">LOAD PLANNING CONTACT</h2>
-        {% if operation and can_edit %}
-        <form method="post" class="neorain-load-planning-contact-form">
-            <input type="hidden" name="action" value="save_contact">
-            <input type="hidden" name="expected_version" value="{{ contact_version }}">
-            <label>Extension
-                <input type="text" name="extension" value="{{ load_planning_contact.extension }}" maxlength="64">
-            </label>
-            <label>Radio Channel
-                <input type="text" name="radio_channel" value="{{ load_planning_contact.radio_channel }}" maxlength="64">
-            </label>
-            <button type="submit">SAVE</button>
-        </form>
-        {% else %}
-        <div class="neorain-load-planning-contact-readonly" aria-label="Load Planning contact">
-            <span><b>Extension</b> {{ load_planning_contact.extension or '—' }}</span>
-            <span><b>Radio Channel</b> {{ load_planning_contact.radio_channel or '—' }}</span>
+    <section class="neorain-load-planner-contacts" aria-labelledby="neorain-load-planner-contacts-title">
+        <header>
+            <h2 id="neorain-load-planner-contacts-title">LOAD PLANNER CONTACTS</h2>
+            <p>Gateway-specific operational contact details.</p>
+        </header>
+        <div class="neorain-outbound-table-wrap">
+            <table class="neorain-outbound-table neorain-load-planner-contact-table">
+                <thead><tr><th>Load Planner</th><th>Extension</th><th>Radio Channel</th>{% if can_edit %}<th>Action</th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for row in planner_contacts %}
+                    <tr>
+                        {% if can_edit %}
+                        <td data-label="Load Planner">{{ row.planner.full_name }}</td>
+                        <td data-label="Extension"><label class="sr-only" for="load-planner-extension-{{ row.planner.id }}">Extension for {{ row.planner.full_name }}</label><input form="load-planner-contact-{{ row.planner.id }}" id="load-planner-extension-{{ row.planner.id }}" type="text" name="extension" value="{{ row.values.extension }}" maxlength="64"></td>
+                        <td data-label="Radio Channel"><label class="sr-only" for="load-planner-radio-{{ row.planner.id }}">Radio Channel for {{ row.planner.full_name }}</label><input form="load-planner-contact-{{ row.planner.id }}" id="load-planner-radio-{{ row.planner.id }}" type="text" name="radio_channel" value="{{ row.values.radio_channel }}" maxlength="64"></td>
+                        <td data-label="Action"><form id="load-planner-contact-{{ row.planner.id }}" method="post" class="neorain-load-planner-contact-form"><input type="hidden" name="action" value="save_planner_contact"><input type="hidden" name="planner_person_id" value="{{ row.planner.id }}"><input type="hidden" name="expected_version" value="{{ row.version }}"><button type="submit">SAVE</button></form></td>
+                        {% else %}
+                        <td data-label="Load Planner">{{ row.planner.full_name }}</td>
+                        <td data-label="Extension">{{ row.values.extension or '—' }}</td>
+                        <td data-label="Radio Channel">{{ row.values.radio_channel or '—' }}</td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="{{ 4 if can_edit else 3 }}" class="neorain-outbound-empty">No active eligible Load Planners.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        {% endif %}
     </section>
 
     <section class="neorain-load-planner-section" aria-labelledby="neorain-master-departures-title">

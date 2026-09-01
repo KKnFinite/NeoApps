@@ -21,6 +21,10 @@ from app.models import (
 )
 from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment, NeoRainDelayInfo
 from app.services.neorain_ground_time_settings import neorain_ground_time_threshold_minutes
+from app.services.neorain_load_planner_contacts import (
+    neorain_load_planner_contact_values,
+    neorain_load_planner_contacts,
+)
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
 from app.services.neostaffing import attendance_operation_department_counts
@@ -475,13 +479,19 @@ def _outbound_rows(operation, *, missions=None):
     }
     if missions is None:
         missions = _outbound_departure_missions(operation)
-    eligible_person_ids = _eligible_load_planner_person_ids()
+    eligible_planners = eligible_neorain_load_planners()
+    eligible_person_ids = {planner.id for planner in eligible_planners}
+    planner_contacts = neorain_load_planner_contacts(
+        operation.gateway if operation is not None else None,
+        eligible_planners,
+    )
     rows = [
         _outbound_row(
             mission,
             operation,
             parking_by_tail,
             eligible_person_ids=eligible_person_ids,
+            planner_contacts=planner_contacts,
         )
         for mission in missions
     ]
@@ -559,7 +569,9 @@ def assign_current_sort_only_departure_load_planner(mission, planner=None):
 
 def neorain_load_planner_lineup(gateway, operation=None):
     """Build bounded persistent and current-sort-only Load Planner sections."""
-    eligible_person_ids = _eligible_load_planner_person_ids()
+    eligible_planners = eligible_neorain_load_planners()
+    eligible_person_ids = {planner.id for planner in eligible_planners}
+    planner_contacts = neorain_load_planner_contacts(gateway, eligible_planners)
     sort_name = operation.sort_name if operation is not None else "night"
     master_departures = (
         MasterFlightSchedule.query.options(
@@ -603,6 +615,9 @@ def neorain_load_planner_lineup(gateway, operation=None):
                     if departure.load_planner_person_id in eligible_person_ids
                     else None
                 ),
+                "planner_contact": neorain_load_planner_contact_values(
+                    planner_contacts.get(departure.load_planner_person_id)
+                ),
                 "planned_time": _time_value(departure.planned_time_local),
                 "version": entity_version(departure),
             }
@@ -614,6 +629,9 @@ def neorain_load_planner_lineup(gateway, operation=None):
                 "planner": effective_neorain_load_planner(
                     mission,
                     eligible_person_ids=eligible_person_ids,
+                ),
+                "planner_contact": neorain_load_planner_contact_values(
+                    planner_contacts.get(mission.load_planner_person_id)
                 ),
                 "planned_time": _time_value(
                     mission_display_timing_data(mission, operation).get(
@@ -897,18 +915,30 @@ def neorain_outbound_row(mission, operation):
         ).all()
         if _tail_key(assignment.tail_number)
     }
+    eligible_planners = eligible_neorain_load_planners()
     row = _outbound_row(
         mission,
         operation,
         parking_by_tail,
-        eligible_person_ids=_eligible_load_planner_person_ids(),
+        eligible_person_ids={planner.id for planner in eligible_planners},
+        planner_contacts=neorain_load_planner_contacts(
+            operation.gateway,
+            eligible_planners,
+        ),
     )
     row.pop("sort_time", None)
     row["departure_status"] = _normalized_status(mission.departure_status)
     return row
 
 
-def _outbound_row(mission, operation, parking_by_tail, *, eligible_person_ids=None):
+def _outbound_row(
+    mission,
+    operation,
+    parking_by_tail,
+    *,
+    eligible_person_ids=None,
+    planner_contacts=None,
+):
     timing = mission_display_timing_data(mission, operation)
     planned = timing.get("adjusted_planned_departure_time") or mission.planned_datetime_local
     timezone_name = mission.timezone or None
@@ -927,6 +957,9 @@ def _outbound_row(mission, operation, parking_by_tail, *, eligible_person_ids=No
         "planned_time": _time_value(planned),
         "status": status.replace("_", " ").upper(),
         "load_planner": planner.full_name if planner else "UNASSIGNED",
+        "load_planner_contact": neorain_load_planner_contact_values(
+            (planner_contacts or {}).get(planner.id) if planner else None
+        ),
         "elmac": format_local_hhmm(mission.elmac_completed_at_utc, timezone_name),
         "ramp_load_complete": format_local_hhmm(
             mission.ramp_load_completed_at_utc, timezone_name
