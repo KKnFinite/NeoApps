@@ -92,6 +92,7 @@ def apply_google_rain_departure_milestones(
             operation,
             row,
             missions_by_flight.get(row["flight_key"], ()),
+            missions,
         )
         if mission is None:
             result = _skipped_result(row, match_error)
@@ -314,11 +315,26 @@ def _missing_no_return_prerequisites(mission):
     return tuple(label for label, value in required if value is None)
 
 
-def _matching_departure(operation, row, candidates):
-    if not row["flight_key"]:
-        return None, "Rain flight number is missing or invalid."
+def _matching_departure(operation, row, candidates, all_departures):
     candidates = list(candidates)
     if not candidates:
+        if not row["raw_flight_number"]:
+            return None, "Rain flight number is missing or invalid."
+        fallback_candidates, fallback_error = _destination_std_candidates(
+            operation,
+            row,
+            all_departures,
+        )
+        if len(fallback_candidates) == 1:
+            return fallback_candidates[0], None
+        if len(fallback_candidates) > 1:
+            return (
+                None,
+                "Rain flight format does not match canonical mission and "
+                "destination/STD matches multiple current-sort departures.",
+            )
+        if fallback_error:
+            return None, fallback_error
         return None, "No current-sort departure matches the Rain flight."
     if len(candidates) == 1:
         return candidates[0], None
@@ -354,15 +370,52 @@ def _matching_departure(operation, row, candidates):
     return None, "Rain flight matches multiple current-sort departures."
 
 
+def _destination_std_candidates(operation, row, departures):
+    """Return safe fallback candidates when Rain's flight label is noncanonical.
+
+    Google Rain has no shared mission identifier. Its C/E values can only be used
+    as a fallback when both identify exactly one existing current-sort departure;
+    neither tail nor an inferred schedule value is used.
+    """
+    destination = row["destination"]
+    std = row["std"]
+    if not destination or std is _MISSING or str(std or "").strip() in {"", "-"}:
+        return (), None
+    try:
+        std_local, _std_utc = _parse_optional_live_datetime(
+            std,
+            operation,
+            "Rain STD",
+        )
+    except GoogleMotherBrainMissionError:
+        return (), "Rain STD is invalid for destination/STD matching."
+    if std_local is None:
+        return (), None
+    return (
+        tuple(
+            mission
+            for mission in departures
+            if str(mission.destination or "").strip().upper() == destination
+            and _same_minute(mission.planned_datetime_local, std_local)
+        ),
+        None,
+    )
+
+
 def _normalize_row(supplied_row):
     supplied_row = dict(supplied_row or {})
-    flight_number = normalize_alp_flight_number(
-        _first_value(supplied_row, "flight_number", "FLIGHT", "A")
+    raw_flight_number = _first_value(
+        supplied_row,
+        "flight_number",
+        "FLIGHT",
+        "A",
     )
+    flight_number = normalize_alp_flight_number(raw_flight_number)
     return {
         "sheet_row": _positive_int(supplied_row.get("sheet_row")),
         "flight_number": flight_number,
         "flight_key": alp_flight_key(flight_number),
+        "raw_flight_number": str(raw_flight_number or "").strip(),
         "destination": str(
             _first_value(supplied_row, "destination", "DEST", "C") or ""
         ).strip().upper(),

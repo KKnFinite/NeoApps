@@ -86,6 +86,73 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertEqual(result["skipped_count"], 1)
         self.assertEqual(SortDateMission.query.count(), 0)
 
+    def test_noncanonical_rain_flight_uses_unique_destination_and_std_identity(self):
+        mission = self._mission(
+            "UPS0910",
+            "LAX",
+            std=datetime(2026, 8, 11, 2, 24),
+        )
+
+        result = self._apply(
+            self._row(
+                "UPS0910/0948",
+                destination="lax",
+                std="2:24",
+                crew_load_complete="2:28",
+            )
+        )
+
+        self.assertEqual(result["applied_count"], 1)
+        self.assertEqual(result["results"][0]["mission_id"], mission.id)
+        self.assertEqual(mission.departure_status, "crew_load_complete")
+
+    def test_noncanonical_rain_flight_never_guesses_between_destination_std_matches(self):
+        first = self._mission(
+            "UPS0910",
+            "LAX",
+            std=datetime(2026, 8, 11, 2, 24),
+        )
+        second = self._mission(
+            "UPS0948",
+            "LAX",
+            std=datetime(2026, 8, 11, 2, 24),
+        )
+
+        result = self._apply(
+            self._row(
+                "UPS0910/0948",
+                destination="LAX",
+                std="2:24",
+                crew_load_complete="2:28",
+            )
+        )
+
+        self.assertEqual(result["applied_count"], 0)
+        self.assertEqual(result["skipped_count"], 1)
+        self.assertIn("multiple", result["results"][0]["reason"].lower())
+        self.assertIsNone(first.crew_load_completed_at_utc)
+        self.assertIsNone(second.crew_load_completed_at_utc)
+
+    def test_missing_rain_flight_never_falls_back_to_destination_and_std(self):
+        mission = self._mission(
+            "UPS0910",
+            "LAX",
+            std=datetime(2026, 8, 11, 2, 24),
+        )
+
+        result = self._apply(
+            self._row(
+                "",
+                destination="LAX",
+                std="2:24",
+                crew_load_complete="2:28",
+            )
+        )
+
+        self.assertEqual(result["applied_count"], 0)
+        self.assertIn("missing or invalid", result["results"][0]["reason"].lower())
+        self.assertIsNone(mission.crew_load_completed_at_utc)
+
     def test_destination_and_std_can_disambiguate_duplicate_flights(self):
         self._mission("UPS1000", "SDF", std=datetime(2026, 8, 11, 1, 0))
         target = self._mission("UPS1000", "SDF", std=datetime(2026, 8, 11, 2, 0))
