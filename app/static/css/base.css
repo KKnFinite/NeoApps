@@ -29743,6 +29743,58 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     white-space: nowrap;
 }
 
+.neorain-outbound-planner-contact {
+    position: relative;
+    display: inline-block;
+}
+
+.neorain-outbound-planner-contact > summary {
+    color: inherit;
+    cursor: pointer;
+    list-style: none;
+}
+
+.neorain-outbound-planner-contact > summary::-webkit-details-marker {
+    display: none;
+}
+
+.neorain-outbound-planner-contact > summary:focus-visible {
+    outline: 1px solid var(--node-highlight);
+    outline-offset: 3px;
+}
+
+.neorain-outbound-planner-contact-popover {
+    display: none;
+    position: absolute;
+    z-index: 12;
+    top: calc(100% + 5px);
+    left: 0;
+    min-width: max-content;
+    padding: 5px 7px;
+    border: 1px solid rgba(var(--node-rgb), .45);
+    border-radius: 3px;
+    background: #0b1018;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, .3);
+    color: var(--node-text);
+    font-size: .6rem;
+    line-height: 1.35;
+}
+
+.neorain-outbound-planner-contact-popover span {
+    display: block;
+}
+
+.neorain-outbound-planner-contact[open] .neorain-outbound-planner-contact-popover,
+.neorain-outbound-planner-contact:focus-within .neorain-outbound-planner-contact-popover {
+    display: block;
+}
+
+@media (hover: hover) {
+    .neorain-outbound-planner-contact:hover .neorain-outbound-planner-contact-popover {
+        display: block;
+    }
+}
+
 .neorain-load-planner-contact-table input {
     width: min(100%, 10rem);
     padding: .25rem .4rem;

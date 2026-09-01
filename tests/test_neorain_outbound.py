@@ -33,6 +33,9 @@ from app.services.google_rain_integration_mode import (
 )
 from app.services.password_policy import set_user_password
 from app.services.live_collaboration import entity_version
+from app.services.neorain_load_planner_contacts import (
+    set_neorain_load_planner_contact,
+)
 
 
 class NeoRainOutboundTest(unittest.TestCase):
@@ -579,6 +582,56 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b'Ramp Load Complete', body)
         self.assertIn(b'Parking', body)
         self.assertIn(b'Load Planner', body)
+
+    def test_outbound_load_planner_contact_is_a_compact_disclosure(self):
+        operation = self._operation()
+        staffing_sort = StaffingUnit(unit_type="sort", name="Night", active=True)
+        ramp = StaffingUnit(unit_type="operation", name="Ramp", parent=staffing_sort, active=True)
+        load_planning = StaffingUnit(
+            unit_type="department", name="Load Planning", parent=ramp, active=True
+        )
+        planners = StaffingUnit(
+            unit_type="work_area", name="Load Planners", parent=load_planning, active=True
+        )
+        db.session.add_all((staffing_sort, ramp, load_planning, planners))
+        db.session.flush()
+        planner = StaffingPerson(
+            employee_id="RAIN-LP-1",
+            first_name="Load",
+            last_name="Planner",
+            seniority_date=date(2020, 1, 1),
+            classification="part_time",
+            employee_status="active",
+            active=True,
+        )
+        db.session.add(planner)
+        db.session.flush()
+        db.session.add(StaffingWorkAssignment(
+            person_id=planner.id, work_area_unit_id=planners.id, active=True
+        ))
+        assigned = self._mission(operation, "UPS645", "SDF", planned=datetime(2026, 8, 30, 6, 45))
+        self._mission(operation, "UPS646", "ONT", planned=datetime(2026, 8, 30, 6, 46))
+        assigned.load_planner_person_id = planner.id
+        set_neorain_load_planner_contact(
+            self.gateway, planner, extension="4101", radio_channel="OPS"
+        )
+        db.session.commit()
+        watcher = self._user("rain_planner_contact_viewer", "watcher")
+        self._login(watcher)
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.get("/neorain/outbound")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'neorain-outbound-planner-contact', response.data)
+        self.assertIn(b'Show Load Planner contact for Load Planner', response.data)
+        self.assertIn(b'EXT 4101', response.data)
+        self.assertIn(b'RADIO OPS', response.data)
+        self.assertIn(b'UNASSIGNED', response.data)
+        self.assertEqual(response.data.count(b'neorain-outbound-planner-contact-popover'), 1)
 
     def test_departed_row_shows_no_return_and_reverse_for_authorized_editor(self):
         operation = self._operation()

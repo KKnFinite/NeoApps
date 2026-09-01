@@ -56,7 +56,19 @@
                 <td data-label="Parking">{{ row.parking or '-' }}</td>
                 <td data-label="STD/ETD">{{ row.planned_time or '-' }}</td>
                 <td data-label="Status" data-neorain-display="status">{{ row.status }}</td>
-                <td data-label="Load Planner">{{ row.load_planner or 'UNASSIGNED' }}</td>
+                <td data-label="Load Planner">
+                    {% if row.load_planner and row.load_planner != 'UNASSIGNED' and (row.load_planner_contact.extension or row.load_planner_contact.radio_channel) %}
+                    <details class="neorain-outbound-planner-contact">
+                        <summary aria-label="Show Load Planner contact for {{ row.load_planner }}">{{ row.load_planner }}</summary>
+                        <div class="neorain-outbound-planner-contact-popover" role="tooltip">
+                            <span>EXT {{ row.load_planner_contact.extension or '—' }}</span>
+                            <span>RADIO {{ row.load_planner_contact.radio_channel or '—' }}</span>
+                        </div>
+                    </details>
+                    {% else %}
+                    <span>{{ row.load_planner or 'UNASSIGNED' }}</span>
+                    {% endif %}
+                </td>
                 <td data-label="eLMAC">{{ row.elmac or '-' }}</td>
                 {{ milestone_cell(row, 'ramp_load_complete', 'Ramp Load Complete') }}
                 {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
