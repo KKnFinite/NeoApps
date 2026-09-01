@@ -22,6 +22,16 @@ treated percentage null. `departure-exposure-nights.txt` is optional additional
 evidence for exceptional nights; a known count may follow the date, such as
 `2026-01-05,12`, but counts must never be guessed.
 
+KRFD observations bound each reconstructed exposure window. The original
+window is always retained in artifact metadata. If observed precipitation has
+already begun before 0200, that night is excluded from frost labeling. If it
+first appears between 0200 and 0400, only 0200 through the first precipitation
+observation remains usable; later dry reports do not reopen the night. Dry
+nights retain the complete window. This is based on historical weather—not the
+Cryotech Active Precipitation field, which remains treatment context. Each
+night and training record carries original/usable bounds, precipitation onset,
+the pre-0200 exclusion flag, and its resulting evidence classification.
+
 Reconstruction excludes Memorial Day, Labor Day, July 4, Thanksgiving and the
 day before, Christmas Eve and Day, New Year's Eve and Day, and MLK Day beginning
 in 2025. Presidents Day, Juneteenth, Veterans Day, and unlisted holidays are not
@@ -48,10 +58,15 @@ Stable application IDs group first. Without one, same-night/tail/reason rows
 group only inside a conservative 30-minute start-time window. Pretreat and
 other applications remain separate outcomes. Invalid
 rows are reported with their CSV row number without discarding valid rows.
+Cold Soak remains contextual treatment evidence and is never classified as
+Frost. A Frost treatment observed only after precipitation contamination is
+retained but left unlabeled rather than manufacturing a Frost label or a later
+clean-negative interval.
 
 Night evidence uses four explicit classes:
 
-- `confirmed_positive`: one or more deduplicated departure Frost treatments.
+- `confirmed_positive`: one or more deduplicated departure Frost treatments
+  before observed precipitation contamination.
 - `uncertain_pretreat`: Pretreat occurred without confirmed departure Frost.
 - `clean_negative`: confirmed departure exposure with neither Pretreat nor Frost.
 - `unlabeled`: relevant departure exposure was not established.

@@ -133,6 +133,116 @@ class NeoSubZeroFrostHistoryTest(unittest.TestCase):
         self.assertEqual(frost.reported_weather, "FZFG")
         self.assertEqual(frost.weather_source, "iem-asos.csv")
 
+    def test_precipitation_before_0200_excludes_entire_frost_window(self):
+        weather = CsvHistoricalWeatherProvider(
+            "station,valid,wxcodes\n"
+            "KRFD,2026-01-06T07:30:00Z,-SN\n"
+            "KRFD,2026-01-06T09:00:00Z,\n"
+        )
+
+        dataset = build_frost_history_dataset(
+            (),
+            weather,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 5),
+        )
+
+        evidence = dataset.night_evidence[0]
+        self.assertEqual(evidence.evidence_class, "unlabeled")
+        self.assertTrue(evidence.excluded_by_pre_0200_precipitation)
+        self.assertEqual(evidence.precipitation_onset_local.hour, 1)
+        self.assertIsNone(evidence.usable_exposure_start_local)
+        self.assertIsNone(evidence.usable_exposure_end_local)
+        self.assertFalse(any(row.frost_label == "negative" for row in dataset.training_records))
+
+    def test_precipitation_during_window_truncates_exposure_without_reopening(self):
+        weather = CsvHistoricalWeatherProvider(
+            "station,valid,wxcodes\n"
+            "KRFD,2026-01-06T08:00:00Z,\n"
+            "KRFD,2026-01-06T08:30:00Z,FZDZ\n"
+            "KRFD,2026-01-06T09:00:00Z,\n"
+        )
+
+        dataset = build_frost_history_dataset(
+            (),
+            weather,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 5),
+        )
+
+        evidence = dataset.night_evidence[0]
+        record = dataset.training_records[0]
+        self.assertEqual(evidence.evidence_class, "clean_negative")
+        self.assertEqual(evidence.usable_exposure_start_local.strftime("%H:%M"), "02:00")
+        self.assertEqual(evidence.usable_exposure_end_local.strftime("%H:%M"), "02:30")
+        self.assertEqual(evidence.precipitation_onset_local.strftime("%H:%M"), "02:30")
+        self.assertEqual(record.exposure_window_end_local.strftime("%H:%M"), "02:30")
+        self.assertEqual(record.usable_exposure_end_local.strftime("%H:%M"), "02:30")
+
+    def test_dry_night_retains_full_original_exposure_window(self):
+        weather = CsvHistoricalWeatherProvider(
+            "station,valid,wxcodes\n"
+            "KRFD,2026-01-06T07:30:00Z,FG\n"
+            "KRFD,2026-01-06T09:00:00Z,BR\n"
+        )
+
+        dataset = build_frost_history_dataset(
+            (),
+            weather,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 5),
+        )
+
+        evidence = dataset.night_evidence[0]
+        self.assertEqual(evidence.evidence_class, "clean_negative")
+        self.assertEqual(evidence.original_exposure_start_local.strftime("%H:%M"), "02:00")
+        self.assertEqual(evidence.original_exposure_end_local.strftime("%H:%M"), "04:00")
+        self.assertEqual(evidence.usable_exposure_start_local, evidence.original_exposure_start_local)
+        self.assertEqual(evidence.usable_exposure_end_local, evidence.original_exposure_end_local)
+        self.assertIsNone(evidence.precipitation_onset_local)
+
+    def test_frost_before_precipitation_onset_remains_confirmed_positive(self):
+        cryotech = parse_cryotech_csv(
+            "Application Date,Start Time,Tail,Reason\n"
+            "01/06/2026,02:15,N901,F\n"
+        )
+        weather = CsvHistoricalWeatherProvider(
+            "station,valid,wxcodes\n"
+            "KRFD,2026-01-06T08:30:00Z,SN\n"
+        )
+
+        dataset = build_frost_history_dataset(
+            cryotech.rows,
+            weather,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 5),
+        )
+
+        self.assertEqual(dataset.night_evidence[0].evidence_class, "confirmed_positive")
+        self.assertEqual(dataset.training_records[0].frost_label, "positive")
+
+    def test_post_precipitation_frost_does_not_create_false_negative(self):
+        cryotech = parse_cryotech_csv(
+            "Application Date,Start Time,Tail,Reason\n"
+            "01/06/2026,03:00,N902,F\n"
+        )
+        weather = CsvHistoricalWeatherProvider(
+            "station,valid,wxcodes\n"
+            "KRFD,2026-01-06T08:30:00Z,RA\n"
+            "KRFD,2026-01-06T09:30:00Z,\n"
+        )
+
+        dataset = build_frost_history_dataset(
+            cryotech.rows,
+            weather,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 5),
+        )
+
+        self.assertEqual(dataset.night_evidence[0].evidence_class, "unlabeled")
+        self.assertEqual(dataset.training_records[0].evidence_class, "unlabeled")
+        self.assertFalse(any(row.frost_label == "negative" for row in dataset.training_records))
+
     def test_multi_truck_rows_collapse_to_one_aircraft_event(self):
         cryotech = parse_cryotech_csv(
             "Application ID,Application Date,Start Time,End Time,Tail,Truck,"
@@ -414,7 +524,7 @@ class NeoSubZeroFrostHistoryTest(unittest.TestCase):
         self.assertTrue(payload["exposure_timestamp_local"].endswith("-06:00"))
         self.assertIn(payload["frost_label"], {"positive", "negative", "unlabeled"})
         artifact = dataset.to_dict()
-        self.assertEqual(artifact["schema_version"], 3)
+        self.assertEqual(artifact["schema_version"], 4)
         self.assertEqual(len(artifact["raw_application_rows"]), 2)
         self.assertEqual(len(artifact["treatment_events"]), 1)
         self.assertEqual(len(artifact["night_evidence"]), 1)

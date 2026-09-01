@@ -21,6 +21,7 @@ RFD_TIMEZONE = "America/Chicago"
 NORMAL_NIGHT_WEEKDAYS = frozenset({0, 1, 2, 3})  # Monday through Thursday.
 DEFAULT_NEGATIVE_WINDOW_START = time(2, 0)
 DEFAULT_NEGATIVE_WINDOW_END = time(4, 0)
+HISTORICAL_NIGHT_WEATHER_START = time(12, 0)
 INFERRED_EVENT_MAX_START_SPREAD = timedelta(minutes=30)
 CRYOTECH_REASON_DESCRIPTIONS = {
     "FG": ("Fog",),
@@ -129,6 +130,12 @@ class FrostNightEvidence:
     pretreat_before_frost: bool
     number_treatment_events: int
     number_raw_application_rows: int
+    original_exposure_start_local: datetime
+    original_exposure_end_local: datetime
+    usable_exposure_start_local: datetime | None
+    usable_exposure_end_local: datetime | None
+    precipitation_onset_local: datetime | None
+    excluded_by_pre_0200_precipitation: bool
 
     def to_dict(self):
         return _serialized_dataclass(self)
@@ -165,6 +172,26 @@ class HistoricalWeatherProvider(Protocol):
 
 
 @dataclass(frozen=True)
+class FrostExposureWindow:
+    """Observed-precipitation limits for one reconstructed frost window."""
+
+    original_start_local: datetime
+    original_end_local: datetime
+    usable_start_local: datetime | None
+    usable_end_local: datetime | None
+    precipitation_onset_local: datetime | None
+    excluded_by_pre_0200_precipitation: bool
+
+    @property
+    def has_usable_exposure(self):
+        return bool(
+            self.usable_start_local
+            and self.usable_end_local
+            and self.usable_end_local > self.usable_start_local
+        )
+
+
+@dataclass(frozen=True)
 class FrostTrainingRecord:
     operational_night: date
     exposure_timestamp_local: datetime
@@ -172,6 +199,12 @@ class FrostTrainingRecord:
     exposure_window_end_local: datetime
     evidence_class: str
     outcome: str
+    original_exposure_start_local: datetime | None = None
+    original_exposure_end_local: datetime | None = None
+    usable_exposure_start_local: datetime | None = None
+    usable_exposure_end_local: datetime | None = None
+    precipitation_onset_local: datetime | None = None
+    excluded_by_pre_0200_precipitation: bool = False
     event_key: str | None = None
     grouping_method: str | None = None
     raw_application_count: int = 0
@@ -239,7 +272,7 @@ class FrostHistoryDataset:
 
     def to_dict(self):
         return {
-            "schema_version": 3,
+            "schema_version": 4,
             "raw_application_rows": [
                 _serialized_dataclass(row) for row in self.raw_application_rows
             ],
@@ -516,6 +549,72 @@ def default_negative_exposure_window(operational_night, *, timezone_name=RFD_TIM
     )
 
 
+def precipitation_adjusted_exposure_window(
+    operational_night,
+    weather_provider,
+    *,
+    timezone_name=RFD_TIMEZONE,
+):
+    """Limit a nightly frost window at the first observed precipitation.
+
+    Weather observations, rather than Cryotech treatment context, establish
+    precipitation onset. Once an onset is observed, later dry observations do
+    not reopen the exposure window.
+    """
+    original_start, original_end = default_negative_exposure_window(
+        operational_night,
+        timezone_name=timezone_name,
+    )
+    if weather_provider is None:
+        return FrostExposureWindow(
+            original_start_local=original_start,
+            original_end_local=original_end,
+            usable_start_local=original_start,
+            usable_end_local=original_end,
+            precipitation_onset_local=None,
+            excluded_by_pre_0200_precipitation=False,
+        )
+
+    zone = original_start.tzinfo
+    weather_start = datetime.combine(
+        _coerce_date(operational_night),
+        HISTORICAL_NIGHT_WEATHER_START,
+        tzinfo=zone,
+    )
+    observations = weather_provider.observations(
+        weather_start.astimezone(timezone.utc),
+        original_end.astimezone(timezone.utc),
+    )
+    precipitation_onset = min(
+        (
+            row.observed_at.astimezone(zone)
+            for row in observations
+            if _observation_reports_active_precipitation(row)
+        ),
+        default=None,
+    )
+    if precipitation_onset is None:
+        usable_start = original_start
+        usable_end = original_end
+        excluded = False
+    elif precipitation_onset < original_start:
+        usable_start = None
+        usable_end = None
+        excluded = True
+    else:
+        usable_start = original_start
+        usable_end = min(precipitation_onset, original_end)
+        excluded = False
+    return FrostExposureWindow(
+        original_start_local=original_start,
+        original_end_local=original_end,
+        usable_start_local=usable_start,
+        usable_end_local=usable_end,
+        precipitation_onset_local=precipitation_onset,
+        excluded_by_pre_0200_precipitation=excluded,
+    )
+
+
 def group_cryotech_treatment_events(
     cryotech_rows,
     *,
@@ -648,10 +747,19 @@ def build_frost_history_dataset(
         night: tuple(row for row in events if row.operational_night == night)
         for night in evidence_nights
     }
+    exposure_windows = {
+        night: precipitation_adjusted_exposure_window(
+            night,
+            weather_provider,
+            timezone_name=timezone_name,
+        )
+        for night in evidence_nights
+    }
     night_evidence = tuple(
         _night_evidence(
             night,
             events_by_night[night],
+            exposure_window=exposure_windows[night],
             confirmed_departure_exposure=night in valid_exposure_nights,
             departure_opportunities=(
                 opportunity_counts.get(night)
@@ -669,6 +777,7 @@ def build_frost_history_dataset(
             _event_training_record(
                 event,
                 evidence_by_night[event.operational_night],
+                exposure_windows[event.operational_night],
                 weather_provider,
                 ZoneInfo(timezone_name),
             )
@@ -679,15 +788,18 @@ def build_frost_history_dataset(
             continue
         if evidence.operational_night not in valid_exposure_nights:
             continue
-        window_start, window_end = default_negative_exposure_window(
-            evidence.operational_night,
-            timezone_name=timezone_name,
-        )
+        exposure_window = exposure_windows[evidence.operational_night]
+        window_start = exposure_window.usable_start_local
+        window_end = exposure_window.usable_end_local
+        if not exposure_window.has_usable_exposure:
+            window_start = exposure_window.original_start_local
+            window_end = exposure_window.original_start_local
         records.append(
             _window_training_record(
                 window_start,
                 window_end,
                 evidence,
+                exposure_window,
                 weather_provider,
             )
         )
@@ -711,13 +823,14 @@ def build_frost_training_dataset(*args, **kwargs):
     return build_frost_history_dataset(*args, **kwargs).training_records
 
 
-def _event_training_record(event, evidence, weather_provider, zone):
+def _event_training_record(event, evidence, exposure_window, weather_provider, zone):
     window_start = event.start_at_local
     window_end = event.end_at_local or event.start_at_local
     features = _weather_features(weather_provider, event.start_at_local, zone)
-    if event.outcome == "departure_frost":
+    event_is_usable = _event_precedes_precipitation(event, exposure_window)
+    if event.outcome == "departure_frost" and event_is_usable:
         evidence_class = "confirmed_positive"
-    elif event.outcome == "pretreat":
+    elif event.outcome == "pretreat" and event_is_usable:
         evidence_class = "uncertain_pretreat"
     else:
         evidence_class = "unlabeled"
@@ -728,6 +841,7 @@ def _event_training_record(event, evidence, weather_provider, zone):
         exposure_window_end_local=window_end,
         evidence_class=evidence_class,
         outcome=event.outcome,
+        **_exposure_window_fields(exposure_window),
         event_key=event.event_key,
         grouping_method=event.grouping_method,
         raw_application_count=event.raw_application_count,
@@ -751,7 +865,13 @@ def _event_training_record(event, evidence, weather_provider, zone):
     )
 
 
-def _window_training_record(window_start, window_end, evidence, weather_provider):
+def _window_training_record(
+    window_start,
+    window_end,
+    evidence,
+    exposure_window,
+    weather_provider,
+):
     anchor = window_start + (window_end - window_start) / 2
     features = _weather_features(
         weather_provider,
@@ -769,6 +889,7 @@ def _window_training_record(window_start, window_end, evidence, weather_provider
             if evidence.evidence_class == "clean_negative"
             else "no_exposure"
         ),
+        **_exposure_window_fields(exposure_window),
         **_night_evidence_fields(evidence),
         **features,
     )
@@ -860,18 +981,33 @@ def _night_evidence(
     night,
     events,
     *,
+    exposure_window,
     confirmed_departure_exposure,
     departure_opportunities,
 ):
     frost_events = tuple(row for row in events if row.outcome == "departure_frost")
     pretreat_events = tuple(row for row in events if row.outcome == "pretreat")
+    usable_frost_events = tuple(
+        row
+        for row in frost_events
+        if _event_precedes_precipitation(row, exposure_window)
+    )
+    usable_pretreat_events = tuple(
+        row
+        for row in pretreat_events
+        if _event_precedes_precipitation(row, exposure_window)
+    )
     frost_count = len(frost_events)
     pretreat_count = len(pretreat_events)
-    confirmed_exposure = confirmed_departure_exposure or bool(frost_events)
-    if frost_count:
+    confirmed_exposure = (
+        confirmed_departure_exposure and exposure_window.has_usable_exposure
+    ) or bool(usable_frost_events)
+    if usable_frost_events:
         evidence_class = "confirmed_positive"
-    elif pretreat_count:
+    elif usable_pretreat_events:
         evidence_class = "uncertain_pretreat"
+    elif frost_events or pretreat_events:
+        evidence_class = "unlabeled"
     elif confirmed_exposure:
         evidence_class = "clean_negative"
     else:
@@ -880,12 +1016,12 @@ def _night_evidence(
     if departure_opportunities:
         percentage = round(100 * frost_count / departure_opportunities, 2)
     first_frost = min(
-        (row.start_at_local for row in frost_events),
+        (row.start_at_local for row in usable_frost_events),
         default=None,
     )
     pretreat_before_frost = bool(
         first_frost
-        and any(row.start_at_local < first_frost for row in pretreat_events)
+        and any(row.start_at_local < first_frost for row in usable_pretreat_events)
     )
     return FrostNightEvidence(
         operational_night=night,
@@ -904,6 +1040,14 @@ def _night_evidence(
         number_raw_application_rows=sum(
             row.raw_application_count for row in events
         ),
+        original_exposure_start_local=exposure_window.original_start_local,
+        original_exposure_end_local=exposure_window.original_end_local,
+        usable_exposure_start_local=exposure_window.usable_start_local,
+        usable_exposure_end_local=exposure_window.usable_end_local,
+        precipitation_onset_local=exposure_window.precipitation_onset_local,
+        excluded_by_pre_0200_precipitation=(
+            exposure_window.excluded_by_pre_0200_precipitation
+        ),
     )
 
 
@@ -919,6 +1063,26 @@ def _night_evidence_fields(evidence):
         "pretreat_and_frost": evidence.pretreat_and_frost,
         "pretreat_before_frost": evidence.pretreat_before_frost,
     }
+
+
+def _exposure_window_fields(exposure_window):
+    return {
+        "original_exposure_start_local": exposure_window.original_start_local,
+        "original_exposure_end_local": exposure_window.original_end_local,
+        "usable_exposure_start_local": exposure_window.usable_start_local,
+        "usable_exposure_end_local": exposure_window.usable_end_local,
+        "precipitation_onset_local": exposure_window.precipitation_onset_local,
+        "excluded_by_pre_0200_precipitation": (
+            exposure_window.excluded_by_pre_0200_precipitation
+        ),
+    }
+
+
+def _event_precedes_precipitation(event, exposure_window):
+    if exposure_window.excluded_by_pre_0200_precipitation:
+        return False
+    onset = exposure_window.precipitation_onset_local
+    return onset is None or event.start_at_local < onset
 
 
 def _weather_features(provider, local_timestamp, zone):
@@ -965,6 +1129,38 @@ def _weather_features(provider, local_timestamp, zone):
         "weather_source": current.source_name,
         "weather_source_row": current.source_row,
     }
+
+
+_ACTIVE_PRECIPITATION_CODE = re.compile(
+    r"(?:FZRA|FZDZ|SHRA|SHSN|SHPL|TSRA|TSSN|RA|DZ|SN|SG|IC|PL|GR|GS|UP)"
+)
+
+
+def _observation_reports_active_precipitation(observation):
+    """Return whether an observed-weather report contains precipitation.
+
+    Fog/mist codes (including FZFG) intentionally do not qualify. The parser
+    accepts normal METAR groups and common descriptive historical exports.
+    """
+    reported = str(observation.reported_weather or "").strip().upper()
+    if not reported:
+        return False
+    descriptive = (
+        "RAIN",
+        "DRIZZLE",
+        "SNOW",
+        "HAIL",
+        "ICE PELLET",
+        "ICE CRYSTAL",
+        "UNKNOWN PRECIP",
+    )
+    if any(value in reported for value in descriptive):
+        return True
+    return any(
+        _ACTIVE_PRECIPITATION_CODE.fullmatch(token.lstrip("+-VC"))
+        for token in re.split(r"[\s,/;]+", reported)
+        if token
+    )
 
 
 def _nearest_observation(observations, target, tolerance):
