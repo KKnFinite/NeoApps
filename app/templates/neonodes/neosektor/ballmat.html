@@ -172,6 +172,8 @@
     let saveTimer = null;
     let refreshController = null;
     let mutationEpoch = 0;
+    let mutationRequestSequence = 0;
+    let latestMutationRequest = 0;
 
     const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
 
@@ -289,7 +291,10 @@
 
     const waveKey = (name) => String(name || "").startsWith("1ST") ? "first" : "second";
 
-    const applyMutationState = (payload) => {
+    const applyMutationState = (payload, requestSequence) => {
+        if (requestSequence !== latestMutationRequest) {
+            return;
+        }
         mutationEpoch += 1;
         applyState(payload.state);
     };
@@ -343,7 +348,7 @@
                         control.value = bay.status;
                     }
                 }
-                if (readout) {
+                if (readout && (!control || !hasPending(control))) {
                     readout.textContent = bay.status;
                 }
             });
@@ -421,6 +426,8 @@
         }
         const controls = Array.from(selectedPanel.querySelectorAll("[data-wave-count], [data-open-bays], [data-bay-status]"));
         const tokens = captureTokens(controls);
+        const requestSequence = ++mutationRequestSequence;
+        latestMutationRequest = requestSequence;
 
         try {
             const response = await fetch(updateUrl, {
@@ -437,7 +444,7 @@
             }
             if (payload.ok) {
                 clearPendingTokens(tokens);
-                applyMutationState(payload);
+                applyMutationState(payload, requestSequence);
             }
         } catch (_error) {
             restoreAfterFailure(tokens, "Ballmat update failed. Restored the latest server value.");

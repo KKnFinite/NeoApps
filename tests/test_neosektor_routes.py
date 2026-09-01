@@ -2023,7 +2023,49 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn("revisionAtRequest !== currentRevision", source)
                 self.assertIn("mutationEpochAtRequest !== mutationEpoch", source)
                 self.assertIn("mutationEpoch += 1;", source)
-                self.assertIn("applyMutationState(payload);", source)
+                if template_path.endswith("ballmat.html"):
+                    self.assertIn("applyMutationState(payload, requestSequence);", source)
+                else:
+                    self.assertIn("applyMutationState(payload);", source)
+
+    def test_bay_slider_ignores_older_mutation_responses(self):
+        """An earlier full-side save cannot replace a later bay-state selection."""
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
+
+        earlier = self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {},
+                "open_bays": 0,
+                "bay_statuses": {"Bay 1": "Light"},
+            },
+        ).get_json()
+        later = self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {},
+                "open_bays": 0,
+                "bay_statuses": {"Bay 1": "Full"},
+            },
+        ).get_json()
+        canonical = self.client.get("/neosektor/ballmat/state").get_json()
+
+        self.assertEqual(earlier["state"]["sides"]["east"]["bays"][0]["status"], "Light")
+        self.assertEqual(later["state"]["sides"]["east"]["bays"][0]["status"], "Full")
+        self.assertEqual(canonical["state"]["sides"]["east"]["bays"][0]["status"], "Full")
+
+        source = Path("app/templates/neonodes/neosektor/ballmat.html").read_text()
+        self.assertIn("let mutationRequestSequence = 0;", source)
+        self.assertIn("let latestMutationRequest = 0;", source)
+        self.assertIn("const requestSequence = ++mutationRequestSequence;", source)
+        self.assertIn("latestMutationRequest = requestSequence;", source)
+        self.assertIn("if (requestSequence !== latestMutationRequest)", source)
+        self.assertIn("applyMutationState(payload, requestSequence);", source)
+        self.assertIn("if (readout && (!control || !hasPending(control)))", source)
 
     def test_tunnel_conductor_blocks_user_without_view_permission(self):
         self._login_approved_user(role="operator")
