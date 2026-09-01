@@ -171,6 +171,7 @@
     let pendingSequence = 0;
     let saveTimer = null;
     let refreshController = null;
+    let mutationEpoch = 0;
 
     const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
 
@@ -288,6 +289,11 @@
 
     const waveKey = (name) => String(name || "").startsWith("1ST") ? "first" : "second";
 
+    const applyMutationState = (payload) => {
+        mutationEpoch += 1;
+        applyState(payload.state);
+    };
+
     const applyState = (state) => {
         (state.waves || []).forEach((wave) => {
             const key = waveKey(wave.name);
@@ -373,9 +379,13 @@
     };
 
     const refreshState = async () => {
+        // A poll can have started before a successful local mutation commits.
+        // Never let that older snapshot replace the mutation response in the DOM.
+        const revisionAtRequest = currentRevision;
+        const mutationEpochAtRequest = mutationEpoch;
         try {
             const pollUrl = new URL(stateUrl, window.location.href);
-            pollUrl.searchParams.set("revision", currentRevision);
+            pollUrl.searchParams.set("revision", revisionAtRequest);
             const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
             if (!response.ok) {
                 throw new Error("Ballmat refresh failed.");
@@ -383,6 +393,12 @@
             const payload = await response.json();
             if (!payload.ok) {
                 throw new Error("Ballmat refresh failed.");
+            }
+            if (
+                revisionAtRequest !== currentRevision
+                || mutationEpochAtRequest !== mutationEpoch
+            ) {
+                return;
             }
             currentRevision = payload.revision || currentRevision;
             const refresh = payload.refresh || payload.state?.refresh || {};
@@ -421,7 +437,7 @@
             }
             if (payload.ok) {
                 clearPendingTokens(tokens);
-                applyState(payload.state);
+                applyMutationState(payload);
             }
         } catch (_error) {
             restoreAfterFailure(tokens, "Ballmat update failed. Restored the latest server value.");

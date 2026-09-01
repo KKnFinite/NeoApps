@@ -1957,6 +1957,74 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("queueWaveSave", tunnel_template)
         self.assertIn("hasPending(control)", ballmat_template)
 
+    def test_count_mutations_advance_revision_before_stale_polls_can_apply(self):
+        """A pre-mutation poll must not be able to replace its saved count."""
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
+
+        ballmat_page = self.client.get("/neosektor/ebm")
+        ballmat_revision = re.search(
+            rb'data-neosektor-revision="([^"]+)"',
+            ballmat_page.data,
+        ).group(1).decode()
+        ballmat_update = self.client.post(
+            "/neosektor/ballmat/update?side=east",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 1}},
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        ).get_json()
+        ballmat_refresh = self.client.get(
+            f"/neosektor/ballmat/state?revision={ballmat_revision}"
+        ).get_json()
+
+        tunnel_page = self.client.get("/neosektor/tunnel-conductor")
+        tunnel_revision = re.search(
+            rb'data-neosektor-revision="([^"]+)"',
+            tunnel_page.data,
+        ).group(1).decode()
+        tunnel_update = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 2}},
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        ).get_json()
+        tunnel_refresh = self.client.get(
+            f"/neosektor/tunnel-conductor/state?revision={tunnel_revision}"
+        ).get_json()
+
+        self.assertTrue(ballmat_refresh["changed"])
+        self.assertNotEqual(ballmat_refresh["revision"], ballmat_revision)
+        self.assertEqual(
+            ballmat_update["state"]["sides"]["east"]["waves"][0]["count"],
+            1,
+        )
+        self.assertTrue(tunnel_refresh["changed"])
+        self.assertNotEqual(tunnel_refresh["revision"], tunnel_revision)
+        self.assertEqual(
+            tunnel_update["state"]["sides"]["east"]["waves"][0]["count"],
+            2,
+        )
+
+        for template_path in (
+            "app/templates/neonodes/neosektor/ballmat.html",
+            "app/templates/neonodes/neosektor/tunnel_conductor.html",
+        ):
+            source = Path(template_path).read_text()
+            with self.subTest(template=template_path):
+                self.assertIn("const revisionAtRequest = currentRevision;", source)
+                self.assertIn("const mutationEpochAtRequest = mutationEpoch;", source)
+                self.assertIn("revisionAtRequest !== currentRevision", source)
+                self.assertIn("mutationEpochAtRequest !== mutationEpoch", source)
+                self.assertIn("mutationEpoch += 1;", source)
+                self.assertIn("applyMutationState(payload);", source)
+
     def test_tunnel_conductor_blocks_user_without_view_permission(self):
         self._login_approved_user(role="operator")
 
@@ -3023,8 +3091,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
             )
             self.assertEqual(page.status_code, 200)
             self.assertIsNotNone(match)
+            revision_source = (
+                b"revisionAtRequest"
+                if page_url in {"/neosektor/ebm", "/neosektor/tunnel-conductor"}
+                else b"currentRevision"
+            )
             self.assertIn(
-                b'pollUrl.searchParams.set("revision", currentRevision)',
+                b'pollUrl.searchParams.set("revision", ' + revision_source + b")",
                 page.data,
             )
             revisions[page_url] = match.group(1).decode()
