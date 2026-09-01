@@ -144,7 +144,10 @@ from app.services.parking_plan_collaboration import (
 )
 from app.services.planning_collaboration import planning_state_revision
 from app.services.operation_lifecycle import (
+    ManualSortCreationError,
+    create_manual_current_sort_operation,
     current_existing_operational_sort_operations,
+    manual_current_sort_creation_status,
 )
 from app.services.operation_scope import operation_by_id
 from app.services.live_collaboration import (
@@ -1778,6 +1781,10 @@ def manage_sort():
     if denied:
         return denied
     current_state = _current_sort_state(gateway)
+    manual_creation = manual_current_sort_creation_status(
+        gateway,
+        local_now=current_state["local_now"],
+    )
     sort_date = current_state["sort_date"]
     operations = current_state["operations"]
     selected_operation = _selected_current_operation(
@@ -1803,7 +1810,46 @@ def manage_sort():
         selected_operation=selected_operation,
         created_count=0,
         errors=(),
+        manual_creation=manual_creation,
+        can_create_tonight_sort=(
+            not manual_creation["operation_exists"]
+            and user_can(MANAGE_SORT_EDIT_PERMISSION)
+            and (
+                manual_creation["scheduled"]
+                or can_manage_system(current_user)
+            )
+        ),
         **_flight_api_auto_poll_timer_context(gateway, operation=selected_operation),
+    )
+
+
+@bp.post("/motherbrain/manage-sort/create-tonight")
+@gateway_node_required("motherbrain", minimum_role="operator")
+def create_tonight_sort():
+    gateway = get_current_gateway()
+    denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
+    if denied:
+        return denied
+    try:
+        result = create_manual_current_sort_operation(
+            gateway,
+            current_user.id,
+            allow_unscheduled=can_manage_system(current_user),
+        )
+    except ManualSortCreationError as error:
+        db.session.rollback()
+        flash(str(error), "error")
+        return redirect(url_for("neomotherbrain.manage_sort"))
+
+    operation = result["operation"]
+    flash(
+        "Tonight's sort operation created."
+        if result["created"]
+        else "Tonight's sort operation already exists.",
+        "info",
+    )
+    return redirect(
+        url_for("neomotherbrain.manage_sort", operation_id=operation.id)
     )
 
 

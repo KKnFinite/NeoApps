@@ -96,6 +96,11 @@
             <h2 id="manage-sort-empty-title">NO ACTIVE SORT OPERATIONS</h2>
         </div>
         <p class="muted centered-empty-message">No active sorts today.</p>
+        {% if can_create_tonight_sort %}
+        <form class="action-row manage-sort-create-tonight" method="post" action="{{ url_for('neomotherbrain.create_tonight_sort') }}">
+            <button class="action-button" type="submit">CREATE TONIGHT'S SORT</button>
+        </form>
+        {% endif %}
     </section>
 {% endif %}
     </div>
