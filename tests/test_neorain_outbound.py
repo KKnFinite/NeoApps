@@ -686,6 +686,18 @@ class NeoRainOutboundTest(unittest.TestCase):
         for column in (b"Ground Time", b"Connecting Outbound", b"Include/Exclude", b"Delay Info"):
             self.assertIn(column, response.data)
         self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
+        blocked_fragment = response.data.split(
+            f'data-neorain-mission-id="{blocked_in.id}"'.encode(), 1
+        )[1].split(b"</tr>", 1)[0]
+        cancelled_fragment = response.data.split(
+            f'data-neorain-mission-id="{cancelled.id}"'.encode(), 1
+        )[1].split(b"</tr>", 1)[0]
+        self.assertIn(b'data-neorain-inbound-edit hidden', blocked_fragment)
+        self.assertNotIn(b'data-neorain-inbound-edit-protected hidden', blocked_fragment)
+        self.assertIn(b'data-neorain-inbound-edit', cancelled_fragment)
+        self.assertIn(b'data-neorain-inbound-edit-protected hidden', cancelled_fragment)
+        self.assertIn(b'disabled', cancelled_fragment)
+        self.assertIn(b'setInboundEditLock', response.data)
 
     def _operation(self):
         operation = SortDateOperation(
