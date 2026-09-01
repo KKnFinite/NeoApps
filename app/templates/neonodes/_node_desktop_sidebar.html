@@ -46,7 +46,6 @@
         <a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}
         {% elif is_neoscorpion_page %}
-        <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neoscorpion.index' %} is-active{% endif %}" href="{{ url_for('neoscorpion.index') }}" {% if request.endpoint == 'neoscorpion.index' %}aria-current="page"{% endif %}>Dashboard</a>
         {% for item in neoscorpion_internal_menu_items() %}
         <a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
         {% endfor %}

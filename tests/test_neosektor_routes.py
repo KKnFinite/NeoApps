@@ -1464,7 +1464,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-rows: max-content minmax(0, 1fr);", desktop_css)
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", desktop_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr);", desktop_css)
-        self.assertIn("font-size: 3.81rem;", desktop_css)
+        self.assertIn("font-size: 1.9rem;", desktop_css)
         self.assertIn("transform: scaleX(0.7);", desktop_css)
         self.assertIn("white-space: nowrap;", desktop_css)
         self.assertIn("font-size: 0.8rem;", desktop_css)
