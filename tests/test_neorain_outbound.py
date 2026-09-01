@@ -525,21 +525,20 @@ class NeoRainOutboundTest(unittest.TestCase):
                 self.assertIn(b'field: "no_return"', response.data)
                 self.assertIn(b'value: desired', response.data)
                 self.assertIn(b'"Reverse No Return for this mission?"', response.data)
-                self.assertIn(b'data-neorain-reopen', response.data)
-                self.assertIn(b'data-neorain-collapsed-row', response.data)
-                self.assertIn(b'neorain-collapsed-summary', response.data)
                 self.assertIn(b'data-neorain-display="departure_variance"', response.data)
                 self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
                 self.assertIn(b'included: desired', response.data)
                 self.assertIn(b'data-neorain-late-inclusion-saving', response.data)
                 self.assertLess(response.data.index(b">+/-<"), response.data.index(b">Include/Exclude<"))
                 self.assertLess(response.data.index(b">Include/Exclude<"), response.data.index(b">No Return<"))
-                self.assertNotIn(b'data-neorain-field="ramp_load_complete"', response.data.split(b'data-neorain-collapsed-row', 1)[1].split(b'data-neorain-full-row', 1)[0])
+                self.assertNotIn(b'data-neorain-collapsed-row', response.data)
+                self.assertNotIn(b'data-neorain-final-row', response.data)
+                self.assertNotIn(b'data-neorain-reopen', response.data)
                 self.assertIn(b"expected_version", response.data)
                 self.assertIn(b"stale_version", response.data)
                 self.assertIn(b"neorainRefreshDeferred", response.data)
 
-    def test_incomplete_row_stays_full_and_ready_row_has_compact_first_stage_view(self):
+    def test_blocked_out_rows_remain_full_width(self):
         operation = self._operation()
         incomplete = self._mission(
             operation,
@@ -556,6 +555,7 @@ class NeoRainOutboundTest(unittest.TestCase):
         ready.ramp_load_completed_at_utc = datetime(2026, 8, 30, 6, 42)
         ready.crew_load_completed_at_utc = datetime(2026, 8, 30, 6, 43)
         ready.actual_block_out_datetime_utc = datetime(2026, 8, 30, 6, 44)
+        ready.departure_status = "blocked_out"
         db.session.commit()
         editor = self._user("rain_collapse_editor", "simulator")
         self._login(editor)
@@ -572,12 +572,13 @@ class NeoRainOutboundTest(unittest.TestCase):
         body = response.data
         self.assertIn(b'data-neorain-mission-id="%d"' % incomplete.id, body)
         self.assertIn(b'data-neorain-mission-id="%d"' % ready.id, body)
-        self.assertIn(b'data-neorain-full-row', body)
-        self.assertIn(b'data-neorain-collapsed-row', body)
-        self.assertIn(b'REOPEN', body)
+        self.assertIn(b'neorain-outbound-row--blocked-out', body)
+        self.assertNotIn(b'data-neorain-collapsed-row', body)
+        self.assertNotIn(b'data-neorain-final-row', body)
+        self.assertNotIn(b'REOPEN', body)
         self.assertIn(b'Ramp Load Complete', body)
-        compact = body.split(b'data-neorain-collapsed-row', 1)[1].split(b'data-neorain-full-row', 1)[0]
-        self.assertNotIn(b'Ramp Load Complete', compact)
+        self.assertIn(b'Parking', body)
+        self.assertIn(b'Load Planner', body)
 
     def test_departed_row_shows_no_return_and_reverse_for_authorized_editor(self):
         operation = self._operation()
@@ -608,15 +609,47 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b'data-neorain-no-return-action="reverse"', response.data)
         self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
         self.assertIn(b'data-neorain-no-return-action="set"', response.data)
-        self.assertIn(b'data-neorain-final-row', response.data)
-        final = response.data.split(b'data-neorain-final-row', 1)[1].split(b'data-neorain-full-row', 1)[0]
-        for value in (b"UPS630", b"SDF", b"NO RETURN", b"REOPEN", b"INCLUDED"):
-            self.assertIn(value, final)
-        for omitted in (b"N630UP", b"Crew Load Complete", b"Ramp Load Complete", b"Parking"):
-            self.assertNotIn(omitted, final)
+        self.assertIn(b'data-neorain-no-return-edit', response.data)
+        self.assertIn(b'neorain-outbound-row--no-return', response.data)
+        self.assertNotIn(b'data-neorain-final-row', response.data)
+        self.assertNotIn(b'data-neorain-collapsed-row', response.data)
+        self.assertNotIn(b'REOPEN', response.data)
+        for visible in (b"UPS630", b"SDF", b"N630UP", b"Crew Load Complete", b"Ramp Load Complete", b"Parking"):
+            self.assertIn(visible, response.data)
         self.assertIn(b'data-neorain-field="ramp_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="crew_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="official_block_out"', response.data)
+        self.assertIn(b'setNoReturnLock', response.data)
+
+    def test_inbound_blocked_in_and_cancelled_rows_remain_full_width(self):
+        operation = self._operation()
+        blocked_in = self._mission(
+            operation, "UPS650", "RFD", planned=datetime(2026, 8, 30, 6, 50), mission_type="arrival"
+        )
+        blocked_in.arrival_status = "arrived"
+        blocked_in.actual_block_in_datetime_utc = datetime(2026, 8, 30, 7, 0)
+        cancelled = self._mission(
+            operation, "UPS651", "RFD", planned=datetime(2026, 8, 30, 7, 10), mission_type="arrival"
+        )
+        cancelled.arrival_status = "cancelled"
+        db.session.commit()
+        editor = self._user("rain_inbound_full_rows", "simulator")
+        self._login(editor)
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.get("/neorain/inbound")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'neorain-inbound-row--blocked-in', response.data)
+        self.assertIn(b'neorain-inbound-row--cancelled', response.data)
+        self.assertNotIn(b'data-neorain-inbound-collapsed', response.data)
+        self.assertNotIn(b'data-neorain-inbound-reopen', response.data)
+        for column in (b"Ground Time", b"Connecting Outbound", b"Include/Exclude", b"Delay Info"):
+            self.assertIn(column, response.data)
+        self.assertIn(b'data-neorain-late-inclusion-toggle', response.data)
 
     def _operation(self):
         operation = SortDateOperation(

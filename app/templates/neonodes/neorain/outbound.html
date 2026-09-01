@@ -118,16 +118,23 @@
         "[data-neorain-mission-id]"
     )).filter((view) => view.dataset.neorainMissionId === String(missionId));
 
+    const setNoReturnLock = (view, locked) => {
+        view.dataset.neorainNoReturnLocked = String(locked);
+        view.querySelectorAll("[data-neorain-hhmm], [data-neorain-late-inclusion-toggle], [data-neorain-no-return-action]")
+            .forEach((control) => { control.disabled = locked; });
+        view.querySelectorAll("[data-neorain-no-return-protected]")
+            .forEach((section) => { section.hidden = locked; });
+        view.querySelectorAll("[data-neorain-no-return-readonly]")
+            .forEach((section) => { section.hidden = !locked; });
+        view.querySelector("[data-neorain-no-return-edit]")?.toggleAttribute("hidden", !locked);
+    };
+
     const applyRow = (row, nextRow, protectedInput = null) => {
         if (!row || !nextRow) return;
         const views = missionViews(row.dataset.missionId);
-        const collapseEligible = Boolean(
-            nextRow.ramp_load_complete && nextRow.crew_load_complete && nextRow.official_block_out
-        );
         views.forEach((view) => {
             view.dataset.missionVersion = nextRow.version || view.dataset.missionVersion || "";
             view.dataset.neorainNoReturn = String(Boolean(nextRow.no_return));
-            view.dataset.neorainCollapseEligible = String(collapseEligible);
             displayFields.forEach((field) => {
                 const value = nextRow[field] || "-";
                 const input = view.querySelector(`[data-neorain-hhmm][data-neorain-field="${field}"]`);
@@ -148,37 +155,13 @@
                 const isNoReturn = Boolean(nextRow.no_return);
                 noReturnEditor.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn);
                 noReturnEditor.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn);
+                if (!isNoReturn) delete view.dataset.neorainEditUnlocked;
+                setNoReturnLock(view, isNoReturn && view.dataset.neorainEditUnlocked !== "true");
             }
+            view.classList.toggle("neorain-outbound-row--blocked-out", nextRow.status === "BLOCKED OUT" && !nextRow.no_return);
+            view.classList.toggle("neorain-outbound-row--no-return", Boolean(nextRow.no_return));
+            view.classList.toggle("neorain-outbound-row--cancelled", nextRow.status === "CANCELLED");
         });
-    };
-
-    const isEligible = (row) => Boolean(
-        row.querySelector('[data-neorain-field="ramp_load_complete"]')?.value &&
-        row.querySelector('[data-neorain-field="crew_load_complete"]')?.value &&
-        row.querySelector('[data-neorain-field="official_block_out"]')?.value
-    );
-
-    const hasRowAttention = (row) => Boolean(row.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], .neorain-milestone-editor.is-error, [data-neorain-no-return-editor].is-error, [data-neorain-no-return-saving='true']"
-    ));
-
-    const setCollapsed = (row, collapsed) => {
-        const views = missionViews(row.dataset.missionId);
-        const full = views.find((view) => view.matches("[data-neorain-full-row]"));
-        const compact = views.find((view) => view.matches("[data-neorain-collapsed-row]"));
-        const final = views.find((view) => view.matches("[data-neorain-final-row]"));
-        if (!full || !compact || !final) return;
-        const noReturn = views.some((view) => view.dataset.neorainNoReturn === "true");
-        full.hidden = collapsed;
-        compact.hidden = !collapsed || noReturn;
-        final.hidden = !collapsed || !noReturn;
-        full.dataset.neorainReopened = collapsed ? "false" : "true";
-    };
-
-    const collapseIfReady = (row) => {
-        if (isEligible(row) && !hasRowAttention(row)) {
-            setCollapsed(row, true);
-        }
     };
 
     const nextEditor = (input) => {
@@ -270,11 +253,7 @@
         if (advance && input.value === input.dataset.neorainSavedValue) {
             if (input.dataset.neorainField === "official_block_out") {
                 const next = nextEditor(input);
-                collapseIfReady(row);
-                const compactSet = missionViews(row.dataset.missionId)
-                    .find((view) => view.matches("[data-neorain-collapsed-row]"))
-                    ?.querySelector("[data-neorain-no-return-action='set']:not([hidden])");
-                (compactSet || next)?.focus({ preventScroll: true });
+                next?.focus({ preventScroll: true });
             } else {
                 nextEditor(input)?.focus({ preventScroll: true });
             }
@@ -319,9 +298,6 @@
                 if (response.status === 409 && payload.code === "stale_version" && payload.row) {
                     applyRow(row, payload.row);
                     editor.dataset.neorainNoReturnStale = "true";
-                    if (row.dataset.neorainNoReturn === "false" || row.dataset.neorainCollapseEligible !== "true") {
-                        setCollapsed(row, false);
-                    }
                     setNoReturnMessage(editor, payload.error || "This mission changed while you were editing.", "error");
                     return;
                 }
@@ -336,11 +312,6 @@
             editor.classList.remove("is-saving");
         }
         applyRow(row, payload.row);
-        if (row.dataset.neorainCollapseEligible === "true") {
-            setCollapsed(row, true);
-        } else {
-            setCollapsed(row, false);
-        }
         setNoReturnMessage(editor);
         if (payload.revision) {
             root.dispatchEvent(new CustomEvent("neorain:revision", { detail: { revision: payload.revision } }));
@@ -376,6 +347,15 @@
     });
     root.querySelectorAll("[data-neorain-no-return-action]").forEach((button) => {
         button.addEventListener("click", () => saveNoReturn(button, button.dataset.neorainNoReturnAction === "set"));
+    });
+    root.querySelectorAll("[data-neorain-no-return-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const row = button.closest("[data-neorain-outbound-row]");
+            if (!row) return;
+            row.dataset.neorainEditUnlocked = "true";
+            setNoReturnLock(row, false);
+            row.querySelector("[data-neorain-hhmm]")?.focus({ preventScroll: true });
+        });
     });
 })();
 </script>
@@ -440,35 +420,4 @@
 })();
 </script>
 {% endif %}
-<script>
-(() => {
-    const root = document.querySelector("[data-neorain-outbound-live]");
-    if (!root) return;
-    const viewsFor = (missionId) => Array.from(root.querySelectorAll("[data-neorain-mission-id]"))
-        .filter((view) => view.dataset.neorainMissionId === String(missionId));
-    const setCollapsed = (row, collapsed) => {
-        const views = viewsFor(row.dataset.neorainMissionId);
-        const full = views.find((view) => view.matches("[data-neorain-full-row]"));
-        const compact = views.find((view) => view.matches("[data-neorain-collapsed-row]"));
-        const final = views.find((view) => view.matches("[data-neorain-final-row]"));
-        if (!full || !compact || !final) return;
-        const noReturn = views.some((view) => view.dataset.neorainNoReturn === "true");
-        full.hidden = collapsed;
-        compact.hidden = !collapsed || noReturn;
-        final.hidden = !collapsed || !noReturn;
-    };
-    const hasAttention = (row) => Boolean(row.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], .neorain-milestone-editor.is-error, [data-neorain-no-return-editor].is-error, [data-neorain-no-return-saving='true']"
-    ));
-    root.querySelectorAll("[data-neorain-reopen]").forEach((button) => {
-        button.addEventListener("click", () => setCollapsed(button.closest("[data-neorain-collapsed-row]"), false));
-    });
-    root.querySelectorAll("[data-neorain-full-row]").forEach((row) => {
-        row.addEventListener("focusout", (event) => {
-            if (event.relatedTarget && row.contains(event.relatedTarget)) return;
-            if (row.dataset.neorainCollapseEligible === "true" && !hasAttention(row)) setCollapsed(row, true);
-        });
-    });
-})();
-</script>
 {% endblock %}

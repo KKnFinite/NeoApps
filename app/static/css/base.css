@@ -29615,71 +29615,31 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     font-weight: 700;
 }
 
-.neorain-inbound-collapsed-row { background: rgba(10, 16, 24, .72); }
-.neorain-reopen-control { padding: 3px 7px; font-size: .68rem; }
+.neorain-outbound-table tbody tr.neorain-inbound-row--blocked-in,
+.neorain-outbound-table tbody tr.neorain-outbound-row--blocked-out {
+    background: rgba(8, 13, 20, .78);
+    color: #aeb9c7;
+}
+
+.neorain-outbound-table tbody tr.neorain-outbound-row--no-return {
+    background: linear-gradient(90deg, rgba(14, 25, 36, .94), rgba(7, 12, 18, .9));
+    box-shadow: inset 3px 0 0 #6e9cb9;
+}
+
+.neorain-outbound-table tbody tr.neorain-inbound-row--cancelled,
+.neorain-outbound-table tbody tr.neorain-outbound-row--cancelled {
+    background: rgba(78, 27, 34, .38);
+    color: #d6afb4;
+}
 
 [data-neorain-late-inclusion-cell][data-neorain-late-inclusion-saving="true"] .neorain-late-inclusion-control {
     opacity: 0.68;
 }
 
-.neorain-collapsed-summary {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    color: var(--node-text);
-    font-size: 0.68rem;
-    white-space: nowrap;
-}
-
-.neorain-final-summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    color: #aeb9c7;
-    font-size: 0.62rem;
-    white-space: nowrap;
-}
-
-.neorain-final-summary span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.neorain-final-summary span:nth-child(2) {
-    color: #d6dee8;
-    font-weight: 700;
-}
-
-.neorain-collapsed-summary span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.neorain-collapsed-no-return-editor {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    overflow: visible !important;
-}
-
-.neorain-reopen-control {
-    margin-left: auto;
-    padding: 2px 6px;
-    border: 1px solid var(--node-highlight);
-    border-radius: 3px;
-    background: transparent;
-    color: var(--node-highlight);
-    font-size: 0.58rem;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.neorain-reopen-control:hover,
-.neorain-reopen-control:focus-visible {
-    background: var(--node-highlight);
-    color: var(--node-bg);
+.neorain-no-return-control:disabled,
+.neorain-late-inclusion-control:disabled {
+    cursor: not-allowed;
+    opacity: .55;
 }
 
 .neorain-milestone-editor.is-saving .neorain-milestone-message {
