@@ -1449,8 +1449,20 @@ class NeoSektorRoutesTest(unittest.TestCase):
         desktop_start = css.index("@media (min-width: 901px) {", css.index("/* Tunnel Conductor keeps"))
         desktop_end = css.index("@media (max-width: 900px)", desktop_start)
         desktop_css = css[desktop_start:desktop_end]
+        heading_selector = (
+            "body.blueprint-neosektor.node-desktop-nav-page."
+            "neosektor-tunnel-operator-page .tunnel-desktop-wave-heading"
+        )
+        heading_rule_match = re.search(
+            rf"{re.escape(heading_selector)}\s*\{{(?P<rule>[^}}]+)\}}",
+            desktop_css,
+        )
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            f'/static/css/base.css?v={self.app.config["STATIC_ASSET_VERSION"]}'.encode(),
+            response.data,
+        )
         self.assertIn(b'class="tunnel-wave-workspace"', response.data)
         self.assertIn(b'class="tunnel-desktop-wave-heading"', response.data)
         self.assertEqual(response.data.count(b'tunnel-desktop-wave-heading'), 6)
@@ -1464,9 +1476,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-template-rows: max-content minmax(0, 1fr);", desktop_css)
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", desktop_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr);", desktop_css)
-        self.assertIn("font-size: 1.9rem;", desktop_css)
-        self.assertIn("transform: scaleX(0.7);", desktop_css)
-        self.assertIn("white-space: nowrap;", desktop_css)
+        self.assertIsNotNone(heading_rule_match)
+        heading_rule = heading_rule_match.group("rule")
+        self.assertIn("display: block;", heading_rule)
+        self.assertIn("font-size: 1.9rem;", heading_rule)
+        self.assertIn("line-height: 1;", heading_rule)
+        self.assertIn("transform: scaleX(0.7);", heading_rule)
+        self.assertIn("white-space: nowrap;", heading_rule)
         self.assertIn("font-size: 0.8rem;", desktop_css)
         self.assertIn("font-size: 0.78rem;", desktop_css)
         self.assertIn("grid-template-columns: auto auto;", desktop_css)
