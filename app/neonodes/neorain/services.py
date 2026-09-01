@@ -211,6 +211,42 @@ def neorain_departure_milestone_value(mission, field):
     return getattr(mission, specification["timestamp_attr"])
 
 
+def mutate_neorain_arrival_block_in(mission, operation, value):
+    """Stage one NeoRain-owned Block-In correction without committing.
+
+    The mobile board uses the same operational HHMM/date-resolution rule as the
+    departure milestones. Existing non-Rain facts stay protected.
+    """
+    if mission is None or operation is None:
+        raise NeoRainMilestoneError("A current arrival mission is required.")
+    if mission.mission_type != "arrival":
+        raise NeoRainMilestoneError("Block-In applies only to arrival missions.")
+    if mission.sort_date_operation_id != operation.id:
+        raise NeoRainMilestoneError("Arrival mission is outside the current sort.")
+
+    timestamp_utc = _parse_operational_hhmm(value, operation, "Block-In")
+    current_timestamp = mission.actual_block_in_datetime_utc
+    current_source = _normalized_source(mission.actual_block_in_source)
+    if not _neorain_may_mutate_timestamp(current_timestamp, current_source):
+        raise NeoRainMilestoneError(
+            f"Block-In is owned by {current_source} and cannot be changed in NeoRain."
+        )
+    next_source = NEORAIN_MILESTONE_SOURCE if timestamp_utc else "unknown"
+    changed = (
+        current_timestamp != timestamp_utc
+        or current_source != next_source
+    )
+    if changed:
+        mission.actual_block_in_datetime_utc = timestamp_utc
+        mission.actual_block_in_source = next_source
+    return {
+        "changed": changed,
+        "field": "block_in",
+        "value": mission.actual_block_in_datetime_utc,
+        "source": mission.actual_block_in_source,
+    }
+
+
 def neorain_late_metrics_inclusion(mission):
     """Return the effective Neo-owned late-metrics eligibility for one mission."""
     override = mission.late_metrics_included_override

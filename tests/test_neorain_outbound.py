@@ -752,6 +752,112 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b'disabled', cancelled_fragment)
         self.assertIn(b'setInboundEditLock', response.data)
 
+    def test_mobile_boards_render_compact_hooks_and_preserve_desktop_tables(self):
+        operation = self._operation()
+        arrival = self._mission(
+            operation,
+            "UPS660",
+            "RFD",
+            planned=datetime(2026, 8, 30, 6, 40),
+            mission_type="arrival",
+        )
+        departure = self._mission(
+            operation,
+            "UPS661",
+            "SDF",
+            planned=datetime(2026, 8, 30, 6, 50),
+        )
+        editor = self._user("rain_mobile_editor", "simulator")
+        self._login(editor)
+        set_rain_integration_mode(self.gateway, operation.sort_name, NEO_ONLY)
+        db.session.commit()
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            inbound = self.client.get("/neorain/inbound")
+            outbound = self.client.get("/neorain/outbound")
+
+        self.assertEqual(inbound.status_code, 200)
+        self.assertEqual(outbound.status_code, 200)
+        self.assertIn(b'data-neorain-mobile-board="inbound"', inbound.data)
+        self.assertIn(b'data-block-in-url="/neorain/inbound/block-in"', inbound.data)
+        self.assertIn(b'data-neorain-inbound-hhmm', inbound.data)
+        self.assertIn(b'data-neorain-mobile-row-open', inbound.data)
+        self.assertIn(b'data-neorain-summary-total', inbound.data)
+        self.assertIn(f'data-neorain-mission-id="{arrival.id}"'.encode(), inbound.data)
+        self.assertIn(b'data-neorain-mobile-board="outbound"', outbound.data)
+        self.assertIn(b'data-neorain-mobile-hhmm', outbound.data)
+        self.assertIn(b'data-neorain-mobile-row-open', outbound.data)
+        self.assertIn(b'data-neorain-summary-total', outbound.data)
+        self.assertIn(f'data-neorain-mission-id="{departure.id}"'.encode(), outbound.data)
+        self.assertIn(b'neorain-desktop-board', inbound.data)
+        self.assertIn(b'neorain-desktop-board', outbound.data)
+
+    def test_mobile_inbound_block_in_saves_four_digit_operational_time(self):
+        operation = self._operation()
+        mission = self._mission(
+            operation,
+            "UPS670",
+            "RFD",
+            planned=datetime(2026, 8, 30, 6, 50),
+            mission_type="arrival",
+        )
+        editor = self._user("rain_mobile_block_in", "simulator")
+        self._login(editor)
+        db.session.commit()
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.post(
+                "/neorain/inbound/block-in",
+                json={
+                    "mission_id": mission.id,
+                    "value": "0237",
+                    "expected_version": entity_version(mission),
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["row"]["block_in"], "02:37")
+        self.assertEqual(mission.actual_block_in_datetime_utc, datetime(2026, 8, 31, 7, 37))
+        self.assertEqual(mission.actual_block_in_source, "neorain")
+
+    def test_mobile_inbound_block_in_rejects_invalid_time_without_mutation(self):
+        operation = self._operation()
+        mission = self._mission(
+            operation,
+            "UPS671",
+            "RFD",
+            planned=datetime(2026, 8, 30, 6, 50),
+            mission_type="arrival",
+        )
+        editor = self._user("rain_mobile_block_in_invalid", "simulator")
+        self._login(editor)
+        db.session.commit()
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.post(
+                "/neorain/inbound/block-in",
+                json={
+                    "mission_id": mission.id,
+                    "value": "12:34",
+                    "expected_version": entity_version(mission),
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["code"], "invalid_block_in")
+        self.assertIsNone(mission.actual_block_in_datetime_utc)
+
     def _operation(self):
         operation = SortDateOperation(
             gateway_id=self.gateway.id,

@@ -23,7 +23,7 @@
     <section class="neorain-outbound-late-summary" aria-label="Outbound late and staffing statistics" data-neorain-late-summary>
         <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
         <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
-        <div><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
+        <div data-neorain-summary-total><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
         <div><strong>HUB</strong><span>ON PAYROLL <output>{{ staffing_summary.hub.on_payroll }}</output></span><span>WORKED <output>{{ staffing_summary.hub.worked }}</output></span></div>
         <div><strong>RAMP</strong><span>ON PAYROLL <output>{{ staffing_summary.ramp.on_payroll }}</output></span><span>WORKED <output>{{ staffing_summary.ramp.worked }}</output></span></div>
     </section>
@@ -98,11 +98,12 @@
 
     if (!root || !mutationUrl) return;
 
-    const messageFor = (input) => input.closest(".neorain-milestone-editor")
+    const editorFor = (input) => input.closest(".neorain-milestone-editor, [data-neorain-mobile-time]");
+    const messageFor = (input) => editorFor(input)
         ?.querySelector("[data-neorain-milestone-message]");
 
     const setMessage = (input, message = "", state = "") => {
-        const editor = input.closest(".neorain-milestone-editor");
+        const editor = editorFor(input);
         const output = messageFor(input);
         if (output) {
             output.textContent = message;
@@ -122,7 +123,7 @@
         const isNoReturn = view.dataset.neorainNoReturn === "true";
         const isCancelled = view.dataset.neorainCancelled === "true";
         view.dataset.neorainOutboundEditLocked = String(locked);
-        view.querySelectorAll("[data-neorain-hhmm], [data-neorain-late-inclusion-toggle], [data-neorain-no-return-action]")
+        view.querySelectorAll("[data-neorain-hhmm], [data-neorain-mobile-time-open], [data-neorain-late-inclusion-toggle], [data-neorain-no-return-action]")
             .forEach((control) => { control.disabled = locked; });
         view.querySelectorAll("[data-neorain-outbound-edit-protected]")
             .forEach((section) => { section.hidden = locked; });
@@ -142,6 +143,8 @@
             view.dataset.neorainCancelled = String(nextRow.status === "CANCELLED");
             displayFields.forEach((field) => {
                 const value = nextRow[field] || "-";
+                view.querySelectorAll(`[data-neorain-display="${field}"]`)
+                    .forEach((display) => { display.textContent = value; });
                 const input = view.querySelector(`[data-neorain-hhmm][data-neorain-field="${field}"]`);
                 if (input) {
                     if (input === protectedInput || input.dataset.neorainDirty === "true" || input.dataset.neorainSaving === "true") {
@@ -152,8 +155,6 @@
                     input.dataset.neorainSavedValue = nextRawValue;
                     return;
                 }
-                const display = view.querySelector(`[data-neorain-display="${field}"]`);
-                if (display) display.textContent = value;
             });
             const noReturnEditor = view.querySelector("[data-neorain-no-return-editor]");
             if (noReturnEditor) {
@@ -233,7 +234,7 @@
         } finally {
             input.disabled = false;
             input.dataset.neorainSaving = "false";
-            input.closest(".neorain-milestone-editor")?.classList.remove("is-saving");
+            editorFor(input)?.classList.remove("is-saving");
         }
 
         applyRow(row, payload.row, input);
@@ -244,6 +245,9 @@
             input.dataset.neorainDirty = "false";
             input.removeAttribute("data-neorain-stale");
             setMessage(input);
+            const mobileEditor = input.closest("[data-neorain-mobile-time]")
+                ?.querySelector("[data-neorain-mobile-time-editor]");
+            if (mobileEditor) mobileEditor.hidden = true;
         }
         if (payload.revision) {
             root.dispatchEvent(new CustomEvent("neorain:revision", {
@@ -337,6 +341,10 @@
                 if (validHhmm.test(input.value)) {
                     saveInput(input, { advance: true });
                 } else {
+                    if (input.dataset.neorainMobileHhmm !== undefined) {
+                        input.value = "";
+                        input.dataset.neorainDirty = "false";
+                    }
                     focusWithError(input, "Use four-digit HHMM.");
                 }
             }
@@ -346,9 +354,25 @@
             if (!input.value && input.value !== (input.dataset.neorainSavedValue || "")) {
                 saveInput(input);
             } else if (input.value && !validHhmm.test(input.value)) {
+                if (input.dataset.neorainMobileHhmm !== undefined) {
+                    input.value = "";
+                    input.dataset.neorainDirty = "false";
+                }
                 focusWithError(input, "Use four-digit HHMM.");
             }
         });
+    });
+    root.addEventListener("click", (event) => {
+        const opener = event.target.closest("[data-neorain-mobile-time-open]");
+        if (!opener || opener.disabled) return;
+        const editor = opener.closest("[data-neorain-mobile-time]")
+            ?.querySelector("[data-neorain-mobile-time-editor]");
+        const input = editor?.querySelector("[data-neorain-hhmm]");
+        if (!editor || !input) return;
+        event.preventDefault();
+        editor.hidden = false;
+        input.focus({ preventScroll: true });
+        input.select();
     });
     root.querySelectorAll("[data-neorain-no-return-action]").forEach((button) => {
         button.addEventListener("click", () => saveNoReturn(button, button.dataset.neorainNoReturnAction === "set"));
@@ -425,4 +449,70 @@
 })();
 </script>
 {% endif %}
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-outbound-live]");
+    const board = root?.querySelector('[data-neorain-mobile-board="outbound"]');
+    if (!root || !board) return;
+    const list = board.querySelector("[data-neorain-mobile-list]");
+    const details = () => Array.from(board.querySelectorAll("[data-neorain-mobile-detail]"));
+    const current = () => details().find((item) => !item.hidden) || null;
+    const mobileState = () => history.state?.neorainMobileBoard === "outbound" ? history.state : {};
+    const saveState = (missionId = null, scrollY = window.scrollY) => history.replaceState(
+        { ...(history.state || {}), neorainMobileBoard: "outbound", neorainMobileMissionId: missionId, neorainMobileListScroll: scrollY },
+        "",
+    );
+    const open = (missionId, { restore = false } = {}) => {
+        const detail = details().find((item) => item.dataset.neorainMissionId === String(missionId));
+        if (!detail) return;
+        const scrollY = restore ? (mobileState().neorainMobileListScroll || 0) : window.scrollY;
+        details().forEach((item) => { item.hidden = item !== detail; });
+        list.hidden = true;
+        saveState(missionId, scrollY);
+        if (!restore) window.scrollTo({ top: root.offsetTop, behavior: "auto" });
+    };
+    const close = () => {
+        const state = mobileState();
+        const missionId = current()?.dataset.neorainMissionId;
+        details().forEach((item) => { item.hidden = true; });
+        list.hidden = false;
+        saveState(null, state.neorainMobileListScroll || 0);
+        window.scrollTo({ top: state.neorainMobileListScroll || 0, behavior: "auto" });
+        const row = list.querySelector(`[data-neorain-mission-id="${missionId}"]`);
+        row?.classList.add("neorain-mobile-returned");
+        window.setTimeout(() => row?.classList.remove("neorain-mobile-returned"), 900);
+    };
+    board.addEventListener("click", (event) => {
+        const openButton = event.target.closest("[data-neorain-mobile-row-open]");
+        if (openButton) { open(openButton.closest("[data-neorain-mission-id]")?.dataset.neorainMissionId); return; }
+        if (event.target.closest("[data-neorain-mobile-back]")) close();
+    });
+    let swipeStart = null;
+    board.addEventListener("pointerdown", (event) => {
+        if (!current() || event.target.closest("input, button, textarea, select, details")) return;
+        swipeStart = { x: event.clientX, y: event.clientY };
+    });
+    board.addEventListener("pointerup", (event) => {
+        if (!swipeStart || event.target.closest("input, button, textarea, select, details")) { swipeStart = null; return; }
+        const dx = event.clientX - swipeStart.x;
+        const dy = event.clientY - swipeStart.y;
+        swipeStart = null;
+        if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy)) return;
+        const items = details();
+        const index = items.indexOf(current());
+        const next = items[index + (dx < 0 ? 1 : -1)];
+        if (next) open(next.dataset.neorainMissionId);
+    });
+    const summary = root.querySelector("[data-neorain-late-summary]");
+    const updateSummary = () => root.classList.toggle(
+        "neorain-mobile-summary-compact",
+        window.matchMedia("(max-width: 760px)").matches && window.scrollY > (summary?.offsetTop || 0) + 12,
+    );
+    window.addEventListener("scroll", updateSummary, { passive: true });
+    window.addEventListener("resize", updateSummary);
+    updateSummary();
+    const state = mobileState();
+    if (state.neorainMobileMissionId) open(state.neorainMobileMissionId, { restore: true });
+})();
+</script>
 {% endblock %}

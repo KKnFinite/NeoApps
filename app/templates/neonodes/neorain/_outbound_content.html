@@ -39,7 +39,7 @@
 {% endif %}
 </details>
 {%- endmacro %}
-<div class="neorain-outbound-table-wrap">
+<div class="neorain-outbound-table-wrap neorain-desktop-board">
     <table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
         <thead><tr>
@@ -99,4 +99,5 @@
         </tbody>
     </table>
 </div>
+{% include "neonodes/neorain/_outbound_mobile_content.html" %}
 {% endif %}

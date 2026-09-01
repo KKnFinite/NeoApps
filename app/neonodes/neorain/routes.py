@@ -26,6 +26,7 @@ from app.neonodes.neorain.services import (
     current_neorain_outbound_operation,
     eligible_neorain_load_planners,
     mutate_neorain_departure_milestone,
+    mutate_neorain_arrival_block_in,
     neorain_departure_milestone_value,
     neorain_outbound_context,
     neorain_inbound_context,
@@ -286,6 +287,91 @@ def inbound_late_inclusion():
         "late_summary": neorain_inbound_late_summary(operation),
         "revision": neorain_inbound_revision(gateway, operation=operation),
     })
+
+
+@bp.route("/inbound/block-in", methods=["POST"])
+@gateway_node_required("rain")
+def inbound_block_in():
+    """Save one current-sort arrival Block-In for the mobile compact board."""
+    page = _neorain_page("neorain.inbound")
+    access = permission_access(page[2], page[3])
+    if not access["can_edit"]:
+        return _json_error("access_denied", "Edit access denied.", 403)
+    payload = request.get_json(silent=True)
+    expected_keys = {"mission_id", "value", "expected_version"}
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        return _json_error(
+            "invalid_request",
+            "Provide only mission_id, value, and expected_version.",
+            400,
+        )
+    mission_id = _positive_integer(payload.get("mission_id"))
+    expected_version = str(payload.get("expected_version") or "").strip()
+    if mission_id is None or not expected_version:
+        return _json_error(
+            "invalid_request", "Provide a valid current arrival mission version.", 400
+        )
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    if operation is None or operation.gateway_id != gateway.id:
+        return _json_error("no_current_sort", "No current sort.", 409)
+    mission = (
+        SortDateMission.query.filter_by(
+            id=mission_id,
+            sort_date_operation_id=operation.id,
+            gateway_code=gateway.code,
+            mission_type="arrival",
+        )
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if mission is None:
+        return _json_error(
+            "mission_not_found", "Arrival mission is not in the current sort.", 404
+        )
+    conflict = version_conflict(mission, expected_version)
+    if conflict:
+        row = neorain_inbound_row(mission, operation)
+        db.session.rollback()
+        return jsonify(
+            {
+                "ok": False,
+                "code": "stale_version",
+                "error": conflict["message"],
+                "row": row,
+            }
+        ), 409
+    try:
+        result = mutate_neorain_arrival_block_in(mission, operation, payload["value"])
+    except NeoRainMilestoneError as exc:
+        db.session.rollback()
+        status = 409 if "owned by" in str(exc).lower() else 400
+        return _json_error(
+            "ownership_conflict" if status == 409 else "invalid_block_in",
+            str(exc),
+            status,
+        )
+    try:
+        if result["changed"]:
+            db.session.commit()
+        else:
+            db.session.rollback()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception(
+            "NeoRain Block-In save failed safely: mission_id=%s", mission_id
+        )
+        return _json_error("save_failed", "NeoRain could not save Block-In.", 500)
+    return jsonify(
+        {
+            "ok": True,
+            "changed": result["changed"],
+            "row": neorain_inbound_row(mission, operation),
+            "late_summary": neorain_inbound_late_summary(operation),
+            "revision": neorain_inbound_revision(gateway, operation=operation),
+        }
+    )
 
 
 @bp.route("/outbound")
