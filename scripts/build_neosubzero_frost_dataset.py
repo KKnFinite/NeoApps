@@ -1,4 +1,4 @@
-"""Build an offline NeoSubZero frost-training JSONL artifact."""
+"""Build an offline NeoSubZero frost-history JSON artifact."""
 
 import argparse
 import json
@@ -11,7 +11,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
 
 from app.services.neosubzero_frost_history import (
     CsvHistoricalWeatherProvider,
-    build_frost_training_dataset,
+    build_frost_history_dataset,
     parse_cryotech_csv,
 )
 
@@ -26,8 +26,9 @@ def main():
         "--exposure-dates",
         type=Path,
         help=(
-            "Optional text file with one YYYY-MM-DD operational-night date per line. "
-            "Only these event-free nights may become negative examples."
+            "Optional text file with one YYYY-MM-DD operational-night date per line "
+            "and an optional comma-separated departure count. Only these event-free "
+            "nights may become negative examples."
         ),
     )
     parser.add_argument("--output", required=True, type=Path)
@@ -35,32 +36,42 @@ def main():
 
     cryotech = parse_cryotech_csv(args.cryotech)
     weather = CsvHistoricalWeatherProvider(args.weather)
-    exposure_dates = _read_exposure_dates(args.exposure_dates)
-    records = build_frost_training_dataset(
+    exposure_dates, opportunity_counts = _read_exposure_manifest(
+        args.exposure_dates
+    )
+    dataset = build_frost_history_dataset(
         cryotech.rows,
         weather,
         start_date=args.start_date,
         end_date=args.end_date,
         departure_exposure_nights=exposure_dates,
+        departure_opportunities_by_night=opportunity_counts,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as output:
-        for record in records:
-            output.write(json.dumps(record.to_dict(), sort_keys=True) + "\n")
+        json.dump(dataset.to_dict(), output, sort_keys=True, separators=(",", ":"))
+        output.write("\n")
     print(
-        f"Wrote {len(records)} training records to {args.output}; "
-        f"parsed {len(cryotech.rows)} Cryotech rows with {len(cryotech.issues)} issues."
+        f"Wrote {len(dataset.training_records)} training records and "
+        f"{len(dataset.treatment_events)} treatment events to {args.output}; "
+        f"preserved {len(cryotech.rows)} Cryotech rows with "
+        f"{len(cryotech.issues)} issues."
     )
 
 
-def _read_exposure_dates(path):
+def _read_exposure_manifest(path):
     if path is None:
-        return ()
-    return tuple(
-        line.strip()
-        for line in path.read_text(encoding="utf-8-sig").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    )
+        return (), {}
+    dates = []
+    counts = {}
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        values = [value.strip() for value in line.split(",")]
+        dates.append(values[0])
+        if len(values) > 1 and values[1]:
+            counts[values[0]] = int(values[1])
+    return tuple(dates), counts
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import csv
 import io
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -20,6 +21,9 @@ RFD_TIMEZONE = "America/Chicago"
 NORMAL_NIGHT_WEEKDAYS = frozenset({0, 1, 2, 3})  # Monday through Thursday.
 DEFAULT_NEGATIVE_WINDOW_START = time(2, 0)
 DEFAULT_NEGATIVE_WINDOW_END = time(4, 0)
+INFERRED_EVENT_MAX_START_SPREAD = timedelta(minutes=30)
+
+
 class NeoSubZeroFrostHistoryError(ValueError):
     """A safe historical-import validation error."""
 
@@ -59,6 +63,56 @@ class CryotechImportResult:
 
 
 @dataclass(frozen=True)
+class CryotechTreatmentEvent:
+    """One aircraft treatment, retaining references to every source row."""
+
+    event_key: str
+    grouping_method: str
+    application_id: str | None
+    operational_night: date
+    start_at_local: datetime
+    end_at_local: datetime | None
+    tail_number: str | None
+    reason_for_application: str | None
+    outcome: str
+    truck_numbers: tuple[str, ...]
+    fluid_types: tuple[str, ...]
+    surface_areas: tuple[str, ...]
+    active_precipitation: tuple[str, ...]
+    total_gallons: float | None
+    raw_source_rows: tuple[int, ...]
+    source_names: tuple[str, ...]
+
+    @property
+    def raw_application_count(self):
+        return len(self.raw_source_rows)
+
+    def to_dict(self):
+        return _serialized_dataclass(self)
+
+
+@dataclass(frozen=True)
+class FrostNightEvidence:
+    operational_night: date
+    evidence_class: str
+    confirmed_departure_exposure: bool
+    number_departure_opportunities: int | None
+    number_frost_treated_events: int
+    frost_treated_percentage: float | None
+    pretreat_occurred: bool
+    number_pretreat_treated_events: int
+    weak_frost_evidence: bool
+    broader_frost_treatment: bool
+    pretreat_and_frost: bool
+    pretreat_before_frost: bool
+    number_treatment_events: int
+    number_raw_application_rows: int
+
+    def to_dict(self):
+        return _serialized_dataclass(self)
+
+
+@dataclass(frozen=True)
 class HistoricalWeatherObservation:
     station: str
     observed_at: datetime
@@ -94,8 +148,11 @@ class FrostTrainingRecord:
     exposure_timestamp_local: datetime
     exposure_window_start_local: datetime
     exposure_window_end_local: datetime
-    frost_label: str
+    evidence_class: str
     outcome: str
+    event_key: str | None = None
+    grouping_method: str | None = None
+    raw_application_count: int = 0
     tail_number: str | None = None
     truck_number: str | None = None
     fluid_type: str | None = None
@@ -125,13 +182,47 @@ class FrostTrainingRecord:
     cryotech_source_row: int | None = None
     weather_source: str | None = None
     weather_source_row: int | None = None
+    number_departure_opportunities: int | None = None
+    number_frost_treated_events: int = 0
+    frost_treated_percentage: float | None = None
+    pretreat_occurred: bool = False
+    number_pretreat_treated_events: int = 0
+    weak_frost_evidence: bool = False
+    broader_frost_treatment: bool = False
+    pretreat_and_frost: bool = False
+    pretreat_before_frost: bool = False
+
+    @property
+    def frost_label(self):
+        """Compatibility label for first-foundation consumers."""
+        return {
+            "confirmed_positive": "positive",
+            "clean_negative": "negative",
+        }.get(self.evidence_class, "unlabeled")
 
     def to_dict(self):
-        payload = asdict(self)
-        for key, value in tuple(payload.items()):
-            if isinstance(value, (date, datetime)):
-                payload[key] = value.isoformat()
+        payload = _serialized_dataclass(self)
+        payload["frost_label"] = self.frost_label
         return payload
+
+
+@dataclass(frozen=True)
+class FrostHistoryDataset:
+    raw_application_rows: tuple[CryotechApplicationRow, ...]
+    treatment_events: tuple[CryotechTreatmentEvent, ...]
+    night_evidence: tuple[FrostNightEvidence, ...]
+    training_records: tuple[FrostTrainingRecord, ...]
+
+    def to_dict(self):
+        return {
+            "schema_version": 2,
+            "raw_application_rows": [
+                _serialized_dataclass(row) for row in self.raw_application_rows
+            ],
+            "treatment_events": [row.to_dict() for row in self.treatment_events],
+            "night_evidence": [row.to_dict() for row in self.night_evidence],
+            "training_records": [row.to_dict() for row in self.training_records],
+        }
 
 
 _CRYOTECH_ALIASES = {
@@ -368,53 +459,163 @@ def default_negative_exposure_window(operational_night, *, timezone_name=RFD_TIM
     )
 
 
-def build_frost_training_dataset(
+def group_cryotech_treatment_events(
+    cryotech_rows,
+    *,
+    inferred_max_start_spread=INFERRED_EVENT_MAX_START_SPREAD,
+):
+    """Collapse truck rows into aircraft events without discarding raw detail.
+
+    Stable Cryotech application IDs take precedence. Without one, rows group
+    only when operational night, tail, and normalized reason match and their
+    start times remain inside one bounded window. Missing tails never infer a
+    multi-row aircraft event.
+    """
+    rows = tuple(
+        sorted(
+            cryotech_rows or (),
+            key=lambda row: (
+                row.operational_night,
+                row.start_at_local,
+                row.source_row,
+            ),
+        )
+    )
+    stable_groups = {}
+    inferred_groups = []
+    for row in rows:
+        if row.application_id:
+            key = (
+                row.operational_night,
+                row.tail_number,
+                _normalize_identifier(row.application_id),
+            )
+            stable_groups.setdefault(key, []).append(row)
+            continue
+        matched = None
+        if row.tail_number:
+            for group in reversed(inferred_groups):
+                first = group[0]
+                if first.operational_night != row.operational_night:
+                    continue
+                if first.tail_number != row.tail_number:
+                    continue
+                if _reason_group_key(first) != _reason_group_key(row):
+                    continue
+                if row.start_at_local - first.start_at_local <= inferred_max_start_spread:
+                    matched = group
+                    break
+        if matched is None:
+            inferred_groups.append([row])
+        else:
+            matched.append(row)
+
+    events = []
+    for stable_key, group in stable_groups.items():
+        events.append(
+            _treatment_event_from_rows(
+                group,
+                event_key=(
+                    f"cryotech:{stable_key[0].isoformat()}:"
+                    f"{stable_key[1] or 'UNKNOWN'}:{stable_key[2]}"
+                ),
+                grouping_method="application_id",
+            )
+        )
+    for group in inferred_groups:
+        first = group[0]
+        events.append(
+            _treatment_event_from_rows(
+                group,
+                event_key=(
+                    f"inferred:{first.operational_night.isoformat()}:"
+                    f"{first.tail_number or 'ROW-' + str(first.source_row)}:"
+                    f"{first.outcome}:{first.start_at_local.isoformat()}"
+                ),
+                grouping_method="bounded_time" if len(group) > 1 else "single_row",
+            )
+        )
+    return tuple(
+        sorted(
+            events,
+            key=lambda row: (
+                row.operational_night,
+                row.start_at_local,
+                row.event_key,
+            ),
+        )
+    )
+
+
+def build_frost_history_dataset(
     cryotech_rows,
     weather_provider,
     *,
     start_date,
     end_date,
     departure_exposure_nights=(),
+    departure_opportunities_by_night=None,
     timezone_name=RFD_TIMEZONE,
 ):
-    """Build positive, evidence-backed negative, and explicit unlabeled records.
+    """Build raw, event, night-evidence, and training-record layers.
 
-    ``departure_exposure_nights`` must come from an operational flight/exposure
-    source. An event-free night absent from that set is never forced negative.
+    ``departure_exposure_nights`` confirms relevant exposure but need not carry
+    a count. ``departure_opportunities_by_night`` may provide exact counts for
+    later percentage/weight analysis. Event-free nights lacking either form of
+    exposure evidence remain unlabeled.
     """
-    zone = ZoneInfo(timezone_name)
     start_date = _coerce_date(start_date)
     end_date = _coerce_date(end_date)
-    exposure_nights = {_coerce_date(value) for value in departure_exposure_nights}
-    rows = tuple(cryotech_rows or ())
-    frost_nights = {row.operational_night for row in rows if row.outcome == "departure_frost"}
+    raw_rows = tuple(cryotech_rows or ())
+    events = tuple(
+        row
+        for row in group_cryotech_treatment_events(raw_rows)
+        if start_date <= row.operational_night <= end_date
+    )
+    exposure_nights, opportunity_counts = _departure_exposure_evidence(
+        departure_exposure_nights,
+        departure_opportunities_by_night,
+    )
+    event_nights = {row.operational_night for row in events}
+    evidence_nights = set(normal_operational_nights(start_date, end_date)) | event_nights
+    events_by_night = {
+        night: tuple(row for row in events if row.operational_night == night)
+        for night in evidence_nights
+    }
+    night_evidence = tuple(
+        _night_evidence(
+            night,
+            events_by_night[night],
+            confirmed_departure_exposure=night in exposure_nights,
+            departure_opportunities=opportunity_counts.get(night),
+        )
+        for night in sorted(evidence_nights)
+    )
+    evidence_by_night = {row.operational_night: row for row in night_evidence}
     records = []
 
-    for row in rows:
-        if not (start_date <= row.operational_night <= end_date):
-            continue
-        if row.outcome == "departure_frost":
-            label = "positive"
-        else:
-            label = "unlabeled"
+    for event in events:
         records.append(
-            _event_training_record(row, label, weather_provider, zone)
+            _event_training_record(
+                event,
+                evidence_by_night[event.operational_night],
+                weather_provider,
+                ZoneInfo(timezone_name),
+            )
         )
 
-    for night in normal_operational_nights(start_date, end_date):
-        if night in frost_nights:
+    for evidence in night_evidence:
+        if evidence.number_frost_treated_events or evidence.pretreat_occurred:
             continue
         window_start, window_end = default_negative_exposure_window(
-            night, timezone_name=timezone_name
+            evidence.operational_night,
+            timezone_name=timezone_name,
         )
-        has_exposure = night in exposure_nights
         records.append(
             _window_training_record(
-                night,
                 window_start,
                 window_end,
-                "negative" if has_exposure else "unlabeled",
-                "no_frost_exposure" if has_exposure else "no_exposure",
+                evidence,
                 weather_provider,
             )
         )
@@ -425,45 +626,56 @@ def build_frost_training_dataset(
             row.cryotech_source_row or 0,
         )
     )
-    return tuple(records)
+    return FrostHistoryDataset(
+        raw_application_rows=raw_rows,
+        treatment_events=events,
+        night_evidence=night_evidence,
+        training_records=tuple(records),
+    )
 
 
-def _event_training_record(row, label, weather_provider, zone):
-    window_start = row.start_at_local
-    window_end = row.end_at_local or row.start_at_local
-    features = _weather_features(weather_provider, row.start_at_local, zone)
+def build_frost_training_dataset(*args, **kwargs):
+    """Compatibility wrapper returning only the model-ready record layer."""
+    return build_frost_history_dataset(*args, **kwargs).training_records
+
+
+def _event_training_record(event, evidence, weather_provider, zone):
+    window_start = event.start_at_local
+    window_end = event.end_at_local or event.start_at_local
+    features = _weather_features(weather_provider, event.start_at_local, zone)
+    if event.outcome == "departure_frost":
+        evidence_class = "confirmed_positive"
+    elif event.outcome == "pretreat":
+        evidence_class = "uncertain_pretreat"
+    else:
+        evidence_class = "unlabeled"
     return FrostTrainingRecord(
-        operational_night=row.operational_night,
-        exposure_timestamp_local=row.start_at_local,
+        operational_night=event.operational_night,
+        exposure_timestamp_local=event.start_at_local,
         exposure_window_start_local=window_start,
         exposure_window_end_local=window_end,
-        frost_label=label,
-        outcome=row.outcome,
-        tail_number=row.tail_number,
-        truck_number=row.truck_number,
-        fluid_type=row.fluid_type,
-        surface_area=row.surface_area,
-        reason_for_application=row.reason_for_application,
-        active_precipitation=row.active_precipitation,
-        gallons=row.gallons,
-        concentration_percent=row.concentration_percent,
-        application_start_local=row.start_at_local,
-        application_end_local=row.end_at_local,
-        notes=row.notes,
-        cryotech_source=row.source_name,
-        cryotech_source_row=row.source_row,
+        evidence_class=evidence_class,
+        outcome=event.outcome,
+        event_key=event.event_key,
+        grouping_method=event.grouping_method,
+        raw_application_count=event.raw_application_count,
+        tail_number=event.tail_number,
+        truck_number=" / ".join(event.truck_numbers) or None,
+        fluid_type=" / ".join(event.fluid_types) or None,
+        surface_area=" / ".join(event.surface_areas) or None,
+        reason_for_application=event.reason_for_application,
+        active_precipitation=" / ".join(event.active_precipitation) or None,
+        gallons=event.total_gallons,
+        application_start_local=event.start_at_local,
+        application_end_local=event.end_at_local,
+        cryotech_source=" / ".join(event.source_names) or None,
+        cryotech_source_row=min(event.raw_source_rows),
+        **_night_evidence_fields(evidence),
         **features,
     )
 
 
-def _window_training_record(
-    night,
-    window_start,
-    window_end,
-    label,
-    outcome,
-    weather_provider,
-):
+def _window_training_record(window_start, window_end, evidence, weather_provider):
     anchor = window_start + (window_end - window_start) / 2
     features = _weather_features(
         weather_provider,
@@ -471,14 +683,157 @@ def _window_training_record(
         window_start.tzinfo,
     )
     return FrostTrainingRecord(
-        operational_night=night,
+        operational_night=evidence.operational_night,
         exposure_timestamp_local=anchor,
         exposure_window_start_local=window_start,
         exposure_window_end_local=window_end,
-        frost_label=label,
-        outcome=outcome,
+        evidence_class=evidence.evidence_class,
+        outcome=(
+            "no_frost_exposure"
+            if evidence.evidence_class == "clean_negative"
+            else "no_exposure"
+        ),
+        **_night_evidence_fields(evidence),
         **features,
     )
+
+
+def _treatment_event_from_rows(rows, *, event_key, grouping_method):
+    ordered = tuple(sorted(rows, key=lambda row: (row.start_at_local, row.source_row)))
+    outcomes = {row.outcome for row in ordered}
+    if "departure_frost" in outcomes:
+        outcome = "departure_frost"
+        reason = "Frost"
+    elif "pretreat" in outcomes:
+        outcome = "pretreat"
+        reason = "Pretreat"
+    else:
+        outcome = ordered[0].outcome
+        reason = ordered[0].reason_for_application
+    end_values = tuple(row.end_at_local for row in ordered if row.end_at_local)
+    gallon_values = tuple(row.gallons for row in ordered if row.gallons is not None)
+    return CryotechTreatmentEvent(
+        event_key=event_key,
+        grouping_method=grouping_method,
+        application_id=ordered[0].application_id,
+        operational_night=ordered[0].operational_night,
+        start_at_local=min(row.start_at_local for row in ordered),
+        end_at_local=max(end_values) if end_values else None,
+        tail_number=ordered[0].tail_number,
+        reason_for_application=reason,
+        outcome=outcome,
+        truck_numbers=_unique_text(row.truck_number for row in ordered),
+        fluid_types=_unique_text(row.fluid_type for row in ordered),
+        surface_areas=_unique_text(row.surface_area for row in ordered),
+        active_precipitation=_unique_text(
+            row.active_precipitation for row in ordered
+        ),
+        total_gallons=sum(gallon_values) if gallon_values else None,
+        raw_source_rows=tuple(row.source_row for row in ordered),
+        source_names=_unique_text(row.source_name for row in ordered),
+    )
+
+
+def _reason_group_key(row):
+    return (
+        row.outcome,
+        str(row.reason_for_application or "").strip().casefold(),
+    )
+
+
+def _unique_text(values):
+    result = []
+    for value in values:
+        if value and value not in result:
+            result.append(value)
+    return tuple(result)
+
+
+def _departure_exposure_evidence(exposure_nights, opportunities_by_night):
+    counts = {}
+    confirmed = set()
+    if isinstance(exposure_nights, Mapping):
+        opportunities_by_night = {
+            **exposure_nights,
+            **(opportunities_by_night or {}),
+        }
+    else:
+        confirmed.update(_coerce_date(value) for value in exposure_nights or ())
+    for night, count in (opportunities_by_night or {}).items():
+        normalized_night = _coerce_date(night)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise NeoSubZeroFrostHistoryError(
+                "Departure opportunity counts must be non-negative whole numbers."
+            )
+        counts[normalized_night] = count
+        if count > 0:
+            confirmed.add(normalized_night)
+    return confirmed, counts
+
+
+def _night_evidence(
+    night,
+    events,
+    *,
+    confirmed_departure_exposure,
+    departure_opportunities,
+):
+    frost_events = tuple(row for row in events if row.outcome == "departure_frost")
+    pretreat_events = tuple(row for row in events if row.outcome == "pretreat")
+    frost_count = len(frost_events)
+    pretreat_count = len(pretreat_events)
+    confirmed_exposure = confirmed_departure_exposure or bool(frost_events)
+    if frost_count:
+        evidence_class = "confirmed_positive"
+    elif pretreat_count:
+        evidence_class = "uncertain_pretreat"
+    elif confirmed_exposure:
+        evidence_class = "clean_negative"
+    else:
+        evidence_class = "unlabeled"
+    percentage = None
+    if departure_opportunities:
+        percentage = round(100 * frost_count / departure_opportunities, 2)
+    first_frost = min(
+        (row.start_at_local for row in frost_events),
+        default=None,
+    )
+    pretreat_before_frost = bool(
+        first_frost
+        and any(row.start_at_local < first_frost for row in pretreat_events)
+    )
+    return FrostNightEvidence(
+        operational_night=night,
+        evidence_class=evidence_class,
+        confirmed_departure_exposure=confirmed_exposure,
+        number_departure_opportunities=departure_opportunities,
+        number_frost_treated_events=frost_count,
+        frost_treated_percentage=percentage,
+        pretreat_occurred=bool(pretreat_events),
+        number_pretreat_treated_events=pretreat_count,
+        weak_frost_evidence=frost_count in {1, 2} and not pretreat_events,
+        broader_frost_treatment=frost_count >= 3,
+        pretreat_and_frost=bool(pretreat_events and frost_events),
+        pretreat_before_frost=pretreat_before_frost,
+        number_treatment_events=len(events),
+        number_raw_application_rows=sum(
+            row.raw_application_count for row in events
+        ),
+    )
+
+
+def _night_evidence_fields(evidence):
+    return {
+        "number_departure_opportunities": evidence.number_departure_opportunities,
+        "number_frost_treated_events": evidence.number_frost_treated_events,
+        "frost_treated_percentage": evidence.frost_treated_percentage,
+        "pretreat_occurred": evidence.pretreat_occurred,
+        "number_pretreat_treated_events": evidence.number_pretreat_treated_events,
+        "weak_frost_evidence": evidence.weak_frost_evidence,
+        "broader_frost_treatment": evidence.broader_frost_treatment,
+        "pretreat_and_frost": evidence.pretreat_and_frost,
+        "pretreat_before_frost": evidence.pretreat_before_frost,
+    }
 
 
 def _weather_features(provider, local_timestamp, zone):
@@ -717,6 +1072,20 @@ def _relative_humidity_f(temperature_f, dewpoint_f):
     numerator = math.exp((17.625 * dewpoint_c) / (243.04 + dewpoint_c))
     denominator = math.exp((17.625 * temperature_c) / (243.04 + temperature_c))
     return max(0, min(100, 100 * numerator / denominator))
+
+
+def _serialized_dataclass(value):
+    return _serialize_value(asdict(value))
+
+
+def _serialize_value(value):
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _serialize_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_value(item) for item in value]
+    return value
 
 
 def _coerce_date(value):
