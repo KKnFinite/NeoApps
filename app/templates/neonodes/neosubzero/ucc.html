@@ -4,7 +4,11 @@
 <section class="neosubzero-shell neosubzero-ucc" data-subzero-ucc data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.ucc_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
     <header class="neosubzero-head">
         <div><p>NEOSUB-ZERO</p><h1>UCC</h1></div>
-        <strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong>
+        <div class="neosubzero-ucc-head-actions">
+            <strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong>
+            <button type="button" class="neosubzero-ucc-tv-enter" data-ucc-tv-enter>TV MODE</button>
+            <button type="button" class="neosubzero-ucc-tv-exit" data-ucc-tv-exit hidden>EXIT TV MODE</button>
+        </div>
     </header>
     {% include "neonodes/neosubzero/_nav.html" %}
 

@@ -587,12 +587,38 @@ class NeoSubZeroUccTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         javascript = (root / "app/static/js/neosubzero_ucc.js").read_text(encoding="utf-8")
         stylesheet = (root / "app/static/css/base.css").read_text(encoding="utf-8")
-        self.assertNotIn("localStorage", javascript)
+        self.assertNotIn("weatherMotionStorage", javascript)
         self.assertIn("weather.dataset.weatherPreferenceUrl", javascript)
         self.assertIn("JSON.stringify({enabled: requested})", javascript)
         self.assertIn('window.matchMedia?.("(prefers-reduced-motion: reduce)")', javascript)
         self.assertIn("@media (prefers-reduced-motion: reduce)", stylesheet)
         self.assertIn("animation:none !important", stylesheet)
+
+    def test_ucc_tv_mode_is_device_local_and_has_wallboard_hooks(self):
+        watcher = self._user("ucc_tv_watcher", "watcher")
+        client = self.app.test_client()
+        self._login(client, watcher)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+            return_value=self._weather_context_fixture(),
+        ):
+            page = client.get("/neosubzero/ucc")
+        root = Path(__file__).resolve().parents[1]
+        javascript = (root / "app/static/js/neosubzero_ucc.js").read_text(encoding="utf-8")
+        stylesheet = (root / "app/static/css/base.css").read_text(encoding="utf-8")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"TV MODE", page.data)
+        self.assertIn(b"data-ucc-tv-enter", page.data)
+        self.assertIn(b"data-ucc-tv-exit", page.data)
+        self.assertIn('"neoapps.neosubzero.ucc.tv-mode"', javascript)
+        self.assertIn("window.localStorage", javascript)
+        self.assertIn("requestFullscreen", javascript)
+        self.assertIn('document.addEventListener("fullscreenchange"', javascript)
+        self.assertIn("neosubzero-ucc-tv-cursor-hidden", javascript)
+        self.assertIn("body.neosubzero-ucc-tv-mode", stylesheet)
 
     def test_weather_motion_preference_persists_per_user_across_sessions(self):
         watcher = self._user("weather_preference_watcher", "watcher")

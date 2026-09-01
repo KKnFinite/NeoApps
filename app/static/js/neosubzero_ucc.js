@@ -52,6 +52,85 @@
         }
     });
 
+    // TV mode is deliberately device-local: it changes only this display's
+    // presentation and must never affect another operator's UCC workspace.
+    const tvEnter = root.querySelector("[data-ucc-tv-enter]");
+    const tvExit = root.querySelector("[data-ucc-tv-exit]");
+    const tvStorageKey = "neoapps.neosubzero.ucc.tv-mode";
+    const cursorIdleMs = 3000;
+    let tvMode = false;
+    let cursorTimer = null;
+
+    const readTvMode = () => {
+        try {
+            return window.localStorage.getItem(tvStorageKey) === "1";
+        } catch (_error) {
+            return false;
+        }
+    };
+    const persistTvMode = (enabled) => {
+        try {
+            if (enabled) window.localStorage.setItem(tvStorageKey, "1");
+            else window.localStorage.removeItem(tvStorageKey);
+        } catch (_error) {
+            // TV mode still works for this page when device storage is unavailable.
+        }
+    };
+    const clearCursorTimer = () => {
+        if (cursorTimer) window.clearTimeout(cursorTimer);
+        cursorTimer = null;
+    };
+    const showCursor = () => document.body.classList.remove("neosubzero-ucc-tv-cursor-hidden");
+    const scheduleCursorHide = () => {
+        clearCursorTimer();
+        showCursor();
+        if (!tvMode) return;
+        cursorTimer = window.setTimeout(() => {
+            if (tvMode) document.body.classList.add("neosubzero-ucc-tv-cursor-hidden");
+        }, cursorIdleMs);
+    };
+    const applyTvMode = (enabled, {persist = true} = {}) => {
+        tvMode = enabled;
+        root.classList.toggle("is-tv-mode", enabled);
+        document.body.classList.toggle("neosubzero-ucc-tv-mode", enabled);
+        tvEnter?.toggleAttribute("hidden", enabled);
+        tvExit?.toggleAttribute("hidden", !enabled);
+        if (persist) persistTvMode(enabled);
+        if (enabled) scheduleCursorHide();
+        else {
+            clearCursorTimer();
+            showCursor();
+        }
+    };
+    const requestTvFullscreen = () => {
+        const fullscreenTarget = document.documentElement;
+        if (typeof fullscreenTarget.requestFullscreen !== "function") return;
+        fullscreenTarget.requestFullscreen().catch(() => {
+            // Browser fullscreen is optional; retain the app-level wall-board.
+        });
+    };
+    tvEnter?.addEventListener("click", () => {
+        applyTvMode(true);
+        requestTvFullscreen();
+    });
+    tvExit?.addEventListener("click", () => {
+        applyTvMode(false);
+        if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
+            document.exitFullscreen().catch(() => {});
+        }
+    });
+    document.addEventListener("fullscreenchange", () => {
+        // Esc/browser exit from the user-initiated native fullscreen restores
+        // the ordinary UCC chrome as well.
+        if (tvMode && !document.fullscreenElement) applyTvMode(false);
+    });
+    ["pointermove", "pointerdown", "touchstart", "keydown"].forEach((eventName) => {
+        document.addEventListener(eventName, () => {
+            if (tvMode) scheduleCursorHide();
+        }, {passive: eventName !== "keydown"});
+    });
+    if (readTvMode()) applyTvMode(true, {persist: false});
+
     const field = (form, name) => form.querySelector(`[name="${name}"]`);
 
     const sourceFormFor = (personId, destinationForm) => forms.find(
