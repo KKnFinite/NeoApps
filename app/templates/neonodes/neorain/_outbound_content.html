@@ -20,7 +20,7 @@
             data-neorain-hhmm
             data-neorain-field="{{ field }}"
             data-neorain-saved-value="{{ displayed_value|replace(':', '') }}"
-            {% if row.no_return %}disabled{% endif %}
+            {% if row.no_return or row.status == 'CANCELLED' %}disabled{% endif %}
         >
         <output id="neorain-milestone-error-{{ row.mission_id }}-{{ field }}" class="neorain-milestone-message" data-neorain-milestone-message aria-live="polite" hidden></output>
     </div>
@@ -32,8 +32,8 @@
 {% macro delay_info(row) -%}
 <details class="neorain-delay-info" id="delay-info-{{ row.mission_id }}"><summary>DELAY INFO ({{ row.delay_info|length }})</summary>
 {% if can_edit %}
-<div data-neorain-no-return-protected {% if row.no_return %}hidden{% endif %}>{% for delay in row.delay_info %}<div class="neorain-delay-row"><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="update"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><input name="minutes" value="{{ delay.minutes }}"><input name="code" maxlength="2" value="{{ delay.code }}"><textarea name="notes">{{ delay.notes }}</textarea><button type="submit">SAVE</button></form><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="delete"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><button type="submit">DELETE</button></form></div>{% endfor %}<form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="add"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input required name="minutes" inputmode="numeric" placeholder="Minutes"><input required name="code" maxlength="2" placeholder="Code"><textarea name="notes" placeholder="Notes"></textarea><button type="submit">ADD</button></form></div>
-<div data-neorain-no-return-readonly {% if not row.no_return %}hidden{% endif %}>{% for delay in row.delay_info %}<div class="neorain-delay-row"><strong>{{ delay.minutes }}</strong> {{ delay.code }} {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>{% else %}<span>—</span>{% endfor %}</div>
+<div data-neorain-outbound-edit-protected {% if row.no_return or row.status == 'CANCELLED' %}hidden{% endif %}>{% for delay in row.delay_info %}<div class="neorain-delay-row"><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="update"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><input name="minutes" value="{{ delay.minutes }}"><input name="code" maxlength="2" value="{{ delay.code }}"><textarea name="notes">{{ delay.notes }}</textarea><button type="submit">SAVE</button></form><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="delete"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><button type="submit">DELETE</button></form></div>{% endfor %}<form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="add"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input required name="minutes" inputmode="numeric" placeholder="Minutes"><input required name="code" maxlength="2" placeholder="Code"><textarea name="notes" placeholder="Notes"></textarea><button type="submit">ADD</button></form></div>
+<div data-neorain-outbound-edit-readonly {% if not row.no_return and row.status != 'CANCELLED' %}hidden{% endif %}>{% for delay in row.delay_info %}<div class="neorain-delay-row"><strong>{{ delay.minutes }}</strong> {{ delay.code }} {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>{% else %}<span>—</span>{% endfor %}</div>
 {% else %}
 <div data-neorain-no-return-readonly>{% for delay in row.delay_info %}<div class="neorain-delay-row"><strong>{{ delay.minutes }}</strong> {{ delay.code }} {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>{% else %}<span>—</span>{% endfor %}</div>
 {% endif %}
@@ -48,7 +48,7 @@
         <tbody>
             {% for row in rows %}
             {% set row_state = 'neorain-outbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-outbound-row--no-return' if row.no_return else ('neorain-outbound-row--blocked-out' if row.status == 'BLOCKED OUT' else '')) %}
-            <tr class="{{ row_state }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}">
+            <tr class="{{ row_state }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
                 <td data-label="Wave">{{ row.wave }}</td>
                 <td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td>
                 <td data-label="Tail">{{ row.tail or '-' }}</td>
@@ -64,7 +64,7 @@
                 <td data-label="+/-" data-neorain-display="departure_variance">{{ row.departure_variance }}</td>
                 <td data-label="Include/Exclude" data-neorain-late-inclusion-cell>
                     {% if can_edit %}
-                    <button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})" {% if row.no_return %}disabled{% endif %}>{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button>
+                    <button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" aria-label="Toggle late metrics inclusion ({{ row.late_metrics_inclusion_source }})" {% if row.no_return or row.status == 'CANCELLED' %}disabled{% endif %}>{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button>
                     <output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>
                     {% else %}
                     <span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>
@@ -74,9 +74,9 @@
                     <span data-neorain-display="no_return">{{ row.no_return or '-' }}</span>
                     {% if can_edit_timestamp_milestones %}
                     <div class="neorain-no-return-editor" data-neorain-no-return-editor>
-                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="set" {% if row.no_return %}hidden{% endif %}>SET NO RETURN</button>
-                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="reverse" {% if not row.no_return %}hidden{% endif %} {% if row.no_return %}disabled{% endif %}>REVERSE</button>
-                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-edit {% if not row.no_return %}hidden{% endif %}>EDIT</button>
+                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="set" {% if row.no_return or row.status == 'CANCELLED' %}hidden{% endif %}>SET NO RETURN</button>
+                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-action="reverse" {% if not row.no_return or row.status == 'CANCELLED' %}hidden{% endif %} {% if row.no_return %}disabled{% endif %}>REVERSE</button>
+                        <button type="button" class="neorain-no-return-control" data-neorain-no-return-edit {% if not row.no_return and row.status != 'CANCELLED' %}hidden{% endif %}>EDIT</button>
                         <output class="neorain-no-return-message" data-neorain-no-return-message aria-live="polite" hidden></output>
                     </div>
                     {% endif %}

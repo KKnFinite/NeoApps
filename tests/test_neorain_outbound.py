@@ -619,7 +619,43 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b'data-neorain-field="ramp_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="crew_load_complete"', response.data)
         self.assertIn(b'data-neorain-field="official_block_out"', response.data)
-        self.assertIn(b'setNoReturnLock', response.data)
+        self.assertIn(b'setOutboundEditLock', response.data)
+
+    def test_cancelled_outbound_row_is_full_width_and_locked_until_edit(self):
+        operation = self._operation()
+        mission = self._mission(
+            operation,
+            "UPS635",
+            "SDF",
+            planned=datetime(2026, 8, 30, 6, 35),
+            status="cancelled",
+        )
+        db.session.commit()
+        editor = self._user("rain_cancelled_editor", "simulator")
+        self._login(editor)
+        set_rain_integration_mode(self.gateway, operation.sort_name, NEO_ONLY)
+        db.session.commit()
+
+        with patch(
+            "app.neonodes.neorain.routes.current_neorain_outbound_operation",
+            return_value=operation,
+        ):
+            response = self.client.get("/neorain/outbound")
+
+        self.assertEqual(response.status_code, 200)
+        fragment = response.data.split(
+            f'data-neorain-mission-id="{mission.id}"'.encode(), 1
+        )[1].split(b"</tr>", 1)[0]
+        self.assertIn(b'neorain-outbound-row--cancelled', response.data)
+        for visible in (b"UPS635", b"N635UP", b"Parking", b"Ramp Load Complete", b"Delay Info"):
+            self.assertIn(visible, response.data)
+        self.assertIn(b'data-neorain-hhmm', fragment)
+        self.assertIn(b'disabled', fragment)
+        self.assertIn(b'data-neorain-no-return-edit', fragment)
+        self.assertIn(b'data-neorain-no-return-action="set" hidden', fragment)
+        self.assertIn(b'data-neorain-outbound-edit-protected hidden', fragment)
+        self.assertIn(b'setOutboundEditLock', response.data)
+        self.assertIn(b'nextRow.status === "CANCELLED"', response.data)
 
     def test_inbound_blocked_in_and_cancelled_rows_remain_full_width(self):
         operation = self._operation()

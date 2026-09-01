@@ -118,14 +118,18 @@
         "[data-neorain-mission-id]"
     )).filter((view) => view.dataset.neorainMissionId === String(missionId));
 
-    const setNoReturnLock = (view, locked) => {
-        view.dataset.neorainNoReturnLocked = String(locked);
+    const setOutboundEditLock = (view, locked) => {
+        const isNoReturn = view.dataset.neorainNoReturn === "true";
+        const isCancelled = view.dataset.neorainCancelled === "true";
+        view.dataset.neorainOutboundEditLocked = String(locked);
         view.querySelectorAll("[data-neorain-hhmm], [data-neorain-late-inclusion-toggle], [data-neorain-no-return-action]")
             .forEach((control) => { control.disabled = locked; });
-        view.querySelectorAll("[data-neorain-no-return-protected]")
+        view.querySelectorAll("[data-neorain-outbound-edit-protected]")
             .forEach((section) => { section.hidden = locked; });
-        view.querySelectorAll("[data-neorain-no-return-readonly]")
+        view.querySelectorAll("[data-neorain-outbound-edit-readonly]")
             .forEach((section) => { section.hidden = !locked; });
+        view.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn || (isCancelled && locked));
+        view.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn || locked);
         view.querySelector("[data-neorain-no-return-edit]")?.toggleAttribute("hidden", !locked);
     };
 
@@ -135,6 +139,7 @@
         views.forEach((view) => {
             view.dataset.missionVersion = nextRow.version || view.dataset.missionVersion || "";
             view.dataset.neorainNoReturn = String(Boolean(nextRow.no_return));
+            view.dataset.neorainCancelled = String(nextRow.status === "CANCELLED");
             displayFields.forEach((field) => {
                 const value = nextRow[field] || "-";
                 const input = view.querySelector(`[data-neorain-hhmm][data-neorain-field="${field}"]`);
@@ -153,10 +158,10 @@
             const noReturnEditor = view.querySelector("[data-neorain-no-return-editor]");
             if (noReturnEditor) {
                 const isNoReturn = Boolean(nextRow.no_return);
-                noReturnEditor.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn);
-                noReturnEditor.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn);
-                if (!isNoReturn) delete view.dataset.neorainEditUnlocked;
-                setNoReturnLock(view, isNoReturn && view.dataset.neorainEditUnlocked !== "true");
+                const isCancelled = nextRow.status === "CANCELLED";
+                const lockedByState = isNoReturn || isCancelled;
+                if (!lockedByState) delete view.dataset.neorainEditUnlocked;
+                setOutboundEditLock(view, lockedByState && view.dataset.neorainEditUnlocked !== "true");
             }
             view.classList.toggle("neorain-outbound-row--blocked-out", nextRow.status === "BLOCKED OUT" && !nextRow.no_return);
             view.classList.toggle("neorain-outbound-row--no-return", Boolean(nextRow.no_return));
@@ -353,7 +358,7 @@
             const row = button.closest("[data-neorain-outbound-row]");
             if (!row) return;
             row.dataset.neorainEditUnlocked = "true";
-            setNoReturnLock(row, false);
+            setOutboundEditLock(row, false);
             row.querySelector("[data-neorain-hhmm]")?.focus({ preventScroll: true });
         });
     });
