@@ -709,6 +709,7 @@ def deicer_mobile():
         gateway=gateway,
         operation=operation,
         assignment=assignment,
+        can_edit=user_can("neosubzero.deicer_mobile.edit"),
         rows=rows,
         selected_mission_id=selected_id,
         revision=departure_deice_revision(gateway, operation),
@@ -1066,7 +1067,7 @@ def _can_edit_position(board, operation, ramp, position, *, allow_ucc=False):
         permission = "neosubzero.ucc.edit"
     if permission is not None:
         return user_can(permission)
-    if board != "deicer" or not user_can("neosubzero.deicer_mobile.view"):
+    if board != "deicer" or not user_can("neosubzero.deicer_mobile.edit"):
         return False
     assignment = current_user_ucc_assignment(operation, current_user)
     return bool(

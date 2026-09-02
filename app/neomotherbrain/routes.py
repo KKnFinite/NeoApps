@@ -271,6 +271,9 @@ SORT_TIMELINE_VIEW_PERMISSION = "neomotherbrain.sort_timeline.view"
 SORT_TIMELINE_EDIT_PERMISSION = "neomotherbrain.sort_timeline.edit"
 MANAGE_API_VIEW_PERMISSION = "neomotherbrain.manage_api.view"
 MANAGE_API_RUN_PERMISSION = "neomotherbrain.manage_api.run"
+SYSTEM_SETTINGS_VIEW_PERMISSION = "neomotherbrain.system_settings.view"
+INTEGRATIONS_EDIT_PERMISSION = "neomotherbrain.integrations.edit"
+NODE_REFRESH_TIMINGS_EDIT_PERMISSION = "neomotherbrain.node_refresh_timings.edit"
 PARKING_RULES_VIEW_PERMISSION = "motherbrain.parking_rules.view"
 PARKING_RULES_EDIT_PERMISSION = "motherbrain.parking_rules.edit"
 PARKING_PLAN_VIEW_PERMISSION = "motherbrain.parking_plan.view"
@@ -396,11 +399,9 @@ def rfd_hub():
         gateway_active_sort_operation=active_sort_operation,
         gateway_active_sort_status=active_sort_status,
         motherbrain_role=get_user_node_role(current_user, gateway.code, "motherbrain"),
-        can_enter_motherbrain=user_can_access_node(
-            current_user,
-            gateway.code,
-            "motherbrain",
-            minimum_role="simulator",
+        can_enter_motherbrain=(
+            user_can_access_node(current_user, gateway.code, "motherbrain")
+            and user_can(DASHBOARD_VIEW_PERMISSION)
         ),
         can_launch_sektor=user_can_access_node(current_user, gateway.code, "sektor"),
         can_launch_ermac=user_can_access_node(current_user, gateway.code, "ermac"),
@@ -417,7 +418,7 @@ def sektor_launch():
 
 
 @bp.route("/motherbrain")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def motherbrain():
     gateway = get_current_gateway()
     denied = _permission_guard(DASHBOARD_VIEW_PERMISSION)
@@ -442,7 +443,7 @@ def motherbrain():
 
 
 @bp.route("/motherbrain/gateway-matrix", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def gateway_matrix():
     gateway = get_current_gateway()
     denied = _permission_guard(GATEWAY_MATRIX_VIEW_PERMISSION)
@@ -477,10 +478,15 @@ def gateway_matrix():
 
 
 @bp.route("/motherbrain/system-settings", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def system_settings():
     gateway = get_current_gateway()
-    can_edit = can_manage_system(current_user)
+    denied = _permission_guard(SYSTEM_SETTINGS_VIEW_PERMISSION)
+    if denied:
+        return denied
+    can_edit = can_manage_system(current_user) and user_can(
+        INTEGRATIONS_EDIT_PERMISSION
+    )
 
     if request.method == "POST":
         return _handle_integration_settings(gateway, can_edit)
@@ -492,10 +498,15 @@ def system_settings():
 
 
 @bp.route("/motherbrain/system-settings/integrations", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def integration_settings():
     gateway = get_current_gateway()
-    can_edit = can_manage_system(current_user)
+    denied = _permission_guard(SYSTEM_SETTINGS_VIEW_PERMISSION)
+    if denied:
+        return denied
+    can_edit = can_manage_system(current_user) and user_can(
+        INTEGRATIONS_EDIT_PERMISSION
+    )
     if request.method == "POST":
         return _handle_integration_settings(gateway, can_edit)
     return _render_integration_settings(gateway, can_edit)
@@ -586,10 +597,15 @@ def _render_integration_settings(gateway, can_edit):
 
 
 @bp.route("/motherbrain/system-settings/node-refresh-timings", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def node_refresh_timings():
     gateway = get_current_gateway()
-    can_edit = can_manage_system(current_user)
+    denied = _permission_guard(SYSTEM_SETTINGS_VIEW_PERMISSION)
+    if denied:
+        return denied
+    can_edit = can_manage_system(current_user) and user_can(
+        NODE_REFRESH_TIMINGS_EDIT_PERMISSION
+    )
     if request.method == "POST":
         if not can_edit:
             db.session.rollback()
@@ -641,7 +657,7 @@ def _neosektor_authority_actor():
 
 
 @bp.route("/motherbrain/sort-timeline", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def sort_timeline():
     gateway = get_current_gateway()
     denied = _permission_guard(SORT_TIMELINE_VIEW_PERMISSION)
@@ -678,7 +694,7 @@ def sort_timeline():
 
 
 @bp.route("/motherbrain/flight-api-test", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def flight_api_test():
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_API_VIEW_PERMISSION)
@@ -1053,7 +1069,7 @@ def _flight_api_review_conflict_response(operation, review_item, conflict):
 
 
 @bp.route("/motherbrain/parking-plan")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def parking_plan():
     gateway = get_current_gateway()
     denied = _permission_guard(PARKING_PLAN_VIEW_PERMISSION)
@@ -1071,7 +1087,7 @@ def parking_plan():
 
 
 @bp.route("/motherbrain/parking-plan/<int:operation_id>")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def parking_plan_operation(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(PARKING_PLAN_VIEW_PERMISSION)
@@ -1099,7 +1115,7 @@ def parking_plan_operation(operation_id):
 
 
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/optimize", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def optimize_parking_plan(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(PARKING_PLAN_VIEW_PERMISSION)
@@ -1159,7 +1175,7 @@ def optimize_parking_plan(operation_id):
 
 
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/optimize/apply", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def apply_parking_plan_optimizer(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(PARKING_PLAN_VIEW_PERMISSION)
@@ -1220,7 +1236,7 @@ def apply_parking_plan_optimizer(operation_id):
 
 
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/state")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def parking_plan_live_state_endpoint(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(PARKING_PLAN_VIEW_PERMISSION)
@@ -1289,7 +1305,7 @@ def parking_plan_live_state_endpoint(operation_id):
 
 
 @bp.route("/motherbrain/parking-rules", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def parking_rules():
     gateway = get_current_gateway()
     if not user_can(PARKING_RULES_VIEW_PERMISSION):
@@ -1341,7 +1357,7 @@ def parking_rules():
 
 @bp.route("/motherbrain/parking-plan/assign", methods=["POST"])
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/assign", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def assign_parking_plan_tail(operation_id=None):
     gateway = get_current_gateway()
     if not user_can(PARKING_PLAN_EDIT_PERMISSION):
@@ -1441,7 +1457,7 @@ def assign_parking_plan_tail(operation_id=None):
 
 @bp.route("/motherbrain/parking-plan/unassign", methods=["POST"])
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/unassign", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def unassign_parking_plan_tail(operation_id=None):
     gateway = get_current_gateway()
     if not user_can(PARKING_PLAN_EDIT_PERMISSION):
@@ -1495,7 +1511,7 @@ def unassign_parking_plan_tail(operation_id=None):
 
 @bp.route("/motherbrain/parking-plan/clear", methods=["POST"])
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/clear", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def clear_parking_plan_assignments(operation_id=None):
     gateway = get_current_gateway()
     if not user_can(PARKING_PLAN_EDIT_PERMISSION):
@@ -1519,7 +1535,7 @@ def clear_parking_plan_assignments(operation_id=None):
 
 @bp.route("/motherbrain/parking-plan/hot", methods=["POST"])
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/hot", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def update_parking_plan_hot(operation_id=None):
     gateway = get_current_gateway()
     if not user_can(PARKING_PLAN_EDIT_PERMISSION):
@@ -1565,7 +1581,7 @@ def update_parking_plan_hot(operation_id=None):
 
 @bp.route("/motherbrain/parking-plan/tail-status", methods=["POST"])
 @bp.route("/motherbrain/parking-plan/<int:operation_id>/tail-status", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def update_parking_plan_tail_status(operation_id=None):
     gateway = get_current_gateway()
     if not user_can(PARKING_PLAN_EDIT_PERMISSION):
@@ -1888,7 +1904,7 @@ def _sort_timeline_preview_payload(preview):
 
 
 @bp.route("/motherbrain/manage-sort")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def manage_sort():
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_VIEW_PERMISSION)
@@ -1938,7 +1954,7 @@ def manage_sort():
 
 
 @bp.post("/motherbrain/manage-sort/create-tonight")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def create_tonight_sort():
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
@@ -1968,7 +1984,7 @@ def create_tonight_sort():
 
 
 @bp.route("/motherbrain/operations")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def operations():
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_VIEW_PERMISSION)
@@ -1986,7 +2002,7 @@ def operations():
 
 
 @bp.route("/motherbrain/master-schedule", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def master_schedule():
     gateway = get_current_gateway()
     denied = _permission_guard(MASTER_SCHEDULE_VIEW_PERMISSION)
@@ -2056,7 +2072,7 @@ def master_schedule():
 
 
 @bp.route("/motherbrain/master-schedule/new", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def new_master_schedule():
     gateway = get_current_gateway()
     denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION if request.method == "POST" else MASTER_SCHEDULE_VIEW_PERMISSION)
@@ -2108,7 +2124,7 @@ def new_master_schedule():
 
 
 @bp.route("/motherbrain/master-schedule/bulk-edit", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def bulk_edit_master_schedule():
     gateway = get_current_gateway()
     denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION if request.method == "POST" else MASTER_SCHEDULE_VIEW_PERMISSION)
@@ -2151,7 +2167,7 @@ def bulk_edit_master_schedule():
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def master_schedule_detail(master_id):
     denied = _permission_guard(MASTER_SCHEDULE_VIEW_PERMISSION)
     if denied:
@@ -2164,7 +2180,7 @@ def master_schedule_detail(master_id):
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>/edit", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def edit_master_schedule(master_id):
     gateway = get_current_gateway()
     denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION if request.method == "POST" else MASTER_SCHEDULE_VIEW_PERMISSION)
@@ -2227,7 +2243,7 @@ def edit_master_schedule(master_id):
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>/toggle-active", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def toggle_master_schedule_active(master_id):
     denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION)
     if denied:
@@ -2259,7 +2275,7 @@ def toggle_master_schedule_active(master_id):
 
 
 @bp.route("/motherbrain/master-schedule/<int:master_id>/delete", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def delete_master_schedule(master_id):
     denied = _permission_guard(MASTER_SCHEDULE_EDIT_PERMISSION)
     if denied:
@@ -2276,7 +2292,7 @@ def delete_master_schedule(master_id):
 
 
 @bp.route("/motherbrain/operations/new", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def new_operation():
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION if request.method == "POST" else MANAGE_SORT_VIEW_PERMISSION)
@@ -2334,7 +2350,7 @@ def new_operation():
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def operation_detail(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_VIEW_PERMISSION)
@@ -2357,9 +2373,12 @@ def operation_detail(operation_id):
 @bp.post(
     "/motherbrain/operations/<int:operation_id>/google-live-polling"
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def update_google_live_polling(operation_id):
-    if not can_manage_system(current_user):
+    if not (
+        can_manage_system(current_user)
+        and user_can("neomotherbrain.google_live_polling.edit")
+    ):
         return _permission_denied_redirect()
 
     gateway = get_current_gateway()
@@ -2392,7 +2411,7 @@ def update_google_live_polling(operation_id):
 @bp.post(
     "/motherbrain/operations/<int:operation_id>/google-current-sort/preview"
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def google_current_sort_preview(operation_id):
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
     if denied:
@@ -2494,7 +2513,7 @@ def google_current_sort_preview(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/arrivals")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def arrival_board(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(ARRIVAL_PLANNING_VIEW_PERMISSION)
@@ -2513,7 +2532,7 @@ def arrival_board(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/departures")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def departure_board(operation_id):
     gateway = get_current_gateway()
     denied = _permission_guard(DEPARTURE_PLANNING_VIEW_PERMISSION)
@@ -2535,7 +2554,7 @@ def departure_board(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/alp/<mission_type>", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def alp_import(operation_id, mission_type):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2655,7 +2674,7 @@ def alp_import(operation_id, mission_type):
 @bp.route(
     "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/state"
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def planning_live_state(operation_id, mission_type):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2734,7 +2753,7 @@ def planning_live_state(operation_id, mission_type):
     "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/alp/add",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def add_alp_planning_row(operation_id, mission_type):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2775,7 +2794,7 @@ def add_alp_planning_row(operation_id, mission_type):
     "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/alp/hot",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def hot_alp_planning_row(operation_id, mission_type):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2813,7 +2832,7 @@ def hot_alp_planning_row(operation_id, mission_type):
     "/motherbrain/operations/<int:operation_id>/planning/<mission_type>/alp/ignore",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def ignore_alp_planning_row(operation_id, mission_type):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2849,7 +2868,7 @@ def ignore_alp_planning_row(operation_id, mission_type):
     "/motherbrain/operations/<int:operation_id>/planning/api/<int:review_item_id>/add",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def add_api_planning_row(operation_id, review_item_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2904,7 +2923,7 @@ def add_api_planning_row(operation_id, review_item_id):
     "/motherbrain/operations/<int:operation_id>/planning/api/<int:review_item_id>/hot",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def hot_api_planning_row(operation_id, review_item_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2956,7 +2975,7 @@ def hot_api_planning_row(operation_id, review_item_id):
     "/motherbrain/operations/<int:operation_id>/planning/api/<int:review_item_id>/ignore",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def ignore_api_planning_row(operation_id, review_item_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -2997,7 +3016,7 @@ def ignore_api_planning_row(operation_id, review_item_id):
     "/motherbrain/operations/<int:operation_id>/spares/mark",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def mark_operation_spare(operation_id):
     operation = _operation_or_404(operation_id)
     if not _planning_can_edit("departure"):
@@ -3022,7 +3041,7 @@ def mark_operation_spare(operation_id):
     "/motherbrain/operations/<int:operation_id>/spares/clear",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def clear_operation_spare(operation_id):
     operation = _operation_or_404(operation_id)
     if not _planning_can_edit("departure"):
@@ -3047,7 +3066,7 @@ def clear_operation_spare(operation_id):
     "/motherbrain/operations/<int:operation_id>/spares/create",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def create_operation_spare(operation_id):
     operation = _operation_or_404(operation_id)
     if not _planning_can_edit("departure"):
@@ -3076,7 +3095,7 @@ def create_operation_spare(operation_id):
     "/motherbrain/operations/<int:operation_id>/spares/remove",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def remove_operation_spare(operation_id):
     operation = _operation_or_404(operation_id)
     if not _planning_can_edit("departure"):
@@ -3097,7 +3116,7 @@ def remove_operation_spare(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/window", methods=["POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def update_operation_window(operation_id):
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
     if denied:
@@ -3126,7 +3145,7 @@ def update_operation_window(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/missions/new", methods=["GET", "POST"])
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def new_mission(operation_id):
     operation = _operation_or_404(operation_id)
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION if request.method == "POST" else MANAGE_SORT_VIEW_PERMISSION)
@@ -3161,7 +3180,7 @@ def new_mission(operation_id):
 
 
 @bp.route("/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>")
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def mission_detail(operation_id, mission_id):
     gateway = get_current_gateway()
     denied = _permission_guard(MANAGE_SORT_VIEW_PERMISSION)
@@ -3183,7 +3202,7 @@ def mission_detail(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/edit",
     methods=["GET", "POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def edit_mission(operation_id, mission_id):
     operation = _operation_or_404(operation_id)
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION if request.method == "POST" else MANAGE_SORT_VIEW_PERMISSION)
@@ -3253,7 +3272,7 @@ def edit_mission(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/delete",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def delete_mission(operation_id, mission_id):
     denied = _permission_guard(MANAGE_SORT_EDIT_PERMISSION)
     if denied:
@@ -3272,7 +3291,7 @@ def delete_mission(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/cancel",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def cancel_mission(operation_id, mission_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -3304,7 +3323,7 @@ def cancel_mission(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/restore",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def restore_mission(operation_id, mission_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)
@@ -3336,7 +3355,7 @@ def restore_mission(operation_id, mission_id):
     "/motherbrain/operations/<int:operation_id>/missions/<int:mission_id>/tail-swap",
     methods=["POST"],
 )
-@gateway_node_required("motherbrain", minimum_role="operator")
+@gateway_node_required("motherbrain")
 def tail_swap_mission(operation_id, mission_id):
     gateway = get_current_gateway()
     operation = _operation_or_404(operation_id)

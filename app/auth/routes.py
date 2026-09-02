@@ -24,7 +24,12 @@ from app.services.access_control import (
     seed_gateway_node_roles,
     user_has_gateway_access,
 )
-from app.services.permission_rules import ensure_default_permission_rules, grouped_permission_rules, user_can
+from app.services.permission_rules import (
+    ensure_default_permission_rules,
+    grouped_permission_rules,
+    permission_is_configurable,
+    user_can,
+)
 from app.services.auth_session_security import (
     clear_authenticated_session_security_state,
     establish_authenticated_session,
@@ -591,7 +596,7 @@ def permission_rules():
         else PERMISSION_RULES_VIEW_PERMISSION
     )
     if not user_can(view_permission):
-        flash("Permission Rules access denied.", "error")
+        flash("Node Permissions access denied.", "error")
         return redirect(url_for("auth.portal_dashboard"))
 
     if request.method == "POST":
@@ -1724,6 +1729,8 @@ def _apply_permission_rule_form():
             raise ValueError("Unsupported permission rule selected.")
         if not rule:
             continue
+        if not permission_is_configurable(rule.permission_key):
+            raise ValueError("Unsupported permission rule selected.")
 
         minimum_role = request.form.get(f"minimum_role_{rule.id}", "").strip().lower()
         description = request.form.get(f"description_{rule.id}", "").strip()

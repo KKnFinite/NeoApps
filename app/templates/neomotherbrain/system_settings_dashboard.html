@@ -7,13 +7,27 @@
         <p class="muted">{{ gateway.code }} gateway-wide administration.</p>
     </div>
     <nav class="system-settings-dashboard" aria-label="System Settings destinations">
+        {% if user_can('neomotherbrain.system_settings.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.node_refresh_timings') }}"><strong>Node Refresh Timings</strong><span>Per-screen live update cadence.</span></a>
+        {% endif %}
+        {% if user_can('neomotherbrain.permission_rules.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('auth.permission_rules') }}"><strong>Node Permissions</strong><span>Existing capability and role rules.</span></a>
+        {% endif %}
+        {% if user_can('neomotherbrain.system_settings.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.integration_settings') }}"><strong>Integrations &amp; Migration</strong><span>Google polling and Neo authority controls.</span></a>
+        {% endif %}
+        {% if user_can('neomotherbrain.gateway_matrix.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.gateway_matrix') }}"><strong>Gateway Matrix</strong><span>Scheduled gateway sort days.</span></a>
+        {% endif %}
+        {% if user_can('neomotherbrain.sort_timeline.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.sort_timeline') }}"><strong>Sort Timeline</strong><span>Operational and sort windows.</span></a>
+        {% endif %}
+        {% if user_can('neomotherbrain.manage_api.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.flight_api_test') }}"><strong>Manage API</strong><span>Flight provider review and controls.</span></a>
+        {% endif %}
+        {% if user_can('neoapps.portal_management.view') %}
         <a class="system-settings-dashboard-card" href="{{ url_for('auth.portal_management') }}"><strong>Portal Manage</strong><span>Users and portal access.</span></a>
+        {% endif %}
     </nav>
 </section>
 {% endblock %}

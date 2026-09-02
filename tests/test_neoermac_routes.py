@@ -305,7 +305,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertTrue(response.get_json()["changed"])
         self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
 
-    def test_upcoming_pulls_state_keeps_view_permission_enforced(self):
+    def test_upcoming_pulls_state_uses_node_access_for_read_only_view(self):
         self._add_operation_departure("UPS701", "BOS")
         rule = PermissionRule.query.filter_by(
             permission_key="neoermac.upcoming_pulls.view"
@@ -318,8 +318,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "/neoermac/upcoming-pulls/state?revision=stale-client-revision"
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["error"], "Access denied.")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["changed"])
 
     def test_upcoming_pulls_revision_tracks_visible_board_inputs(self):
         from app.services.neoermac_dashboard import upcoming_pulls_revision
@@ -1117,7 +1117,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"SELECTED DOOR", response.data)
         self.assertNotIn(b"DX", response.data)
 
-    def test_door_view_unauthorized_user_is_blocked_by_view_permission(self):
+    def test_door_view_read_only_access_ignores_redundant_view_threshold(self):
         view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
         edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
         view_rule.minimum_role = "master"
@@ -1127,8 +1127,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neoermac/door-view", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/neoermac", response.location)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"View Only", response.data)
 
     def test_door_view_selected_door_shows_building_lineup_destinations(self):
         self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
@@ -3096,7 +3096,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(format_local_hhmm(now), payload["state"]["on_the_way_events"][0]["label"])
         self.assertEqual(payload["state"]["requests"], [])
 
-    def test_door_view_state_requires_view_permission(self):
+    def test_door_view_state_uses_node_access_for_read_only_view(self):
         view_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.view").one()
         edit_rule = PermissionRule.query.filter_by(permission_key="neoermac.door_view.edit").one()
         view_rule.minimum_role = "master"
@@ -3106,8 +3106,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neoermac/door-view/state?door=D34")
 
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(response.get_json()["ok"])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
 
     def test_door_view_state_short_circuits_an_unchanged_revision(self):
         self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
@@ -4165,7 +4165,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         context.assert_not_called()
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
-    def test_view_outbound_state_keeps_view_permission_enforced(self):
+    def test_view_outbound_state_uses_node_access_for_read_only_view(self):
         rule = PermissionRule.query.filter_by(
             permission_key="neoermac.view_outbound.view"
         ).one()
@@ -4177,8 +4177,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "/neoermac/view-outbound/state?revision=stale-client-revision"
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["error"], "Access denied.")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["changed"])
 
     def test_view_outbound_state_reports_sort_window_shutdown(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(

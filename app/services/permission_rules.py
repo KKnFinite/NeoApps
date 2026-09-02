@@ -72,6 +72,21 @@ DEFAULT_PERMISSION_RULES = (
         "Save minimum-role dropdown settings for NeoApps Permission Rules.",
     ),
     (
+        "neomotherbrain.system_settings.view",
+        "operator",
+        "View the NeoMotherBrain System Settings dashboard and status pages.",
+    ),
+    (
+        "neomotherbrain.integrations.edit",
+        "grandmaster",
+        "Change NeoNode integration, migration, and compatibility-write settings.",
+    ),
+    (
+        "neomotherbrain.node_refresh_timings.edit",
+        "grandmaster",
+        "Save gateway-scoped live-screen refresh timings.",
+    ),
+    (
         "neogateway.landing.view",
         "watcher",
         "View the NeoGateway RFD landing page.",
@@ -507,6 +522,11 @@ DEFAULT_PERMISSION_RULES = (
         "Use the assigned NeoSub-Zero Deicer Mobile workspace.",
     ),
     (
+        "neosubzero.deicer_mobile.edit",
+        "operator",
+        "Save the assigned Deicer Mobile position's truck and spray gallons.",
+    ),
+    (
         "neosubzero.deice_log.view",
         "watcher",
         "View the NeoSub-Zero Cryotech-oriented Deice Log.",
@@ -620,6 +640,16 @@ DEFAULT_PERMISSION_RULES = (
         "neostaffing.vacation_selection.view",
         "watcher",
         "View the NeoStaffing Vacation Selection placeholder.",
+    ),
+    (
+        "neostaffing.vacation_selection.edit",
+        "watcher",
+        "Submit permitted vacation selections and management calendar actions.",
+    ),
+    (
+        "neostaffing.settings.edit",
+        "master",
+        "Save NeoStaffing operational settings such as qualifying holidays.",
     ),
     (
         "neostaffing.permissions.view",
@@ -782,6 +812,14 @@ PERMISSION_ACTION_LABELS = {
     "trigger": "Trigger / Run",
 }
 
+# Retained in the seed set so existing databases stay compatible, but these
+# capabilities no longer govern a route. Node Permissions is now the sole
+# permission administration surface.
+RETIRED_PERMISSION_KEYS = {
+    "neostaffing.permissions.view",
+    "neostaffing.permissions.edit",
+}
+
 PERMISSION_ACTION_ORDER = ("view", "edit", "trigger")
 
 # Keep this registry aligned with routed NeoApps pages. New page/view permissions
@@ -867,11 +905,38 @@ PERMISSION_RULE_ITEMS = (
     (
         "motherbrain",
         "neomotherbrain.permission_rules",
-        "Permission Rules",
-        "NeoApps permission rule editor.",
+        "Node Permissions",
+        "Central NeoApps node, page, and action role thresholds.",
         {
             "view": "neomotherbrain.permission_rules.view",
             "edit": "neomotherbrain.permission_rules.edit",
+        },
+    ),
+    (
+        "motherbrain",
+        "neomotherbrain.system_settings",
+        "System Settings",
+        "NeoMotherBrain system administration dashboard and status pages.",
+        {
+            "view": "neomotherbrain.system_settings.view",
+        },
+    ),
+    (
+        "motherbrain",
+        "neomotherbrain.integrations",
+        "Integrations & Migration",
+        "NeoNode integration modes, migration controls, and compatibility writes.",
+        {
+            "edit": "neomotherbrain.integrations.edit",
+        },
+    ),
+    (
+        "motherbrain",
+        "neomotherbrain.node_refresh_timings",
+        "Node Refresh Timings",
+        "Gateway-scoped live-screen refresh cadence administration.",
+        {
+            "edit": "neomotherbrain.node_refresh_timings.edit",
         },
     ),
     (
@@ -1282,6 +1347,95 @@ PERMISSION_RULE_ITEMS = (
         },
     ),
     (
+        "subzero",
+        "neosubzero.pretreat",
+        "Pretreat",
+        "NeoSub-Zero Pretreat planning and treatment operations.",
+        {
+            "view": "neosubzero.pretreat.view",
+            "edit": "neosubzero.pretreat.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.outbound",
+        "Outbound",
+        "NeoSub-Zero departure-deice operations.",
+        {
+            "view": "neosubzero.outbound.view",
+            "edit": "neosubzero.outbound.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.coordinator",
+        "Coordinator",
+        "NeoSub-Zero Coordinator departure-deice workspace.",
+        {
+            "view": "neosubzero.coordinator.view",
+            "edit": "neosubzero.coordinator.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.ucc",
+        "UCC",
+        "NeoSub-Zero UCC ramp and staffing operations.",
+        {
+            "view": "neosubzero.ucc.view",
+            "edit": "neosubzero.ucc.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.deicer_mobile",
+        "Deicer Mobile",
+        "Assigned Deicer Mobile truck and gallon entry.",
+        {
+            "view": "neosubzero.deicer_mobile.view",
+            "edit": "neosubzero.deicer_mobile.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.deice_log",
+        "Deice Log",
+        "Read-only Cryotech-oriented Deice Log.",
+        {
+            "view": "neosubzero.deice_log.view",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.callouts",
+        "Callout Management",
+        "Current-sort Deice callout pool.",
+        {
+            "view": "neosubzero.callouts.view",
+            "edit": "neosubzero.callouts.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.qualifications",
+        "Qualifications",
+        "Shared employee Deice qualification management.",
+        {
+            "view": "neosubzero.qualifications.view",
+            "edit": "neosubzero.qualifications.edit",
+        },
+    ),
+    (
+        "subzero",
+        "neosubzero.settings",
+        "Settings",
+        "NeoSub-Zero operational settings.",
+        {
+            "view": "neosubzero.settings.view",
+            "edit": "neosubzero.settings.edit",
+        },
+    ),
+    (
         "staffing",
         "neostaffing.board",
         "Board",
@@ -1384,6 +1538,16 @@ PERMISSION_RULE_ITEMS = (
         "NeoStaffing management vacation selection and seniority-based scheduling placeholder.",
         {
             "view": "neostaffing.vacation_selection.view",
+            "edit": "neostaffing.vacation_selection.edit",
+        },
+    ),
+    (
+        "staffing",
+        "neostaffing.settings",
+        "Settings",
+        "NeoStaffing operational configuration.",
+        {
+            "edit": "neostaffing.settings.edit",
         },
     ),
     (
@@ -1548,6 +1712,8 @@ def grouped_permission_rules(rules):
         actions = []
         for action_type in PERMISSION_ACTION_ORDER:
             permission_key = action_keys.get(action_type)
+            if not permission_is_configurable(permission_key):
+                continue
             rule = rule_by_key.get(normalize_permission_key(permission_key))
             if not rule:
                 continue
@@ -1564,6 +1730,8 @@ def grouped_permission_rules(rules):
             )
 
     for rule in rules:
+        if not permission_is_configurable(rule.permission_key):
+            continue
         group_key = _permission_rule_group_key(rule.permission_key)
         grouped.get(group_key, grouped[fallback_key])["rules"].append(rule)
         if rule.id in assigned_rule_ids:
@@ -1587,13 +1755,16 @@ def user_can(permission_key, user=None):
         if role is None:
             return False
 
-        if role == "grandmaster":
+        if _is_node_read_only_permission(normalized_key):
             return True
 
         rule = get_permission_rule(normalized_key)
-        minimum_role = rule.minimum_role if rule else default_minimum_role(normalized_key)
-        if not minimum_role:
+        minimum_role = rule.minimum_role if rule else None
+        if minimum_role not in ROLE_LEVELS:
             return False
+
+        if role == "grandmaster":
+            return True
 
         return ROLE_LEVELS.get(role, 0) >= ROLE_LEVELS.get(minimum_role, 0)
 
@@ -1638,6 +1809,30 @@ def permission_rule_action_type(permission_key):
     if suffix in {"apply", "run", "trigger"}:
         return "trigger"
     return "edit"
+
+
+def permission_is_configurable(permission_key):
+    """Only MotherBrain/admin views and explicit actions have role thresholds."""
+    normalized_key = normalize_permission_key(permission_key)
+    if not normalized_key:
+        return False
+    if normalized_key in RETIRED_PERMISSION_KEYS:
+        return False
+    if not normalized_key.endswith(".view"):
+        return True
+    return _permission_key_prefix(normalized_key) in {
+        "neoapps",
+        "system",
+        "neomotherbrain",
+        "motherbrain",
+    }
+
+
+def _is_node_read_only_permission(permission_key):
+    return (
+        normalize_permission_key(permission_key).endswith(".view")
+        and not permission_is_configurable(permission_key)
+    )
 
 
 def _permission_rule_action(action_type, rule):

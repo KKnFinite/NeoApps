@@ -30,7 +30,6 @@
             {% if user_can("neostaffing.staffing_groups.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.staffing_groups') }}"><span>STAFFING GROUPS</span><em>Deduplicated reporting scope</em></a>{% endif %}
             {% if user_can("neostaffing.bulk_change.use") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.bulk_change') }}"><span>BULK CHANGE</span><em>Session change workspace</em></a>{% endif %}
             {% if user_can("neostaffing.reports.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.reports') }}"><span>REPORTS</span><em>Staffing and attendance</em></a>{% endif %}
-            {% if user_can("neostaffing.permissions.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.permissions') }}"><span>PERMISSIONS</span><em>Role-level configuration</em></a>{% endif %}
             {% if user_can("neostaffing.vacation_selection.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.vacation_selection') }}"><span>VACATION SELECTION</span><em>Selection workspace</em></a>{% endif %}
         </nav>
 

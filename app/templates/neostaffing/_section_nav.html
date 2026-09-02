@@ -24,9 +24,6 @@
     {% if user_can("neostaffing.vacation_selection.view") %}
     <a href="{{ url_for('neostaffing.vacation_selection') }}" {% if request.endpoint in ("neostaffing.vacation_selection", "neostaffing.vacation_management", "neostaffing.vacation_management_capacity", "neostaffing.vacation_management_initialize", "neostaffing.vacation_management_reduced_capacity", "neostaffing.vacation_management_select", "neostaffing.vacation_management_split", "neostaffing.vacation_management_pass", "neostaffing.vacation_management_availability", "neostaffing.vacation_management_availability_remove", "neostaffing.vacation_union_calendars", "neostaffing.vacation_union_select", "neostaffing.vacation_union_split", "neostaffing.vacation_union_selection_review", "neostaffing.vacation_union_selection_cancel", "neostaffing.vacation_split_day_schedule", "neostaffing.vacation_split_day_cancel", "neostaffing.vacation_day_schedule", "neostaffing.vacation_day_cancel", "neostaffing.vacation_split_week_recombine", "neostaffing.vacation_union_calendar_new", "neostaffing.vacation_union_calendar_edit", "neostaffing.vacation_union_calendar_view", "neostaffing.vacation_union_calendar_admin") %}aria-current="page"{% endif %}>Vacation Selection</a>
     {% endif %}
-    {% if user_can("neostaffing.permissions.view") %}
-    <a href="{{ url_for('neostaffing.permissions') }}" {% if request.endpoint == "neostaffing.permissions" %}aria-current="page"{% endif %}>Permissions</a>
-    {% endif %}
     {% if neostaffing_settings_visible %}
     <a href="{{ url_for('neostaffing.settings') }}" {% if request.endpoint in ("neostaffing.settings", "neostaffing.save_floating_holiday_setting", "neostaffing.delete_floating_holiday_setting") %}aria-current="page"{% endif %}>Settings</a>
     {% endif %}

@@ -46,7 +46,7 @@ def _title_parts(path, ballmat_side):
     if path.startswith("/portal/manage"):
         return "Portal Management", "NeoApps"
     if path == "/admin/permissions" or path.startswith("/motherbrain/permissions"):
-        return "Permission Rules", "NeoApps"
+        return "Node Permissions", "NeoApps"
 
     if path == "/nodes":
         return "Node Directory", "NeoApps"

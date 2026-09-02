@@ -36,15 +36,11 @@ def gateway_node_required(node_code, minimum_role="watcher"):
         @login_required
         def wrapped_view(*args, **kwargs):
             gateway = get_current_gateway()
-            effective_minimum_role = minimum_role
-            if node_code == "motherbrain" and minimum_role == "watcher":
-                effective_minimum_role = "simulator"
-
             if user_can_access_node(
                 current_user,
                 gateway.code,
                 node_code,
-                minimum_role=effective_minimum_role,
+                minimum_role=minimum_role,
             ):
                 return view_func(*args, **kwargs)
 

@@ -31,9 +31,9 @@
                     <td>{{ operation.generated_at_utc.strftime("%Y-%m-%d %H:%M") if operation.generated_at_utc else "-" }} UTC</td>
                     <td>{{ operation.missions|length }}</td>
                     <td class="table-actions">
-                        <a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OVERVIEW</a>
-                        <a href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVALS</a>
-                        <a href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURES</a>
+                        {% if user_can("neomotherbrain.manage_sort.view") %}<a href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">OVERVIEW</a>{% endif %}
+                        {% if user_can("neomotherbrain.arrival_planning.view") %}<a href="{{ url_for('neomotherbrain.arrival_board', operation_id=operation.id) }}">ARRIVALS</a>{% endif %}
+                        {% if user_can("neomotherbrain.departure_planning.view") %}<a href="{{ url_for('neomotherbrain.departure_board', operation_id=operation.id) }}">DEPARTURES</a>{% endif %}
                     </td>
                 </tr>
                 {% else %}

@@ -478,7 +478,7 @@ def resolve_shell_metadata(
 
 def _motherbrain_labels(**flags):
     if flags["is_permission_management_page"]:
-        return "Permission Rules", "Permissions"
+        return "Node Permissions", "Permissions"
     if flags["is_user_management_page"]:
         return "Portal Management", "Portal Mgmt"
     if flags["is_system_settings_page"]:

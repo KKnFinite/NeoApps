@@ -15,7 +15,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import (
-    PermissionRule,
     StaffingGroup,
     StaffingLeadershipAssignment,
     StaffingPerson,
@@ -33,7 +32,7 @@ from app.services import neostaffing_management_review as management_review_serv
 from app.services import neostaffing_notifications as notification_service
 from app.services import neostaffing_vacation as vacation_service
 from app.services import neostaffing_vacation_reports as vacation_report_service
-from app.services.permission_rules import ensure_default_permission_rules, user_can
+from app.services.permission_rules import user_can
 
 
 BOARD_VIEW_PERMISSION = "neostaffing.board.view"
@@ -48,6 +47,8 @@ ORG_CHART_VIEW_PERMISSION = "neostaffing.org_chart.view"
 ORG_CHART_EDIT_STRUCTURE_PERMISSION = "neostaffing.org_chart.edit_structure"
 REPORTS_VIEW_PERMISSION = "neostaffing.reports.view"
 VACATION_SELECTION_VIEW_PERMISSION = "neostaffing.vacation_selection.view"
+VACATION_SELECTION_EDIT_PERMISSION = "neostaffing.vacation_selection.edit"
+SETTINGS_EDIT_PERMISSION = "neostaffing.settings.edit"
 MANAGEMENT_ASSIGN_PERMISSION = "neostaffing.management.assign"
 CHANGE_REQUEST_VIEW_PERMISSION = "neostaffing.change_requests.view"
 CHANGE_REQUEST_SUBMIT_PERMISSION = "neostaffing.change_requests.submit"
@@ -55,52 +56,14 @@ CHANGE_REQUEST_APPROVE_PERMISSION = "neostaffing.change_requests.approve"
 BULK_CHANGE_PERMISSION = "neostaffing.bulk_change.use"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
-PERMISSIONS_VIEW_PERMISSION = "neostaffing.permissions.view"
-PERMISSIONS_EDIT_PERMISSION = "neostaffing.permissions.edit"
-ROLE_CHOICES = ("watcher", "operator", "simulator", "master", "grandmaster")
-
-NEOSTAFFING_PERMISSION_LABELS = {
-    "neostaffing.board.view": "View Board",
-    "neostaffing.seniority.view": "View Seniority",
-    "neostaffing.people.view": "View People",
-    "neostaffing.people.edit": "Edit People",
-    "neostaffing.people.bulk_actions": "People Bulk Actions",
-    "neostaffing.attendance.take": "Take Attendance",
-    "neostaffing.staffing_groups.view": "View Staffing Groups",
-    "neostaffing.staffing_groups.edit": "Edit Staffing Groups",
-    "neostaffing.org_chart.view": "View Org Chart",
-    "neostaffing.org_chart.edit_structure": "Edit Org Chart Structure",
-    "neostaffing.reports.view": "View Reports",
-    "neostaffing.vacation_selection.view": "View Vacation Selection",
-    "neostaffing.permissions.view": "View Permissions",
-    "neostaffing.permissions.edit": "Edit Permissions",
-    "neostaffing.management.assign": "Assign Management",
-    "neostaffing.app_management.view": "View App Management",
-    "neostaffing.hierarchy.view": "View Hierarchy",
-    "neostaffing.hierarchy.edit": "Edit Hierarchy",
-    "neostaffing.planned_staffing.view": "View Planned Staffing",
-    "neostaffing.planned_staffing.edit": "Edit Planned Staffing",
-    "neostaffing.people_management.view": "View People Management",
-    "neostaffing.people_management.edit": "Edit People Management",
-    "neostaffing.work_assignments.view": "View Work Assignments",
-    "neostaffing.work_assignments.edit": "Edit Work Assignments",
-    "neostaffing.management_assignments.view": "View Management Assignments",
-    "neostaffing.management_assignments.edit": "Edit Management Assignments",
-    "neostaffing.change_requests.view": "View Change Requests",
-    "neostaffing.change_requests.submit": "Submit Change Requests",
-    "neostaffing.change_requests.approve": "Approve Change Requests",
-    "neostaffing.bulk_change.use": "Use Bulk Change",
-}
-
-
 @bp.context_processor
 def inject_neostaffing_navigation():
     return {
         "neostaffing_nav": notification_service.notification_navigation_state(
             current_user
         ),
-        "neostaffing_settings_visible": user_can_access_app(
-            current_user, "neostaffing", minimum_role="master"
+        "neostaffing_settings_visible": user_has_app_access(
+            current_user, "neostaffing"
         ),
     }
 
@@ -953,7 +916,7 @@ def vacation_management():
 
 
 @bp.route("/vacation-selection/management/capacity", methods=["POST"])
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_capacity():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -975,7 +938,7 @@ def vacation_management_capacity():
 
 
 @bp.route("/vacation-selection/management/initialize", methods=["POST"])
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_initialize():
     vacation_year = request.form.get("vacation_year")
     context = vacation_service.management_vacation_context(
@@ -1004,7 +967,7 @@ def vacation_management_initialize():
 
 
 @bp.route("/vacation-selection/management/reduced-capacity", methods=["POST"])
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_reduced_capacity():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1027,7 +990,7 @@ def vacation_management_reduced_capacity():
 
 
 @bp.route("/vacation-selection/management/select", methods=["POST"])
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_select():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1056,7 +1019,7 @@ def vacation_management_select():
 
 
 @bp.post("/vacation-selection/management/change-request")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_change_request():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1076,7 +1039,7 @@ def vacation_management_change_request():
 
 
 @bp.post("/vacation-selection/management/change-request/<int:request_id>/cancel")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_change_request_cancel(request_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1093,7 +1056,7 @@ def vacation_management_change_request_cancel(request_id):
 
 
 @bp.post("/vacation-selection/management/change-request/<int:request_id>/review")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_change_request_review(request_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1113,7 +1076,7 @@ def vacation_management_change_request_review(request_id):
 
 
 @bp.post("/vacation-selection/management/selection/<int:selection_id>/move")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_selection_move(selection_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1133,7 +1096,7 @@ def vacation_management_selection_move(selection_id):
 
 
 @bp.post("/vacation-selection/management/selection/<int:selection_id>/cancel")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_selection_cancel(selection_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1152,7 +1115,7 @@ def vacation_management_selection_cancel(selection_id):
 
 
 @bp.post("/vacation-selection/management/split")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_split():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1172,7 +1135,7 @@ def vacation_management_split():
 
 
 @bp.route("/vacation-selection/management/pass", methods=["POST"])
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_pass():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1222,7 +1185,7 @@ def vacation_union_calendars():
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/carry-forward")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_carry_forward(calendar_id):
     try:
         created = vacation_service.carry_forward_official_calendar(
@@ -1260,7 +1223,7 @@ def vacation_union_calendar_view(calendar_id):
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/select")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_select(calendar_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1283,7 +1246,7 @@ def vacation_union_select(calendar_id):
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/split")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_split(calendar_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1304,7 +1267,7 @@ def vacation_union_split(calendar_id):
 
 
 @bp.post("/vacation-selection/split-day/schedule")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_split_day_schedule():
     vacation_year = request.form.get("vacation_year")
     program = request.form.get("program")
@@ -1325,7 +1288,7 @@ def vacation_split_day_schedule():
 
 
 @bp.post("/vacation-selection/split-day/<int:day_id>/cancel")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_split_day_cancel(day_id):
     vacation_year = request.form.get("vacation_year")
     program = request.form.get("program")
@@ -1341,7 +1304,7 @@ def vacation_split_day_cancel(day_id):
 
 
 @bp.post("/vacation-selection/day/schedule")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_day_schedule():
     vacation_year = request.form.get("vacation_year")
     program = request.form.get("program")
@@ -1365,7 +1328,7 @@ def vacation_day_schedule():
 
 
 @bp.post("/vacation-selection/day/<int:day_id>/cancel")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_day_cancel(day_id):
     vacation_year = request.form.get("vacation_year")
     program = request.form.get("program")
@@ -1381,7 +1344,7 @@ def vacation_day_cancel(day_id):
 
 
 @bp.post("/vacation-selection/management/availability")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_availability():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1401,7 +1364,7 @@ def vacation_management_availability():
 
 
 @bp.post("/vacation-selection/management/availability/<int:day_id>/remove")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_availability_remove(day_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1416,7 +1379,7 @@ def vacation_management_availability_remove(day_id):
 
 
 @bp.post("/vacation-selection/split-week/<int:conversion_id>/recombine")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_split_week_recombine(conversion_id):
     vacation_year = request.form.get("vacation_year")
     program = request.form.get("program")
@@ -1432,7 +1395,7 @@ def vacation_split_week_recombine(conversion_id):
 
 
 @bp.post("/vacation-selection/union/selection/<int:selection_id>/review")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_selection_review(selection_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1455,7 +1418,7 @@ def vacation_union_selection_review(selection_id):
 
 
 @bp.post("/vacation-selection/union/selection/<int:selection_id>/cancel")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_selection_cancel(selection_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1474,7 +1437,7 @@ def vacation_union_selection_cancel(selection_id):
 
 
 @bp.post("/vacation-selection/union/selection/<int:selection_id>/move")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_selection_move(selection_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1496,7 +1459,7 @@ def vacation_union_selection_move(selection_id):
 
 
 @bp.route("/vacation-selection/union/new", methods=["GET", "POST"])
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_new():
     vacation_year = _vacation_year_arg()
     if request.method == "POST":
@@ -1525,7 +1488,7 @@ def vacation_union_calendar_new():
     "/vacation-selection/union/<int:calendar_id>/edit",
     methods=["GET", "POST"],
 )
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_edit(calendar_id):
     calendar = db.session.get(StaffingVacationUnionCalendar, calendar_id)
     if not calendar:
@@ -1554,7 +1517,7 @@ def vacation_union_calendar_edit(calendar_id):
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/delete")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_delete(calendar_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1571,7 +1534,7 @@ def vacation_union_calendar_delete(calendar_id):
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/shares")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_shares(calendar_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1615,7 +1578,7 @@ def vacation_union_share_search():
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/copy")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_copy(calendar_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1658,7 +1621,7 @@ def vacation_union_calendar_admin():
 
 
 @bp.post("/vacation-selection/union/<int:calendar_id>/reset")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_union_calendar_reset(calendar_id):
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1675,7 +1638,7 @@ def vacation_union_calendar_reset(calendar_id):
 
 
 @bp.post("/vacation-selection/management/reset")
-@neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
+@neostaffing_app_required(permission_key=VACATION_SELECTION_EDIT_PERMISSION)
 def vacation_management_reset():
     vacation_year = request.form.get("vacation_year")
     try:
@@ -1696,14 +1659,16 @@ def vacation_management_reset():
 
 
 @bp.route("/settings")
-@neostaffing_app_required(minimum_role="master")
+@neostaffing_app_required()
 def settings():
     contract = vacation_service.qualifying_holiday_settings(current_user)
     return render_template(
         "neostaffing/settings.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         holidays=contract["holidays"],
-        can_edit_settings=contract["can_edit"],
+        can_edit_settings=(
+            contract["can_edit"] and user_can(SETTINGS_EDIT_PERMISSION)
+        ),
         holiday_month_choices=contract["month_choices"],
         holiday_weekday_choices=contract["weekday_choices"],
         holiday_occurrence_choices=contract["occurrence_choices"],
@@ -1712,7 +1677,7 @@ def settings():
 
 
 @bp.route("/settings/floating-holidays", methods=["POST"])
-@neostaffing_app_required(minimum_role="master")
+@neostaffing_app_required(permission_key=SETTINGS_EDIT_PERMISSION)
 def save_floating_holiday_setting():
     try:
         vacation_service.save_qualifying_holiday(
@@ -1735,7 +1700,7 @@ def save_floating_holiday_setting():
 
 
 @bp.route("/settings/floating-holidays/<int:holiday_id>/delete", methods=["POST"])
-@neostaffing_app_required(minimum_role="master")
+@neostaffing_app_required(permission_key=SETTINGS_EDIT_PERMISSION)
 def delete_floating_holiday_setting(holiday_id):
     try:
         vacation_service.delete_qualifying_holiday(holiday_id, current_user)
@@ -1749,56 +1714,9 @@ def delete_floating_holiday_setting(holiday_id):
 
 
 @bp.route("/permissions", methods=["GET", "POST"])
-@neostaffing_app_required(permission_key=PERMISSIONS_VIEW_PERMISSION)
+@neostaffing_app_required()
 def permissions():
-    ensure_default_permission_rules()
-    app_role = get_user_app_role(current_user, "neostaffing")
-    can_edit = app_role == "grandmaster" and user_can(PERMISSIONS_EDIT_PERMISSION)
-
-    if request.method == "POST":
-        if not can_edit:
-            flash("Only a NeoStaffing Grandmaster can save permission settings.", "error")
-            return redirect(url_for("neostaffing.permissions"))
-        try:
-            _apply_neostaffing_permission_rule_form()
-            db.session.commit()
-        except ValueError as error:
-            db.session.rollback()
-            flash(str(error), "error")
-        else:
-            flash("NeoStaffing permission settings updated.", "success")
-            return redirect(url_for("neostaffing.permissions"))
-
-    rules = PermissionRule.query.filter(
-        PermissionRule.permission_key.like("neostaffing.%")
-    ).order_by(PermissionRule.permission_key.asc()).all()
-    rule_by_key = {rule.permission_key: rule for rule in rules}
-    ordered_keys = [
-        key for key in NEOSTAFFING_PERMISSION_LABELS if key in rule_by_key
-    ]
-    ordered_keys.extend(
-        sorted(key for key in rule_by_key if key not in NEOSTAFFING_PERMISSION_LABELS)
-    )
-    capabilities = [
-        {
-            "label": NEOSTAFFING_PERMISSION_LABELS.get(
-                key,
-                key.removeprefix("neostaffing.")
-                .replace("_", " ")
-                .replace(".", " ")
-                .title(),
-            ),
-            "rule": rule_by_key[key],
-        }
-        for key in ordered_keys
-    ]
-    return render_template(
-        "neostaffing/permissions.html",
-        app_role=app_role,
-        can_edit_permissions=can_edit,
-        capabilities=capabilities,
-        role_choices=ROLE_CHOICES,
-    )
+    return redirect(url_for("auth.permission_rules"), code=303)
 
 
 @bp.route("/people/<int:person_id>/assign-work-area", methods=["POST"])
@@ -2514,21 +2432,6 @@ def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
     else:
         flash(success_message, "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
-
-
-def _apply_neostaffing_permission_rule_form():
-    for rule_id in request.form.getlist("rule_ids"):
-        try:
-            rule = db.session.get(PermissionRule, int(rule_id))
-        except (TypeError, ValueError):
-            raise ValueError("Unsupported NeoStaffing permission selected.")
-        if not rule or not rule.permission_key.startswith("neostaffing."):
-            raise ValueError("Unsupported NeoStaffing permission selected.")
-
-        minimum_role = request.form.get(f"minimum_role_{rule.id}", "").strip().lower()
-        if minimum_role not in ROLE_CHOICES:
-            raise ValueError("Unsupported minimum role selected.")
-        rule.minimum_role = minimum_role
 
 
 def _org_chart_return_values(default_unit_id=None):

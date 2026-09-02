@@ -552,16 +552,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 "/neosektor": 200,
                 "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
-                "/neosektor/tunnel-conductor": 302,
-                "/neosektor/ebm": 302,
-                "/neosektor/wbm": 302,
-                "/neosektor/discharge": 302,
+                "/neosektor/tunnel-conductor": 200,
+                "/neosektor/ebm": 200,
+                "/neosektor/wbm": 200,
+                "/neosektor/discharge": 200,
             },
             "operator": {
                 "/neosektor": 200,
                 "/neosektor/live-counts": 200,
                 "/neosektor/driver-routing": 200,
-                "/neosektor/tunnel-conductor": 302,
+                "/neosektor/tunnel-conductor": 200,
                 "/neosektor/ebm": 200,
                 "/neosektor/wbm": 200,
                 "/neosektor/discharge": 200,
@@ -2110,13 +2110,17 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("applyMutationState(payload, requestSequence);", source)
         self.assertIn("if (readout && (!control || !hasPending(control)))", source)
 
-    def test_tunnel_conductor_blocks_user_without_view_permission(self):
-        self._login_approved_user(role="operator")
+    def test_watcher_can_view_tunnel_conductor_read_only(self):
+        self._login_approved_user(role="watcher")
 
         response = self.client.get("/neosektor/tunnel-conductor", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/neosektor")
+        self.assertEqual(response.status_code, 200)
+        denied = self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "first", "delta": 1},
+        )
+        self.assertEqual(denied.status_code, 403)
 
     def test_view_only_tunnel_conductor_user_cannot_update_counts(self):
         edit_rule = PermissionRule.query.filter_by(
@@ -3943,14 +3947,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn(b"NeoSektor", dashboard.data)
-        self.assertEqual(conductor.status_code, 302)
-        self.assertEqual(conductor.location, "/neosektor")
-        self.assertEqual(ebm.status_code, 302)
-        self.assertEqual(ebm.location, "/neosektor")
-        self.assertEqual(wbm.status_code, 302)
-        self.assertEqual(wbm.location, "/neosektor")
-        self.assertEqual(discharge.status_code, 302)
-        self.assertEqual(discharge.location, "/neosektor")
+        self.assertEqual(conductor.status_code, 200)
+        self.assertEqual(ebm.status_code, 200)
+        self.assertEqual(wbm.status_code, 200)
+        self.assertEqual(discharge.status_code, 200)
         self.assertEqual(live_counts.status_code, 200)
         self.assertIn(b"data-live-counts", live_counts.data)
 

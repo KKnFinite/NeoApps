@@ -94,7 +94,7 @@ class RequestAccessCacheTest(unittest.TestCase):
             self.assertTrue(user_can("NEOERMAC.DASHBOARD.VIEW", self.user))
             self.assertTrue(user_can(" neoermac.dashboard.view ", self.user))
 
-        self.assertEqual(self._permission_query_count(statements, "neoermac.dashboard.view"), 1)
+        self.assertEqual(self._permission_query_count(statements, "neoermac.dashboard.view"), 0)
         self.assertEqual(self._table_query_count(statements, "gateway_memberships"), 1)
         self.assertEqual(self._table_query_count(statements, "portal_app_accesses"), 1)
         self.assertEqual(self._table_query_count(statements, "gateway_node_roles"), 1)
@@ -109,9 +109,9 @@ class RequestAccessCacheTest(unittest.TestCase):
         self.assertEqual(self._table_query_count(statements, "gateway_memberships"), 1)
         self.assertEqual(self._table_query_count(statements, "portal_app_accesses"), 1)
         self.assertEqual(self._table_query_count(statements, "gateway_node_roles"), 1)
-        self.assertEqual(self._permission_query_count(statements, "neoermac.dashboard.view"), 1)
+        self.assertEqual(self._permission_query_count(statements, "neoermac.dashboard.view"), 0)
 
-    def test_independent_request_resolves_updated_permission_again(self):
+    def test_redundant_node_view_threshold_does_not_override_node_access(self):
         first_statements = []
         with self._capture_selects(first_statements):
             first = self.client.get("/_request-cache-probe")
@@ -127,11 +127,11 @@ class RequestAccessCacheTest(unittest.TestCase):
             second = self.client.get("/_request-cache-probe")
 
         self.assertEqual(first.get_data(as_text=True).strip(), "RFD|True|True")
-        self.assertEqual(second.get_data(as_text=True).strip(), "RFD|False|False")
+        self.assertEqual(second.get_data(as_text=True).strip(), "RFD|True|True")
         for statements in (first_statements, second_statements):
             self.assertEqual(
                 self._permission_query_count(statements, "neoermac.dashboard.view"),
-                1,
+                0,
             )
             self.assertEqual(self._table_query_count(statements, "gateway_memberships"), 1)
             self.assertEqual(self._table_query_count(statements, "gateway_node_roles"), 1)

@@ -1,5 +1,7 @@
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import event
 
@@ -12,6 +14,7 @@ from app.services.permission_rules import (
     PERMISSION_RULE_ITEMS,
     ensure_default_permission_rules,
     get_permission_rule,
+    permission_is_configurable,
     preload_permission_rules,
     user_can,
 )
@@ -241,7 +244,7 @@ class PermissionRulesTest(unittest.TestCase):
         portal_user.role = "grandmaster"
         self.assertTrue(user_can("neoapps.portal_management.view", portal_user))
         self.assertTrue(user_can("neostaffing.board.view", staffing_user))
-        self.assertFalse(user_can("neostaffing.reports.view", staffing_user))
+        self.assertTrue(user_can("neostaffing.reports.view", staffing_user))
 
         staffing_access.role = "master"
         db.session.commit()
@@ -282,7 +285,7 @@ class PermissionRulesTest(unittest.TestCase):
                 self.assertIsNone(loaded[fallback_key])
                 self.assertIsNone(loaded["missing.permission"])
                 self.assertIsNone(get_permission_rule(fallback_key))
-                self.assertFalse(user_can(custom_key, user))
+                self.assertTrue(user_can(custom_key, user))
                 self.assertTrue(user_can(fallback_key, user))
                 self.assertFalse(user_can("missing.permission", user))
                 preload_permission_rules((custom_key, fallback_key))
@@ -304,7 +307,7 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn(" IN ", permission_selects[0])
         self.assertEqual(writes, [])
 
-    def test_neostaffing_route_uses_saved_view_permission(self):
+    def test_node_read_only_route_uses_app_access_not_redundant_view_threshold(self):
         view_rule = PermissionRule.query.filter_by(
             permission_key="neostaffing.people.view"
         ).one()
@@ -320,7 +323,7 @@ class PermissionRulesTest(unittest.TestCase):
         response = self.client.get("/neostaffing/app-management", follow_redirects=False)
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/neostaffing")
+        self.assertEqual(response.location, "/neostaffing/people")
 
     def test_grandmaster_can_manage_permission_rules(self):
         grandmaster = self._user_with_ermac_role("permission_grandmaster", "grandmaster")
@@ -343,7 +346,7 @@ class PermissionRulesTest(unittest.TestCase):
 
         updated = db.session.get(PermissionRule, rule.id)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"PERMISSION RULES", response.data)
+        self.assertIn(b"Node Permissions", response.data)
         self.assertIn(b"permission-rule-item", response.data)
         self.assertIn(b'data-permission-action="view"', response.data)
         self.assertIn(b'data-permission-action="edit"', response.data)
@@ -411,6 +414,10 @@ class PermissionRulesTest(unittest.TestCase):
             'data-permission-item="motherbrain.parking_optimizer_apply"',
             1,
         )[1].split("</article>", 1)[0]
+        ermac_lineup_block = html.split(
+            'data-permission-item="neoermac.building_lineup"',
+            1,
+        )[1].split("</article>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('data-permission-action="view"', manage_sort_block)
@@ -419,6 +426,8 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertIn('data-permission-action="view"', manage_api_block)
         self.assertIn('data-permission-action="trigger"', manage_api_block)
         self.assertIn('data-permission-action="trigger"', optimizer_apply_block)
+        self.assertNotIn('data-permission-action="view"', ermac_lineup_block)
+        self.assertIn('data-permission-action="edit"', ermac_lineup_block)
         self.assertIn("neomotherbrain.manage_api.run", manage_api_block)
         self.assertIn("motherbrain.parking_optimizer.apply", optimizer_apply_block)
 
@@ -488,6 +497,75 @@ class PermissionRulesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/rfd")
+
+    def test_motherbrain_menu_hides_denied_page_and_direct_route_is_denied(self):
+        system_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.system_settings.view"
+        ).one()
+        system_rule.minimum_role = "grandmaster"
+        operator = self._user_with_node_role(
+            "motherbrain_menu_operator", "motherbrain", "operator"
+        )
+        db.session.commit()
+        self._login(operator.username)
+
+        dashboard = self.client.get("/motherbrain")
+        direct = self.client.get("/motherbrain/system-settings", follow_redirects=False)
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertNotIn(b'href="/motherbrain/system-settings"', dashboard.data)
+        self.assertEqual(direct.status_code, 302)
+        self.assertEqual(direct.location, "/rfd")
+
+    def test_missing_mutation_rule_blocks_direct_post_even_for_grandmaster(self):
+        edit_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.manage_sort.edit"
+        ).one()
+        db.session.delete(edit_rule)
+        grandmaster = self._user_with_node_role(
+            "missing_action_grandmaster", "motherbrain", "grandmaster"
+        )
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        response = self.client.post(
+            "/motherbrain/manage-sort/create-tonight",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/rfd")
+
+    def test_invalid_mutation_threshold_fails_read_only(self):
+        simulator = self._user_with_ermac_role(
+            "invalid_action_simulator", "simulator"
+        )
+        with patch(
+            "app.services.permission_rules.get_permission_rule",
+            return_value=SimpleNamespace(minimum_role="invalid-role"),
+        ):
+            self.assertFalse(
+                user_can("neoermac.building_lineup.edit", simulator)
+            )
+
+    def test_system_grandmaster_safeguard_survives_lowered_action_threshold(self):
+        integration_rule = PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.integrations.edit"
+        ).one()
+        integration_rule.minimum_role = "watcher"
+        operator = self._user_with_node_role(
+            "integration_operator", "motherbrain", "operator"
+        )
+        db.session.commit()
+        self._login(operator.username)
+
+        response = self.client.post(
+            "/motherbrain/system-settings/integrations",
+            data={"action": "save_google_live_polling"},
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_manage_api_run_permission_controls_manual_actions(self):
         view_rule = PermissionRule.query.filter_by(
@@ -568,8 +646,8 @@ class PermissionRulesTest(unittest.TestCase):
         operator = self._user_with_node_role("sektor_operator", "sektor", "operator")
         simulator = self._user_with_node_role("sektor_simulator", "sektor", "simulator")
 
-        self.assertFalse(user_can("neosektor.conductor.view", watcher))
-        self.assertFalse(user_can("neosektor.conductor.view", operator))
+        self.assertTrue(user_can("neosektor.conductor.view", watcher))
+        self.assertTrue(user_can("neosektor.conductor.view", operator))
         self.assertTrue(user_can("neosektor.conductor.view", simulator))
         self.assertTrue(user_can("neosektor.tunnel_conductor.edit", simulator))
         self.assertTrue(user_can("neosektor.ebm.view", operator))
@@ -578,18 +656,24 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertTrue(user_can("neosektor.wbm.edit", operator))
         self.assertFalse(user_can("neosektor.driver_routing.edit", operator))
 
-    def test_lower_role_cannot_view_or_edit_door_view(self):
+    def test_watcher_can_view_but_cannot_edit_door_view(self):
         watcher = self._user_with_ermac_role("ermac_watcher", "watcher")
 
-        self.assertFalse(user_can("neoermac.door_view.view", watcher))
+        self.assertTrue(user_can("neoermac.door_view.view", watcher))
         self.assertFalse(user_can("neoermac.door_view.edit", watcher))
 
-    def test_missing_permission_key_denies_non_grandmaster_and_allows_grandmaster(self):
+    def test_missing_action_permission_fails_read_only_for_every_role(self):
         master = self._user_with_ermac_role("ermac_master", "master")
         grandmaster = self._user_with_ermac_role("ermac_missing_grandmaster", "grandmaster")
 
         self.assertFalse(user_can("neoermac.unknown_screen.edit", master))
-        self.assertTrue(user_can("neoermac.unknown_screen.edit", grandmaster))
+        self.assertFalse(user_can("neoermac.unknown_screen.edit", grandmaster))
+
+    def test_only_motherbrain_and_action_rules_are_centrally_configurable(self):
+        self.assertFalse(permission_is_configurable("neoermac.door_view.view"))
+        self.assertFalse(permission_is_configurable("neorain.outbound.view"))
+        self.assertTrue(permission_is_configurable("neoermac.door_view.edit"))
+        self.assertTrue(permission_is_configurable("neomotherbrain.manage_sort.view"))
 
     def _user(self, username, role="watcher"):
         user = User(username=username, role=role)

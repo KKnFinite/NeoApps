@@ -2184,13 +2184,13 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertEqual(forged.status_code, 302)
         self.assertEqual(StaffingVacationUnionCalendar.query.count(), 1)
 
-    def test_permission_threshold_and_static_tri_state_contract(self):
+    def test_read_only_page_ignores_redundant_view_threshold(self):
         user = self._user("vacation_below_threshold", "watcher")
         PermissionRule.query.filter_by(permission_key="neostaffing.vacation_selection.view").one().minimum_role = "operator"
         db.session.commit()
         self._login(user)
-        denied = self.client.get("/neostaffing/vacation-selection")
-        self.assertEqual(denied.status_code, 302)
+        page = self.client.get("/neostaffing/vacation-selection")
+        self.assertEqual(page.status_code, 200)
 
         root = Path(__file__).resolve().parents[1]
         javascript = (root / "app/static/js/neostaffing_vacation.js").read_text(encoding="utf-8")

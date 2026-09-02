@@ -105,7 +105,7 @@ class NeoRainRoutesTest(unittest.TestCase):
         clear_request_cache()
         self.assertTrue(user_can("neorain.inbound.edit", user))
 
-    def test_rain_view_permission_denial_does_not_bypass_rain_role(self):
+    def test_rain_read_only_view_follows_node_access_not_redundant_threshold(self):
         user = self._rain_user("rain_denied_user", "master")
         rain = NeoNode.query.filter_by(code="rain").one()
         membership = GatewayMembership.query.filter_by(user_id=user.id).one()
@@ -121,8 +121,8 @@ class NeoRainRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neorain/inbound", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/neorain")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(user_can("neorain.inbound.edit", user))
 
     def _rain_user(self, username, role):
         user = User(
