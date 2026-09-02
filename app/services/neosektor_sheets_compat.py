@@ -11,7 +11,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from flask import has_app_context
@@ -759,14 +759,29 @@ def google_primary_operational_values(gateway, force=False):
     return dict(values)
 
 
-def google_primary_wave_timer_starts(gateway):
-    """Return process-local ALL UP observation times for Google-owned waves."""
+def google_primary_wave_timer_starts(gateway, *, operational_settings=None):
+    """Return process-local ALL UP starts for Google-owned waves.
+
+    Google has no timer columns.  Keep the timer process-local, but apply the
+    same side-specific ALL UP and wave-activation rules used by Neon.
+    """
     gateway = _resolve_gateway(gateway)
     if not gateway:
         return {}
     with _google_state_cache_lock:
         cached = _google_state_cache.get(gateway.id) or {}
-        return dict(cached.get("wave_all_up_started_at") or {})
+        values = cached.get("values") or {}
+        starts = _updated_google_wave_timers(
+            cached.get("wave_all_up_started_at"),
+            values,
+            down_timer_minutes=_google_primary_down_timer_minutes(
+                operational_settings
+            ),
+        )
+        if cached:
+            cached["wave_all_up_started_at"] = starts
+            _google_state_cache[gateway.id] = cached
+        return dict(starts)
 
 
 def write_google_primary_operational_values(
@@ -1279,20 +1294,45 @@ def _merge_cached_google_values(gateway_id, updates):
         }
 
 
-def _updated_google_wave_timers(existing, values):
+def _updated_google_wave_timers(existing, values, *, down_timer_minutes=15):
     now = datetime.utcnow()
     starts = dict(existing or {})
-    wave_cells = {
-        "1ST WAVE": ("B2", "C2", "D2"),
-        "2ND WAVE": ("B3", "C3", "D3"),
-    }
-    for wave_name, cells in wave_cells.items():
-        is_all_up = all(int(values.get(cell) or 0) == 0 for cell in cells)
-        if is_all_up:
-            starts.setdefault(wave_name, now)
-        else:
-            starts.pop(wave_name, None)
+    first_is_all_up = _google_wave_is_all_up(values, "B2", "C2", "D2")
+    second_is_all_up = _google_wave_is_all_up(values, "B3", "C3", "D3")
+
+    if first_is_all_up:
+        starts.setdefault("1ST WAVE", now)
+    else:
+        starts.pop("1ST WAVE", None)
+        starts.pop("2ND WAVE", None)
+        return starts
+
+    first_started_at = starts.get("1ST WAVE")
+    first_is_down = bool(
+        first_started_at
+        and now - first_started_at >= timedelta(minutes=down_timer_minutes)
+    )
+    if first_is_down and second_is_all_up:
+        starts.setdefault("2ND WAVE", now)
+    else:
+        starts.pop("2ND WAVE", None)
     return starts
+
+
+def _google_wave_is_all_up(values, east_count_cell, west_count_cell, left_to_arrive_cell):
+    return (
+        _safe_int(values.get(left_to_arrive_cell)) == 0
+        and _safe_int(values.get(east_count_cell)) <= _safe_int(values.get("B4"))
+        and _safe_int(values.get(west_count_cell)) <= _safe_int(values.get("C4"))
+    )
+
+
+def _google_primary_down_timer_minutes(settings):
+    try:
+        value = int(getattr(settings, "all_up_to_down_minutes", 15))
+    except (TypeError, ValueError):
+        value = 15
+    return min(max(value, 1), 120)
 
 
 def _sheet_values_from_state(state):

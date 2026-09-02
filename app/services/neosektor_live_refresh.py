@@ -73,7 +73,10 @@ def neosektor_state_revision(
     aggregate_queries = []
     timer_rows = []
     if mode == GOOGLE_PRIMARY:
-        timer_starts = google_primary_wave_timer_starts(gateway)
+        timer_starts = google_primary_wave_timer_starts(
+            gateway,
+            operational_settings=settings,
+        )
         timer_rows = [
             SimpleNamespace(
                 wave_name=wave_name,

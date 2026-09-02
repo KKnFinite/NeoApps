@@ -760,7 +760,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
 
     def test_google_primary_all_up_observation_is_process_local(self):
         worksheet = _FakeWorksheet(
-            _complete_sheet_values(B2=0, C2=0, D2=0, B3=1, C3=0, D3=0)
+            _complete_sheet_values(B2=3, C2=0, D2=0, B3=1, C3=0, D3=0, B4=3, C4=0)
         )
         with (
             patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
@@ -771,7 +771,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         ):
             google_primary_operational_values(self.gateway)
             started = google_primary_wave_timer_starts(self.gateway)
-            worksheet.values["B2"] = 1
+            worksheet.values["B2"] = 4
             google_primary_operational_values(self.gateway, force=True)
             cleared = google_primary_wave_timer_starts(self.gateway)
 

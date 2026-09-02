@@ -131,7 +131,10 @@ class NeoSektorOperationalStateBundle:
                 )
             else:
                 sort_state = _copy_sort_state(None, gateway, sort_date, sort_name)
-                timer_starts = google_primary_wave_timer_starts(gateway)
+                timer_starts = google_primary_wave_timer_starts(
+                    gateway,
+                    operational_settings=settings,
+                )
                 timer_rows = [
                     SimpleNamespace(
                         wave_name=wave_name,
@@ -1396,17 +1399,15 @@ def _wave_views(
     second_east_wave_count = _side_wave_count(east, "second")
     second_west_wave_count = _side_wave_count(west, "second")
 
-    first_remaining = _remaining_wave_load(
-        first_left_to_arrive,
+    first_back_row_waiting = _wave_back_row_waiting(
         first_east_wave_count,
         first_west_wave_count,
         east_open_bays,
         west_open_bays,
     )
-    first_is_all_up = (
-        first_left_to_arrive == 0
-        and first_remaining == 0
-        and _wave_back_rows_empty(first_east_wave_count, first_west_wave_count)
+    first_is_all_up = _wave_is_all_up(
+        first_left_to_arrive,
+        first_back_row_waiting,
     )
     first_timer_done = _sync_wave_all_up_timer(
         timer_rows_by_name["1ST WAVE"],
@@ -1421,59 +1422,51 @@ def _wave_views(
     elif first_is_all_up:
         first_left_to_unload = "ALL UP"
     else:
-        first_left_to_unload = (
-            first_remaining
-            + _settings_first_modifier(operational_settings)
+        first_left_to_unload = _active_wave_left_to_unload(
+            first_left_to_arrive,
+            first_back_row_waiting,
+            _settings_first_modifier(operational_settings),
         )
 
     second_waiting_on_first_wave = first_is_all_up and not first_timer_done
-    second_base_remaining = _wave_load_without_open_bays(
-        second_left_to_arrive,
-        second_east_wave_count,
-        second_west_wave_count,
-    )
-    second_open_bay_remaining = _remaining_wave_load(
-        second_left_to_arrive,
+    second_is_active = first_is_all_up and first_timer_done
+    second_back_row_waiting = _wave_back_row_waiting(
         second_east_wave_count,
         second_west_wave_count,
         east_open_bays,
         west_open_bays,
     )
-    second_can_use_open_bays = (
-        first_left_to_arrive == 0
-        and first_left_to_unload in {0, "DOWN"}
+    second_inactive_remaining = _inactive_wave_left_to_unload(
+        second_left_to_arrive,
+        second_east_wave_count,
+        second_west_wave_count,
     )
-    second_remaining = (
-        second_open_bay_remaining
-        if second_can_use_open_bays
-        else second_base_remaining
-    )
-    second_is_all_up = (
-        second_left_to_arrive == 0
-        and second_remaining == 0
-        and _wave_back_rows_empty(second_east_wave_count, second_west_wave_count)
+    second_is_all_up = _wave_is_all_up(
+        second_left_to_arrive,
+        second_back_row_waiting,
     )
     second_timer_done = _sync_wave_all_up_timer(
         timer_rows_by_name["2ND WAVE"],
-        second_is_all_up,
+        second_is_active and second_is_all_up,
         operational_settings,
         now,
         persist=persist_timer,
         change_tracker=change_tracker,
     )
 
-    if second_is_all_up and second_timer_done:
+    if second_is_active and second_is_all_up and second_timer_done:
         second_left_to_unload = "DOWN"
-    elif second_is_all_up:
+    elif second_is_active and second_is_all_up:
         second_left_to_unload = "ALL UP"
     elif second_waiting_on_first_wave:
-        second_left_to_unload = "-"
-    elif not first_is_all_up:
-        second_left_to_unload = second_remaining
+        second_left_to_unload = "PENDING"
+    elif not second_is_active:
+        second_left_to_unload = second_inactive_remaining
     else:
-        second_left_to_unload = (
-            second_remaining
-            + _settings_second_modifier(operational_settings)
+        second_left_to_unload = _active_wave_left_to_unload(
+            second_left_to_arrive,
+            second_back_row_waiting,
+            _settings_second_modifier(operational_settings),
         )
 
     return [
@@ -1486,17 +1479,28 @@ def _wave_left_to_arrive_display(value):
     return "ALL IN" if max(value or 0, 0) == 0 else max(value or 0, 0)
 
 
-def _remaining_wave_load(left_to_arrive, east_wave, west_wave, east_open_bays, west_open_bays):
-    open_bays_total = east_open_bays + west_open_bays
-    return max(0, left_to_arrive + east_wave + west_wave - open_bays_total)
+def _wave_back_row_waiting(east_wave, west_wave, east_open_bays, west_open_bays):
+    """Count back-row work after each ballmat uses only its own open bays."""
+    east_waiting = max(max(east_wave or 0, 0) - max(east_open_bays or 0, 0), 0)
+    west_waiting = max(max(west_wave or 0, 0) - max(west_open_bays or 0, 0), 0)
+    return east_waiting + west_waiting
 
 
-def _wave_load_without_open_bays(left_to_arrive, east_wave, west_wave):
-    return max(0, left_to_arrive + east_wave + west_wave)
+def _wave_is_all_up(left_to_arrive, back_row_waiting):
+    return max(left_to_arrive or 0, 0) == 0 and back_row_waiting == 0
 
 
-def _wave_back_rows_empty(east_wave, west_wave):
-    return max(east_wave or 0, 0) == 0 and max(west_wave or 0, 0) == 0
+def _active_wave_left_to_unload(left_to_arrive, back_row_waiting, modifier):
+    return max(left_to_arrive or 0, 0) + back_row_waiting + max(modifier or 0, 0)
+
+
+def _inactive_wave_left_to_unload(left_to_arrive, east_wave, west_wave):
+    """Show the raw workload for a wave that cannot yet use its modifier."""
+    return (
+        max(left_to_arrive or 0, 0)
+        + max(east_wave or 0, 0)
+        + max(west_wave or 0, 0)
+    )
 
 
 def _sync_wave_all_up_timer(
