@@ -41,6 +41,26 @@
                 {% endif %}
             </form>
 
+            <div class="system-settings-mode-help neosektor-shared-authority-status" data-neosektor-shared-authority="{{ neosektor_shared_authority.authority }}">
+                <p>
+                    <strong>SHARED STANDALONE AUTHORITY:</strong>
+                    {{ neosektor_shared_authority.authority_label }}
+                    {% if neosektor_shared_authority.record_present %}
+                    · generation {{ neosektor_shared_authority.generation }}
+                    {% endif %}
+                </p>
+                {% if neosektor_shared_authority.authority == "standalone_primary" %}
+                <p>Neo will not write NeoSektor compatibility cells while standalone authority is active.</p>
+                {% elif neosektor_shared_authority.record_present %}
+                <p>Neo may mirror compatibility cells. Authority changes are not enabled here yet.</p>
+                {% else %}
+                <p>Shared failover control is not activated; legacy Google compatibility remains unchanged.</p>
+                {% endif %}
+                {% if not neosektor_shared_authority.available %}
+                <p class="muted">Authority status is unavailable: {{ neosektor_shared_authority.error }}</p>
+                {% endif %}
+            </div>
+
             {% if neosektor_status.google_mirror_sync_needed %}
             <div class="system-settings-warning" data-neosektor-mirror-warning>
                 <strong>GOOGLE MIRROR NEEDS ATTENTION</strong>

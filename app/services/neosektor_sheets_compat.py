@@ -78,9 +78,46 @@ GOOGLE_TRANSIENT_CACHE_SECONDS = 2.0
 _google_state_cache = {}
 _google_state_cache_lock = threading.Lock()
 
+# This control is deliberately opt-in.  Existing deployments and the existing
+# standalone application only know about the operational worksheet, so merely
+# deploying NeoApps must not silently change who can write those cells.  When
+# both applications have been upgraded, configure this tab name in both
+# deployments and initialize its one-record contract explicitly.
+NEOSEKTOR_SHARED_AUTHORITY_TAB_ENV = "GOOGLE_SHEETS_NEOSEKTOR_AUTHORITY_TAB"
+NEOSEKTOR_SHARED_AUTHORITY_HEADERS = (
+    "authority",
+    "generation",
+    "changed_at",
+    "changed_by",
+    "metadata",
+)
+NEOSEKTOR_SHARED_AUTHORITY_CELLS = ("A2", "B2", "C2", "D2", "E2")
+NEO_PRIMARY_AUTHORITY = "neo_primary"
+STANDALONE_PRIMARY_AUTHORITY = "standalone_primary"
+LEGACY_UNMANAGED_AUTHORITY = "legacy_unmanaged"
+NEOSEKTOR_SHARED_AUTHORITIES = (
+    NEO_PRIMARY_AUTHORITY,
+    STANDALONE_PRIMARY_AUTHORITY,
+)
+NEOSEKTOR_SHARED_AUTHORITY_LABELS = {
+    NEO_PRIMARY_AUTHORITY: "NEO PRIMARY",
+    STANDALONE_PRIMARY_AUTHORITY: "STANDALONE PRIMARY",
+    LEGACY_UNMANAGED_AUTHORITY: "NOT ACTIVATED",
+}
+
+# Authority is read immediately before each Neo Google write.  It is not used
+# by live page refreshes, so this does not create another polling path.
+SHARED_AUTHORITY_CACHE_SECONDS = 5.0
+_shared_authority_cache = {}
+_shared_authority_cache_lock = threading.Lock()
+
 
 class NeoSektorGoogleError(ValueError):
     """Safe, user-displayable NeoSektor Google transition failure."""
+
+
+class NeoSektorSharedAuthorityError(NeoSektorGoogleError):
+    """The shared Google authority record is unavailable, stale, or invalid."""
 
 
 def neosektor_integration_mode(gateway=None, *, settings=None):
@@ -180,6 +217,196 @@ def change_neosektor_integration_mode(gateway, requested_mode):
     return neosektor_integration_status(gateway)
 
 
+def neosektor_shared_authority_status(gateway=None, *, force=False):
+    """Return the external write-fence state without changing it.
+
+    A missing authority-tab configuration is intentionally reported as legacy
+    compatibility rather than inferred as Neo primary.  This keeps existing
+    Google-primary deployments unchanged until both writers are upgraded.
+    """
+    gateway = _resolve_gateway(gateway)
+    if not _shared_authority_tab_name():
+        return _legacy_shared_authority_status("not_configured")
+    try:
+        return read_neosektor_shared_authority(gateway, force=force)
+    except NeoSektorSharedAuthorityError as error:
+        return {
+            **_legacy_shared_authority_status("unavailable"),
+            "available": False,
+            "error": str(error),
+        }
+
+
+def read_neosektor_shared_authority(gateway=None, *, force=False, worksheet=None):
+    """Read the dedicated shared NeoSektor authority record.
+
+    This is a read-only operation.  The standalone implementation can use the
+    same five-cell contract: A2 authority, B2 generation, C2 changed-at, D2
+    actor, and E2 JSON metadata.
+    """
+    gateway = _resolve_gateway(gateway)
+    if not _shared_authority_tab_name():
+        return _legacy_shared_authority_status("not_configured")
+    if not gateway:
+        raise NeoSektorSharedAuthorityError("NeoSektor gateway is unavailable.")
+    if not force:
+        cached = _cached_shared_authority(gateway.id)
+        if cached is not None:
+            return cached
+    if not sheets_credentials_configured():
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor Google Sheets credentials are missing."
+        )
+
+    try:
+        worksheet = worksheet or _get_shared_authority_worksheet()
+        batch_values = worksheet.batch_get(list(NEOSEKTOR_SHARED_AUTHORITY_CELLS))
+        values = [
+            _batch_item_value(batch_values[index])
+            if index < len(batch_values)
+            else None
+            for index in range(len(NEOSEKTOR_SHARED_AUTHORITY_CELLS))
+        ]
+    except Exception as error:
+        if _is_missing_worksheet_error(error):
+            return _legacy_shared_authority_status("tab_missing")
+        _log_safe_warning("shared authority read", error)
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor could not read its shared authority record."
+        ) from error
+
+    status = _normalized_shared_authority_record(values)
+    _store_shared_authority(gateway.id, status)
+    return dict(status)
+
+
+def initialize_neosektor_shared_authority(gateway, *, actor=None, metadata=None):
+    """Create the opt-in authority tab with Neo as generation-one primary.
+
+    No route calls this yet.  It is deliberately an explicit deployment/control
+    action so an unmodified standalone application never loses its legacy
+    ability to write the operational sheet merely because NeoApps was deployed.
+    """
+    gateway = _resolve_gateway(gateway)
+    if not gateway:
+        raise NeoSektorSharedAuthorityError("NeoSektor gateway is unavailable.")
+    if not _shared_authority_tab_name():
+        raise NeoSektorSharedAuthorityError(
+            "Configure the dedicated NeoSektor shared authority tab first."
+        )
+    current = read_neosektor_shared_authority(gateway, force=True)
+    if current["record_present"]:
+        return current
+    worksheet = _get_shared_authority_worksheet(create=True)
+    _write_shared_authority_headers(worksheet)
+    status = _shared_authority_status(
+        authority=NEO_PRIMARY_AUTHORITY,
+        generation=1,
+        changed_at=_authority_timestamp(),
+        changed_by=_normalized_authority_actor(actor),
+        metadata=_normalized_authority_metadata(metadata),
+        record_present=True,
+        source="shared_record",
+    )
+    _write_shared_authority_record(worksheet, status)
+    verified = read_neosektor_shared_authority(gateway, force=True)
+    if (
+        verified["authority"] != NEO_PRIMARY_AUTHORITY
+        or verified["generation"] != 1
+    ):
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor shared authority initialization could not be verified."
+        )
+    return verified
+
+
+def transition_neosektor_shared_authority(
+    gateway,
+    requested_authority,
+    *,
+    expected_generation,
+    actor=None,
+    metadata=None,
+):
+    """Compare, write, then verify a shared authority generation transition.
+
+    Google Sheets has no compare-and-swap primitive through this integration.
+    This is therefore a read/expected-generation/write/re-read fence, not a
+    claim of atomic CAS.  Both writers must perform this same verification and
+    must stop operational writes before changing the record.
+    """
+    target = _normalized_shared_authority(requested_authority, strict=True)
+    if isinstance(expected_generation, bool):
+        raise NeoSektorSharedAuthorityError("Use the current authority generation.")
+    try:
+        expected = int(expected_generation)
+    except (TypeError, ValueError) as error:
+        raise NeoSektorSharedAuthorityError("Use the current authority generation.") from error
+    if expected < 0:
+        raise NeoSektorSharedAuthorityError("Use the current authority generation.")
+
+    gateway = _resolve_gateway(gateway)
+    current = read_neosektor_shared_authority(gateway, force=True)
+    if current["generation"] != expected:
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor authority changed. Refresh before taking control."
+        )
+    if current["record_present"] and current["authority"] == target:
+        return current
+    if not _shared_authority_tab_name():
+        raise NeoSektorSharedAuthorityError(
+            "Configure the dedicated NeoSektor shared authority tab first."
+        )
+
+    worksheet = _get_shared_authority_worksheet(create=not current["record_present"])
+    if not current["record_present"]:
+        _write_shared_authority_headers(worksheet)
+    proposed = _shared_authority_status(
+        authority=target,
+        generation=expected + 1,
+        changed_at=_authority_timestamp(),
+        changed_by=_normalized_authority_actor(actor),
+        metadata=_normalized_authority_metadata(metadata),
+        record_present=True,
+        source="shared_record",
+    )
+    _write_shared_authority_record(worksheet, proposed)
+    verified = read_neosektor_shared_authority(gateway, force=True)
+    if (
+        verified["authority"] != proposed["authority"]
+        or verified["generation"] != proposed["generation"]
+        or verified["changed_at"] != proposed["changed_at"]
+        or verified["changed_by"] != proposed["changed_by"]
+        or verified["metadata"] != proposed["metadata"]
+    ):
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor authority transition conflicted. No control change was confirmed."
+        )
+    return verified
+
+
+def neo_may_write_neosektor_google(gateway=None, *, force=False):
+    """Whether the shared fence permits Neo operational Google writes."""
+    status = read_neosektor_shared_authority(gateway, force=force)
+    return bool(status["can_neo_write"])
+
+
+def standalone_may_write_neosektor_google(gateway=None, *, force=False):
+    """Expose the complementary decision for a later standalone implementation."""
+    status = read_neosektor_shared_authority(gateway, force=force)
+    return bool(status["can_standalone_write"])
+
+
+def assert_neo_may_write_neosektor_google(gateway):
+    """Fence an imminent Neo operational write with a fresh authority read."""
+    status = read_neosektor_shared_authority(gateway, force=True)
+    if not status["can_neo_write"]:
+        raise NeoSektorSharedAuthorityError(
+            "Standalone NeoSektor currently controls the shared operational sheet."
+        )
+    return status
+
+
 def google_primary_operational_values(gateway, force=False):
     """Return authoritative Google operational values without writing Neon."""
     gateway = _resolve_gateway(gateway)
@@ -229,6 +456,7 @@ def write_google_primary_operational_values(
     if mode != GOOGLE_PRIMARY:
         raise NeoSektorGoogleError("NeoSektor is not in GOOGLE PRIMARY mode.")
     normalized = normalize_operational_cell_values(updates, require_complete=False)
+    assert_neo_may_write_neosektor_google(gateway)
     _write_google_operational_values(gateway, normalized)
     return normalized
 
@@ -278,7 +506,10 @@ def mirror_neosektor_operational_values(
         return {"status": "unchanged", "updated": 0}
 
     try:
+        assert_neo_may_write_neosektor_google(gateway)
         _write_google_operational_values(gateway, updates)
+    except NeoSektorSharedAuthorityError:
+        return {"status": "blocked_by_shared_authority", "updated": 0}
     except Exception as error:
         _record_mirror_failure(gateway, error, settings=settings)
         return {"status": "error", "updated": 0}
@@ -356,6 +587,11 @@ def clear_neosektor_google_cache(gateway=None):
             _google_state_cache.pop(gateway.id, None)
         else:
             _google_state_cache.clear()
+    with _shared_authority_cache_lock:
+        if gateway:
+            _shared_authority_cache.pop(gateway.id, None)
+        else:
+            _shared_authority_cache.clear()
 
 
 # Backward-compatible service names remain importable while the old toggle UI
@@ -442,7 +678,12 @@ def _clear_mirror_warning(settings):
 
 
 def _get_worksheet():
-    """Open the exact worksheet configured for standalone NeoSektor."""
+    """Open the exact operational worksheet configured for standalone NeoSektor."""
+    return _get_spreadsheet().worksheet(os.environ["GOOGLE_SHEETS_TAB"])
+
+
+def _get_spreadsheet():
+    """Open the configured shared workbook once for operational/control access."""
     if gspread is None:
         raise RuntimeError("gspread unavailable")
 
@@ -450,8 +691,211 @@ def _get_worksheet():
     if "private_key" in credentials:
         credentials["private_key"] = credentials["private_key"].replace("\\n", "\n")
     client = gspread.service_account_from_dict(credentials)
-    spreadsheet = client.open_by_key(os.environ["GOOGLE_SHEETS_ID"])
-    return spreadsheet.worksheet(os.environ["GOOGLE_SHEETS_TAB"])
+    return client.open_by_key(os.environ["GOOGLE_SHEETS_ID"])
+
+
+def _get_shared_authority_worksheet(*, create=False):
+    title = _shared_authority_tab_name()
+    if not title:
+        raise NeoSektorSharedAuthorityError(
+            "Configure the dedicated NeoSektor shared authority tab first."
+        )
+    spreadsheet = _get_spreadsheet()
+    try:
+        return spreadsheet.worksheet(title)
+    except Exception as error:
+        if not create or not _is_missing_worksheet_error(error):
+            raise
+    try:
+        return spreadsheet.add_worksheet(title=title, rows=4, cols=5)
+    except Exception as error:
+        _log_safe_warning("shared authority tab creation", error)
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor could not create its shared authority tab."
+        ) from error
+
+
+def _shared_authority_tab_name():
+    return str(os.environ.get(NEOSEKTOR_SHARED_AUTHORITY_TAB_ENV) or "").strip()
+
+
+def _is_missing_worksheet_error(error):
+    return error.__class__.__name__ in {"WorksheetNotFound", "APIError"} and (
+        error.__class__.__name__ == "WorksheetNotFound"
+        or "not found" in str(error).lower()
+    )
+
+
+def _legacy_shared_authority_status(source):
+    return _shared_authority_status(
+        authority=LEGACY_UNMANAGED_AUTHORITY,
+        generation=0,
+        changed_at=None,
+        changed_by=None,
+        metadata={},
+        record_present=False,
+        source=source,
+    )
+
+
+def _shared_authority_status(
+    *,
+    authority,
+    generation,
+    changed_at,
+    changed_by,
+    metadata,
+    record_present,
+    source,
+):
+    authority = _normalized_shared_authority(authority)
+    enforced = bool(record_present)
+    return {
+        "authority": authority,
+        "authority_label": NEOSEKTOR_SHARED_AUTHORITY_LABELS[authority],
+        "generation": generation,
+        "changed_at": changed_at,
+        "changed_by": changed_by,
+        "metadata": dict(metadata or {}),
+        "record_present": enforced,
+        "enforced": enforced,
+        # Legacy compatibility intentionally leaves both writers available
+        # until the shared record is provisioned by both deployments.
+        "can_neo_write": authority != STANDALONE_PRIMARY_AUTHORITY,
+        "can_standalone_write": authority != NEO_PRIMARY_AUTHORITY,
+        "available": True,
+        "source": source,
+        "control_tab": _shared_authority_tab_name() or None,
+    }
+
+
+def _normalized_shared_authority_record(values):
+    authority, generation, changed_at, changed_by, metadata = values
+    if all(value is None or str(value).strip() == "" for value in values):
+        return _legacy_shared_authority_status("tab_empty")
+    normalized_authority = _normalized_shared_authority(authority, strict=True)
+    try:
+        normalized_generation = int(str(generation).strip())
+    except (TypeError, ValueError) as error:
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor shared authority generation is invalid."
+        ) from error
+    if normalized_generation < 1:
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor shared authority generation is invalid."
+        )
+    changed_at = str(changed_at or "").strip()
+    if not changed_at:
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor shared authority timestamp is missing."
+        )
+    return _shared_authority_status(
+        authority=normalized_authority,
+        generation=normalized_generation,
+        changed_at=changed_at,
+        changed_by=_normalized_authority_actor(changed_by),
+        metadata=_normalized_authority_metadata(metadata),
+        record_present=True,
+        source="shared_record",
+    )
+
+
+def _normalized_shared_authority(value, *, strict=False):
+    normalized = str(value or "").strip().lower()
+    if normalized in NEOSEKTOR_SHARED_AUTHORITIES:
+        return normalized
+    if normalized == LEGACY_UNMANAGED_AUTHORITY:
+        return normalized
+    if strict:
+        raise NeoSektorSharedAuthorityError("Choose a valid NeoSektor authority.")
+    return LEGACY_UNMANAGED_AUTHORITY
+
+
+def _normalized_authority_actor(value):
+    actor = str(value or "").strip()
+    if len(actor) > 160:
+        raise NeoSektorSharedAuthorityError("NeoSektor authority actor is too long.")
+    return actor or None
+
+
+def _normalized_authority_metadata(value):
+    if value in (None, ""):
+        return {}
+    if isinstance(value, dict):
+        metadata = value
+    else:
+        try:
+            metadata = json.loads(str(value))
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise NeoSektorSharedAuthorityError(
+                "NeoSektor shared authority metadata is invalid."
+            ) from error
+    if not isinstance(metadata, dict):
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor shared authority metadata is invalid."
+        )
+    serialized = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    if len(serialized) > 2000:
+        raise NeoSektorSharedAuthorityError(
+            "NeoSektor shared authority metadata is too large."
+        )
+    return metadata
+
+
+def _authority_timestamp():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
+def _write_shared_authority_headers(worksheet):
+    if hasattr(worksheet, "batch_update"):
+        worksheet.batch_update(
+            [{"range": "A1:E1", "values": [list(NEOSEKTOR_SHARED_AUTHORITY_HEADERS)]}]
+        )
+        return
+    for cell, value in zip(
+        ("A1", "B1", "C1", "D1", "E1"),
+        NEOSEKTOR_SHARED_AUTHORITY_HEADERS,
+    ):
+        worksheet.update_acell(cell, value)
+
+
+def _write_shared_authority_record(worksheet, status):
+    values = (
+        status["authority"],
+        status["generation"],
+        status["changed_at"],
+        status["changed_by"] or "",
+        json.dumps(status["metadata"], sort_keys=True, separators=(",", ":")),
+    )
+    if hasattr(worksheet, "batch_update"):
+        worksheet.batch_update(
+            [{"range": "A2:E2", "values": [list(values)]}]
+        )
+        return
+    for cell, value in zip(NEOSEKTOR_SHARED_AUTHORITY_CELLS, values):
+        worksheet.update_acell(cell, value)
+
+
+def _cached_shared_authority(gateway_id):
+    now = time.monotonic()
+    with _shared_authority_cache_lock:
+        cached = _shared_authority_cache.get(gateway_id)
+        if (
+            not cached
+            or now - cached["stored_at"] >= SHARED_AUTHORITY_CACHE_SECONDS
+        ):
+            return None
+        return dict(cached["status"])
+
+
+def _store_shared_authority(gateway_id, status):
+    with _shared_authority_cache_lock:
+        _shared_authority_cache[gateway_id] = {
+            "stored_at": time.monotonic(),
+            "status": dict(status),
+        }
 
 
 def _cached_google_values(gateway_id):

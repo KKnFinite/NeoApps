@@ -196,6 +196,7 @@ from app.services.my_alerts import my_alert_context
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
     change_neosektor_integration_mode,
+    neosektor_shared_authority_status,
     neosektor_integration_status,
     retry_neosektor_google_mirror,
 )
@@ -518,6 +519,7 @@ def _render_system_settings(gateway, can_edit):
         gateway=gateway,
         can_edit_system_settings=can_edit,
         neosektor_status=neosektor_integration_status(gateway),
+        neosektor_shared_authority=neosektor_shared_authority_status(gateway),
         neorain_status=rain_integration_status(gateway, "night"),
         google_live_polling_status=google_motherbrain_live_polling_status(
             gateway,

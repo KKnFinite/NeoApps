@@ -30,13 +30,22 @@ from app.services.neosektor_live_refresh import (
 )
 from app.services.neosektor_sheets_compat import (
     GOOGLE_PRIMARY,
+    NEO_PRIMARY_AUTHORITY,
     NEO_ONLY,
     NEO_PRIMARY_GOOGLE_MIRROR,
     SHEET_CELL_ORDER,
+    STANDALONE_PRIMARY_AUTHORITY,
+    NeoSektorSharedAuthorityError,
     clear_neosektor_google_cache,
     google_primary_operational_values,
     google_primary_wave_timer_starts,
+    initialize_neosektor_shared_authority,
+    mirror_neosektor_operational_values,
+    neosektor_shared_authority_status,
     neosektor_integration_mode,
+    read_neosektor_shared_authority,
+    transition_neosektor_shared_authority,
+    write_google_primary_operational_values,
 )
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -46,6 +55,10 @@ FAKE_SHEETS_ENV = {
     "GOOGLE_SHEETS_ID": "test-sheet-id",
     "GOOGLE_SHEETS_TAB": "Live Counts",
     "GOOGLE_SERVICE_ACCOUNT_JSON": "{}",
+}
+FAKE_SHARED_AUTHORITY_ENV = {
+    **FAKE_SHEETS_ENV,
+    "GOOGLE_SHEETS_NEOSEKTOR_AUTHORITY_TAB": "NeoSektor Authority",
 }
 
 
@@ -132,6 +145,197 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertNotIn("B13", SHEET_CELL_ORDER)
         self.assertNotIn("B14", SHEET_CELL_ORDER)
         self.assertNotIn("B15", SHEET_CELL_ORDER)
+
+    def test_shared_authority_is_legacy_compatible_until_explicitly_configured(self):
+        with patch.dict(
+            os.environ,
+            {"GOOGLE_SHEETS_NEOSEKTOR_AUTHORITY_TAB": ""},
+            clear=False,
+        ):
+            status = neosektor_shared_authority_status(self.gateway)
+
+        self.assertEqual(status["authority"], "legacy_unmanaged")
+        self.assertEqual(status["generation"], 0)
+        self.assertFalse(status["record_present"])
+        self.assertTrue(status["can_neo_write"])
+        self.assertTrue(status["can_standalone_write"])
+
+    def test_shared_authority_parses_and_transitions_by_generation(self):
+        authority = _FakeWorksheet(
+            {
+                "A2": NEO_PRIMARY_AUTHORITY,
+                "B2": 7,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "grandmaster@example.test",
+                "E2": '{"reconciliation":"ready"}',
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            current = read_neosektor_shared_authority(self.gateway, force=True)
+            changed = transition_neosektor_shared_authority(
+                self.gateway,
+                STANDALONE_PRIMARY_AUTHORITY,
+                expected_generation=7,
+                actor="standalone-admin",
+                metadata={"reconciliation": "pending"},
+            )
+
+        self.assertEqual(current["authority"], NEO_PRIMARY_AUTHORITY)
+        self.assertEqual(current["generation"], 7)
+        self.assertEqual(current["metadata"], {"reconciliation": "ready"})
+        self.assertEqual(changed["authority"], STANDALONE_PRIMARY_AUTHORITY)
+        self.assertEqual(changed["generation"], 8)
+        self.assertEqual(changed["changed_by"], "standalone-admin")
+        self.assertIn(("A2", STANDALONE_PRIMARY_AUTHORITY), authority.updates)
+        self.assertIn(("B2", 8), authority.updates)
+
+    def test_shared_authority_initialization_creates_generation_one_neo_record(self):
+        authority = _FakeWorksheet({"X1": ""})
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            initialized = initialize_neosektor_shared_authority(
+                self.gateway,
+                actor="grandmaster@example.test",
+                metadata={"reconciliation": "not_started"},
+            )
+
+        self.assertEqual(initialized["authority"], NEO_PRIMARY_AUTHORITY)
+        self.assertEqual(initialized["generation"], 1)
+        self.assertEqual(initialized["changed_by"], "grandmaster@example.test")
+        self.assertIn(("A1", "authority"), authority.updates)
+        self.assertIn(("A2", NEO_PRIMARY_AUTHORITY), authority.updates)
+
+    def test_shared_authority_rejects_a_stale_generation(self):
+        authority = _FakeWorksheet(
+            {
+                "A2": NEO_PRIMARY_AUTHORITY,
+                "B2": 3,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "grandmaster@example.test",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            with self.assertRaises(NeoSektorSharedAuthorityError):
+                transition_neosektor_shared_authority(
+                    self.gateway,
+                    STANDALONE_PRIMARY_AUTHORITY,
+                    expected_generation=2,
+                    actor="standalone-admin",
+                )
+
+        self.assertEqual(authority.updates, [])
+
+    def test_shared_authority_allows_neo_writes_only_while_neo_is_primary(self):
+        operational = _FakeWorksheet()
+        authority = _FakeWorksheet(
+            {
+                "A2": NEO_PRIMARY_AUTHORITY,
+                "B2": 1,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "grandmaster@example.test",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            write_google_primary_operational_values(
+                self.gateway,
+                {"D3": 17},
+                integration_mode=GOOGLE_PRIMARY,
+            )
+
+        self.assertEqual(operational.updates, [("D3", 17)])
+
+    def test_shared_authority_blocks_google_writes_while_standalone_is_primary(self):
+        operational = _FakeWorksheet()
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 2,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            with self.assertRaises(NeoSektorSharedAuthorityError):
+                write_google_primary_operational_values(
+                    self.gateway,
+                    {"D3": 17},
+                    integration_mode=GOOGLE_PRIMARY,
+                )
+            mirror = mirror_neosektor_operational_values(
+                {"D3": 14},
+                {"D3": 17},
+                gateway=self.gateway,
+                integration_mode=NEO_PRIMARY_GOOGLE_MIRROR,
+            )
+
+        self.assertEqual(operational.updates, [])
+        self.assertEqual(mirror, {"status": "blocked_by_shared_authority", "updated": 0})
+
+    def test_system_settings_shows_shared_authority_without_enabling_controls(self):
+        self._login("operator")
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 4,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            page = self.client.get("/motherbrain/system-settings")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"SHARED STANDALONE AUTHORITY", page.data)
+        self.assertIn(b"STANDALONE PRIMARY", page.data)
+        self.assertNotIn(b"TAKE CONTROL", page.data)
+        self.assertNotIn(b"RETURN CONTROL TO NEO", page.data)
 
     def test_system_settings_mode_is_grandmaster_writable_only(self):
         self._login("operator")
