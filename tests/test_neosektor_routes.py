@@ -1082,6 +1082,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
         css = Path("app/static/css/base.css").read_text()
+        driver_body_block = css.split(
+            ".blueprint-neosektor .driver-body {",
+            1,
+        )[1].split("}", 1)[0]
+        routing_block = css.split(
+            ".blueprint-neosektor .driver-routing {",
+            1,
+        )[1].split("}", 1)[0]
+        wave_label_block = css.split(
+            ".blueprint-neosektor .driver-wave-label {",
+            1,
+        )[1].split("}", 1)[0]
         legacy_card_bar_block = css.split(
             ".neosektor-driver-wave-card::before {",
             1,
@@ -1102,6 +1114,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .driver-instruction {",
             1,
         )[1].split("}", 1)[0]
+        bay_priority_block = css.split(
+            ".blueprint-neosektor .driver-bay-priority {",
+            1,
+        )[1].split("}", 1)[0]
         shaft_block = css.split(
             ".blueprint-neosektor .driver-arrow::before {",
             1,
@@ -1117,21 +1133,32 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertIn("content: none;", legacy_card_bar_block)
         self.assertIn("content: none;", wave_bar_block)
+        self.assertIn("width: 100%;", driver_body_block)
+        self.assertIn("max-width: none;", driver_body_block)
+        self.assertIn("width: 100%;", routing_block)
+        self.assertIn(
+            "font-size: clamp(3.6rem, min(12.6vw, 9.6svh), 7.05rem);",
+            wave_label_block,
+        )
         self.assertIn("width: min(90%, 640px);", arrow_block)
-        self.assertIn("height: clamp(46px, 7.2svh, 88px);", arrow_block)
+        self.assertIn("height: clamp(115px, 18svh, 220px);", arrow_block)
         self.assertIn("font-size: 0;", arrow_block)
         self.assertIn("order: 1;", arrow_block)
         self.assertIn("order: 2;", target_block)
-        self.assertIn("font-size: 0.72em;", instruction_block)
+        self.assertIn("font-size: 2.16em;", instruction_block)
         self.assertIn("width: 100%;", shaft_block)
+        self.assertIn("height: clamp(70px, 11.5svh, 140px);", shaft_block)
         self.assertIn("clip-path: polygon", shaft_block)
         self.assertIn("linear-gradient(90deg, #720812", shaft_block)
         self.assertIn("content: none;", head_block)
         self.assertNotIn("border-right:", head_block)
         self.assertIn("scaleX(-1)", css)
-        self.assertIn("font-size: clamp(1.2rem, min(4.2vw, 3.2svh), 2.35rem);", css)
         self.assertIn("font-size: clamp(0.68rem, min(2.1vw, 1.7svh), 1.05rem);", css)
-        self.assertIn("font-size: clamp(0.95rem, min(2.8vw, 2.6svh), 1.65rem);", css)
+        self.assertIn("min-height: clamp(144px, 21svh, 236px);", bay_priority_block)
+        self.assertIn(
+            "font-size: clamp(1.425rem, min(4.2vw, 3.9svh), 2.475rem);",
+            css,
+        )
         self.assertIn("font-size: 0.92rem;", css)
         self.assertIn("width: 98%;", mobile_arrow_block)
 
