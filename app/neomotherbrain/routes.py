@@ -195,13 +195,11 @@ from app.services.google_rain_integration_mode import (
 from app.services.my_alerts import my_alert_context
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
-    NeoSektorRecoveryError,
     change_neosektor_integration_mode,
-    neosektor_standalone_recovery_context,
     neosektor_integration_status,
-    reconcile_neosektor_standalone_state,
+    neosektor_shared_authority_status,
     retry_neosektor_google_mirror,
-    return_neosektor_control_to_neo,
+    set_neosektor_google_mirror_writes,
 )
 from app.services.parking_optimizer import (
     apply_parking_optimizer_plan,
@@ -497,31 +495,11 @@ def system_settings():
             elif action == "retry_neosektor_google_mirror":
                 retry_neosektor_google_mirror(gateway)
                 flash("NeoSektor Google mirror is current.", "success")
-            elif action == "reconcile_neosektor_standalone_state":
-                if request.form.get("confirm_reconciliation") != "reconcile":
-                    raise ValueError("Confirm standalone reconciliation before importing state.")
-                result = reconcile_neosektor_standalone_state(
-                    gateway,
-                    expected_generation=request.form.get("expected_generation"),
-                    actor=_neosektor_authority_actor(),
-                )
+            elif action == "set_neosektor_google_mirror_writes":
+                enabled = str(request.form.get("enabled") or "").strip() == "1"
+                set_neosektor_google_mirror_writes(gateway, enabled)
                 flash(
-                    "Standalone NeoSektor state was reconciled for generation "
-                    f"{result['authority']['generation']} "
-                    f"({result['preview']['changed_count']} compatibility values changed).",
-                    "success",
-                )
-            elif action == "return_neosektor_control_to_neo":
-                if request.form.get("confirm_return_control") != "return":
-                    raise ValueError("Confirm Return Control to Neo before changing authority.")
-                status = return_neosektor_control_to_neo(
-                    gateway,
-                    expected_generation=request.form.get("expected_generation"),
-                    actor=_neosektor_authority_actor(),
-                )
-                flash(
-                    "NeoSektor control returned to Neo at generation "
-                    f"{status['generation']}.",
+                    f"NeoSektor Google Mirror Writes are now {'ON' if enabled else 'OFF'}.",
                     "success",
                 )
             else:
@@ -533,7 +511,7 @@ def system_settings():
                 "error",
             )
             return _render_system_settings(gateway, can_edit=True), 400
-        except (NeoSektorGoogleError, NeoSektorRecoveryError, ValueError) as error:
+        except (NeoSektorGoogleError, ValueError) as error:
             db.session.rollback()
             flash(str(error), "error")
             return _render_system_settings(gateway, can_edit=True), 400
@@ -544,14 +522,13 @@ def system_settings():
 
 
 def _render_system_settings(gateway, can_edit):
-    neosektor_recovery = neosektor_standalone_recovery_context(gateway)
+    neosektor_shared_authority = neosektor_shared_authority_status(gateway)
     return render_template(
         "neomotherbrain/system_settings.html",
         gateway=gateway,
         can_edit_system_settings=can_edit,
         neosektor_status=neosektor_integration_status(gateway),
-        neosektor_shared_authority=neosektor_recovery["authority"],
-        neosektor_recovery=neosektor_recovery,
+        neosektor_shared_authority=neosektor_shared_authority,
         neorain_status=rain_integration_status(gateway, "night"),
         google_live_polling_status=google_motherbrain_live_polling_status(
             gateway,

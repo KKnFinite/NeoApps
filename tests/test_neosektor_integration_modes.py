@@ -34,6 +34,7 @@ from app.services.neosektor_sheets_compat import (
     NEO_PRIMARY_AUTHORITY,
     NEO_ONLY,
     NEO_PRIMARY_GOOGLE_MIRROR,
+    NeoSektorGoogleError,
     NeoSektorRecoveryError,
     SHEET_CELL_ORDER,
     STANDALONE_PRIMARY_AUTHORITY,
@@ -43,12 +44,14 @@ from app.services.neosektor_sheets_compat import (
     google_primary_wave_timer_starts,
     initialize_neosektor_shared_authority,
     mirror_neosektor_operational_values,
+    neosektor_google_mirror_writes_enabled,
     neosektor_shared_authority_status,
     preview_neosektor_standalone_reconciliation,
     neosektor_integration_mode,
     read_neosektor_shared_authority,
     reconcile_neosektor_standalone_state,
     return_neosektor_control_to_neo,
+    set_neosektor_google_mirror_writes,
     transition_neosektor_shared_authority,
     write_google_primary_operational_values,
 )
@@ -311,6 +314,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 {"D3": 17},
                 gateway=self.gateway,
                 integration_mode=NEO_PRIMARY_GOOGLE_MIRROR,
+                allow_when_disabled=True,
             )
 
         self.assertEqual(operational.updates, [])
@@ -597,7 +601,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(authority.values["A2"], NEO_PRIMARY_AUTHORITY)
         self.assertEqual(operational.updates, [])
 
-    def test_system_settings_shows_recovery_preview_and_only_grandmaster_actions(self):
+    def test_system_settings_keeps_standalone_authority_fenced_without_reconciliation_ui(self):
         self._login("operator")
         operational = _FakeWorksheet(_complete_sheet_values())
         authority = _FakeWorksheet(
@@ -624,13 +628,12 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             self._login("grandmaster")
             manager = self.client.get("/motherbrain/system-settings")
 
-        self.assertIn(b"STANDALONE RECONCILIATION PREVIEW", viewer.data)
-        self.assertIn(b"RECOVERY REQUIRED", viewer.data)
-        self.assertIn(b"Neo-owned driver offsets", viewer.data)
+        self.assertIn(b"STANDBY FENCE ACTIVE", viewer.data)
+        self.assertIn(b"NeoApps does not import standalone operational values", viewer.data)
         self.assertNotIn(b"RECONCILE STANDALONE STATE", viewer.data)
-        self.assertIn(b"RECONCILE STANDALONE STATE", manager.data)
+        self.assertNotIn(b"RECONCILE STANDALONE STATE", manager.data)
 
-    def test_system_settings_reconciles_then_returns_control_with_explicit_confirmations(self):
+    def test_system_settings_does_not_expose_google_to_neon_reconciliation_actions(self):
         self._login("grandmaster")
         apply_standalone_compat_values(self.gateway, _complete_sheet_values(D3=14))
         db.session.commit()
@@ -662,7 +665,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                     "expected_generation": "8",
                 },
             )
-            reconciled = self.client.post(
+            reconciliation = self.client.post(
                 "/motherbrain/system-settings",
                 data={
                     "action": "reconcile_neosektor_standalone_state",
@@ -670,7 +673,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                     "confirm_reconciliation": "reconcile",
                 },
             )
-            returned = self.client.post(
+            return_control = self.client.post(
                 "/motherbrain/system-settings",
                 data={
                     "action": "return_neosektor_control_to_neo",
@@ -680,10 +683,11 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             )
 
         self.assertEqual(rejected.status_code, 400)
-        self.assertEqual(reconciled.status_code, 302)
-        self.assertEqual(returned.status_code, 302)
-        self.assertEqual(authority.values["A2"], NEO_PRIMARY_AUTHORITY)
-        self.assertEqual(authority.values["B2"], 9)
+        self.assertEqual(reconciliation.status_code, 400)
+        self.assertEqual(return_control.status_code, 400)
+        self.assertEqual(authority.values["A2"], STANDALONE_PRIMARY_AUTHORITY)
+        self.assertEqual(authority.values["B2"], 8)
+        self.assertEqual(operational.batch_reads, [])
 
     def test_system_settings_mode_is_grandmaster_writable_only(self):
         self._login("operator")
@@ -1023,7 +1027,12 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertIn(b"could not save", response.data)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
 
-    def test_google_primary_to_neo_primary_handoff_imports_before_switch(self):
+    def test_google_primary_to_neo_primary_keeps_neon_state_without_google_read(self):
+        apply_standalone_compat_values(
+            self.gateway,
+            _complete_sheet_values(B2=3, D3=11),
+        )
+        db.session.commit()
         self._login("grandmaster")
         worksheet = _FakeWorksheet()
         with (
@@ -1047,11 +1056,12 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             NeoSektorBallmatWaveCount.query.filter_by(
                 side="EAST", wave_name="1ST WAVE"
             ).one().count,
-            7,
+            3,
         )
-        self.assertEqual(worksheet.batch_reads, [SHEET_CELL_ORDER])
+        self.assertEqual(worksheet.batch_reads, [])
+        self.assertEqual(worksheet.updates, [])
 
-    def test_neo_only_to_mirror_mode_keeps_neo_authoritative_on_mirror_failure(self):
+    def test_neo_only_to_mirror_mode_does_not_sync_until_explicitly_enabled(self):
         self._set_mode(NEO_ONLY)
         apply_standalone_compat_values(self.gateway, _complete_sheet_values())
         db.session.commit()
@@ -1076,8 +1086,9 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(neosektor_integration_mode(self.gateway), NEO_PRIMARY_GOOGLE_MIRROR)
         settings = NeoSektorOperationalSetting.query.one()
-        self.assertTrue(settings.google_mirror_sync_needed)
-        self.assertIn(b"GOOGLE MIRROR NEEDS ATTENTION", response.data)
+        self.assertFalse(settings.google_mirror_sync_needed)
+        self.assertIn(b"GOOGLE MIRROR WRITES:</strong>\n                    OFF", response.data)
+        self.assertEqual(worksheet.updates, [])
         self.assertEqual(
             NeoSektorBallmatWaveCount.query.filter_by(
                 side="EAST", wave_name="1ST WAVE"
@@ -1085,7 +1096,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             7,
         )
 
-    def test_failed_google_handoff_leaves_google_primary_active(self):
+    def test_google_primary_to_neo_primary_does_not_depend_on_google_availability(self):
         self._login("grandmaster")
         worksheet = _FakeWorksheet(values=_complete_sheet_values(B2="invalid"))
         with (
@@ -1103,9 +1114,10 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(neosektor_integration_mode(self.gateway), GOOGLE_PRIMARY)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(neosektor_integration_mode(self.gateway), NEO_PRIMARY_GOOGLE_MIRROR)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
+        self.assertEqual(worksheet.batch_reads, [])
 
     def test_neo_primary_reads_neon_and_mirrors_edits(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
@@ -1120,6 +1132,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 return_value=worksheet,
             ),
         ):
+            self._enable_mirror_writes(worksheet)
             state = self.client.get("/neosektor/live-counts/state")
             edit = self.client.post(
                 "/neosektor/ballmat/update?side=east",
@@ -1142,12 +1155,98 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             11,
         )
 
+    def test_mirror_writes_default_off_keeps_neon_edits_and_skips_google(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(B2=4))
+        db.session.commit()
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            self.assertFalse(neosektor_google_mirror_writes_enabled(self.gateway))
+            response = self.client.post(
+                "/neosektor/ballmat/update?side=east",
+                json={
+                    "side": "east",
+                    "waves": {"first": {"count": 12}},
+                    "open_bays": 2,
+                    "bay_statuses": {"Bay 1": "Full"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(worksheet.batch_reads, [])
+        self.assertEqual(worksheet.updates, [])
+        self.assertEqual(
+            NeoSektorBallmatWaveCount.query.filter_by(
+                side="EAST", wave_name="1ST WAVE"
+            ).one().count,
+            12,
+        )
+
+    def test_enabling_mirror_force_syncs_complete_neon_state(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(B2=12, D3=9))
+        db.session.commit()
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            self.assertTrue(set_neosektor_google_mirror_writes(self.gateway, True))
+
+        self.assertTrue(neosektor_google_mirror_writes_enabled(self.gateway))
+        self.assertEqual(set(cell for cell, _value in worksheet.updates), set(SHEET_CELL_ORDER))
+        self.assertIn(("B2", 12), worksheet.updates)
+        self.assertIn(("D3", 9), worksheet.updates)
+
+    def test_failed_initial_mirror_enablement_remains_off(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        worksheet = _FakeWorksheet(write_error=RuntimeError("unavailable"))
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            with self.assertRaisesRegex(NeoSektorGoogleError, "remain OFF"):
+                set_neosektor_google_mirror_writes(self.gateway, True)
+
+        self.assertFalse(neosektor_google_mirror_writes_enabled(self.gateway))
+
+    def test_system_settings_exposes_process_local_google_mirror_control(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        self._login("grandmaster")
+        page = self.client.get("/motherbrain/system-settings")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"GOOGLE MIRROR WRITES", page.data)
+        self.assertIn(b"TURN ON &amp; SYNC GOOGLE MIRROR", page.data)
+
     def test_mirror_failure_preserves_neo_success_and_retry_clears_warning(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
         apply_standalone_compat_values(self.gateway, _complete_sheet_values())
         db.session.commit()
         self._login("simulator")
         failing = _FakeWorksheet(write_error=RuntimeError("unavailable"))
+        healthy = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=healthy,
+            ),
+        ):
+            self._enable_mirror_writes(healthy)
         with (
             patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
             patch(
@@ -1266,8 +1365,18 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         db.session.commit()
         self._login("simulator")
         worksheet = _FakeWorksheet()
-        order = []
         original_update = worksheet.update_acell
+
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            self._enable_mirror_writes(worksheet)
+
+        order = []
 
         def ordered_update(cell, value):
             order.append(("google", cell))
@@ -1452,6 +1561,11 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             db.session.add(settings)
         settings.integration_mode = mode
         db.session.commit()
+
+    def _enable_mirror_writes(self, worksheet):
+        self.assertTrue(set_neosektor_google_mirror_writes(self.gateway, True))
+        self.assertTrue(neosektor_google_mirror_writes_enabled(self.gateway))
+        worksheet.updates.clear()
 
     def _login(self, role):
         self.client.post("/logout")

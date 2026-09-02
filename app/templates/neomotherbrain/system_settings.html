@@ -31,7 +31,7 @@
                 </div>
                 <div class="system-settings-mode-help">
                     <p><strong>GOOGLE PRIMARY:</strong> Google owns the operational cells; Neo settings remain in Neon.</p>
-                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> Neon owns operational state and mirrors changes to Google.</p>
+                    <p><strong>NEO PRIMARY + GOOGLE MIRROR:</strong> Intended production mode. Neon owns operational state; Google is an explicitly enabled one-way backup mirror.</p>
                     <p><strong>NEO ONLY:</strong> Neon owns operational state and NeoSektor performs no Google traffic.</p>
                 </div>
                 {% if can_edit_system_settings %}
@@ -40,6 +40,31 @@
                 <p class="view-only-pill">VIEW ONLY</p>
                 {% endif %}
             </form>
+
+            <div class="system-settings-mode-help" data-neosektor-google-mirror-writes>
+                <p>
+                    <strong>GOOGLE MIRROR WRITES:</strong>
+                    {{ "ON" if neosektor_status.google_mirror_writes_enabled else "OFF" }}
+                </p>
+                <p>OFF blocks NeoSektor-to-Google operational mirrors only. It does not affect Neon operations and resets to OFF when NeoApps restarts.</p>
+                {% if can_edit_system_settings %}
+                    {% if neosektor_status.google_mirror_writes_enabled %}
+                    <form method="post">
+                        <input type="hidden" name="action" value="set_neosektor_google_mirror_writes">
+                        <input type="hidden" name="enabled" value="0">
+                        <button class="action-button" type="submit">TURN GOOGLE MIRROR WRITES OFF</button>
+                    </form>
+                    {% elif neosektor_status.mode == "neo_primary_google_mirror" %}
+                    <form method="post">
+                        <input type="hidden" name="action" value="set_neosektor_google_mirror_writes">
+                        <input type="hidden" name="enabled" value="1">
+                        <button class="action-button primary-action" type="submit">TURN ON &amp; SYNC GOOGLE MIRROR</button>
+                    </form>
+                    {% else %}
+                    <p class="muted">Select NEO PRIMARY + GOOGLE MIRROR before enabling one-way Google backup writes.</p>
+                    {% endif %}
+                {% endif %}
+            </div>
 
             <div class="system-settings-mode-help neosektor-shared-authority-status" data-neosektor-shared-authority="{{ neosektor_shared_authority.authority }}">
                 <p>
@@ -50,55 +75,15 @@
                     {% endif %}
                 </p>
                 {% if neosektor_shared_authority.authority == "standalone_primary" %}
-                <p><strong>RECOVERY REQUIRED:</strong> Neo is fenced from NeoSektor compatibility writes while standalone authority is active.</p>
+                <p><strong>STANDBY FENCE ACTIVE:</strong> Neo is fenced from NeoSektor compatibility writes while standalone authority is active.</p>
                 <p>
                     TAKEOVER: <strong>{{ neosektor_shared_authority.changed_at or "unknown" }}</strong>
                     {% if neosektor_shared_authority.changed_by %} · {{ neosektor_shared_authority.changed_by }}{% endif %}
                 </p>
                 {% if neosektor_shared_authority.metadata %}
-                <p class="muted">RECOVERY METADATA: <code>{{ neosektor_shared_authority.metadata|tojson }}</code></p>
+                <p class="muted">AUTHORITY METADATA: <code>{{ neosektor_shared_authority.metadata|tojson }}</code></p>
                 {% endif %}
-                {% if neosektor_recovery.preview %}
-                <div class="neosektor-reconciliation-preview" data-neosektor-reconciliation-preview>
-                    <p><strong>STANDALONE RECONCILIATION PREVIEW</strong> · {{ neosektor_recovery.preview.changed_count }} value{{ "s" if neosektor_recovery.preview.changed_count != 1 else "" }} will change in Neon.</p>
-                    <p class="muted">This imports every standalone-writable compatibility value. Neo-owned driver offsets and derived Ballmat/unload values are retained or recomputed in Neon.</p>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr><th>FIELD</th><th>STANDALONE / GOOGLE</th><th>NEON</th><th>IMPORT</th></tr>
-                            </thead>
-                            <tbody>
-                                {% for field in neosektor_recovery.preview.fields %}
-                                <tr class="{{ 'is-changed' if field.will_change else '' }}">
-                                    <td>{{ field.label }}</td>
-                                    <td>{{ field.standalone_value }}</td>
-                                    <td>{{ field.canonical_value }}</td>
-                                    <td>{{ "CHANGE" if field.will_change else "CURRENT" }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                {% elif neosektor_recovery.preview_error %}
-                <p class="system-settings-warning">RECOVERY PREVIEW UNAVAILABLE: {{ neosektor_recovery.preview_error }}</p>
-                {% endif %}
-                {% if can_edit_system_settings and neosektor_recovery.preview %}
-                <form method="post" class="system-settings-form neosektor-recovery-action">
-                    <input type="hidden" name="action" value="reconcile_neosektor_standalone_state">
-                    <input type="hidden" name="expected_generation" value="{{ neosektor_shared_authority.generation }}">
-                    <label><input type="checkbox" name="confirm_reconciliation" value="reconcile" required> I reviewed this generation {{ neosektor_shared_authority.generation }} preview and will import it into Neon.</label>
-                    <button class="action-button primary-action" type="submit">RECONCILE STANDALONE STATE</button>
-                </form>
-                {% if neosektor_recovery.reconciled_current_generation %}
-                <form method="post" class="system-settings-form neosektor-recovery-action">
-                    <input type="hidden" name="action" value="return_neosektor_control_to_neo">
-                    <input type="hidden" name="expected_generation" value="{{ neosektor_shared_authority.generation }}">
-                    <label><input type="checkbox" name="confirm_return_control" value="return" required> I confirm this reconciled generation may return control to Neo.</label>
-                    <button class="action-button destructive-action" type="submit">RETURN CONTROL TO NEO</button>
-                </form>
-                {% endif %}
-                {% endif %}
+                <p class="muted">NeoApps does not import standalone operational values or reclaim authority automatically.</p>
             {% elif neosektor_shared_authority.record_present %}
                 <p>Neo may mirror compatibility cells. Authority changes are not enabled here yet.</p>
                 {% else %}
@@ -113,7 +98,7 @@
             <div class="system-settings-warning" data-neosektor-mirror-warning>
                 <strong>GOOGLE MIRROR NEEDS ATTENTION</strong>
                 <p>{{ neosektor_status.google_mirror_last_error or "Google mirror retry is required." }}</p>
-                {% if can_edit_system_settings and neosektor_status.mode == "neo_primary_google_mirror" %}
+                {% if can_edit_system_settings and neosektor_status.mode == "neo_primary_google_mirror" and neosektor_status.google_mirror_writes_enabled %}
                 <form method="post">
                     <button class="action-button" type="submit" name="action" value="retry_neosektor_google_mirror">RETRY GOOGLE MIRROR</button>
                 </form>

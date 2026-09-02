@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from flask import has_app_context
+from flask import current_app, has_app_context
 
 try:
     import gspread
@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 GOOGLE_PRIMARY = "google_primary"
 NEO_PRIMARY_GOOGLE_MIRROR = "neo_primary_google_mirror"
 NEO_ONLY = "neo_only"
+# Keep the legacy default until an operator deliberately selects the intended
+# production mode. This avoids silently changing authority for a gateway merely
+# because the application was deployed or restarted.
 DEFAULT_NEOSEKTOR_INTEGRATION_MODE = GOOGLE_PRIMARY
 NEOSEKTOR_INTEGRATION_MODES = (
     GOOGLE_PRIMARY,
@@ -77,6 +80,16 @@ STATUS_LABELS = ("Empty", "Light", "Moderate", "Full", "Overflowing")
 GOOGLE_TRANSIENT_CACHE_SECONDS = 2.0
 _google_state_cache = {}
 _google_state_cache_lock = threading.Lock()
+
+# This deliberately lives only in the web-process memory. Render starts the
+# application with Gunicorn's default single worker, so the same process that
+# handles NeoSektor edits also owns this opt-in. A deploy/restart creates a new
+# app process and therefore begins with Google mirroring OFF, which is the safe
+# posture while a standalone fallback might be operating the shared sheet.
+# Keying by Flask app additionally keeps independently created test apps from
+# sharing an enablement decision.
+_google_mirror_writes_enabled = set()
+_google_mirror_writes_enabled_lock = threading.Lock()
 
 # This control is deliberately opt-in.  Existing deployments and the existing
 # standalone application only know about the operational worksheet, so merely
@@ -166,6 +179,9 @@ def neosektor_integration_status(gateway=None, *, settings=None):
         "google_mirror_failed_at_utc": (
             settings.google_mirror_failed_at_utc if settings else None
         ),
+        "google_mirror_writes_enabled": neosektor_google_mirror_writes_enabled(
+            gateway
+        ),
         "credentials_configured": sheets_credentials_configured(),
     }
 
@@ -191,49 +207,85 @@ def ensure_neosektor_integration_setting(gateway):
 
 
 def change_neosektor_integration_mode(gateway, requested_mode):
-    """Perform any required authority handoff, then persist the target mode."""
+    """Persist the requested NeoSektor authority mode without importing Google.
+
+    Google remains authoritative only while the legacy GOOGLE PRIMARY mode is
+    selected. Entering either Neo-primary mode deliberately retains Neon state;
+    operators explicitly enable the one-way mirror after reviewing it.
+    """
     target_mode = _normalized_mode(requested_mode, strict=True)
     settings = ensure_neosektor_integration_setting(gateway)
     current_mode = _normalized_mode(settings.integration_mode)
     if current_mode == target_mode:
         return neosektor_integration_status(gateway)
 
-    if current_mode == GOOGLE_PRIMARY and target_mode in {
-        NEO_PRIMARY_GOOGLE_MIRROR,
-        NEO_ONLY,
-    }:
-        try:
-            values = google_primary_operational_values(gateway, force=True)
-            from app.services.neosektor_live_counts import (
-                apply_standalone_compat_values,
-            )
-
-            apply_standalone_compat_values(gateway, values)
-            settings.integration_mode = target_mode
-            _clear_mirror_warning(settings)
-            db.session.commit()
-        except Exception as error:
-            db.session.rollback()
-            _log_safe_warning("Google to Neo handoff", error)
-            if isinstance(error, NeoSektorGoogleError):
-                raise
-            raise NeoSektorGoogleError(
-                "Google values could not be imported. NeoSektor remains GOOGLE PRIMARY."
-            ) from error
-        return neosektor_integration_status(gateway)
-
     settings.integration_mode = target_mode
     if target_mode != NEO_PRIMARY_GOOGLE_MIRROR:
+        # Re-entering mirror mode must require another explicit enable + full
+        # Neon-to-Google sync; do not carry a prior process opt-in across modes.
+        set_neosektor_google_mirror_writes(gateway, False)
         _clear_mirror_warning(settings)
     db.session.commit()
 
-    if current_mode == NEO_ONLY and target_mode == NEO_PRIMARY_GOOGLE_MIRROR:
-        from app.services.neosektor_live_counts import driver_routing_state_payload
-
-        state = driver_routing_state_payload(gateway)
-        mirror_neosektor_sheet_update({}, state, gateway=gateway, force=True)
-
     return neosektor_integration_status(gateway)
+
+
+def _google_mirror_writes_state_key(gateway):
+    app_identity = id(current_app._get_current_object()) if has_app_context() else None
+    return app_identity, getattr(gateway, "id", None)
+
+
+def neosektor_google_mirror_writes_enabled(gateway=None):
+    """Whether this app process may mirror NeoSektor operational values."""
+    gateway = _resolve_gateway(gateway)
+    if not gateway:
+        return False
+    with _google_mirror_writes_enabled_lock:
+        return _google_mirror_writes_state_key(gateway) in _google_mirror_writes_enabled
+
+
+def set_neosektor_google_mirror_writes(gateway, enabled):
+    """Enable/disable this process's one-way NeoSektor Google mirror.
+
+    Enabling first force-syncs the complete canonical Neon compatibility state.
+    The flag is set only after that write succeeds, so a failed enablement never
+    authorizes later background mirroring.
+    """
+    gateway = _resolve_gateway(gateway)
+    if not gateway:
+        raise NeoSektorGoogleError("NeoSektor gateway is unavailable.")
+
+    if not bool(enabled):
+        with _google_mirror_writes_enabled_lock:
+            _google_mirror_writes_enabled.discard(_google_mirror_writes_state_key(gateway))
+        return False
+
+    if neosektor_integration_mode(gateway) != NEO_PRIMARY_GOOGLE_MIRROR:
+        raise ValueError(
+            "Google Mirror Writes can be enabled only in NEO PRIMARY + GOOGLE MIRROR mode."
+        )
+
+    from app.services.neosektor_live_counts import canonical_neosektor_compat_values
+
+    canonical_values = canonical_neosektor_compat_values(gateway)
+    result = mirror_neosektor_operational_values(
+        {},
+        canonical_values,
+        gateway=gateway,
+        force=True,
+        integration_mode=NEO_PRIMARY_GOOGLE_MIRROR,
+        allow_when_disabled=True,
+    )
+    if result["status"] != "mirrored":
+        with _google_mirror_writes_enabled_lock:
+            _google_mirror_writes_enabled.discard(_google_mirror_writes_state_key(gateway))
+        raise NeoSektorGoogleError(
+            "NeoSektor Google mirror could not be enabled; mirror writes remain OFF."
+        )
+
+    with _google_mirror_writes_enabled_lock:
+        _google_mirror_writes_enabled.add(_google_mirror_writes_state_key(gateway))
+    return True
 
 
 def neosektor_shared_authority_status(gateway=None, *, force=False):
@@ -829,6 +881,7 @@ def mirror_neosektor_operational_values(
     integration_mode=None,
     settings=None,
     warning_pending=None,
+    allow_when_disabled=False,
 ):
     """Mirror compact cell snapshots after the authoritative Neo commit."""
     gateway = _resolve_gateway(gateway)
@@ -839,6 +892,8 @@ def mirror_neosektor_operational_values(
     )
     if not gateway or mode != NEO_PRIMARY_GOOGLE_MIRROR:
         return {"status": "skipped", "updated": 0}
+    if not allow_when_disabled and not neosektor_google_mirror_writes_enabled(gateway):
+        return {"status": "mirror_writes_off", "updated": 0}
 
     updates = {
         cell: after_values[cell]
@@ -869,17 +924,9 @@ def retry_neosektor_google_mirror(gateway):
     if neosektor_integration_mode(gateway) != NEO_PRIMARY_GOOGLE_MIRROR:
         raise ValueError("Google mirror retry is available only in NEO PRIMARY + GOOGLE MIRROR mode.")
 
-    from app.services.neosektor_live_counts import driver_routing_state_payload
-
-    result = mirror_neosektor_sheet_update(
-        {},
-        driver_routing_state_payload(gateway),
-        gateway=gateway,
-        force=True,
-    )
-    if result["status"] != "mirrored":
-        raise NeoSektorGoogleError("Google mirror retry failed. Neo remains authoritative.")
-    return result
+    if not neosektor_google_mirror_writes_enabled(gateway):
+        raise NeoSektorGoogleError("NeoSektor Google Mirror Writes are OFF.")
+    return set_neosektor_google_mirror_writes(gateway, True)
 
 
 def read_neosektor_sheet_values(worksheet=None):
