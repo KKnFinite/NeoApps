@@ -46,7 +46,7 @@
                     <strong>GOOGLE MIRROR WRITES:</strong>
                     {{ "ON" if neosektor_status.google_mirror_writes_enabled else "OFF" }}
                 </p>
-                <p>OFF blocks NeoSektor-to-Google operational mirrors only. It does not affect Neon operations and resets to OFF when NeoApps restarts.</p>
+                <p>OFF blocks NeoSektor-to-Google operational mirrors only. It does not affect Neon operations. ON persists for this gateway.</p>
                 {% if can_edit_system_settings %}
                     {% if neosektor_status.google_mirror_writes_enabled %}
                     <form method="post">

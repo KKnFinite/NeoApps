@@ -44,6 +44,13 @@ def ensure_neosektor_sheets_compat_columns(app):
             connection.execute(
                 text(
                     f"ALTER TABLE {NeoSektorOperationalSetting.__tablename__} "
+                    "ADD COLUMN IF NOT EXISTS google_mirror_writes_enabled BOOLEAN "
+                    "NOT NULL DEFAULT FALSE"
+                )
+            )
+            connection.execute(
+                text(
+                    f"ALTER TABLE {NeoSektorOperationalSetting.__tablename__} "
                     "ADD COLUMN IF NOT EXISTS google_mirror_sync_needed BOOLEAN "
                     "NOT NULL DEFAULT FALSE"
                 )

@@ -54,6 +54,7 @@ from app.services.neosektor_sheets_compat import (
     set_neosektor_google_mirror_writes,
     transition_neosektor_shared_authority,
     write_google_primary_operational_values,
+    change_neosektor_integration_mode,
 )
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -1180,6 +1181,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(NeoSektorOperationalSetting.query.one().google_mirror_writes_enabled)
         self.assertEqual(worksheet.batch_reads, [])
         self.assertEqual(worksheet.updates, [])
         self.assertEqual(
@@ -1204,6 +1206,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             self.assertTrue(set_neosektor_google_mirror_writes(self.gateway, True))
 
         self.assertTrue(neosektor_google_mirror_writes_enabled(self.gateway))
+        self.assertTrue(NeoSektorOperationalSetting.query.one().google_mirror_writes_enabled)
         self.assertEqual(set(cell for cell, _value in worksheet.updates), set(SHEET_CELL_ORDER))
         self.assertIn(("B2", 12), worksheet.updates)
         self.assertIn(("D3", 9), worksheet.updates)
@@ -1222,8 +1225,63 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 set_neosektor_google_mirror_writes(self.gateway, True)
 
         self.assertFalse(neosektor_google_mirror_writes_enabled(self.gateway))
+        self.assertFalse(NeoSektorOperationalSetting.query.one().google_mirror_writes_enabled)
 
-    def test_system_settings_exposes_process_local_google_mirror_control(self):
+    def test_persisted_mirror_enablement_survives_fresh_session_and_mirrors_edits(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(B2=4))
+        settings = NeoSektorOperationalSetting.query.one()
+        settings.google_mirror_writes_enabled = True
+        db.session.commit()
+        db.session.expire_all()
+
+        self.assertTrue(neosektor_google_mirror_writes_enabled(self.gateway))
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            response = self.client.post(
+                "/neosektor/ballmat/update?side=east",
+                json={
+                    "side": "east",
+                    "waves": {"first": {"count": 12}},
+                    "open_bays": 2,
+                    "bay_statuses": {"Bay 1": "Full"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(("B2", 12), worksheet.updates)
+
+    def test_leaving_mirror_mode_persists_google_mirror_writes_off(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        settings = NeoSektorOperationalSetting.query.one()
+        settings.google_mirror_writes_enabled = True
+        db.session.commit()
+
+        change_neosektor_integration_mode(self.gateway, NEO_ONLY)
+
+        self.assertFalse(NeoSektorOperationalSetting.query.one().google_mirror_writes_enabled)
+        self.assertFalse(neosektor_google_mirror_writes_enabled(self.gateway))
+
+    def test_disabling_google_mirror_writes_persists_off_immediately(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        settings = NeoSektorOperationalSetting.query.one()
+        settings.google_mirror_writes_enabled = True
+        db.session.commit()
+
+        self.assertFalse(set_neosektor_google_mirror_writes(self.gateway, False))
+        db.session.expire_all()
+
+        self.assertFalse(NeoSektorOperationalSetting.query.one().google_mirror_writes_enabled)
+        self.assertFalse(neosektor_google_mirror_writes_enabled(self.gateway))
+
+    def test_system_settings_exposes_persisted_google_mirror_control(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
         self._login("grandmaster")
         page = self.client.get("/motherbrain/system-settings")
@@ -1231,6 +1289,8 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"GOOGLE MIRROR WRITES", page.data)
         self.assertIn(b"TURN ON &amp; SYNC GOOGLE MIRROR", page.data)
+        self.assertIn(b"ON persists for this gateway", page.data)
+        self.assertNotIn(b"resets to OFF when NeoApps restarts", page.data)
 
     def test_mirror_failure_preserves_neo_success_and_retry_clears_warning(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
@@ -1402,7 +1462,10 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(metrics["selects"], 17)
+        # The persisted, gateway-scoped mirror preference is re-read after the
+        # Neo commit before a compatibility write, so independently restarted
+        # web workers share the same ON/OFF decision.
+        self.assertLessEqual(metrics["selects"], 18)
         self.assertEqual(metrics["commits"], 1)
         self.assertEqual(
             worksheet.updates,

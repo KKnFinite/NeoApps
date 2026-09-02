@@ -29,6 +29,11 @@ class NeoSektorOperationalSetting(db.Model):
         nullable=False,
         default="google_primary",
     )
+    google_mirror_writes_enabled = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
     google_mirror_sync_needed = db.Column(
         db.Boolean,
         nullable=False,

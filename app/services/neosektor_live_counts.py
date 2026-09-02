@@ -1022,6 +1022,7 @@ def _operational_settings_for_state(
         second_wave_unload_modifier=DEFAULT_SECOND_WAVE_UNLOAD_MODIFIER,
         all_up_to_down_minutes=DEFAULT_ALL_UP_TO_DOWN_MINUTES,
         integration_mode="google_primary",
+        google_mirror_writes_enabled=False,
         google_mirror_sync_needed=False,
         google_mirror_last_error=None,
         google_mirror_failed_at_utc=None,

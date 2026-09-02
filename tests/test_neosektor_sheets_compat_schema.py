@@ -39,6 +39,7 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
         table = NeoSektorOperationalSetting.__table__.c
 
         self.assertFalse(table.integration_mode.nullable)
+        self.assertFalse(table.google_mirror_writes_enabled.nullable)
         self.assertFalse(table.google_mirror_sync_needed.nullable)
         self.assertTrue(table.google_mirror_last_error.nullable)
         self.assertTrue(table.google_mirror_failed_at_utc.nullable)
@@ -47,6 +48,18 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
                 "integration_mode"
             ],
             "VARCHAR(40) NOT NULL DEFAULT 'google_primary'",
+        )
+        self.assertEqual(
+            LOCAL_SQLITE_OPTIONAL_COLUMNS["neosektor_operational_settings"][
+                "google_mirror_writes_enabled"
+            ],
+            "BOOLEAN NOT NULL DEFAULT 0",
+        )
+        self.assertEqual(
+            POSTGRES_OPTIONAL_COLUMNS["neosektor_operational_settings"][
+                "google_mirror_writes_enabled"
+            ],
+            "BOOLEAN NOT NULL DEFAULT FALSE",
         )
         self.assertEqual(
             POSTGRES_OPTIONAL_COLUMNS["neosektor_operational_settings"][
@@ -100,6 +113,11 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
         self.assertIn(
             "ADD COLUMN IF NOT EXISTS integration_mode VARCHAR(40) "
             "NOT NULL DEFAULT 'google_primary'",
+            statements,
+        )
+        self.assertIn(
+            "ADD COLUMN IF NOT EXISTS google_mirror_writes_enabled BOOLEAN "
+            "NOT NULL DEFAULT FALSE",
             statements,
         )
         self.assertIn(

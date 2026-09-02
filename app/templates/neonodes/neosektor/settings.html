@@ -26,7 +26,7 @@
             <div class="neosektor-settings-copy">
                 <p>Unload modifiers, driver offset, and application configuration remain NeoApps-owned in every integration mode.</p>
                 <p>Gateway-wide Google/Neo authority is managed in MotherBrain System Settings.</p>
-                <p><strong>Google Mirror Writes:</strong> {{ "ON" if integration_status.google_mirror_writes_enabled else "OFF" }} · mirror writes reset OFF after a NeoApps restart.</p>
+                <p><strong>Google Mirror Writes:</strong> {{ "ON" if integration_status.google_mirror_writes_enabled else "OFF" }} · gateway setting persists across NeoApps restarts.</p>
             </div>
 
             {% if integration_status.google_mirror_sync_needed %}
