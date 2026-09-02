@@ -1399,12 +1399,9 @@ def _wave_views(
     second_east_wave_count = _side_wave_count(east, "second")
     second_west_wave_count = _side_wave_count(west, "second")
 
-    first_back_row_waiting = _wave_back_row_waiting(
-        first_east_wave_count,
-        first_west_wave_count,
-        east_open_bays,
-        west_open_bays,
-    )
+    first_east_waiting = _side_wave_waiting(first_east_wave_count, east_open_bays)
+    first_west_waiting = _side_wave_waiting(first_west_wave_count, west_open_bays)
+    first_back_row_waiting = first_east_waiting + first_west_waiting
     first_is_all_up = _wave_is_all_up(
         first_left_to_arrive,
         first_back_row_waiting,
@@ -1424,18 +1421,18 @@ def _wave_views(
     else:
         first_left_to_unload = _active_wave_left_to_unload(
             first_left_to_arrive,
-            first_back_row_waiting,
+            first_east_waiting,
+            first_west_waiting,
+            east_open_bays,
+            west_open_bays,
             _settings_first_modifier(operational_settings),
         )
 
     second_waiting_on_first_wave = first_is_all_up and not first_timer_done
     second_is_active = first_is_all_up and first_timer_done
-    second_back_row_waiting = _wave_back_row_waiting(
-        second_east_wave_count,
-        second_west_wave_count,
-        east_open_bays,
-        west_open_bays,
-    )
+    second_east_waiting = _side_wave_waiting(second_east_wave_count, east_open_bays)
+    second_west_waiting = _side_wave_waiting(second_west_wave_count, west_open_bays)
+    second_back_row_waiting = second_east_waiting + second_west_waiting
     second_inactive_remaining = _inactive_wave_left_to_unload(
         second_left_to_arrive,
         second_east_wave_count,
@@ -1465,7 +1462,10 @@ def _wave_views(
     else:
         second_left_to_unload = _active_wave_left_to_unload(
             second_left_to_arrive,
-            second_back_row_waiting,
+            second_east_waiting,
+            second_west_waiting,
+            east_open_bays,
+            west_open_bays,
             _settings_second_modifier(operational_settings),
         )
 
@@ -1481,8 +1481,8 @@ def _wave_left_to_arrive_display(value):
 
 def _wave_back_row_waiting(east_wave, west_wave, east_open_bays, west_open_bays):
     """Count back-row work after each ballmat uses only its own open bays."""
-    east_waiting = max(max(east_wave or 0, 0) - max(east_open_bays or 0, 0), 0)
-    west_waiting = max(max(west_wave or 0, 0) - max(west_open_bays or 0, 0), 0)
+    east_waiting = _side_wave_waiting(east_wave, east_open_bays)
+    west_waiting = _side_wave_waiting(west_wave, west_open_bays)
     return east_waiting + west_waiting
 
 
@@ -1490,8 +1490,41 @@ def _wave_is_all_up(left_to_arrive, back_row_waiting):
     return max(left_to_arrive or 0, 0) == 0 and back_row_waiting == 0
 
 
-def _active_wave_left_to_unload(left_to_arrive, back_row_waiting, modifier):
-    return max(left_to_arrive or 0, 0) + back_row_waiting + max(modifier or 0, 0)
+def _side_wave_waiting(back_row_count, open_bays):
+    return max(max(back_row_count or 0, 0) - max(open_bays or 0, 0), 0)
+
+
+def _active_wave_left_to_unload(
+    left_to_arrive,
+    east_waiting,
+    west_waiting,
+    east_open_bays,
+    west_open_bays,
+    modifier,
+):
+    """Calculate active-wave LTU with the opposite-ballmat opening adjustment.
+
+    A side with no waiting back-row work has enough of its own openings to
+    absorb its queue. Its available openings reduce the active wave's modifier
+    only when the other side is still waiting; manual back-row counts remain
+    untouched throughout.
+    """
+    base_modifier = max(modifier or 0, 0)
+    if east_waiting > 0 and west_waiting > 0:
+        adjusted_modifier = base_modifier
+    elif east_waiting > 0:
+        adjusted_modifier = max(base_modifier - max(west_open_bays or 0, 0), 0)
+    elif west_waiting > 0:
+        adjusted_modifier = max(base_modifier - max(east_open_bays or 0, 0), 0)
+    else:
+        adjusted_modifier = 0
+
+    return (
+        max(left_to_arrive or 0, 0)
+        + max(east_waiting or 0, 0)
+        + max(west_waiting or 0, 0)
+        + adjusted_modifier
+    )
 
 
 def _inactive_wave_left_to_unload(left_to_arrive, east_wave, west_wave):

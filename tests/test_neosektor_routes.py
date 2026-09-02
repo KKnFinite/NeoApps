@@ -32,6 +32,7 @@ from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
 from app.services.gateway_matrix import save_gateway_matrix
+from app.services.neosektor_live_counts import _active_wave_left_to_unload
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.uld_requests import (
     active_on_the_way_events,
@@ -2310,6 +2311,32 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["state"]["waves"][0]["left"], 34)
 
+    def test_active_wave_ltu_offsets_modifier_with_opposite_open_ballmat(self):
+        # LTA 11 + West waiting 2 + (modifier 45 - East openings 4) = 54.
+        self.assertEqual(
+            _active_wave_left_to_unload(11, 0, 2, 4, 0, 45),
+            54,
+        )
+
+    def test_active_wave_ltu_offsets_modifier_for_opposite_ballmat_equivalent(self):
+        # LTA 11 + East waiting 2 + (modifier 45 - West openings 4) = 54.
+        self.assertEqual(
+            _active_wave_left_to_unload(11, 2, 0, 0, 4, 45),
+            54,
+        )
+
+    def test_active_wave_ltu_uses_full_modifier_when_both_ballmats_wait(self):
+        self.assertEqual(
+            _active_wave_left_to_unload(11, 2, 3, 4, 5, 45),
+            61,
+        )
+
+    def test_active_wave_ltu_removes_modifier_when_neither_ballmat_waits(self):
+        self.assertEqual(
+            _active_wave_left_to_unload(11, 0, 0, 4, 5, 45),
+            11,
+        )
+
     def test_second_wave_uses_custom_second_modifier_after_first_down(self):
         self._login_approved_user(role="simulator")
         self.client.post(
@@ -2349,6 +2376,47 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["state"]["waves"][1]["left"], 28)
+
+    def test_active_second_wave_uses_conditional_opposite_opening_modifier(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={
+                "first_modifier": 45,
+                "second_modifier": 45,
+                "down_timer_minutes": 15,
+            },
+        )
+        self.client.get("/neosektor/live-counts")
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
+        db.session.commit()
+        self.client.post(
+            "/neosektor/tunnel-conductor/wave",
+            json={"wave": "second", "delta": 11},
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 0}, "second": {"count": 0}},
+                "open_bays": 4,
+                "bay_statuses": {},
+            },
+        )
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 0}, "second": {"count": 2}},
+                "open_bays": 0,
+                "bay_statuses": {},
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["waves"][0]["left"], "DOWN")
+        self.assertEqual(response.get_json()["state"]["waves"][1]["left"], 54)
 
     def test_all_up_to_down_transition_uses_custom_timer_minutes(self):
         self._login_approved_user(role="simulator")
