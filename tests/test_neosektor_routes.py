@@ -1145,6 +1145,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: 0;", arrow_block)
         self.assertIn("order: 1;", arrow_block)
         self.assertIn("order: 2;", target_block)
+        self.assertIn("align-self: center;", target_block)
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr);", css)
+        self.assertIn("align-content: stretch;", css)
+        self.assertIn("margin-top: clamp(4px, 0.5svh, 8px);", css)
         self.assertIn("font-size: 2.16em;", instruction_block)
         self.assertIn("width: 100%;", shaft_block)
         self.assertIn("height: clamp(70px, 11.5svh, 140px);", shaft_block)
@@ -1156,7 +1160,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: clamp(0.68rem, min(2.1vw, 1.7svh), 1.05rem);", css)
         self.assertIn("min-height: clamp(144px, 21svh, 236px);", bay_priority_block)
         self.assertIn(
-            "font-size: clamp(1.425rem, min(4.2vw, 3.9svh), 2.475rem);",
+            "font-size: clamp(2.85rem, min(8.4vw, 7.8svh), 4.95rem);",
             css,
         )
         self.assertIn("font-size: 0.92rem;", css)

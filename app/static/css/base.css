@@ -21626,10 +21626,11 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 .blueprint-neosektor .driver-target {
     display: grid;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto minmax(0, 1fr);
     place-items: center;
-    align-content: center;
+    align-content: stretch;
     gap: clamp(5px, 0.8svh, 10px);
+    margin-top: clamp(4px, 0.5svh, 8px);
     min-height: 0;
 }
 
@@ -21645,6 +21646,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     letter-spacing: 0;
     text-transform: uppercase;
     text-shadow: 0 0 18px rgba(var(--node-sektor-primary-rgb), 0.36);
+    align-self: center;
 }
 
 .blueprint-neosektor .driver-instruction {
@@ -21748,7 +21750,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     max-width: 100%;
     overflow: hidden;
     padding: 5px 3px;
-    font-size: clamp(1.425rem, min(4.2vw, 3.9svh), 2.475rem);
+    font-size: clamp(2.85rem, min(8.4vw, 7.8svh), 4.95rem);
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
