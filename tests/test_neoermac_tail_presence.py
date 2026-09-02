@@ -323,6 +323,34 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         self.assertEqual(old_assignment.position_code, "A01")
         self.assertEqual(new_assignment.position_code, "B02")
 
+    def test_repeated_tail_uses_return_before_the_matching_later_departure(self):
+        first_departure = self._departure(tail="N123UP")
+        first_departure.flight_number = "UPS101"
+        first_departure.actual_block_out_datetime_utc = datetime(2026, 8, 12, 6, 0)
+        first_departure.planned_datetime_utc = datetime(2026, 8, 12, 6, 0)
+
+        return_arrival = self._arrival(
+            tail="N123UP",
+            flight_number="UPS102",
+            actual_block_in=datetime(2026, 8, 12, 7, 0),
+        )
+        return_arrival.planned_datetime_utc = datetime(2026, 8, 12, 7, 0)
+
+        second_departure = self._departure(tail="N123UP")
+        second_departure.flight_number = "UPS103"
+        second_departure.planned_datetime_utc = datetime(2026, 8, 12, 8, 0)
+        db.session.commit()
+
+        evidence = arrival_presence_by_tail(self.operation)
+        first_presence = departure_tail_presence(first_departure, evidence)
+        second_presence = departure_tail_presence(second_departure, evidence)
+
+        self.assertEqual(first_presence["state"], TAIL_PRESENCE_ASSUMED_HERE)
+        self.assertFalse(first_presence["has_matching_arrival"])
+        self.assertEqual(second_presence["state"], TAIL_PRESENCE_ARRIVED)
+        self.assertTrue(second_presence["has_matching_arrival"])
+        self.assertTrue(second_presence["has_actual_block_in"])
+
     def test_meaningful_departure_statuses_are_never_masked(self):
         mission = self._departure(tail="N123UP")
         self._arrival(tail="N123UP")

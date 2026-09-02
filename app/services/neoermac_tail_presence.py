@@ -71,6 +71,13 @@ def arrival_presence_by_tail(
         state["has_api_assumed_arrived"] |= arrival_evidence[
             "has_api_assumed_arrived"
         ]
+        state.setdefault("arrival_events", []).append(
+            {
+                **arrival_evidence,
+                "chronology_at": _mission_chronology_at(arrival, arrival=True),
+                "mission_id": arrival.id,
+            }
+        )
         current_evidence = state["presence_evidence"]
         if _EVIDENCE_PRIORITY[evidence] > _EVIDENCE_PRIORITY[current_evidence]:
             state["presence_evidence"] = evidence
@@ -88,7 +95,10 @@ def departure_tail_presence(mission, arrivals_by_tail=None):
             has_actual_block_in=False,
         )
 
-    arrival = (arrivals_by_tail or {}).get(tail)
+    arrival = _arrival_evidence_before_departure(
+        mission,
+        (arrivals_by_tail or {}).get(tail),
+    )
     if arrival is None:
         return _presence_payload(
             TAIL_PRESENCE_ASSUMED_HERE,
@@ -150,6 +160,52 @@ def _arrival_presence_evidence(arrival, tail, google_links, now_utc):
         "has_api_assumed_arrived": has_api_assumed_arrived,
         "presence_evidence": presence_evidence,
     }
+
+
+def _arrival_evidence_before_departure(mission, arrival):
+    """Choose the latest same-tail arrival that occurred before this departure.
+
+    A tail can operate departure → return → departure within one sort.  The
+    arrival summary therefore retains event chronology instead of allowing a
+    later return to make an earlier departure look present.
+    """
+    if arrival is None:
+        return None
+    events = tuple(arrival.get("arrival_events") or ())
+    if not events:
+        return arrival
+
+    departure_at = _mission_chronology_at(mission, arrival=False)
+    candidates = [
+        event
+        for event in events
+        if departure_at is None
+        or event.get("chronology_at") is None
+        or event["chronology_at"] <= departure_at
+    ]
+    if not candidates:
+        return None
+    return max(
+        candidates,
+        key=lambda event: (
+            event.get("chronology_at") or datetime.min,
+            _EVIDENCE_PRIORITY.get(event.get("presence_evidence"), 0),
+            event.get("mission_id") or 0,
+        ),
+    )
+
+
+def _mission_chronology_at(mission, *, arrival):
+    attributes = (
+        ("actual_block_in_datetime_utc", "estimated_datetime_utc", "planned_datetime_utc")
+        if arrival
+        else ("actual_block_out_datetime_utc", "estimated_datetime_utc", "planned_datetime_utc")
+    )
+    for attribute in attributes:
+        value = _utc_naive(getattr(mission, attribute, None))
+        if value is not None:
+            return value
+    return None
 
 
 def _google_arrival_links_by_tail(operation, *, google_links=None):
