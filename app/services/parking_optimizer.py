@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from ortools.sat.python import cp_model
 
 from app.extensions import db
+from app.services.memory_diagnostics import memory_diagnostics
 from app.models import MotherBrainParkingRule, MotherBrainParkingSettings, SortDateParkingAssignment
 from app.services.gateway_matrix import gateway_timezone
 from app.services.parking_physical_validator import (
@@ -131,6 +132,7 @@ def parking_optimizer_default_options(gateway):
     }
 
 
+@memory_diagnostics("parking_optimizer_preview")
 def parking_optimizer_preview(
     gateway,
     operation,

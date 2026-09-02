@@ -20,6 +20,7 @@ from app.services.gateway_matrix import (
     gateway_timezone,
     sort_lookup_window_for_operation,
 )
+from app.services.memory_diagnostics import memory_diagnostics
 
 
 KRFD_ICAO = "KRFD"
@@ -42,6 +43,7 @@ class NeoSubZeroWeatherError(RuntimeError):
     """Safe weather-provider failure."""
 
 
+@memory_diagnostics("neosubzero_weather_context")
 def neosubzero_weather_context(gateway, operation=None, *, now=None):
     """Return current KRFD observation and operational-sort forecasts."""
     snapshot = _weather_snapshot(now=now)

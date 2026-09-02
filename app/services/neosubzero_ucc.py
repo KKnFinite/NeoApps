@@ -18,6 +18,7 @@ from app.models import (
     StaffingWorkAssignment,
 )
 from app.services.live_collaboration import entity_version
+from app.services.memory_diagnostics import memory_diagnostics
 from app.services.neosubzero_constants import RAMP_ORDER
 from app.services.neosubzero_staffing import current_subzero_staffing_pool
 
@@ -31,6 +32,7 @@ class NeoSubZeroUccError(ValueError):
     """Safe operator-facing UCC validation error."""
 
 
+@memory_diagnostics("neosubzero_ucc_context")
 def neosubzero_ucc_context(gateway, operation):
     """Return a bounded UCC projection from canonical current-sort state."""
     from app.services.neosubzero_departure_deice import (

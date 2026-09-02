@@ -42,6 +42,7 @@ from app.services.neosektor_sheets_compat import (
     neosektor_integration_status,
 )
 from app.services.permission_rules import preload_permission_rules, user_can
+from app.services.memory_diagnostics import memory_diagnostics
 from app.services import neostaffing as staffing_service
 from app.services.uld_requests import (
     discharge_context,
@@ -779,6 +780,7 @@ def driver_routing_state():
         return jsonify({"ok": False, "error": str(exc)}), 503
 
 
+@memory_diagnostics("neosektor_live_state_response")
 def _neosektor_live_state_response(
     gateway,
     revision_scope,

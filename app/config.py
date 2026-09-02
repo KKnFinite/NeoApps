@@ -44,6 +44,16 @@ class Config:
         1000,
         int(os.getenv("LIVE_SCREEN_REFRESH_INTERVAL_MS", "5000")),
     )
+    # Disabled by default. When explicitly enabled, workers emit rate-limited
+    # RSS/high-water observations around selected high-value operations.
+    NEOAPPS_MEMORY_DIAGNOSTICS_ENABLED = env_flag(
+        "NEOAPPS_MEMORY_DIAGNOSTICS_ENABLED",
+        False,
+    )
+    NEOAPPS_MEMORY_DIAGNOSTICS_SAMPLE_SECONDS = max(
+        0,
+        int(os.getenv("NEOAPPS_MEMORY_DIAGNOSTICS_SAMPLE_SECONDS", "300")),
+    )
     BREVO_API_KEY = os.getenv("BREVO_API_KEY")
     MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "NeoApps Portal")
     MAIL_FROM_EMAIL = os.getenv(

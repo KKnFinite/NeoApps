@@ -38,6 +38,7 @@ from app.services.google_rain_integration_mode import (
     rain_integration_mode,
 )
 from app.services.operation_lifecycle import ensure_operational_sort_operations
+from app.services.memory_diagnostics import memory_diagnostics
 from app.services.sort_timeline import ensure_sort_timeline_settings, sort_settings_by_name
 
 
@@ -45,6 +46,7 @@ GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_HEADER = "X-Neo-Google-Live-Poll-Client"
 GOOGLE_LIVE_POLL_HEARTBEAT_CLIENT_VERSION = "2"
 
 
+@memory_diagnostics("google_motherbrain_live_poll")
 def execute_google_motherbrain_live_poll(
     gateway,
     now=None,

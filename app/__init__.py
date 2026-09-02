@@ -135,6 +135,7 @@ from app.services.live_screen_refresh_schema import (
 )
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
+from app.services.memory_diagnostics import record_process_memory_checkpoint
 
 
 def create_app(config_class=Config, auto_bootstrap=False):
@@ -197,6 +198,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     register_template_helpers(app)
     register_request_guards(app)
     register_security_headers(app)
+    record_process_memory_checkpoint("app_startup", app=app)
 
     return app
 

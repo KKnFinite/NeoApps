@@ -27,6 +27,7 @@ from app.services.neorain_load_planner_contacts import (
 )
 from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.live_collaboration import entity_version
+from app.services.memory_diagnostics import memory_diagnostics
 from app.services.neostaffing import attendance_operation_department_counts
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.operation_scope import current_operational_sort_operation
@@ -81,6 +82,7 @@ class LoadPlannerAssignmentError(ValueError):
     """Safe validation error for canonical NeoRain Load Planner assignments."""
 
 
+@memory_diagnostics("neorain_outbound_context")
 def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
     """Build the current-sort Outbound board without mutating operational state."""
     if operation is _OPERATION_UNSET:
@@ -101,6 +103,7 @@ def current_neorain_outbound_operation(gateway):
     return current_operational_sort_operation(gateway)
 
 
+@memory_diagnostics("neorain_inbound_context")
 def neorain_inbound_context(gateway, *, operation=_OPERATION_UNSET):
     """Build the bounded current-sort arrival board."""
     if operation is _OPERATION_UNSET:
