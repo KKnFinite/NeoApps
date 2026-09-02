@@ -190,6 +190,37 @@ class SortDateGenerationTest(unittest.TestCase):
 
         self.assertEqual(SortDateOperation.query.count(), 0)
 
+    def test_same_destination_departures_keep_their_master_mission_identity(self):
+        oak_one = self._add_master(
+            flight_number="OAK1",
+            destination="OAK",
+            planned_time_local=time(2, 10),
+        )
+        oak_two = self._add_master(
+            flight_number="OAK2",
+            destination="OAK",
+            planned_time_local=time(3, 10),
+        )
+        db.session.commit()
+
+        operation = generate_sort_date_operation_from_master(
+            sort_date=date(2026, 6, 1),
+            gateway_code="RFD",
+            sort_name="night",
+        )
+
+        missions = SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            destination="OAK",
+        ).order_by(SortDateMission.planned_datetime_utc).all()
+        self.assertEqual([mission.flight_number for mission in missions], ["OAK1", "OAK2"])
+        self.assertEqual(
+            [mission.master_flight_schedule_id for mission in missions],
+            [oak_one.id, oak_two.id],
+        )
+        self.assertNotEqual(missions[0].id, missions[1].id)
+
     def test_tail_state_is_created_when_assigned_tail_exists(self):
         mission = self._mission(assigned_tail_number="N123UP")
         db.session.add(mission.sort_date_operation)
