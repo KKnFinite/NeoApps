@@ -31,6 +31,7 @@ from app.models import (
     User,
 )
 from app.services import neostaffing_vacation as vacation_service
+from app.services.database_bootstrap import bootstrap_database
 from app.services.neostaffing_vacation_schema import (
     NEOSTAFFING_VACATION_MODELS,
     NEOSTAFFING_VACATION_SCHEMA_LOCK_KEY,
@@ -2199,7 +2200,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertIn("child.checked = input.checked", javascript)
         self.assertIn("data-vacation-operation-tree", template)
 
-    def test_schema_is_additive_idempotent_and_factory_integrated(self):
+    def test_schema_is_additive_idempotent_and_deployment_bootstrap_owned(self):
         table_names = set(inspect(db.engine).get_table_names())
         self.assertTrue({model.__tablename__ for model in NEOSTAFFING_VACATION_MODELS}.issubset(table_names))
         connection = Mock()
@@ -2229,9 +2230,19 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self.assertNotIn("UPDATE ", statements)
         self.assertEqual(commit.call_count, 2)
 
-        with patch("app.ensure_neostaffing_vacation_tables") as ensure:
-            app = create_app(self.config)
-        ensure.assert_called_once_with(app)
+        self.app.config.update(
+            TESTING=True,
+            SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
+        )
+        with patch(
+            "app.services.database_bootstrap.sync_database_schema"
+        ) as sync_schema:
+            bootstrap_database(self.app)
+        sync_schema.assert_called_once_with(self.app)
+
+        with patch("app.services.schema_sync.sync_database_schema") as web_sync_schema:
+            create_app(self.config, auto_bootstrap=False)
+        web_sync_schema.assert_not_called()
 
     def _hierarchy(self):
         night = StaffingUnit(unit_type="sort", name="Night", display_order=1)
