@@ -24,6 +24,11 @@ class NeoSubZeroUserPreference(db.Model):
         nullable=False,
         default=True,
     )
+    frost_risk_explanations_enabled = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

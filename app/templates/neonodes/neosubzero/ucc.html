@@ -15,13 +15,16 @@
     <section class="neosubzero-weather theme-{{ weather.theme }}" aria-labelledby="subzero-weather-heading"
              data-weather-theme="{{ weather.theme }}"
              data-weather-motion="{{ 'on' if weather_animations_enabled else 'off' }}"
-             data-weather-preference-url="{{ url_for('neosubzero.ucc_weather_preference') }}">
+             data-weather-preference-url="{{ url_for('neosubzero.ucc_weather_preference') }}"
+             data-frost-explanations="{{ 'on' if frost_risk_explanations_enabled else 'off' }}"
+             data-frost-explanation-preference-url="{{ url_for('neosubzero.ucc_frost_explanation_preference') }}">
         <div class="neosubzero-weather-ambient" aria-hidden="true"><i></i><i></i></div>
         <header>
             <div><p>KRFD · ACTUAL OBSERVATION</p><h2 id="subzero-weather-heading">WEATHER OPERATIONS</h2></div>
             <div class="neosubzero-weather-source">
                 <span>{{ weather.sources.current }} · {{ weather.current.observed_at_label }}{% if weather.current.stale %} · STALE{% endif %}</span>
                 <button type="button" data-weather-motion-toggle aria-pressed="{{ 'true' if weather_animations_enabled else 'false' }}">AMBIENT MOTION {{ 'ON' if weather_animations_enabled else 'OFF' }}</button>
+                <button type="button" data-frost-explanation-toggle aria-pressed="{{ 'true' if frost_risk_explanations_enabled else 'false' }}">WHY {{ 'ON' if frost_risk_explanations_enabled else 'OFF' }}</button>
             </div>
         </header>
         <div class="neosubzero-weather-current">
@@ -59,7 +62,7 @@
                     <span><small>TEMPERATURE</small><b>{{ hour.temperature }}</b></span>
                 </div>
                 <div class="neosubzero-weather-hour-secondary">
-                    <span class="is-frost-reason">{{ hour.frost_risk.explanation }}</span>
+                    <span class="is-frost-reason" {% if not frost_risk_explanations_enabled %}hidden{% endif %}>{{ hour.frost_risk.explanation }}</span>
                     <span>DEW {{ hour.dewpoint }}</span><span>SPREAD {{ hour.spread }}</span>
                     <span>RH {{ hour.humidity }}</span><span>{{ hour.wind }}{% if hour.gust != '-' %} · {{ hour.gust }}{% endif %}</span>
                     <span>{{ hour.condition }}</span>

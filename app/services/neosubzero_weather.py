@@ -229,10 +229,14 @@ def preliminary_frost_risk(
         reasons.append("cold fog/mist")
 
     level = "HIGH" if score >= 7 else "MEDIUM" if score >= 4 else "LOW"
+    normalized_reasons = tuple(dict.fromkeys(reasons))
     return {
         "level": level,
         "score": score,
-        "rationale": ", ".join(dict.fromkeys(reasons)) or "limited frost signals",
+        "rationale": ", ".join(normalized_reasons) or "limited frost signals",
+        # Future NeoFrost output can provide the same normalized reason list
+        # and display text without changing the persisted WHY preference/UI.
+        "explanation_reasons": normalized_reasons,
         "explanation": _frost_explanation(
             temperature,
             spread,

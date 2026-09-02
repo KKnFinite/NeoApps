@@ -190,6 +190,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neosubzero_pretreat_states": {
         "reason_for_application": "VARCHAR(120)",
     },
+    "neosubzero_user_preferences": {
+        "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+    },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
     },

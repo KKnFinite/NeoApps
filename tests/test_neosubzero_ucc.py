@@ -654,6 +654,44 @@ class NeoSubZeroUccTest(unittest.TestCase):
             persisted_page = first_client.get("/neosubzero/ucc")
         self.assertIn(b'data-weather-motion="off"', persisted_page.data)
 
+    def test_frost_why_preference_defaults_on_and_persists_per_user(self):
+        watcher = self._user("frost_why_watcher", "watcher")
+        client = self.app.test_client()
+        self._login(client, watcher)
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+            return_value=self._weather_context_fixture(),
+        ):
+            default_page = client.get("/neosubzero/ucc")
+        self.assertIn(b'data-frost-explanations="on"', default_page.data)
+        self.assertIn(b"data-frost-explanation-toggle", default_page.data)
+        self.assertIn(b"/neosubzero/ucc/frost-explanation-preference", default_page.data)
+
+        saved = client.post(
+            "/neosubzero/ucc/frost-explanation-preference",
+            json={"enabled": False},
+        )
+        self.assertEqual(saved.status_code, 200)
+        self.assertFalse(saved.get_json()["enabled"])
+        self.assertFalse(
+            NeoSubZeroUserPreference.query.filter_by(user_id=watcher.id)
+            .one()
+            .frost_risk_explanations_enabled
+        )
+
+        with patch(
+            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
+            return_value=self.operation,
+        ), patch(
+            "app.neonodes.neosubzero.routes.neosubzero_weather_context",
+            return_value=self._weather_context_fixture(),
+        ):
+            persisted_page = client.get("/neosubzero/ucc")
+        self.assertIn(b'data-frost-explanations="off"', persisted_page.data)
+
     def test_ucc_route_rejects_stale_slot_version(self):
         simulator = self._user("ucc_stale_simulator", "simulator")
         slot = set_neosubzero_ucc_assignment(

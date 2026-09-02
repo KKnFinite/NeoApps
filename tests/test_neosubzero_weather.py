@@ -113,6 +113,7 @@ class NeoSubZeroWeatherTest(unittest.TestCase):
             high["explanation"],
             "30°F · spread 2°F · RH 92% · light wind · clear",
         )
+        self.assertIn("at/below freezing", high["explanation_reasons"])
 
     def test_preliminary_frost_trend_compares_the_next_hour(self):
         rows = preliminary_frost_trends(

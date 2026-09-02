@@ -52,6 +52,43 @@
         }
     });
 
+    const frostExplanationToggle = weather?.querySelector("[data-frost-explanation-toggle]");
+    const applyFrostExplanations = (enabled) => {
+        if (!weather || !frostExplanationToggle) return;
+        weather.dataset.frostExplanations = enabled ? "on" : "off";
+        frostExplanationToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+        frostExplanationToggle.textContent = `WHY ${enabled ? "ON" : "OFF"}`;
+        weather.querySelectorAll(".is-frost-reason").forEach((element) => {
+            element.hidden = !enabled;
+        });
+    };
+    let frostExplanationsEnabled = weather?.dataset.frostExplanations !== "off";
+    applyFrostExplanations(frostExplanationsEnabled);
+    frostExplanationToggle?.addEventListener("click", async () => {
+        const previous = frostExplanationsEnabled;
+        const requested = !previous;
+        frostExplanationToggle.disabled = true;
+        applyFrostExplanations(requested);
+        try {
+            const response = await fetch(weather.dataset.frostExplanationPreferenceUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({enabled: requested}),
+            });
+            const payload = await response.json();
+            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Save failed");
+            frostExplanationsEnabled = payload.enabled === true;
+            applyFrostExplanations(frostExplanationsEnabled);
+        } catch (_error) {
+            frostExplanationsEnabled = previous;
+            applyFrostExplanations(previous);
+            frostExplanationToggle.title = "Frost explanation preference could not be saved.";
+        } finally {
+            frostExplanationToggle.disabled = false;
+        }
+    });
+
     // TV mode is deliberately device-local: it changes only this display's
     // presentation and must never affect another operator's UCC workspace.
     const tvEnter = root.querySelector("[data-ucc-tv-enter]");

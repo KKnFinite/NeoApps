@@ -15,6 +15,9 @@ from app.models import (
 
 LOCK_KEY = 7_483_327_341_930
 NEOSUBZERO_OPTIONAL_COLUMNS = {
+    NeoSubZeroUserPreference.__tablename__: {
+        "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+    },
     NeoSubZeroDepartureDeiceEvent.__tablename__: {
         "reason_for_application": "VARCHAR(120)",
     },
