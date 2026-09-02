@@ -19,6 +19,7 @@ from app.services.neosektor_live_counts import (
     ballmat_operations_context,
     ballmat_state_payload,
     driver_routing_context,
+    driver_routing_refresh_status,
     driver_routing_state_payload,
     live_counts_context,
     neosektor_refresh_status,
@@ -680,9 +681,11 @@ def driver_routing():
 
     gateway = get_current_gateway()
     try:
+        refresh_status = driver_routing_refresh_status(gateway)
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
             include_routing=True,
+            refresh_status=refresh_status,
         )
         context = driver_routing_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
@@ -770,14 +773,21 @@ def driver_routing_state():
             gateway,
             ROUTING_STATE_SCOPE,
             driver_routing_state_payload,
+            refresh_status_resolver=driver_routing_refresh_status,
         )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
 
 
-def _neosektor_live_state_response(gateway, revision_scope, state_builder):
+def _neosektor_live_state_response(
+    gateway,
+    revision_scope,
+    state_builder,
+    *,
+    refresh_status_resolver=neosektor_refresh_status,
+):
     client_revision = str(request.args.get("revision") or "").strip()
-    refresh = neosektor_refresh_status(gateway)
+    refresh = refresh_status_resolver(gateway)
     if client_revision and not refresh.get("auto_refresh_enabled"):
         return _live_state_json(
             {

@@ -19,10 +19,6 @@
         <a class="header-link neosektor-driver-back" href="{{ url_for('neosektor.index') }}">Back</a>
     </header>
     <main class="driver-routing neosektor-driver-board" aria-label="Driver routing">
-        {% set operation_refresh_status = state.refresh %}
-        {% set operation_refresh_class = "neosektor-refresh-paused" %}
-        {% set operation_refresh_hook = "neosektor-refresh-paused" %}
-        {% include "neonodes/_operation_refresh_banner.html" %}
         {% for wave_key in ["first"] %}
         {% set route = state.routing.routes[wave_key] %}
         <section
@@ -89,8 +85,30 @@
     const stateUrl = root.dataset.stateUrl;
     let currentRevision = root.dataset.neosektorRevision || "";
     const initialRefreshStatus = {{ state.refresh|tojson }};
-    const refreshPaused = root.querySelector("[data-neosektor-refresh-paused]");
     let refreshController = null;
+    let nextWindowWakeTimer = null;
+
+    const clearNextWindowWake = () => {
+        if (nextWindowWakeTimer !== null) {
+            window.clearTimeout(nextWindowWakeTimer);
+            nextWindowWakeTimer = null;
+        }
+    };
+
+    const scheduleNextWindowWake = (refresh) => {
+        clearNextWindowWake();
+        if (document.hidden || refresh.auto_refresh_enabled !== false) {
+            return;
+        }
+        const seconds = Number(refresh.next_check_seconds);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+            return;
+        }
+        nextWindowWakeTimer = window.setTimeout(() => {
+            nextWindowWakeTimer = null;
+            void refreshState().catch(() => {});
+        }, Math.max(1000, seconds * 1000));
+    };
 
     const applyRoute = (waveKey, route) => {
         const panel = root.querySelector(`[data-driver-wave="${waveKey}"]`);
@@ -136,26 +154,16 @@
         const isActive = status.auto_refresh_enabled !== false;
         root.dataset.refreshActive = isActive ? "true" : "false";
 
-        if (refreshPaused) {
-            refreshPaused.hidden = isActive;
-            refreshPaused.replaceChildren(
-                document.createTextNode(status.message || "Live updates off - outside Ops window"),
-            );
-            if (status.operation_label && status.window_label) {
-                const detail = document.createElement("span");
-                detail.textContent = `${status.operation_label} · ${status.window_label}`;
-                refreshPaused.appendChild(detail);
-            }
-        }
-
         if (!refreshController) {
             refreshController = window.NeoLiveUpdates.create({
                 intervalMs: {{ live_screen_refresh_interval_ms }},
-                statusElement: document.querySelector("[data-live-update-status]"),
+                continuousWhileVisible: true,
+                immediate: false,
                 poll: refreshState,
             });
         }
         refreshController.setServerStatus(status);
+        scheduleNextWindowWake(status);
     };
 
     const refreshState = async () => {
@@ -186,6 +194,16 @@
     };
 
     setRefreshStatus(initialRefreshStatus);
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            clearNextWindowWake();
+            return;
+        }
+        if (root.dataset.refreshActive !== "true") {
+            void refreshState().catch(() => {});
+        }
+    });
+    window.addEventListener("pagehide", clearNextWindowWake, { once: true });
 })();
 </script>
 {% endblock %}

@@ -1,4 +1,8 @@
+from datetime import datetime, timedelta
+
+from app.models import GatewaySortMatrix, SortTimelineSortSetting
 from app.services.gateway_matrix import (
+    SORT_ORDER,
     current_gateway_local_datetime,
     current_operations_for_gateway,
     ops_window_for_operation,
@@ -13,6 +17,7 @@ def node_auto_refresh_status(
     active_message="Live updates on",
     before_message="Live updates off - outside Ops window",
     outside_message="Live updates off - outside Ops window",
+    schedule_next_window=False,
 ):
     """Resolve live-screen eligibility independently from Flight API polling."""
     return _auto_refresh_status(
@@ -25,6 +30,7 @@ def node_auto_refresh_status(
         active_message=active_message,
         before_message=before_message,
         outside_message=outside_message,
+        schedule_next_window=schedule_next_window,
     )
 
 
@@ -35,6 +41,7 @@ def sort_window_auto_refresh_status(
     active_message="Live updates on",
     before_message="Live updates off - outside Sort window",
     outside_message="Live updates off - outside Sort window",
+    schedule_next_window=False,
 ):
     """Resolve live-screen eligibility against the physical Sort window."""
     return _auto_refresh_status(
@@ -47,6 +54,7 @@ def sort_window_auto_refresh_status(
         active_message=active_message,
         before_message=before_message,
         outside_message=outside_message,
+        schedule_next_window=schedule_next_window,
     )
 
 
@@ -61,6 +69,7 @@ def _auto_refresh_status(
     active_message,
     before_message,
     outside_message,
+    schedule_next_window,
 ):
     local_now = current_gateway_local_datetime(gateway, now=now)
 
@@ -75,6 +84,7 @@ def _auto_refresh_status(
             active_message=active_message,
             before_message=before_message,
             outside_message=outside_message,
+            schedule_next_window=schedule_next_window,
         )
 
     operations = current_operations_for_gateway(gateway, now=local_now)
@@ -117,7 +127,7 @@ def _auto_refresh_status(
                 next_window = (start_local, end_local)
 
     if next_operation:
-        return _refresh_status_payload(
+        status = _refresh_status_payload(
             next_operation,
             next_window[0],
             next_window[1],
@@ -126,6 +136,7 @@ def _auto_refresh_status(
             reason=before_reason,
             message=before_message,
         )
+        return _with_next_window_wake(status, next_window[0], local_now) if schedule_next_window else status
 
     candidate = next(
         (
@@ -138,7 +149,7 @@ def _auto_refresh_status(
     start_local, end_local = (
         window_resolver(candidate, gateway) if candidate else (None, None)
     )
-    return _refresh_status_payload(
+    status = _refresh_status_payload(
         candidate,
         start_local,
         end_local,
@@ -147,6 +158,11 @@ def _auto_refresh_status(
         reason=outside_reason,
         message=outside_message,
     )
+    if schedule_next_window:
+        next_window = _next_scheduled_ops_window(gateway, local_now)
+        if next_window:
+            return _with_next_window_wake(status, next_window, local_now)
+    return status
 
 
 def _status_for_selected_operation(
@@ -160,10 +176,11 @@ def _status_for_selected_operation(
     active_message,
     before_message,
     outside_message,
+    schedule_next_window=False,
 ):
     start_local, end_local = window_resolver(operation, gateway)
     if not _operation_is_current_context(operation, gateway, local_now):
-        return _refresh_status_payload(
+        status = _refresh_status_payload(
             operation,
             start_local,
             end_local,
@@ -172,6 +189,11 @@ def _status_for_selected_operation(
             reason="historical_sort",
             message="Live updates off - historical sort",
         )
+        if schedule_next_window:
+            next_window = _next_scheduled_ops_window(gateway, local_now)
+            if next_window:
+                return _with_next_window_wake(status, next_window, local_now)
+        return status
 
     active = bool(start_local <= local_now < end_local)
     reason = (
@@ -184,7 +206,7 @@ def _status_for_selected_operation(
             outside_reason,
         )
     )
-    return _refresh_status_payload(
+    status = _refresh_status_payload(
         operation,
         start_local,
         end_local,
@@ -197,6 +219,9 @@ def _status_for_selected_operation(
             else before_message if reason == before_reason else outside_message
         ),
     )
+    if schedule_next_window and not active and start_local and local_now < start_local:
+        return _with_next_window_wake(status, start_local, local_now)
+    return status
 
 
 def _operation_is_inside_window(operation, gateway, local_now, window_resolver):
@@ -245,6 +270,54 @@ def _refresh_status_payload(
         "window_label": _window_label(start_local, end_local),
         "next_check_seconds": None,
     }
+
+
+def _with_next_window_wake(status, start_local, local_now):
+    """Attach one canonical future-window wake hint without enabling polling."""
+    seconds = max(1, int((start_local - local_now).total_seconds()))
+    return {
+        **status,
+        "next_check_seconds": seconds,
+        "next_window_start_local": start_local.isoformat(),
+    }
+
+
+def _next_scheduled_ops_window(gateway, local_now):
+    """Find the next configured MotherBrain Ops window, even before its row exists."""
+    settings_by_sort = {
+        str(row.sort_name or "").strip().lower(): row
+        for row in SortTimelineSortSetting.query.filter_by(gateway_id=gateway.id).all()
+    }
+    active_by_day = {}
+    for row in GatewaySortMatrix.query.filter_by(
+        gateway_id=gateway.id,
+        is_active=True,
+    ).all():
+        active_by_day.setdefault(row.day_of_week, set()).add(row.sort_name)
+
+    candidates = []
+    for offset in range(0, 8):
+        sort_date = local_now.date() + timedelta(days=offset)
+        active_sorts = active_by_day.get(sort_date.strftime("%A").lower(), set())
+        for sort_name in active_sorts:
+            setting = settings_by_sort.get(str(sort_name or "").strip().lower())
+            if not setting:
+                continue
+            if setting.ops_window_start_local and setting.ops_window_end_local:
+                start_time = setting.ops_window_start_local
+            else:
+                start_time = setting.sort_window_start_local
+            if not start_time:
+                continue
+            start_local = datetime.combine(sort_date, start_time)
+            if start_local > local_now:
+                candidates.append(
+                    (
+                        start_local,
+                        SORT_ORDER.get(sort_name, len(SORT_ORDER)),
+                    )
+                )
+    return min(candidates, default=None)[0] if candidates else None
 
 
 def _operation_label(operation):

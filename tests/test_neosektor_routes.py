@@ -31,6 +31,7 @@ from app.models import (
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
+from app.services.gateway_matrix import save_gateway_matrix
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.uld_requests import (
     active_on_the_way_events,
@@ -1047,6 +1048,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"driver-bay-priority", response.data)
         self.assertIn(b"data-driver-routing", response.data)
         self.assertIn(b"neosektor-driver-page", response.data)
+        self.assertNotIn(b"operation-refresh-banner", response.data)
+        self.assertNotIn(b"neosektor-refresh-paused", response.data)
+        self.assertNotIn(b"LIVE UPDATES", response.data)
+        self.assertNotIn(b"KEEP LIVE", response.data)
+        self.assertNotIn(b"MONITOR MODE", response.data)
+        self.assertIn(b"continuousWhileVisible: true", response.data)
+        self.assertIn(b"scheduleNextWindowWake", response.data)
+        self.assertIn(b"visibilitychange", response.data)
         self.assertIn(b'href="/neosektor"', response.data)
         self.assertIn(b"Back", response.data)
         self.assertNotIn(b"Change Characters", response.data)
@@ -1108,7 +1117,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertIn("content: none;", legacy_card_bar_block)
         self.assertIn("content: none;", wave_bar_block)
-        self.assertIn("width: min(96%, 700px);", arrow_block)
+        self.assertIn("width: min(90%, 640px);", arrow_block)
+        self.assertIn("height: clamp(46px, 7.2svh, 88px);", arrow_block)
         self.assertIn("font-size: 0;", arrow_block)
         self.assertIn("order: 1;", arrow_block)
         self.assertIn("order: 2;", target_block)
@@ -1119,8 +1129,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("content: none;", head_block)
         self.assertNotIn("border-right:", head_block)
         self.assertIn("scaleX(-1)", css)
-        self.assertIn("font-size: clamp(1.08rem, 3.55vw, 1.82rem);", css)
-        self.assertIn("font-size: clamp(1.52rem, 4.65vw, 2.85rem);", css)
+        self.assertIn("font-size: clamp(1.2rem, min(4.2vw, 3.2svh), 2.35rem);", css)
+        self.assertIn("font-size: clamp(0.68rem, min(2.1vw, 1.7svh), 1.05rem);", css)
+        self.assertIn("font-size: clamp(0.95rem, min(2.8vw, 2.6svh), 1.65rem);", css)
         self.assertIn("font-size: 0.92rem;", css)
         self.assertIn("width: 98%;", mobile_arrow_block)
 
@@ -3286,7 +3297,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "/neosektor/tunnel-conductor",
             "/neosektor/ebm",
             "/neosektor/wbm",
-            "/neosektor/driver-routing",
             "/neosektor/discharge",
         ):
             with self.subTest(path=path):
@@ -3302,6 +3312,29 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(".operation-refresh-banner {", stylesheet)
         self.assertIn("border: 1px solid rgba(var(--node-rgb), 0.42);", stylesheet)
         self.assertNotIn(".blueprint-neosektor .neosektor-refresh-paused {", stylesheet)
+
+    def test_driver_routing_waits_for_the_next_canonical_ops_window_without_a_banner(self):
+        self._login_approved_user(role="watcher")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 29, 10, 0)
+        operation = self._add_sort_operation(date(2026, 6, 29), "night")
+        self._set_sort_window("night", time(22, 0), time(4, 0))
+        save_gateway_matrix(self.gateway, {("monday", "night")})
+
+        page = self.client.get("/neosektor/driver-routing")
+        state_response = self.client.get("/neosektor/driver-routing/state")
+        payload = state_response.get_json()
+
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn(b"operation-refresh-banner", page.data)
+        self.assertIn(b"next_check_seconds", page.data)
+        self.assertIn(b"continuousWhileVisible: true", page.data)
+        self.assertFalse(payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["state"]["refresh"]["operation_id"], operation.id)
+        self.assertEqual(payload["state"]["refresh"]["next_check_seconds"], 12 * 60 * 60)
+        self.assertEqual(
+            payload["state"]["refresh"]["next_window_start_local"],
+            "2026-06-29T22:00:00",
+        )
 
     def test_live_counts_and_discharge_use_the_tunnel_refresh_banner_standard(self):
         self._login_approved_user(role="simulator")

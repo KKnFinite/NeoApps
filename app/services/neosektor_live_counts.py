@@ -574,6 +574,15 @@ def neosektor_refresh_status(gateway, now=None):
     return node_auto_refresh_status(gateway, now=now)
 
 
+def driver_routing_refresh_status(gateway, now=None):
+    """Passive wall-board refresh status with one canonical next-window wake."""
+    return node_auto_refresh_status(
+        gateway,
+        now=now,
+        schedule_next_window=True,
+    )
+
+
 def update_ballmat_side(
     gateway,
     selected_side,

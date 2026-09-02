@@ -21542,10 +21542,15 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 .blueprint-neosektor .driver-body {
     display: grid;
-    place-items: center;
-    width: min(100%, 900px);
-    min-height: 100svh;
-    padding: 8px;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+    justify-items: stretch;
+    width: min(100%, 960px);
+    height: 100svh;
+    min-height: 0;
+    padding: 4px 8px 6px;
+    gap: 4px;
+    overflow: hidden;
 }
 
 .blueprint-neosektor .neosektor-driver-shell > .neosektor-standalone-header {
@@ -21567,10 +21572,11 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 .blueprint-neosektor .driver-routing {
     display: grid;
-    grid-template-rows: auto auto auto;
-    width: min(100%, 860px);
+    grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+    width: min(100%, 920px);
+    height: 100%;
     min-height: 0;
-    overflow: visible;
+    overflow: hidden;
     border-inline: 1px solid rgba(216, 220, 224, 0.16);
     background: rgba(5, 7, 11, 0.3);
 }
@@ -21579,8 +21585,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     position: relative;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    min-height: clamp(260px, 34svh, 390px);
-    padding: clamp(18px, 3svh, 34px) clamp(18px, 5vw, 42px) clamp(12px, 2svh, 22px);
+    min-height: 0;
+    padding: clamp(6px, 1.2svh, 14px) clamp(12px, 3vw, 28px) clamp(5px, 0.9svh, 10px);
     overflow: hidden;
     border-bottom: 1px solid rgba(216, 220, 224, 0.18);
     background:
@@ -21609,7 +21615,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .driver-wave-label {
     margin: 0;
     color: var(--node-sektor-primary);
-    font-size: clamp(2.1rem, 8vw, 4.5rem);
+    font-size: clamp(1.2rem, min(4.2vw, 3.2svh), 2.35rem);
     font-weight: 950;
     line-height: 1;
     text-align: center;
@@ -21622,7 +21628,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     grid-template-rows: auto auto;
     place-items: center;
     align-content: center;
-    gap: clamp(10px, 1.8svh, 22px);
+    gap: clamp(5px, 0.8svh, 10px);
     min-height: 0;
 }
 
@@ -21631,7 +21637,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     display: grid;
     gap: 0.04em;
     color: var(--neo-bright-silver);
-    font-size: clamp(2.15rem, 8.5vw, 4.85rem);
+    font-size: clamp(1.55rem, min(5.5vw, 4.8svh), 3.5rem);
     font-weight: 950;
     line-height: 0.96;
     text-align: center;
@@ -21650,8 +21656,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     position: relative;
     order: 1;
     display: block;
-    width: min(96%, 700px);
-    height: clamp(72px, 11svh, 128px);
+    width: min(90%, 640px);
+    height: clamp(46px, 7.2svh, 88px);
     color: transparent;
     font-size: 0;
     line-height: 1;
@@ -21668,7 +21674,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     top: 50%;
     left: 0;
     width: 100%;
-    height: clamp(54px, 7.8svh, 96px);
+    height: clamp(28px, 4.6svh, 56px);
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 34%, rgba(0, 0, 0, 0.24) 100%),
         linear-gradient(90deg, #720812 0%, var(--node-sektor-primary) 42%, var(--node-sektor-highlight) 100%);
@@ -21711,7 +21717,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: clamp(5px, 1vw, 9px);
     min-height: 0;
-    padding: 11px;
+    min-height: clamp(72px, 10.5svh, 118px);
+    padding: 6px clamp(5px, 1vw, 10px);
     border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.44);
     border-bottom: 1px solid rgba(var(--node-sektor-primary-rgb), 0.36);
     background:
@@ -21728,10 +21735,10 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 .blueprint-neosektor .driver-priority-rank {
     width: 100%;
-    padding: 6px 2px;
+    padding: 4px 2px;
     background: rgba(244, 246, 248, 0.9);
     color: var(--node-sektor-primary);
-    font-size: clamp(1.08rem, 3.55vw, 1.82rem);
+    font-size: clamp(0.68rem, min(2.1vw, 1.7svh), 1.05rem);
     line-height: 1;
     text-align: center;
 }
@@ -21739,8 +21746,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .blueprint-neosektor .driver-priority-card strong {
     max-width: 100%;
     overflow: hidden;
-    padding: 10px 4px;
-    font-size: clamp(1.52rem, 4.65vw, 2.85rem);
+    padding: 5px 3px;
+    font-size: clamp(0.95rem, min(2.8vw, 2.6svh), 1.65rem);
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
