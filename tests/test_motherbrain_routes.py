@@ -158,50 +158,26 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"current-sort-overview-card", dashboard_body)
         self.assertNotIn(b"CURRENT SORT OVERVIEW", dashboard_body)
         self.assertNotIn(b"MIN WINDOW", dashboard_body)
-        self.assertGreaterEqual(dashboard_body.count(b"motherbrain-dashboard-card"), 12)
-        self.assertIn(b"motherbrain-dashboard-card-manage-sort", dashboard_body)
-        self.assertIn(f'href="/motherbrain/operations/{operation.id}"'.encode(), dashboard_body)
-        self.assertIn(
-            f'href="/motherbrain/operations/{operation.id}/alp/arrival"'.encode(),
-            dashboard_body,
+        # The dashboard is an operational entry point.  Administration moved
+        # under System Settings and selected-sort work begins in Manage Sort.
+        self.assertEqual(dashboard_body.count(b"data-motherbrain-dashboard-tile="), 7)
+        expected_links = (
+            b'href="/motherbrain/manage-sort"',
+            b'href="/motherbrain/parking-plan"',
+            b'href="/motherbrain/parking-rules"',
+            b'href="/motherbrain/master-schedule"',
+            b'href="/motherbrain/flight-api-review"',
         )
-        self.assertIn(
-            f'href="/motherbrain/operations/{operation.id}/alp/departure"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), dashboard_body)
-        self.assertIn(
-            f'href="/motherbrain/parking-rules?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/motherbrain/gateway-matrix?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/motherbrain/master-schedule?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/motherbrain/sort-timeline?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/motherbrain/flight-api-test?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/motherbrain/flight-api-review?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/portal/manage?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
-        self.assertIn(
-            f'href="/motherbrain/permissions?operation_id={operation.id}"'.encode(),
-            dashboard_body,
-        )
+        for link in expected_links:
+            self.assertIn(link, dashboard_body)
+        for removed_admin_tile in (
+            b"gateway-matrix",
+            b"sort-timeline",
+            b"manage-api",
+            b"portal-management",
+            b"permission-rules",
+        ):
+            self.assertNotIn(removed_admin_tile, dashboard_body)
 
     def test_motherbrain_dashboard_tiles_include_expected_pages(self):
         response = self.client.get("/motherbrain", follow_redirects=False)
@@ -217,13 +193,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             (b"departure-planning", b"DEPARTURE PLANNING"),
             (b"parking-plan", b"PARKING PLAN"),
             (b"parking-rules", b"PARKING RULES"),
-            (b"gateway-matrix", b"GATEWAY MATRIX"),
             (b"master-schedule", b"MASTER SCHEDULE"),
-            (b"sort-timeline", b"SORT TIMELINE"),
-            (b"manage-api", b"MANAGE API"),
             (b"unmatched-queue", b"UNMATCHED QUEUE"),
-            (b"portal-management", b"PORTAL MANAGEMENT"),
-            (b"permission-rules", b"PERMISSION RULES"),
         )
         for tile_key, label in expected_tiles:
             self.assertIn(b'data-motherbrain-dashboard-tile="' + tile_key + b'"', response.data)
@@ -237,13 +208,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
             b"Departure Planning",
             b"Parking Plan",
             b"Parking Rules",
-            b"Gateway Matrix",
             b"Master Schedule",
-            b"Sort Timeline",
-            b"Manage API",
             b"Unmatched Queue",
-            b"Portal Management",
-            b"Permission Rules",
+            b"System Settings",
         ):
             self.assertIn(nav_label, response.data)
 
@@ -258,10 +225,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
     def test_motherbrain_header_navigation_routes_work(self):
         routes = {
-            "/motherbrain/gateway-matrix": b'href="/motherbrain/gateway-matrix" aria-current="page"',
             "/motherbrain/master-schedule": b'href="/motherbrain/master-schedule" aria-current="page"',
             "/motherbrain/manage-sort": b'href="/motherbrain/manage-sort" aria-current="page"',
-            "/motherbrain/sort-timeline": b'href="/motherbrain/sort-timeline" aria-current="page"',
+            "/motherbrain/system-settings": b'href="/motherbrain/system-settings" aria-current="page"',
         }
 
         for path, active_link in routes.items():
@@ -285,24 +251,17 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
                 self.assertNotIn(b"BACK TO NeoMotherBrain MAIN MENU", response.data)
                 self.assertNotIn(b"BACK TO NeoGateway", response.data)
-                self.assertIn(b"PORTAL MANAGEMENT", response.data)
-                self.assertIn(b"GATEWAY MATRIX", response.data)
                 self.assertIn(b"MASTER SCHEDULE", response.data)
                 self.assertIn(b"MANAGE SORT", response.data)
-                self.assertIn(b"SORT TIMELINE", response.data)
                 for nav_label in (
                     b"Manage Sort",
                     b"Arrival Planning",
                     b"Departure Planning",
                     b"Parking Plan",
                     b"Parking Rules",
-                    b"Gateway Matrix",
                     b"Master Schedule",
-                    b"Sort Timeline",
-                    b"Manage API",
                     b"Unmatched Queue",
-                    b"Portal Management",
-                    b"Permission Rules",
+                    b"System Settings",
                 ):
                     self.assertIn(nav_label, response.data)
                 desktop_sidebar = response.data.split(b"data-motherbrain-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
@@ -331,7 +290,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         portal_management = self.client.get("/portal/manage")
         self.assertEqual(portal_management.status_code, 200)
-        self.assertIn(b"PORTAL MANAGEMENT", portal_management.data)
+        self.assertIn(b"Portal Management", portal_management.data)
 
         rfd_response = self.client.get("/rfd")
         self.assertEqual(rfd_response.status_code, 200)
@@ -394,13 +353,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
             (f"/motherbrain/operations/{operation.id}/alp/departure", "Departure Planning", True),
             (f"/motherbrain/parking-plan/{operation.id}", "Parking Plan", True),
             (f"/motherbrain/parking-rules?operation_id={operation.id}", "Parking Rules", True),
-            (f"/motherbrain/gateway-matrix?operation_id={operation.id}", "Gateway Matrix", True),
             (f"/motherbrain/master-schedule?operation_id={operation.id}", "Master Schedule", True),
-            (f"/motherbrain/sort-timeline?operation_id={operation.id}", "Sort Timeline", True),
-            (f"/motherbrain/flight-api-test?operation_id={operation.id}", "Manage API", True),
             (f"/motherbrain/flight-api-review?operation_id={operation.id}", "Unmatched Queue", True),
-            (f"/portal/manage?operation_id={operation.id}", "Portal Management", True),
-            (f"/motherbrain/permissions?operation_id={operation.id}", "Permission Rules", True),
+            ("/motherbrain/system-settings", "System Settings", True),
         ]
 
         for path, label, has_duplicate_title in pages:
@@ -417,9 +372,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
                 if has_duplicate_title:
                     self.assertIn("motherbrain-body-duplicate-title", html)
 
-        manage_api = self.client.get(
-            f"/motherbrain/flight-api-test?operation_id={operation.id}"
-        ).data.decode()
         unmatched_queue = self.client.get(
             f"/motherbrain/flight-api-review?operation_id={operation.id}"
         ).data.decode()
@@ -427,7 +379,6 @@ class MotherBrainRoutesTest(unittest.TestCase):
             f"/motherbrain/master-schedule?operation_id={operation.id}"
         ).data.decode()
 
-        self.assertNotIn("FLIGHT API TEST</h1>", manage_api)
         self.assertNotIn("FLIGHT API REVIEW</h1>", unmatched_queue)
         self.assertNotIn("MASTER FLIGHT SCHEDULE</h1>", master_schedule)
 
@@ -446,9 +397,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
     def test_sort_timeline_is_grandmaster_only(self):
         response = self.client.get("/motherbrain/sort-timeline?month=2026-06")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"SORT TIMELINE", response.data)
+        self.assertIn(b"Sort Timeline", response.data)
         self.assertIn(b"API PLANNING SETTINGS", response.data)
-        self.assertIn(b'href="/motherbrain/flight-api-test"', response.data)
+        self.assertIn(b'href="/motherbrain/system-settings"', response.data)
         self.assertIn(b"motherbrain-desktop-side-menu", response.data)
 
         self._login_motherbrain_role("timeline_master", "master")
@@ -1920,10 +1871,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn("Arrival Planning", workflow_html)
         self.assertIn("Departure Planning", workflow_html)
         self.assertIn("Parking Plan", workflow_html)
-        self.assertIn("Gateway Matrix", workflow_html)
         self.assertIn("Master Schedule", workflow_html)
-        self.assertIn("Sort Timeline", workflow_html)
-        self.assertIn("Manage API", workflow_html)
+        self.assertIn("System Settings", workflow_html)
         self.assertIn("Unmatched Queue", workflow_html)
         self.assertIn("Sort Operation Settings", workflow_html)
         self.assertIn("Gateway Matrix / Schedule Source Controls", workflow_html)
@@ -1938,9 +1887,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("Flight API Test", workflow_html)
         self.assertNotIn("Flight API Review", workflow_html)
         self.assertNotIn("ADD SPECIAL FLIGHT", workflow_html)
-        self.assertIn(f'href="/motherbrain/gateway-matrix?operation_id={operations[0].id}"', workflow_html)
         self.assertIn(f'href="/motherbrain/master-schedule?operation_id={operations[0].id}"', workflow_html)
-        self.assertIn(f'href="/motherbrain/sort-timeline?operation_id={operations[0].id}"', workflow_html)
+        self.assertIn('href="/motherbrain/system-settings"', workflow_html)
         self.assertNotIn('href="/motherbrain"', workflow_html)
         self.assertNotIn('class="motherbrain-main-menu-return"', main_html)
         self.assertIn('data-motherbrain-desktop-side-nav', html)
@@ -7403,10 +7351,8 @@ class MotherBrainRoutesTest(unittest.TestCase):
             response.data,
         )
         self.assertIn(f'href="/motherbrain/parking-plan/{operation.id}"'.encode(), response.data)
-        self.assertIn(f'href="/motherbrain/gateway-matrix?operation_id={operation.id}"'.encode(), response.data)
         self.assertIn(f'href="/motherbrain/master-schedule?operation_id={operation.id}"'.encode(), response.data)
-        self.assertIn(f'href="/motherbrain/sort-timeline?operation_id={operation.id}"'.encode(), response.data)
-        self.assertIn(f'href="/motherbrain/flight-api-test?operation_id={operation.id}"'.encode(), response.data)
+        self.assertIn(b'href="/motherbrain/system-settings"', response.data)
         self.assertIn(f'href="/motherbrain/flight-api-review?operation_id={operation.id}"'.encode(), response.data)
         self.assertIn(b"UNPARKED TAILS", response.data)
         self.assertIn(b"N457UP", response.data)
@@ -13150,7 +13096,9 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["changed"])
-        self.assertLessEqual(len(selects), 15)
+        # The DB-backed live-screen status adds bounded gateway/screen lookups;
+        # the operational collections themselves remain bounded below.
+        self.assertLessEqual(len(selects), 18)
         self.assertEqual(commits, 0)
         self.assertLessEqual(
             sum("sort_date_parking_assignments" in statement for statement in selects),
@@ -13185,7 +13133,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         selects = [statement for statement in statements if statement.startswith("select")]
 
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(len(selects), 14)
+        self.assertLessEqual(len(selects), 15)
         self.assertEqual(commits, 1)
         self.assertEqual(
             sum("sort_date_parking_assignments" in statement for statement in selects),

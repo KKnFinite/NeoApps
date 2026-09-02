@@ -4,8 +4,11 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import Gateway, SortDateMission, SortDateOperation, User
-from app.services.access_control import backfill_default_gateway_node_roles
+from app.models import SortDateMission, SortDateOperation, User
+from app.services.access_control import (
+    backfill_default_gateway_node_roles,
+    ensure_default_gateway_and_nodes,
+)
 from app.services.google_rain_integration_mode import (
     NEO_ONLY,
     NEO_PRIMARY_GOOGLE_MIRROR,
@@ -14,6 +17,7 @@ from app.services.google_rain_integration_mode import (
 from app.services.google_rain_sheets import GoogleRainWriterError
 from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
@@ -33,9 +37,11 @@ class NeoRainOutboundMutationEndpointTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        self.gateway = Gateway(code="RFD", name="NeoGateway", is_active=True)
-        db.session.add(self.gateway)
-        db.session.flush()
+        # Explicit test bootstrap mirrors deployment bootstrap; web startup
+        # deliberately does not create gateway/node or permission rows.
+        self.gateway = ensure_default_gateway_and_nodes()
+        ensure_default_permission_rules()
+        db.session.commit()
         self.operation = self._operation(date(2026, 6, 18))
         self.mission = self._mission(self.operation, "UPS0910")
         db.session.commit()

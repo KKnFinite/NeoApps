@@ -15,6 +15,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.gateway_matrix import current_gateway_local_date
 from app.services.neoermac_door_view import door_view_uld_state
 from app.services.neoermac_tail_presence import (
     PRESENCE_EVIDENCE_ACTUAL_BLOCK_IN,
@@ -51,11 +52,19 @@ class NeoErmacTailPresenceTest(unittest.TestCase):
         db.create_all()
         self.gateway = ensure_default_gateway_and_nodes()
         ensure_default_permission_rules()
+        operation_creator = User(
+            username="ermac_presence_operation_creator",
+            role="watcher",
+        )
+        set_user_password(operation_creator, "TestPassword123!")
+        db.session.add(operation_creator)
+        db.session.flush()
         self.operation = SortDateOperation(
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
             sort_name="night",
-            sort_date=date(2026, 8, 11),
+            sort_date=current_gateway_local_date(self.gateway),
+            generated_by_user_id=operation_creator.id,
         )
         db.session.add(self.operation)
         db.session.flush()

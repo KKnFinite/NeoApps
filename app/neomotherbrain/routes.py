@@ -1081,6 +1081,9 @@ def parking_plan():
         gateway=gateway,
         operation=None,
         selection_mode=True,
+        live_update_status=_motherbrain_live_refresh_status(
+            gateway, None, MOTHERBRAIN_PARKING_PLAN_REFRESH_KEY
+        ),
         **context,
         **_flight_api_auto_poll_timer_context(gateway),
     )

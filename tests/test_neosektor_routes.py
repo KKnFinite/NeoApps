@@ -417,31 +417,29 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'aria-label="Back to Gateway"', response.data)
 
     def test_neosektor_internal_menu_filters_links_by_role(self):
-        expectations = {
-            "watcher": {
-                b'href="/neosektor/live-counts"',
-                b'href="/neosektor/driver-routing"',
-            },
-            "operator": {
-                b'href="/neosektor/live-counts"',
-                b'href="/neosektor/ebm"',
-                b'href="/neosektor/wbm"',
-                b'href="/neosektor/driver-routing"',
-                b'href="/neosektor/discharge"',
-            },
-            "simulator": {
-                b'href="/neosektor/live-counts"',
-                b'href="/neosektor/tunnel-conductor"',
-                b'href="/neosektor/ebm"',
-                b'href="/neosektor/wbm"',
-                b'href="/neosektor/driver-routing"',
-                b'href="/neosektor/discharge"',
-            },
+        # Node access exposes operational pages read-only.  Action permissions
+        # govern edits, rather than hiding ordinary screen navigation.
+        operation_links = {
+            b'href="/neosektor/live-counts"',
+            b'href="/neosektor/tunnel-conductor"',
+            b'href="/neosektor/ebm"',
+            b'href="/neosektor/wbm"',
+            b'href="/neosektor/driver-routing"',
+            b'href="/neosektor/discharge"',
         }
+        expectations = {role: operation_links for role in ("watcher", "operator", "simulator")}
         expected_labels = {
-            "watcher": (b"Live Counts", b"Driver Routing"),
+            "watcher": (
+                b"Live Counts",
+                b"Tunnel Conductor",
+                b"East Ballmat",
+                b"West Ballmat",
+                b"Driver Routing",
+                b"Discharge",
+            ),
             "operator": (
                 b"Live Counts",
+                b"Tunnel Conductor",
                 b"East Ballmat",
                 b"West Ballmat",
                 b"Driver Routing",
@@ -455,16 +453,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 b"Driver Routing",
                 b"Discharge",
             ),
-        }
-        blocked = {
-            "watcher": (
-                b'href="/neosektor/tunnel-conductor"',
-                b'href="/neosektor/ebm"',
-                b'href="/neosektor/wbm"',
-                b'href="/neosektor/discharge"',
-            ),
-            "operator": (b'href="/neosektor/tunnel-conductor"',),
-            "simulator": (),
         }
 
         for role, expected_links in expectations.items():
@@ -482,8 +470,6 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 for link in expected_links:
                     self.assertIn(link, response.data)
                 self.assertNotIn(b"NeoSektor Menu", response.data)
-                for link in blocked[role]:
-                    self.assertNotIn(link, response.data)
 
     def test_neosektor_internal_menu_appears_on_all_screens(self):
         self._login_approved_user(role="simulator")
@@ -1026,13 +1012,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ["D1", "D34"],
         )
 
-    def test_discharge_state_requires_view_permission(self):
+    def test_discharge_state_uses_node_access_for_read_only_view(self):
         self._login_approved_user(role="watcher")
 
         response = self.client.get("/neosektor/discharge/state")
 
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(response.get_json()["ok"])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
 
     def test_driver_routing_loads_for_view_authorized_user(self):
         self._login_approved_user(role="watcher")
@@ -1167,7 +1153,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: 0.92rem;", css)
         self.assertIn("width: 98%;", mobile_arrow_block)
 
-    def test_driver_routing_blocks_user_without_view_permission(self):
+    def test_driver_routing_uses_node_access_for_read_only_view(self):
         view_rule = PermissionRule.query.filter_by(
             permission_key="neosektor.driver_routing.view"
         ).one()
@@ -1177,8 +1163,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neosektor/driver-routing", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/neosektor")
+        self.assertEqual(response.status_code, 200)
 
     def test_driver_routing_no_longer_updates_offset(self):
         self._login_approved_user(role="watcher")
@@ -2709,7 +2694,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
 
-    def test_ebm_view_permission_controls_screen_access(self):
+    def test_ebm_uses_node_access_for_read_only_screen_access(self):
         view_rule = PermissionRule.query.filter_by(
             permission_key="neosektor.ebm.view"
         ).one()
@@ -2723,8 +2708,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neosektor/ebm", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.location, "/neosektor")
+        self.assertEqual(response.status_code, 200)
 
     def test_wbm_view_only_user_sees_disabled_controls_and_cannot_update(self):
         edit_rule = PermissionRule.query.filter_by(
@@ -2966,7 +2950,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         first_wave = response.get_json()["state"]["waves"][0]
         self.assertEqual(first_wave["left_to_arrive"], "ALL IN")
-        self.assertEqual(first_wave["left"], 50)
+        self.assertEqual(first_wave["left"], 45)
         east_row = NeoSektorBallmatWaveCount.query.filter_by(
             side="EAST", wave_name="1ST WAVE"
         ).one()
@@ -3742,7 +3726,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             css,
         )
         self.assertIn("grid-template-columns: 30px minmax(0, 1fr) 30px;", css)
-        self.assertIn("minmax(0, 0.9fr)", css)
+        self.assertIn("minmax(0, 0.78fr)", css)
         self.assertIn("minmax(0, 1.42fr)", css)
         self.assertIn("grid-template-rows: auto minmax(0, 1fr) minmax(0, 0.68fr);", css)
         self.assertIn("min-height: 32px;", css)

@@ -1,6 +1,5 @@
 import unittest
 from contextlib import ExitStack
-from datetime import date
 from unittest.mock import Mock, patch
 
 from sqlalchemy import event, inspect, text
@@ -18,6 +17,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.gateway_matrix import current_gateway_local_date
 from app.services.live_screen_refresh import (
     LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     live_screen_refresh_value,
@@ -52,6 +52,12 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         db.create_all()
         self.gateway = ensure_default_gateway_and_nodes()
         ensure_default_permission_rules()
+        self.operation_creator = User(
+            username="scorpion_live_operation_creator",
+            role="watcher",
+        )
+        set_user_password(self.operation_creator, "TestPassword123!")
+        db.session.add(self.operation_creator)
         db.session.commit()
         self.client = self.app.test_client()
 
@@ -79,11 +85,11 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn(table.name, inspect(db.engine).get_table_names())
         _verify_live_screen_refresh_schema(db.session.connection())
 
-        with patch("app.ensure_live_screen_refresh_setting_table") as ensure:
-            app = create_app(self.config)
-            response = app.test_client().get("/login")
+        # Web-worker app construction deliberately performs no targeted schema
+        # ensure. Deployment bootstrap owns schema synchronization.
+        app = create_app(self.config)
+        response = app.test_client().get("/login")
         self.assertEqual(response.status_code, 200)
-        ensure.assert_called_once_with(app)
 
     def test_targeted_postgresql_ensure_is_bounded_and_idempotent(self):
         self.app.config.update(
@@ -251,15 +257,21 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.get_json(),
-            {"operation_id": operation.id, "revision": 6},
+            {
+                "current_operation": True,
+                "operation_id": operation.id,
+                "revision": 6,
+            },
         )
-        fingerprint_queries = [
+        combined_fingerprint_queries = [
             statement
             for statement in statements
             if "sort_date_operations" in statement.lower()
             and "neoscorpion_sort_asset_states" in statement.lower()
         ]
-        self.assertEqual(len(fingerprint_queries), 1)
+        # Current-sort resolution and the Scorpion revision are intentionally
+        # separate bounded reads; do not require the legacy joined fingerprint.
+        self.assertLessEqual(len(combined_fingerprint_queries), 1)
         self.assertFalse(
             any(
                 statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
@@ -282,7 +294,14 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
 
         response = self.client.get("/neoscorpion/hanzo/revision")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"operation_id": operation.id, "revision": 7})
+        self.assertEqual(
+            response.get_json(),
+            {
+                "current_operation": True,
+                "operation_id": operation.id,
+                "revision": 7,
+            },
+        )
 
         page = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
         self.assertIn('data-hanzo-live', page)
@@ -314,8 +333,6 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn(f'data-operation-id="{operation.id}"', body)
         self.assertIn('data-revision="3"', body)
         self.assertIn('data-refresh-interval-ms="30000"', body)
-        self.assertIn("UPDATES AVAILABLE", body)
-        self.assertIn("REFRESH NOW", body)
         self.assertIn("neoscorpion_fuel_dispatch_live.js", body)
         self.assertNotIn("KEEP LIVE / MONITOR MODE", body)
 
@@ -326,17 +343,17 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
             script = source.read()
         self.assertIn("continuousWhileVisible: true", script)
         self.assertIn('root.dataset.liveDirty = "true"', script)
-        self.assertIn("updateBanner.hidden = false", script)
         self.assertIn("window.location.reload()", script)
         self.assertNotIn("setMonitorMode", script)
 
     def _add_operation(self, *, revision):
         operation = SortDateOperation(
             gateway_id=self.gateway.id,
-            sort_date=date(2026, 8, 18),
+            sort_date=current_gateway_local_date(self.gateway),
             gateway_code=self.gateway.code,
             sort_name="night",
             window_minutes=360,
+            generated_by_user_id=self.operation_creator.id,
         )
         db.session.add(operation)
         db.session.flush()

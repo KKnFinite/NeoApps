@@ -44,6 +44,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        # Production web startup no longer seeds schema/default access data.
+        # Route tests must explicitly establish the canonical bootstrap state.
+        ensure_default_gateway_and_nodes()
+        ensure_default_permission_rules()
+        db.session.commit()
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -120,11 +125,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'href="/neostaffing/people"', landing_menu)
         self.assertIn(b'href="/neostaffing/shift-flow"', landing_menu)
-        self.assertNotIn(b'href="/neostaffing/reports"', landing_menu)
-        self.assertNotIn(b'href="/neostaffing/requests"', landing_menu)
-        self.assertNotIn(b'href="/neostaffing/notifications"', landing_menu)
+        # Ordinary read-only node pages now rely on NeoStaffing node access;
+        # changing obsolete per-page view thresholds must not hide them.
+        self.assertIn(b'href="/neostaffing/reports"', landing_menu)
+        self.assertIn(b'href="/neostaffing/requests"', landing_menu)
+        self.assertIn(b'href="/neostaffing/notifications"', landing_menu)
         self.assertNotIn(b'href="/neostaffing/bulk-change"', landing_menu)
-        self.assertNotIn(b'href="/neostaffing/vacation-selection"', landing_menu)
+        self.assertIn(b'href="/neostaffing/vacation-selection"', landing_menu)
         self.assertNotIn(b'href="/neostaffing/permissions"', landing_menu)
 
     def test_neostaffing_section_pages_render_clean_sidebar_navigation(self):
@@ -1104,7 +1111,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         people_page = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}")
         self.assertEqual(people_page.status_code, 200)
         self.assertIn(b"data-people-tree-scroll", people_page.data)
-        self.assertIn(b"ADD PERSON", people_page.data)
+        self.assertIn(b"ADD EMPLOYEE", people_page.data)
         self.assertIn(b"neostaffing-people-roster-table", people_page.data)
         self.assertIn(b"neostaffing-people-detail-drawer", people_page.data)
         self.assertNotIn(b"PEOPLE CONTROL DECK", people_page.data)
@@ -1585,25 +1592,25 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"data-people-tree-item", initial.data)
         self.assertNotIn(b"Step 1", initial.data)
         self.assertNotIn(b"LOAD ROSTER", initial.data)
-        self.assertIn(b"+ ADD PERSON", initial.data)
+        self.assertIn(b"+ ADD MANAGEMENT", initial.data)
         self.assertNotIn(b"BULK ADD EMPLOYEES", initial.data)
 
         self.assertEqual(by_sort.status_code, 200)
         self.assertIn(b"Shift Operation", by_sort.data)
-        self.assertIn(b"+ ADD PERSON", by_sort.data)
+        self.assertIn(b"+ ADD MANAGEMENT", by_sort.data)
 
         self.assertEqual(by_operation.status_code, 200)
         self.assertIn(b"East Shift Department", by_operation.data)
         self.assertIn(b"Load Planning", by_operation.data)
-        self.assertIn(b"+ ADD PERSON", by_operation.data)
+        self.assertIn(b"+ ADD MANAGEMENT", by_operation.data)
 
         self.assertEqual(by_department.status_code, 200)
         self.assertIn(b"EBM", by_department.data)
-        self.assertIn(b"+ ADD PERSON", by_department.data)
+        self.assertIn(b"+ ADD MANAGEMENT", by_department.data)
 
         self.assertEqual(by_direct_work_area.status_code, 200)
-        self.assertIn(b"ADD PERSON", by_direct_work_area.data)
-        self.assertIn(b'data-people-open-add="single"', by_direct_work_area.data)
+        self.assertIn(b"ADD EMPLOYEE", by_direct_work_area.data)
+        self.assertIn(b'data-people-open-add="employee"', by_direct_work_area.data)
         self.assertIn(b'data-people-open-add="bulk"', by_direct_work_area.data)
         self.assertIn(b"neostaffing-people-roster-actions", by_direct_work_area.data)
         self.assertIn(b"data-people-bulk-preview", by_direct_work_area.data)
