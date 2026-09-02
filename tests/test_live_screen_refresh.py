@@ -247,7 +247,12 @@ class LiveScreenRefreshTest(unittest.TestCase):
         self.assertIn("KEEP LIVE / MONITOR MODE", source)
         self.assertIn("this.monitorMode", source)
         self.assertNotIn("localStorage", source)
-        self.assertNotIn("sessionStorage", source)
+        # Browser storage must not persist, override, or otherwise bypass the
+        # server-resolved live-screen refresh cadence.  The People form keeps
+        # its own unsaved add-person fields in session storage, which is not a
+        # live-refresh concern and is intentionally permitted.
+        self.assertEqual(source.count("sessionStorage."), 3)
+        self.assertIn('sessionStorage.setItem("neostaffing.people.single-add"', source)
         self.assertIn('[data-live-update-state="inactive"]', css)
         self.assertIn(".live-update-monitor-toggle", css)
 

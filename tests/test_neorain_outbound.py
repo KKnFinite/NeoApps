@@ -32,6 +32,7 @@ from app.services.google_rain_integration_mode import (
     set_rain_integration_mode,
 )
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services.live_collaboration import entity_version
 from app.services.neorain_load_planner_contacts import (
     set_neorain_load_planner_contact,
@@ -54,6 +55,7 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
         self.gateway = Gateway(code="RFD", name="RFD")
         db.session.add(self.gateway)
         db.session.commit()

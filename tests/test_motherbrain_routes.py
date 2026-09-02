@@ -114,6 +114,10 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        # Web workers no longer bootstrap production data during create_app().
+        # Keep this legacy route fixture explicit about the permission defaults
+        # it needs before exercising guarded MotherBrain mutations.
+        ensure_default_permission_rules()
 
         user = User(username="Kessler", role="grandmaster")
         set_user_password(user, "TestPassword123!")
