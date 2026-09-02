@@ -2896,6 +2896,10 @@ def people_context(filters=None, user=None):
         paginated_rows = rows
 
     selected_person = _resolve_people_detail(filters.get("person_id"), rows)
+    if selected_person:
+        selected_person["assignment_display"] = _people_detail_assignment_display(
+            selected_person
+        )
 
     counts = {
         "total": total_matches,
@@ -4804,14 +4808,24 @@ def _people_rows():
         assignment.person_id: assignment
         for assignment in (
             StaffingWorkAssignment.query.filter_by(active=True)
-            .join(StaffingUnit)
+            .options(
+                joinedload(StaffingWorkAssignment.work_area)
+                .joinedload(StaffingUnit.parent)
+                .joinedload(StaffingUnit.parent)
+                .joinedload(StaffingUnit.parent)
+            )
             .all()
         )
     }
     active_leadership = {}
     for assignment in (
         StaffingLeadershipAssignment.query.filter_by(active=True)
-        .join(StaffingUnit)
+        .options(
+            joinedload(StaffingLeadershipAssignment.unit)
+            .joinedload(StaffingUnit.parent)
+            .joinedload(StaffingUnit.parent)
+            .joinedload(StaffingUnit.parent)
+        )
         .all()
     ):
         active_leadership.setdefault(assignment.person_id, []).append(assignment)
@@ -4923,6 +4937,31 @@ def _leadership_labels(person, assignments):
             }
         )
     return labels
+
+
+def _people_detail_assignment_display(row):
+    """Return the canonical active assignment display for the People drawer."""
+    person = row["person"]
+    if is_management_classification(person.classification):
+        return {
+            "heading": "Active Management Assignments",
+            "is_management": True,
+            "items": [
+                {"label": label["label"], "path": label["path"]}
+                for label in row["leadership_labels"]
+            ],
+        }
+
+    work_area = row.get("work_area")
+    return {
+        "heading": "Current Work Area",
+        "is_management": False,
+        "items": (
+            [{"label": "Work Area", "path": unit_path(work_area)}]
+            if work_area
+            else []
+        ),
+    }
 
 
 def _people_seniority_operation(work_area, leadership_assignments):

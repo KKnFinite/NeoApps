@@ -379,6 +379,7 @@
             {% endif %}
             {% block content %}{% endblock %}
         </main>
+        {% block page_overlay %}{% endblock %}
         {% if show_mobile_bottom_nav %}
         <nav class="mobile-bottom-nav node-{{ mobile_shell_key }}" aria-label="Mobile navigation" data-mobile-bottom-nav>
             <a class="mobile-bottom-nav-item mobile-bottom-nav-link" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">

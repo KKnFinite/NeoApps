@@ -1687,7 +1687,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neostaffing-people-detail-drawer", response.data)
         self.assertIn(b"REMOVE FROM WORK AREA", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
-        self.assertIn(b"ADD PERSON", response.data)
+        self.assertIn(b"+ ADD EMPLOYEE", response.data)
         self.assertNotIn(b"OPEN IN APP MANAGEMENT", response.data)
         self.assertIn(b"All statuses", response.data)
         self.assertNotIn(b"Roster Status", response.data)
@@ -1705,6 +1705,81 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             f'/neostaffing/app-management/people/{avery.id}/update'.encode(),
             unselected.data,
         )
+
+    def test_people_detail_shows_only_active_canonical_assignments(self):
+        user = self._user("staffing_people_assignment_display")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, _operation, department, work_area = self._staffing_hierarchy()
+        second_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "WBM", "parent_id": department.id}
+        )
+        inactive_work_area = staffing_service.create_unit(
+            {"unit_type": "work_area", "name": "Inactive Area", "parent_id": department.id}
+        )
+        hourly = staffing_service.create_person(
+            {
+                "employee_id": "DISPLAY-1",
+                "first_name": "Hourly",
+                "last_name": "Assigned",
+                "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            }
+        )
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "DISPLAY-2",
+                "first_name": "Pat",
+                "last_name": "Supervisor",
+                "seniority_date": "2019-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        unassigned = staffing_service.create_person(
+            {
+                "employee_id": "DISPLAY-3",
+                "first_name": "Una",
+                "last_name": "Signed",
+                "seniority_date": "2021-01-01",
+                "classification": "full_time_combo",
+            }
+        )
+        self._link_user_for_person(supervisor, "staffing_people_assignment_supervisor")
+        staffing_service.assign_work_area(hourly, work_area)
+        staffing_service.create_leadership_assignment(supervisor, work_area)
+        staffing_service.create_leadership_assignment(supervisor, second_work_area)
+        inactive_assignment = staffing_service.create_leadership_assignment(
+            supervisor, inactive_work_area
+        )
+        inactive_assignment.active = False
+        db.session.commit()
+        self._login(user.username)
+
+        hourly_response = self.client.get(f"/neostaffing/people?person_id={hourly.id}")
+        supervisor_response = self.client.get(
+            f"/neostaffing/people?person_id={supervisor.id}"
+        )
+        unassigned_response = self.client.get(
+            f"/neostaffing/people?person_id={unassigned.id}"
+        )
+        supervisor_context = staffing_service.people_context({"person_id": supervisor.id})
+
+        self.assertEqual(hourly_response.status_code, 200)
+        self.assertIn(b"Current Work Area", hourly_response.data)
+        self.assertIn(
+            b"Night Sort / Shift Operation / East Shift Department / EBM",
+            hourly_response.data,
+        )
+        self.assertIn(b"Active Management Assignments", supervisor_response.data)
+        self.assertIn(b"Work Area Supervisor", supervisor_response.data)
+        self.assertEqual(
+            [item["path"] for item in supervisor_context["selected_person"]["assignment_display"]["items"]],
+            [
+                "Night Sort / Shift Operation / East Shift Department / EBM",
+                "Night Sort / Shift Operation / East Shift Department / WBM",
+            ],
+        )
+        self.assertIn(b"Current Work Area", unassigned_response.data)
+        self.assertIn(b'<li class="is-unassigned">Unassigned</li>', unassigned_response.data)
 
     def test_pt_supervisor_candidates_use_linked_universal_account_without_staffing_access(self):
         editor_user = self._user("staffing_pt_candidate_editor")
