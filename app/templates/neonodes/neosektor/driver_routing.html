@@ -156,7 +156,7 @@
 
         if (!refreshController) {
             refreshController = window.NeoLiveUpdates.create({
-                intervalMs: {{ live_screen_refresh_interval_ms }},
+                intervalMs: {{ state.refresh.live_screen_refresh_interval_ms }},
                 continuousWhileVisible: true,
                 immediate: false,
                 poll: refreshState,

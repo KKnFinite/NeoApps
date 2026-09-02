@@ -35,6 +35,36 @@
 
             <a class="action-button" href="{{ url_for('neomotherbrain.system_settings') }}">VIEW SYSTEM SETTINGS</a>
         </section>
+
+        <section class="neosektor-settings-panel" aria-labelledby="neosektor-refresh-settings-title">
+            <div class="neosektor-settings-panel-head">
+                <span id="neosektor-refresh-settings-title">Live Auto-Refresh</span>
+            </div>
+            <div class="neosektor-settings-copy">
+                <p>Each NeoSektor live screen has its own gateway-scoped refresh interval.</p>
+            </div>
+            <div class="neosektor-refresh-settings-list">
+                {% for label, screen_key in refresh_rows %}
+                {% set setting = refresh_settings[screen_key] %}
+                <form method="post" class="neosektor-refresh-settings-row">
+                    <input type="hidden" name="action" value="save_live_refresh">
+                    <input type="hidden" name="screen_key" value="{{ screen_key }}">
+                    <div>
+                        <strong>{{ label }}</strong>
+                        <small>{{ setting.effective_label }} · {{ setting.source_label }}</small>
+                    </div>
+                    <label class="sr-only" for="neosektor-refresh-{{ loop.index }}">{{ label }} refresh interval</label>
+                    <select id="neosektor-refresh-{{ loop.index }}" name="refresh_interval_seconds" {% if not can_edit %}disabled{% endif %}>
+                        <option value="default" {% if setting.override_seconds is none %}selected{% endif %}>Render default</option>
+                        {% for seconds in live_refresh_allowed_seconds %}
+                        <option value="{{ seconds }}" {% if setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+                </form>
+                {% endfor %}
+            </div>
+        </section>
     </main>
 </section>
 {% endblock %}

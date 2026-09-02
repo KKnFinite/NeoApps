@@ -15,6 +15,7 @@ from app.models import (
     NeoSektorWaveState,
 )
 from app.services.node_refresh import node_auto_refresh_status
+from app.services.live_screen_refresh import live_screen_refresh_value
 
 
 STATUS_LABELS = ("Empty", "Light", "Moderate", "Full", "Overflowing")
@@ -573,17 +574,75 @@ def _neosektor_integration_status(gateway, settings=None):
     return neosektor_integration_status(gateway, settings=settings)
 
 
-def neosektor_refresh_status(gateway, now=None):
-    return node_auto_refresh_status(gateway, now=now)
+NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY = "neosektor.live_counts"
+NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY = "neosektor.tunnel_conductor"
+NEOSEKTOR_EBM_REFRESH_KEY = "neosektor.ebm"
+NEOSEKTOR_WBM_REFRESH_KEY = "neosektor.wbm"
+NEOSEKTOR_DISCHARGE_REFRESH_KEY = "neosektor.discharge"
+NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY = "neosektor.driver_routing"
+NEOSEKTOR_REFRESH_KEYS = (
+    NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
+    NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
+    NEOSEKTOR_EBM_REFRESH_KEY,
+    NEOSEKTOR_WBM_REFRESH_KEY,
+    NEOSEKTOR_DISCHARGE_REFRESH_KEY,
+    NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY,
+)
 
 
-def driver_routing_refresh_status(gateway, now=None):
-    """Passive wall-board refresh status with one canonical next-window wake."""
-    return node_auto_refresh_status(
+def neosektor_refresh_status(
+    gateway,
+    now=None,
+    *,
+    screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
+):
+    return _neosektor_screen_refresh_status(
         gateway,
+        screen_key,
+        now=now,
+    )
+
+
+def driver_routing_refresh_status(gateway, now=None, *, screen_key=None):
+    """Passive wall-board refresh status with one canonical next-window wake."""
+    return _neosektor_screen_refresh_status(
+        gateway,
+        NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY,
         now=now,
         schedule_next_window=True,
     )
+
+
+def _neosektor_screen_refresh_status(
+    gateway,
+    screen_key,
+    *,
+    now=None,
+    schedule_next_window=False,
+):
+    """Combine canonical Ops-window eligibility with one screen's DB override."""
+    status = node_auto_refresh_status(
+        gateway,
+        now=now,
+        schedule_next_window=schedule_next_window,
+    )
+    setting = live_screen_refresh_value(gateway, screen_key)
+    status = {
+        **status,
+        "screen_key": screen_key,
+        "live_screen_refresh_interval_ms": setting.effective_interval_ms,
+        "refresh_configured_label": setting.configured_label,
+        "refresh_effective_label": setting.effective_label,
+        "refresh_source": setting.source,
+    }
+    if status["auto_refresh_enabled"] and not setting.enabled:
+        status.update(
+            auto_refresh_enabled=False,
+            reason="screen_refresh_off",
+            message="Live updates off in NeoSektor Settings.",
+            live_status_label="Live updates off in NeoSektor Settings.",
+        )
+    return status
 
 
 def update_ballmat_side(

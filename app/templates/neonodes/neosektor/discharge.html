@@ -255,7 +255,7 @@
 
         if (!refreshController) {
             refreshController = window.NeoLiveUpdates.create({
-                intervalMs: {{ live_screen_refresh_interval_ms }},
+                intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
                 statusElement: document.querySelector("[data-live-update-status]"),
                 poll: refreshState,
             });

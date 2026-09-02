@@ -22,6 +22,13 @@ from app.services.neosektor_live_counts import (
     driver_routing_refresh_status,
     driver_routing_state_payload,
     live_counts_context,
+    NEOSEKTOR_DISCHARGE_REFRESH_KEY,
+    NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY,
+    NEOSEKTOR_EBM_REFRESH_KEY,
+    NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
+    NEOSEKTOR_REFRESH_KEYS,
+    NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
+    NEOSEKTOR_WBM_REFRESH_KEY,
     neosektor_refresh_status,
     normalize_ballmat_side,
     tunnel_conductor_context,
@@ -43,6 +50,11 @@ from app.services.neosektor_sheets_compat import (
 )
 from app.services.permission_rules import preload_permission_rules, user_can
 from app.services.memory_diagnostics import memory_diagnostics
+from app.services.live_screen_refresh import (
+    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    live_screen_refresh_values,
+    save_live_screen_refresh_override,
+)
 from app.services import neostaffing as staffing_service
 from app.services.uld_requests import (
     discharge_context,
@@ -213,9 +225,14 @@ def tunnel_conductor():
 
     gateway = get_current_gateway()
     try:
+        refresh_status = neosektor_refresh_status(
+            gateway,
+            screen_key=NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
+        )
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
             include_routing=True,
+            refresh_status=refresh_status,
         )
         context = tunnel_conductor_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
@@ -252,6 +269,7 @@ def tunnel_conductor_state():
             gateway,
             ROUTING_STATE_SCOPE,
             driver_routing_state_payload,
+            screen_key=NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
         )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
@@ -419,7 +437,15 @@ def _render_ballmat_operations(selected_side):
     session["neosektor_ballmat_side"] = selected_side
     gateway = get_current_gateway()
     try:
-        bundle = NeoSektorOperationalStateBundle.load(gateway)
+        screen_key = (
+            NEOSEKTOR_WBM_REFRESH_KEY
+            if selected_side == "west"
+            else NEOSEKTOR_EBM_REFRESH_KEY
+        )
+        bundle = NeoSektorOperationalStateBundle.load(
+            gateway,
+            refresh_status=neosektor_refresh_status(gateway, screen_key=screen_key),
+        )
         context = ballmat_operations_context(
             gateway,
             selected_side,
@@ -454,6 +480,11 @@ def ballmat_state():
             gateway,
             COUNT_STATE_SCOPE,
             ballmat_state_payload,
+            screen_key=(
+                NEOSEKTOR_WBM_REFRESH_KEY
+                if _selected_ballmat_side() == "west"
+                else NEOSEKTOR_EBM_REFRESH_KEY
+            ),
         )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
@@ -503,7 +534,10 @@ def discharge():
 
     gateway = get_current_gateway()
     context = discharge_context(gateway)
-    context["refresh_status"] = neosektor_refresh_status(gateway)
+    context["refresh_status"] = neosektor_refresh_status(
+        gateway,
+        screen_key=NEOSEKTOR_DISCHARGE_REFRESH_KEY,
+    )
     context["live_revision"] = neosektor_discharge_revision(
         gateway,
         operation_id=(context["operation"].id if context["operation"] else None),
@@ -584,7 +618,10 @@ def discharge_send():
     if request.is_json:
         gateway = get_current_gateway()
         state = discharge_state_payload(gateway)
-        state["refresh"] = neosektor_refresh_status(gateway)
+        state["refresh"] = neosektor_refresh_status(
+            gateway,
+            screen_key=NEOSEKTOR_DISCHARGE_REFRESH_KEY,
+        )
         return jsonify(
             {
                 "ok": True,
@@ -610,7 +647,13 @@ def live_counts():
 
     gateway = get_current_gateway()
     try:
-        bundle = NeoSektorOperationalStateBundle.load(gateway)
+        bundle = NeoSektorOperationalStateBundle.load(
+            gateway,
+            refresh_status=neosektor_refresh_status(
+                gateway,
+                screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
+            ),
+        )
         context = live_counts_context(gateway, bundle=bundle)
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
@@ -651,12 +694,13 @@ def live_counts_state():
             gateway,
             COUNT_STATE_SCOPE,
             ballmat_state_payload,
+            screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
         )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
 
 
-@bp.route("/settings")
+@bp.route("/settings", methods=["GET", "POST"])
 @gateway_node_required("sektor")
 def settings():
     gateway = get_current_gateway()
@@ -667,6 +711,33 @@ def settings():
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosektor.index"))
+
+    if request.method == "POST":
+        if not access["can_edit"]:
+            return "Access denied.", 403
+        try:
+            if request.form.get("action") != "save_live_refresh":
+                raise ValueError("Choose a valid NeoSektor Settings action.")
+            result = save_live_screen_refresh_override(
+                gateway,
+                request.form.get("screen_key"),
+                request.form.get("refresh_interval_seconds"),
+                allowed_screen_keys=NEOSEKTOR_REFRESH_KEYS,
+            )
+            if result.changed:
+                db.session.commit()
+            else:
+                db.session.rollback()
+            flash("LIVE REFRESH SETTING SAVED.", "success")
+        except (ValueError, IntegrityError) as exc:
+            db.session.rollback()
+            flash(
+                "Unable to save NeoSektor live refresh settings."
+                if isinstance(exc, IntegrityError)
+                else str(exc),
+                "error",
+            )
+        return redirect(url_for("neosektor.settings"))
 
     return _settings_response(gateway, access)
 
@@ -774,6 +845,7 @@ def driver_routing_state():
             gateway,
             ROUTING_STATE_SCOPE,
             driver_routing_state_payload,
+            screen_key=NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY,
             refresh_status_resolver=driver_routing_refresh_status,
         )
     except NeoSektorGoogleError as exc:
@@ -786,10 +858,11 @@ def _neosektor_live_state_response(
     revision_scope,
     state_builder,
     *,
+    screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
     refresh_status_resolver=neosektor_refresh_status,
 ):
     client_revision = str(request.args.get("revision") or "").strip()
-    refresh = refresh_status_resolver(gateway)
+    refresh = refresh_status_resolver(gateway, screen_key=screen_key)
     if client_revision and not refresh.get("auto_refresh_enabled"):
         return _live_state_json(
             {
@@ -829,7 +902,10 @@ def _neosektor_live_state_response(
 
 def _neosektor_discharge_state_response(gateway):
     client_revision = str(request.args.get("revision") or "").strip()
-    refresh = neosektor_refresh_status(gateway)
+    refresh = neosektor_refresh_status(
+        gateway,
+        screen_key=NEOSEKTOR_DISCHARGE_REFRESH_KEY,
+    )
     if client_revision and not refresh.get("auto_refresh_enabled"):
         return _live_state_json(
             {
@@ -995,6 +1071,16 @@ def _settings_response(gateway, access, status_code=200):
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         integration_status=neosektor_integration_status(gateway),
+        refresh_settings=live_screen_refresh_values(gateway, NEOSEKTOR_REFRESH_KEYS),
+        refresh_rows=(
+            ("Live Counts", NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY),
+            ("Tunnel Conductor", NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY),
+            ("EBM", NEOSEKTOR_EBM_REFRESH_KEY),
+            ("WBM", NEOSEKTOR_WBM_REFRESH_KEY),
+            ("Discharge", NEOSEKTOR_DISCHARGE_REFRESH_KEY),
+            ("Driver Routing", NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY),
+        ),
+        live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
     return response, status_code
 
