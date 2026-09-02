@@ -838,6 +838,55 @@ def apply_standalone_compat_values(
     return changed
 
 
+def canonical_neosektor_compat_values(
+    gateway,
+    sort_date=None,
+    sort_name=None,
+):
+    """Read the persisted Neon side of the standalone Sheet contract only.
+
+    This deliberately bypasses the active integration mode.  Recovery needs to
+    compare Google with the actual Neon rows, not with a GOOGLE PRIMARY display
+    bundle that would read those same Google values back.
+    """
+    sort_date = sort_date or date.today()
+    sort_name = normalize_sort_name(sort_name)
+    (
+        _sort_state,
+        wave_counts,
+        waves,
+        _ballmats,
+        open_bays,
+        bay_statuses,
+    ) = _read_only_ballmat_components(gateway, sort_date, sort_name)
+
+    wave_count_rows = {
+        (row.side, row.wave_name): max(row.count or 0, 0)
+        for row in wave_counts
+    }
+    wave_rows = {
+        row.wave_name: max(row.planned_count or 0, 0)
+        for row in waves
+    }
+    open_bay_rows = {row.side: max(row.open_count or 0, 0) for row in open_bays}
+    bay_rows = {row.bay_name: _status(row.status) for row in bay_statuses}
+    return {
+        "B2": wave_count_rows[("EAST", "1ST WAVE")],
+        "C2": wave_count_rows[("WEST", "1ST WAVE")],
+        "D2": wave_rows["1ST WAVE"],
+        "B3": wave_count_rows[("EAST", "2ND WAVE")],
+        "C3": wave_count_rows[("WEST", "2ND WAVE")],
+        "D3": wave_rows["2ND WAVE"],
+        "B4": open_bay_rows["EAST"],
+        "C4": open_bay_rows["WEST"],
+        "B6": bay_rows["Bay 1"],
+        "B8": bay_rows["Bay 2"],
+        "B10": bay_rows["Bay 3"],
+        "C6": bay_rows["Bay 4"],
+        "C8": bay_rows["Bay 5"],
+    }
+
+
 def adjust_tunnel_wave_arrivals(
     gateway,
     wave,

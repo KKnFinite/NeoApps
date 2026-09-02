@@ -104,6 +104,21 @@ NEOSEKTOR_SHARED_AUTHORITY_LABELS = {
     STANDALONE_PRIMARY_AUTHORITY: "STANDALONE PRIMARY",
     LEGACY_UNMANAGED_AUTHORITY: "NOT ACTIVATED",
 }
+NEOSEKTOR_COMPAT_FIELD_LABELS = {
+    "B2": ("1ST WAVE · EAST LIVE COUNT", "ULD / live counter"),
+    "C2": ("1ST WAVE · WEST LIVE COUNT", "ULD / live counter"),
+    "D2": ("1ST WAVE · LEFT TO ARRIVE", "Wave planned count"),
+    "B3": ("2ND WAVE · EAST LIVE COUNT", "ULD / live counter"),
+    "C3": ("2ND WAVE · WEST LIVE COUNT", "ULD / live counter"),
+    "D3": ("2ND WAVE · LEFT TO ARRIVE", "Wave planned count"),
+    "B4": ("EAST OPEN BAYS", "Open-bay counter"),
+    "C4": ("WEST OPEN BAYS", "Open-bay counter"),
+    "B6": ("BAY 1 STATUS", "Bay status"),
+    "B8": ("BAY 2 STATUS", "Bay status"),
+    "B10": ("BAY 3 STATUS", "Bay status"),
+    "C6": ("BAY 4 STATUS", "Bay status"),
+    "C8": ("BAY 5 STATUS", "Bay status"),
+}
 
 # Authority is read immediately before each Neo Google write.  It is not used
 # by live page refreshes, so this does not create another polling path.
@@ -118,6 +133,10 @@ class NeoSektorGoogleError(ValueError):
 
 class NeoSektorSharedAuthorityError(NeoSektorGoogleError):
     """The shared Google authority record is unavailable, stale, or invalid."""
+
+
+class NeoSektorRecoveryError(NeoSektorSharedAuthorityError):
+    """A fenced NeoSektor recovery or return-control operation could not finish."""
 
 
 def neosektor_integration_mode(gateway=None, *, settings=None):
@@ -381,6 +400,315 @@ def transition_neosektor_shared_authority(
     ):
         raise NeoSektorSharedAuthorityError(
             "NeoSektor authority transition conflicted. No control change was confirmed."
+        )
+    return verified
+
+
+def preview_neosektor_standalone_reconciliation(
+    gateway,
+    *,
+    expected_generation=None,
+):
+    """Compare a fresh standalone snapshot with persisted Neon compatibility rows."""
+    authority = _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=expected_generation,
+    )
+    standalone_values = google_primary_operational_values(gateway, force=True)
+    _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=authority["generation"],
+    )
+    canonical_values = _canonical_neosektor_compat_values(gateway)
+    return _reconciliation_preview(
+        authority,
+        standalone_values,
+        canonical_values,
+    )
+
+
+def neosektor_standalone_recovery_context(gateway):
+    """Build read-only authority/reconciliation context for System Settings."""
+    authority = neosektor_shared_authority_status(gateway, force=True)
+    context = {
+        "authority": authority,
+        "preview": None,
+        "preview_error": None,
+        "reconciled_current_generation": bool(
+            _current_generation_reconciliation(authority)
+        ),
+    }
+    if authority["authority"] != STANDALONE_PRIMARY_AUTHORITY:
+        return context
+    if not authority["available"]:
+        context["preview_error"] = authority.get("error") or (
+            "NeoSektor shared authority is unavailable."
+        )
+        return context
+    try:
+        context["preview"] = preview_neosektor_standalone_reconciliation(
+            gateway,
+            expected_generation=authority["generation"],
+        )
+    except NeoSektorGoogleError as error:
+        context["preview_error"] = str(error)
+    return context
+
+
+def reconcile_neosektor_standalone_state(
+    gateway,
+    *,
+    expected_generation,
+    actor=None,
+):
+    """Import a fenced standalone snapshot into Neon without reclaiming authority."""
+    authority = _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=expected_generation,
+    )
+    standalone_values = google_primary_operational_values(gateway, force=True)
+    canonical_before = _canonical_neosektor_compat_values(gateway)
+    preview = _reconciliation_preview(
+        authority,
+        standalone_values,
+        canonical_before,
+    )
+    _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=authority["generation"],
+    )
+
+    try:
+        from app.services.neosektor_live_counts import (
+            apply_standalone_compat_values,
+        )
+
+        changed = apply_standalone_compat_values(gateway, standalone_values)
+        db.session.flush()
+        canonical_after = _canonical_neosektor_compat_values(gateway)
+        if canonical_after != standalone_values:
+            raise NeoSektorRecoveryError(
+                "NeoSektor standalone values could not be verified in Neon."
+            )
+        _require_standalone_recovery_authority(
+            gateway,
+            expected_generation=authority["generation"],
+        )
+        db.session.commit()
+    except NeoSektorRecoveryError:
+        db.session.rollback()
+        raise
+    except Exception as error:
+        db.session.rollback()
+        _log_safe_warning("standalone reconciliation", error)
+        raise NeoSektorRecoveryError(
+            "NeoSektor standalone state could not be reconciled into Neon."
+        ) from error
+
+    # A commit cannot be rolled back after this point.  A changed authority
+    # generation therefore leaves the imported rows fenced from RETURN CONTROL
+    # until a new reconciliation is completed for that newer generation.
+    _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=authority["generation"],
+    )
+    reconciliation = {
+        "generation": authority["generation"],
+        "reconciled_at": _authority_timestamp(),
+        "reconciled_by": _normalized_authority_actor(actor),
+        "changed_cells": [
+            row["cell"] for row in preview["fields"] if row["will_change"]
+        ],
+        "snapshot": standalone_values,
+    }
+    verified_authority = _record_neosektor_reconciliation_metadata(
+        gateway,
+        authority,
+        reconciliation,
+    )
+    return {
+        "authority": verified_authority,
+        "changed": changed,
+        "preview": preview,
+        "reconciliation": reconciliation,
+    }
+
+
+def return_neosektor_control_to_neo(
+    gateway,
+    *,
+    expected_generation,
+    actor=None,
+):
+    """Deliberately transition a reconciled standalone generation back to Neo."""
+    authority = _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=expected_generation,
+    )
+    reconciliation = _current_generation_reconciliation(authority)
+    if reconciliation is None:
+        raise NeoSektorRecoveryError(
+            "Reconcile the current standalone authority generation before returning control to Neo."
+        )
+
+    metadata = dict(authority["metadata"])
+    metadata["return_control"] = {
+        "from_generation": authority["generation"],
+        "returned_at": _authority_timestamp(),
+        "returned_by": _normalized_authority_actor(actor),
+        "reconciliation_generation": reconciliation["generation"],
+        # A primary record written during recovery remains fenced until a
+        # forced read confirms the completed return-control record below.
+        "verified": False,
+    }
+    try:
+        transitioned = transition_neosektor_shared_authority(
+            gateway,
+            NEO_PRIMARY_AUTHORITY,
+            expected_generation=authority["generation"],
+            actor=actor,
+            metadata=metadata,
+        )
+        return _verify_neosektor_return_control(gateway, transitioned)
+    except NeoSektorSharedAuthorityError:
+        raise
+    except Exception as error:
+        _log_safe_warning("return control to Neo", error)
+        raise NeoSektorRecoveryError(
+            "NeoSektor control could not be returned to Neo."
+        ) from error
+
+
+def _require_standalone_recovery_authority(gateway, *, expected_generation=None):
+    authority = read_neosektor_shared_authority(gateway, force=True)
+    if not authority["record_present"]:
+        raise NeoSektorRecoveryError(
+            "NeoSektor shared authority is not configured for recovery."
+        )
+    if authority["authority"] != STANDALONE_PRIMARY_AUTHORITY:
+        raise NeoSektorRecoveryError(
+            "Standalone NeoSektor is not the current shared authority."
+        )
+    if expected_generation is not None:
+        expected = _normalized_expected_generation(expected_generation)
+        if authority["generation"] != expected:
+            raise NeoSektorRecoveryError(
+                "NeoSektor authority changed. Refresh and reconcile the current generation."
+            )
+    return authority
+
+
+def _normalized_expected_generation(value):
+    if isinstance(value, bool):
+        raise NeoSektorRecoveryError("Use the current NeoSektor authority generation.")
+    try:
+        generation = int(value)
+    except (TypeError, ValueError) as error:
+        raise NeoSektorRecoveryError(
+            "Use the current NeoSektor authority generation."
+        ) from error
+    if generation < 1:
+        raise NeoSektorRecoveryError("Use the current NeoSektor authority generation.")
+    return generation
+
+
+def _canonical_neosektor_compat_values(gateway):
+    from app.services.neosektor_live_counts import canonical_neosektor_compat_values
+
+    values = canonical_neosektor_compat_values(gateway)
+    return normalize_operational_cell_values(values)
+
+
+def _reconciliation_preview(authority, standalone_values, canonical_values):
+    fields = []
+    for cell in SHEET_CELL_ORDER:
+        label, category = NEOSEKTOR_COMPAT_FIELD_LABELS[cell]
+        standalone_value = standalone_values[cell]
+        canonical_value = canonical_values[cell]
+        fields.append(
+            {
+                "cell": cell,
+                "label": label,
+                "category": category,
+                "standalone_value": standalone_value,
+                "canonical_value": canonical_value,
+                "will_change": standalone_value != canonical_value,
+            }
+        )
+    return {
+        "authority_generation": authority["generation"],
+        "fields": fields,
+        "changed_count": sum(row["will_change"] for row in fields),
+        "standalone_values": dict(standalone_values),
+        "canonical_values": dict(canonical_values),
+    }
+
+
+def _record_neosektor_reconciliation_metadata(gateway, authority, reconciliation):
+    current = _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=authority["generation"],
+    )
+    metadata = dict(current["metadata"])
+    metadata["reconciliation"] = reconciliation
+    worksheet = _get_shared_authority_worksheet()
+    _write_shared_authority_metadata(worksheet, metadata)
+    verified = _require_standalone_recovery_authority(
+        gateway,
+        expected_generation=authority["generation"],
+    )
+    if verified["metadata"] != metadata:
+        raise NeoSektorRecoveryError(
+            "NeoSektor reconciliation metadata could not be verified."
+        )
+    return verified
+
+
+def _current_generation_reconciliation(authority):
+    reconciliation = (authority.get("metadata") or {}).get("reconciliation")
+    if not isinstance(reconciliation, dict):
+        return None
+    try:
+        generation = int(reconciliation.get("generation"))
+    except (TypeError, ValueError):
+        return None
+    if generation != authority.get("generation"):
+        return None
+    if not str(reconciliation.get("reconciled_at") or "").strip():
+        return None
+    return reconciliation
+
+
+def _verify_neosektor_return_control(gateway, transitioned_authority):
+    """Mark a previously verified return record writable only after a fresh read."""
+    current = read_neosektor_shared_authority(gateway, force=True)
+    return_control = (current.get("metadata") or {}).get("return_control")
+    if (
+        current.get("authority") != NEO_PRIMARY_AUTHORITY
+        or current.get("generation") != transitioned_authority.get("generation")
+        or not isinstance(return_control, dict)
+        or return_control.get("verified") is not False
+    ):
+        raise NeoSektorRecoveryError(
+            "NeoSektor Return Control could not be verified. Neo remains fenced."
+        )
+
+    metadata = dict(current["metadata"])
+    verified_return = dict(return_control)
+    verified_return["verified"] = True
+    verified_return["verified_at"] = _authority_timestamp()
+    metadata["return_control"] = verified_return
+    worksheet = _get_shared_authority_worksheet()
+    _write_shared_authority_metadata(worksheet, metadata)
+    verified = read_neosektor_shared_authority(gateway, force=True)
+    if (
+        verified.get("authority") != NEO_PRIMARY_AUTHORITY
+        or verified.get("generation") != transitioned_authority.get("generation")
+        or verified.get("metadata") != metadata
+        or not verified.get("can_neo_write")
+    ):
+        raise NeoSektorRecoveryError(
+            "NeoSektor Return Control could not be verified. Neo remains fenced."
         )
     return verified
 
@@ -750,6 +1078,12 @@ def _shared_authority_status(
 ):
     authority = _normalized_shared_authority(authority)
     enforced = bool(record_present)
+    pending_neo_return = (
+        enforced
+        and authority == NEO_PRIMARY_AUTHORITY
+        and isinstance((metadata or {}).get("return_control"), dict)
+        and (metadata or {})["return_control"].get("verified") is not True
+    )
     return {
         "authority": authority,
         "authority_label": NEOSEKTOR_SHARED_AUTHORITY_LABELS[authority],
@@ -761,7 +1095,9 @@ def _shared_authority_status(
         "enforced": enforced,
         # Legacy compatibility intentionally leaves both writers available
         # until the shared record is provisioned by both deployments.
-        "can_neo_write": authority != STANDALONE_PRIMARY_AUTHORITY,
+        "can_neo_write": (
+            authority != STANDALONE_PRIMARY_AUTHORITY and not pending_neo_return
+        ),
         "can_standalone_write": authority != NEO_PRIMARY_AUTHORITY,
         "available": True,
         "source": source,
@@ -876,6 +1212,14 @@ def _write_shared_authority_record(worksheet, status):
         return
     for cell, value in zip(NEOSEKTOR_SHARED_AUTHORITY_CELLS, values):
         worksheet.update_acell(cell, value)
+
+
+def _write_shared_authority_metadata(worksheet, metadata):
+    value = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+    if hasattr(worksheet, "batch_update"):
+        worksheet.batch_update([{"range": "E2", "values": [[value]]}])
+        return
+    worksheet.update_acell("E2", value)
 
 
 def _cached_shared_authority(gateway_id):

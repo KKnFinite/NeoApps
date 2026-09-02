@@ -20,6 +20,7 @@ from app.services.access_control import (
 )
 from app.services.neosektor_live_counts import (
     apply_standalone_compat_values,
+    canonical_neosektor_compat_values,
     driver_routing_state_payload,
     update_tunnel_driver_offset,
 )
@@ -33,6 +34,7 @@ from app.services.neosektor_sheets_compat import (
     NEO_PRIMARY_AUTHORITY,
     NEO_ONLY,
     NEO_PRIMARY_GOOGLE_MIRROR,
+    NeoSektorRecoveryError,
     SHEET_CELL_ORDER,
     STANDALONE_PRIMARY_AUTHORITY,
     NeoSektorSharedAuthorityError,
@@ -42,8 +44,11 @@ from app.services.neosektor_sheets_compat import (
     initialize_neosektor_shared_authority,
     mirror_neosektor_operational_values,
     neosektor_shared_authority_status,
+    preview_neosektor_standalone_reconciliation,
     neosektor_integration_mode,
     read_neosektor_shared_authority,
+    reconcile_neosektor_standalone_state,
+    return_neosektor_control_to_neo,
     transition_neosektor_shared_authority,
     write_google_primary_operational_values,
 )
@@ -336,6 +341,349 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertIn(b"STANDALONE PRIMARY", page.data)
         self.assertNotIn(b"TAKE CONTROL", page.data)
         self.assertNotIn(b"RETURN CONTROL TO NEO", page.data)
+
+    def test_reconciliation_preview_identifies_only_changed_compatibility_values(self):
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(D3=14))
+        db.session.commit()
+        operational = _FakeWorksheet(_complete_sheet_values(D3=60, B6="Light"))
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            preview = preview_neosektor_standalone_reconciliation(
+                self.gateway,
+                expected_generation=8,
+            )
+
+        changed = {row["cell"] for row in preview["fields"] if row["will_change"]}
+        self.assertEqual(changed, {"B6", "D3"})
+        self.assertEqual(preview["changed_count"], 2)
+        self.assertEqual(preview["authority_generation"], 8)
+
+    def test_reconciliation_imports_snapshot_and_records_its_exact_generation(self):
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(D3=14))
+        db.session.commit()
+        standalone_values = _complete_sheet_values(D3=60, B6="Light")
+        operational = _FakeWorksheet(standalone_values)
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{\"takeover\":\"offline\"}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            result = reconcile_neosektor_standalone_state(
+                self.gateway,
+                expected_generation=8,
+                actor="grandmaster@example.test",
+            )
+            authority_after = read_neosektor_shared_authority(self.gateway, force=True)
+
+        self.assertEqual(canonical_neosektor_compat_values(self.gateway), standalone_values)
+        self.assertEqual(result["changed"], 2)
+        self.assertEqual(authority_after["authority"], STANDALONE_PRIMARY_AUTHORITY)
+        self.assertEqual(authority_after["generation"], 8)
+        reconciliation = authority_after["metadata"]["reconciliation"]
+        self.assertEqual(reconciliation["generation"], 8)
+        self.assertEqual(reconciliation["changed_cells"], ["D3", "B6"])
+        self.assertEqual(reconciliation["snapshot"], standalone_values)
+
+    def test_return_control_requires_the_current_generation_to_be_reconciled(self):
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            with self.assertRaises(NeoSektorRecoveryError):
+                return_neosektor_control_to_neo(
+                    self.gateway,
+                    expected_generation=8,
+                    actor="grandmaster@example.test",
+                )
+
+        self.assertEqual(authority.values["A2"], STANDALONE_PRIMARY_AUTHORITY)
+        self.assertEqual(authority.values["B2"], 8)
+
+    def test_return_control_rejects_stale_reconciliation_then_verifies_next_generation(self):
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(D3=14))
+        db.session.commit()
+        operational = _FakeWorksheet(_complete_sheet_values(D3=60))
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            reconcile_neosektor_standalone_state(
+                self.gateway,
+                expected_generation=8,
+                actor="grandmaster@example.test",
+            )
+            authority.values["B2"] = 9
+            with self.assertRaises(NeoSektorRecoveryError):
+                return_neosektor_control_to_neo(
+                    self.gateway,
+                    expected_generation=8,
+                    actor="grandmaster@example.test",
+                )
+
+            authority.values["B2"] = 8
+            returned = return_neosektor_control_to_neo(
+                self.gateway,
+                expected_generation=8,
+                actor="grandmaster@example.test",
+            )
+
+        self.assertEqual(returned["authority"], NEO_PRIMARY_AUTHORITY)
+        self.assertEqual(returned["generation"], 9)
+        self.assertEqual(returned["metadata"]["reconciliation"]["generation"], 8)
+        self.assertEqual(returned["metadata"]["return_control"]["from_generation"], 8)
+        self.assertTrue(returned["metadata"]["return_control"]["verified"])
+
+    def test_reconciliation_stops_before_import_when_authority_changes(self):
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(D3=14))
+        db.session.commit()
+        operational = _FakeWorksheet(_complete_sheet_values(D3=60))
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+
+        def change_generation_during_snapshot(_gateway, force=False):
+            authority.values["B2"] = 9
+            return _complete_sheet_values(D3=60)
+
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat.google_primary_operational_values",
+                side_effect=change_generation_during_snapshot,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            with self.assertRaises(NeoSektorRecoveryError):
+                reconcile_neosektor_standalone_state(
+                    self.gateway,
+                    expected_generation=8,
+                    actor="grandmaster@example.test",
+                )
+
+        self.assertEqual(canonical_neosektor_compat_values(self.gateway)["D3"], 14)
+
+    def test_failed_return_verification_does_not_unfence_neo_google_writes(self):
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": (
+                    '{"reconciliation":{"generation":8,'
+                    '"reconciled_at":"2026-09-01T04:00:00Z"}}'
+                ),
+            }
+        )
+        operational = _FakeWorksheet()
+
+        def leave_pending_return_then_fail(*_args, **_kwargs):
+            authority.values.update(
+                {
+                    "A2": NEO_PRIMARY_AUTHORITY,
+                    "B2": 9,
+                    "C2": "2026-09-01T04:01:00Z",
+                    "D2": "grandmaster@example.test",
+                    "E2": (
+                        '{"reconciliation":{"generation":8,'
+                        '"reconciled_at":"2026-09-01T04:00:00Z"},'
+                        '"return_control":{"from_generation":8,'
+                        '"verified":false}}'
+                    ),
+                }
+            )
+            raise NeoSektorSharedAuthorityError(
+                "NeoSektor authority transition could not be verified."
+            )
+
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat.transition_neosektor_shared_authority",
+                side_effect=leave_pending_return_then_fail,
+            ),
+        ):
+            with self.assertRaises(NeoSektorSharedAuthorityError):
+                return_neosektor_control_to_neo(
+                    self.gateway,
+                    expected_generation=8,
+                    actor="grandmaster@example.test",
+                )
+            with self.assertRaises(NeoSektorSharedAuthorityError):
+                write_google_primary_operational_values(
+                    self.gateway,
+                    {"D3": 60},
+                    integration_mode=GOOGLE_PRIMARY,
+                )
+
+        self.assertEqual(authority.values["A2"], NEO_PRIMARY_AUTHORITY)
+        self.assertEqual(operational.updates, [])
+
+    def test_system_settings_shows_recovery_preview_and_only_grandmaster_actions(self):
+        self._login("operator")
+        operational = _FakeWorksheet(_complete_sheet_values())
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{\"takeover\":\"offline\"}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            viewer = self.client.get("/motherbrain/system-settings")
+            self._login("grandmaster")
+            manager = self.client.get("/motherbrain/system-settings")
+
+        self.assertIn(b"STANDALONE RECONCILIATION PREVIEW", viewer.data)
+        self.assertIn(b"RECOVERY REQUIRED", viewer.data)
+        self.assertIn(b"Neo-owned driver offsets", viewer.data)
+        self.assertNotIn(b"RECONCILE STANDALONE STATE", viewer.data)
+        self.assertIn(b"RECONCILE STANDALONE STATE", manager.data)
+
+    def test_system_settings_reconciles_then_returns_control_with_explicit_confirmations(self):
+        self._login("grandmaster")
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(D3=14))
+        db.session.commit()
+        operational = _FakeWorksheet(_complete_sheet_values(D3=60))
+        authority = _FakeWorksheet(
+            {
+                "A2": STANDALONE_PRIMARY_AUTHORITY,
+                "B2": 8,
+                "C2": "2026-09-01T03:15:00Z",
+                "D2": "standalone-admin",
+                "E2": "{}",
+            }
+        )
+        with (
+            patch.dict(os.environ, FAKE_SHARED_AUTHORITY_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=operational,
+            ),
+            patch(
+                "app.services.neosektor_sheets_compat._get_shared_authority_worksheet",
+                return_value=authority,
+            ),
+        ):
+            rejected = self.client.post(
+                "/motherbrain/system-settings",
+                data={
+                    "action": "return_neosektor_control_to_neo",
+                    "expected_generation": "8",
+                },
+            )
+            reconciled = self.client.post(
+                "/motherbrain/system-settings",
+                data={
+                    "action": "reconcile_neosektor_standalone_state",
+                    "expected_generation": "8",
+                    "confirm_reconciliation": "reconcile",
+                },
+            )
+            returned = self.client.post(
+                "/motherbrain/system-settings",
+                data={
+                    "action": "return_neosektor_control_to_neo",
+                    "expected_generation": "8",
+                    "confirm_return_control": "return",
+                },
+            )
+
+        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(reconciled.status_code, 302)
+        self.assertEqual(returned.status_code, 302)
+        self.assertEqual(authority.values["A2"], NEO_PRIMARY_AUTHORITY)
+        self.assertEqual(authority.values["B2"], 9)
 
     def test_system_settings_mode_is_grandmaster_writable_only(self):
         self._login("operator")

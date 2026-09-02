@@ -50,8 +50,56 @@
                     {% endif %}
                 </p>
                 {% if neosektor_shared_authority.authority == "standalone_primary" %}
-                <p>Neo will not write NeoSektor compatibility cells while standalone authority is active.</p>
-                {% elif neosektor_shared_authority.record_present %}
+                <p><strong>RECOVERY REQUIRED:</strong> Neo is fenced from NeoSektor compatibility writes while standalone authority is active.</p>
+                <p>
+                    TAKEOVER: <strong>{{ neosektor_shared_authority.changed_at or "unknown" }}</strong>
+                    {% if neosektor_shared_authority.changed_by %} · {{ neosektor_shared_authority.changed_by }}{% endif %}
+                </p>
+                {% if neosektor_shared_authority.metadata %}
+                <p class="muted">RECOVERY METADATA: <code>{{ neosektor_shared_authority.metadata|tojson }}</code></p>
+                {% endif %}
+                {% if neosektor_recovery.preview %}
+                <div class="neosektor-reconciliation-preview" data-neosektor-reconciliation-preview>
+                    <p><strong>STANDALONE RECONCILIATION PREVIEW</strong> · {{ neosektor_recovery.preview.changed_count }} value{{ "s" if neosektor_recovery.preview.changed_count != 1 else "" }} will change in Neon.</p>
+                    <p class="muted">This imports every standalone-writable compatibility value. Neo-owned driver offsets and derived Ballmat/unload values are retained or recomputed in Neon.</p>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>FIELD</th><th>STANDALONE / GOOGLE</th><th>NEON</th><th>IMPORT</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for field in neosektor_recovery.preview.fields %}
+                                <tr class="{{ 'is-changed' if field.will_change else '' }}">
+                                    <td>{{ field.label }}</td>
+                                    <td>{{ field.standalone_value }}</td>
+                                    <td>{{ field.canonical_value }}</td>
+                                    <td>{{ "CHANGE" if field.will_change else "CURRENT" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% elif neosektor_recovery.preview_error %}
+                <p class="system-settings-warning">RECOVERY PREVIEW UNAVAILABLE: {{ neosektor_recovery.preview_error }}</p>
+                {% endif %}
+                {% if can_edit_system_settings and neosektor_recovery.preview %}
+                <form method="post" class="system-settings-form neosektor-recovery-action">
+                    <input type="hidden" name="action" value="reconcile_neosektor_standalone_state">
+                    <input type="hidden" name="expected_generation" value="{{ neosektor_shared_authority.generation }}">
+                    <label><input type="checkbox" name="confirm_reconciliation" value="reconcile" required> I reviewed this generation {{ neosektor_shared_authority.generation }} preview and will import it into Neon.</label>
+                    <button class="action-button primary-action" type="submit">RECONCILE STANDALONE STATE</button>
+                </form>
+                {% if neosektor_recovery.reconciled_current_generation %}
+                <form method="post" class="system-settings-form neosektor-recovery-action">
+                    <input type="hidden" name="action" value="return_neosektor_control_to_neo">
+                    <input type="hidden" name="expected_generation" value="{{ neosektor_shared_authority.generation }}">
+                    <label><input type="checkbox" name="confirm_return_control" value="return" required> I confirm this reconciled generation may return control to Neo.</label>
+                    <button class="action-button destructive-action" type="submit">RETURN CONTROL TO NEO</button>
+                </form>
+                {% endif %}
+                {% endif %}
+            {% elif neosektor_shared_authority.record_present %}
                 <p>Neo may mirror compatibility cells. Authority changes are not enabled here yet.</p>
                 {% else %}
                 <p>Shared failover control is not activated; legacy Google compatibility remains unchanged.</p>
