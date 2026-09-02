@@ -281,10 +281,11 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
 
         # The first chronological OAK mission receives its own two door pulls.
         self._save_destination("D32", "OAK", "pure", "01:40")
-        self._save_destination("D34", "OAK", "pure", "01:45")
+        next_card = self._save_destination("D34", "OAK", "pure", "01:45")
         first = db.session.get(SortDateMission, first.id)
         self.assertEqual(first.actual_pure_pull_time_local, time(1, 45))
         self.assertEqual(first.departure_status, "last_uld_enroute")
+        self.assertEqual(next_card["flight_number"], "OAK2")
 
         # The next OAK card advances to OAK2.  Its update neither reuses the
         # earlier pull rows nor overwrites OAK1's aggregate.

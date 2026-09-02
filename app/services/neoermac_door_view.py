@@ -143,11 +143,7 @@ class DoorViewOperationalStateBundle:
                 self.departure_mission_candidates_by_destination.setdefault(
                     destination, []
                 ).append(mission)
-        self.departure_missions_by_destination = {
-            destination: _active_departure_mission(candidates)
-            for destination, candidates in self.departure_mission_candidates_by_destination.items()
-            if _active_departure_mission(candidates) is not None
-        }
+        self.refresh_active_departure_missions()
         self.arrival_missions = tuple(arrivals)
         self.door_pulls_by_door_destination = {}
         self.door_pulls_by_destination_and_door = {}
@@ -220,6 +216,13 @@ class DoorViewOperationalStateBundle:
             )
         if record not in self.door_pulls:
             self.door_pulls.append(record)
+
+    def refresh_active_departure_missions(self):
+        self.departure_missions_by_destination = {
+            destination: mission
+            for destination, candidates in self.departure_mission_candidates_by_destination.items()
+            if (mission := _active_departure_mission(candidates)) is not None
+        }
 
     @property
     def masters_by_destination(self):
@@ -410,6 +413,7 @@ def save_door_pulls(
         missions_by_destination=bundle.departure_missions_by_destination,
     )
     db.session.flush()
+    bundle.refresh_active_departure_missions()
 
 
 def save_single_door_pull(
@@ -476,6 +480,7 @@ def save_single_door_pull(
         missions_by_destination=bundle.departure_missions_by_destination,
     )
     db.session.flush()
+    bundle.refresh_active_departure_missions()
     return _pull_card_payload(
         gateway,
         selected_door,
