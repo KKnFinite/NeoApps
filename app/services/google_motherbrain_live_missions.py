@@ -177,6 +177,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at):
     if not row["sheet_row"]:
         raise GoogleMotherBrainMissionError("Google sheet row must be a positive integer.")
     if not row["effective_tail"]:
+        if row["raw_effective_tail"]:
+            raise GoogleMotherBrainMissionError("Effective tail is invalid.")
         raise GoogleMotherBrainMissionError("Effective tail is required.")
 
     link = _link_for_row(operation, mission_type, row)
@@ -665,6 +667,7 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
     sheet_row = _row_number(row.get("sheet_row") or row.get("row_number"))
     raw_flight = row.get("flight_number", row.get("P", ""))
     raw_tail = row.get("effective_tail", row.get("tail_number", row.get("Q", "")))
+    raw_tail_text = str(raw_tail or "").strip()
     raw_airport = row.get(
         "origin" if mission_type == "arrival" else "destination",
         row.get("R", ""),
@@ -696,7 +699,8 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
         "source_sheet": source_sheet,
         "sheet_row": sheet_row,
         "flight_number": normalize_alp_flight_number(raw_flight),
-        "effective_tail": _normalize_tail(raw_tail),
+        "effective_tail": _normalize_tail(raw_tail_text),
+        "raw_effective_tail": raw_tail_text,
         "origin": airport if mission_type == "arrival" else "",
         "destination": airport if mission_type == "departure" and destination_mode == "normal" else "",
         "destination_mode": destination_mode,
@@ -853,7 +857,12 @@ def _validate_operation(operation):
 
 
 def _skipped_result(row, reason):
-    current_app.logger.warning(
+    log = (
+        current_app.logger.debug
+        if _is_expected_transient_row(row, reason)
+        else current_app.logger.warning
+    )
+    log(
         "Skipped Google MotherBrain live mission row sheet=%s row=%s flight=%s reason=%s",
         row.get("source_sheet") or "unknown",
         row.get("sheet_row") or row.get("batch_index") or "unknown",
@@ -873,6 +882,11 @@ def _skipped_result(row, reason):
         "parking": None,
         "pending_tail_number": None,
     }
+
+
+def _is_expected_transient_row(row, reason):
+    """Keep expected sheet-fill gaps out of production warning noise."""
+    return reason == "Effective tail is required." and not row.get("raw_effective_tail")
 
 
 def _utc_naive(value):

@@ -138,6 +138,22 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(mission.planned_datetime_local, datetime(2026, 8, 7, 23, 15))
         self.assertEqual(mission.planned_source, GOOGLE_MOTHERBRAIN_MISSION_SOURCE)
 
+    def test_blank_effective_tail_is_safely_skipped_without_warning_noise(self):
+        with patch.object(self.app.logger, "warning") as warning:
+            result = self._apply_arrivals(self._inbound(4, "947", ""))
+
+        self.assertEqual(result["results"][0]["status"], "skipped")
+        self.assertEqual(result["results"][0]["reason"], "Effective tail is required.")
+        warning.assert_not_called()
+
+    def test_invalid_effective_tail_remains_a_warning(self):
+        with patch.object(self.app.logger, "warning") as warning:
+            result = self._apply_arrivals(self._inbound(4, "947", "not a tail"))
+
+        self.assertEqual(result["results"][0]["status"], "skipped")
+        self.assertEqual(result["results"][0]["reason"], "Effective tail is invalid.")
+        warning.assert_called_once()
+
     def test_new_outbound_blank_t_is_pending_then_later_populates(self):
         first = self._apply_departures(self._outbound(4, "755", "N457UP", planned=""))
         db.session.commit()

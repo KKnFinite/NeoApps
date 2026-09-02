@@ -87,6 +87,52 @@ class GoogleRainSheetsTest(unittest.TestCase):
         ):
             self.assertNotIn(f".{method}(", source)
 
+    def test_reader_ignores_checkbox_only_false_rows_but_keeps_meaningful_rows(self):
+        spreadsheet = _FakeSpreadsheet(
+            {
+                "Outbound!A3:A50": [[], [], []],
+                "Outbound!C3:C50": [[], [], []],
+                "Outbound!E3:E50": [[], [], []],
+                "Outbound!M3:M50": [[], [], []],
+                "Outbound!N3:N50": [[], [], []],
+                "Outbound!O3:O50": [[], [], ["03:10"]],
+                "Outbound!S3:S50": [["FALSE"], ["TRUE"], ["FALSE"]],
+            }
+        )
+
+        rows = read_google_rain_outbound_milestones(
+            _reader_config(),
+            client_factory=lambda _credentials: _FakeClient(spreadsheet),
+        )
+
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "source_sheet": "Outbound",
+                    "sheet_row": 4,
+                    "flight_number": "",
+                    "destination": "",
+                    "std": "",
+                    "ramp_load_complete": "",
+                    "crew_load_complete": "",
+                    "block": "",
+                    "no_return": "TRUE",
+                },
+                {
+                    "source_sheet": "Outbound",
+                    "sheet_row": 5,
+                    "flight_number": "",
+                    "destination": "",
+                    "std": "",
+                    "ramp_load_complete": "",
+                    "crew_load_complete": "",
+                    "block": "03:10",
+                    "no_return": "FALSE",
+                },
+            ],
+        )
+
 
 def _reader_config():
     return {

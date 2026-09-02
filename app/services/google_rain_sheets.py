@@ -99,16 +99,14 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
         crew_load_complete = _cell(crew_load_complete_rows[offset], 0)
         block = _cell(block_rows[offset], 0)
         no_return = _cell(no_return_rows[offset], 0)
-        if not any(
-            (
-                flight_number,
-                destination,
-                std,
-                ramp_load_complete,
-                crew_load_complete,
-                block,
-                no_return,
-            )
+        if not _rain_outbound_row_has_content(
+            flight_number,
+            destination,
+            std,
+            ramp_load_complete,
+            crew_load_complete,
+            block,
+            no_return,
         ):
             continue
         rows.append(
@@ -125,6 +123,53 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
             }
         )
     return rows
+
+
+def _rain_outbound_row_has_content(
+    flight_number,
+    destination,
+    std,
+    ramp_load_complete,
+    crew_load_complete,
+    block,
+    no_return,
+):
+    """Return whether a bounded Rain row contains meaningful sheet data.
+
+    An unchecked Google checkbox is returned as the literal string ``FALSE``.
+    That value by itself is formatting residue, not an operational Rain row.
+    Keep any other supplied identity or milestone value, including an invalid
+    checkbox value, so the existing row-level validation can safely diagnose it.
+    """
+    if any(
+        _has_rendered_value(value)
+        for value in (
+            flight_number,
+            destination,
+            std,
+            ramp_load_complete,
+            crew_load_complete,
+            block,
+        )
+    ):
+        return True
+    return _has_rendered_value(no_return) and not _unchecked_rain_checkbox(no_return)
+
+
+def _has_rendered_value(value):
+    return value is not None and str(value).strip() != ""
+
+
+def _unchecked_rain_checkbox(value):
+    if value is False:
+        return True
+    return isinstance(value, str) and value.strip().lower() in {
+        "false",
+        "0",
+        "no",
+        "off",
+        "unchecked",
+    }
 
 
 def write_google_rain_departure_milestone(
