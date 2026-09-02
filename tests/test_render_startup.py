@@ -51,6 +51,31 @@ class RenderStartupTest(unittest.TestCase):
             if previous_run_module is not None:
                 sys.modules["run"] = previous_run_module
 
+    def test_worker_factory_does_not_open_postgres_for_schema_ensures(self):
+        production_config = type(
+            "RenderWorkerNoSchemaConfig",
+            (),
+            {
+                "SECRET_KEY": "render-worker-startup-secret-key-0123456789",
+                "TESTING": False,
+                "SQLALCHEMY_DATABASE_URI": "postgresql://neo@example.test/neoapps",
+                "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "AUTO_BOOTSTRAP_DATABASE": False,
+            },
+        )
+
+        # A worker can construct the Flask app and bind before a database is
+        # reachable.  Schema synchronization remains the explicit deployment
+        # bootstrap responsibility, rather than opening one connection per
+        # targeted schema ensure during ``gunicorn run:app`` import.
+        with patch(
+            "sqlalchemy.engine.base.Engine.connect",
+            side_effect=AssertionError("worker startup opened PostgreSQL"),
+        ):
+            app = create_app(production_config, auto_bootstrap=False)
+
+        self.assertIsInstance(app, Flask)
+
     def test_deploy_bootstrap_script_runs_once(self):
         from scripts import bootstrap_database as bootstrap_script
 

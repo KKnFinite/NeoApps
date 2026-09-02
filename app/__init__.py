@@ -50,89 +50,6 @@ from app.services.csrf import (
     validate_csrf_request,
 )
 from app.services.password_policy import user_requires_password_change
-from app.services.google_motherbrain_live_poll_schema import (
-    ensure_google_motherbrain_live_poll_state_table,
-)
-from app.services.google_rain_integration_schema import (
-    ensure_google_rain_integration_mode_column,
-)
-from app.services.neorain_load_planner_schema import (
-    ensure_neorain_load_planner_columns,
-)
-from app.services.neorain_load_planner_contact_schema import (
-    ensure_neorain_load_planner_contact_table,
-)
-from app.services.neorain_crew_admin_schema import ensure_neorain_crew_admin_assignments_table
-from app.services.neorain_delay_info_schema import ensure_neorain_delay_info_table
-from app.services.neosubzero_schema import ensure_neosubzero_pretreat_table
-from app.services.load_planning_contact_schema import (
-    ensure_load_planning_contact_columns,
-)
-from app.services.neorain_ground_time_settings_schema import (
-    ensure_neorain_ground_time_settings_table,
-)
-from app.services.motherbrain_alert_user_state_schema import (
-    ensure_motherbrain_alert_user_state_table,
-)
-from app.services.sort_timeline_schema import ensure_sort_timeline_sort_setting_columns
-from app.services.sort_date_mission_schema import (
-    ensure_sort_date_mission_departure_status_constraint,
-)
-from app.services.sort_date_operation_schema import (
-    ensure_sort_date_operation_window_nullable,
-)
-from app.services.neosektor_sheets_compat_schema import (
-    ensure_neosektor_sheets_compat_columns,
-)
-from app.services.neoermac_door_pull_schema import (
-    ensure_neoermac_door_pull_legacy_defaults,
-)
-from app.services.neoermac_building_lineup_schema import (
-    ensure_neoermac_building_lineup_columns,
-)
-from app.services.neoermac_door_supervision_schema import (
-    ensure_neoermac_door_supervision_table,
-)
-from app.services.neoermac_uld_workspace_schema import (
-    ensure_neoermac_uld_workspace_columns,
-)
-from app.services.neostaffing_attendance_schema import (
-    ensure_neostaffing_attendance_columns,
-)
-from app.services.neostaffing_attendance_history_schema import (
-    ensure_neostaffing_attendance_summary_table,
-)
-from app.services.neostaffing_classification_schema import (
-    ensure_neostaffing_classification_constraint,
-)
-from app.services.neostaffing_operation_schedule_schema import (
-    ensure_neostaffing_operation_schedule_table,
-)
-from app.services.neostaffing_reporting_schema import (
-    ensure_neostaffing_reporting_relationship_table,
-)
-from app.services.neostaffing_twenty_c_schema import (
-    ensure_neostaffing_twenty_c_affiliation_table,
-)
-from app.services.neostaffing_change_request_schema import (
-    ensure_neostaffing_change_request_tables,
-)
-from app.services.neostaffing_staffing_group_schema import (
-    ensure_neostaffing_staffing_group_tables,
-)
-from app.services.neostaffing_notification_schema import (
-    ensure_neostaffing_notification_table,
-)
-from app.services.neostaffing_shift_flow_schema import (
-    ensure_neostaffing_shift_flow_plan_table,
-)
-from app.services.neostaffing_vacation_schema import (
-    ensure_neostaffing_vacation_tables,
-)
-from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
-from app.services.live_screen_refresh_schema import (
-    ensure_live_screen_refresh_setting_table,
-)
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 from app.services.memory_diagnostics import record_process_memory_checkpoint
@@ -157,38 +74,11 @@ def create_app(config_class=Config, auto_bootstrap=False):
     db.init_app(app)
     login_manager.init_app(app)
 
+    # PostgreSQL schema/compatibility work is intentionally excluded from the
+    # Gunicorn import path.  The deployment bootstrap command owns that work;
+    # executing every targeted ensure in each web worker can wait on dozens of
+    # independent advisory locks before Render observes a bound $PORT.
     sync_existing_local_schema(app)
-    ensure_google_motherbrain_live_poll_state_table(app)
-    ensure_google_rain_integration_mode_column(app)
-    ensure_neorain_load_planner_columns(app)
-    ensure_neorain_load_planner_contact_table(app)
-    ensure_load_planning_contact_columns(app)
-    ensure_neorain_ground_time_settings_table(app)
-    ensure_neorain_crew_admin_assignments_table(app)
-    ensure_neorain_delay_info_table(app)
-    ensure_neosubzero_pretreat_table(app)
-    ensure_motherbrain_alert_user_state_table(app)
-    ensure_sort_timeline_sort_setting_columns(app)
-    ensure_sort_date_mission_departure_status_constraint(app)
-    ensure_sort_date_operation_window_nullable(app)
-    ensure_neosektor_sheets_compat_columns(app)
-    ensure_neoermac_door_pull_legacy_defaults(app)
-    ensure_neoermac_building_lineup_columns(app)
-    ensure_neoermac_door_supervision_table(app)
-    ensure_neoermac_uld_workspace_columns(app)
-    ensure_neostaffing_attendance_columns(app)
-    ensure_neostaffing_attendance_summary_table(app)
-    ensure_neostaffing_classification_constraint(app)
-    ensure_neostaffing_operation_schedule_table(app)
-    ensure_neostaffing_reporting_relationship_table(app)
-    ensure_neostaffing_twenty_c_affiliation_table(app)
-    ensure_neostaffing_change_request_tables(app)
-    ensure_neostaffing_staffing_group_tables(app)
-    ensure_neostaffing_notification_table(app)
-    ensure_neostaffing_shift_flow_plan_table(app)
-    ensure_neostaffing_vacation_tables(app)
-    ensure_live_screen_refresh_setting_table(app)
-    ensure_neoscorpion_production_schema(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
