@@ -60,10 +60,10 @@ def view_outbound_context(
         gateway,
         initialize=initialize_lineup,
     )
-    pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     parking_by_tail = _parking_assignments_by_tail(operation)
     arrivals_by_tail = arrival_presence_by_tail(operation)
     missions = _departure_missions(operation)
+    pulls_by_mission = _door_pulls_by_mission(gateway, operation, missions)
 
     rows = []
     seen_destinations = set()
@@ -76,7 +76,7 @@ def view_outbound_context(
             _row_for_destination(
                 destination,
                 assignments_by_destination.get(destination, []),
-                pulls_by_destination.get(destination, []),
+                pulls_by_mission.get(mission.id, []),
                 operation,
                 mission,
                 parking_by_tail,
@@ -89,7 +89,7 @@ def view_outbound_context(
             _row_for_destination(
                 destination,
                 assignments_by_destination.get(destination, []),
-                pulls_by_destination.get(destination, []),
+                [],
                 operation,
                 None,
                 parking_by_tail,
@@ -327,7 +327,7 @@ def _lineup_assignments_by_destination(gateway, *, initialize=True):
     return assignments_by_destination
 
 
-def _door_pulls_by_destination(gateway, operation):
+def _door_pulls_by_mission(gateway, operation, missions):
     query = NeoErmacDoorPull.query.filter_by(gateway_id=gateway.id)
     if operation:
         query = query.filter_by(sort_date_operation_id=operation.id)
@@ -335,13 +335,23 @@ def _door_pulls_by_destination(gateway, operation):
         query = query.filter(NeoErmacDoorPull.sort_date_operation_id.is_(None))
 
     rows = query.order_by(NeoErmacDoorPull.updated_at.desc(), NeoErmacDoorPull.id.desc()).all()
-    pulls_by_destination = {}
+    missions_by_destination = {}
+    for mission in missions:
+        destination = normalize_destination(mission.destination)
+        if destination:
+            missions_by_destination.setdefault(destination, []).append(mission)
+    pulls_by_mission = {}
     for row in rows:
-        destination = normalize_destination(row.destination)
-        if not destination:
+        mission_id = getattr(row, "sort_date_mission_id", None)
+        if mission_id:
+            pulls_by_mission.setdefault(mission_id, []).append(row)
             continue
-        pulls_by_destination.setdefault(destination, []).append(row)
-    return pulls_by_destination
+        destination = normalize_destination(row.destination)
+        candidates = missions_by_destination.get(destination, ())
+        # Destination-only historical rows are safe only for a unique mission.
+        if len(candidates) == 1:
+            pulls_by_mission.setdefault(candidates[0].id, []).append(row)
+    return pulls_by_mission
 
 
 def _parking_assignments_by_tail(operation):

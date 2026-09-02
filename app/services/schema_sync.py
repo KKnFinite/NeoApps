@@ -98,6 +98,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoermac_door_pulls": {
         "sort_date_operation_id": "INTEGER",
+        "sort_date_mission_id": "INTEGER",
         "actual_pure_pull_time_local": "TIME",
         "no_pure_pull": "BOOLEAN NOT NULL DEFAULT 0",
         "actual_mix_pull_time_local": "TIME",
@@ -297,6 +298,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neoermac_door_pulls": {
         "sort_date_operation_id": "INTEGER",
+        "sort_date_mission_id": "INTEGER",
         "actual_pure_pull_time_local": "TIME",
         "no_pure_pull": "BOOLEAN NOT NULL DEFAULT FALSE",
         "actual_mix_pull_time_local": "TIME",

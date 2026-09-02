@@ -56,8 +56,8 @@ def neoermac_dashboard_context(
         initialize=initialize_lineup,
         lineup_rows=lineup_load.rows,
     )
-    door_pulls_by_destination = _door_pulls_by_destination(gateway, operation)
     missions = _departure_missions(operation)
+    door_pulls_by_mission = _door_pulls_by_mission(gateway, operation, missions)
     parking_by_tail = _parking_assignments_by_tail(operation)
     rows = {"east": [], "west": []}
 
@@ -75,7 +75,7 @@ def neoermac_dashboard_context(
             required_doors = assignment["required_doors"]
             related_door_pulls = [
                 door_pull
-                for door_pull in door_pulls_by_destination.get(destination, [])
+                for door_pull in door_pulls_by_mission.get(mission.id, [])
                 if door_pull.door in required_doors
             ]
 
@@ -256,7 +256,7 @@ def _dashboard_belt_label(slot_label):
     return str(slot_label or "").strip().upper()
 
 
-def _door_pulls_by_destination(gateway, operation):
+def _door_pulls_by_mission(gateway, operation, missions):
     query = NeoErmacDoorPull.query.filter_by(gateway_id=gateway.id)
     if operation:
         query = query.filter_by(sort_date_operation_id=operation.id)
@@ -264,13 +264,22 @@ def _door_pulls_by_destination(gateway, operation):
         query = query.filter(NeoErmacDoorPull.sort_date_operation_id.is_(None))
 
     rows = query.order_by(NeoErmacDoorPull.updated_at.desc(), NeoErmacDoorPull.id.desc()).all()
-    door_pulls_by_destination = {}
+    missions_by_destination = {}
+    for mission in missions:
+        destination = normalize_destination(mission.destination)
+        if destination:
+            missions_by_destination.setdefault(destination, []).append(mission)
+    door_pulls_by_mission = {}
     for row in rows:
-        destination = normalize_destination(row.destination)
-        if not destination:
+        mission_id = getattr(row, "sort_date_mission_id", None)
+        if mission_id:
+            door_pulls_by_mission.setdefault(mission_id, []).append(row)
             continue
-        door_pulls_by_destination.setdefault(destination, []).append(row)
-    return door_pulls_by_destination
+        destination = normalize_destination(row.destination)
+        candidates = missions_by_destination.get(destination, ())
+        if len(candidates) == 1:
+            door_pulls_by_mission.setdefault(candidates[0].id, []).append(row)
+    return door_pulls_by_mission
 
 
 def _departure_missions(operation):

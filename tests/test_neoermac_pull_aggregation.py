@@ -262,6 +262,44 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         self.assertEqual(mission.actual_pure_pull_time_local, time(23, 50))
         self.assertEqual(NeoErmacDoorPull.query.count(), 3)
 
+    def test_same_destination_departures_keep_pull_state_and_aggregates_separate(self):
+        self._assign_destination("runout_10", "east_destination_1", "OAK")
+        self._assign_destination("runout_10", "west_destination_1", "OAK")
+        first = self._add_departure(
+            destination="OAK",
+            flight_number="OAK1",
+            planned_hour=2,
+            mix_pull_time_local=None,
+        )
+        second = self._add_departure(
+            destination="OAK",
+            flight_number="OAK2",
+            planned_hour=3,
+            mix_pull_time_local=None,
+        )
+        db.session.commit()
+
+        # The first chronological OAK mission receives its own two door pulls.
+        self._save_destination("D32", "OAK", "pure", "01:40")
+        self._save_destination("D34", "OAK", "pure", "01:45")
+        first = db.session.get(SortDateMission, first.id)
+        self.assertEqual(first.actual_pure_pull_time_local, time(1, 45))
+        self.assertEqual(first.departure_status, "last_uld_enroute")
+
+        # The next OAK card advances to OAK2.  Its update neither reuses the
+        # earlier pull rows nor overwrites OAK1's aggregate.
+        self._save_destination("D32", "OAK", "pure", "02:35")
+        second = db.session.get(SortDateMission, second.id)
+        self.assertEqual(second.actual_pure_pull_time_local, time(2, 35))
+        self.assertEqual(first.actual_pure_pull_time_local, time(1, 45))
+        self.assertEqual(
+            {
+                row.sort_date_mission_id
+                for row in NeoErmacDoorPull.query.filter_by(destination="OAK").all()
+            },
+            {first.id, second.id},
+        )
+
     def _assign_destination(self, runout_key, field_name, destination):
         row = next(
             row
@@ -276,6 +314,8 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         destination="SDF",
         pure_pull_time_local=_DEFAULT_PULL,
         mix_pull_time_local=_DEFAULT_PULL,
+        flight_number="UPS302",
+        planned_hour=2,
     ):
         mission = SortDateMission(
             sort_date=self.operation.sort_date,
@@ -285,12 +325,12 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
             mission_type="departure",
             mission_source="master",
             wave="1",
-            flight_number="UPS302",
+            flight_number=flight_number,
             origin=self.gateway.code,
             destination=destination,
             timezone="America/Chicago",
-            planned_datetime_local=datetime(2026, 8, 11, 2, 30),
-            planned_datetime_utc=datetime(2026, 8, 11, 7, 30),
+            planned_datetime_local=datetime(2026, 8, 11, planned_hour, 30),
+            planned_datetime_utc=datetime(2026, 8, 11, planned_hour + 5, 30),
             planned_source="master",
             departure_status="scheduled",
             pure_pull_time_local=(
@@ -327,10 +367,13 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         )
 
     def _save(self, door, pull_key, actual_value="", no_pull=False):
+        return self._save_destination(door, "SDF", pull_key, actual_value, no_pull)
+
+    def _save_destination(self, door, destination, pull_key, actual_value="", no_pull=False):
         card = save_single_door_pull(
             self.gateway,
             door,
-            "SDF",
+            destination,
             pull_key,
             actual_value,
             no_pull,

@@ -100,9 +100,12 @@ class DoorViewOperationalStateBundle:
     destinations_by_door: dict = field(init=False)
     doors_by_destination: dict = field(init=False)
     departure_missions_by_destination: dict = field(init=False)
+    departure_mission_candidates_by_destination: dict = field(init=False)
     arrival_missions: tuple = field(init=False)
     door_pulls_by_door_destination: dict = field(init=False)
     door_pulls_by_destination_and_door: dict = field(init=False)
+    door_pulls_by_door_mission: dict = field(init=False)
+    door_pulls_by_mission_and_door: dict = field(init=False)
     _masters_by_destination: object = field(default=_BUNDLE_UNSET, init=False)
     _parking_by_tail: object = field(default=_BUNDLE_UNSET, init=False)
     _arrivals_by_tail: object = field(default=_BUNDLE_UNSET, init=False)
@@ -127,7 +130,7 @@ class DoorViewOperationalStateBundle:
             self.gateway,
             assignments=self.lineup_assignments,
         )
-        self.departure_missions_by_destination = {}
+        self.departure_mission_candidates_by_destination = {}
         arrivals = []
         for mission in self.missions:
             if mission.mission_type == "arrival":
@@ -136,14 +139,20 @@ class DoorViewOperationalStateBundle:
             if mission.mission_type != "departure":
                 continue
             destination = normalize_destination(mission.destination)
-            if (
-                destination
-                and destination not in self.departure_missions_by_destination
-            ):
-                self.departure_missions_by_destination[destination] = mission
+            if destination:
+                self.departure_mission_candidates_by_destination.setdefault(
+                    destination, []
+                ).append(mission)
+        self.departure_missions_by_destination = {
+            destination: _active_departure_mission(candidates)
+            for destination, candidates in self.departure_mission_candidates_by_destination.items()
+            if _active_departure_mission(candidates) is not None
+        }
         self.arrival_missions = tuple(arrivals)
         self.door_pulls_by_door_destination = {}
         self.door_pulls_by_destination_and_door = {}
+        self.door_pulls_by_door_mission = {}
+        self.door_pulls_by_mission_and_door = {}
         for record in self.door_pulls:
             self.register_door_pull(record)
 
@@ -196,14 +205,19 @@ class DoorViewOperationalStateBundle:
         destination = normalize_destination(record.destination)
         if not door or not destination:
             return
-        self.door_pulls_by_door_destination.setdefault(
-            (door, destination),
-            record,
-        )
-        self.door_pulls_by_destination_and_door.setdefault(
-            (destination, door),
-            record,
-        )
+        mission_id = getattr(record, "sort_date_mission_id", None)
+        if mission_id:
+            self.door_pulls_by_door_mission.setdefault((door, mission_id), record)
+            self.door_pulls_by_mission_and_door.setdefault((mission_id, door), record)
+        else:
+            self.door_pulls_by_door_destination.setdefault(
+                (door, destination),
+                record,
+            )
+            self.door_pulls_by_destination_and_door.setdefault(
+                (destination, door),
+                record,
+            )
         if record not in self.door_pulls:
             self.door_pulls.append(record)
 
@@ -394,7 +408,6 @@ def save_door_pulls(
         destinations=changed_destinations,
         doors_by_destination=bundle.doors_by_destination,
         missions_by_destination=bundle.departure_missions_by_destination,
-        pulls_by_destination_and_door=bundle.door_pulls_by_destination_and_door,
     )
     db.session.flush()
 
@@ -461,7 +474,6 @@ def save_single_door_pull(
         destinations=(destination,),
         doors_by_destination=bundle.doors_by_destination,
         missions_by_destination=bundle.departure_missions_by_destination,
-        pulls_by_destination_and_door=bundle.door_pulls_by_destination_and_door,
     )
     db.session.flush()
     return _pull_card_payload(
@@ -486,6 +498,7 @@ def _apply_pull_value(
     apply_to_both=False,
     bundle=None,
 ):
+    mission = _mission_for_destination(bundle, destination)
     for target_door in _pull_write_doors(
         gateway,
         selected_door,
@@ -500,6 +513,7 @@ def _apply_pull_value(
             destination,
             operation,
             create=True,
+            mission=mission,
             bundle=bundle,
         )
         setattr(record, field["no_attr"], bool(no_pull))
@@ -1027,7 +1041,9 @@ def _destination_cards_for_door(
     for destination, slot_labels in destination_slots.items():
         mission = missions.get(destination)
         master = masters.get(destination)
-        door_pull = door_pulls.get((selected_door, destination))
+        door_pull = _door_pull_for_mission(
+            bundle, selected_door, destination, mission, legacy_lookup=door_pulls
+        )
         timing_data = _mission_timing_data(mission, operation)
         planned_times = {
             "pure": _planned_pull_time(timing_data, master, "pure"),
@@ -1168,6 +1184,30 @@ def _current_operation(gateway):
     return current_operational_sort_operation(gateway)
 
 
+_PULL_COMPLETE_DEPARTURE_STATUSES = {
+    "last_uld_enroute",
+    "ramp_load_complete",
+    "crew_load_complete",
+    "blocked_out",
+    "departed",
+    "cancelled",
+}
+
+
+def _active_departure_mission(candidates):
+    """Choose the next operational mission for one displayed destination.
+
+    Building-lineup slots intentionally remain destination based.  The pull
+    state beneath them cannot be: repeat destinations must advance in planned
+    chronology once the earlier mission's pull progression is complete.
+    """
+    for mission in candidates or ():
+        status = str(getattr(mission, "departure_status", "") or "").strip().lower()
+        if status not in _PULL_COMPLETE_DEPARTURE_STATUSES:
+            return mission
+    return (candidates or (None,))[0]
+
+
 def _master_departures_by_destination(gateway):
     masters = (
         MasterFlightSchedule.query.filter(
@@ -1196,15 +1236,25 @@ def _door_pull_record(
     operation,
     create=False,
     *,
+    mission=None,
     bundle=None,
 ):
+    mission_id = getattr(mission, "id", None)
     if bundle is not None:
-        key = (normalize_door(selected_door), normalize_destination(destination))
-        record = bundle.door_pulls_by_door_destination.get(key)
+        door = normalize_door(selected_door)
+        key = (door, mission_id)
+        record = (
+            bundle.door_pulls_by_door_mission.get(key)
+            if mission_id
+            else bundle.door_pulls_by_door_destination.get(
+                (door, normalize_destination(destination))
+            )
+        )
         if record is None and create:
             record = NeoErmacDoorPull(
                 gateway_id=gateway.id,
                 sort_date_operation_id=operation.id if operation else None,
+                sort_date_mission_id=mission_id,
                 door=selected_door,
                 destination=destination,
             )
@@ -1215,8 +1265,11 @@ def _door_pull_record(
     query = NeoErmacDoorPull.query.filter_by(
         gateway_id=gateway.id,
         door=selected_door,
-        destination=destination,
     )
+    if mission_id:
+        query = query.filter_by(sort_date_mission_id=mission_id)
+    else:
+        query = query.filter_by(destination=destination)
     if operation:
         query = query.filter_by(sort_date_operation_id=operation.id)
     else:
@@ -1227,11 +1280,35 @@ def _door_pull_record(
         record = NeoErmacDoorPull(
             gateway_id=gateway.id,
             sort_date_operation_id=operation.id if operation else None,
+            sort_date_mission_id=mission_id,
             door=selected_door,
             destination=destination,
         )
         db.session.add(record)
     return record
+
+
+def _mission_for_destination(bundle, destination):
+    if bundle is None:
+        return None
+    return bundle.departure_missions_by_destination.get(
+        normalize_destination(destination)
+    )
+
+
+def _door_pull_for_mission(bundle, door, destination, mission, *, legacy_lookup=None):
+    """Read a mission pull, allowing a destination legacy record only safely."""
+    if mission is not None:
+        record = bundle.door_pulls_by_door_mission.get((normalize_door(door), mission.id))
+        if record is not None:
+            return record
+    candidates = bundle.departure_mission_candidates_by_destination.get(
+        normalize_destination(destination), ()
+    )
+    if len(candidates) != 1:
+        return None
+    lookup = legacy_lookup if legacy_lookup is not None else bundle.door_pulls_by_door_destination
+    return lookup.get((normalize_door(door), normalize_destination(destination)))
 
 
 def _uld_request_for_door(gateway, selected_door, operation):

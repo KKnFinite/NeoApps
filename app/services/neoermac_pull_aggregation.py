@@ -53,28 +53,40 @@ def recompute_current_sort_door_pull_aggregates(
     }
     if doors_by_destination is None:
         doors_by_destination = get_building_lineup_doors_by_destination(gateway)
+    # ``missions_by_destination`` is retained as a compatibility argument for
+    # callers that preloaded the Door View bundle.  Work is deliberately
+    # performed per mission, not per destination: two OAK departures may have
+    # the same destination and must never share a pull aggregate.
     if missions_by_destination is None:
-        missions_by_destination = _departure_missions_by_destination(operation)
+        missions = _departure_missions(operation)
+    else:
+        missions = tuple(missions_by_destination.values())
     if requested_destinations:
-        missions_by_destination = {
-            destination: mission
-            for destination, mission in missions_by_destination.items()
-            if destination in requested_destinations
-        }
+        missions = tuple(
+            mission
+            for mission in missions
+            if normalize_destination(mission.destination) in requested_destinations
+        )
 
     if pulls_by_destination_and_door is None:
-        pulls_by_destination_and_door = _door_pulls_by_destination_and_door(
+        pulls_by_mission_and_door = _door_pulls_by_mission_and_door(
             gateway,
             operation,
+            missions,
+        )
+    else:
+        pulls_by_mission_and_door = _mission_pull_lookup_from_legacy_bundle(
+            pulls_by_destination_and_door,
+            missions,
         )
     results = {}
-    for destination, mission in missions_by_destination.items():
-        results[destination] = _recompute_mission(
+    for mission in missions:
+        results[mission.id] = _recompute_mission(
             gateway,
             operation,
             mission,
-            doors_by_destination.get(destination, ()),
-            pulls_by_destination_and_door,
+            doors_by_destination.get(normalize_destination(mission.destination), ()),
+            pulls_by_mission_and_door,
         )
     return results
 
@@ -84,16 +96,15 @@ def _recompute_mission(
     operation,
     mission,
     assigned_doors,
-    pulls_by_destination_and_door,
+    pulls_by_mission_and_door,
 ):
-    destination = normalize_destination(mission.destination)
     requirement_results = []
     completed_actual_datetimes = []
     aggregate_values = {}
 
     for planned_attr, actual_attr, no_attr in PULL_AGGREGATION_FIELDS:
         door_pulls = [
-            pulls_by_destination_and_door.get((destination, door))
+            pulls_by_mission_and_door.get((mission.id, door))
             for door in assigned_doors
         ]
         actual_values = [
@@ -160,8 +171,8 @@ def _recompute_mission(
     }
 
 
-def _departure_missions_by_destination(operation):
-    missions = (
+def _departure_missions(operation):
+    return tuple(
         SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
             mission_type="departure",
@@ -169,15 +180,9 @@ def _departure_missions_by_destination(operation):
         .order_by(SortDateMission.planned_datetime_utc.asc(), SortDateMission.id.asc())
         .all()
     )
-    result = {}
-    for mission in missions:
-        destination = normalize_destination(mission.destination)
-        if destination and destination not in result:
-            result[destination] = mission
-    return result
 
 
-def _door_pulls_by_destination_and_door(gateway, operation):
+def _door_pulls_by_mission_and_door(gateway, operation, missions):
     rows = (
         NeoErmacDoorPull.query.filter_by(
             gateway_id=gateway.id,
@@ -187,11 +192,48 @@ def _door_pulls_by_destination_and_door(gateway, operation):
         .all()
     )
     result = {}
+    missions_by_destination = {}
+    for mission in missions:
+        destination = normalize_destination(mission.destination)
+        if destination:
+            missions_by_destination.setdefault(destination, []).append(mission)
     for row in rows:
-        destination = normalize_destination(row.destination)
         door = str(row.door or "").strip().upper()
-        if destination and door:
-            result.setdefault((destination, door), row)
+        if not door:
+            continue
+        mission_id = getattr(row, "sort_date_mission_id", None)
+        if mission_id:
+            result.setdefault((mission_id, door), row)
+            continue
+        # Legacy destination-only records can be used only when that
+        # destination maps uniquely in this operation.  Ambiguous legacy
+        # records are intentionally not guessed onto either mission.
+        destination = normalize_destination(row.destination)
+        candidates = missions_by_destination.get(destination, ())
+        if len(candidates) == 1:
+            result.setdefault((candidates[0].id, door), row)
+    return result
+
+
+def _mission_pull_lookup_from_legacy_bundle(records, missions):
+    """Convert the older destination lookup without unsafe ambiguous reuse."""
+    by_destination = {}
+    for mission in missions:
+        destination = normalize_destination(mission.destination)
+        if destination:
+            by_destination.setdefault(destination, []).append(mission)
+    result = {}
+    for key, record in records.items():
+        mission_id = getattr(record, "sort_date_mission_id", None)
+        if mission_id:
+            result.setdefault((mission_id, str(record.door or "").strip().upper()), record)
+            continue
+        if not isinstance(key, tuple) or len(key) != 2:
+            continue
+        destination, door = key
+        candidates = by_destination.get(normalize_destination(destination), ())
+        if len(candidates) == 1:
+            result.setdefault((candidates[0].id, str(door or "").strip().upper()), record)
     return result
 
 

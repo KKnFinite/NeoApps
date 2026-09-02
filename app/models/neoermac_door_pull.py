@@ -14,6 +14,16 @@ class NeoErmacDoorPull(db.Model):
         nullable=True,
         index=True,
     )
+    # Pulls belong to one canonical current-sort departure.  Destination is
+    # retained as the operational/display snapshot used by older records, but
+    # cannot distinguish repeated destinations in the same sort (for example
+    # two OAK departures).
+    sort_date_mission_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_missions.id"),
+        nullable=True,
+        index=True,
+    )
     door = db.Column(db.String(8), nullable=False, index=True)
     destination = db.Column(db.String(8), nullable=False, index=True)
     actual_pure_pull_time_local = db.Column(db.Time, nullable=True)
@@ -30,3 +40,4 @@ class NeoErmacDoorPull(db.Model):
 
     gateway = db.relationship("Gateway")
     sort_date_operation = db.relationship("SortDateOperation")
+    sort_date_mission = db.relationship("SortDateMission")
