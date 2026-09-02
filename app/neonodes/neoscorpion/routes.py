@@ -22,7 +22,6 @@ from app.services.neoscorpion import (
     fueler_context,
     history_context,
     mark_fueler_off,
-    NEOSCORPION_LIVE_REFRESH_SCREEN_KEYS,
     end_fuel_work_early,
     reopen_fueler_off,
     resume_held_fuel_assignment,
@@ -58,7 +57,6 @@ from app.services.permission_rules import (
     preload_permission_rules,
     user_can,
 )
-from app.services.live_screen_refresh import save_live_screen_refresh_override
 
 
 FUEL_DISPATCH_VIEW_PERMISSION = "neoscorpion.fuel_dispatch.view"
@@ -72,7 +70,6 @@ TRUCK_MANAGER_EDIT_PERMISSION = "neoscorpion.truck_manager.edit"
 SETTINGS_VIEW_PERMISSION = "neoscorpion.settings.view"
 SETTINGS_EDIT_PERMISSION = "neoscorpion.settings.edit"
 APU_RATES_EDIT_PERMISSION = "neoscorpion.apu_rates.edit"
-REFRESH_SETTINGS_EDIT_PERMISSION = "neoscorpion.refresh_settings.edit"
 HISTORY_VIEW_PERMISSION = "neoscorpion.history.view"
 
 
@@ -812,37 +809,8 @@ def settings():
     gateway = get_current_gateway()
     access = permission_access(SETTINGS_VIEW_PERMISSION, SETTINGS_EDIT_PERMISSION)
     can_edit_apu_rates = user_can(APU_RATES_EDIT_PERMISSION)
-    can_edit_refresh_settings = user_can(REFRESH_SETTINGS_EDIT_PERMISSION)
     if request.method == "POST":
         action = (request.form.get("action") or "save_settings").strip()
-        if action == "save_live_refresh":
-            if not access["can_view"] or not can_edit_refresh_settings:
-                db.session.rollback()
-                flash("Access denied.", "error")
-                return _settings_response(gateway, access, status_code=403)
-            try:
-                result = save_live_screen_refresh_override(
-                    gateway,
-                    request.form.get("screen_key"),
-                    request.form.get("refresh_interval_seconds"),
-                    allowed_screen_keys=NEOSCORPION_LIVE_REFRESH_SCREEN_KEYS,
-                )
-            except (IntegrityError, ValueError) as exc:
-                db.session.rollback()
-                message = (
-                    str(exc)
-                    if isinstance(exc, ValueError)
-                    else "Live refresh setting changed. Reload Settings and try again."
-                )
-                flash(message, "error")
-                return _settings_response(gateway, access, status_code=400)
-            if result.changed:
-                db.session.commit()
-                flash("LIVE REFRESH SETTING SAVED.", "success")
-            else:
-                flash("NO LIVE REFRESH SETTING CHANGES.", "info")
-            return redirect(url_for("neoscorpion.settings"))
-
         if action == "save_apu_rates":
             if not access["can_view"] or not can_edit_apu_rates:
                 db.session.rollback()
@@ -997,7 +965,6 @@ def _settings_response(gateway, access, status_code=200):
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         can_edit_apu_rates=user_can(APU_RATES_EDIT_PERMISSION),
-        can_edit_refresh_settings=user_can(REFRESH_SETTINGS_EDIT_PERMISSION),
         **settings_context(gateway),
     )
     return response, status_code

@@ -12,12 +12,7 @@
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'arrival-planning' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=sidebar_operation.id, mission_type='arrival') }}">Arrival Planning</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'departure-planning' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=sidebar_operation.id, mission_type='departure') }}">Departure Planning</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'parking-plan' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=sidebar_operation.id) }}">Parking Plan</a>
-        <a class="manage-sort-sidebar-link{% if sidebar_active == 'gateway-matrix' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix', operation_id=sidebar_operation.id) }}">Gateway Matrix</a>
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'master-schedule' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule', operation_id=sidebar_operation.id) }}">Master Schedule</a>
-        {% if can_manage_system(current_user) %}
-        <a class="manage-sort-sidebar-link{% if sidebar_active == 'sort-timeline' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=sidebar_operation.id) }}">Sort Timeline</a>
-        <a class="manage-sort-sidebar-link{% if sidebar_active == 'manage-api' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=sidebar_operation.id) }}">Manage API</a>
-        {% endif %}
         <a class="manage-sort-sidebar-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}">System Settings</a>
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'unmatched-queue' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=sidebar_operation.id) }}">Unmatched Queue</a>

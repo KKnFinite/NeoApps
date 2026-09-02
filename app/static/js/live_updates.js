@@ -6,6 +6,7 @@
     }
 
     const DEFAULT_FAILURE_THRESHOLD = 3;
+    const MINIMUM_REFRESH_INTERVAL_MS = 5000;
     const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
     const USER_ACTIVITY_EVENTS = Object.freeze([
         ["pointerdown", true],
@@ -20,8 +21,8 @@
     class LiveUpdateController {
         constructor(options) {
             this.poll = options.poll;
-            this.intervalMs = Number(options.intervalMs);
-            if (!Number.isFinite(this.intervalMs) || this.intervalMs < 1000) {
+            this.intervalMs = Math.max(MINIMUM_REFRESH_INTERVAL_MS, Number(options.intervalMs));
+            if (!Number.isFinite(this.intervalMs)) {
                 throw new Error("A valid live-screen refresh interval is required.");
             }
             this.statusElement = options.statusElement || null;
@@ -30,6 +31,7 @@
             this.continuousWhileVisible = options.continuousWhileVisible === true;
             this.enabled = false;
             this.running = false;
+            this.lastRefreshStartedAt = 0;
             this.timer = null;
             this.inactivityTimer = null;
             this.inactivityPaused = false;
@@ -88,14 +90,14 @@
             }
             if (!wasEnabled && !document.hidden) {
                 if (this.immediate) {
-                    this.refreshNow();
+                    this.refreshNow({force: true});
                 } else {
                     this.schedule();
                 }
             }
         }
 
-        refreshNow() {
+        refreshNow(options = {}) {
             if (
                 !this.enabled
                 || this.running
@@ -105,8 +107,18 @@
             ) {
                 return Promise.resolve(false);
             }
+            const elapsed = Date.now() - this.lastRefreshStartedAt;
+            if (!options.force && this.lastRefreshStartedAt && elapsed < MINIMUM_REFRESH_INTERVAL_MS) {
+                this.clearTimer();
+                this.timer = window.setTimeout(
+                    () => this.refreshNow(),
+                    MINIMUM_REFRESH_INTERVAL_MS - elapsed
+                );
+                return Promise.resolve(false);
+            }
             this.clearTimer();
             this.running = true;
+            this.lastRefreshStartedAt = Date.now();
             return Promise.resolve()
                 .then(() => this.poll())
                 .then(() => {
@@ -206,7 +218,7 @@
                 this.inactivityPaused = false;
                 this.renderStatus("active", "Live updates on");
                 this.armInactivityTimer();
-                this.refreshNow();
+                this.refreshNow({force: true});
                 return;
             }
             this.armInactivityTimer();
@@ -223,7 +235,7 @@
                 if (this.inactivityPaused) {
                     this.inactivityPaused = false;
                     this.renderStatus("active", "Live updates on");
-                    this.refreshNow();
+                    this.refreshNow({force: true});
                 }
                 return;
             }
@@ -240,7 +252,7 @@
                 this.inactivityPaused = false;
                 this.renderStatus("active", "Live updates on");
                 this.armInactivityTimer();
-                this.refreshNow();
+                this.refreshNow({force: true});
             }
         }
 

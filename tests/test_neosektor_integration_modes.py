@@ -339,7 +339,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 return_value=authority,
             ),
         ):
-            page = self.client.get("/motherbrain/system-settings")
+            page = self.client.get("/motherbrain/system-settings/integrations")
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"SHARED STANDALONE AUTHORITY", page.data)
@@ -625,9 +625,9 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 return_value=authority,
             ),
         ):
-            viewer = self.client.get("/motherbrain/system-settings")
+            viewer = self.client.get("/motherbrain/system-settings/integrations")
             self._login("grandmaster")
-            manager = self.client.get("/motherbrain/system-settings")
+            manager = self.client.get("/motherbrain/system-settings/integrations")
 
         self.assertIn(b"STANDBY FENCE ACTIVE", viewer.data)
         self.assertIn(b"NeoApps does not import standalone operational values", viewer.data)
@@ -692,7 +692,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
 
     def test_system_settings_mode_is_grandmaster_writable_only(self):
         self._login("operator")
-        page = self.client.get("/motherbrain/system-settings")
+        page = self.client.get("/motherbrain/system-settings/integrations")
         denied = self.client.post(
             "/motherbrain/system-settings",
             data={"action": "set_neosektor_mode", "integration_mode": NEO_ONLY},
@@ -1284,7 +1284,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
     def test_system_settings_exposes_persisted_google_mirror_control(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
         self._login("grandmaster")
-        page = self.client.get("/motherbrain/system-settings")
+        page = self.client.get("/motherbrain/system-settings/integrations")
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"GOOGLE MIRROR WRITES", page.data)

@@ -202,7 +202,7 @@
         if (payload.changed && !hasLocalEdits()) window.location.reload();
     };
     const controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms or live_screen_refresh_interval_ms }},
+        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
         poll,
         continuousWhileVisible: true,
     });

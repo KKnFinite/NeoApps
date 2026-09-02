@@ -25,24 +25,5 @@
         </form>
     </section>
 
-    <section class="neosubzero-settings" aria-labelledby="subzero-refresh-settings">
-        <h2 id="subzero-refresh-settings">LIVE AUTO-REFRESH</h2>
-        {% for label, screen_key in refresh_rows %}
-        {% set setting = refresh_settings[screen_key] %}
-        <form method="post" class="neosubzero-refresh-row">
-            <input type="hidden" name="action" value="save_refresh">
-            <input type="hidden" name="screen_key" value="{{ screen_key }}">
-            <strong>{{ label }}</strong>
-            <select name="refresh_interval_seconds" {% if not can_edit %}disabled{% endif %}>
-                <option value="default" {% if setting.override_seconds is none %}selected{% endif %}>Render default</option>
-                {% for seconds in choices %}
-                <option value="{{ seconds }}" {% if setting.override_seconds == seconds %}selected{% endif %}>{{ 'OFF' if seconds == 0 else seconds ~ ' seconds' }}</option>
-                {% endfor %}
-            </select>
-            <span>{{ setting.effective_label }} · {{ setting.source_label }}</span>
-            {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
-        </form>
-        {% endfor %}
-    </section>
 </section>
 {% endblock %}

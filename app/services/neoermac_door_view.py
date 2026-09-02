@@ -825,7 +825,9 @@ def door_tab_pull_alerts(
 
 
 def neoermac_refresh_status(gateway, operation=None, now=None):
-    return neoermac_live_refresh_status(gateway)
+    from app.services.neoermac_live_refresh import NEOERMAC_DOOR_VIEW_REFRESH_KEY
+
+    return neoermac_live_refresh_status(gateway, NEOERMAC_DOOR_VIEW_REFRESH_KEY)
 
 
 def current_door_view_operation(gateway):

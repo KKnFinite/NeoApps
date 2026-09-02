@@ -52,23 +52,24 @@ class NeoSektorRefreshSettingsTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_settings_render_all_six_gateway_scoped_screens(self):
-        self._login("master")
+    def test_central_settings_render_all_six_gateway_scoped_screens(self):
+        self._login("grandmaster")
 
-        response = self.client.get("/neosektor/settings")
+        response = self.client.get("/motherbrain/system-settings/node-refresh-timings")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Live Auto-Refresh", response.data)
+        self.assertIn(b"Node Refresh Timings", response.data)
         for screen_key in NEOSEKTOR_REFRESH_KEYS:
             self.assertIn(screen_key.encode(), response.data)
+        node_settings = self.client.get("/neosektor/settings")
+        self.assertNotIn(b"refresh_interval_seconds", node_settings.data)
 
-    def test_master_saves_only_supported_screen_override(self):
-        self._login("master")
+    def test_grandmaster_saves_supported_screen_override_centrally(self):
+        self._login("grandmaster")
 
         response = self.client.post(
-            "/neosektor/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
                 "screen_key": NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
                 "refresh_interval_seconds": "15",
             },
@@ -81,26 +82,25 @@ class NeoSektorRefreshSettingsTest(unittest.TestCase):
             screen_key=NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
         ).one()
         self.assertEqual(setting.interval_seconds, 15)
-        self.assertIn(b"LIVE REFRESH SETTING SAVED", response.data)
+        self.assertIn(b"Node refresh timing saved", response.data)
         status = neosektor_refresh_status(
             self.gateway,
             screen_key=NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
         )
         self.assertEqual(status["live_screen_refresh_interval_ms"], 15_000)
 
-    def test_unsupported_screen_key_is_rejected(self):
-        self._login("master")
+    def test_unregistered_screen_key_is_rejected(self):
+        self._login("grandmaster")
 
         response = self.client.post(
-            "/neosektor/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
-                "screen_key": "neorain.outbound",
+                "screen_key": "neosektor.not-a-live-screen",
                 "refresh_interval_seconds": "10",
             },
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(LiveScreenRefreshSetting.query.count(), 0)
 
     def test_driver_routing_override_preserves_window_wake_metadata(self):

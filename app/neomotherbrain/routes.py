@@ -157,6 +157,16 @@ from app.services.live_collaboration import (
     version_conflict,
 )
 from app.services.node_refresh import node_auto_refresh_status
+from app.services.live_screen_refresh import (
+    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
+    live_screen_refresh_status,
+    live_screen_refresh_values,
+    save_live_screen_refresh_override,
+)
+from app.services.live_screen_registry import (
+    grouped_live_screens,
+    registered_live_screen_keys,
+)
 from app.services.unmatched_review_alerts import (
     UNMATCHED_REVIEW_ALERT_PERMISSION,
     is_unmatched_review_alert,
@@ -268,6 +278,25 @@ PARKING_PLAN_EDIT_PERMISSION = "motherbrain.parking_plan.edit"
 PARKING_OPTIMIZER_RUN_PERMISSION = "motherbrain.parking_optimizer.run"
 PARKING_OPTIMIZER_APPLY_PERMISSION = "motherbrain.parking_optimizer.apply"
 CANCELLED_MISSION_STATUS = "cancelled"
+MOTHERBRAIN_ARRIVAL_PLANNING_REFRESH_KEY = "neomotherbrain.arrival_planning"
+MOTHERBRAIN_DEPARTURE_PLANNING_REFRESH_KEY = "neomotherbrain.departure_planning"
+MOTHERBRAIN_PARKING_PLAN_REFRESH_KEY = "neomotherbrain.parking_plan"
+
+
+def _motherbrain_live_refresh_status(gateway, operation, screen_key):
+    return live_screen_refresh_status(
+        gateway,
+        screen_key,
+        node_auto_refresh_status(gateway, operation=operation),
+    )
+
+
+def _planning_refresh_key(mission_type):
+    return (
+        MOTHERBRAIN_ARRIVAL_PLANNING_REFRESH_KEY
+        if mission_type == "arrival"
+        else MOTHERBRAIN_DEPARTURE_PLANNING_REFRESH_KEY
+    )
 
 SORT_NAME_OPTIONS = (
     ("night", "Night"),
@@ -454,10 +483,31 @@ def system_settings():
     can_edit = can_manage_system(current_user)
 
     if request.method == "POST":
+        return _handle_integration_settings(gateway, can_edit)
+    return render_template(
+        "neomotherbrain/system_settings_dashboard.html",
+        gateway=gateway,
+        can_edit_system_settings=can_edit,
+    )
+
+
+@bp.route("/motherbrain/system-settings/integrations", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="operator")
+def integration_settings():
+    gateway = get_current_gateway()
+    can_edit = can_manage_system(current_user)
+    if request.method == "POST":
+        return _handle_integration_settings(gateway, can_edit)
+    return _render_integration_settings(gateway, can_edit)
+
+
+def _handle_integration_settings(gateway, can_edit):
+
+    if request.method == "POST":
         if not can_edit:
             db.session.rollback()
             flash("System Settings changes require Grandmaster access.", "error")
-            return _render_system_settings(gateway, can_edit=False), 403
+            return _render_integration_settings(gateway, can_edit=False), 403
 
         action = str(request.form.get("action") or "").strip().lower()
         try:
@@ -510,18 +560,15 @@ def system_settings():
                 "NeoRain authority change failed; the previous mode remains active.",
                 "error",
             )
-            return _render_system_settings(gateway, can_edit=True), 400
+            return _render_integration_settings(gateway, can_edit=True), 400
         except (NeoSektorGoogleError, ValueError) as error:
             db.session.rollback()
             flash(str(error), "error")
-            return _render_system_settings(gateway, can_edit=True), 400
+            return _render_integration_settings(gateway, can_edit=True), 400
 
-        return redirect(url_for("neomotherbrain.system_settings"))
+        return redirect(url_for("neomotherbrain.integration_settings"))
 
-    return _render_system_settings(gateway, can_edit=can_edit)
-
-
-def _render_system_settings(gateway, can_edit):
+def _render_integration_settings(gateway, can_edit):
     neosektor_shared_authority = neosektor_shared_authority_status(gateway)
     return render_template(
         "neomotherbrain/system_settings.html",
@@ -535,6 +582,53 @@ def _render_system_settings(gateway, can_edit):
             "night",
         ),
         google_live_poll_health=google_motherbrain_live_poll_health(gateway),
+    )
+
+
+@bp.route("/motherbrain/system-settings/node-refresh-timings", methods=["GET", "POST"])
+@gateway_node_required("motherbrain", minimum_role="operator")
+def node_refresh_timings():
+    gateway = get_current_gateway()
+    can_edit = can_manage_system(current_user)
+    if request.method == "POST":
+        if not can_edit:
+            db.session.rollback()
+            flash("Node Refresh Timing changes require Grandmaster access.", "error")
+            return _render_node_refresh_timings(gateway, can_edit), 403
+        try:
+            result = save_live_screen_refresh_override(
+                gateway,
+                request.form.get("screen_key"),
+                request.form.get("refresh_interval_seconds"),
+                allowed_screen_keys=registered_live_screen_keys(),
+            )
+            if result.changed:
+                db.session.commit()
+                flash("Node refresh timing saved.", "success")
+            else:
+                db.session.rollback()
+                flash("No node refresh timing changes.", "info")
+        except (IntegrityError, ValueError) as error:
+            db.session.rollback()
+            flash(
+                str(error) if isinstance(error, ValueError) else "Unable to save node refresh timing.",
+                "error",
+            )
+            return _render_node_refresh_timings(gateway, can_edit), 400
+        return redirect(url_for("neomotherbrain.node_refresh_timings"))
+    return _render_node_refresh_timings(gateway, can_edit)
+
+
+def _render_node_refresh_timings(gateway, can_edit):
+    groups = grouped_live_screens()
+    values = live_screen_refresh_values(gateway, registered_live_screen_keys())
+    return render_template(
+        "neomotherbrain/node_refresh_timings.html",
+        gateway=gateway,
+        can_edit_system_settings=can_edit,
+        refresh_groups=groups,
+        refresh_values=values,
+        live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
 
 
@@ -1135,9 +1229,8 @@ def parking_plan_live_state_endpoint(operation_id):
     operation = _parking_plan_operation_or_404(gateway, operation_id)
     client_revision = str(request.args.get("revision") or "").strip()
     current_revision = parking_plan_revision(operation)
-    live_update_status = node_auto_refresh_status(
-        gateway,
-        operation=operation,
+    live_update_status = _motherbrain_live_refresh_status(
+        gateway, operation, MOTHERBRAIN_PARKING_PLAN_REFRESH_KEY
     )
     if client_revision and client_revision == current_revision:
         response = jsonify(
@@ -1563,7 +1656,9 @@ def _parking_plan_live_context(
     return {
         "parking_live_state": state,
         "live_update_status": live_update_status
-        or node_auto_refresh_status(gateway, operation=operation),
+        or _motherbrain_live_refresh_status(
+            gateway, operation, MOTHERBRAIN_PARKING_PLAN_REFRESH_KEY
+        ),
     }
 
 
@@ -2546,9 +2641,8 @@ def alp_import(operation_id, mission_type):
         arrival_spare_candidates=collections["arrival_spare_candidates"],
         parking_positions=PARKING_RAMP_GROUPS,
         standalone_spare_aircraft_type_options=STANDALONE_SPARE_AIRCRAFT_TYPE_OPTIONS,
-        live_update_status=node_auto_refresh_status(
-            gateway,
-            operation=operation,
+        live_update_status=_motherbrain_live_refresh_status(
+            gateway, operation, _planning_refresh_key(mission_type)
         ),
         planning_revision=planning_state_revision(
             operation,
@@ -2570,7 +2664,9 @@ def planning_live_state(operation_id, mission_type):
     if denied:
         return denied
 
-    refresh = node_auto_refresh_status(gateway, operation=operation)
+    refresh = _motherbrain_live_refresh_status(
+        gateway, operation, _planning_refresh_key(mission_type)
+    )
     client_revision = str(request.args.get("revision") or "").strip()
     if not client_revision:
         response = jsonify(

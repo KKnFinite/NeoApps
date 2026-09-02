@@ -4,6 +4,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import Gateway, LiveScreenRefreshSetting
+from app.services.live_screen_registry import live_screen_definition
 
 
 LIVE_SCREEN_REFRESH_ALLOWED_SECONDS = (0, 5, 10, 15, 30, 60)
@@ -33,7 +34,13 @@ class LiveScreenRefreshValue:
 
     @property
     def source_label(self):
-        return "Override" if self.source == "override" else "Render default"
+        if self.source == "override":
+            return "Override"
+        if self.source == "legacy_neoermac_override":
+            return "Legacy NeoErmac override"
+        if self.source == "unregistered":
+            return "Not registered"
+        return "Render default"
 
 
 @dataclass(frozen=True)
@@ -51,27 +58,65 @@ def live_screen_refresh_value(gateway, screen_key, *, fallback_ms=None):
     return values[screen_key]
 
 
+def live_screen_refresh_status(gateway, screen_key, base_status=None):
+    """Combine registry-backed timing with an operational-window status."""
+    value = live_screen_refresh_value(gateway, screen_key)
+    status = dict(base_status or {})
+    window_enabled = status.get("auto_refresh_enabled", True) is not False
+    status.update(
+        {
+            "auto_refresh_enabled": bool(window_enabled and value.enabled),
+            "live_screen_refresh_interval_ms": value.effective_interval_ms,
+            "configured_label": value.configured_label,
+            "effective_label": value.effective_label,
+            "source_label": value.source_label,
+        }
+    )
+    if not value.enabled:
+        status.update(
+            {
+                "reason": "disabled",
+                "message": "Live updates off",
+                "live_status_label": "Live updates off",
+            }
+        )
+    return status
+
+
 def live_screen_refresh_values(gateway, screen_keys, *, fallback_ms=None):
     normalized_keys = tuple(dict.fromkeys(_normalize_screen_key(key) for key in screen_keys))
     if not normalized_keys:
         return {}
 
+    registered_keys = tuple(key for key in normalized_keys if live_screen_definition(key))
+    query_keys = tuple(dict.fromkeys((*registered_keys, "neoermac.all")))
     overrides = {
         row.screen_key: row.interval_seconds
         for row in LiveScreenRefreshSetting.query.filter(
             LiveScreenRefreshSetting.gateway_id == gateway.id,
-            LiveScreenRefreshSetting.screen_key.in_(normalized_keys),
+            LiveScreenRefreshSetting.screen_key.in_(query_keys),
         ).all()
     }
     effective_fallback_ms = _effective_fallback_ms(fallback_ms)
-    return {
-        screen_key: _refresh_value(
+    values = {}
+    for screen_key in normalized_keys:
+        if not live_screen_definition(screen_key):
+            values[screen_key] = LiveScreenRefreshValue(
+                screen_key, None, 0, "unregistered"
+            )
+            continue
+        override = overrides.get(screen_key)
+        source = "override"
+        if override is None and screen_key.startswith("neoermac."):
+            override = overrides.get("neoermac.all")
+            source = "legacy_neoermac_override"
+        values[screen_key] = _refresh_value(
             screen_key,
-            overrides.get(screen_key),
+            override,
             effective_fallback_ms,
+            override_source=source,
         )
-        for screen_key in normalized_keys
-    }
+    return values
 
 
 def save_live_screen_refresh_override(
@@ -82,6 +127,8 @@ def save_live_screen_refresh_override(
     allowed_screen_keys=None,
 ):
     normalized_key = _normalize_screen_key(screen_key)
+    if live_screen_definition(normalized_key) is None:
+        raise ValueError("Select a registered live screen.")
     if allowed_screen_keys is not None:
         normalized_allowed = {
             _normalize_screen_key(key) for key in allowed_screen_keys
@@ -125,7 +172,7 @@ def save_live_screen_refresh_override(
     return LiveScreenRefreshMutationResult(True, setting)
 
 
-def _refresh_value(screen_key, override_seconds, fallback_ms):
+def _refresh_value(screen_key, override_seconds, fallback_ms, *, override_source="override"):
     if override_seconds is None:
         return LiveScreenRefreshValue(
             screen_key=screen_key,
@@ -137,7 +184,7 @@ def _refresh_value(screen_key, override_seconds, fallback_ms):
         screen_key=screen_key,
         override_seconds=int(override_seconds),
         effective_interval_ms=int(override_seconds) * 1000,
-        source="override",
+        source=override_source,
     )
 
 

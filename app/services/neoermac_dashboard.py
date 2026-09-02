@@ -17,7 +17,10 @@ from app.services.neoermac_building_lineup import (
     normalize_destination,
 )
 from app.services.neoermac_door_view import PULL_FIELDS
-from app.services.neoermac_live_refresh import neoermac_live_refresh_status
+from app.services.neoermac_live_refresh import (
+    NEOERMAC_UPCOMING_PULLS_REFRESH_KEY,
+    neoermac_live_refresh_status,
+)
 from app.services.operation_scope import current_operational_sort_operation
 from app.services.sort_date_operations import mission_display_timing_data
 
@@ -42,7 +45,7 @@ def neoermac_dashboard_context(
             "operation": None,
             "has_current_sort": False,
             "refresh_status": refresh_status
-            or neoermac_live_refresh_status(gateway),
+            or neoermac_live_refresh_status(gateway, NEOERMAC_UPCOMING_PULLS_REFRESH_KEY),
             "east": [],
             "west": [],
         }
@@ -108,7 +111,7 @@ def neoermac_dashboard_context(
         "operation": operation,
         "has_current_sort": True,
         "refresh_status": refresh_status
-        or neoermac_live_refresh_status(gateway),
+        or neoermac_live_refresh_status(gateway, NEOERMAC_UPCOMING_PULLS_REFRESH_KEY),
         "east": rows["east"],
         "west": rows["west"],
         "_initialization_changed": lineup_load.persistent_state_changed,
@@ -122,7 +125,7 @@ def current_upcoming_pulls_operation(gateway):
 
 def upcoming_pulls_refresh_status(gateway, *, operation=None):
     """Resolve current-board status without re-querying the operation set."""
-    return neoermac_live_refresh_status(gateway)
+    return neoermac_live_refresh_status(gateway, NEOERMAC_UPCOMING_PULLS_REFRESH_KEY)
 
 
 def upcoming_pulls_revision(gateway, *, operation=_OPERATION_UNSET):

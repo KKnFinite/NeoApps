@@ -27,13 +27,8 @@
         <a class="motherbrain-desktop-side-link{% if request.path.startswith('/motherbrain/operations/' ~ sidebar_operation.id ~ '/alp/departure') %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=sidebar_operation.id, mission_type='departure') }}" {% if request.path.startswith('/motherbrain/operations/' ~ sidebar_operation.id ~ '/alp/departure') %}aria-current="page"{% endif %}>Departure Planning</a>
         <a class="motherbrain-desktop-side-link{% if is_parking_plan_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=sidebar_operation.id) }}" {% if is_parking_plan_page %}aria-current="page"{% endif %}>Parking Plan</a>
         <a class="motherbrain-desktop-side-link{% if is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_rules', operation_id=sidebar_operation.id) }}" {% if is_parking_rules_page %}aria-current="page"{% endif %}>Parking Rules</a>
-        <a class="motherbrain-desktop-side-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix', operation_id=sidebar_operation.id) }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>Gateway Matrix</a>
         <a class="motherbrain-desktop-side-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule', operation_id=sidebar_operation.id) }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>Master Schedule</a>
-        {% if can_manage_system(current_user) %}
-        <a class="motherbrain-desktop-side-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline', operation_id=sidebar_operation.id) }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>Sort Timeline</a>
-        {% endif %}
         <a class="motherbrain-desktop-side-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
-        <a class="motherbrain-desktop-side-link{% if is_flight_api_test_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test', operation_id=sidebar_operation.id) }}" {% if is_flight_api_test_page %}aria-current="page"{% endif %}>Manage API</a>
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="motherbrain-desktop-side-link{% if is_flight_api_review_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=sidebar_operation.id) }}" {% if is_flight_api_review_page %}aria-current="page"{% endif %}>Unmatched Queue</a>
         {% endif %}
@@ -43,21 +38,12 @@
         <a class="motherbrain-desktop-side-link" href="{{ url_for('neomotherbrain.manage_sort') }}">Departure Planning</a>
         <a class="motherbrain-desktop-side-link{% if is_parking_plan_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" {% if is_parking_plan_page %}aria-current="page"{% endif %}>Parking Plan</a>
         <a class="motherbrain-desktop-side-link{% if is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_rules') }}" {% if is_parking_rules_page %}aria-current="page"{% endif %}>Parking Rules</a>
-        <a class="motherbrain-desktop-side-link{% if is_gateway_matrix_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.gateway_matrix') }}" {% if is_gateway_matrix_page %}aria-current="page"{% endif %}>Gateway Matrix</a>
         <a class="motherbrain-desktop-side-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>Master Schedule</a>
-        {% if can_manage_system(current_user) %}
-        <a class="motherbrain-desktop-side-link{% if is_sort_timeline_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.sort_timeline') }}" {% if is_sort_timeline_page %}aria-current="page"{% endif %}>Sort Timeline</a>
-        {% endif %}
         <a class="motherbrain-desktop-side-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
-        <a class="motherbrain-desktop-side-link{% if is_flight_api_test_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_test') }}" {% if is_flight_api_test_page %}aria-current="page"{% endif %}>Manage API</a>
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="motherbrain-desktop-side-link{% if is_flight_api_review_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review') }}" {% if is_flight_api_review_page %}aria-current="page"{% endif %}>Unmatched Queue</a>
         {% endif %}
         {% endif %}
 
-        {% if can_manage_system(current_user) %}
-        <a class="motherbrain-desktop-side-link{% if is_user_management_page %} is-active{% endif %}" href="{{ url_for('auth.portal_management') }}" {% if is_user_management_page %}aria-current="page"{% endif %}>Portal Management</a>
-        <a class="motherbrain-desktop-side-link{% if is_permission_management_page %} is-active{% endif %}" href="{{ url_for('auth.permission_rules') }}" {% if is_permission_management_page %}aria-current="page"{% endif %}>Permission Rules</a>
-        {% endif %}
     </nav>
 </aside>

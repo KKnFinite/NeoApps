@@ -94,7 +94,7 @@
     };
 
     controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ dashboard_context.refresh_status.live_screen_refresh_interval_ms or live_screen_refresh_interval_ms }},
+        intervalMs: {{ dashboard_context.refresh_status.live_screen_refresh_interval_ms }},
         statusElement: root.querySelector("[data-live-update-status]"),
         poll,
         continuousWhileVisible: true,

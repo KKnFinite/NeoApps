@@ -2193,7 +2193,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             b'<span class="neo-page-title motherbrain-desktop-top-title-text">SETTINGS</span>',
             response.data,
         )
-        self.assertIn(b'href="/motherbrain/system-settings"', response.data)
+        self.assertIn(b'href="/motherbrain/system-settings/integrations"', response.data)
         self.assertIn(
             b"Gateway-wide Google/Neo authority is managed in MotherBrain System Settings",
             response.data,

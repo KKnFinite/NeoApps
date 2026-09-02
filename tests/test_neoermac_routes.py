@@ -654,38 +654,40 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"data-operation-refresh-reload", response.data)
                 self.assertNotIn(b"window.NeoLiveUpdates.create", response.data)
 
-    def test_shared_neoermac_refresh_setting_controls_all_live_pages(self):
+    def test_individual_neoermac_refresh_setting_controls_only_its_live_page(self):
         self._add_operation_departure("UPS701", "BOS")
         self._login_approved_user(role="grandmaster")
+        self._grant_node_role("neoermac_grandmaster_user", "motherbrain", "grandmaster")
 
         settings = self.client.get("/neoermac/settings")
         self.assertEqual(settings.status_code, 200)
-        self.assertIn(b"Render Default", settings.data)
-        self.assertIn(b"OFF", settings.data)
+        self.assertNotIn(b"refresh_interval_seconds", settings.data)
 
         saved = self.client.post(
-            "/neoermac/settings",
-            data={"refresh_interval_seconds": "10"},
+            "/motherbrain/system-settings/node-refresh-timings",
+            data={
+                "screen_key": "neoermac.door_view",
+                "refresh_interval_seconds": "10",
+            },
             follow_redirects=True,
         )
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(
-            LiveScreenRefreshSetting.query.filter_by(screen_key="neoermac.all").one().interval_seconds,
+            LiveScreenRefreshSetting.query.filter_by(screen_key="neoermac.door_view").one().interval_seconds,
             10,
         )
-        for path in (
-            "/neoermac/upcoming-pulls",
-            "/neoermac/building-lineup",
-            "/neoermac/view-outbound",
-            "/neoermac/door-view?door=D34",
-        ):
-            with self.subTest(path=path):
-                body = self.client.get(path).get_data(as_text=True)
-                self.assertIn("intervalMs: 10000", body)
-                self.assertIn("continuousWhileVisible: true", body)
-                self.assertNotIn("KEEP LIVE / MONITOR MODE", body)
+        body = self.client.get("/neoermac/door-view?door=D34").get_data(as_text=True)
+        self.assertIn("intervalMs: 10000", body)
+        other = self.client.get("/neoermac/upcoming-pulls").get_data(as_text=True)
+        self.assertIn("intervalMs: 5000", other)
 
-        self.client.post("/neoermac/settings", data={"refresh_interval_seconds": "off"})
+        self.client.post(
+            "/motherbrain/system-settings/node-refresh-timings",
+            data={
+                "screen_key": "neoermac.door_view",
+                "refresh_interval_seconds": "off",
+            },
+        )
         state = self.client.get("/neoermac/door-view/state?door=D34").get_json()
         self.assertFalse(state["state"]["refresh"]["auto_refresh_enabled"])
 

@@ -240,7 +240,7 @@ class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
         )
 
         detail = client.get(f"/motherbrain/operations/{self.operation.id}")
-        system_settings = client.get("/motherbrain/system-settings")
+        system_settings = client.get("/motherbrain/system-settings/integrations")
         dashboard = client.get("/motherbrain")
 
         self.assertEqual(detail.status_code, 200)

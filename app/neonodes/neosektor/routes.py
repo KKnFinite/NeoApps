@@ -26,7 +26,6 @@ from app.services.neosektor_live_counts import (
     NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY,
     NEOSEKTOR_EBM_REFRESH_KEY,
     NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
-    NEOSEKTOR_REFRESH_KEYS,
     NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
     NEOSEKTOR_WBM_REFRESH_KEY,
     neosektor_refresh_status,
@@ -50,11 +49,6 @@ from app.services.neosektor_sheets_compat import (
 )
 from app.services.permission_rules import preload_permission_rules, user_can
 from app.services.memory_diagnostics import memory_diagnostics
-from app.services.live_screen_refresh import (
-    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
-    live_screen_refresh_values,
-    save_live_screen_refresh_override,
-)
 from app.services import neostaffing as staffing_service
 from app.services.uld_requests import (
     discharge_context,
@@ -700,7 +694,7 @@ def live_counts_state():
         return jsonify({"ok": False, "error": str(exc)}), 503
 
 
-@bp.route("/settings", methods=["GET", "POST"])
+@bp.route("/settings")
 @gateway_node_required("sektor")
 def settings():
     gateway = get_current_gateway()
@@ -711,33 +705,6 @@ def settings():
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosektor.index"))
-
-    if request.method == "POST":
-        if not access["can_edit"]:
-            return "Access denied.", 403
-        try:
-            if request.form.get("action") != "save_live_refresh":
-                raise ValueError("Choose a valid NeoSektor Settings action.")
-            result = save_live_screen_refresh_override(
-                gateway,
-                request.form.get("screen_key"),
-                request.form.get("refresh_interval_seconds"),
-                allowed_screen_keys=NEOSEKTOR_REFRESH_KEYS,
-            )
-            if result.changed:
-                db.session.commit()
-            else:
-                db.session.rollback()
-            flash("LIVE REFRESH SETTING SAVED.", "success")
-        except (ValueError, IntegrityError) as exc:
-            db.session.rollback()
-            flash(
-                "Unable to save NeoSektor live refresh settings."
-                if isinstance(exc, IntegrityError)
-                else str(exc),
-                "error",
-            )
-        return redirect(url_for("neosektor.settings"))
 
     return _settings_response(gateway, access)
 
@@ -1071,16 +1038,6 @@ def _settings_response(gateway, access, status_code=200):
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         integration_status=neosektor_integration_status(gateway),
-        refresh_settings=live_screen_refresh_values(gateway, NEOSEKTOR_REFRESH_KEYS),
-        refresh_rows=(
-            ("Live Counts", NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY),
-            ("Tunnel Conductor", NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY),
-            ("EBM", NEOSEKTOR_EBM_REFRESH_KEY),
-            ("WBM", NEOSEKTOR_WBM_REFRESH_KEY),
-            ("Discharge", NEOSEKTOR_DISCHARGE_REFRESH_KEY),
-            ("Driver Routing", NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY),
-        ),
-        live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
     return response, status_code
 

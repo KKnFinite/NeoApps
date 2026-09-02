@@ -3,12 +3,22 @@
 from app.services.live_screen_refresh import live_screen_refresh_value
 
 
-NEOERMAC_LIVE_REFRESH_KEY = "neoermac.all"
+NEOERMAC_LEGACY_LIVE_REFRESH_KEY = "neoermac.all"
+NEOERMAC_UPCOMING_PULLS_REFRESH_KEY = "neoermac.upcoming_pulls"
+NEOERMAC_BUILDING_LINEUP_REFRESH_KEY = "neoermac.building_lineup"
+NEOERMAC_VIEW_OUTBOUND_REFRESH_KEY = "neoermac.view_outbound"
+NEOERMAC_DOOR_VIEW_REFRESH_KEY = "neoermac.door_view"
+NEOERMAC_REFRESH_KEYS = (
+    NEOERMAC_UPCOMING_PULLS_REFRESH_KEY,
+    NEOERMAC_BUILDING_LINEUP_REFRESH_KEY,
+    NEOERMAC_VIEW_OUTBOUND_REFRESH_KEY,
+    NEOERMAC_DOOR_VIEW_REFRESH_KEY,
+)
 
 
-def neoermac_live_refresh_status(gateway):
-    """Expose the one NeoErmac setting in the existing live-refresh contract."""
-    value = live_screen_refresh_value(gateway, NEOERMAC_LIVE_REFRESH_KEY)
+def neoermac_live_refresh_status(gateway, screen_key):
+    """Expose one registered NeoErmac screen in the live-refresh contract."""
+    value = live_screen_refresh_value(gateway, screen_key)
     enabled = value.enabled
     return {
         "auto_refresh_enabled": enabled,

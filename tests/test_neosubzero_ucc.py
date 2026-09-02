@@ -561,15 +561,13 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertNotEqual(before, neosubzero_ucc_revision(self.gateway, self.operation))
         self.assertEqual(UCC_REFRESH_KEY, "neosubzero.ucc")
 
-        master = self._user("ucc_master", "master")
-        self._login(client, master)
+        grandmaster = self._user("ucc_grandmaster", "grandmaster")
+        self._login(client, grandmaster)
         settings = client.get("/neosubzero/settings")
-        self.assertIn(b"UCC", settings.data)
-        self.assertIn(b"neosubzero.ucc", settings.data)
+        self.assertNotIn(b"refresh_interval_seconds", settings.data)
         saved_refresh = client.post(
-            "/neosubzero/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_refresh",
                 "screen_key": UCC_REFRESH_KEY,
                 "refresh_interval_seconds": "10",
             },

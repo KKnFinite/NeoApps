@@ -51,11 +51,6 @@ from app.services.google_rain_sheets import (
     GoogleRainWriterError,
     write_google_rain_departure_milestone,
 )
-from app.services.live_screen_refresh import (
-    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
-    live_screen_refresh_value,
-    save_live_screen_refresh_override,
-)
 from app.services.live_collaboration import entity_version, version_conflict
 from app.services.neorain_load_planner_contacts import (
     neorain_load_planner_contact_values,
@@ -917,53 +912,36 @@ def _render_load_planner_lineup(
     ), status_code
 
 
-NEORAIN_REFRESH_SETTINGS_EDIT_PERMISSION = "neorain.refresh_settings.edit"
-
-
 @bp.route("/settings", methods=["GET", "POST"])
 @gateway_node_required("rain")
 def settings():
     page = _neorain_page("neorain.settings")
     access = permission_access(page[2], page[3])
-    can_edit_refresh_settings = user_can(NEORAIN_REFRESH_SETTINGS_EDIT_PERMISSION)
     gateway = get_current_gateway()
 
     if request.method == "POST":
         action = request.form.get("action")
-        may_edit = (
-            can_edit_refresh_settings if action == "save_live_refresh" else access["can_edit"]
-        )
-        if not access["can_view"] or not may_edit:
+        if not access["can_view"] or not access["can_edit"]:
             db.session.rollback()
             response = _render_neorain_settings(
                 gateway,
                 access,
-                can_edit_refresh_settings,
                 status_code=403,
                 message=("Access denied.", "error"),
             )
             return response
-        if action not in {"save_live_refresh", "save_ground_time_threshold"}:
+        if action != "save_ground_time_threshold":
             return _render_neorain_settings(
                 gateway,
                 access,
-                can_edit_refresh_settings,
                 status_code=400,
                 message=("Choose a valid NeoRain settings action.", "error"),
             )
         try:
-            if action == "save_live_refresh":
-                result = save_live_screen_refresh_override(
-                    gateway,
-                    request.form.get("screen_key"),
-                    request.form.get("refresh_interval_seconds"),
-                    allowed_screen_keys=(NEORAIN_OUTBOUND_REFRESH_KEY, NEORAIN_INBOUND_REFRESH_KEY),
-                )
-            else:
-                set_neorain_ground_time_threshold_minutes(
-                    gateway, request.form.get("ground_time_threshold_minutes")
-                )
-                result = type("Result", (), {"changed": True})()
+            set_neorain_ground_time_threshold_minutes(
+                gateway, request.form.get("ground_time_threshold_minutes")
+            )
+            result = type("Result", (), {"changed": True})()
         except (IntegrityError, ValueError) as exc:
             db.session.rollback()
             message = (
@@ -974,14 +952,13 @@ def settings():
             return _render_neorain_settings(
                 gateway,
                 access,
-                can_edit_refresh_settings,
                 status_code=400,
                 message=(message, "error"),
             )
         if result.changed:
             db.session.commit()
             flash(
-                "LIVE REFRESH SETTING SAVED." if action == "save_live_refresh" else "GROUND TIME THRESHOLD SAVED.",
+                "GROUND TIME THRESHOLD SAVED.",
                 "success",
             )
         else:
@@ -995,14 +972,12 @@ def settings():
     return _render_neorain_settings(
         gateway,
         access,
-        can_edit_refresh_settings,
     )
 
 
 def _render_neorain_settings(
     gateway,
     access,
-    can_edit_refresh_settings,
     *,
     status_code=200,
     message=None,
@@ -1015,14 +990,8 @@ def _render_neorain_settings(
         can_edit=access["can_edit"],
         can_view=access["can_view"],
         page_label="Settings",
-        can_edit_refresh_settings=can_edit_refresh_settings,
         can_edit_ground_time=access["can_edit"],
-        refresh_settings=[
-            live_screen_refresh_value(gateway, NEORAIN_OUTBOUND_REFRESH_KEY),
-            live_screen_refresh_value(gateway, NEORAIN_INBOUND_REFRESH_KEY),
-        ],
         ground_time_threshold_minutes=neorain_ground_time_threshold_minutes(gateway),
-        live_refresh_allowed_seconds=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
     return response, status_code
 

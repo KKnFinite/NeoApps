@@ -42,28 +42,26 @@ class NeoRainRefreshSettingsTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_settings_view_shows_outbound_value_without_edit_control(self):
-        self._login("operator")
+    def test_node_settings_no_longer_owns_refresh_controls(self):
+        self._login("master")
 
         response = self.client.get("/neorain/settings")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"LIVE AUTO-REFRESH", response.data)
-        self.assertIn(b"neorain.outbound", response.data)
-        self.assertIn(b"Render default", response.data)
-        self.assertRegex(
-            response.data,
-            rb'name="refresh_interval_seconds"[^>]*disabled',
-        )
-        self.assertNotIn(b">SAVE<", response.data)
+        self.assertNotIn(b"refresh_interval_seconds", response.data)
+        self.assertIn(b"GROUND TIME THRESHOLD", response.data)
 
-    def test_viewer_cannot_save_refresh_override(self):
+    def test_viewer_sees_central_refresh_values_but_cannot_save(self):
         self._login("operator")
 
+        page = self.client.get("/motherbrain/system-settings/node-refresh-timings")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(NEORAIN_OUTBOUND_REFRESH_KEY.encode(), page.data)
+        self.assertRegex(page.data, rb'name="refresh_interval_seconds"[^>]*disabled')
+
         response = self.client.post(
-            "/neorain/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
                 "screen_key": NEORAIN_OUTBOUND_REFRESH_KEY,
                 "refresh_interval_seconds": "10",
             },
@@ -77,13 +75,12 @@ class NeoRainRefreshSettingsTest(unittest.TestCase):
             ).one_or_none()
         )
 
-    def test_grandmaster_saves_only_allowed_outbound_override(self):
+    def test_grandmaster_saves_outbound_override_centrally(self):
         self._login("grandmaster")
 
         response = self.client.post(
-            "/neorain/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
                 "screen_key": NEORAIN_OUTBOUND_REFRESH_KEY,
                 "refresh_interval_seconds": "10",
             },
@@ -96,30 +93,28 @@ class NeoRainRefreshSettingsTest(unittest.TestCase):
             screen_key=NEORAIN_OUTBOUND_REFRESH_KEY,
         ).one()
         self.assertEqual(setting.interval_seconds, 10)
-        self.assertIn(b"LIVE REFRESH SETTING SAVED", response.data)
+        self.assertIn(b"Node refresh timing saved", response.data)
 
-    def test_non_rain_screen_key_is_rejected(self):
+    def test_unregistered_screen_key_is_rejected(self):
         self._login("grandmaster")
 
         response = self.client.post(
-            "/neorain/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
-                "screen_key": "neoscorpion.fuel_dispatch",
+                "screen_key": "neorain.not-registered",
                 "refresh_interval_seconds": "10",
             },
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn(b"select a supported live screen", response.data.lower())
+        self.assertIn(b"select a registered live screen", response.data.lower())
         self.assertEqual(LiveScreenRefreshSetting.query.count(), 0)
 
     def test_saved_override_is_consumed_by_outbound_refresh_status(self):
         self._login("grandmaster")
         self.client.post(
-            "/neorain/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
                 "screen_key": NEORAIN_OUTBOUND_REFRESH_KEY,
                 "refresh_interval_seconds": "15",
             },

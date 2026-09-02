@@ -13,7 +13,7 @@
     data-state-url="{{ url_for('neomotherbrain.parking_plan_live_state_endpoint', operation_id=operation.id) if operation else '' }}"
     data-parking-revision="{{ parking_live_state.revision if operation else '' }}"
     data-can-edit="{{ '1' if operation and can_edit_parking_plan else '0' }}"
-    data-live-interval-ms="{{ live_screen_refresh_interval_ms }}"
+    data-live-interval-ms="{{ live_update_status.live_screen_refresh_interval_ms }}"
     data-live-enabled="{{ '1' if operation and live_update_status.auto_refresh_enabled else '0' }}"
     data-live-reason="{{ live_update_status.reason if operation else 'outside_ops_window' }}"
     data-live-label="{{ live_update_status.live_status_label if operation else 'Live updates off - outside Ops window' }}"

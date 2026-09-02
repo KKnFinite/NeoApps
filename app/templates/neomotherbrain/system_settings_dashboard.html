@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}System Settings | NeoMotherBrain{% endblock %}
+{% block content %}
+<section class="panel centered-command-page system-settings-page" aria-labelledby="system-settings-title" data-system-settings-dashboard>
+    <div class="section-heading">
+        <h1 id="system-settings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">System Settings</h1>
+        <p class="muted">{{ gateway.code }} gateway-wide administration.</p>
+    </div>
+    <nav class="system-settings-dashboard" aria-label="System Settings destinations">
+        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.node_refresh_timings') }}"><strong>Node Refresh Timings</strong><span>Per-screen live update cadence.</span></a>
+        <a class="system-settings-dashboard-card" href="{{ url_for('auth.permission_rules') }}"><strong>Node Permissions</strong><span>Existing capability and role rules.</span></a>
+        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.integration_settings') }}"><strong>Integrations &amp; Migration</strong><span>Google polling and Neo authority controls.</span></a>
+        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.gateway_matrix') }}"><strong>Gateway Matrix</strong><span>Scheduled gateway sort days.</span></a>
+        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.sort_timeline') }}"><strong>Sort Timeline</strong><span>Operational and sort windows.</span></a>
+        <a class="system-settings-dashboard-card" href="{{ url_for('neomotherbrain.flight_api_test') }}"><strong>Manage API</strong><span>Flight provider review and controls.</span></a>
+        <a class="system-settings-dashboard-card" href="{{ url_for('auth.portal_management') }}"><strong>Portal Manage</strong><span>Users and portal access.</span></a>
+    </nav>
+</section>
+{% endblock %}

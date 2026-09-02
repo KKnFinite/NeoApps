@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}System Settings | NeoMotherBrain{% endblock %}
+{% block title %}Integrations &amp; Migration | NeoMotherBrain{% endblock %}
 
 {% block content %}
 <section class="panel centered-command-page system-settings-page" aria-labelledby="system-settings-title" data-system-settings>
     <div class="section-heading">
-        <h1 id="system-settings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">System Settings</h1>
-        <p class="muted">{{ gateway.code }} gateway-wide operational integration settings.</p>
+        <h1 id="system-settings-title" class="mobile-shell-duplicate-title motherbrain-body-duplicate-title">Integrations &amp; Migration</h1>
+        <p class="muted">{{ gateway.code }} gateway-wide operational integration settings. <a href="{{ url_for('neomotherbrain.system_settings') }}">Back to System Settings</a></p>
     </div>
 
     <div class="system-settings-sections">

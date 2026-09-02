@@ -29,11 +29,7 @@ from app.models import (
 )
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
-from app.services.live_screen_refresh import (
-    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
-    live_screen_refresh_value,
-    live_screen_refresh_values,
-)
+from app.services.live_screen_refresh import live_screen_refresh_value
 from app.services.neoscorpion_assets import (
     eligible_nightly_fueler_users,
     hold_active_assignments_for_truck,
@@ -564,10 +560,6 @@ def settings_context(gateway):
             ),
         ).all()
     }
-    refresh_values = live_screen_refresh_values(
-        gateway,
-        tuple(screen_key for screen_key, _label in NEOSCORPION_LIVE_REFRESH_SCREENS),
-    )
     assignment_planning = assignment_planning_settings(gateway)
     return {
         "settings": settings,
@@ -596,15 +588,6 @@ def settings_context(gateway):
             }
             for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
         ],
-        "live_refresh_settings": [
-            {
-                "screen_key": screen_key,
-                "label": label,
-                "value": refresh_values[screen_key],
-            }
-            for screen_key, label in NEOSCORPION_LIVE_REFRESH_SCREENS
-        ],
-        "live_refresh_allowed_seconds": LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     }
 
 

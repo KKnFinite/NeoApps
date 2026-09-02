@@ -70,11 +70,6 @@ from app.services.neosubzero_spray import (
 )
 from app.services.access_control import get_current_gateway
 from app.services.live_collaboration import entity_version, version_conflict
-from app.services.live_screen_refresh import (
-    LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
-    live_screen_refresh_values,
-    save_live_screen_refresh_override,
-)
 from app.services.gateway_matrix import gateway_timezone
 from app.services.permission_rules import permission_access, user_can
 
@@ -135,15 +130,6 @@ NEOSUBZERO_PAGES = (
         "neosubzero.settings.edit",
     ),
 )
-REFRESH_KEYS = (
-    PRETREAT_REFRESH_KEY,
-    OUTBOUND_REFRESH_KEY,
-    COORDINATOR_REFRESH_KEY,
-    UCC_REFRESH_KEY,
-    DEICER_REFRESH_KEY,
-)
-
-
 @bp.context_processor
 def navigation():
     return {
@@ -1039,16 +1025,7 @@ def settings():
             return "Access denied.", 403
         try:
             action = request.form.get("action")
-            if action == "save_refresh":
-                result = save_live_screen_refresh_override(
-                    gateway,
-                    request.form.get("screen_key"),
-                    request.form.get("refresh_interval_seconds"),
-                    allowed_screen_keys=REFRESH_KEYS,
-                )
-                changed = result.changed
-                message = "REFRESH SETTING SAVED."
-            elif action == "save_fluids":
+            if action == "save_fluids":
                 set_neosubzero_fluid_settings(
                     gateway,
                     request.form.get("type_i_fluid_name"),
@@ -1076,16 +1053,7 @@ def settings():
     return render_template(
         "neonodes/neosubzero/settings.html",
         can_edit=access["can_edit"],
-        refresh_settings=live_screen_refresh_values(gateway, REFRESH_KEYS),
-        refresh_rows=(
-            ("Pretreat", PRETREAT_REFRESH_KEY),
-            ("Outbound", OUTBOUND_REFRESH_KEY),
-            ("Coordinator", COORDINATOR_REFRESH_KEY),
-            ("UCC", UCC_REFRESH_KEY),
-            ("Deicer Mobile", DEICER_REFRESH_KEY),
-        ),
         fluid_settings=neosubzero_fluid_settings(gateway),
-        choices=LIVE_SCREEN_REFRESH_ALLOWED_SECONDS,
     )
 
 

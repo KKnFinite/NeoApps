@@ -194,7 +194,7 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         db.session.rollback()
         self.assertEqual(LiveScreenRefreshSetting.query.count(), 0)
 
-    def test_settings_lists_screens_and_only_grandmaster_can_edit(self):
+    def test_refresh_controls_are_central_and_only_grandmaster_can_edit(self):
         master = self._add_user("refresh_master", "master")
         grandmaster = self._add_user("refresh_grandmaster", "grandmaster")
         db.session.commit()
@@ -203,16 +203,12 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         response = self.client.get("/neoscorpion/settings")
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Live Refresh", body)
-        self.assertIn("Fuel Dispatch", body)
-        self.assertIn("Fuel Assignments", body)
-        self.assertIn("Source: Render default", body)
-        self.assertNotIn("Save Fuel Dispatch", body)
+        self.assertNotIn("refresh_interval_seconds", body)
+        self.assertIn("Fuel Settings Shell", body)
         self.assertEqual(LiveScreenRefreshSetting.query.count(), 0)
         denied = self.client.post(
-            "/neoscorpion/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
                 "screen_key": "neoscorpion.fuel_dispatch",
                 "refresh_interval_seconds": "10",
             },
@@ -222,16 +218,15 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
 
         self._login(grandmaster)
         saved = self.client.post(
-            "/neoscorpion/settings",
+            "/motherbrain/system-settings/node-refresh-timings",
             data={
-                "action": "save_live_refresh",
                 "screen_key": "neoscorpion.fuel_dispatch",
                 "refresh_interval_seconds": "10",
             },
             follow_redirects=True,
         )
         self.assertEqual(saved.status_code, 200)
-        self.assertIn(b"LIVE REFRESH SETTING SAVED", saved.data)
+        self.assertIn(b"Node refresh timing saved", saved.data)
         setting = LiveScreenRefreshSetting.query.one()
         self.assertEqual(setting.interval_seconds, 10)
 

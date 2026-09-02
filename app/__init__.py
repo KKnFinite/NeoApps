@@ -53,6 +53,7 @@ from app.services.password_policy import user_requires_password_change
 from app.services.shell_metadata import resolve_shell_metadata
 from app.services.time_display import format_local_hhmm
 from app.services.memory_diagnostics import record_process_memory_checkpoint
+from app.services.live_refresh_guard import enforce_live_refresh_request_cadence
 
 
 def create_app(config_class=Config, auto_bootstrap=False):
@@ -83,6 +84,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
     initialize_auth_rate_limit_storage(app)
+    app.before_request(enforce_live_refresh_request_cadence)
     register_pwa_assets(app)
     register_blueprints(app)
     register_template_helpers(app)
@@ -374,9 +376,6 @@ def register_template_helpers(app):
             "change_character_targets": change_character_targets,
             "current_pwa_manifest_key": current_pwa_manifest_key,
             "browser_tab_title": browser_tab_title(request),
-            "live_screen_refresh_interval_ms": app.config[
-                "LIVE_SCREEN_REFRESH_INTERVAL_MS"
-            ],
             "google_live_poll_heartbeat_client_version": (
                 google_live_poll_heartbeat_client_version
             ),

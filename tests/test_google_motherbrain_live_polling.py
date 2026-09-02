@@ -72,7 +72,7 @@ class GoogleMotherBrainLivePollingTest(unittest.TestCase):
         self.client = self.app.test_client()
         self.detail_endpoint = f"/motherbrain/operations/{self.operation.id}"
         self.toggle_endpoint = f"{self.detail_endpoint}/google-live-polling"
-        self.system_settings_endpoint = "/motherbrain/system-settings"
+        self.system_settings_endpoint = "/motherbrain/system-settings/integrations"
 
     def tearDown(self):
         db.session.remove()

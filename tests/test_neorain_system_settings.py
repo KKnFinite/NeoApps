@@ -60,7 +60,7 @@ class NeoRainSystemSettingsTest(unittest.TestCase):
 
     def test_viewer_sees_disabled_selector_and_cannot_change_mode(self):
         self._login("operator")
-        page = self.client.get("/motherbrain/system-settings")
+        page = self.client.get("/motherbrain/system-settings/integrations")
         self.assertEqual(page.status_code, 200)
         self.assertIn(b'data-neorain-mode="google_primary"', page.data)
         self.assertIn(b'name="action" value="set_neorain_mode"', page.data)

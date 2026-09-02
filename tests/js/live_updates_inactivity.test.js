@@ -106,6 +106,9 @@ const createHarness = () => {
         querySelectorAll() {
             return [];
         },
+        querySelector() {
+            return null;
+        },
         createElement(tagName) {
             return new FakeElement(tagName);
         },
@@ -305,4 +308,31 @@ test("server-disabled pages stay stopped even when monitor mode is selected", as
 
     assert.equal(polls, 0);
     assert.equal(harness.timers.size, 0);
+});
+
+test("sub-five-second intervals are clamped and refresh requests never overlap", async () => {
+    const harness = createHarness();
+    let releasePoll = null;
+    let polls = 0;
+    const controller = harness.liveUpdates.create({
+        immediate: false,
+        intervalMs: 1000,
+        poll: () => {
+            polls += 1;
+            return new Promise((resolve) => {
+                releasePoll = resolve;
+            });
+        },
+    });
+
+    controller.setServerStatus({auto_refresh_enabled: true});
+    assert.equal(harness.hasTimer(5000), true);
+    const first = controller.refreshNow({force: true});
+    const overlapping = await controller.refreshNow({force: true});
+    await settle();
+
+    assert.equal(overlapping, false);
+    assert.equal(polls, 1);
+    releasePoll();
+    assert.equal(await first, true);
 });

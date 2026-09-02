@@ -2,8 +2,6 @@ from datetime import date, datetime, time
 from pathlib import Path
 import unittest
 
-from flask import render_template_string
-
 from app import create_app
 from app.extensions import db
 from app.models import (
@@ -193,11 +191,8 @@ class LiveScreenRefreshTest(unittest.TestCase):
         self.assertEqual(status["reason"], "historical_sort")
         self.assertEqual(status["live_status_label"], "Live updates off - historical sort")
 
-    def test_shared_refresh_interval_defaults_to_5000_and_is_in_template_context(self):
+    def test_shared_refresh_interval_defaults_to_absolute_5000_floor(self):
         self.assertEqual(self.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"], 5000)
-        with self.app.test_request_context("/"):
-            rendered = render_template_string("{{ live_screen_refresh_interval_ms }}")
-        self.assertEqual(rendered, "5000")
 
     def test_operational_templates_use_shared_controller_without_local_5000_cadence(self):
         templates = (
@@ -222,7 +217,7 @@ class LiveScreenRefreshTest(unittest.TestCase):
 
         self.assertIn('document.addEventListener("visibilitychange"', source)
         self.assertIn("document.hidden", source)
-        self.assertIn("this.refreshNow();", source)
+        self.assertIn("this.refreshNow({force: true});", source)
         self.assertIn("DEFAULT_FAILURE_THRESHOLD = 3", source)
         self.assertIn("Live updates paused - reconnecting...", source)
         self.assertIn("this.failures = 0", source)

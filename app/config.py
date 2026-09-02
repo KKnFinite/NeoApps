@@ -20,6 +20,13 @@ def env_flag(name, default=False):
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def resolve_database_uri():
     database_url = os.getenv("DATABASE_URL")
     if database_url:
@@ -41,8 +48,12 @@ class Config:
         "images/icons/neogateway/inapp/neogateway-inapp-128.png",
     )
     LIVE_SCREEN_REFRESH_INTERVAL_MS = max(
-        1000,
-        int(os.getenv("LIVE_SCREEN_REFRESH_INTERVAL_MS", "5000")),
+        5000,
+        env_int("LIVE_SCREEN_REFRESH_INTERVAL_MS", 5000),
+    )
+    LIVE_REFRESH_SERVER_MIN_INTERVAL_SECONDS = max(
+        5,
+        env_int("LIVE_REFRESH_SERVER_MIN_INTERVAL_SECONDS", 5),
     )
     # Disabled by default. When explicitly enabled, workers emit rate-limited
     # RSS/high-water observations around selected high-value operations.
