@@ -13,30 +13,31 @@
 
     function initializeSpearSplash(scope) {
         const splash = scope.querySelector("[data-spear-splash]");
-        const skip = splash?.querySelector("[data-spear-splash-skip]");
+        const close = splash?.querySelector("[data-spear-splash-close]");
         const storageKey = "neoapps.neoscorpion.spear-splash.v1";
-        if (!splash || !skip) return;
+        if (!splash || !close) return;
         try {
             if (window.localStorage.getItem(storageKey)) return;
-            window.localStorage.setItem(storageKey, "seen");
         } catch (_error) {
-            return;
+            // Storage is optional: still show and permit a per-visit close.
         }
 
         let dismissed = false;
-        let dismissTimer = null;
         const dismiss = () => {
             if (dismissed) return;
             dismissed = true;
-            if (dismissTimer !== null) window.clearTimeout(dismissTimer);
+            try {
+                window.localStorage.setItem(storageKey, "seen");
+            } catch (_error) {
+                // A blocked storage API must never prevent manual dismissal.
+            }
             splash.classList.remove("is-visible");
             splash.classList.add("is-dismissing");
             window.setTimeout(() => { splash.hidden = true; }, 300);
         };
         splash.hidden = false;
         window.requestAnimationFrame(() => splash.classList.add("is-visible"));
-        skip.addEventListener("click", dismiss);
-        dismissTimer = window.setTimeout(dismiss, 4700);
+        close.addEventListener("click", dismiss);
     }
 
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);

@@ -355,7 +355,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertIn("<details class=\"neoscorpion-spear-why\"", template)
         self.assertIn("WHY SPEAR?", template)
 
-    def test_dispatch_splash_uses_versioned_once_per_browser_hook(self):
+    def test_dispatch_splash_requires_explicit_close_before_marking_seen(self):
         root = Path(__file__).resolve().parents[1]
         template = (root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html").read_text(encoding="utf-8")
         script = (root / "app/static/js/neoscorpion_fuel_dispatch_live.js").read_text(encoding="utf-8")
@@ -366,7 +366,12 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertTrue((root / "app/static/images/neoscorpion/spear-promo.png").is_file())
         self.assertIn("neoapps.neoscorpion.spear-splash.v1", script)
         self.assertIn("window.localStorage.getItem", script)
-        self.assertIn("data-spear-splash-skip", script)
+        self.assertIn("data-spear-splash-close", template)
+        self.assertIn("CLOSE", template)
+        self.assertIn("data-spear-splash-close", script)
+        self.assertIn('window.localStorage.setItem(storageKey, "seen")', script)
+        self.assertNotIn("dismissTimer", script)
+        self.assertNotIn("4700", script)
 
     def test_schema_contains_settings_and_execution_audit(self):
         inspector = inspect(db.engine)

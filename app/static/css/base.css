@@ -25675,7 +25675,7 @@ a.neoscorpion-spear-indicator:focus-visible {
     filter: drop-shadow(0 18px 44px rgba(0, 0, 0, .75));
 }
 
-.neoscorpion-spear-splash-skip {
+.neoscorpion-spear-splash-close {
     position: fixed;
     top: max(16px, env(safe-area-inset-top));
     right: max(16px, env(safe-area-inset-right));
