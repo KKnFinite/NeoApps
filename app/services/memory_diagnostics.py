@@ -119,8 +119,7 @@ def _should_sample(operation, app):
 
 
 def _log_sample(app, operation, *, before, after, elapsed_seconds, error_name):
-    logger = app.logger if app is not None else None
-    if logger is None:
+    if app is None:
         return
 
     before_rss = before.get("rss_bytes")
@@ -130,20 +129,19 @@ def _log_sample(app, operation, *, before, after, elapsed_seconds, error_name):
         if isinstance(before_rss, int) and isinstance(after_rss, int)
         else None
     )
-    logger.info(
-        "NeoApps memory diagnostic operation=%s pid=%s python=%s "
-        "rss_before_bytes=%s rss_after_bytes=%s rss_delta_bytes=%s "
-        "high_water_bytes=%s elapsed_seconds=%s error=%s",
-        operation,
-        after.get("pid"),
-        after.get("python"),
-        before_rss,
-        after_rss,
-        delta,
-        after.get("high_water_bytes"),
-        round(elapsed_seconds, 3) if elapsed_seconds is not None else None,
-        error_name,
+    _emit_diagnostic_line(
+        "INFO NeoApps memory diagnostic "
+        f"operation={operation} pid={after.get('pid')} python={after.get('python')} "
+        f"rss_before_bytes={before_rss} rss_after_bytes={after_rss} "
+        f"rss_delta_bytes={delta} high_water_bytes={after.get('high_water_bytes')} "
+        f"elapsed_seconds={round(elapsed_seconds, 3) if elapsed_seconds is not None else None} "
+        f"error={error_name}"
     )
+
+
+def _emit_diagnostic_line(message):
+    """Write opt-in diagnostics directly to the process stream Render captures."""
+    print(message, file=sys.stderr, flush=True)
 
 
 def _linux_rss_bytes():

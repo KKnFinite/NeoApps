@@ -35,12 +35,14 @@ class MemoryDiagnosticsTest(unittest.TestCase):
     def test_diagnostics_are_disabled_by_default(self):
         with patch(
             "app.services.memory_diagnostics.process_memory_snapshot"
-        ) as snapshot, patch.object(self.app.logger, "info") as log_info:
+        ) as snapshot, patch(
+            "app.services.memory_diagnostics._emit_diagnostic_line"
+        ) as emit:
             with observe_process_memory("test_operation"):
                 pass
 
         snapshot.assert_not_called()
-        log_info.assert_not_called()
+        emit.assert_not_called()
 
     def test_enabled_operation_logs_rss_delta_and_high_water(self):
         self.app.config["NEOAPPS_MEMORY_DIAGNOSTICS_ENABLED"] = True
@@ -61,16 +63,18 @@ class MemoryDiagnosticsTest(unittest.TestCase):
         with patch(
             "app.services.memory_diagnostics.process_memory_snapshot",
             side_effect=snapshots,
-        ) as snapshot, patch.object(self.app.logger, "info") as log_info:
+        ) as snapshot, patch(
+            "app.services.memory_diagnostics._emit_diagnostic_line"
+        ) as emit:
             with observe_process_memory("test_operation"):
                 pass
 
         self.assertEqual(snapshot.call_count, 2)
-        message, *args = log_info.call_args.args
-        self.assertIn("operation=%s", message)
-        self.assertEqual(args[0], "test_operation")
-        self.assertEqual(args[5], 40)
-        self.assertEqual(args[6], 240)
+        message = emit.call_args.args[0]
+        self.assertIn("INFO NeoApps memory diagnostic", message)
+        self.assertIn("operation=test_operation", message)
+        self.assertIn("rss_delta_bytes=40", message)
+        self.assertIn("high_water_bytes=240", message)
 
     def test_operation_sampling_is_rate_limited_per_worker(self):
         self.app.config.update(
@@ -86,14 +90,16 @@ class MemoryDiagnosticsTest(unittest.TestCase):
         with patch(
             "app.services.memory_diagnostics.process_memory_snapshot",
             return_value=snapshot,
-        ) as snapshots, patch.object(self.app.logger, "info") as log_info:
+        ) as snapshots, patch(
+            "app.services.memory_diagnostics._emit_diagnostic_line"
+        ) as emit:
             with observe_process_memory("test_operation"):
                 pass
             with observe_process_memory("test_operation"):
                 pass
 
         self.assertEqual(snapshots.call_count, 2)
-        self.assertEqual(log_info.call_count, 1)
+        self.assertEqual(emit.call_count, 1)
 
     def test_checkpoint_uses_the_same_opt_in_gate(self):
         self.app.config["NEOAPPS_MEMORY_DIAGNOSTICS_ENABLED"] = True
@@ -106,10 +112,12 @@ class MemoryDiagnosticsTest(unittest.TestCase):
         with patch(
             "app.services.memory_diagnostics.process_memory_snapshot",
             return_value=snapshot,
-        ) as snapshots, patch.object(self.app.logger, "info") as log_info:
+        ) as snapshots, patch(
+            "app.services.memory_diagnostics._emit_diagnostic_line"
+        ) as emit:
             self.assertTrue(
                 record_process_memory_checkpoint("test_checkpoint", app=self.app)
             )
 
         snapshots.assert_called_once()
-        self.assertEqual(log_info.call_count, 1)
+        self.assertEqual(emit.call_count, 1)
