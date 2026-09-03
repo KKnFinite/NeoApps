@@ -1483,6 +1483,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-tunnel-route-override="second"', response.data)
         self.assertIn(b">1ST WAVE<", response.data)
         self.assertIn(b">2ND WAVE<", response.data)
+        self.assertIn(b'type="range"', response.data)
+        self.assertNotIn(b'type="radio"', response.data)
         self.assertIn(b'data-tunnel-route-override-input="first"', response.data)
         self.assertIn(b'data-tunnel-route-override-input="second"', response.data)
         self.assertIn(b"Unload Settings", response.data)

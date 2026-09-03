@@ -151,25 +151,28 @@
         <section class="tunnel-route-overrides" aria-label="Driver routing overrides">
             {% for wave_key in ["first", "second"] %}
             {% set route = state.routing.routes[wave_key] %}
-            <fieldset class="tunnel-route-override" data-tunnel-route-override="{{ wave_key }}">
-                <legend>{{ route.wave_label }}</legend>
-                <div class="tunnel-route-override-options" role="radiogroup" aria-label="{{ route.wave_label }} Driver Routing override">
-                    {% for value, label in [("east", "EAST"), ("auto", "AUTO"), ("west", "WEST")] %}
-                    <label>
-                        <input
-                            type="radio"
-                            name="{{ wave_key }}_route_override"
-                            value="{{ value }}"
-                            data-tunnel-route-override-input="{{ wave_key }}"
-                            data-neosektor-edit-key="routing:{{ wave_key }}_override"
-                            {% if route.override == value %}checked{% endif %}
-                            {% if not can_edit %}disabled{% endif %}
-                        >
-                        <span>{{ label }}</span>
-                    </label>
-                    {% endfor %}
+            {% set override_position = {"east": 0, "auto": 1, "west": 2}[route.override] %}
+            <section class="tunnel-route-override" data-tunnel-route-override="{{ wave_key }}" data-route-position="{{ override_position }}">
+                <h2>{{ route.wave_label }}</h2>
+                <div class="tunnel-route-slider-shell">
+                    <div class="tunnel-route-slider-labels" aria-hidden="true">
+                        <span>EAST</span>
+                        <span>AUTO</span>
+                        <span>WEST</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="1"
+                        value="{{ override_position }}"
+                        data-tunnel-route-override-input="{{ wave_key }}"
+                        data-neosektor-edit-key="routing:{{ wave_key }}_override"
+                        aria-label="{{ route.wave_label }} Driver Routing override: East, Auto, or West"
+                        {% if not can_edit %}disabled{% endif %}
+                    >
                 </div>
-            </fieldset>
+            </section>
             {% endfor %}
         </section>
         <section class="tunnel-panel tunnel-settings-panel" aria-label="Left to unload settings">
@@ -285,6 +288,8 @@
     const offsetInput = root.querySelector("[data-tunnel-offset-input]");
     const settingInputs = Array.from(root.querySelectorAll("[data-tunnel-setting]"));
     const routeOverrideInputs = Array.from(root.querySelectorAll("[data-tunnel-route-override-input]"));
+    const routeOverridePositions = { east: "0", auto: "1", west: "2" };
+    const routeOverrideValues = ["east", "auto", "west"];
     const ballmatSaveTimers = {};
     const waveSaveTimers = {};
     const pendingEdits = new Map();
@@ -418,7 +423,11 @@
                 .filter((input) => input.dataset.tunnelRouteOverrideInput === waveKey)
                 .forEach((input) => {
                     if (!hasPending(input)) {
-                        input.checked = input.value === override;
+                        input.value = routeOverridePositions[override] || routeOverridePositions.auto;
+                        input.closest("[data-tunnel-route-override]")?.setAttribute(
+                            "data-route-position",
+                            input.value,
+                        );
                     }
                 });
         });
@@ -587,9 +596,8 @@
             payload[input.dataset.tunnelSetting] = readClampedNumber(input);
         });
         routeOverrideInputs.forEach((input) => {
-            if (input.checked) {
-                payload[`${input.dataset.tunnelRouteOverrideInput}_override`] = input.value;
-            }
+            payload[`${input.dataset.tunnelRouteOverrideInput}_override`] =
+                routeOverrideValues[Number.parseInt(input.value, 10)] || "auto";
         });
         return payload;
     };
@@ -785,6 +793,10 @@
         }
 
         if (event.target.matches("[data-tunnel-route-override-input]") && !event.target.disabled) {
+            event.target.closest("[data-tunnel-route-override]")?.setAttribute(
+                "data-route-position",
+                event.target.value,
+            );
             markInputPending(event.target);
             saveSettings();
         }
