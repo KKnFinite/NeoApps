@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 import re
 
 from flask import current_app
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -1807,9 +1807,6 @@ def create_initial_person_assignments(person, units):
             raise ValueError("Hourly employees may have one initial Work Area assignment.")
         return [assign_work_area(person, units[0])]
 
-    linked_user = linked_user_for_person(person)
-    if not linked_user:
-        raise ValueError("Management assignments require a matching NeoApps user account.")
     validated = []
     for unit in units:
         level = default_leadership_level_for(person, unit)
@@ -2994,25 +2991,16 @@ def management_candidates_for_unit(unit):
     if not unit:
         return []
     candidates = []
-    linked_people = (
-        db.session.query(StaffingPerson, User)
-        .join(
-            User,
-            and_(
-                User.employee_id.is_not(None),
-                func.lower(func.trim(User.employee_id))
-                == func.lower(func.trim(StaffingPerson.employee_id)),
-            ),
-        )
+    management_people = (
+        StaffingPerson.query
         .filter(
             StaffingPerson.active.is_(True),
             StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS),
-            User.is_active.is_(True),
         )
         .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.employee_id)
         .all()
     )
-    for person, linked_user in linked_people:
+    for person in management_people:
         try:
             leadership_level = default_leadership_level_for(person, unit)
         except ValueError:
@@ -3021,7 +3009,6 @@ def management_candidates_for_unit(unit):
             {
                 "person": person,
                 "leadership_level": leadership_level,
-                "linked_user": linked_user,
             }
         )
     return candidates
@@ -5254,8 +5241,6 @@ def _validate_work_assignment(person, work_area):
 
 
 def _validate_leadership_assignment(person, unit, leadership_level):
-    if not linked_user_for_person(person):
-        raise ValueError("Management assignments require a matching NeoApps user account.")
     _validate_leadership_assignment_scope(person, unit, leadership_level)
 
 

@@ -2236,16 +2236,6 @@ def delete_management_assignment(assignment_id):
         )
         return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
     try:
-        mutation = management_review_service.assignment_remove_mutation(assignment.id)
-        review = management_review_service.prepare_management_relationship_review(
-            mutation
-        )
-        if review["required"]:
-            return _render_management_relationship_review(
-                review,
-                redirect_endpoint,
-                redirect_values,
-            )
         staffing_service.delete_leadership_assignment(assignment)
         db.session.commit()
     except (ValueError, IntegrityError) as error:

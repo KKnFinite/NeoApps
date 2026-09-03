@@ -468,9 +468,12 @@ def sync_local_sqlite_schema(app):
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _create_google_mission_link_table()
     _create_google_live_poll_state_table()
-    rebuilt_constraint_table = _sync_sort_date_tail_state_status_constraints_sqlite(
-        inspector,
-        table_names,
+    rebuilt_constraint_table = _sync_staffing_leadership_level_constraint_sqlite(
+        inspector, table_names
+    )
+    rebuilt_constraint_table = (
+        _sync_sort_date_tail_state_status_constraints_sqlite(inspector, table_names)
+        or rebuilt_constraint_table
     )
     rebuilt_constraint_table = (
         _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names)
@@ -537,6 +540,7 @@ def sync_database_schema(app):
             existing_columns.add(column_name)
 
     _sync_staffing_people_employee_status_postgres(table_names)
+    _sync_staffing_leadership_level_constraint_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
     _create_google_mission_link_table()
     _create_google_live_poll_state_table()
@@ -1085,6 +1089,181 @@ def _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names):
     db.session.execute(text(f"DROP TABLE {legacy_table}"))
     db.session.execute(text("PRAGMA legacy_alter_table=OFF"))
     return True
+
+
+def _sync_staffing_leadership_level_constraint_sqlite(inspector, table_names):
+    """Replace the original role-like levels with canonical unit-scope levels."""
+    table_name = "staffing_leadership_assignments"
+    legacy_table = "staffing_leadership_assignments_level_legacy"
+    if table_name not in table_names:
+        return False
+    create_sql = db.session.execute(
+        text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'staffing_leadership_assignments'"
+        )
+    ).scalar() or ""
+    canonical_levels = ("work_area", "department", "operation", "sort")
+    if all(f"'{level}'" in create_sql for level in canonical_levels):
+        return False
+
+    invalid_count = db.session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM staffing_leadership_assignments AS assignment
+            LEFT JOIN staffing_units AS unit ON unit.id = assignment.unit_id
+            WHERE assignment.leadership_level NOT IN (
+                'work_area', 'department', 'operation', 'sort',
+                'work_area_lead', 'department_lead', 'operation_lead', 'sort_lead',
+                'specialist_support'
+            )
+               OR (
+                    assignment.leadership_level IN (
+                        'work_area_lead', 'department_lead', 'operation_lead',
+                        'sort_lead', 'specialist_support'
+                    )
+                    AND unit.unit_type NOT IN (
+                        'work_area', 'department', 'operation', 'sort'
+                    )
+               )
+            """
+        )
+    ).scalar()
+    if invalid_count:
+        raise RuntimeError(
+            "NeoStaffing leadership assignments contain unsupported legacy levels."
+        )
+
+    all_tables = set(inspector.get_table_names())
+    if legacy_table in all_tables:
+        db.session.execute(text(f"DROP TABLE {legacy_table}"))
+    from app.models import StaffingLeadershipAssignment
+
+    db.session.execute(text("PRAGMA legacy_alter_table=ON"))
+    db.session.execute(text(f"ALTER TABLE {table_name} RENAME TO {legacy_table}"))
+    _drop_sqlite_indexes_for_table(legacy_table)
+    StaffingLeadershipAssignment.__table__.create(
+        bind=db.session.connection(),
+        checkfirst=False,
+    )
+    legacy_columns = {
+        row[1]
+        for row in db.session.execute(text(f"PRAGMA table_info({legacy_table})")).all()
+    }
+    target_columns = []
+    select_expressions = []
+    for column in StaffingLeadershipAssignment.__table__.columns:
+        if column.name not in legacy_columns:
+            continue
+        target_columns.append(column.name)
+        if column.name == "leadership_level":
+            select_expressions.append(
+                "CASE WHEN leadership_level IN ("
+                "'work_area_lead', 'department_lead', 'operation_lead', "
+                "'sort_lead', 'specialist_support') THEN "
+                "(SELECT unit_type FROM staffing_units WHERE id = legacy.unit_id) "
+                "ELSE leadership_level END"
+            )
+        else:
+            select_expressions.append(_quote_sqlite_identifier(column.name))
+    quoted_columns = ", ".join(
+        _quote_sqlite_identifier(column) for column in target_columns
+    )
+    db.session.execute(
+        text(
+            f"INSERT INTO {table_name} ({quoted_columns}) "
+            f"SELECT {', '.join(select_expressions)} FROM {legacy_table} AS legacy"
+        )
+    )
+    db.session.execute(text(f"DROP TABLE {legacy_table}"))
+    db.session.execute(text("PRAGMA legacy_alter_table=OFF"))
+    return True
+
+
+def _sync_staffing_leadership_level_constraint_postgres(table_names):
+    """Migrate the legacy production CHECK to canonical hierarchy scopes."""
+    table_name = "staffing_leadership_assignments"
+    constraint_name = "ck_staffing_leadership_assignments_level"
+    if table_name not in table_names:
+        return
+    definition = db.session.execute(
+        text(
+            """
+            SELECT pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conname = :constraint_name
+              AND conrelid = CAST(:table_name AS regclass)
+            """
+        ),
+        {"constraint_name": constraint_name, "table_name": table_name},
+    ).scalar()
+    normalized = str(definition or "").casefold()
+    canonical_levels = ("work_area", "department", "operation", "sort")
+    if all(f"'{level}'" in normalized for level in canonical_levels) and not any(
+        legacy in normalized
+        for legacy in ("work_area_lead", "department_lead", "operation_lead", "sort_lead")
+    ):
+        return
+
+    invalid_count = db.session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM staffing_leadership_assignments AS assignment
+            LEFT JOIN staffing_units AS unit ON unit.id = assignment.unit_id
+            WHERE assignment.leadership_level NOT IN (
+                'work_area', 'department', 'operation', 'sort',
+                'work_area_lead', 'department_lead', 'operation_lead', 'sort_lead',
+                'specialist_support'
+            )
+               OR (
+                    assignment.leadership_level IN (
+                        'work_area_lead', 'department_lead', 'operation_lead',
+                        'sort_lead', 'specialist_support'
+                    )
+                    AND unit.unit_type NOT IN (
+                        'work_area', 'department', 'operation', 'sort'
+                    )
+               )
+            """
+        )
+    ).scalar()
+    if invalid_count:
+        raise RuntimeError(
+            "NeoStaffing leadership assignments contain unsupported legacy levels."
+        )
+
+    db.session.execute(
+        text(f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {constraint_name}")
+    )
+    db.session.execute(
+        text(
+            """
+            UPDATE staffing_leadership_assignments AS assignment
+            SET leadership_level = unit.unit_type
+            FROM staffing_units AS unit
+            WHERE unit.id = assignment.unit_id
+              AND assignment.leadership_level IN (
+                  'work_area_lead', 'department_lead', 'operation_lead', 'sort_lead',
+                  'specialist_support'
+              )
+            """
+        )
+    )
+    db.session.execute(
+        text(
+            f"""
+            ALTER TABLE {table_name}
+            ADD CONSTRAINT {constraint_name}
+            CHECK (leadership_level IN ('work_area', 'department', 'operation', 'sort'))
+            NOT VALID
+            """
+        )
+    )
+    db.session.execute(
+        text(f"ALTER TABLE {table_name} VALIDATE CONSTRAINT {constraint_name}")
+    )
 
 
 def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):

@@ -300,8 +300,12 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already exists"):
             staffing_service.create_leadership_assignment(part_time_supervisor, work_area)
 
-        with self.assertRaisesRegex(ValueError, "matching NeoApps user account"):
-            staffing_service.create_leadership_assignment(unlinked_manager, operation)
+        self.assertEqual(
+            staffing_service.create_leadership_assignment(
+                unlinked_manager, operation
+            ).leadership_level,
+            "operation",
+        )
 
         with self.assertRaisesRegex(ValueError, "cannot lead"):
             staffing_service.create_leadership_assignment(manager, work_area)
