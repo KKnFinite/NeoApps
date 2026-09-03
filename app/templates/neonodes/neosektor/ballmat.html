@@ -453,7 +453,12 @@
 
     const queueSave = () => {
         window.clearTimeout(saveTimer);
-        saveTimer = window.setTimeout(saveSelectedSide, 300);
+        saveTimer = window.setTimeout(saveSelectedSide, 1000);
+    };
+
+    const flushSave = () => {
+        window.clearTimeout(saveTimer);
+        saveSelectedSide();
     };
 
     root.addEventListener("click", (event) => {
@@ -503,6 +508,29 @@
         if (target.matches("[data-wave-status], [data-open-bays], [data-bay-status]")) {
             markInputPending(target);
             queueSave();
+        }
+    });
+
+    root.addEventListener("keydown", (event) => {
+        if (
+            event.key === "Enter"
+            && !event.target.disabled
+            && event.target.closest(`[data-ballmat-side="${selectedSide}"]`)
+            && event.target.matches("[data-wave-count], [data-open-bays]")
+        ) {
+            event.preventDefault();
+            flushSave();
+        }
+    });
+
+    root.addEventListener("focusout", (event) => {
+        if (
+            !event.target.disabled
+            && hasPending(event.target)
+            && event.target.closest(`[data-ballmat-side="${selectedSide}"]`)
+            && event.target.matches("[data-wave-count], [data-open-bays]")
+        ) {
+            flushSave();
         }
     });
 

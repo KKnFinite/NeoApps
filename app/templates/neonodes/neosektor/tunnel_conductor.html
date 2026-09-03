@@ -604,7 +604,16 @@
             return;
         }
         window.clearTimeout(ballmatSaveTimers[side]);
-        ballmatSaveTimers[side] = window.setTimeout(() => saveBallmatSide(panel), 250);
+        ballmatSaveTimers[side] = window.setTimeout(() => saveBallmatSide(panel), 1000);
+    };
+
+    const flushBallmatSave = (panel) => {
+        const side = panel?.dataset.tunnelSide;
+        if (!side) {
+            return;
+        }
+        window.clearTimeout(ballmatSaveTimers[side]);
+        saveBallmatSide(panel);
     };
 
     const collectSettingsPayload = () => {
@@ -691,7 +700,12 @@
             return;
         }
         window.clearTimeout(waveSaveTimers[waveKey]);
-        waveSaveTimers[waveKey] = window.setTimeout(() => saveWaveValue(waveKey, input), 250);
+        waveSaveTimers[waveKey] = window.setTimeout(() => saveWaveValue(waveKey, input), 1000);
+    };
+
+    const flushWaveSave = (waveKey, input) => {
+        window.clearTimeout(waveSaveTimers[waveKey]);
+        saveWaveValue(waveKey, input);
     };
 
     const applyWaveDelta = (wave, delta) => {
@@ -705,7 +719,7 @@
         );
         input.value = nextValue;
         markInputPending(input);
-        saveWaveValue(wave, input);
+        queueWaveSave(wave, input);
     };
 
     const saveOffset = async () => {
@@ -738,7 +752,12 @@
 
     const queueOffsetSave = () => {
         window.clearTimeout(offsetSaveTimer);
-        offsetSaveTimer = window.setTimeout(saveOffset, 250);
+        offsetSaveTimer = window.setTimeout(saveOffset, 1000);
+    };
+
+    const flushOffsetSave = () => {
+        window.clearTimeout(offsetSaveTimer);
+        saveOffset();
     };
 
     root.addEventListener("click", (event) => {
@@ -781,7 +800,7 @@
             20,
         );
         markInputPending(offsetInput);
-        saveOffset();
+        queueOffsetSave();
     });
 
     root.addEventListener("change", (event) => {
@@ -851,6 +870,35 @@
         if (event.target.matches("[data-tunnel-offset-input]") && !event.target.disabled) {
             markInputPending(event.target);
             queueOffsetSave();
+        }
+    });
+
+    root.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.target.disabled) {
+            return;
+        }
+        if (event.target.matches("[data-tunnel-wave-input]")) {
+            event.preventDefault();
+            flushWaveSave(event.target.dataset.tunnelWaveInput, event.target);
+        } else if (event.target.matches("[data-wave-count], [data-open-bays]")) {
+            event.preventDefault();
+            flushBallmatSave(event.target.closest("[data-tunnel-side]"));
+        } else if (event.target.matches("[data-tunnel-offset-input]")) {
+            event.preventDefault();
+            flushOffsetSave();
+        }
+    });
+
+    root.addEventListener("focusout", (event) => {
+        if (event.target.disabled || !hasPending(event.target)) {
+            return;
+        }
+        if (event.target.matches("[data-tunnel-wave-input]")) {
+            flushWaveSave(event.target.dataset.tunnelWaveInput, event.target);
+        } else if (event.target.matches("[data-wave-count], [data-open-bays]")) {
+            flushBallmatSave(event.target.closest("[data-tunnel-side]"));
+        } else if (event.target.matches("[data-tunnel-offset-input]")) {
+            flushOffsetSave();
         }
     });
 

@@ -2180,7 +2180,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertIn("queueOffsetSave", tunnel_template)
         self.assertIn("queueWaveSave", tunnel_template)
+        self.assertGreaterEqual(tunnel_template.count("1000);"), 3)
+        self.assertIn("flushWaveSave", tunnel_template)
+        self.assertIn("flushBallmatSave", tunnel_template)
+        self.assertIn("flushOffsetSave", tunnel_template)
         self.assertIn("hasPending(control)", ballmat_template)
+        self.assertIn("window.setTimeout(saveSelectedSide, 1000);", ballmat_template)
+        self.assertIn("const flushSave = () =>", ballmat_template)
 
     def test_count_mutations_advance_revision_before_stale_polls_can_apply(self):
         """A pre-mutation poll must not be able to replace its saved count."""
