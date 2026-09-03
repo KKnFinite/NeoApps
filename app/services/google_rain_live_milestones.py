@@ -39,6 +39,12 @@ _DEPARTURE_STATUS_RANK = {
 }
 _MILESTONE_SPECS = (
     (
+        "elmac",
+        "elmac_completed_at_utc",
+        "elmac_completed_source",
+        None,
+    ),
+    (
         "ramp_load_complete",
         "ramp_load_completed_at_utc",
         "ramp_load_completed_source",
@@ -129,8 +135,6 @@ def apply_google_rain_departure_milestones(
 def _apply_row(operation, mission, row, *, authority_handoff=None):
     changed_fields = []
     warnings = []
-    if authority_handoff is None and _relinquish_legacy_google_rain_elmac(mission):
-        changed_fields.extend(("elmac_completed_at_utc", "elmac_completed_source"))
     replace_neorain_owned = authority_handoff == NEO_TO_GOOGLE_AUTHORITY_HANDOFF
     for row_key, timestamp_attr, source_attr, target_status in _MILESTONE_SPECS:
         raw_value = row[row_key]
@@ -298,14 +302,6 @@ def _rain_handoff_owned_source(source, *, include_neorain=False):
     return source == GOOGLE_RAIN_SOURCE or (include_neorain and source == "neorain")
 
 
-def _relinquish_legacy_google_rain_elmac(mission):
-    if _normalized_source(mission.elmac_completed_source) != GOOGLE_RAIN_SOURCE:
-        return False
-    mission.elmac_completed_at_utc = None
-    mission.elmac_completed_source = "unknown"
-    return True
-
-
 def _missing_no_return_prerequisites(mission):
     required = (
         ("Ramp Load Complete", mission.ramp_load_completed_at_utc),
@@ -420,6 +416,7 @@ def _normalize_row(supplied_row):
             _first_value(supplied_row, "destination", "DEST", "C") or ""
         ).strip().upper(),
         "std": _first_supplied(supplied_row, "std", "STD", "E"),
+        "elmac": _first_supplied(supplied_row, "elmac", "ELMAC", "eLMAC", "L"),
         "ramp_load_complete": _first_supplied(
             supplied_row, "ramp_load_complete", "r_lc", "R-LC", "M"
         ),
@@ -451,6 +448,7 @@ def _first_supplied(row, *keys):
 
 def _field_label(row_key):
     return {
+        "elmac": "Rain eLMAC",
         "ramp_load_complete": "Rain Ramp Load Complete",
         "crew_load_complete": "Rain C-LC",
         "block": "Rain Official Block-Out",

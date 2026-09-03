@@ -29,6 +29,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "Outbound!A3:A50": [["UPS9992"], ["UPS7831"]],
                 "Outbound!C3:C50": [["SPARE"], ["SDF"]],
                 "Outbound!E3:E50": [[""], ["1:15"]],
+                "Outbound!L3:L50": [[""], ["2:20"]],
                 "Outbound!M3:M50": [[""], ["2:22"]],
                 "Outbound!N3:N50": [[""], ["2:24"]],
                 "Outbound!O3:O50": [[""], ["2:29"]],
@@ -64,14 +65,14 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "flight_number": "UPS7831",
                 "destination": "SDF",
                 "std": "1:15",
+                "elmac": "2:20",
                 "ramp_load_complete": "2:22",
                 "crew_load_complete": "2:24",
                 "block": "2:29",
                 "no_return": "TRUE",
             },
         )
-        self.assertNotIn("Outbound!L3:L50", spreadsheet.batch_calls[0][0])
-        self.assertNotIn("elmac", rows[1])
+        self.assertIn("Outbound!L3:L50", spreadsheet.batch_calls[0][0])
         self.assertNotIn("tail", rows[1])
 
     def test_reader_source_has_no_google_write_calls(self):
@@ -93,6 +94,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                 "Outbound!A3:A50": [[], [], []],
                 "Outbound!C3:C50": [[], [], []],
                 "Outbound!E3:E50": [[], [], []],
+                "Outbound!L3:L50": [[], [], []],
                 "Outbound!M3:M50": [[], [], []],
                 "Outbound!N3:N50": [[], [], []],
                 "Outbound!O3:O50": [[], [], ["03:10"]],
@@ -114,6 +116,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                     "flight_number": "",
                     "destination": "",
                     "std": "",
+                    "elmac": "",
                     "ramp_load_complete": "",
                     "crew_load_complete": "",
                     "block": "",
@@ -125,6 +128,7 @@ class GoogleRainSheetsTest(unittest.TestCase):
                     "flight_number": "",
                     "destination": "",
                     "std": "",
+                    "elmac": "",
                     "ramp_load_complete": "",
                     "crew_load_complete": "",
                     "block": "03:10",

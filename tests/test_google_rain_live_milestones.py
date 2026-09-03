@@ -186,17 +186,14 @@ class GoogleRainLiveMilestonesTest(unittest.TestCase):
         self.assertIsNone(first.crew_load_completed_at_utc)
         self.assertIsNone(second.crew_load_completed_at_utc)
 
-    def test_legacy_google_rain_elmac_is_relinquished_without_touching_other_sources(self):
+    def test_google_rain_elmac_populates_canonical_mission(self):
         mission = self._mission("UPS0910", "LAX")
-        mission.elmac_completed_at_utc = datetime(2026, 8, 11, 4, 55)
-        mission.elmac_completed_source = GOOGLE_RAIN_SOURCE
-        db.session.commit()
 
-        self._apply(self._row("UPS0910", ramp_load_complete="2:22"))
+        self._apply(self._row("UPS0910", elmac="2:20"))
 
-        self.assertIsNone(mission.elmac_completed_at_utc)
-        self.assertEqual(mission.elmac_completed_source, "unknown")
-        self.assertEqual(mission.departure_status, "ramp_load_complete")
+        self.assertEqual(mission.elmac_completed_at_utc, datetime(2026, 8, 11, 7, 20))
+        self.assertEqual(mission.elmac_completed_source, GOOGLE_RAIN_SOURCE)
+        self.assertEqual(mission.departure_status, "scheduled")
 
     def test_ramp_and_crew_can_advance_without_earlier_milestones(self):
         ramp = self._mission("UPS0910", "LAX")

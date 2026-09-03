@@ -181,19 +181,18 @@ class GoogleRainMilestoneWriterTest(unittest.TestCase):
         self.assertEqual(result["sheet_row"], 4)
         self.assertEqual(spreadsheet.worksheet_object.updates, [("N4", "02:37")])
 
-    def test_unsupported_elmac_field_is_rejected_without_google_io(self):
+    def test_elmac_writes_to_column_l(self):
         spreadsheet = _FakeSpreadsheet(self._identity_values())
-        with self.assertRaisesRegex(GoogleRainWriterError, "valid NeoRain milestone"):
-            write_google_rain_departure_milestone(
-                self.mission,
-                "elmac",
-                datetime(2026, 6, 19, 7, 37),
-                operation=self.operation,
-                config=_writer_config(),
-                client_factory=lambda _credentials: _FakeClient(spreadsheet),
-            )
-        self.assertEqual(spreadsheet.batch_calls, [])
-        self.assertEqual(spreadsheet.worksheet_object.updates, [])
+        result = write_google_rain_departure_milestone(
+            self.mission,
+            "elmac",
+            datetime(2026, 6, 19, 7, 37),
+            operation=self.operation,
+            config=_writer_config(),
+            client_factory=lambda _credentials: _FakeClient(spreadsheet),
+        )
+        self.assertEqual(result["cell"], "L3")
+        self.assertEqual(spreadsheet.worksheet_object.updates, [("L3", "02:37")])
 
     @staticmethod
     def _identity_values(

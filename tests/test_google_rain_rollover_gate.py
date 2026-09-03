@@ -97,6 +97,15 @@ class GoogleRainRolloverGateTest(unittest.TestCase):
         self.assertEqual(cleared["rows"][0]["ramp_load_complete"], "")
         self.assertEqual(repopulated["rows"][0]["ramp_load_complete"], "1:47")
 
+    def test_elmac_clear_then_repopulate_releases_rollover_fence(self):
+        self._gate(self._row(elmac="1:40"))
+
+        cleared = self._gate(self._row(elmac=""))
+        repopulated = self._gate(self._row(elmac="1:42"))
+
+        self.assertEqual(cleared["rows"][0]["elmac"], "")
+        self.assertEqual(repopulated["rows"][0]["elmac"], "1:42")
+
     def test_equivalent_timestamp_format_does_not_false_release(self):
         self._gate(self._row(ramp_load_complete="8/11 1:45"))
 
