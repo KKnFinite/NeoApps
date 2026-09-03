@@ -1110,6 +1110,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
             ".blueprint-neosektor .driver-bay-priority {",
             1,
         )[1].split("}", 1)[0]
+        driver_priority_layout_block = css.split(
+            "body.blueprint-neosektor.neosektor-driver-page .driver-bay-priority {",
+            1,
+        )[1].split("}", 1)[0]
         shaft_block = css.split(
             ".blueprint-neosektor .driver-arrow::before {",
             1,
@@ -1151,8 +1155,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("scaleX(-1)", css)
         self.assertIn("font-size: clamp(0.68rem, min(2.1vw, 1.7svh), 1.05rem);", css)
         self.assertIn("min-height: clamp(144px, 21svh, 236px);", bay_priority_block)
+        self.assertIn("width: min(82vw, 1080px);", driver_priority_layout_block)
+        self.assertIn("margin-inline: auto;", driver_priority_layout_block)
+        self.assertIn("justify-content: center;", driver_priority_layout_block)
+        self.assertIn("min-height: clamp(184px, 26svh, 295px);", driver_priority_layout_block)
         self.assertIn(
             "font-size: clamp(2.85rem, min(8.4vw, 7.8svh), 4.95rem);",
+            css,
+        )
+        self.assertIn(
+            "font-size: clamp(4.5rem, min(13vw, 12svh), 7.8rem);",
             css,
         )
         self.assertIn("font-size: 0.92rem;", css)
