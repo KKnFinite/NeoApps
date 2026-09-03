@@ -1063,7 +1063,7 @@ def _neosektor_write_bundle(gateway, *, include_routing=False):
         settings.google_mirror_sync_needed
         or settings.google_mirror_last_error
     )
-    return bundle, bundle.operational_cell_values(), warning_pending
+    return bundle, bundle.mirror_operational_cell_values(), warning_pending
 
 
 def _commit_neosektor_update_and_mirror(
@@ -1073,7 +1073,7 @@ def _commit_neosektor_update_and_mirror(
 ):
     """Commit Neo first, then mirror only Mode 2's changed cell values."""
     after_values = (
-        bundle.operational_cell_values()
+        bundle.mirror_operational_cell_values()
         if before_values is not None
         else None
     )

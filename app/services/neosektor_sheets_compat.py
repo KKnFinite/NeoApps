@@ -62,6 +62,9 @@ SHEET_CELL_ORDER = (
     "C6",
     "C8",
 )
+# These cells are Neon-owned display outputs. Keep them outside the legacy
+# Google input contract so Google can never become the LTU source.
+MIRROR_CELL_ORDER = (*SHEET_CELL_ORDER, "E2", "E3")
 COUNT_CELL_MAXIMUMS = {
     "B2": 99,
     "C2": 99,
@@ -661,7 +664,9 @@ def _canonical_neosektor_compat_values(gateway):
     from app.services.neosektor_live_counts import canonical_neosektor_compat_values
 
     values = canonical_neosektor_compat_values(gateway)
-    return normalize_operational_cell_values(values)
+    return normalize_operational_cell_values(
+        {cell: values[cell] for cell in SHEET_CELL_ORDER}
+    )
 
 
 def _reconciliation_preview(authority, standalone_values, canonical_values):
@@ -893,7 +898,7 @@ def mirror_neosektor_operational_values(
 
     updates = {
         cell: after_values[cell]
-        for cell in SHEET_CELL_ORDER
+        for cell in MIRROR_CELL_ORDER
         if force or before_values.get(cell) != after_values.get(cell)
     }
     if not updates:
@@ -1021,7 +1026,7 @@ def _write_google_operational_values(gateway, updates):
         raise NeoSektorGoogleError("NeoSektor Google Sheets credentials are missing.")
     try:
         worksheet = _get_worksheet()
-        for cell in SHEET_CELL_ORDER:
+        for cell in MIRROR_CELL_ORDER:
             if cell in updates:
                 worksheet.update_acell(cell, updates[cell])
     except Exception as error:
@@ -1381,7 +1386,7 @@ def _google_primary_down_timer_minutes(settings):
 def _sheet_values_from_state(state):
     sides = (state or {}).get("sides") or {}
     waves = (state or {}).get("waves") or []
-    return {
+    values = {
         "B2": _side_wave_count(sides, "east", "first"),
         "C2": _side_wave_count(sides, "west", "first"),
         "D2": _wave_planned_count(waves, "1ST WAVE"),
@@ -1396,6 +1401,13 @@ def _sheet_values_from_state(state):
         "C6": _bay_status(sides, "Bay 4"),
         "C8": _bay_status(sides, "Bay 5"),
     }
+    values.update(
+        {
+            "E2": _wave_left_to_unload_output(waves, "1ST WAVE"),
+            "E3": _wave_left_to_unload_output(waves, "2ND WAVE"),
+        }
+    )
+    return values
 
 
 def _side_wave_count(sides, side_key, wave_key):
@@ -1409,6 +1421,14 @@ def _wave_planned_count(waves, wave_name):
     for wave in waves:
         if wave.get("name") == wave_name:
             return _safe_int(wave.get("planned"))
+    return 0
+
+
+def _wave_left_to_unload_output(waves, wave_name):
+    for wave in waves:
+        if wave.get("name") == wave_name:
+            value = wave.get("left_to_unload", wave.get("left", 0))
+            return 0 if str(value or "").strip().upper() == "DOWN" else value
     return 0
 
 

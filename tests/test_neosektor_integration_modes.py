@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import event
@@ -12,6 +13,7 @@ from app.models import (
     NeoSektorBayStatus,
     NeoSektorOpenBayState,
     NeoSektorOperationalSetting,
+    NeoSektorWaveState,
     User,
 )
 from app.services.access_control import (
@@ -19,6 +21,7 @@ from app.services.access_control import (
     ensure_default_gateway_and_nodes,
 )
 from app.services.neosektor_live_counts import (
+    NeoSektorOperationalStateBundle,
     apply_standalone_compat_values,
     canonical_neosektor_compat_values,
     driver_routing_state_payload,
@@ -37,6 +40,7 @@ from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
     NeoSektorRecoveryError,
     SHEET_CELL_ORDER,
+    MIRROR_CELL_ORDER,
     STANDALONE_PRIMARY_AUTHORITY,
     NeoSektorSharedAuthorityError,
     clear_neosektor_google_cache,
@@ -413,7 +417,11 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             )
             authority_after = read_neosektor_shared_authority(self.gateway, force=True)
 
-        self.assertEqual(canonical_neosektor_compat_values(self.gateway), standalone_values)
+        canonical_values = canonical_neosektor_compat_values(self.gateway)
+        self.assertEqual(
+            {cell: canonical_values[cell] for cell in SHEET_CELL_ORDER},
+            standalone_values,
+        )
         self.assertEqual(result["changed"], 2)
         self.assertEqual(authority_after["authority"], STANDALONE_PRIMARY_AUTHORITY)
         self.assertEqual(authority_after["generation"], 8)
@@ -1149,6 +1157,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(edit.status_code, 200)
         self.assertEqual(worksheet.batch_reads, [])
         self.assertIn(("B2", 11), worksheet.updates)
+        self.assertIn(("E2", 75), worksheet.updates)
         self.assertEqual(
             NeoSektorBallmatWaveCount.query.filter_by(
                 side="EAST", wave_name="1ST WAVE"
@@ -1207,9 +1216,58 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
 
         self.assertTrue(neosektor_google_mirror_writes_enabled(self.gateway))
         self.assertTrue(NeoSektorOperationalSetting.query.one().google_mirror_writes_enabled)
-        self.assertEqual(set(cell for cell, _value in worksheet.updates), set(SHEET_CELL_ORDER))
+        self.assertEqual(
+            set(cell for cell, _value in worksheet.updates),
+            set(MIRROR_CELL_ORDER),
+        )
         self.assertIn(("B2", 12), worksheet.updates)
         self.assertIn(("D3", 9), worksheet.updates)
+        self.assertIn(("E2", 76), worksheet.updates)
+        self.assertIn(("E3", 17), worksheet.updates)
+
+    def test_ltu_google_mirror_cells_are_output_only_and_down_is_zero(self):
+        self.assertNotIn("E2", SHEET_CELL_ORDER)
+        self.assertNotIn("E3", SHEET_CELL_ORDER)
+        self.assertTrue({"E2", "E3"}.issubset(MIRROR_CELL_ORDER))
+
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(
+            self.gateway,
+            _complete_sheet_values(B2=0, C2=0, D2=0),
+        )
+        first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
+        first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
+        db.session.commit()
+
+        bundle = NeoSektorOperationalStateBundle.load(
+            self.gateway,
+            initialize=False,
+        )
+        state = bundle.ballmat_state_payload()
+        self.assertEqual(state["waves"][0]["left_to_unload"], "DOWN")
+        self.assertEqual(bundle.mirror_operational_cell_values()["E2"], 0)
+
+    def test_second_wave_ltu_changes_mirror_to_e3(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values())
+        db.session.commit()
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        with (
+            patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False),
+            patch(
+                "app.services.neosektor_sheets_compat._get_worksheet",
+                return_value=worksheet,
+            ),
+        ):
+            self._enable_mirror_writes(worksheet)
+            response = self.client.post(
+                "/neosektor/tunnel-conductor/wave",
+                json={"wave": "second", "value": 15},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(worksheet.updates, [("D3", 15), ("E3", 23)])
 
     def test_failed_initial_mirror_enablement_remains_off(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
@@ -1469,7 +1527,7 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(metrics["commits"], 1)
         self.assertEqual(
             worksheet.updates,
-            [("B2", 11), ("B4", 3), ("B6", "Moderate")],
+            [("B2", 11), ("B4", 3), ("B6", "Moderate"), ("E2", 74)],
         )
         self.assertEqual(order[0], ("commit", None))
         self.assertTrue(all(kind == "google" for kind, _cell in order[1:]))

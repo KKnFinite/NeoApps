@@ -290,6 +290,13 @@ class NeoSektorOperationalStateBundle:
             "C8": bays["Bay 5"],
         }
 
+    def mirror_operational_cell_values(self):
+        """Return Google mirror values, including canonical LTU display output."""
+        values = self.operational_cell_values()
+        waves = self.ballmat_state_payload()["waves"]
+        values.update(_google_mirror_left_to_unload_values(waves))
+        return values
+
     def ballmat_state_payload(self):
         if self.integration_mode == "google_primary":
             (
@@ -939,11 +946,10 @@ def canonical_neosektor_compat_values(
         _sort_state,
         wave_counts,
         waves,
-        _ballmats,
+        ballmats,
         open_bays,
         bay_statuses,
     ) = _read_only_ballmat_components(gateway, sort_date, sort_name)
-
     wave_count_rows = {
         (row.side, row.wave_name): max(row.count or 0, 0)
         for row in wave_counts
@@ -954,7 +960,7 @@ def canonical_neosektor_compat_values(
     }
     open_bay_rows = {row.side: max(row.open_count or 0, 0) for row in open_bays}
     bay_rows = {row.bay_name: _status(row.status) for row in bay_statuses}
-    return {
+    values = {
         "B2": wave_count_rows[("EAST", "1ST WAVE")],
         "C2": wave_count_rows[("WEST", "1ST WAVE")],
         "D2": wave_rows["1ST WAVE"],
@@ -969,6 +975,16 @@ def canonical_neosektor_compat_values(
         "C6": bay_rows["Bay 4"],
         "C8": bay_rows["Bay 5"],
     }
+    sides = _side_state_views(wave_counts, ballmats, open_bays, bay_statuses)
+    wave_views = _wave_views(
+        waves,
+        sides,
+        _operational_settings_for_state(gateway, initialize=False),
+        timer_rows=waves,
+        persist_timer=False,
+    )
+    values.update(_google_mirror_left_to_unload_values(wave_views))
+    return values
 
 
 def adjust_tunnel_wave_arrivals(
@@ -1449,6 +1465,29 @@ def _wave_view(row, left_to_unload=None):
         "left": left,
         "left_to_unload": left,
         "status": _status(row.status),
+    }
+
+
+def _wave_left_to_unload(waves, wave_name):
+    for wave in waves:
+        if wave.get("name") == wave_name:
+            return wave.get("left_to_unload", wave.get("left", 0))
+    return 0
+
+
+def _google_mirror_left_to_unload_value(value):
+    """Mirror the already-calculated LTU display value; DOWN is numeric zero."""
+    return 0 if str(value or "").strip().upper() == "DOWN" else value
+
+
+def _google_mirror_left_to_unload_values(waves):
+    return {
+        "E2": _google_mirror_left_to_unload_value(
+            _wave_left_to_unload(waves, "1ST WAVE")
+        ),
+        "E3": _google_mirror_left_to_unload_value(
+            _wave_left_to_unload(waves, "2ND WAVE")
+        ),
     }
 
 
