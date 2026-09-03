@@ -25491,6 +25491,22 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     color: #9ccce3;
 }
 
+.neoscorpion-spear-readiness {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 10px;
+    margin: -2px 0 8px;
+    color: #9ccce3;
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .055em;
+}
+
+.neoscorpion-spear-readiness strong {
+    color: #d9edf7;
+}
+
 .neoscorpion-spear-fleet-status.is-late {
     border-color: #c54d58;
     background: #261116;
@@ -25702,6 +25718,59 @@ a.neoscorpion-spear-indicator:focus-visible {
 .neoscorpion-spear-risk.is-at-risk,
 .neoscorpion-spear-risk.is-unplanned {
     color: #e5b962;
+}
+
+.neoscorpion-spear-risk.is-waiting,
+.neoscorpion-spear-readiness-reasons {
+    color: #9ccce3;
+}
+
+.neoscorpion-spear-readiness-reasons {
+    display: block;
+    margin-top: 1px;
+    font-size: .48rem;
+    line-height: 1.25;
+}
+
+.neoscorpion-spear-why {
+    margin-top: 4px;
+    max-width: 280px;
+    color: #a8c4d2;
+    font-size: .54rem;
+    line-height: 1.35;
+}
+
+.neoscorpion-spear-why summary {
+    width: fit-content;
+    color: #7acaa1;
+    cursor: pointer;
+    font-weight: 900;
+    letter-spacing: .06em;
+}
+
+.neoscorpion-spear-why > div {
+    display: grid;
+    gap: 3px;
+    margin-top: 4px;
+    border-left: 2px solid #3b735c;
+    background: #0b1a22;
+    padding: 5px 6px;
+}
+
+.neoscorpion-spear-why strong {
+    color: #e0f1f7;
+}
+
+.neoscorpion-spear-why ol {
+    display: grid;
+    gap: 2px;
+    margin: 2px 0 0;
+    padding-left: 16px;
+}
+
+.neoscorpion-spear-hard-notes {
+    color: #e5b962;
+    font-size: .5rem;
 }
 
 .neoscorpion-spear-risk.is-late {

@@ -139,6 +139,37 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(plan.covered_count, 0)
         self.assertEqual(plan.at_risk_count, 0)
         self.assertEqual(plan.status_text, "SPEAR: 1 WAITING FOR DATA")
+        self.assertEqual(
+            plan.readiness_by_mission_id[100],
+            ("required_fuel", "inbound_fuel", "estimated_gallons"),
+        )
+
+    def test_temporary_resource_shortage_is_evaluable_not_waiting_for_data(self):
+        plan = _plan([_row()], trucks=(_truck(status="unavailable_oos"),))
+
+        self.assertEqual(plan.waiting_for_data_count, 0)
+        self.assertEqual(plan.unplanned_count, 1)
+        self.assertEqual(plan.readiness_by_mission_id[100], ())
+
+    def test_assignment_explanation_uses_planned_values_and_ranked_alternatives(self):
+        plan = _plan([_row()], trucks=(_truck(10), _truck(20)))
+        explanation = plan.steps[0].explanation
+
+        self.assertEqual(explanation["kind"], "assignment")
+        self.assertEqual(explanation["safe_completion_target"], "21:40")
+        self.assertEqual(explanation["truck_gallons_before"], 2000)
+        self.assertEqual(explanation["truck_gallons_after"], 1500)
+        self.assertEqual(len(explanation["alternatives"]), 2)
+        self.assertIn("Selected", explanation["alternatives"][0]["reason"])
+
+    def test_top_off_explanation_identifies_reserve_protection(self):
+        plan = _plan([_row(demand=100)], trucks=(_truck(current=550, capacity=2000),))
+        explanation = plan.steps[0].explanation
+
+        self.assertEqual(explanation["kind"], "top_off")
+        self.assertEqual(explanation["current_gallons"], 550)
+        self.assertEqual(explanation["reserve_gallons"], 500)
+        self.assertIn("Reserve", explanation["reason"])
 
     def test_learning_payload_is_versioned_deterministic_and_has_no_persistence(self):
         step = _plan([_row()]).steps[0]
@@ -302,6 +333,15 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertIn("LEARNING OFF", template)
         self.assertIn("SPEAR Learning Capture is not enabled yet.", template)
         self.assertIn("LEARNING VAULT NOT CONFIGURED", settings_template)
+
+    def test_dispatch_renders_compact_readiness_and_collapsed_why_hook(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html").read_text(encoding="utf-8")
+
+        self.assertIn("SPEAR DATA READINESS", template)
+        self.assertIn("WAITING FOR DATA", template)
+        self.assertIn("<details class=\"neoscorpion-spear-why\"", template)
+        self.assertIn("WHY SPEAR?", template)
 
     def test_dispatch_splash_uses_versioned_once_per_browser_hook(self):
         root = Path(__file__).resolve().parents[1]

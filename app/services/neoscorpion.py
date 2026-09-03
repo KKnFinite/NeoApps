@@ -40,6 +40,7 @@ from app.services.neoscorpion_assets import (
 from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
 from app.services.neoscorpion_spear import (
     SPEAR_HARD_CONSTRAINTS,
+    SPEAR_READINESS_REASON_LABELS,
     build_spear_plan,
     effective_spear_settings,
     priority_rows,
@@ -4218,7 +4219,11 @@ def _fuel_rows(
                 ),
                 "parking_position": parking.get(tail_number, "-") if tail_number else "-",
                 "required_fuel_display": format_entered_thousands(mission.planned_fuel_load),
+                "required_fuel_lbs": mission.planned_fuel_load,
                 "inbound_fuel_display": format_entered_thousands(
+                    tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
+                ),
+                "inbound_fuel_lbs": (
                     tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
                 ),
                 "fob_display": format_display_thousands(
@@ -4343,6 +4348,13 @@ def _attach_spear_plan(rows, truck_visuals, plan):
         row["spear_risk"] = plan.risks_by_mission_id.get(mission_id)
         row["spear_waiting_for_data"] = plan.waiting_for_data_by_mission_id.get(
             mission_id
+        )
+        row["spear_readiness_reasons"] = tuple(
+            {
+                "code": reason,
+                "label": SPEAR_READINESS_REASON_LABELS[reason],
+            }
+            for reason in plan.readiness_by_mission_id.get(mission_id, ())
         )
         row["spear_problem"] = (
             plan.unavailable_by_mission_id.get(mission_id)
