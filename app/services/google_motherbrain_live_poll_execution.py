@@ -32,6 +32,7 @@ from app.services.google_motherbrain_sheets import read_google_motherbrain_live_
 from app.services.google_rain_live_milestones import (
     apply_google_rain_departure_milestones,
 )
+from app.services.google_rain_rollover_gate import gate_google_rain_rollover_rows
 from app.services.google_rain_sheets import read_google_rain_outbound_milestones
 from app.services.google_rain_integration_mode import (
     GOOGLE_PRIMARY,
@@ -218,7 +219,8 @@ def _run_google_rain_best_effort(
     applier = applier or apply_google_rain_departure_milestones
     try:
         rows = reader()
-        application = applier(operation, rows=rows, now=now)
+        rollover = gate_google_rain_rollover_rows(operation, rows=rows, now=now)
+        application = applier(operation, rows=rollover["rows"], now=now)
         db.session.commit()
     except Exception as error:
         db.session.rollback()
@@ -234,6 +236,9 @@ def _run_google_rain_best_effort(
         "mode": mode,
         "applied_count": application.get("applied_count", 0),
         "skipped_count": application.get("skipped_count", 0),
+        "rollover_status": rollover["status"],
+        "rollover_baseline_count": rollover["baseline_count"],
+        "rollover_released_count": rollover["released_count"],
     }
 
 

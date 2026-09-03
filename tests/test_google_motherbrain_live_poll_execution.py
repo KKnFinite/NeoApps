@@ -40,6 +40,7 @@ from app.services.google_rain_integration_mode import (
     NEO_PRIMARY_GOOGLE_MIRROR,
     set_rain_integration_mode,
 )
+from app.services.google_rain_rollover_gate import gate_google_rain_rollover_rows
 from app.services.operation_lifecycle import ensure_operational_sort_operations
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -312,6 +313,22 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         )
         db.session.add(mission)
         db.session.commit()
+        stale_row = {
+            "sheet_row": 4,
+            "flight_number": "UPS0910",
+            "destination": "LAX",
+            "std": "2:24",
+            "ramp_load_complete": "2:20",
+            "crew_load_complete": "2:21",
+            "block": "2:22",
+            "no_return": "FALSE",
+        }
+        gate_google_rain_rollover_rows(
+            operation,
+            rows=(stale_row,),
+            now=self.NOW,
+        )
+        db.session.commit()
 
         result = execute_google_motherbrain_live_poll(
             self.gateway,
@@ -338,6 +355,53 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(result["rain_applied_count"], 1)
         self.assertEqual(mission.departure_status, "departed")
         self.assertEqual(mission.actual_block_out_source, "google_rain")
+
+    def test_first_rain_observation_is_only_a_new_sort_baseline(self):
+        self._enable()
+        operation = self._ensure_operation()
+        mission = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code="RFD",
+            sort_name="night",
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            mission_source="master",
+            flight_number="UPS0910",
+            origin="RFD",
+            destination="LAX",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 6, 19, 2, 24),
+            departure_status="scheduled",
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        result = execute_google_motherbrain_live_poll(
+            self.gateway,
+            now=self.NOW,
+            reader=Mock(return_value={"inbound_rows": [], "outbound_rows": []}),
+            rain_reader=Mock(
+                return_value=[
+                    {
+                        "sheet_row": 4,
+                        "flight_number": "UPS0910",
+                        "destination": "LAX",
+                        "std": "2:24",
+                        "ramp_load_complete": "2:22",
+                        "crew_load_complete": "2:24",
+                        "block": "2:29",
+                        "no_return": "TRUE",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(result["rain_status"], "success")
+        self.assertEqual(result["rain_applied_count"], 0)
+        self.assertEqual(mission.departure_status, "scheduled")
+        self.assertIsNone(mission.ramp_load_completed_at_utc)
+        self.assertIsNone(mission.crew_load_completed_at_utc)
+        self.assertIsNone(mission.actual_block_out_datetime_utc)
 
     def test_rain_read_failure_does_not_break_successful_motherbrain_poll(self):
         self._enable()
@@ -892,13 +956,17 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         rain_reader = Mock()
         rain_applier = Mock()
 
-        result = execute_google_motherbrain_live_poll(
-            self.gateway,
-            now=self.NOW,
-            reader=primary_reader,
-            rain_reader=rain_reader,
-            rain_applier=rain_applier,
-        )
+        with patch(
+            "app.services.google_motherbrain_live_poll_execution."
+            "gate_google_rain_rollover_rows"
+        ) as rollover_gate:
+            result = execute_google_motherbrain_live_poll(
+                self.gateway,
+                now=self.NOW,
+                reader=primary_reader,
+                rain_reader=rain_reader,
+                rain_applier=rain_applier,
+            )
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["rain_status"], "skipped_neo_authoritative")
@@ -906,6 +974,7 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         primary_reader.assert_called_once_with()
         rain_reader.assert_not_called()
         rain_applier.assert_not_called()
+        rollover_gate.assert_not_called()
 
     def _state(self, operation):
         return MotherBrainGoogleLivePollState.query.filter_by(

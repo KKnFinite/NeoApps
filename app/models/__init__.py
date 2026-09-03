@@ -33,6 +33,7 @@ from app.models.neorain_operational_setting import NeoRainOperationalSetting
 from app.models.neorain_load_planner_contact import NeoRainLoadPlannerContact
 from app.models.neorain_crew_admin_assignment import NeoRainCrewAdminAssignment
 from app.models.neorain_delay_info import NeoRainDelayInfo
+from app.models.neorain_google_rollover_state import NeoRainGoogleRolloverState
 from app.models.neosubzero_pretreat_state import NeoSubZeroPretreatState
 from app.models.neosubzero_departure_deice_event import NeoSubZeroDepartureDeiceEvent
 from app.models.neosubzero_setting import NeoSubZeroSetting
@@ -147,6 +148,7 @@ __all__ = [
     "NeoRainLoadPlannerContact",
     "NeoRainCrewAdminAssignment",
     "NeoRainDelayInfo",
+    "NeoRainGoogleRolloverState",
     "NeoSubZeroPretreatState",
     "NeoSubZeroDepartureDeiceEvent",
     "NeoSubZeroSetting",
