@@ -75,11 +75,15 @@ def create_app(config_class=Config, auto_bootstrap=False):
     db.init_app(app)
     login_manager.init_app(app)
 
-    # PostgreSQL schema/compatibility work is intentionally excluded from the
-    # Gunicorn import path.  The deployment bootstrap command owns that work;
-    # executing every targeted ensure in each web worker can wait on dozens of
-    # independent advisory locks before Render observes a bound $PORT.
+    # Broad PostgreSQL schema work remains in deployment bootstrap.  This
+    # narrowly bounded compatibility ensure repairs the Door Pull column
+    # required before mission-aware views can serve a request.
     sync_existing_local_schema(app)
+    from app.services.neoermac_door_pull_schema import (
+        ensure_neoermac_door_pull_legacy_defaults,
+    )
+
+    ensure_neoermac_door_pull_legacy_defaults(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

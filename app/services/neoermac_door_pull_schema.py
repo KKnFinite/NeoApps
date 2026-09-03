@@ -12,10 +12,11 @@ LEGACY_DOOR_PULL_BOOLEAN_COLUMNS = (
     "no_first_mix_pull",
     "no_second_mix_pull",
 )
+MISSION_AWARE_DOOR_PULL_COLUMN = "sort_date_mission_id"
 
 
 def ensure_neoermac_door_pull_legacy_defaults(app):
-    """Give retained legacy NOT NULL booleans safe insert defaults in PostgreSQL."""
+    """Repair the narrow PostgreSQL Door Pull compatibility surface at startup."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 
@@ -50,7 +51,10 @@ def ensure_neoermac_door_pull_legacy_defaults(app):
 
 
 def _legacy_default_repair_sql(table_name):
-    statements = []
+    statements = [
+        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+        f"{MISSION_AWARE_DOOR_PULL_COLUMN} INTEGER;"
+    ]
     for column_name in LEGACY_DOOR_PULL_BOOLEAN_COLUMNS:
         statements.append(
             f"""

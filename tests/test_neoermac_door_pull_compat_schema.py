@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from app import create_app
 from app.services.neoermac_door_pull_schema import (
     LEGACY_DOOR_PULL_BOOLEAN_COLUMNS,
+    MISSION_AWARE_DOOR_PULL_COLUMN,
     NEOERMAC_DOOR_PULL_SCHEMA_LOCK_KEY,
     ensure_neoermac_door_pull_legacy_defaults,
 )
@@ -51,6 +52,10 @@ class NeoErmacDoorPullCompatibilitySchemaTest(unittest.TestCase):
             connection.execute.call_args_list[1].args[1]["lock_key"],
             NEOERMAC_DOOR_PULL_SCHEMA_LOCK_KEY,
         )
+        self.assertIn(
+            f"ADD COLUMN IF NOT EXISTS {MISSION_AWARE_DOOR_PULL_COLUMN} INTEGER",
+            statements,
+        )
         for column_name in LEGACY_DOOR_PULL_BOOLEAN_COLUMNS:
             self.assertIn(
                 f"ALTER COLUMN {column_name} SET DEFAULT FALSE",
@@ -72,7 +77,10 @@ class NeoErmacDoorPullCompatibilitySchemaTest(unittest.TestCase):
         connection.assert_not_called()
 
     def test_factory_invokes_the_targeted_compatibility_ensure(self):
-        with patch("app.ensure_neoermac_door_pull_legacy_defaults") as ensure:
+        with patch(
+            "app.services.neoermac_door_pull_schema."
+            "ensure_neoermac_door_pull_legacy_defaults"
+        ) as ensure:
             app = create_app(self.config)
 
         ensure.assert_called_once_with(app)
