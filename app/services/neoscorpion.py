@@ -43,6 +43,7 @@ from app.services.neoscorpion_spear import (
     build_spear_plan,
     effective_spear_settings,
     priority_rows,
+    spear_dispatch_status,
 )
 from app.services.neoscorpion_dispatch_planning import (
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
@@ -357,6 +358,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "truck_visuals": [],
             "spear_plan": None,
             "spear_settings": spear_settings,
+            "spear_indicator": spear_dispatch_status(None, spear_settings),
             "fuel_dispatch_refresh": refresh_setting,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
             **asset_context,
@@ -432,6 +434,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "settings": settings,
         "spear_plan": spear_plan,
         "spear_settings": spear_settings,
+        "spear_indicator": spear_dispatch_status(spear_plan, spear_settings),
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         **asset_context,

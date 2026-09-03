@@ -11,10 +11,12 @@ from app.extensions import db
 from app.models import Gateway, NeoScorpionSettings, User
 from app.services.neoscorpion_spear import (
     SPEAR_DEFAULT_PRIORITY_ORDER,
+    SpearPlan,
     SpearSettings,
     build_spear_plan,
     execute_spear_step,
     save_spear_settings,
+    spear_dispatch_status,
 )
 
 
@@ -94,6 +96,28 @@ def _plan(rows, *, trucks=None, settings=None):
 
 
 class NeoScorpionSpearPlanningTest(unittest.TestCase):
+    def test_compact_dispatch_status_prioritizes_risk_over_automation(self):
+        plan = SpearPlan((), {}, {}, 0, 0, 0, 0, "", "token")
+        self.assertEqual(
+            spear_dispatch_status(plan, SpearSettings(recommendations_enabled=False))["state"],
+            "off",
+        )
+        self.assertEqual(spear_dispatch_status(plan, SpearSettings())["state"], "ready")
+        self.assertEqual(
+            spear_dispatch_status(plan, SpearSettings(automation_enabled=True))["state"],
+            "auto",
+        )
+        at_risk = SpearPlan((), {}, {}, 0, 1, 0, 0, "", "token")
+        self.assertEqual(
+            spear_dispatch_status(at_risk, SpearSettings(automation_enabled=True))["state"],
+            "at-risk",
+        )
+        late = SpearPlan((), {}, {}, 0, 0, 1, 0, "", "token")
+        self.assertEqual(
+            spear_dispatch_status(late, SpearSettings(automation_enabled=True))["state"],
+            "late",
+        )
+
     def test_normal_recommendation_is_deterministic_and_covered(self):
         plan = _plan([_row()])
 
@@ -206,6 +230,19 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertIn("SPEAR Fleet Optimizer", template)
         self.assertIn("data-spear-priority-list", template)
         self.assertIn('addEventListener("dragover"', script)
+
+    def test_dispatch_splash_uses_versioned_once_per_browser_hook(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html").read_text(encoding="utf-8")
+        script = (root / "app/static/js/neoscorpion_fuel_dispatch_live.js").read_text(encoding="utf-8")
+
+        self.assertIn("data-spear-splash", template)
+        self.assertIn("images/neoscorpion/spear-promo.png", template)
+        self.assertIn("can_view_spear_settings", template)
+        self.assertTrue((root / "app/static/images/neoscorpion/spear-promo.png").is_file())
+        self.assertIn("neoapps.neoscorpion.spear-splash.v1", script)
+        self.assertIn("window.localStorage.getItem", script)
+        self.assertIn("data-spear-splash-skip", script)
 
     def test_schema_contains_settings_and_execution_audit(self):
         inspector = inspect(db.engine)

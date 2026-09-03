@@ -84,6 +84,37 @@ class SpearSettingsSaveResult:
     automation_just_enabled: bool
 
 
+def spear_dispatch_status(plan, settings):
+    """Return the compact Fuel Dispatch presentation state for SPEAR."""
+    if not settings.recommendations_enabled:
+        return {
+            "state": "off",
+            "label": "SPEAR · OFF",
+            "detail": "Recommendations disabled",
+            "automation_enabled": False,
+        }
+    if plan is not None and plan.late_count:
+        state = "late"
+    elif plan is not None and (plan.at_risk_count or plan.unplanned_count):
+        state = "at-risk"
+    elif settings.automation_enabled:
+        state = "auto"
+    else:
+        state = "ready"
+    labels = {
+        "ready": "SPEAR · READY",
+        "auto": "SPEAR · AUTO",
+        "at-risk": "SPEAR · AT RISK",
+        "late": "SPEAR · LATE",
+    }
+    return {
+        "state": state,
+        "label": labels[state],
+        "detail": "Automation ON" if settings.automation_enabled else "Automation OFF",
+        "automation_enabled": settings.automation_enabled,
+    }
+
+
 @dataclass
 class _ResourceState:
     available_at: datetime

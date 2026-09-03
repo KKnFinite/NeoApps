@@ -1091,6 +1091,7 @@ def _dispatch_response(gateway, access, status_code=200):
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         can_manage_assets=access["can_edit"],
+        can_view_spear_settings=user_can(SETTINGS_VIEW_PERMISSION),
         **fuel_dispatch_context(
             gateway,
             include_asset_choices=access["can_edit"],

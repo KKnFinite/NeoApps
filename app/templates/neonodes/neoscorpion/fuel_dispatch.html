@@ -32,11 +32,30 @@
     data-spear-action-url="{{ url_for('neoscorpion.fuel_dispatch_spear_action') }}"
     data-spear-plan-token="{{ spear_plan.token if spear_plan else '' }}"
 >
+    <aside class="neoscorpion-spear-splash" data-spear-splash hidden aria-label="SPEAR Fleet Optimizer introduction">
+        <button class="neoscorpion-spear-splash-skip" type="button" data-spear-splash-skip>SKIP</button>
+        <img src="{{ url_for('static', filename='images/neoscorpion/spear-promo.png', v=config.STATIC_ASSET_VERSION) }}" alt="SPEAR — Scorpion Planning Engine for Assignment and Routing">
+    </aside>
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
         {% include "neonodes/neoscorpion/_brand_title.html" %}
         {% endwith %}
-        <h1>Fuel Dispatch</h1>
+        <div class="neoscorpion-dispatch-heading">
+            <h1>Fuel Dispatch</h1>
+            {% if can_view_spear_settings %}
+            <a class="neoscorpion-spear-indicator is-{{ spear_indicator.state }}" href="{{ url_for('neoscorpion.spear_settings') }}" title="{{ spear_indicator.detail }} · Open SPEAR Fleet Optimizer">
+                <span class="neoscorpion-spear-indicator-icon" aria-hidden="true"></span>
+                <span>{{ spear_indicator.label }}</span>
+                {% if spear_indicator.state in ['at-risk', 'late'] and spear_indicator.automation_enabled %}<small>AUTO</small>{% endif %}
+            </a>
+            {% else %}
+            <span class="neoscorpion-spear-indicator is-{{ spear_indicator.state }}" title="{{ spear_indicator.detail }}">
+                <span class="neoscorpion-spear-indicator-icon" aria-hidden="true"></span>
+                <span>{{ spear_indicator.label }}</span>
+                {% if spear_indicator.state in ['at-risk', 'late'] and spear_indicator.automation_enabled %}<small>AUTO</small>{% endif %}
+            </span>
+            {% endif %}
+        </div>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
 

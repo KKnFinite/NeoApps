@@ -2,8 +2,41 @@
     "use strict";
 
     const root = document.querySelector("[data-fuel-dispatch-live]");
-    if (!root || !window.NeoLiveUpdates) {
+    if (!root) {
         return;
+    }
+
+    initializeSpearSplash(root);
+    if (!window.NeoLiveUpdates) {
+        return;
+    }
+
+    function initializeSpearSplash(scope) {
+        const splash = scope.querySelector("[data-spear-splash]");
+        const skip = splash?.querySelector("[data-spear-splash-skip]");
+        const storageKey = "neoapps.neoscorpion.spear-splash.v1";
+        if (!splash || !skip) return;
+        try {
+            if (window.localStorage.getItem(storageKey)) return;
+            window.localStorage.setItem(storageKey, "seen");
+        } catch (_error) {
+            return;
+        }
+
+        let dismissed = false;
+        let dismissTimer = null;
+        const dismiss = () => {
+            if (dismissed) return;
+            dismissed = true;
+            if (dismissTimer !== null) window.clearTimeout(dismissTimer);
+            splash.classList.remove("is-visible");
+            splash.classList.add("is-dismissing");
+            window.setTimeout(() => { splash.hidden = true; }, 300);
+        };
+        splash.hidden = false;
+        window.requestAnimationFrame(() => splash.classList.add("is-visible"));
+        skip.addEventListener("click", dismiss);
+        dismissTimer = window.setTimeout(dismiss, 4700);
     }
 
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);

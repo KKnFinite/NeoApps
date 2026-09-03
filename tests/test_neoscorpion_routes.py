@@ -185,6 +185,11 @@ class NeoScorpionRoutesTest(unittest.TestCase):
                 pages[path] = response
 
         self.assertIn(b"SPEAR Fleet Optimizer", pages["/neoscorpion/settings/spear"].data)
+        self.assertIn(b"SPEAR \xc2\xb7 READY", pages["/neoscorpion/fuel-dispatch"].data)
+        self.assertIn(
+            b'href="/neoscorpion/settings/spear"',
+            pages["/neoscorpion/fuel-dispatch"].data,
+        )
 
     def test_fuel_dispatch_assembles_owned_data(self):
         user = self._login_approved_user(role="simulator")
