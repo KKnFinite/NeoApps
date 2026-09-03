@@ -108,9 +108,15 @@ def assignment_mission_timing(
 ):
     """Derive mission timing facts from already-loaded operational planning data."""
     demand = _decimal_or_none(planning_demand_gallons)
-    setup_minutes = _decimal_or_none(getattr(planning_settings, "setup_minutes", None))
+    setup_minutes = _decimal_or_none(
+        planning_settings.setup_for(aircraft_type)
+        if hasattr(planning_settings, "setup_for")
+        else getattr(planning_settings, "setup_minutes", None)
+    )
     finishing_minutes = _decimal_or_none(
-        getattr(planning_settings, "finishing_minutes", None)
+        planning_settings.finishing_for(aircraft_type)
+        if hasattr(planning_settings, "finishing_for")
+        else getattr(planning_settings, "finishing_minutes", None)
     )
     pump_rate = _decimal_or_none(
         planning_settings.pump_rate_for(aircraft_type)

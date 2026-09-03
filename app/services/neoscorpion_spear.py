@@ -262,6 +262,7 @@ def build_spear_plan(
     nightly_fuelers,
     nightly_trucks,
     now_utc,
+    calibrations=None,
 ):
     """Plan the remaining sort from already-bounded canonical dispatch data."""
     if not spear_settings.recommendations_enabled:
@@ -495,6 +496,7 @@ def build_spear_plan(
                     truck_rows=truck_rows,
                     settings=spear_settings,
                     staging_allowed_at_utc=staging_allowed_at,
+                    calibrations=calibrations or {},
                 ),
             )
         )
@@ -665,6 +667,7 @@ def _assignment_explanation(
     truck_rows,
     settings,
     staging_allowed_at_utc,
+    calibrations,
 ):
     mission = row["mission"]
     departure = _departure_at(row)
@@ -709,7 +712,30 @@ def _assignment_explanation(
         "early_staging_available": staging_allowed_at_utc < timing.aircraft_ready_utc,
         "alternatives": alternatives,
         "hard_constraint_notes": _truck_constraint_notes(truck_rows),
+        "live_calibration": _live_calibration_notes(
+            calibrations, row.get("detailed_aircraft_type")
+        ),
     }
+
+
+def _live_calibration_notes(calibrations, aircraft_type):
+    """Presentation metadata comes from the same calibration objects as planning."""
+    notes = []
+    for metric, scope in (
+        ("setup_minutes", aircraft_type),
+        ("finishing_minutes", aircraft_type),
+        ("pump_rate", aircraft_type),
+    ):
+        item = calibrations.get((metric, scope))
+        if item is not None and getattr(item, "active", False):
+            notes.append({
+                "metric": metric.replace("_", " ").title(),
+                "scope": scope,
+                "configured": _minutes_display(getattr(item, "configured", None)),
+                "using": _minutes_display(getattr(item, "effective", None)),
+                "samples": item.samples,
+            })
+    return notes
 
 
 def _top_off_explanation(*, row, truck, current_gallons, demand, settings):
@@ -789,6 +815,8 @@ def _spear_timing(row, operation, planning_settings):
         finishing_minutes=planning_settings.finishing_minutes,
         eta_safety_buffer_minutes=Decimal("5"),
         pump_rate_for=planning_settings.pump_rate_for,
+        setup_for=getattr(planning_settings, "setup_for", lambda _type: planning_settings.setup_minutes),
+        finishing_for=getattr(planning_settings, "finishing_for", lambda _type: planning_settings.finishing_minutes),
         is_complete_for=lambda aircraft_type: (
             planning_settings.setup_minutes is not None
             and planning_settings.finishing_minutes is not None

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}SPEAR Live Calibration | NeoScorpion{% endblock %}
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Live Calibration">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}{% include "neonodes/neoscorpion/_brand_title.html" %}{% endwith %}
+        <h1>SPEAR Live Calibration</h1><p>Current-sort operational estimates only · no Learning Vault capture</p>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head"><span>Current Sort</span><strong>{{ spear_calibration.label }}</strong></div>
+        {% if not operation %}<p class="neoscorpion-empty">No current sort is available.</p>{% endif %}
+        <div class="neoscorpion-spear-calibration-list">
+        {% for item in spear_calibration.items %}
+            <article>
+                <strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong>
+                <span>Configured {{ item.configured if item.configured is not none else '-' }} · Observed {{ item.observed if item.observed is not none else '-' }} · SPEAR Using {{ item.effective if item.effective is not none else '-' }}</span>
+                <span>{{ item.samples }} qualifying · {{ item.excluded_samples }} excluded · {{ item.confidence }}</span>
+                <small>{{ item.explanation }}</small>
+                {% if can_edit and operation %}<form method="post"><input type="hidden" name="metric" value="{{ item.metric }}"><input type="hidden" name="scope_key" value="{{ item.scope_key }}"><button class="action-button" type="submit">RESET</button></form>{% endif %}
+                <details><summary>Observations</summary>{% for observation in item.observations %}<span>{{ observation.source_label }} · mission {{ observation.mission_id }} · {{ observation.value }} at {{ observation.observed_at_utc.strftime('%H:%M') }}</span>{% else %}<span>No qualifying observations yet.</span>{% endfor %}{% for observation in item.excluded_observations %}<span>EXCLUDED · {{ observation.excluded_reason }}</span>{% endfor %}</details>
+            </article>
+        {% else %}<p class="neoscorpion-empty">Collecting qualifying completed current-sort work.</p>{% endfor %}
+        </div>
+    </section>
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head"><span>Calibration Review</span><strong>REVIEW ONLY</strong></div>
+        <p>Configured versus observed current-sort values are shown above. Strong candidates require 10+ qualifying observations; fewer than 3 need more data.</p>
+        <button class="action-button" type="button" disabled title="SPEAR Vault is not configured.">SAVE TO SPEAR VAULT · NOT CONFIGURED</button>
+    </section>
+</section>
+{% endblock %}

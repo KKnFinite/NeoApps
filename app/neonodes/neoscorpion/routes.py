@@ -22,6 +22,7 @@ from app.services.neoscorpion import (
     hanzo_context,
     fueler_context,
     history_context,
+    mark_ready_for_fuel,
     mark_fueler_off,
     end_fuel_work_early,
     reopen_fueler_off,
@@ -64,6 +65,10 @@ from app.services.neoscorpion_spear import (
     record_spear_completion,
     record_spear_execution,
     save_spear_settings,
+)
+from app.services.neoscorpion_spear_calibration import (
+    calibration_review_payload,
+    reset_live_calibration,
 )
 
 
@@ -335,6 +340,29 @@ def fuel_dispatch_complete():
         flash("FUELING COMPLETE.", "success")
     else:
         flash("FUELING WAS ALREADY COMPLETE.", "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.post("/fuel-dispatch/ready-for-fuel")
+@gateway_node_required("scorpion")
+def fuel_dispatch_ready_for_fuel():
+    gateway = get_current_gateway()
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        db.session.rollback()
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    try:
+        result = mark_ready_for_fuel(gateway, current_user, request.form.get("assignment_id"))
+    except (IntegrityError, ValueError) as exc:
+        db.session.rollback()
+        flash(str(exc) if isinstance(exc, ValueError) else "Fuel assignment changed. Reload and try again.", "error")
+        return _dispatch_response(gateway, access, status_code=400)
+    if result.changed:
+        db.session.commit()
+        flash("READY FOR FUEL RECORDED.", "success")
+    else:
+        flash("READY FOR FUEL WAS ALREADY RECORDED.", "info")
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
@@ -954,6 +982,38 @@ def spear_settings():
     return _spear_settings_response(gateway, access)
 
 
+@bp.route("/settings/spear/calibration", methods=["GET", "POST"])
+@gateway_node_required("scorpion")
+def spear_calibration():
+    gateway = get_current_gateway()
+    access = permission_access(SETTINGS_VIEW_PERMISSION, SETTINGS_EDIT_PERMISSION)
+    if request.method == "POST":
+        if not access["can_edit"]:
+            db.session.rollback()
+            flash("Access denied.", "error")
+            return _spear_calibration_response(gateway, access, status_code=403)
+        context = fuel_dispatch_context(gateway)
+        operation = context["operation"]
+        if operation is None:
+            flash("No current sort operation is available.", "error")
+            return _spear_calibration_response(gateway, access, status_code=400)
+        try:
+            reset_live_calibration(
+                operation, request.form.get("metric"), request.form.get("scope_key"), current_user
+            )
+            db.session.commit()
+        except (IntegrityError, ValueError) as exc:
+            db.session.rollback()
+            flash(str(exc) if isinstance(exc, ValueError) else "Calibration changed. Reload and try again.", "error")
+            return _spear_calibration_response(gateway, access, status_code=400)
+        flash("SPEAR LIVE CALIBRATION RESET TO CONFIGURED BASELINE.", "success")
+        return redirect(url_for("neoscorpion.spear_calibration"))
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.spear_settings"))
+    return _spear_calibration_response(gateway, access)
+
+
 @bp.post("/fuel-dispatch/spear-action")
 @gateway_node_required("scorpion")
 def fuel_dispatch_spear_action():
@@ -1154,6 +1214,24 @@ def _spear_settings_response(gateway, access, status_code=200):
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        **settings_context(gateway),
+    )
+    return response, status_code
+
+
+def _spear_calibration_response(gateway, access, status_code=200):
+    dispatch = fuel_dispatch_context(gateway)
+    calibration = dispatch["spear_calibration"]
+    response = render_template(
+        "neonodes/neoscorpion/spear_calibration.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
+        operation=dispatch["operation"],
+        spear_calibration=calibration,
+        spear_calibration_review=calibration_review_payload(
+            dispatch["operation"], { (item.metric, item.scope_key): item for item in calibration["items"] }
+        ),
         **settings_context(gateway),
     )
     return response, status_code

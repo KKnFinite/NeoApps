@@ -365,6 +365,15 @@ class NeoScorpionFuelAssignment(db.Model):
         db.ForeignKey("users.id"),
         nullable=True,
     )
+    # A compact operational milestone.  It is intentionally separate from
+    # Fuel On Board so current-sort SPEAR timing can distinguish arrival,
+    # aircraft readiness, and physical fuel work without creating telemetry.
+    ready_for_fuel_at_utc = db.Column(db.DateTime, nullable=True)
+    ready_for_fuel_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     completed_at_utc = db.Column(db.DateTime, nullable=True)
     completed_by_user_id = db.Column(
         db.Integer,
@@ -428,6 +437,10 @@ class NeoScorpionFuelAssignment(db.Model):
     fuel_on_board_by_user = db.relationship(
         "User",
         foreign_keys=[fuel_on_board_by_user_id],
+    )
+    ready_for_fuel_by_user = db.relationship(
+        "User",
+        foreign_keys=[ready_for_fuel_by_user_id],
     )
     completed_by_user = db.relationship(
         "User",
@@ -761,6 +774,31 @@ class NeoScorpionSpearAuditEntry(db.Model):
     superseded_entry = db.relationship(
         "NeoScorpionSpearAuditEntry", remote_side=[id], uselist=False
     )
+
+
+class NeoScorpionSpearCalibrationReset(db.Model):
+    """Current-sort cutoff marker; source operational facts are never deleted."""
+
+    __tablename__ = "neoscorpion_spear_calibration_resets"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "sort_date_operation_id", "metric", "scope_key",
+            name="uq_neoscorpion_spear_calibration_reset_scope",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer, db.ForeignKey("sort_date_operations.id"), nullable=False, index=True
+    )
+    metric = db.Column(db.String(32), nullable=False)
+    scope_key = db.Column(db.String(96), nullable=False)
+    observed_after_utc = db.Column(db.DateTime, nullable=False)
+    reset_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    sort_date_operation = db.relationship("SortDateOperation")
+    reset_by_user = db.relationship("User")
 
 
 class NeoScorpionAircraftFuelSetting(db.Model):

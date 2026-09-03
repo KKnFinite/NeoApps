@@ -52,6 +52,12 @@
             <p><strong>{% if spear_learning_vault.configured %}LEARNING STANDBY{% else %}LEARNING VAULT NOT CONFIGURED{% endif %}</strong><br>Enable only when NeoScorpion is the full operational source and the external Learning Vault is configured.</p>
         </section>
 
+        <section class="neoscorpion-panel">
+            <div class="neoscorpion-panel-head"><span>Live Calibration</span><strong>CURRENT SORT</strong></div>
+            <p>See the transparent configured, observed, and active SPEAR timing estimates. This does not enable Learning Capture.</p>
+            <a class="action-button" href="{{ url_for('neoscorpion.spear_calibration') }}">VIEW LIVE CALIBRATION</a>
+        </section>
+
         {% if can_edit %}<button class="action-button neoscorpion-save-button" type="submit">SAVE SPEAR SETTINGS</button>{% endif %}
     </form>
 </section>

@@ -6,9 +6,10 @@ from app import create_app
 from app.services.neoscorpion_spear_schema import (
     NEOSCORPION_SPEAR_SCHEMA_LOCK_KEY,
     SPEAR_SETTINGS_COLUMNS,
+    SPEAR_ASSIGNMENT_COLUMNS,
     ensure_neoscorpion_spear_schema_compatibility,
 )
-from app.models import NeoScorpionSpearAuditEntry
+from app.models import NeoScorpionSpearAuditEntry, NeoScorpionSpearCalibrationReset
 
 
 class NeoScorpionSpearProductionSchemaTest(unittest.TestCase):
@@ -59,6 +60,9 @@ class NeoScorpionSpearProductionSchemaTest(unittest.TestCase):
             create = stack.enter_context(
                 patch.object(NeoScorpionSpearAuditEntry.__table__, "create")
             )
+            reset_create = stack.enter_context(
+                patch.object(NeoScorpionSpearCalibrationReset.__table__, "create")
+            )
 
             self.assertTrue(ensure_neoscorpion_spear_schema_compatibility(app))
             self.assertTrue(ensure_neoscorpion_spear_schema_compatibility(app))
@@ -74,10 +78,11 @@ class NeoScorpionSpearProductionSchemaTest(unittest.TestCase):
         )
         self.assertEqual(
             statements.count("ADD COLUMN IF NOT EXISTS"),
-            len(SPEAR_SETTINGS_COLUMNS) * 2,
+            (len(SPEAR_SETTINGS_COLUMNS) + len(SPEAR_ASSIGNMENT_COLUMNS)) * 2,
         )
-        self.assertNotIn("neoscorpion_fuel_assignments", statements)
+        self.assertIn("neoscorpion_fuel_assignments", statements)
         create.assert_called_with(bind=connection, checkfirst=True)
+        reset_create.assert_called_with(bind=connection, checkfirst=True)
         self.assertEqual(create.call_count, 2)
         self.assertEqual(commit.call_count, 2)
 

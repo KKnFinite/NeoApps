@@ -47,6 +47,11 @@ from app.services.neoscorpion_spear import (
     spear_dispatch_status,
 )
 from app.services.neoscorpion_learning_vault import learning_vault_status
+from app.services.neoscorpion_spear_calibration import (
+    build_live_calibration,
+    calibrated_planning_settings,
+    calibration_summary,
+)
 from app.services.neoscorpion_dispatch_planning import (
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
     assignment_mission_timing,
@@ -361,6 +366,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "spear_plan": None,
             "spear_settings": spear_settings,
             "spear_indicator": spear_dispatch_status(None, spear_settings),
+            "spear_calibration": {"active_count": 0, "collecting_count": 0, "label": "SPEAR CALIBRATION · COLLECTING", "items": ()},
             "fuel_dispatch_refresh": refresh_setting,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
             **asset_context,
@@ -417,14 +423,21 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
         now_utc=datetime.utcnow(),
     )
+    configured_planning_settings = assignment_planning_settings(gateway, settings=settings)
+    live_calibrations = build_live_calibration(
+        operation, configured_planning_settings, rows
+    )
     spear_plan = build_spear_plan(
         rows,
         operation=operation,
-        planning_settings=assignment_planning_settings(gateway, settings=settings),
+        planning_settings=calibrated_planning_settings(
+            configured_planning_settings, live_calibrations
+        ),
         spear_settings=spear_settings,
         nightly_fuelers=asset_context["nightly_assignment_fuelers"],
         nightly_trucks=asset_context["nightly_trucks"],
         now_utc=datetime.utcnow(),
+        calibrations=live_calibrations,
     )
     _attach_spear_plan(rows, truck_visuals, spear_plan)
     return {
@@ -437,6 +450,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "spear_plan": spear_plan,
         "spear_settings": spear_settings,
         "spear_indicator": spear_dispatch_status(spear_plan, spear_settings),
+        "spear_calibration": calibration_summary(live_calibrations),
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         **asset_context,
@@ -1621,6 +1635,28 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         tail_fuel_state=tail_fuel_state,
         fuel_work_state=fuel_work_state,
     )
+
+
+def mark_ready_for_fuel(gateway, user, assignment_id, *, now_utc=None):
+    """Record the operational Ready for Fuel milestone without forcing a workflow."""
+    operation = current_sort_operation(gateway)
+    if not operation:
+        raise ValueError("No current sort operation is available for Ready for Fuel.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation, assignment_id, action_label="READY FOR FUEL"
+    )
+    _validate_precompletion_assignment(assignment, mission, "READY FOR FUEL")
+    if assignment.ready_for_fuel_at_utc is not None:
+        return FuelInterruptionResult(
+            False, int(asset_state.revision), assignment, None
+        )
+    assignment.ready_for_fuel_at_utc = now_utc
+    assignment.ready_for_fuel_by_user_id = getattr(user, "id", None)
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return FuelInterruptionResult(True, int(asset_state.revision), assignment, None)
 
 
 def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):

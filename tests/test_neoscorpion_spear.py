@@ -162,6 +162,18 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(len(explanation["alternatives"]), 2)
         self.assertIn("Selected", explanation["alternatives"][0]["reason"])
 
+    def test_why_spear_identifies_the_same_active_calibration_used_by_planning(self):
+        calibration = SimpleNamespace(
+            active=True, configured=Decimal("100"), effective=Decimal("120"), samples=3
+        )
+        plan = build_spear_plan(
+            [_row()], operation=SimpleNamespace(id=1), planning_settings=_PlanningSettings(),
+            spear_settings=SpearSettings(), nightly_fuelers=(_fueler(),),
+            nightly_trucks=(_truck(),), now_utc=NOW,
+            calibrations={("pump_rate", "B757"): calibration},
+        )
+        self.assertEqual(plan.steps[0].explanation["live_calibration"][0]["samples"], 3)
+
     def test_top_off_explanation_identifies_reserve_protection(self):
         plan = _plan([_row(demand=100)], trucks=(_truck(current=550, capacity=2000),))
         explanation = plan.steps[0].explanation
@@ -360,6 +372,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         inspector = inspect(db.engine)
 
         self.assertIn("neoscorpion_spear_audit_entries", inspector.get_table_names())
+        self.assertIn("neoscorpion_spear_calibration_resets", inspector.get_table_names())
         columns = {
             column["name"]
             for column in inspector.get_columns("neoscorpion_settings")
@@ -367,6 +380,10 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertIn("spear_automation_enabled", columns)
         self.assertIn("spear_learning_capture_enabled", columns)
         self.assertIn("spear_priority_order_json", columns)
+        assignment_columns = {
+            column["name"] for column in inspector.get_columns("neoscorpion_fuel_assignments")
+        }
+        self.assertIn("ready_for_fuel_at_utc", assignment_columns)
 
 
 if __name__ == "__main__":

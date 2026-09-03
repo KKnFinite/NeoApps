@@ -25507,6 +25507,39 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     color: #d9edf7;
 }
 
+.neoscorpion-spear-calibration {
+    margin: -2px 0 8px;
+    color: #9ccce3;
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+}
+
+.neoscorpion-spear-calibration summary {
+    cursor: pointer;
+    color: #d9edf7;
+    list-style: none;
+}
+
+.neoscorpion-spear-calibration summary::-webkit-details-marker { display: none; }
+
+.neoscorpion-spear-calibration > div,
+.neoscorpion-spear-calibration-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.neoscorpion-spear-calibration-list article {
+    display: grid;
+    gap: 4px;
+    border: 1px solid #294c63;
+    background: #091925;
+    padding: 9px;
+    color: #b8d4e4;
+    font-size: .72rem;
+}
+
 .neoscorpion-spear-fleet-status.is-late {
     border-color: #c54d58;
     background: #261116;

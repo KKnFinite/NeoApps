@@ -3,7 +3,7 @@
 from sqlalchemy import inspect, text
 
 from app.extensions import db
-from app.models import NeoScorpionSpearAuditEntry
+from app.models import NeoScorpionSpearAuditEntry, NeoScorpionSpearCalibrationReset
 
 
 NEOSCORPION_SPEAR_SCHEMA_LOCK_KEY = 7_483_327_341_913
@@ -23,6 +23,10 @@ SPEAR_SETTINGS_COLUMNS = {
     "spear_recalculation_interval_minutes": "INTEGER NOT NULL DEFAULT 2",
     "spear_automation_stability_delay_seconds": "INTEGER NOT NULL DEFAULT 5",
     "spear_priority_order_json": "TEXT",
+}
+SPEAR_ASSIGNMENT_COLUMNS = {
+    "ready_for_fuel_at_utc": "TIMESTAMP",
+    "ready_for_fuel_by_user_id": "INTEGER",
 }
 
 
@@ -51,7 +55,18 @@ def ensure_neoscorpion_spear_schema_compatibility(app):
                         f"ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
                     )
                 )
+            for column_name, column_type in SPEAR_ASSIGNMENT_COLUMNS.items():
+                connection.execute(
+                    text(
+                        "ALTER TABLE neoscorpion_fuel_assignments "
+                        f"ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                    )
+                )
             NeoScorpionSpearAuditEntry.__table__.create(
+                bind=connection,
+                checkfirst=True,
+            )
+            NeoScorpionSpearCalibrationReset.__table__.create(
                 bind=connection,
                 checkfirst=True,
             )
@@ -73,8 +88,11 @@ def _verify_spear_schema_contract(connection):
     schema_inspector = inspect(connection)
     tables = set(schema_inspector.get_table_names())
     audit_table = NeoScorpionSpearAuditEntry.__tablename__
+    reset_table = NeoScorpionSpearCalibrationReset.__tablename__
     if audit_table not in tables:
         raise RuntimeError("NeoScorpion SPEAR audit table is missing.")
+    if reset_table not in tables:
+        raise RuntimeError("NeoScorpion SPEAR calibration reset table is missing.")
     actual_settings_columns = {
         column["name"]
         for column in schema_inspector.get_columns(SPEAR_SETTINGS_TABLE)
@@ -98,6 +116,18 @@ def _verify_spear_schema_contract(connection):
         raise RuntimeError(
             "NeoScorpion SPEAR audit columns are missing: "
             + ", ".join(missing_audit_columns)
+        )
+    actual_assignment_columns = {
+        column["name"]
+        for column in schema_inspector.get_columns("neoscorpion_fuel_assignments")
+    }
+    missing_assignment_columns = sorted(
+        set(SPEAR_ASSIGNMENT_COLUMNS) - actual_assignment_columns
+    )
+    if missing_assignment_columns:
+        raise RuntimeError(
+            "NeoScorpion SPEAR assignment columns are missing: "
+            + ", ".join(missing_assignment_columns)
         )
 
 
