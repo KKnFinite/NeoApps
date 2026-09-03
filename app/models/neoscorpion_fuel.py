@@ -651,6 +651,40 @@ class NeoScorpionSettings(db.Model):
         nullable=True,
         default=5,
     )
+    spear_recommendations_enabled = db.Column(
+        db.Boolean, nullable=False, default=True, server_default=db.true()
+    )
+    spear_automation_enabled = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
+    spear_minimum_truck_reserve_gallons = db.Column(
+        db.Integer, nullable=False, default=500, server_default="500"
+    )
+    spear_do_not_top_off_above_percent = db.Column(
+        db.Integer, nullable=False, default=70, server_default="70"
+    )
+    spear_truck_minutes_per_ramp_move = db.Column(
+        db.Numeric(8, 2), nullable=False, default=2, server_default="2"
+    )
+    spear_fueler_begins_at = db.Column(
+        db.String(16), nullable=False, default="Remote", server_default="Remote"
+    )
+    spear_truck_begins_at = db.Column(
+        db.String(16), nullable=False, default="Remote", server_default="Remote"
+    )
+    spear_truck_after_top_off = db.Column(
+        db.String(16), nullable=False, default="Remote", server_default="Remote"
+    )
+    spear_incoming_early_staging_minutes = db.Column(
+        db.Integer, nullable=False, default=15, server_default="15"
+    )
+    spear_recalculation_interval_minutes = db.Column(
+        db.Integer, nullable=False, default=2, server_default="2"
+    )
+    spear_automation_stability_delay_seconds = db.Column(
+        db.Integer, nullable=False, default=5, server_default="5"
+    )
+    spear_priority_order_json = db.Column(db.Text, nullable=True)
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
@@ -662,6 +696,65 @@ class NeoScorpionSettings(db.Model):
 
     gateway = db.relationship("Gateway")
     updated_by = db.relationship("User")
+
+
+class NeoScorpionSpearAuditEntry(db.Model):
+    """Immutable audit of a dispatcher-approved or automatic SPEAR execution."""
+
+    __tablename__ = "neoscorpion_spear_audit_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_operations.id"),
+        nullable=False,
+        index=True,
+    )
+    sort_date_mission_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sort_date_missions.id"),
+        nullable=True,
+        index=True,
+    )
+    fuel_assignment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_fuel_assignments.id"),
+        nullable=True,
+    )
+    action_type = db.Column(db.String(24), nullable=False)
+    execution_mode = db.Column(db.String(24), nullable=False)
+    source = db.Column(
+        db.String(24),
+        nullable=False,
+        default="spear_optimizer",
+        server_default="spear_optimizer",
+    )
+    reason = db.Column(db.Text, nullable=False)
+    fuel_truck_id = db.Column(
+        db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=True
+    )
+    fueler_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    projected_start_at_utc = db.Column(db.DateTime, nullable=True)
+    projected_complete_at_utc = db.Column(db.DateTime, nullable=True)
+    risk_classification = db.Column(db.String(24), nullable=True)
+    superseded_entry_id = db.Column(
+        db.Integer,
+        db.ForeignKey("neoscorpion_spear_audit_entries.id"),
+        nullable=True,
+    )
+    recommendation_json = db.Column(db.Text, nullable=False, default="{}")
+    executed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    sort_date_operation = db.relationship("SortDateOperation")
+    sort_date_mission = db.relationship("SortDateMission")
+    fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
+    fuel_truck = db.relationship("NeoScorpionFuelTruck")
+    fueler_user = db.relationship("User", foreign_keys=[fueler_user_id])
+    executed_by_user = db.relationship("User", foreign_keys=[executed_by_user_id])
+    superseded_entry = db.relationship(
+        "NeoScorpionSpearAuditEntry", remote_side=[id], uselist=False
+    )
 
 
 class NeoScorpionAircraftFuelSetting(db.Model):

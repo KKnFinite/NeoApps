@@ -25,6 +25,12 @@
     data-revision="{{ nightly_asset_revision }}"
     data-refresh-interval-ms="{{ fuel_dispatch_refresh.effective_interval_ms }}"
     data-refresh-source="{{ fuel_dispatch_refresh.source }}"
+    data-spear-automation-enabled="{{ 'true' if spear_settings.automation_enabled and spear_plan and spear_plan.steps else 'false' }}"
+    data-spear-stability-delay-ms="{{ spear_settings.automation_stability_delay_seconds * 1000 }}"
+    data-spear-recalculation-ms="{{ spear_settings.recalculation_interval_minutes * 60000 }}"
+    data-spear-recommendations-enabled="{{ 'true' if spear_settings.recommendations_enabled else 'false' }}"
+    data-spear-action-url="{{ url_for('neoscorpion.fuel_dispatch_spear_action') }}"
+    data-spear-plan-token="{{ spear_plan.token if spear_plan else '' }}"
 >
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
@@ -40,6 +46,11 @@
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
         </div>
         {% include "neonodes/neoscorpion/_nightly_assets.html" %}
+        {% if operation and spear_plan %}
+        <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% endif %}" data-spear-fleet-status>
+            {{ spear_plan.status_text }}
+        </div>
+        {% endif %}
         {% if operation and truck_visuals %}
         <aside class="neoscorpion-truck-visual-panel" aria-label="Tonight's fuel truck capacity">
             <header>
@@ -61,6 +72,21 @@
                         <div><span>Current</span><progress class="neoscorpion-truck-gauge" max="100" value="{{ truck.current_gauge_percent if truck.current_gauge_percent is not none else 0 }}"></progress></div>
                         <div><span>Projected</span><progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--projected{% if truck.projected_short %} is-short{% endif %}" max="100" value="{{ truck.projected_gauge_percent if truck.projected_gauge_percent is not none else 0 }}"></progress></div>
                     </div>
+                    {% if truck.spear_recommendation %}
+                    {% set spear = truck.spear_recommendation %}
+                    <div class="neoscorpion-truck-spear">
+                        <strong>SPEAR RECOMMENDS</strong>
+                        {% if spear.action_type == 'top_off' %}<span>TOP OFF</span>{% else %}<span>{{ spear.flight_number }} → {{ spear.ramp|upper }}</span><small>{{ spear.fueler_name }} · {{ spear.risk }}</small>{% endif %}
+                        {% if can_edit %}
+                        <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_spear_action') }}" data-spear-action-form>
+                            <input type="hidden" name="plan_token" value="{{ spear_plan.token }}">
+                            <input type="hidden" name="mission_id" value="{{ spear.mission_id or '' }}">
+                            <input type="hidden" name="truck_id" value="{{ spear.truck_id or '' }}">
+                            <button class="action-button" type="submit">ASSIGN</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                     {% if can_manage_assets and truck.status == "available" %}
                     <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>
                         <input type="hidden" name="action" value="mark_topping_off">
@@ -135,7 +161,7 @@
                         <td>{{ row.arrival_eta }}</td>
                         <td>{{ row.arrival_status }}</td>
                         <td class="neoscorpion-dispatch-divider-cell" aria-label="Arrival to departure"><span aria-hidden="true"></span></td>
-                        <td><strong>{{ row.mission.flight_number }}</strong></td>
+                        <td><strong>{{ row.mission.flight_number }}</strong>{% if row.spear_risk %}<small class="neoscorpion-spear-risk is-{{ row.spear_risk|lower|replace(' ', '-') }}">SPEAR {{ row.spear_risk }}</small>{% elif row.spear_problem %}<small class="neoscorpion-spear-risk is-unplanned">SPEAR {{ row.spear_problem }}</small>{% endif %}</td>
                         <td>{{ row.destination }}</td>
                         <td>{{ row.parking_position }}</td>
                         <td>{{ row.departure_time or '-' }}</td>

@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
+from app.models import NeoScorpionSettings
 from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion import (
@@ -56,6 +57,13 @@ from app.services.permission_rules import (
     permission_access,
     preload_permission_rules,
     user_can,
+)
+from app.services.neoscorpion_spear import (
+    effective_spear_settings,
+    execute_spear_step,
+    record_spear_completion,
+    record_spear_execution,
+    save_spear_settings,
 )
 
 
@@ -684,9 +692,39 @@ def fueler_off():
         flash(str(exc), "error")
         return _fueler_response(gateway, access, status_code=400)
 
+    spear_completed = False
+    spear_completion_error = None
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    if result.changed and effective_spear_settings(settings).automation_enabled:
+        try:
+            completion = complete_fueled_assignment(
+                gateway,
+                current_user,
+                request.form.get("assignment_id"),
+            )
+            spear_completed = completion.changed
+            if completion.changed:
+                operation = current_sort_operation(gateway)
+                record_spear_completion(
+                    operation,
+                    completion.assignment,
+                    current_user,
+                )
+        except ValueError as exc:
+            spear_completion_error = str(exc)
     if result.changed:
         db.session.commit()
-        flash("FUELER MARKED OFF.", "success")
+        flash(
+            "FUELER MARKED OFF · SPEAR COMPLETED ASSIGNMENT."
+            if spear_completed
+            else "FUELER MARKED OFF.",
+            "success",
+        )
+        if spear_completion_error:
+            flash(
+                f"SPEAR COULD NOT AUTO-COMPLETE: {spear_completion_error}",
+                "warning",
+            )
     else:
         flash("FUELER WAS ALREADY OFF.", "info")
     return redirect(url_for("neoscorpion.fueler"))
@@ -885,6 +923,145 @@ def settings():
     return _settings_response(gateway, access)
 
 
+@bp.route("/settings/spear", methods=["GET", "POST"])
+@gateway_node_required("scorpion")
+def spear_settings():
+    gateway = get_current_gateway()
+    access = permission_access(SETTINGS_VIEW_PERMISSION, SETTINGS_EDIT_PERMISSION)
+    if request.method == "POST":
+        if not access["can_edit"]:
+            db.session.rollback()
+            flash("Access denied.", "error")
+            return _spear_settings_response(gateway, access, status_code=403)
+        try:
+            result = save_spear_settings(gateway, current_user, request.form)
+        except (IntegrityError, ValueError) as exc:
+            db.session.rollback()
+            flash(
+                str(exc) if isinstance(exc, ValueError) else "SPEAR settings changed. Reload and try again.",
+                "error",
+            )
+            return _spear_settings_response(gateway, access, status_code=400)
+        db.session.commit()
+        flash("SPEAR SETTINGS SAVED." if result.changed else "NO SPEAR SETTING CHANGES.", "success" if result.changed else "info")
+        if result.automation_just_enabled:
+            return redirect(url_for("neoscorpion.fuel_dispatch"))
+        return redirect(url_for("neoscorpion.spear_settings"))
+
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.settings"))
+    return _spear_settings_response(gateway, access)
+
+
+@bp.post("/fuel-dispatch/spear-action")
+@gateway_node_required("scorpion")
+def fuel_dispatch_spear_action():
+    gateway = get_current_gateway()
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    json_response = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if not access["can_edit"]:
+        db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+        flash("Access denied.", "error")
+        return _dispatch_response(gateway, access, status_code=403)
+    try:
+        context = fuel_dispatch_context(gateway, include_asset_choices=True)
+        operation = context["operation"]
+        plan = context["spear_plan"]
+        if operation is None or plan is None:
+            raise ValueError("No current SPEAR plan is available.")
+        automatic = request.form.get("execution_mode") == "automatic"
+        if automatic and not context["spear_settings"].automation_enabled:
+            raise ValueError("SPEAR Automation is off.")
+        if request.form.get("plan_token") != plan.token:
+            raise ValueError("SPEAR plan changed. Review the current recommendation.")
+        requested_mission_id = _positive_form_id(request.form.get("mission_id"), "mission") if request.form.get("mission_id") else None
+        requested_truck_id = _positive_form_id(request.form.get("truck_id"), "fuel truck") if request.form.get("truck_id") else None
+        step = next(
+            (
+                item for item in plan.steps
+                if (automatic and item.automatic_eligible)
+                or (
+                    not automatic
+                    and item.mission_id == requested_mission_id
+                    and item.truck_id == requested_truck_id
+                )
+            ),
+            None,
+        )
+        if step is None:
+            raise ValueError("SPEAR recommendation is no longer available.")
+        assignment_id = None
+
+        def assign_action(selected_step):
+            row = next(
+                row
+                for row in context["rows"]
+                if row["mission"].id == selected_step.mission_id
+            )
+            assignment = row["assignment"]
+            if assignment is not None and row.get("work_has_begun"):
+                swap_result = None
+                if assignment.assigned_fueler_user_id != selected_step.fueler_id:
+                    swap_result = swap_assignment_fueler(
+                        gateway,
+                        current_user,
+                        assignment.id,
+                        selected_step.fueler_id,
+                    )
+                if assignment.assigned_truck_id != selected_step.truck_id:
+                    swap_result = swap_assignment_truck(
+                        gateway,
+                        current_user,
+                        assignment.id,
+                        selected_step.truck_id,
+                    )
+                if swap_result is None:
+                    raise ValueError("SPEAR replacement is already current.")
+                return swap_result
+            return save_dispatch_assignment(
+                gateway,
+                {
+                    "mission_id": str(selected_step.mission_id),
+                    "expected_assigned_fueler_user_id": str(assignment.assigned_fueler_user_id) if assignment and assignment.assigned_fueler_user_id else "",
+                    "expected_assigned_truck_id": str(assignment.assigned_truck_id) if assignment and assignment.assigned_truck_id else "",
+                    "assigned_fueler_user_id": str(selected_step.fueler_id or ""),
+                    "assigned_truck_id": str(selected_step.truck_id or ""),
+                    "review_status": "assigned",
+                },
+            )
+
+        def top_off_action(selected_step):
+            return mark_nightly_truck_topping_off(
+                operation, selected_step.truck_id, changed_by_user=current_user
+            )
+
+        result = execute_spear_step(
+            step, assign_action=assign_action, top_off_action=top_off_action
+        )
+        changed = result.changed
+        if step.action_type == "assign":
+            assignment_id = result.assignment.id
+        if changed:
+            record_spear_execution(
+                operation, step, current_user, automatic=automatic, assignment_id=assignment_id
+            )
+            db.session.commit()
+        if json_response:
+            return _json_no_store({"ok": True, "changed": changed})
+        flash("SPEAR ACTION ASSIGNED." if changed else "SPEAR ACTION ALREADY CURRENT.", "success" if changed else "info")
+        return redirect(url_for("neoscorpion.fuel_dispatch"))
+    except (IntegrityError, StopIteration, ValueError) as exc:
+        db.session.rollback()
+        message = str(exc) if isinstance(exc, ValueError) else "SPEAR plan changed. Reload and review it."
+        if json_response:
+            return _json_no_store({"ok": False, "error": message}, 409 if "changed" in message.lower() else 400)
+        flash(message, "error")
+        return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
 @bp.route("/history")
 @gateway_node_required("scorpion")
 def history():
@@ -965,6 +1142,17 @@ def _settings_response(gateway, access, status_code=200):
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         can_edit_apu_rates=user_can(APU_RATES_EDIT_PERMISSION),
+        **settings_context(gateway),
+    )
+    return response, status_code
+
+
+def _spear_settings_response(gateway, access, status_code=200):
+    response = render_template(
+        "neonodes/neoscorpion/spear_settings.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        can_edit=access["can_edit"],
         **settings_context(gateway),
     )
     return response, status_code

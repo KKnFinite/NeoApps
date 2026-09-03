@@ -38,6 +38,12 @@ from app.services.neoscorpion_assets import (
     record_nightly_operational_change,
 )
 from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
+from app.services.neoscorpion_spear import (
+    SPEAR_HARD_CONSTRAINTS,
+    build_spear_plan,
+    effective_spear_settings,
+    priority_rows,
+)
 from app.services.neoscorpion_dispatch_planning import (
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
     assignment_mission_timing,
@@ -322,6 +328,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     fuelers = _fueler_users()
     trucks = _fuel_trucks(gateway)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    spear_settings = effective_spear_settings(settings)
     fuel_density = (
         settings.fuel_density_lbs_per_gallon
         if settings is not None
@@ -348,6 +355,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "trucks": trucks,
             "settings": settings,
             "truck_visuals": [],
+            "spear_plan": None,
+            "spear_settings": spear_settings,
             "fuel_dispatch_refresh": refresh_setting,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
             **asset_context,
@@ -404,6 +413,16 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
         now_utc=datetime.utcnow(),
     )
+    spear_plan = build_spear_plan(
+        rows,
+        operation=operation,
+        planning_settings=assignment_planning_settings(gateway, settings=settings),
+        spear_settings=spear_settings,
+        nightly_fuelers=asset_context["nightly_assignment_fuelers"],
+        nightly_trucks=asset_context["nightly_trucks"],
+        now_utc=datetime.utcnow(),
+    )
+    _attach_spear_plan(rows, truck_visuals, spear_plan)
     return {
         "operation": operation,
         "rows": rows,
@@ -411,6 +430,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "fuelers": fuelers,
         "trucks": trucks,
         "settings": settings,
+        "spear_plan": spear_plan,
+        "spear_settings": spear_settings,
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         **asset_context,
@@ -561,6 +582,9 @@ def settings_context(gateway):
         ).all()
     }
     assignment_planning = assignment_planning_settings(gateway)
+    spear_settings = effective_spear_settings(
+        settings if not isinstance(settings, dict) else None
+    )
     return {
         "settings": settings,
         "planning_inbound_fallback_display": format_display_thousands(
@@ -580,6 +604,9 @@ def settings_context(gateway):
             for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
         ],
         "assignment_planning": assignment_planning,
+        "spear_settings": spear_settings,
+        "spear_priority_rows": priority_rows(spear_settings),
+        "spear_hard_constraints": SPEAR_HARD_CONSTRAINTS,
         "assignment_pump_rate_settings": [
             {
                 "aircraft_type": aircraft_type,
@@ -4300,6 +4327,25 @@ _DISPATCH_RECOMMENDATION_REASON_LABELS = {
     "no_eligible_fueler": "NO ELIGIBLE FUELER",
     "no_eligible_truck": "NO ELIGIBLE TRUCK",
 }
+
+
+def _attach_spear_plan(rows, truck_visuals, plan):
+    """Decorate the existing bounded dispatch rows/cards with the fleet plan."""
+    rows_by_mission_id = {row["mission"].id: row for row in rows}
+    for row in rows:
+        mission_id = row["mission"].id
+        row["spear_step"] = None
+        row["spear_risk"] = plan.risks_by_mission_id.get(mission_id)
+        row["spear_problem"] = plan.unavailable_by_mission_id.get(mission_id)
+    visuals_by_truck_id = {item["truck_id"]: item for item in truck_visuals}
+    for visual in truck_visuals:
+        visual["spear_recommendation"] = None
+    for step in plan.steps:
+        if step.mission_id in rows_by_mission_id:
+            rows_by_mission_id[step.mission_id]["spear_step"] = step
+        visual = visuals_by_truck_id.get(step.truck_id)
+        if visual is not None and visual["spear_recommendation"] is None:
+            visual["spear_recommendation"] = step
 
 
 def _attach_dispatch_assignment_recommendations(

@@ -9,6 +9,12 @@
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);
     const revisionUrl = root.dataset.revisionUrl;
     const autosaveUrl = root.dataset.autosaveUrl;
+    const spearActionUrl = root.dataset.spearActionUrl;
+    const spearRecalculationMs = Math.max(
+        60000,
+        Number(root.dataset.spearRecalculationMs || 120000)
+    );
+    const spearRenderedAt = Date.now();
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
     const initialControlValues = new WeakMap();
@@ -98,6 +104,12 @@
         const nextRevision = Number(payload.revision || 0);
         if (nextOperationId !== operationId || nextRevision !== revision) {
             handleChangedFingerprint();
+        } else if (
+            root.dataset.spearRecommendationsEnabled === "true"
+            && Date.now() - spearRenderedAt >= spearRecalculationMs
+            && !hasUnsavedControls()
+        ) {
+            reloadPage();
         }
     };
 
@@ -352,6 +364,38 @@
         });
     });
     syncDirtyState();
+    if (
+        root.dataset.spearAutomationEnabled === "true"
+        && spearActionUrl
+        && root.dataset.spearPlanToken
+    ) {
+        const delay = Math.max(1000, Number(root.dataset.spearStabilityDelayMs || 5000));
+        window.setTimeout(async () => {
+            if (reloading || hasUnsavedControls() || root.dataset.liveDirty === "true") return;
+            root.dataset.liveDirty = "true";
+            const body = new FormData();
+            body.set("execution_mode", "automatic");
+            body.set("plan_token", root.dataset.spearPlanToken);
+            try {
+                const response = await fetch(spearActionUrl, {
+                    method: "POST",
+                    body,
+                    cache: "no-store",
+                    credentials: "same-origin",
+                    headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || payload.ok !== true) {
+                    throw new Error(payload.error || "Automation action failed.");
+                }
+                reloadPage();
+            } catch (error) {
+                root.dataset.liveDirty = "false";
+                const status = root.querySelector("[data-spear-fleet-status]");
+                setStatus(status, `SPEAR: ${error.message}`, "error");
+            }
+        }, delay);
+    }
     if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000) {
         controller = window.NeoLiveUpdates.create({
             continuousWhileVisible: true,

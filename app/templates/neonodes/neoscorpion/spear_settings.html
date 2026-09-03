@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}SPEAR Fleet Optimizer | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Fleet Optimizer settings">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}{% include "neonodes/neoscorpion/_brand_title.html" %}{% endwith %}
+        <h1>SPEAR Fleet Optimizer</h1>
+        <p>Scorpion Planning Engine for Assignment &amp; Routing</p>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <form class="neoscorpion-spear-settings-form" method="post" data-spear-settings-form>
+        <section class="neoscorpion-panel">
+            <div class="neoscorpion-panel-head"><span>Operational Controls</span><strong>{{ gateway.code }}</strong></div>
+            <div class="neoscorpion-spear-setting-grid">
+                <label><input type="checkbox" name="recommendations_enabled" value="1" {% if spear_settings.recommendations_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Enable SPEAR Recommendations</label>
+                <label><input type="checkbox" name="automation_enabled" value="1" {% if spear_settings.automation_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %} data-spear-automation-toggle> SPEAR Automation</label>
+                <label>Minimum Truck Reserve Gallons<input name="minimum_truck_reserve_gallons" value="{{ spear_settings.minimum_truck_reserve_gallons }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
+                <label>Do Not Top Off Above, %<input name="do_not_top_off_above_percent" value="{{ spear_settings.do_not_top_off_above_percent }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
+                <label>Truck Minutes Per Ramp Move<input name="truck_minutes_per_ramp_move" value="{{ spear_settings.truck_minutes_per_ramp_move }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}></label>
+                <label>Fueler Begins At<select name="fueler_begins_at" {% if not can_edit %}disabled{% endif %}>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<option value="{{ ramp }}" {% if spear_settings.fueler_begins_at == ramp %}selected{% endif %}>{{ ramp }}</option>{% endfor %}</select></label>
+                <label>Truck Begins At<select name="truck_begins_at" {% if not can_edit %}disabled{% endif %}>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<option value="{{ ramp }}" {% if spear_settings.truck_begins_at == ramp %}selected{% endif %}>{{ ramp }}</option>{% endfor %}</select></label>
+                <label>Truck After Top Off<select name="truck_after_top_off" {% if not can_edit %}disabled{% endif %}>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<option value="{{ ramp }}" {% if spear_settings.truck_after_top_off == ramp %}selected{% endif %}>{{ ramp }}</option>{% endfor %}</select></label>
+                <label>Incoming Aircraft Early Staging, minutes<input name="incoming_early_staging_minutes" value="{{ spear_settings.incoming_early_staging_minutes }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
+                <label>Recalculation Interval, minutes<input name="recalculation_interval_minutes" value="{{ spear_settings.recalculation_interval_minutes }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
+                <label>Automation Stability Delay, seconds<input name="automation_stability_delay_seconds" value="{{ spear_settings.automation_stability_delay_seconds }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
+            </div>
+        </section>
+
+        <section class="neoscorpion-panel">
+            <div class="neoscorpion-panel-head"><span>Soft Priorities</span><strong>DRAG TO REORDER</strong></div>
+            <ol class="neoscorpion-spear-priorities" data-spear-priority-list>
+                {% for key, label in spear_priority_rows %}<li draggable="{{ 'true' if can_edit else 'false' }}" data-priority-key="{{ key }}"><span aria-hidden="true">⋮⋮</span>{{ label }}</li>{% endfor %}
+            </ol>
+            <input type="hidden" name="priority_order" value="{{ spear_settings.priority_order|join(',') }}" data-spear-priority-order>
+        </section>
+
+        <section class="neoscorpion-panel">
+            <div class="neoscorpion-panel-head"><span>Hard Constraints</span><strong>FIXED</strong></div>
+            <ul class="neoscorpion-spear-hard-constraints">{% for item in spear_hard_constraints %}<li>{{ item }}</li>{% endfor %}</ul>
+        </section>
+
+        {% if can_edit %}<button class="action-button neoscorpion-save-button" type="submit">SAVE SPEAR SETTINGS</button>{% endif %}
+    </form>
+</section>
+<script src="{{ url_for('static', filename='js/neoscorpion_spear_settings.js', v=config.STATIC_ASSET_VERSION) }}" defer></script>
+{% endblock %}

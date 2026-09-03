@@ -25349,6 +25349,166 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     }
 }
 
+.neoscorpion-settings-link-card {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+
+.neoscorpion-settings-link-card:hover,
+.neoscorpion-settings-link-card:focus-visible {
+    border-color: #62b5df;
+    outline: 0;
+}
+
+.neoscorpion-spear-settings-form {
+    display: grid;
+    gap: 10px;
+}
+
+.neoscorpion-spear-setting-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    padding: 10px;
+}
+
+.neoscorpion-spear-setting-grid label {
+    display: grid;
+    gap: 4px;
+    color: #9db5c5;
+    font-size: .7rem;
+}
+
+.neoscorpion-spear-setting-grid label:has(input[type="checkbox"]) {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+}
+
+.neoscorpion-spear-setting-grid :is(input:not([type="checkbox"]), select) {
+    min-height: 36px;
+    border: 1px solid #365a72;
+    border-radius: 3px;
+    background: #0a1b28;
+    color: #e3f0f7;
+    padding: 5px 7px;
+}
+
+.neoscorpion-spear-setting-grid input[type="checkbox"] {
+    accent-color: #5bb9e8;
+}
+
+.neoscorpion-spear-priorities,
+.neoscorpion-spear-hard-constraints {
+    display: grid;
+    gap: 5px;
+    margin: 0;
+    padding: 10px 10px 10px 38px;
+}
+
+.neoscorpion-spear-priorities li {
+    border: 1px solid #2d5168;
+    background: #0a1b28;
+    color: #dcebf3;
+    padding: 7px 9px;
+    cursor: grab;
+}
+
+.neoscorpion-spear-priorities li span {
+    margin-right: 8px;
+    color: #68bce7;
+}
+
+.neoscorpion-spear-hard-constraints li {
+    color: #a8bdca;
+    font-size: .72rem;
+}
+
+.neoscorpion-spear-fleet-status {
+    margin: 8px 0;
+    border-left: 4px solid #48a878;
+    background: #0c211a;
+    color: #8ae0b1;
+    padding: 7px 10px;
+    font-size: .74rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+}
+
+.neoscorpion-spear-fleet-status.is-at-risk {
+    border-color: #d39c45;
+    background: #211b0e;
+    color: #f0c36f;
+}
+
+.neoscorpion-spear-fleet-status.is-late {
+    border-color: #c54d58;
+    background: #261116;
+    color: #ef9299;
+}
+
+.neoscorpion-truck-spear {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 7px;
+    align-items: center;
+    margin-top: 5px;
+    border-top: 1px solid #294b61;
+    padding-top: 5px;
+}
+
+.neoscorpion-truck-spear > strong {
+    grid-column: 1 / -1;
+    color: #67c5f2;
+    font-size: .55rem;
+    letter-spacing: .1em;
+}
+
+.neoscorpion-truck-spear > span {
+    color: #e3f0f7;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.neoscorpion-truck-spear > small {
+    grid-column: 1;
+    color: #91aabd;
+    font-size: .58rem;
+}
+
+.neoscorpion-truck-spear form {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+}
+
+.neoscorpion-truck-spear button {
+    min-height: 30px;
+    padding: 3px 8px;
+}
+
+.neoscorpion-spear-risk {
+    display: block;
+    margin-top: 2px;
+    color: #78d6a4;
+    font-size: .54rem;
+    letter-spacing: .05em;
+}
+
+.neoscorpion-spear-risk.is-at-risk,
+.neoscorpion-spear-risk.is-unplanned {
+    color: #e5b962;
+}
+
+.neoscorpion-spear-risk.is-late {
+    color: #e47b84;
+}
+
+@media (max-width: 700px) {
+    .neoscorpion-spear-setting-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Compact operational Crew Admin controls; scoped so other Rain forms retain their styling. */
 .neorain-crew-admin :is(input:not([type="hidden"]), select, button) {
     min-height: 34px;
