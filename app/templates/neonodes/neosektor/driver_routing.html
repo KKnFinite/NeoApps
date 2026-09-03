@@ -144,6 +144,7 @@
             target.replaceChildren(message);
             target.setAttribute("aria-label", message.textContent);
             if (arrow) {
+                arrow.textContent = "";
                 arrow.hidden = true;
             }
             return;

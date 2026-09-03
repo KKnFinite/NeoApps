@@ -1139,6 +1139,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("width: min(90%, 640px);", arrow_block)
         self.assertIn("height: clamp(115px, 18svh, 220px);", arrow_block)
         self.assertIn("font-size: 0;", arrow_block)
+        self.assertIn(
+            ".blueprint-neosektor .driver-arrow[hidden] {\n    display: none !important;",
+            css,
+        )
         self.assertIn("order: 1;", arrow_block)
         self.assertIn("order: 2;", target_block)
         self.assertIn("align-self: center;", target_block)
