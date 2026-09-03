@@ -21812,16 +21812,19 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 /* Driver Routing is intentionally a three-bay decision display. */
 body.blueprint-neosektor.neosektor-driver-page .driver-bay-priority {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: min(82vw, 1080px);
+    width: min(78vw, 1080px);
     max-width: calc(100% - 32px);
-    min-height: clamp(184px, 26svh, 295px);
+    min-height: clamp(208px, 29svh, 330px);
     margin-inline: auto;
     justify-self: center;
     justify-content: center;
 }
 
 body.blueprint-neosektor.neosektor-driver-page .driver-priority-card strong {
-    font-size: clamp(4.5rem, min(13vw, 12svh), 7.8rem);
+    font-size: clamp(5.25rem, min(16vw, 14svh), 9.4rem);
+    align-self: stretch;
+    display: grid;
+    place-items: center;
 }
 
 .blueprint-neosektor .driver-wave-message {
