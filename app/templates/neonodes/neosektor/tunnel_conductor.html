@@ -148,6 +148,30 @@
         </section>
 
         <section class="tunnel-panel tunnel-operations-card" aria-label="Operations" data-tunnel-operations-card>
+        <section class="tunnel-route-overrides" aria-label="Driver routing overrides">
+            {% for wave_key in ["first", "second"] %}
+            {% set route = state.routing.routes[wave_key] %}
+            <fieldset class="tunnel-route-override" data-tunnel-route-override="{{ wave_key }}">
+                <legend>{{ route.wave_label }}</legend>
+                <div class="tunnel-route-override-options" role="radiogroup" aria-label="{{ route.wave_label }} Driver Routing override">
+                    {% for value, label in [("east", "EAST"), ("auto", "AUTO"), ("west", "WEST")] %}
+                    <label>
+                        <input
+                            type="radio"
+                            name="{{ wave_key }}_route_override"
+                            value="{{ value }}"
+                            data-tunnel-route-override-input="{{ wave_key }}"
+                            data-neosektor-edit-key="routing:{{ wave_key }}_override"
+                            {% if route.override == value %}checked{% endif %}
+                            {% if not can_edit %}disabled{% endif %}
+                        >
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            {% endfor %}
+        </section>
         <section class="tunnel-panel tunnel-settings-panel" aria-label="Left to unload settings">
             <h2 class="tunnel-mobile-section-title">Unload Settings</h2>
             <div class="tunnel-settings-grid">
@@ -260,6 +284,7 @@
     const initialRefreshStatus = {{ state.refresh|tojson }};
     const offsetInput = root.querySelector("[data-tunnel-offset-input]");
     const settingInputs = Array.from(root.querySelectorAll("[data-tunnel-setting]"));
+    const routeOverrideInputs = Array.from(root.querySelectorAll("[data-tunnel-route-override-input]"));
     const ballmatSaveTimers = {};
     const waveSaveTimers = {};
     const pendingEdits = new Map();
@@ -387,6 +412,16 @@
 
         const routing = state.routing || {};
         setEditableValue(offsetInput, routing.west_offset ?? 0);
+        Object.entries(routing.routes || {}).forEach(([waveKey, route]) => {
+            const override = route?.override || "auto";
+            routeOverrideInputs
+                .filter((input) => input.dataset.tunnelRouteOverrideInput === waveKey)
+                .forEach((input) => {
+                    if (!hasPending(input)) {
+                        input.checked = input.value === override;
+                    }
+                });
+        });
 
         const settings = state.operational_settings || {};
         settingInputs.forEach((input) => {
@@ -551,6 +586,11 @@
         settingInputs.forEach((input) => {
             payload[input.dataset.tunnelSetting] = readClampedNumber(input);
         });
+        routeOverrideInputs.forEach((input) => {
+            if (input.checked) {
+                payload[`${input.dataset.tunnelRouteOverrideInput}_override`] = input.value;
+            }
+        });
         return payload;
     };
 
@@ -559,7 +599,7 @@
             return;
         }
         const saveSequence = ++settingsSaveSequence;
-        const tokens = captureTokens(settingInputs);
+        const tokens = captureTokens([...settingInputs, ...routeOverrideInputs]);
 
         try {
             const response = await fetch(settingsUrl, {
@@ -739,6 +779,12 @@
 
         if (event.target.matches("[data-tunnel-setting]") && !event.target.disabled) {
             event.target.value = readClampedNumber(event.target);
+            markInputPending(event.target);
+            saveSettings();
+            return;
+        }
+
+        if (event.target.matches("[data-tunnel-route-override-input]") && !event.target.disabled) {
             markInputPending(event.target);
             saveSettings();
         }

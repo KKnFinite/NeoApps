@@ -40,10 +40,15 @@ DEFAULT_BAYS = (
 DRIVER_ROUTE_FIRST_WAVE_NAME = "1ST WAVE ROUTE"
 DRIVER_ROUTE_SECOND_WAVE_NAME = "2ND WAVE ROUTE"
 DRIVER_ROUTE_WEST_OFFSET_NAME = "WEST OFFSET"
+DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME = "1ST WAVE OVERRIDE"
+DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME = "2ND WAVE OVERRIDE"
+DRIVER_ROUTE_OVERRIDE_VALUES = ("auto", "east", "west")
 DEFAULT_DRIVER_ROUTES = (
     DRIVER_ROUTE_FIRST_WAVE_NAME,
     DRIVER_ROUTE_SECOND_WAVE_NAME,
     DRIVER_ROUTE_WEST_OFFSET_NAME,
+    DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME,
+    DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME,
 )
 DEFAULT_FIRST_WAVE_UNLOAD_MODIFIER = 45
 DEFAULT_SECOND_WAVE_UNLOAD_MODIFIER = 37
@@ -823,6 +828,7 @@ def update_neosektor_operational_settings(
         sort_name,
         include_routing=True,
     )
+    driver_routes = bundle.ensure_driver_routes()
     settings = bundle.operational_settings
     settings.first_wave_unload_modifier = _clean_count(
         (payload or {}).get("first_modifier"),
@@ -839,6 +845,22 @@ def update_neosektor_operational_settings(
         default=settings.all_up_to_down_minutes,
         minimum=1,
         maximum=ALL_UP_TO_DOWN_MINUTES_MAX,
+    )
+    first_override = _driver_route_by_name(
+        driver_routes,
+        DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME,
+    )
+    second_override = _driver_route_by_name(
+        driver_routes,
+        DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME,
+    )
+    first_override.route_value = _clean_driver_route_override(
+        (payload or {}).get("first_override"),
+        default=first_override.route_value,
+    )
+    second_override.route_value = _clean_driver_route_override(
+        (payload or {}).get("second_override"),
+        default=second_override.route_value,
     )
     return bundle.driver_routing_state_payload()
 
@@ -1692,7 +1714,14 @@ def _settings_down_timer_minutes(settings):
 
 
 def _driver_route_default_value(route_name):
-    return "0" if route_name == DRIVER_ROUTE_WEST_OFFSET_NAME else ""
+    if route_name == DRIVER_ROUTE_WEST_OFFSET_NAME:
+        return "0"
+    if route_name in (
+        DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME,
+        DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME,
+    ):
+        return "auto"
+    return ""
 
 
 def _driver_route_by_name(driver_routes, route_name):
@@ -1705,19 +1734,21 @@ def _driver_routing_calculation(sort_state, sides, driver_routes):
     west_offset = _driver_route_offset(driver_routes)
     east_open_bays = max(east["open_bays"], 0)
     west_open_bays = max(west["open_bays"], 0)
-    first_route = _driver_wave_route(
+    first_route = _driver_wave_route_with_override(
         _side_wave_count(east, "first"),
         _side_wave_count(west, "first"),
         east_open_bays,
         west_open_bays,
         west_offset,
+        _driver_route_override(driver_routes, DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME),
     )
-    second_route = _driver_wave_route(
+    second_route = _driver_wave_route_with_override(
         _side_wave_count(east, "second"),
         _side_wave_count(west, "second"),
         east_open_bays,
         west_open_bays,
         west_offset,
+        _driver_route_override(driver_routes, DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME),
     )
 
     return {
@@ -1772,6 +1803,43 @@ def _driver_wave_route(east_value, west_value, east_open_bays, west_open_bays, w
     }
 
 
+def _driver_wave_route_with_override(
+    east_value,
+    west_value,
+    east_open_bays,
+    west_open_bays,
+    west_offset,
+    override,
+):
+    calculated = _driver_wave_route(
+        east_value,
+        west_value,
+        east_open_bays,
+        west_open_bays,
+        west_offset,
+    )
+    if override == "east":
+        route = {
+            "target": "East Ballmat Stay Right",
+            "direction": "east",
+            "arrow": "right",
+        }
+    elif override == "west":
+        route = {
+            "target": "West Ballmat Stay Left",
+            "direction": "west",
+            "arrow": "left",
+        }
+    else:
+        route = calculated
+    return {
+        **route,
+        "calculated_target": calculated["target"],
+        "override": override,
+        "route_source": "MANUAL OVERRIDE" if override != "auto" else "AUTO",
+    }
+
+
 def _side_wave_count(side, wave_key):
     wave = next((row for row in side["waves"] if row["key"] == wave_key), None)
     return max((wave or {}).get("count") or 0, 0)
@@ -1820,6 +1888,19 @@ def _driver_route_offset(driver_routes):
     return _clean_offset(offset_row.route_value)
 
 
+def _driver_route_override(driver_routes, route_name):
+    return _clean_driver_route_override(
+        _driver_route_by_name(driver_routes, route_name).route_value,
+    )
+
+
+def _clean_driver_route_override(value, *, default="auto"):
+    normalized = str(value or default).strip().lower()
+    if normalized not in DRIVER_ROUTE_OVERRIDE_VALUES:
+        return _clean_driver_route_override(default, default="auto")
+    return normalized
+
+
 def _sync_driver_route_values(
     driver_routes,
     routing,
@@ -1829,13 +1910,13 @@ def _sync_driver_route_values(
     _assign_if_changed(
         _driver_route_by_name(driver_routes, DRIVER_ROUTE_FIRST_WAVE_NAME),
         "route_value",
-        routing["routes"]["first"]["target"],
+        routing["routes"]["first"]["calculated_target"],
         change_tracker=change_tracker,
     )
     _assign_if_changed(
         _driver_route_by_name(driver_routes, DRIVER_ROUTE_SECOND_WAVE_NAME),
         "route_value",
-        routing["routes"]["second"]["target"],
+        routing["routes"]["second"]["calculated_target"],
         change_tracker=change_tracker,
     )
     _assign_if_changed(

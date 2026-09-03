@@ -32,7 +32,10 @@ from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
 from app.services.gateway_matrix import save_gateway_matrix
-from app.services.neosektor_live_counts import _active_wave_left_to_unload
+from app.services.neosektor_live_counts import (
+    _active_wave_left_to_unload,
+    driver_routing_state_payload,
+)
 from app.services.sort_timeline import ensure_sort_timeline_settings
 from app.services.uld_requests import (
     active_on_the_way_events,
@@ -1195,6 +1198,88 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "4",
         )
 
+    def test_tunnel_conductor_driver_route_overrides_are_independent_and_persisted(self):
+        self._login_approved_user(role="simulator")
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "east",
+                "waves": {"first": {"count": 2}, "second": {"count": 8}},
+                "open_bays": 1,
+                "bay_statuses": {},
+            },
+        )
+        self.client.post(
+            "/neosektor/tunnel-conductor/ballmat",
+            json={
+                "side": "west",
+                "waves": {"first": {"count": 9}, "second": {"count": 1}},
+                "open_bays": 3,
+                "bay_statuses": {},
+            },
+        )
+
+        initial = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
+        self.assertEqual(initial["routing"]["routes"]["first"]["override"], "auto")
+        self.assertEqual(initial["routing"]["routes"]["second"]["override"], "auto")
+        before_counts = (
+            initial["routing"]["routes"]["first"]["east_count"],
+            initial["routing"]["routes"]["first"]["west_count"],
+            initial["waves"],
+        )
+
+        response = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={"first_override": "east", "second_override": "west"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        routing = response.get_json()["state"]["routing"]
+        self.assertEqual(routing["routes"]["first"]["target"], "East Ballmat Stay Right")
+        self.assertEqual(routing["routes"]["first"]["route_source"], "MANUAL OVERRIDE")
+        self.assertEqual(routing["routes"]["second"]["target"], "West Ballmat Stay Left")
+        self.assertEqual(routing["routes"]["second"]["route_source"], "MANUAL OVERRIDE")
+        self.assertEqual(
+            (routing["routes"]["first"]["east_count"], routing["routes"]["first"]["west_count"], response.get_json()["state"]["waves"]),
+            before_counts,
+        )
+        self.assertEqual(
+            NeoSektorDriverRouteSetting.query.filter_by(route_name="1ST WAVE OVERRIDE").one().route_value,
+            "east",
+        )
+        self.assertEqual(
+            NeoSektorDriverRouteSetting.query.filter_by(route_name="2ND WAVE OVERRIDE").one().route_value,
+            "west",
+        )
+        driver_board = self.client.get("/neosektor/driver-routing")
+        self.assertIn(b"MANUAL OVERRIDE", driver_board.data)
+        self.assertIn(b"data-driver-route-source", driver_board.data)
+
+        switched = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={"first_override": "west", "second_override": "east"},
+        ).get_json()["state"]["routing"]
+        self.assertEqual(switched["routes"]["first"]["target"], "West Ballmat Stay Left")
+        self.assertEqual(switched["routes"]["second"]["target"], "East Ballmat Stay Right")
+
+        restored = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={"first_override": "auto", "second_override": "auto"},
+        ).get_json()["state"]["routing"]
+        self.assertEqual(restored["routes"]["first"]["override"], "auto")
+        self.assertEqual(restored["routes"]["first"]["target"], "East Ballmat Stay Right")
+        self.assertEqual(restored["routes"]["second"]["override"], "auto")
+
+    def test_new_neosektor_sort_defaults_driver_route_overrides_to_auto(self):
+        state = driver_routing_state_payload(
+            self.gateway,
+            sort_date=date(2031, 1, 6),
+            sort_name="night",
+        )
+
+        self.assertEqual(state["routing"]["routes"]["first"]["override"], "auto")
+        self.assertEqual(state["routing"]["routes"]["second"]["override"], "auto")
+
     def test_tunnel_conductor_route_offset_clamps_to_non_negative_standalone_behavior(self):
         self._login_approved_user(role="simulator")
 
@@ -1394,6 +1479,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"Ballmat Counts", response.data)
         self.assertIn(b"Driver Route Offset", response.data)
         self.assertIn(b"data-tunnel-offset-input", response.data)
+        self.assertIn(b'data-tunnel-route-override="first"', response.data)
+        self.assertIn(b'data-tunnel-route-override="second"', response.data)
+        self.assertIn(b">1ST WAVE<", response.data)
+        self.assertIn(b">2ND WAVE<", response.data)
+        self.assertIn(b'data-tunnel-route-override-input="first"', response.data)
+        self.assertIn(b'data-tunnel-route-override-input="second"', response.data)
         self.assertIn(b"Unload Settings", response.data)
         self.assertIn(b"data-tunnel-setting=\"first_modifier\"", response.data)
         self.assertIn(b"data-settings-url=\"/neosektor/tunnel-conductor/settings\"", response.data)
@@ -3185,7 +3276,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBallmatCount.query.count(), 2)
         self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
         self.assertEqual(NeoSektorBayStatus.query.count(), 5)
-        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 3)
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 5)
 
         with (
             patch(

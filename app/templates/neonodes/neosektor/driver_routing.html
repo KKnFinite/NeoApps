@@ -28,6 +28,7 @@
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
+            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.direction == "east" %}
@@ -60,6 +61,7 @@
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
+            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.direction == "east" %}
@@ -116,6 +118,12 @@
             return;
         }
         panel.dataset.direction = route.direction;
+        panel.toggleAttribute("data-manual-override", route.override !== "auto");
+        const source = panel.querySelector("[data-driver-route-source]");
+        if (source) {
+            source.hidden = route.override === "auto";
+            source.textContent = `MANUAL OVERRIDE · ${String(route.override || "auto").toUpperCase()}`;
+        }
         const target = panel.querySelector("[data-driver-target]");
         const targetLabel = route.direction === "east" ? "East Ballmat" : "West Ballmat";
         const instructionLabel = route.direction === "east" ? "Stay Right" : "Stay Left";
