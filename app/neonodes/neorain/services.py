@@ -800,7 +800,7 @@ def _inbound_row(mission, parking_by_tail, departures_by_tail=None, ground_time_
         "arrival_variance": _arrival_variance(mission),
         "late_metrics_included": late_metrics["included"],
         "late_metrics_inclusion_source": late_metrics["source"],
-        "connecting_outbound": connection["flight_number"],
+        "connecting_outbound": connection["display"],
         "ground_time": connection["ground_time"],
         "ground_time_warning": bool(
             connection.get("ground_time_minutes") is not None
@@ -849,17 +849,22 @@ def _inbound_departures_by_tail(departures, operation):
 
 def _inbound_connection(mission, arrival_anchor, departures_by_tail):
     if arrival_anchor is None:
-        return {"flight_number": "", "ground_time": "", "ground_time_minutes": None}
+        return {"flight_number": "", "display": "", "ground_time": "", "ground_time_minutes": None}
     for departure_time, departure in departures_by_tail.get(_tail_key(mission.assigned_tail_number), ()):
         if departure_time < arrival_anchor:
             continue
         minutes = int((departure_time - arrival_anchor).total_seconds() / 60)
         return {
             "flight_number": _text(departure.flight_number),
+            "display": " · ".join((
+                _text(departure.flight_number) or "-",
+                _text(departure.assigned_tail_number) or "-",
+                _text(departure.destination) or "-",
+            )),
             "ground_time": _duration_hhmm(minutes),
             "ground_time_minutes": minutes,
         }
-    return {"flight_number": "", "ground_time": "", "ground_time_minutes": None}
+    return {"flight_number": "", "display": "", "ground_time": "", "ground_time_minutes": None}
 
 
 def _duration_hhmm(minutes):

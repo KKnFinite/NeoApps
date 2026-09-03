@@ -149,7 +149,7 @@ from app.services.operation_lifecycle import (
     current_existing_operational_sort_operations,
     manual_current_sort_creation_status,
 )
-from app.services.operation_scope import operation_by_id
+from app.services.operation_scope import current_operational_sort_operation, operation_by_id
 from app.services.live_collaboration import (
     changed_field_conflicts,
     entity_version,
@@ -3200,6 +3200,9 @@ def new_mission(operation_id):
         _sync_tail_state_and_crew_slots(mission)
         db.session.commit()
         flash("Manual mission created.", "info")
+        return_endpoint = _new_mission_return_endpoint(operation, mission.mission_type)
+        if return_endpoint:
+            return redirect(url_for(return_endpoint))
         return redirect(
             url_for(
                 "neomotherbrain.mission_detail",
@@ -5458,6 +5461,7 @@ def _render_mission_form(operation, form, mode, mission=None, conflict=None):
             },
             sort_keys=True,
         )
+    return_endpoint = _new_mission_return_endpoint(operation, form.get("mission_type"))
     return render_template(
         "neomotherbrain/mission_form.html",
         arrival_statuses=ARRIVAL_STATUSES,
@@ -5475,7 +5479,22 @@ def _render_mission_form(operation, form, mode, mission=None, conflict=None):
             else entity_version(mission) if mission else ""
         ),
         original_values=original_values,
+        return_endpoint=return_endpoint,
     )
+
+
+def _new_mission_return_endpoint(operation, mission_type):
+    """Allow the canonical mission form to return to its Rain board safely."""
+    endpoint = request.values.get("return_to", "")
+    expected = {
+        "arrival": "neorain.inbound",
+        "departure": "neorain.outbound",
+    }.get((mission_type or "").strip().lower())
+    if endpoint != expected or not expected:
+        return None
+    gateway = get_current_gateway()
+    current = current_operational_sort_operation(gateway)
+    return expected if current and current.id == operation.id else None
 
 
 def _mission_form_from_request(operation):

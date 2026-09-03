@@ -10,6 +10,9 @@
     </div>
 
     <form class="operation-form" method="post">
+        {% if return_endpoint %}
+        <input type="hidden" name="return_to" value="{{ return_endpoint }}">
+        {% endif %}
         {% if mode == "edit" %}
         <input type="hidden" name="expected_version" value="{{ expected_version }}">
         <input type="hidden" name="original_values" value="{{ original_values|e }}">
@@ -115,7 +118,7 @@
 
         <div class="action-row">
             <button class="action-button" type="submit">{{ "SAVE" if mode == "edit" else "CREATE" }}</button>
-            <a class="action-button action-button-secondary" href="{{ url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">BACK TO OPERATION</a>
+            <a class="action-button action-button-secondary" href="{{ url_for(return_endpoint) if return_endpoint else url_for('neomotherbrain.operation_detail', operation_id=operation.id) }}">{{ "BACK TO NEO RAIN" if return_endpoint else "BACK TO OPERATION" }}</a>
         </div>
     </form>
 </section>

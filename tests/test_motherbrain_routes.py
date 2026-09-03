@@ -3836,6 +3836,33 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(tail_state.aircraft_type, "A300")
         self.assertEqual(tail_state.aircraft_type_source, "derived")
 
+    def test_canonical_manual_mission_form_returns_to_matching_rain_board(self):
+        operation = self._operation(sort_date=current_gateway_local_date(self.rfd_gateway))
+        db.session.add(operation)
+        db.session.commit()
+
+        with patch(
+            "app.neomotherbrain.routes.current_operational_sort_operation",
+            return_value=operation,
+        ):
+            response = self.client.post(
+                f"/motherbrain/operations/{operation.id}/missions/new",
+                data=self._mission_form_data(
+                    mission_type="arrival",
+                    flight_number="RAINARR",
+                    origin="SDF",
+                    destination="RFD",
+                    return_to="neorain.inbound",
+                ),
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/neorain/inbound")
+        mission = SortDateMission.query.filter_by(flight_number="RAINARR").one()
+        self.assertEqual(mission.mission_source, "manual")
+        self.assertEqual(mission.mission_type, "arrival")
+
     def test_create_manual_departure_mission_with_pull_times(self):
         operation = self._operation()
         db.session.add(operation)

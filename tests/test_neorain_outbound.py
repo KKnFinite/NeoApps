@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -187,7 +188,7 @@ class NeoRainOutboundTest(unittest.TestCase):
         self._mission(operation, "UPS403", "LAX", planned=datetime(2026, 8, 30, 2, 30), tail="N999UP")
         db.session.commit()
         row = neorain_inbound_context(self.gateway, operation=operation)["rows"][0]
-        self.assertEqual(row["connecting_outbound"], "UPS402")
+        self.assertEqual(row["connecting_outbound"], "UPS402 · N400UP · ONT")
         self.assertEqual(row["ground_time"], "0:45")
 
     def test_departure_variance_uses_canonical_std_and_handles_midnight(self):
@@ -753,6 +754,38 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b'data-neorain-inbound-edit-protected hidden', cancelled_fragment)
         self.assertIn(b'disabled', cancelled_fragment)
         self.assertIn(b'setInboundEditLock', response.data)
+
+    def test_rain_boards_link_to_canonical_manual_mission_form_and_ui_hooks(self):
+        operation = self._operation()
+        self._mission(
+            operation, "UPS670", "SDF", planned=datetime(2026, 8, 30, 6, 50)
+        )
+        self._mission(
+            operation, "UPS671", "RFD", planned=datetime(2026, 8, 30, 6, 55), mission_type="arrival"
+        )
+        db.session.commit()
+        editor = self._user("rain_add_flight", "simulator")
+        self._login(editor)
+
+        with patch("app.neonodes.neorain.routes.current_neorain_outbound_operation", return_value=operation):
+            outbound = self.client.get("/neorain/outbound")
+            inbound = self.client.get("/neorain/inbound")
+
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/new?mission_type=departure&amp;return_to=neorain.outbound".encode(),
+            outbound.data,
+        )
+        self.assertIn(
+            f"/motherbrain/operations/{operation.id}/missions/new?mission_type=arrival&amp;return_to=neorain.inbound".encode(),
+            inbound.data,
+        )
+        css = Path("app/static/css/base.css").read_bytes()
+        for hook in (
+            b'grid-template-columns: minmax(4.5rem, .55fr)',
+            b'.neorain-outbound-late-summary strong',
+            b'td[data-label="Connecting Outbound"]',
+        ):
+            self.assertIn(hook, css)
 
     def test_mobile_boards_render_compact_hooks_and_preserve_desktop_tables(self):
         operation = self._operation()

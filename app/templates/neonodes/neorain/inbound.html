@@ -5,6 +5,7 @@
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div><p>LIVE OPERATIONS</p><h1>INBOUND</h1></div>
         <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }}{% else %}NO CURRENT SORT{% endif %}</strong>
+        {% if operation and can_edit %}<a class="neorain-add-flight" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id, mission_type='arrival', return_to='neorain.inbound') }}">ADD FLIGHT</a>{% endif %}
     </header>
     <section class="neorain-outbound-late-summary" aria-label="Inbound late and staffing statistics" data-neorain-late-summary>
         <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
