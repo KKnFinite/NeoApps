@@ -1162,7 +1162,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("width: min(78vw, 1080px);", driver_priority_layout_block)
         self.assertIn("margin-inline: auto;", driver_priority_layout_block)
         self.assertIn("justify-content: center;", driver_priority_layout_block)
-        self.assertIn("min-height: clamp(208px, 29svh, 330px);", driver_priority_layout_block)
+        self.assertIn("min-height: 0;", driver_priority_layout_block)
+        self.assertIn("height: clamp(170px, 19svh, 210px);", driver_priority_layout_block)
         self.assertIn(
             "font-size: clamp(2.85rem, min(8.4vw, 7.8svh), 4.95rem);",
             css,

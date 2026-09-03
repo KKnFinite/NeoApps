@@ -21819,7 +21819,8 @@ body.blueprint-neosektor.neosektor-driver-page .driver-bay-priority {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: min(78vw, 1080px);
     max-width: calc(100% - 32px);
-    min-height: clamp(208px, 29svh, 330px);
+    min-height: 0;
+    height: clamp(170px, 19svh, 210px);
     margin-inline: auto;
     justify-self: center;
     justify-content: center;
