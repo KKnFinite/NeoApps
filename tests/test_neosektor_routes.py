@@ -1553,8 +1553,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "grid-template-areas:\n"
             "            \"wave-first east-first west-first\"\n"
             "            \"wave-second east-second west-second\"\n"
-            "            \"operations east-open west-open\";",
+            "            \"offset east-open west-open\"\n"
+            "            \"operations operations operations\";",
             css,
+        )
+        self.assertLess(
+            response.data.index(b'class="tunnel-panel tunnel-offset-panel"'),
+            response.data.index(b'class="tunnel-panel tunnel-operations-card"'),
         )
         self.assertIn("grid-column: 2;", css)
         self.assertIn("grid-auto-rows: minmax(0, 1fr);", css)
@@ -1589,12 +1594,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.data.count(b'tunnel-desktop-wave-heading'), 6)
         self.assertEqual(response.data.count(b'class="tunnel-desktop-wave-heading tunnel-ballmat-wave-heading"'), 4)
         self.assertEqual(response.data.count(b'class="tunnel-ballmat-wave-workspace"'), 4)
-        self.assertNotIn(
+        self.assertIn(
             b'<article class="tunnel-panel tunnel-wave-panel" data-tunnel-wave-key="first">\n                    <h2 class="tunnel-desktop-wave-heading"',
             response.data,
         )
         self.assertIn("color: var(--neo-bright-silver);", desktop_css)
-        self.assertIn("grid-template-rows: max-content minmax(0, 1fr);", desktop_css)
+        self.assertIn("grid-template-rows: minmax(0, 1fr);", desktop_css)
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr));", desktop_css)
         self.assertIn("grid-template-columns: minmax(0, 1fr);", desktop_css)
         self.assertIsNotNone(heading_rule_match)
@@ -1602,7 +1607,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("display: block;", heading_rule)
         self.assertIn("font-size: 1.9rem;", heading_rule)
         self.assertIn("line-height: 1;", heading_rule)
-        self.assertIn("transform: scaleX(0.7);", heading_rule)
+        self.assertIn("transform: none;", heading_rule)
         self.assertIn("white-space: nowrap;", heading_rule)
         self.assertIn("font-size: 0.8rem;", desktop_css)
         self.assertIn("font-size: 0.78rem;", desktop_css)
@@ -1621,7 +1626,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("gap: 12px;", desktop_css)
         self.assertIn("background: transparent;", desktop_css)
         self.assertIn("background: rgba(5, 7, 11, 0.88);", desktop_css)
-        self.assertIn("align-content: end;", desktop_css)
+        self.assertIn("padding-block: 4px 2px;", desktop_css)
         self.assertIn("gap: 1px;", desktop_css)
         self.assertIn("min-height: 104px;", desktop_css)
         self.assertIn("min-width: 112px;", desktop_css)
@@ -1639,6 +1644,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: clamp(4.14rem, 6.21vw, 6.3rem);", desktop_css)
         self.assertIn("padding-bottom: 10px;", desktop_css)
         self.assertIn("text-align: center;", desktop_css)
+        self.assertIn("grid-template-areas: \"overrides settings\";", desktop_css)
+        self.assertIn("grid-template-columns: minmax(0, 1.45fr) minmax(0, .78fr);", desktop_css)
+        self.assertIn("appearance: none;", desktop_css)
+        self.assertIn("::-webkit-slider-runnable-track", desktop_css)
+        self.assertIn("::-webkit-slider-thumb", desktop_css)
+        self.assertIn("::-moz-range-track", desktop_css)
+        self.assertIn("::-moz-range-thumb", desktop_css)
+        self.assertIn("height: 74px;", desktop_css)
         self.assertIn("color: var(--neo-bright-silver);", css)
 
     def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
@@ -1999,7 +2012,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         mobile_layout = css[layout_start:layout_end]
 
         self.assertIn(
-            '"notice"\n            "waves"\n            "counts"\n            "bays"\n            "operations";',
+            '"notice"\n            "waves"\n            "counts"\n            "bays"\n            "operations"\n            "offset";',
             mobile_layout,
         )
         self.assertIn("grid-area: notice;", mobile_layout)
@@ -2037,7 +2050,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-tunnel-setting="second_modifier"', response.data)
         self.assertIn(b'data-tunnel-setting="down_timer_minutes"', response.data)
         self.assertIn(b"<span>DOWN TIMER <em>MIN</em></span>", response.data)
-        self.assertIn('grid-template-areas: "offset modifier-one modifier-two timer";', css)
+        self.assertIn('"modifier-one modifier-two timer";', css)
         self.assertIn("grid-template-rows: 11px minmax(30px, 1fr);", css)
         self.assertIn("grid-area: offset;", css)
         self.assertIn("grid-area: modifier-one;", css)
