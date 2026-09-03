@@ -435,6 +435,7 @@
                     <span>Menu</span>
                 </button>
                 <div class="mobile-bottom-popover mobile-bottom-popover--menu mobile-bottom-menu-panel mobile-shell-menu-panel" id="mobile-bottom-menu-panel" role="menu" aria-label="Mobile menu" aria-hidden="true" data-mobile-shell-menu-panel data-mobile-popover-anchor="menu">
+                    <button class="mobile-shell-menu-link mobile-share-neoapps-action" type="button" role="menuitem" data-mobile-share-open>Share NeoApps</button>
                     {% if is_neosektor_page %}
                         {% for item in neosektor_internal_menu_items() %}
                         <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
@@ -471,6 +472,18 @@
                 </div>
             </div>
         </nav>
+        <dialog class="mobile-share-dialog" data-mobile-share-dialog aria-labelledby="mobile-share-title">
+            <div class="mobile-share-dialog-panel">
+                <h2 id="mobile-share-title">SHARE NEOAPPS</h2>
+                <p>Scan to request access or sign in</p>
+                <img src="{{ url_for('auth.neoapps_share_qr') }}" alt="QR code for the NeoApps portal" width="220" height="220">
+                <div class="mobile-share-dialog-actions">
+                    <button type="button" data-mobile-share-copy data-share-url="{{ url_for('neonodes.index', _external=True) }}">COPY LINK</button>
+                    <button type="button" data-mobile-share-close>CLOSE</button>
+                </div>
+                <span data-mobile-share-status aria-live="polite"></span>
+            </div>
+        </dialog>
         {% endif %}
     </div>
     {% if uses_node_header %}
@@ -755,6 +768,28 @@
         });
     })();
     </script>
+    <script>
+    (() => {
+        const dialog = document.querySelector("[data-mobile-share-dialog]");
+        const openButton = document.querySelector("[data-mobile-share-open]");
+        if (!dialog || !openButton) return;
+        const close = () => dialog.close();
+        openButton.addEventListener("click", () => dialog.showModal());
+        dialog.querySelector("[data-mobile-share-close]")?.addEventListener("click", close);
+        dialog.addEventListener("click", (event) => {
+            if (event.target === dialog) close();
+        });
+        dialog.querySelector("[data-mobile-share-copy]")?.addEventListener("click", async (event) => {
+            const status = dialog.querySelector("[data-mobile-share-status]");
+            try {
+                await navigator.clipboard.writeText(event.currentTarget.dataset.shareUrl);
+                if (status) status.textContent = "Link copied";
+            } catch (_error) {
+                if (status) status.textContent = event.currentTarget.dataset.shareUrl;
+            }
+        });
+    })();
+    </script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
     <script
@@ -814,6 +849,32 @@
     })();
     </script>
     {% endif %}
+    <script>
+    (() => {
+        const key = "neoapps.same-page-scroll.v1";
+        const page = `${location.pathname}${location.search}`;
+        try {
+            const saved = JSON.parse(sessionStorage.getItem(key) || "null");
+            sessionStorage.removeItem(key);
+            if (saved?.page === page && Date.now() - saved.savedAt < 120000) {
+                requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, saved.y)));
+            }
+        } catch (_error) {
+            sessionStorage.removeItem(key);
+        }
+        document.addEventListener("submit", (event) => {
+            const form = event.target instanceof HTMLFormElement ? event.target : null;
+            if (!form || form.dataset.noScrollPreserve !== undefined) return;
+            const method = String(event.submitter?.formMethod || form.method || "GET").toUpperCase();
+            if (method === "GET") return;
+            window.setTimeout(() => {
+                if (!event.defaultPrevented) {
+                    sessionStorage.setItem(key, JSON.stringify({ page, y: window.scrollY, savedAt: Date.now() }));
+                }
+            }, 0);
+        });
+    })();
+    </script>
     <script>
     (() => {
         const pressableSelector = [

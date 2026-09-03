@@ -1,7 +1,7 @@
 from datetime import datetime
 from functools import wraps
 
-from flask import current_app, flash, redirect, render_template, request, session, url_for
+from flask import Response, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -68,6 +68,28 @@ GENERIC_REGISTRATION_CONFLICT_RESPONSE = (
     "An account may already exist with the information provided. "
     "Use password reset or contact an administrator if you need help."
 )
+
+
+@bp.route("/share/neoapps-qr.svg")
+@login_required
+def neoapps_share_qr():
+    """Render a local QR for the public NeoApps root without an external service."""
+    from reportlab.graphics import renderSVG
+    from reportlab.graphics.barcode.qr import QrCodeWidget
+    from reportlab.graphics.shapes import Drawing
+
+    target = url_for("neonodes.index", _external=True)
+    qr = QrCodeWidget(target)
+    x1, y1, x2, y2 = qr.getBounds()
+    size = 220
+    scale = size / max(x2 - x1, y2 - y1)
+    drawing = Drawing(size, size, transform=[scale, 0, 0, scale, 0, 0])
+    drawing.add(qr)
+    return Response(
+        renderSVG.drawToString(drawing),
+        mimetype="image/svg+xml",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 ROLE_CHOICES = ("watcher", "operator", "simulator", "master", "grandmaster")
 ROLE_DISPLAY_LABELS = {
     "watcher": "Watcher",
