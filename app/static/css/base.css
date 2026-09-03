@@ -25424,6 +25424,50 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     font-size: .72rem;
 }
 
+.neoscorpion-spear-learning-panel p {
+    margin: 0;
+    padding: 0 10px 10px;
+    color: #9db5c5;
+    font-size: .72rem;
+    line-height: 1.45;
+}
+
+.neoscorpion-spear-learning-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    color: #dcebf3;
+    font-size: .78rem;
+}
+
+.neoscorpion-spear-learning-toggle strong {
+    margin-left: auto;
+    color: #e5b962;
+    letter-spacing: .08em;
+}
+
+.neoscorpion-teach-spear {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    border: 1px solid #385367;
+    border-radius: 3px;
+    background: #10202c;
+    color: #91a4b0;
+    padding: 2px 5px;
+    font-size: .52rem;
+    font-weight: 900;
+    letter-spacing: .05em;
+    cursor: not-allowed;
+}
+
+.neoscorpion-teach-spear small {
+    color: #d2a65f;
+    font-size: .48rem;
+}
+
 .neoscorpion-spear-fleet-status {
     margin: 8px 0;
     border-left: 4px solid #48a878;
@@ -25439,6 +25483,12 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
     border-color: #d39c45;
     background: #211b0e;
     color: #f0c36f;
+}
+
+.neoscorpion-spear-fleet-status.is-waiting {
+    border-color: #4b88aa;
+    background: #0c1d29;
+    color: #9ccce3;
 }
 
 .neoscorpion-spear-fleet-status.is-late {

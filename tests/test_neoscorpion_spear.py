@@ -18,6 +18,11 @@ from app.services.neoscorpion_spear import (
     save_spear_settings,
     spear_dispatch_status,
 )
+from app.services.neoscorpion_spear_learning import (
+    SPEAR_LEARNING_PAYLOAD_VERSION,
+    build_learning_recommendation_payload,
+)
+from app.services.neoscorpion_learning_vault import export_learning_record
 
 
 NOW = datetime(2026, 9, 3, 1, 0)
@@ -127,6 +132,38 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(step.risk, "COVERED")
         self.assertEqual(plan.status_text, "SPEAR: ALL LOADS COVERED")
 
+    def test_incomplete_fuel_data_is_waiting_not_covered_or_at_risk(self):
+        plan = _plan([_row(demand=None)])
+
+        self.assertEqual(plan.waiting_for_data_count, 1)
+        self.assertEqual(plan.covered_count, 0)
+        self.assertEqual(plan.at_risk_count, 0)
+        self.assertEqual(plan.status_text, "SPEAR: 1 WAITING FOR DATA")
+
+    def test_learning_payload_is_versioned_deterministic_and_has_no_persistence(self):
+        step = _plan([_row()]).steps[0]
+        kwargs = {
+            "captured_at_utc": NOW,
+            "gateway_id": 1,
+            "operation_id": 2,
+            "mission_id": 100,
+            "recommendation_token": "stable-token",
+            "soft_priority_order": SPEAR_DEFAULT_PRIORITY_ORDER,
+            "recommendation": step,
+            "mission_facts": {"required_fuel": 500, "mission_ramp": "Charlie"},
+            "candidate_trucks": ({"truck_id": 10, "location": "Remote"},),
+            "candidate_fuelers": ({"user_id": 1, "location": "Remote"},),
+        }
+        self.assertEqual(
+            build_learning_recommendation_payload(**kwargs),
+            build_learning_recommendation_payload(**kwargs),
+        )
+        payload = build_learning_recommendation_payload(**kwargs)
+        self.assertEqual(payload["schema_version"], SPEAR_LEARNING_PAYLOAD_VERSION)
+        self.assertEqual(payload["record_type"], "recommendation_snapshot")
+        with self.assertRaisesRegex(ValueError, "durable Learning Vault"):
+            export_learning_record(payload)
+
     def test_reserve_shortfall_recommends_existing_top_off_workflow(self):
         plan = _plan([_row(demand=100)], trucks=(_truck(current=550, capacity=2000),))
 
@@ -221,6 +258,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
 
         self.assertTrue(result.automation_just_enabled)
         self.assertTrue(saved.spear_automation_enabled)
+        self.assertFalse(saved.spear_learning_capture_enabled)
         self.assertEqual(saved.spear_minimum_truck_reserve_gallons, 650)
         self.assertEqual(tuple(__import__("json").loads(saved.spear_priority_order_json)), reversed_order)
 
@@ -230,6 +268,40 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertIn("SPEAR Fleet Optimizer", template)
         self.assertIn("data-spear-priority-list", template)
         self.assertIn('addEventListener("dragover"', script)
+
+    def test_learning_capture_defaults_off_and_cannot_enable_without_vault(self):
+        with self.assertRaisesRegex(ValueError, "durable Learning Vault"):
+            save_spear_settings(
+                self.gateway,
+                self.user,
+                {
+                    "recommendations_enabled": "1",
+                    "learning_capture_enabled": "1",
+                    "minimum_truck_reserve_gallons": "500",
+                    "do_not_top_off_above_percent": "70",
+                    "truck_minutes_per_ramp_move": "2",
+                    "fueler_begins_at": "Remote",
+                    "truck_begins_at": "Remote",
+                    "truck_after_top_off": "Remote",
+                    "incoming_early_staging_minutes": "15",
+                    "recalculation_interval_minutes": "2",
+                    "automation_stability_delay_seconds": "5",
+                    "priority_order": ",".join(SPEAR_DEFAULT_PRIORITY_ORDER),
+                },
+            )
+        self.assertIsNone(
+            NeoScorpionSettings.query.filter_by(gateway_id=self.gateway.id).first()
+        )
+
+    def test_teach_spear_is_visible_but_disabled_while_learning_is_off(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html").read_text(encoding="utf-8")
+        settings_template = (root / "app/templates/neonodes/neoscorpion/spear_settings.html").read_text(encoding="utf-8")
+
+        self.assertIn("TEACH SPEAR", template)
+        self.assertIn("LEARNING OFF", template)
+        self.assertIn("SPEAR Learning Capture is not enabled yet.", template)
+        self.assertIn("LEARNING VAULT NOT CONFIGURED", settings_template)
 
     def test_dispatch_splash_uses_versioned_once_per_browser_hook(self):
         root = Path(__file__).resolve().parents[1]
@@ -253,6 +325,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
             for column in inspector.get_columns("neoscorpion_settings")
         }
         self.assertIn("spear_automation_enabled", columns)
+        self.assertIn("spear_learning_capture_enabled", columns)
         self.assertIn("spear_priority_order_json", columns)
 
 

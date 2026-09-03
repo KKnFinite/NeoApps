@@ -657,6 +657,12 @@ class NeoScorpionSettings(db.Model):
     spear_automation_enabled = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.false()
     )
+    # Learning capture is deliberately separate from recommendations and
+    # automation.  It remains off until a durable external Learning Vault is
+    # explicitly configured.
+    spear_learning_capture_enabled = db.Column(
+        db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
     spear_minimum_truck_reserve_gallons = db.Column(
         db.Integer, nullable=False, default=500, server_default="500"
     )

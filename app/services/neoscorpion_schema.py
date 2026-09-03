@@ -51,6 +51,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
         "spear_recommendations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
         "spear_automation_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "spear_learning_capture_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
         "spear_minimum_truck_reserve_gallons": "INTEGER NOT NULL DEFAULT 500",
         "spear_do_not_top_off_above_percent": "INTEGER NOT NULL DEFAULT 70",
         "spear_truck_minutes_per_ramp_move": "NUMERIC(8, 2) NOT NULL DEFAULT 2",

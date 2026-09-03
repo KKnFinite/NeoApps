@@ -42,6 +42,16 @@
             <ul class="neoscorpion-spear-hard-constraints">{% for item in spear_hard_constraints %}<li>{{ item }}</li>{% endfor %}</ul>
         </section>
 
+        <section class="neoscorpion-panel neoscorpion-spear-learning-panel">
+            <div class="neoscorpion-panel-head"><span>SPEAR Learning</span><strong>{{ spear_learning_vault.label }}</strong></div>
+            <label class="neoscorpion-spear-learning-toggle" title="{{ spear_learning_vault.detail }}">
+                <input type="checkbox" name="learning_capture_enabled" value="1" {% if spear_settings.learning_capture_enabled %}checked{% endif %} {% if not can_edit or not spear_learning_vault.configured %}disabled{% endif %}>
+                <span>Enable SPEAR Learning Capture</span>
+                <strong>{% if spear_settings.learning_capture_enabled %}ON{% else %}OFF{% endif %}</strong>
+            </label>
+            <p><strong>{% if spear_learning_vault.configured %}LEARNING STANDBY{% else %}LEARNING VAULT NOT CONFIGURED{% endif %}</strong><br>Enable only when NeoScorpion is the full operational source and the external Learning Vault is configured.</p>
+        </section>
+
         {% if can_edit %}<button class="action-button neoscorpion-save-button" type="submit">SAVE SPEAR SETTINGS</button>{% endif %}
     </form>
 </section>

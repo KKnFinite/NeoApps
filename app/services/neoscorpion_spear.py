@@ -1,6 +1,6 @@
 """Deterministic NeoScorpion SPEAR fleet planning and settings."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from app.extensions import db
 from app.models import NeoScorpionSettings, NeoScorpionSpearAuditEntry
 from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
+from app.services.neoscorpion_learning_vault import require_learning_vault
 
 
 SPEAR_RAMP_ORDER = ("Remote", "Alpha", "Bravo", "Charlie", "Delta", "Echo")
@@ -36,6 +37,7 @@ SPEAR_HARD_CONSTRAINTS = (
 class SpearSettings:
     recommendations_enabled: bool = True
     automation_enabled: bool = False
+    learning_capture_enabled: bool = False
     minimum_truck_reserve_gallons: int = 500
     do_not_top_off_above_percent: int = 70
     truck_minutes_per_ramp_move: Decimal = Decimal("2")
@@ -63,6 +65,8 @@ class SpearPlanStep:
     risk: str
     reason: str
     automatic_eligible: bool = True
+    truck_location_provenance: dict | None = None
+    fueler_location_provenance: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,10 @@ class SpearPlan:
     unplanned_count: int
     status_text: str
     token: str
+    waiting_for_data_by_mission_id: dict[int, str] = field(default_factory=dict)
+    evaluated_count: int = 0
+    waiting_for_data_count: int = 0
+    relevant_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -120,6 +128,9 @@ class _ResourceState:
     available_at: datetime
     ramp: str
     workload: int = 0
+    location_source: str = "configured_sort_start"
+    location_confidence: str = "low"
+    location_recorded_at_utc: datetime | None = None
 
 
 def first_automatic_step(plan):
@@ -141,6 +152,9 @@ def effective_spear_settings(settings):
     return SpearSettings(
         recommendations_enabled=bool(settings.spear_recommendations_enabled),
         automation_enabled=bool(settings.spear_automation_enabled),
+        learning_capture_enabled=bool(
+            getattr(settings, "spear_learning_capture_enabled", False)
+        ),
         minimum_truck_reserve_gallons=int(
             settings.spear_minimum_truck_reserve_gallons or 500
         ),
@@ -167,6 +181,9 @@ def effective_spear_settings(settings):
 
 
 def save_spear_settings(gateway, user, form):
+    requested_learning_capture = _form_bool(form, "learning_capture_enabled")
+    if requested_learning_capture:
+        require_learning_vault()
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).with_for_update().first()
     if settings is None:
         settings = NeoScorpionSettings(gateway_id=gateway.id)
@@ -176,11 +193,13 @@ def save_spear_settings(gateway, user, form):
     previous_automation = bool(settings.spear_automation_enabled)
     enabled = _form_bool(form, "recommendations_enabled")
     automation = _form_bool(form, "automation_enabled")
+    learning_capture = requested_learning_capture
     if automation and not enabled:
         raise ValueError("Enable SPEAR Recommendations before enabling Automation.")
     values = {
         "spear_recommendations_enabled": enabled,
         "spear_automation_enabled": automation,
+        "spear_learning_capture_enabled": learning_capture,
         "spear_minimum_truck_reserve_gallons": _whole_number(
             form.get("minimum_truck_reserve_gallons"), "Minimum Truck Reserve Gallons", 0
         ),
@@ -268,6 +287,7 @@ def build_spear_plan(
     steps = []
     risks = {}
     unavailable = {}
+    waiting_for_data = {}
     ordered_rows = sorted(
         (row for row in rows if not row.get("administratively_complete")),
         key=lambda row: (
@@ -280,15 +300,15 @@ def build_spear_plan(
         mission_id = mission.id
         demand = _decimal_or_none(row.get("planning_demand_gallons"))
         if demand is None or demand == 0:
-            unavailable[mission_id] = "FUEL DATA INCOMPLETE"
+            waiting_for_data[mission_id] = "FUEL DATA INCOMPLETE"
             continue
         ramp = _ramp(row.get("parking_position"), allow_unknown=True)
         if ramp not in SPEAR_RAMP_ORDER:
-            unavailable[mission_id] = "PARKING / RAMP REQUIRED"
+            waiting_for_data[mission_id] = "PARKING / RAMP REQUIRED"
             continue
         timing = _spear_timing(row, operation, planning_settings)
         if timing is None:
-            unavailable[mission_id] = "TIMING DATA INCOMPLETE"
+            waiting_for_data[mission_id] = "TIMING DATA INCOMPLETE"
             continue
 
         assignment = row.get("assignment")
@@ -412,13 +432,25 @@ def build_spear_plan(
                     and truck_state[truck_id].workload == 0
                     and now_utc >= staging_allowed_at
                 ),
+                truck_location_provenance=_location_provenance(
+                    truck_state[truck_id]
+                ),
+                fueler_location_provenance=_location_provenance(
+                    fueler_state[fueler_id]
+                ),
             )
         )
         risks[mission_id] = risk
         _advance_resources(fueler_state[fueler_id], truck_state[truck_id], ramp, finish)
         truck_gallons[truck_id] = projected
 
-    return _plan(tuple(steps), risks, unavailable)
+    return _plan(
+        tuple(steps),
+        risks,
+        unavailable,
+        waiting_for_data=waiting_for_data,
+        relevant_count=len(ordered_rows),
+    )
 
 
 def record_spear_execution(operation, step, user, *, automatic, assignment_id=None):
@@ -471,20 +503,42 @@ def priority_rows(settings):
     return tuple((key, labels[key]) for key in settings.priority_order)
 
 
-def _plan(steps, risks, unavailable, status_text=None):
+def _plan(
+    steps,
+    risks,
+    unavailable,
+    status_text=None,
+    *,
+    waiting_for_data=None,
+    relevant_count=None,
+):
+    waiting_for_data = dict(waiting_for_data or {})
     covered = sum(value == "COVERED" for value in risks.values())
     at_risk = sum(value == "AT RISK" for value in risks.values())
     late = sum(value == "LATE" for value in risks.values())
     unplanned = len(unavailable)
+    waiting_count = len(waiting_for_data)
+    evaluated = len(risks) + unplanned
     if status_text is None:
-        if late:
-            status_text = f"SPEAR: {late} LATE"
-        elif at_risk:
-            status_text = f"SPEAR: {at_risk} LOAD{'S' if at_risk != 1 else ''} AT RISK"
-        elif unplanned:
-            status_text = f"SPEAR: {unplanned} LOAD{'S' if unplanned != 1 else ''} NEED DATA / RESOURCE"
-        else:
+        if covered and not late and not at_risk and not waiting_count and not unplanned:
             status_text = "SPEAR: ALL LOADS COVERED"
+        else:
+            status_parts = []
+            if late:
+                status_parts.append(f"{late} LATE")
+            if covered:
+                status_parts.append(f"{covered} COVERED")
+            if at_risk:
+                status_parts.append(f"{at_risk} AT RISK")
+            if waiting_count:
+                status_parts.append(f"{waiting_count} WAITING FOR DATA")
+            if unplanned:
+                status_parts.append(f"{unplanned} NO FEASIBLE RESOURCE")
+            status_text = (
+                "SPEAR: " + " · ".join(status_parts)
+                if status_parts
+                else "SPEAR: NO REMAINING LOADS"
+            )
     token_payload = [
         (
             step.action_type, step.mission_id, step.truck_id, step.fueler_id,
@@ -495,7 +549,9 @@ def _plan(steps, risks, unavailable, status_text=None):
     token = hashlib.sha256(json.dumps(token_payload, sort_keys=True).encode()).hexdigest()[:24]
     return SpearPlan(
         tuple(steps), dict(risks), dict(unavailable), covered, at_risk, late,
-        unplanned, status_text, token,
+        unplanned, status_text, token, waiting_for_data, evaluated,
+        waiting_count,
+        relevant_count if relevant_count is not None else evaluated + waiting_count,
     )
 
 
@@ -573,6 +629,9 @@ def _advance_resources(fueler, truck, ramp, finish):
         state.available_at = finish
         state.ramp = ramp
         state.workload += 1
+        state.location_source = "current_assignment"
+        state.location_confidence = "high"
+        state.location_recorded_at_utc = finish
 
 
 def _adopt_completed_locations(rows, fueler_state, truck_state):
@@ -597,6 +656,24 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
         ):
             if identifier in mapping:
                 mapping[identifier].ramp = ramp
+                mapping[identifier].location_source = "last_completed_assignment"
+                mapping[identifier].location_confidence = "high"
+                mapping[identifier].location_recorded_at_utc = getattr(
+                    assignment, "completed_at_utc", None
+                )
+
+
+def _location_provenance(state):
+    return {
+        "location": state.ramp,
+        "recorded_at_utc": (
+            state.location_recorded_at_utc.isoformat()
+            if state.location_recorded_at_utc
+            else None
+        ),
+        "source": state.location_source,
+        "confidence": state.location_confidence,
+    }
 
 
 def _fuel_feasibility(current, capacity, demand):

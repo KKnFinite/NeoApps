@@ -66,7 +66,7 @@
         </div>
         {% include "neonodes/neoscorpion/_nightly_assets.html" %}
         {% if operation and spear_plan %}
-        <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% endif %}" data-spear-fleet-status>
+        <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% elif spear_plan.waiting_for_data_count %} is-waiting{% endif %}" data-spear-fleet-status>
             {{ spear_plan.status_text }}
         </div>
         {% endif %}
@@ -180,7 +180,7 @@
                         <td>{{ row.arrival_eta }}</td>
                         <td>{{ row.arrival_status }}</td>
                         <td class="neoscorpion-dispatch-divider-cell" aria-label="Arrival to departure"><span aria-hidden="true"></span></td>
-                        <td><strong>{{ row.mission.flight_number }}</strong>{% if row.spear_risk %}<small class="neoscorpion-spear-risk is-{{ row.spear_risk|lower|replace(' ', '-') }}">SPEAR {{ row.spear_risk }}</small>{% elif row.spear_problem %}<small class="neoscorpion-spear-risk is-unplanned">SPEAR {{ row.spear_problem }}</small>{% endif %}</td>
+                        <td><strong>{{ row.mission.flight_number }}</strong>{% if row.spear_risk %}<small class="neoscorpion-spear-risk is-{{ row.spear_risk|lower|replace(' ', '-') }}">SPEAR {{ row.spear_risk }}</small>{% elif row.spear_problem %}<small class="neoscorpion-spear-risk is-unplanned">SPEAR {{ row.spear_problem }}</small>{% endif %}{% if row.spear_step %}<button class="neoscorpion-teach-spear" type="button" disabled title="SPEAR Learning Capture is not enabled yet.">TEACH SPEAR <small>LEARNING OFF</small></button>{% endif %}</td>
                         <td>{{ row.destination }}</td>
                         <td>{{ row.parking_position }}</td>
                         <td>{{ row.departure_time or '-' }}</td>

@@ -45,6 +45,7 @@ from app.services.neoscorpion_spear import (
     priority_rows,
     spear_dispatch_status,
 )
+from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services.neoscorpion_dispatch_planning import (
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
     assignment_mission_timing,
@@ -608,6 +609,7 @@ def settings_context(gateway):
         ],
         "assignment_planning": assignment_planning,
         "spear_settings": spear_settings,
+        "spear_learning_vault": learning_vault_status(),
         "spear_priority_rows": priority_rows(spear_settings),
         "spear_hard_constraints": SPEAR_HARD_CONSTRAINTS,
         "assignment_pump_rate_settings": [
@@ -4339,7 +4341,13 @@ def _attach_spear_plan(rows, truck_visuals, plan):
         mission_id = row["mission"].id
         row["spear_step"] = None
         row["spear_risk"] = plan.risks_by_mission_id.get(mission_id)
-        row["spear_problem"] = plan.unavailable_by_mission_id.get(mission_id)
+        row["spear_waiting_for_data"] = plan.waiting_for_data_by_mission_id.get(
+            mission_id
+        )
+        row["spear_problem"] = (
+            plan.unavailable_by_mission_id.get(mission_id)
+            or row["spear_waiting_for_data"]
+        )
     visuals_by_truck_id = {item["truck_id"]: item for item in truck_visuals}
     for visual in truck_visuals:
         visual["spear_recommendation"] = None
