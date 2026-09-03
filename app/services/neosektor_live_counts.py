@@ -13,7 +13,9 @@ from app.models import (
     NeoSektorOperationalSetting,
     NeoSektorSortState,
     NeoSektorWaveState,
+    SortDateMission,
 )
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.live_screen_refresh import live_screen_refresh_value
 
@@ -42,6 +44,9 @@ DRIVER_ROUTE_SECOND_WAVE_NAME = "2ND WAVE ROUTE"
 DRIVER_ROUTE_WEST_OFFSET_NAME = "WEST OFFSET"
 DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME = "1ST WAVE OVERRIDE"
 DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME = "2ND WAVE OVERRIDE"
+DRIVER_ROUTE_BAY_PRIORITY_ENABLED_NAMES = tuple(
+    f"{bay_name.upper()} PRIORITY ENABLED" for _side, bay_name in DEFAULT_BAYS
+)
 DRIVER_ROUTE_OVERRIDE_VALUES = ("auto", "east", "west")
 DEFAULT_DRIVER_ROUTES = (
     DRIVER_ROUTE_FIRST_WAVE_NAME,
@@ -49,6 +54,7 @@ DEFAULT_DRIVER_ROUTES = (
     DRIVER_ROUTE_WEST_OFFSET_NAME,
     DRIVER_ROUTE_FIRST_WAVE_OVERRIDE_NAME,
     DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME,
+    *DRIVER_ROUTE_BAY_PRIORITY_ENABLED_NAMES,
 )
 DEFAULT_FIRST_WAVE_UNLOAD_MODIFIER = 45
 DEFAULT_SECOND_WAVE_UNLOAD_MODIFIER = 37
@@ -372,8 +378,10 @@ class NeoSektorOperationalStateBundle:
         state = self.ballmat_state_payload()
         driver_routes = self.ensure_driver_routes()
         routing = _driver_routing_calculation(
+            self.gateway,
             self.routing_sort_state or self.sort_state,
             state["sides"],
+            state["waves"],
             driver_routes,
         )
         _sync_driver_route_values(
@@ -869,6 +877,15 @@ def update_neosektor_operational_settings(
         (payload or {}).get("second_override"),
         default=second_override.route_value,
     )
+    priority_enabled = (payload or {}).get("bay_priority_enabled") or {}
+    if isinstance(priority_enabled, dict):
+        for bay_name in (bay_name for _side, bay_name in DEFAULT_BAYS):
+            if bay_name not in priority_enabled:
+                continue
+            _driver_route_by_name(
+                driver_routes,
+                _driver_route_bay_priority_enabled_name(bay_name),
+            ).route_value = "true" if bool(priority_enabled[bay_name]) else "false"
     return bundle.driver_routing_state_payload()
 
 
@@ -1760,6 +1777,8 @@ def _driver_route_default_value(route_name):
         DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME,
     ):
         return "auto"
+    if route_name in DRIVER_ROUTE_BAY_PRIORITY_ENABLED_NAMES:
+        return "true"
     return ""
 
 
@@ -1767,7 +1786,7 @@ def _driver_route_by_name(driver_routes, route_name):
     return next(row for row in driver_routes if row.route_name == route_name)
 
 
-def _driver_routing_calculation(sort_state, sides, driver_routes):
+def _driver_routing_calculation(gateway, sort_state, sides, waves, driver_routes):
     east = sides["east"]
     west = sides["west"]
     west_offset = _driver_route_offset(driver_routes)
@@ -1790,6 +1809,23 @@ def _driver_routing_calculation(sort_state, sides, driver_routes):
         _driver_route_override(driver_routes, DRIVER_ROUTE_SECOND_WAVE_OVERRIDE_NAME),
     )
 
+    wave_by_name = {wave["name"]: wave for wave in waves}
+    first_left_to_arrive = max(
+        wave_by_name["1ST WAVE"].get("planned") or 0,
+        0,
+    )
+    second_left_to_arrive = max(
+        wave_by_name["2ND WAVE"].get("planned") or 0,
+        0,
+    )
+    first_display_state = "all_in" if first_left_to_arrive == 0 else "route"
+    second_display_state = _second_wave_driver_display_state(
+        gateway,
+        second_left_to_arrive,
+    )
+    first_route = _with_driver_display_state(first_route, first_display_state, "first")
+    second_route = _with_driver_display_state(second_route, second_display_state, "second")
+
     return {
         "sort_name": sort_state.sort_name.upper(),
         "active_wave": sort_state.active_wave,
@@ -1810,7 +1846,11 @@ def _driver_routing_calculation(sort_state, sides, driver_routes):
                 **second_route,
             },
         },
-        "bay_priority": _driver_bay_priority(sides),
+        "bay_priority": _driver_bay_priority(sides, driver_routes),
+        "bay_priority_enabled_bays": {
+            bay_name: _driver_route_bay_priority_enabled(driver_routes, bay_name)
+            for _side, bay_name in DEFAULT_BAYS
+        },
     }
 
 
@@ -1884,7 +1924,7 @@ def _side_wave_count(side, wave_key):
     return max((wave or {}).get("count") or 0, 0)
 
 
-def _driver_bay_priority(sides):
+def _driver_bay_priority(sides, driver_routes):
     priority = [
         {
             **bay,
@@ -1894,6 +1934,7 @@ def _driver_bay_priority(sides):
         }
         for side in sides.values()
         for bay in side["bays"]
+        if _driver_route_bay_priority_enabled(driver_routes, bay["bay_name"])
     ]
     priority.sort(
         key=lambda bay: (bay["status_rank"], _bay_number(bay["bay_name"])),
@@ -1902,7 +1943,50 @@ def _driver_bay_priority(sides):
     for index, bay in enumerate(priority, start=1):
         bay["rank"] = index
         bay["rank_label"] = _ordinal(index)
-    return priority
+    return priority[:3]
+
+
+def _driver_route_bay_priority_enabled_name(bay_name):
+    return f"{str(bay_name or '').strip().upper()} PRIORITY ENABLED"
+
+
+def _driver_route_bay_priority_enabled(driver_routes, bay_name):
+    row = _driver_route_by_name(
+        driver_routes,
+        _driver_route_bay_priority_enabled_name(bay_name),
+    )
+    return str(row.route_value or "true").strip().lower() != "false"
+
+
+def _second_wave_driver_display_state(gateway, left_to_arrive):
+    operation = current_operational_sort_operation(gateway)
+    if operation is None or not _current_sort_second_wave_has_arrived(operation):
+        return "not_arrived"
+    return "all_in" if left_to_arrive == 0 else "route"
+
+
+def _current_sort_second_wave_has_arrived(operation):
+    return (
+        SortDateMission.query.filter(
+            SortDateMission.sort_date_operation_id == operation.id,
+            SortDateMission.mission_type == "arrival",
+            SortDateMission.wave.in_(("2", "2nd Wave")),
+            SortDateMission.actual_block_in_datetime_utc.isnot(None),
+        )
+        .limit(1)
+        .first()
+        is not None
+    )
+
+
+def _with_driver_display_state(route, display_state, wave_key):
+    if display_state == "not_arrived":
+        message = "2ND WAVE NOT ARRIVED"
+    elif display_state == "all_in":
+        message = "1ST WAVE ALL IN" if wave_key == "first" else "2ND WAVE ALL IN"
+    else:
+        message = ""
+    return {**route, "display_state": display_state, "display_message": message}
 
 
 def _bay_number(value):

@@ -21809,6 +21809,46 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     line-height: 1;
 }
 
+/* Driver Routing is intentionally a three-bay decision display. */
+body.blueprint-neosektor.neosektor-driver-page .driver-bay-priority {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(100%, 980px);
+    min-height: clamp(166px, 24svh, 270px);
+    justify-self: center;
+}
+
+body.blueprint-neosektor.neosektor-driver-page .driver-priority-card strong {
+    font-size: clamp(4.2rem, min(12vw, 11svh), 7.2rem);
+}
+
+.blueprint-neosektor .driver-wave-message {
+    color: var(--neo-bright-silver);
+    font-size: clamp(2.25rem, min(7vw, 6.4svh), 4.4rem);
+    font-weight: 950;
+    letter-spacing: .06em;
+    line-height: .95;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-bay-priority-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: rgba(238, 246, 255, .7);
+    font-size: .52rem;
+    font-weight: 900;
+    letter-spacing: .07em;
+    line-height: 1;
+}
+
+.blueprint-neosektor .tunnel-bay-priority-toggle input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #d8202a;
+}
+
 .blueprint-neosektor .driver-bay-priority {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));

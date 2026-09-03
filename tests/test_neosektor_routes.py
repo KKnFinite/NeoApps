@@ -26,6 +26,7 @@ from app.models import (
     PermissionRule,
     PortalAppAccess,
     SortDateOperation,
+    SortDateMission,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -1063,7 +1064,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
         self.assertLess(response.data.index(b"driver-wave-first"), response.data.index(b"driver-bay-priority"))
         self.assertLess(response.data.index(b"driver-bay-priority"), response.data.index(b"driver-wave-second"))
-        self.assertIn(b'<span class="driver-target-node">', response.data)
+        self.assertIn(b"driver-wave-message", response.data)
+        self.assertIn(b"1ST WAVE ALL IN", response.data)
         self.assertNotIn(b"East Ballmat <span", response.data)
         self.assertNotIn(b"West Ballmat <span", response.data)
         self.assertIn(b"targetNode.textContent = targetLabel;", response.data)
@@ -1448,12 +1450,84 @@ class NeoSektorRoutesTest(unittest.TestCase):
         priority = response.get_json()["state"]["routing"]["bay_priority"]
         self.assertEqual(
             [bay["bay_name"] for bay in priority],
-            ["Bay 4", "Bay 5", "Bay 3", "Bay 1", "Bay 2"],
+            ["Bay 4", "Bay 5", "Bay 3"],
         )
         self.assertEqual(
             [bay["rank_label"] for bay in priority],
-            ["1st", "2nd", "3rd", "4th", "5th"],
+            ["1st", "2nd", "3rd"],
         )
+
+    def test_tunnel_conductor_bay_priority_toggle_persists_and_limits_driver_display(self):
+        self._login_approved_user(role="simulator")
+
+        disabled = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={"bay_priority_enabled": {"Bay 4": False, "Bay 5": False}},
+        )
+
+        self.assertEqual(disabled.status_code, 200)
+        state = disabled.get_json()["state"]
+        self.assertFalse(state["routing"]["bay_priority_enabled_bays"]["Bay 4"])
+        self.assertFalse(state["routing"]["bay_priority_enabled_bays"]["Bay 5"])
+        self.assertNotIn(
+            "Bay 4",
+            [bay["bay_name"] for bay in state["routing"]["bay_priority"]],
+        )
+        self.assertEqual(len(state["routing"]["bay_priority"]), 3)
+
+        restored = self.client.post(
+            "/neosektor/tunnel-conductor/settings",
+            json={"bay_priority_enabled": {"Bay 4": True}},
+        )
+        self.assertTrue(
+            restored.get_json()["state"]["routing"]["bay_priority_enabled_bays"]["Bay 4"]
+        )
+        self.assertEqual(
+            NeoSektorDriverRouteSetting.query.filter_by(
+                route_name="BAY 4 PRIORITY ENABLED"
+            ).one().route_value,
+            "true",
+        )
+
+    def test_driver_routing_hides_first_wave_route_when_all_in(self):
+        self._login_approved_user(role="simulator")
+
+        response = self.client.get("/neosektor/driver-routing/state")
+
+        first = response.get_json()["state"]["routing"]["routes"]["first"]
+        self.assertEqual(first["display_state"], "all_in")
+        self.assertEqual(first["display_message"], "1ST WAVE ALL IN")
+
+    def test_second_wave_driver_routing_waits_for_canonical_block_in_then_all_in(self):
+        self._login_approved_user(role="simulator")
+        operation = self._add_sort_operation(date.today())
+        mission = SortDateMission(
+            sort_date_operation=operation,
+            sort_date=operation.sort_date,
+            gateway_code=self.gateway.code,
+            sort_name=operation.sort_name,
+            mission_type="arrival",
+            mission_source="manual",
+            wave="2",
+            flight_number="RFD2",
+            origin="OAK",
+            destination="RFD",
+        )
+        db.session.add(mission)
+        db.session.commit()
+
+        with patch(
+            "app.services.neosektor_live_counts.current_operational_sort_operation",
+            return_value=operation,
+        ):
+            before = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
+            mission.actual_block_in_datetime_utc = datetime.utcnow()
+            db.session.commit()
+            after = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
+
+        self.assertEqual(before["routing"]["routes"]["second"]["display_state"], "not_arrived")
+        self.assertEqual(after["routing"]["routes"]["second"]["display_state"], "all_in")
+        self.assertEqual(after["routing"]["routes"]["second"]["display_message"], "2ND WAVE ALL IN")
 
     def test_neosektor_dashboard_and_header_link_to_real_driver_routing(self):
         self._login_approved_user(role="operator")

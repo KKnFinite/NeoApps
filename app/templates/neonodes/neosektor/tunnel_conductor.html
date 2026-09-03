@@ -261,6 +261,16 @@
                 <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
                     <span>{{ bay.bay_name }}</span>
                     <strong>{{ bay.status }}</strong>
+                    <label class="tunnel-bay-priority-toggle">
+                        <input
+                            type="checkbox"
+                            data-tunnel-bay-priority-enabled="{{ bay.bay_name }}"
+                            data-neosektor-edit-key="routing:bay_priority:{{ bay.bay_name }}"
+                            {% if state.routing.bay_priority_enabled_bays[bay.bay_name] %}checked{% endif %}
+                            {% if not can_edit %}disabled{% endif %}
+                        >
+                        <span>PRIORITY</span>
+                    </label>
                 </article>
                 {% endfor %}
                 {% endfor %}
@@ -289,6 +299,7 @@
     const offsetInput = root.querySelector("[data-tunnel-offset-input]");
     const settingInputs = Array.from(root.querySelectorAll("[data-tunnel-setting]"));
     const routeOverrideInputs = Array.from(root.querySelectorAll("[data-tunnel-route-override-input]"));
+    const bayPriorityInputs = Array.from(root.querySelectorAll("[data-tunnel-bay-priority-enabled]"));
     const routeOverridePositions = { east: "0", auto: "1", west: "2" };
     const routeOverrideValues = ["east", "auto", "west"];
     const ballmatSaveTimers = {};
@@ -431,6 +442,11 @@
                         );
                     }
                 });
+        });
+        bayPriorityInputs.forEach((input) => {
+            if (!hasPending(input)) {
+                input.checked = Boolean((routing.bay_priority_enabled_bays || {})[input.dataset.tunnelBayPriorityEnabled]);
+            }
         });
 
         const settings = state.operational_settings || {};
@@ -600,6 +616,10 @@
             payload[`${input.dataset.tunnelRouteOverrideInput}_override`] =
                 routeOverrideValues[Number.parseInt(input.value, 10)] || "auto";
         });
+        payload.bay_priority_enabled = {};
+        bayPriorityInputs.forEach((input) => {
+            payload.bay_priority_enabled[input.dataset.tunnelBayPriorityEnabled] = input.checked;
+        });
         return payload;
     };
 
@@ -608,7 +628,7 @@
             return;
         }
         const saveSequence = ++settingsSaveSequence;
-        const tokens = captureTokens([...settingInputs, ...routeOverrideInputs]);
+        const tokens = captureTokens([...settingInputs, ...routeOverrideInputs, ...bayPriorityInputs]);
 
         try {
             const response = await fetch(settingsUrl, {
@@ -798,6 +818,12 @@
                 "data-route-position",
                 event.target.value,
             );
+            markInputPending(event.target);
+            saveSettings();
+            return;
+        }
+
+        if (event.target.matches("[data-tunnel-bay-priority-enabled]") && !event.target.disabled) {
             markInputPending(event.target);
             saveSettings();
         }

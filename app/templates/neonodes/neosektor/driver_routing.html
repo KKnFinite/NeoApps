@@ -25,29 +25,33 @@
             class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
             data-driver-wave="{{ wave_key }}"
             data-direction="{{ route.direction }}"
+            data-display-state="{{ route.display_state }}"
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
-            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
+            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' or route.display_state != 'route' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
-                    {% if route.direction == "east" %}
+                    {% if route.display_state != "route" %}
+                    <span class="driver-wave-message">{{ route.display_message }}</span>
+                    {% elif route.direction == "east" %}
                     <span class="driver-target-node">East Ballmat</span><span class="driver-instruction">Stay Right</span>
                     {% else %}
                     <span class="driver-target-node">West Ballmat</span><span class="driver-instruction">Stay Left</span>
                     {% endif %}
                 </strong>
-                <span class="driver-arrow" data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
+                <span class="driver-arrow" data-driver-arrow aria-hidden="true" {% if route.display_state != "route" %}hidden{% endif %}>{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
             </div>
         </section>
         {% endfor %}
 
         <section class="driver-bay-priority neosektor-driver-bay-priority" aria-label="Bay priority">
-            {% for bay in state.routing.bay_priority %}
-            <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ loop.index0 }}">
-                <span class="driver-priority-rank" data-driver-rank>{{ bay.rank_label }}</span>
-                <strong data-driver-bay-name>{{ bay.bay_name }}</strong>
-                <em class="visually-hidden" data-driver-bay-status>{{ bay.status }}</em>
+            {% for index in range(3) %}
+            {% set bay = state.routing.bay_priority[index] if index < state.routing.bay_priority|length else none %}
+            <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ index }}" {% if not bay %}hidden{% endif %}>
+                <span class="driver-priority-rank" data-driver-rank>{{ bay.rank_label if bay else "" }}</span>
+                <strong data-driver-bay-name>{{ bay.bay_name|replace("Bay ", "") if bay else "" }}</strong>
+                <em class="visually-hidden" data-driver-bay-status>{{ bay.status if bay else "" }}</em>
             </article>
             {% endfor %}
         </section>
@@ -58,19 +62,22 @@
             class="driver-wave driver-wave-{{ wave_key }} neosektor-driver-wave-card"
             data-driver-wave="{{ wave_key }}"
             data-direction="{{ route.direction }}"
+            data-display-state="{{ route.display_state }}"
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
-            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
+            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' or route.display_state != 'route' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
-                    {% if route.direction == "east" %}
+                    {% if route.display_state != "route" %}
+                    <span class="driver-wave-message">{{ route.display_message }}</span>
+                    {% elif route.direction == "east" %}
                     <span class="driver-target-node">East Ballmat</span><span class="driver-instruction">Stay Right</span>
                     {% else %}
                     <span class="driver-target-node">West Ballmat</span><span class="driver-instruction">Stay Left</span>
                     {% endif %}
                 </strong>
-                <span class="driver-arrow" data-driver-arrow aria-hidden="true">{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
+                <span class="driver-arrow" data-driver-arrow aria-hidden="true" {% if route.display_state != "route" %}hidden{% endif %}>{% if route.arrow == "right" %}&rarr;{% else %}&larr;{% endif %}</span>
             </div>
         </section>
         {% endfor %}
@@ -118,13 +125,29 @@
             return;
         }
         panel.dataset.direction = route.direction;
-        panel.toggleAttribute("data-manual-override", route.override !== "auto");
+        panel.dataset.displayState = route.display_state || "route";
+        panel.toggleAttribute(
+            "data-manual-override",
+            route.override !== "auto" && route.display_state === "route",
+        );
         const source = panel.querySelector("[data-driver-route-source]");
         if (source) {
-            source.hidden = route.override === "auto";
+            source.hidden = route.override === "auto" || route.display_state !== "route";
             source.textContent = `MANUAL OVERRIDE · ${String(route.override || "auto").toUpperCase()}`;
         }
         const target = panel.querySelector("[data-driver-target]");
+        const arrow = panel.querySelector("[data-driver-arrow]");
+        if (route.display_state && route.display_state !== "route") {
+            const message = document.createElement("span");
+            message.className = "driver-wave-message";
+            message.textContent = route.display_message || "";
+            target.replaceChildren(message);
+            target.setAttribute("aria-label", message.textContent);
+            if (arrow) {
+                arrow.hidden = true;
+            }
+            return;
+        }
         const targetLabel = route.direction === "east" ? "East Ballmat" : "West Ballmat";
         const instructionLabel = route.direction === "east" ? "Stay Right" : "Stay Left";
         const targetNode = document.createElement("span");
@@ -135,17 +158,21 @@
         instruction.textContent = instructionLabel;
         target.replaceChildren(targetNode, instruction);
         target.setAttribute("aria-label", `${targetLabel} ${instructionLabel}`);
-        panel.querySelector("[data-driver-arrow]").textContent = route.arrow === "right" ? "\u2192" : "\u2190";
+        if (arrow) {
+            arrow.hidden = false;
+            arrow.textContent = route.arrow === "right" ? "\u2192" : "\u2190";
+        }
     };
 
     const applyBayPriority = (bays) => {
-        (bays || []).forEach((bay, index) => {
-            const card = root.querySelector(`[data-driver-priority-index="${index}"]`);
-            if (!card) {
+        Array.from(root.querySelectorAll("[data-driver-priority-index]")).forEach((card, index) => {
+            const bay = (bays || [])[index];
+            card.hidden = !bay;
+            if (!bay) {
                 return;
             }
             card.querySelector("[data-driver-rank]").textContent = bay.rank_label;
-            card.querySelector("[data-driver-bay-name]").textContent = bay.bay_name;
+            card.querySelector("[data-driver-bay-name]").textContent = String(bay.bay_name || "").replace(/^Bay\s+/i, "");
             card.querySelector("[data-driver-bay-status]").textContent = bay.status;
         });
     };
