@@ -16,6 +16,7 @@ from app.services.neoscorpion_schema import (
     ensure_neoscorpion_production_schema,
     neoscorpion_model_schema_contract,
 )
+from app.services.neoscorpion_spear_schema import SPEAR_SETTINGS_COLUMNS
 
 
 class NeoScorpionProductionSchemaTest(unittest.TestCase):
@@ -32,19 +33,22 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             },
         )
 
-    def test_factory_invokes_ensure_once_and_get_does_not_invoke_it(self):
-        with patch("app.ensure_neoscorpion_production_schema") as ensure:
+    def test_factory_does_not_run_broad_neoscorpion_schema_bootstrap(self):
+        with patch(
+            "app.services.neoscorpion_schema.ensure_neoscorpion_production_schema"
+        ) as ensure:
             app = create_app(self.config)
             response = app.test_client().get("/login")
 
         self.assertEqual(response.status_code, 200)
-        ensure.assert_called_once_with(app)
+        ensure.assert_not_called()
 
     def test_current_model_table_and_column_contract_is_covered(self):
         expected_table_names = (
             "neoscorpion_tail_fuel_states",
             "neoscorpion_fuel_trucks",
             "neoscorpion_settings",
+            "neoscorpion_spear_audit_entries",
             "neoscorpion_sort_asset_states",
             "neoscorpion_sort_fuelers",
             "neoscorpion_sort_trucks",
@@ -76,6 +80,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                 "assignment_setup_minutes": "NUMERIC(8, 2)",
                 "assignment_finishing_minutes": "NUMERIC(8, 2)",
                 "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
+                **SPEAR_SETTINGS_COLUMNS,
             },
         )
         self.assertEqual(

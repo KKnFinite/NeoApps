@@ -84,6 +84,11 @@ def create_app(config_class=Config, auto_bootstrap=False):
     )
 
     ensure_neoermac_door_pull_legacy_defaults(app)
+    from app.services.neoscorpion_spear_schema import (
+        ensure_neoscorpion_spear_schema_compatibility,
+    )
+
+    ensure_neoscorpion_spear_schema_compatibility(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

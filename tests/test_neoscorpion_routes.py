@@ -167,6 +167,25 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neoscorpion"', hub.data)
         self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"', hub.data)
 
+    def test_settings_model_routes_smoke_after_spear_contract(self):
+        self._login_approved_user(role="master")
+
+        pages = {}
+        for path in (
+            "/neoscorpion",
+            "/neoscorpion/fuel-dispatch",
+            "/neoscorpion/fueler",
+            "/neoscorpion/settings",
+            "/neoscorpion/settings/spear",
+            "/neoscorpion/hanzo",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                pages[path] = response
+
+        self.assertIn(b"SPEAR Fleet Optimizer", pages["/neoscorpion/settings/spear"].data)
+
     def test_fuel_dispatch_assembles_owned_data(self):
         user = self._login_approved_user(role="simulator")
         operation, mission = self._add_current_departure(
