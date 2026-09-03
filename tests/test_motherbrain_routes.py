@@ -160,13 +160,14 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"MIN WINDOW", dashboard_body)
         # The dashboard is an operational entry point.  Administration moved
         # under System Settings and selected-sort work begins in Manage Sort.
-        self.assertEqual(dashboard_body.count(b"data-motherbrain-dashboard-tile="), 7)
+        self.assertEqual(dashboard_body.count(b"data-motherbrain-dashboard-tile="), 8)
         expected_links = (
             b'href="/motherbrain/manage-sort"',
             b'href="/motherbrain/parking-plan"',
             b'href="/motherbrain/parking-rules"',
             b'href="/motherbrain/master-schedule"',
             b'href="/motherbrain/flight-api-review"',
+            b'href="/motherbrain/system-settings"',
         )
         for link in expected_links:
             self.assertIn(link, dashboard_body)
@@ -178,6 +179,22 @@ class MotherBrainRoutesTest(unittest.TestCase):
             b"permission-rules",
         ):
             self.assertNotIn(removed_admin_tile, dashboard_body)
+
+    def test_system_settings_dashboard_is_available_with_any_child_permission(self):
+        self._login_motherbrain_role("system_child_operator", "operator")
+        PermissionRule.query.filter_by(
+            permission_key="neomotherbrain.system_settings.view"
+        ).one().minimum_role = "grandmaster"
+        db.session.commit()
+
+        dashboard = self.client.get("/motherbrain")
+        settings = self.client.get("/motherbrain/system-settings")
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIn(b'data-motherbrain-dashboard-tile="system-settings"', dashboard.data)
+        self.assertEqual(settings.status_code, 200)
+        self.assertIn(b"Gateway Matrix", settings.data)
+        self.assertNotIn(b"Integrations &amp; Migration", settings.data)
 
     def test_motherbrain_dashboard_tiles_include_expected_pages(self):
         response = self.client.get("/motherbrain", follow_redirects=False)

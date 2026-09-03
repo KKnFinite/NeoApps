@@ -13,7 +13,7 @@
         {% if user_can("neomotherbrain.departure_planning.view") %}<a class="manage-sort-sidebar-link{% if sidebar_active == 'departure-planning' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=sidebar_operation.id, mission_type='departure') }}">Departure Planning</a>{% endif %}
         {% if user_can("motherbrain.parking_plan.view") %}<a class="manage-sort-sidebar-link{% if sidebar_active == 'parking-plan' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan_operation', operation_id=sidebar_operation.id) }}">Parking Plan</a>{% endif %}
         {% if user_can("neomotherbrain.master_schedule.view") %}<a class="manage-sort-sidebar-link{% if sidebar_active == 'master-schedule' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule', operation_id=sidebar_operation.id) }}">Master Schedule</a>{% endif %}
-        {% if user_can("neomotherbrain.system_settings.view") %}<a class="manage-sort-sidebar-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}">System Settings</a>{% endif %}
+        {% if can_access_system_settings() %}<a class="manage-sort-sidebar-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}">System Settings</a>{% endif %}
         {% if user_can("neomotherbrain.flight_api_review.view") %}
         <a class="manage-sort-sidebar-link{% if sidebar_active == 'unmatched-queue' %} is-active{% endif %}" href="{{ url_for('neomotherbrain.flight_api_review', operation_id=sidebar_operation.id) }}">Unmatched Queue</a>
         {% endif %}

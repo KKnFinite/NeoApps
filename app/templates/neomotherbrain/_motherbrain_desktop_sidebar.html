@@ -40,7 +40,7 @@
         {% if user_can("neomotherbrain.master_schedule.view") %}
         <a class="motherbrain-desktop-side-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule', operation_id=sidebar_operation.id) }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>Master Schedule</a>
         {% endif %}
-        {% if user_can("neomotherbrain.system_settings.view") %}
+        {% if can_access_system_settings() %}
         <a class="motherbrain-desktop-side-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
         {% endif %}
         {% if user_can("neomotherbrain.flight_api_review.view") %}
@@ -65,7 +65,7 @@
         {% if user_can("neomotherbrain.master_schedule.view") %}
         <a class="motherbrain-desktop-side-link{% if is_master_schedule_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.master_schedule') }}" {% if is_master_schedule_page %}aria-current="page"{% endif %}>Master Schedule</a>
         {% endif %}
-        {% if user_can("neomotherbrain.system_settings.view") %}
+        {% if can_access_system_settings() %}
         <a class="motherbrain-desktop-side-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>System Settings</a>
         {% endif %}
         {% if user_can("neomotherbrain.flight_api_review.view") %}

@@ -2182,13 +2182,50 @@ class NeoSektorRoutesTest(unittest.TestCase):
             b'<span class="neo-page-title motherbrain-desktop-top-title-text">SETTINGS</span>',
             response.data,
         )
-        self.assertIn(b'href="/motherbrain/system-settings/integrations"', response.data)
+        self.assertIn(
+            b'href="/motherbrain/system-settings/integrations?origin=neosektor-settings"',
+            response.data,
+        )
         self.assertIn(
             b"Gateway-wide Google/Neo authority is managed in MotherBrain System Settings",
             response.data,
         )
         self.assertNotIn(b"Google Sheets Compatibility", response.data)
         self.assertNotIn(b'name="action" value="enable"', response.data)
+
+    def test_neosektor_integration_link_allows_motherbrain_authorized_user_and_returns_denied_user(self):
+        self._login_approved_user(role="master")
+
+        denied = self.client.get(
+            "/motherbrain/system-settings/integrations?origin=neosektor-settings",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(denied.status_code, 302)
+        self.assertEqual(denied.location, "/neosektor/settings")
+        returned = self.client.get(denied.location)
+        self.assertIn(b"Access denied.", returned.data)
+
+        user = User.query.filter_by(username="sektor_master_user").one()
+        membership = GatewayMembership.query.filter_by(
+            user_id=user.id,
+            gateway_id=self.gateway.id,
+        ).one()
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
+        motherbrain_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=motherbrain.id,
+        ).one()
+        motherbrain_role.role = "operator"
+        motherbrain_role.is_active = True
+        db.session.commit()
+
+        authorized = self.client.get(
+            "/motherbrain/system-settings/integrations?origin=neosektor-settings"
+        )
+
+        self.assertEqual(authorized.status_code, 200)
+        self.assertIn(b"Integrations &amp; Migration", authorized.data)
     def test_neosektor_operational_settings_default_when_missing(self):
         self._login_approved_user(role="simulator")
 

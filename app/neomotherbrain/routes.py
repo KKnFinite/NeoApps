@@ -285,6 +285,25 @@ MOTHERBRAIN_ARRIVAL_PLANNING_REFRESH_KEY = "neomotherbrain.arrival_planning"
 MOTHERBRAIN_DEPARTURE_PLANNING_REFRESH_KEY = "neomotherbrain.departure_planning"
 MOTHERBRAIN_PARKING_PLAN_REFRESH_KEY = "neomotherbrain.parking_plan"
 
+SYSTEM_SETTINGS_CHILD_VIEW_PERMISSIONS = (
+    SYSTEM_SETTINGS_VIEW_PERMISSION,
+    "neomotherbrain.permission_rules.view",
+    GATEWAY_MATRIX_VIEW_PERMISSION,
+    SORT_TIMELINE_VIEW_PERMISSION,
+    MANAGE_API_VIEW_PERMISSION,
+    "neoapps.portal_management.view",
+)
+
+
+def can_access_system_settings(user=None):
+    """Whether a MotherBrain user can reach at least one settings child."""
+    return any(user_can(permission_key, user) for permission_key in SYSTEM_SETTINGS_CHILD_VIEW_PERMISSIONS)
+
+
+@bp.app_context_processor
+def inject_system_settings_access():
+    return {"can_access_system_settings": can_access_system_settings}
+
 
 def _motherbrain_live_refresh_status(gateway, operation, screen_key):
     return live_screen_refresh_status(
@@ -355,6 +374,14 @@ def _permission_denied_redirect():
 def _permission_guard(permission_key):
     if user_can(permission_key):
         return None
+    return _permission_denied_redirect()
+
+
+def _integration_settings_denied_redirect():
+    """Return a Sektor-originated integration request to its settings page."""
+    if request.args.get("origin") == "neosektor-settings":
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.settings"))
     return _permission_denied_redirect()
 
 
@@ -481,9 +508,8 @@ def gateway_matrix():
 @gateway_node_required("motherbrain")
 def system_settings():
     gateway = get_current_gateway()
-    denied = _permission_guard(SYSTEM_SETTINGS_VIEW_PERMISSION)
-    if denied:
-        return denied
+    if not can_access_system_settings():
+        return _permission_denied_redirect()
     can_edit = can_manage_system(current_user) and user_can(
         INTEGRATIONS_EDIT_PERMISSION
     )
@@ -498,12 +524,15 @@ def system_settings():
 
 
 @bp.route("/motherbrain/system-settings/integrations", methods=["GET", "POST"])
-@gateway_node_required("motherbrain")
+@login_required
 def integration_settings():
     gateway = get_current_gateway()
-    denied = _permission_guard(SYSTEM_SETTINGS_VIEW_PERMISSION)
-    if denied:
-        return denied
+    if not user_can_access_node(current_user, gateway.code, "motherbrain"):
+        if not user_has_gateway_access(current_user, gateway.code):
+            return redirect(url_for("auth.access_pending"))
+        return _integration_settings_denied_redirect()
+    if not user_can(SYSTEM_SETTINGS_VIEW_PERMISSION):
+        return _integration_settings_denied_redirect()
     can_edit = can_manage_system(current_user) and user_can(
         INTEGRATIONS_EDIT_PERMISSION
     )

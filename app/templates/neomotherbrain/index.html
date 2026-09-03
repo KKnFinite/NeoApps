@@ -79,6 +79,16 @@
                 </span>
             </a>
             {% endif %}
+            {% if can_access_system_settings() %}
+            <a class="motherbrain-dashboard-card motherbrain-dashboard-card-system-settings" href="{{ url_for('neomotherbrain.system_settings') }}" data-motherbrain-dashboard-tile="system-settings">
+                <span class="motherbrain-dashboard-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M19.4 13.5c.04-.5.04-1 0-1.5l2-1.55-2-3.46-2.35.95a7.8 7.8 0 0 0-1.3-.76L15.4 4.7h-4l-.35 2.48a7.8 7.8 0 0 0-1.3.76l-2.35-.95-2 3.46L7.4 12c-.04.5-.04 1 0 1.5l-2 1.55 2 3.46 2.35-.95c.4.3.84.56 1.3.76l.35 2.48h4l.35-2.48c.46-.2.9-.46 1.3-.76l2.35.95 2-3.46-2-1.55ZM13.4 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z"/></svg>
+                </span>
+                <span class="motherbrain-dashboard-card-copy">
+                    <strong>SYSTEM SETTINGS</strong>
+                </span>
+            </a>
+            {% endif %}
     </nav>
 </section>
 {% endblock %}

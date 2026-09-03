@@ -221,7 +221,7 @@
                     {% if is_motherbrain_page and user_can('motherbrain.parking_plan.view') %}
                     <a class="motherbrain-nav-link{% if is_parking_plan_page or is_parking_rules_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.parking_plan') }}" {% if is_parking_plan_page or is_parking_rules_page %}aria-current="page"{% endif %}>PARKING PLAN</a>
                     {% endif %}
-                    {% if is_motherbrain_page and user_can('neomotherbrain.system_settings.view') %}
+                    {% if is_motherbrain_page and can_access_system_settings() %}
                     <a class="motherbrain-nav-link{% if is_system_settings_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.system_settings') }}" {% if is_system_settings_page %}aria-current="page"{% endif %}>SYSTEM SETTINGS</a>
                     {% endif %}
                     {% if is_motherbrain_page and user_can('neomotherbrain.master_schedule.view') %}
