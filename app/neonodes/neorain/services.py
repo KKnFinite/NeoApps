@@ -18,9 +18,21 @@ from app.models import (
     StaffingPerson,
     StaffingUnit,
     StaffingWorkAssignment,
+    NeoRainFuelReviewAcknowledgement,
+    NeoRainGoogleFuelValue,
+    NeoScorpionFuelAssignment,
+    NeoScorpionFuelingEvent,
+    MotherBrainGoogleIntegrationSetting,
 )
 from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment, NeoRainDelayInfo
 from app.services.neorain_ground_time_settings import neorain_ground_time_threshold_minutes
+from app.services.neorain_fuel_authority import (
+    RAIN_FUEL_SOURCE_NEO,
+    completed_scorpion_fuel_by_mission,
+    fuel_review_pending_by_mission,
+    google_rain_fuel_by_mission,
+    rain_fuel_data_source,
+)
 from app.services.neorain_load_planner_contacts import (
     neorain_load_planner_contact_values,
     neorain_load_planner_contacts,
@@ -89,9 +101,24 @@ def neorain_outbound_context(gateway, *, operation=_OPERATION_UNSET):
         operation = current_neorain_outbound_operation(gateway)
     refresh = neorain_outbound_refresh_status(gateway, operation=operation)
     missions = _outbound_departure_missions(operation)
+    fuel_source = rain_fuel_data_source(
+        gateway, getattr(operation, "sort_name", None)
+    )
+    fuel_by_mission = (
+        completed_scorpion_fuel_by_mission(operation)
+        if fuel_source == RAIN_FUEL_SOURCE_NEO
+        else google_rain_fuel_by_mission(operation)
+    )
     return {
         "operation": operation,
-        "rows": _outbound_rows(operation, missions=missions),
+        "rows": _outbound_rows(
+            operation,
+            missions=missions,
+            fuel_source=fuel_source,
+            fuel_by_mission=fuel_by_mission,
+            fuel_review_pending=fuel_review_pending_by_mission(operation, fuel_by_mission)
+            if fuel_source == RAIN_FUEL_SOURCE_NEO else {},
+        ),
         "late_summary": _outbound_late_summary(missions),
         "staffing_summary": neorain_outbound_staffing_summary(operation),
         "refresh_status": refresh,
@@ -478,6 +505,11 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
             MasterFlightSchedule.mission_type == "departure",
             MasterFlightSchedule.active.is_(True),
         ),
+        _revision_aggregate("rain_fuel_source", MotherBrainGoogleIntegrationSetting, MotherBrainGoogleIntegrationSetting.updated_at, MotherBrainGoogleIntegrationSetting.gateway_id == gateway.id, MotherBrainGoogleIntegrationSetting.sort_name == (operation.sort_name if operation else "night")),
+        _revision_aggregate("google_fuel", NeoRainGoogleFuelValue, NeoRainGoogleFuelValue.updated_at, NeoRainGoogleFuelValue.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("google_fuel", NeoRainGoogleFuelValue, NeoRainGoogleFuelValue.updated_at, NeoRainGoogleFuelValue.id.is_(None)),
+        _revision_aggregate("scorpion_assignments", NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.updated_at, NeoScorpionFuelAssignment.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("scorpion_assignments", NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.updated_at, NeoScorpionFuelAssignment.id.is_(None)),
+        _revision_aggregate("scorpion_events", NeoScorpionFuelingEvent, NeoScorpionFuelingEvent.updated_at, NeoScorpionFuelingEvent.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("scorpion_events", NeoScorpionFuelingEvent, NeoScorpionFuelingEvent.updated_at, NeoScorpionFuelingEvent.id.is_(None)),
+        _revision_aggregate("fuel_review", NeoRainFuelReviewAcknowledgement, NeoRainFuelReviewAcknowledgement.reviewed_at, NeoRainFuelReviewAcknowledgement.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("fuel_review", NeoRainFuelReviewAcknowledgement, NeoRainFuelReviewAcknowledgement.reviewed_at, NeoRainFuelReviewAcknowledgement.id.is_(None)),
     )
     rows = sorted(
         db.session.execute(union_all(*aggregates)).all(),
@@ -506,7 +538,7 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _outbound_rows(operation, *, missions=None):
+def _outbound_rows(operation, *, missions=None, fuel_source=None, fuel_by_mission=None, fuel_review_pending=None):
     if operation is None:
         return []
     parking_by_tail = {
@@ -524,6 +556,11 @@ def _outbound_rows(operation, *, missions=None):
         operation.gateway if operation is not None else None,
         eligible_planners,
     )
+    fuel_source = fuel_source or rain_fuel_data_source(operation.gateway, operation.sort_name)
+    if fuel_by_mission is None:
+        fuel_by_mission = completed_scorpion_fuel_by_mission(operation) if fuel_source == RAIN_FUEL_SOURCE_NEO else google_rain_fuel_by_mission(operation)
+    if fuel_review_pending is None:
+        fuel_review_pending = fuel_review_pending_by_mission(operation, fuel_by_mission) if fuel_source == RAIN_FUEL_SOURCE_NEO else {}
     rows = [
         _outbound_row(
             mission,
@@ -531,6 +568,9 @@ def _outbound_rows(operation, *, missions=None):
             parking_by_tail,
             eligible_person_ids=eligible_person_ids,
             planner_contacts=planner_contacts,
+            fuel_source=fuel_source,
+            fuel_value=fuel_by_mission.get(mission.id, {}),
+            fuel_review_pending=bool(fuel_review_pending.get(mission.id)),
         )
         for mission in missions
     ]
@@ -960,6 +1000,16 @@ def neorain_outbound_row(mission, operation):
         if _tail_key(assignment.tail_number)
     }
     eligible_planners = eligible_neorain_load_planners()
+    fuel_source = rain_fuel_data_source(operation.gateway, operation.sort_name)
+    fuel_by_mission = (
+        completed_scorpion_fuel_by_mission(operation)
+        if fuel_source == RAIN_FUEL_SOURCE_NEO
+        else google_rain_fuel_by_mission(operation)
+    )
+    fuel_pending = (
+        fuel_review_pending_by_mission(operation, fuel_by_mission)
+        if fuel_source == RAIN_FUEL_SOURCE_NEO else {}
+    )
     row = _outbound_row(
         mission,
         operation,
@@ -969,6 +1019,9 @@ def neorain_outbound_row(mission, operation):
             operation.gateway,
             eligible_planners,
         ),
+        fuel_source=fuel_source,
+        fuel_value=fuel_by_mission.get(mission.id, {}),
+        fuel_review_pending=bool(fuel_pending.get(mission.id)),
     )
     row.pop("sort_time", None)
     row["departure_status"] = _normalized_status(mission.departure_status)
@@ -982,6 +1035,9 @@ def _outbound_row(
     *,
     eligible_person_ids=None,
     planner_contacts=None,
+    fuel_source=None,
+    fuel_value=None,
+    fuel_review_pending=False,
 ):
     timing = mission_display_timing_data(mission, operation)
     planned = timing.get("adjusted_planned_departure_time") or mission.planned_datetime_local
@@ -992,6 +1048,7 @@ def _outbound_row(
         mission,
         eligible_person_ids=eligible_person_ids,
     )
+    fuel_value = fuel_value or {}
     return {
         "wave": timing.get("wave") or "-",
         "flight_number": _text(mission.flight_number),
@@ -1005,6 +1062,11 @@ def _outbound_row(
             (planner_contacts or {}).get(planner.id) if planner else None
         ),
         "elmac": format_local_hhmm(mission.elmac_completed_at_utc, timezone_name),
+        "fuel_source": fuel_source or rain_fuel_data_source(operation.gateway, operation.sort_name),
+        "neo_fuel": fuel_value.get("neo_fuel", ""),
+        "center_fuel": fuel_value.get("center_fuel", ""),
+        "fuel_revision": fuel_value.get("revision", ""),
+        "fuel_review_pending": fuel_review_pending,
         "ramp_load_complete": format_local_hhmm(
             mission.ramp_load_completed_at_utc, timezone_name
         ),

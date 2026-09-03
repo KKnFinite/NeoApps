@@ -29,6 +29,15 @@ class MotherBrainGoogleIntegrationSetting(db.Model):
         default="google_primary",
         server_default="google_primary",
     )
+    # Kept deliberately independent from the Rain milestone migration bundle.
+    # The operational bundle and final Scorpion fuel data migrate on different
+    # schedules.
+    rain_fuel_data_source = db.Column(
+        db.String(16),
+        nullable=False,
+        default="google",
+        server_default="google",
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

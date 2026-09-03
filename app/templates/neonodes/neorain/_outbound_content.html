@@ -43,7 +43,7 @@
     <table class="neorain-outbound-table">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
         <thead><tr>
-            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>Load Planner</th><th>eLMAC</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th><th>Delay Info</th>
+            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>Load Planner</th><th>eLMAC</th><th>Neo Fuel</th><th>Center Fuel</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th><th>Delay Info</th>
         </tr></thead>
         <tbody>
             {% for row in rows %}
@@ -70,6 +70,8 @@
                     {% endif %}
                 </td>
                 <td data-label="eLMAC">{{ row.elmac or '-' }}</td>
+                <td data-label="Neo Fuel" class="neorain-fuel-cell"><span class="neorain-fuel-source">FUEL · {{ row.fuel_source|upper }}</span><span>{{ row.neo_fuel or '-' }}</span>{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% endif %}</td>
+                <td data-label="Center Fuel" class="neorain-fuel-cell"><span>{{ row.center_fuel or '-' }}</span>{% if row.fuel_review_pending and can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}</td>
                 {{ milestone_cell(row, 'ramp_load_complete', 'Ramp Load Complete') }}
                 {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
                 {{ milestone_cell(row, 'official_block_out', 'Official Block-Out') }}

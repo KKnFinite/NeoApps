@@ -22,6 +22,8 @@ GOOGLE_RAIN_ROLLOVER_FIELDS = (
     "crew_load_complete",
     "block",
     "no_return",
+    "neo_fuel",
+    "center_fuel",
 )
 _FIELD_LABELS = {
     "elmac": "Rain eLMAC",
@@ -147,6 +149,8 @@ def gate_google_rain_rollover_rows(operation, rows=(), now=None):
 
 
 def _normalized_cell_value(field, value, operation):
+    if field in {"neo_fuel", "center_fuel"}:
+        return str(value or "").strip().casefold() or "blank"
     if field == "no_return":
         if isinstance(value, bool):
             return "true" if value else "false"

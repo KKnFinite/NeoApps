@@ -107,6 +107,26 @@
             {% endif %}
         </section>
 
+        <section class="system-settings-section" aria-labelledby="neorain-fuel-source-title" data-neorain-fuel-source>
+            <div class="system-settings-section-heading">
+                <div>
+                    <h2 id="neorain-fuel-source-title">RAIN FUEL DATA SOURCE</h2>
+                    <p>Independent from Rain operational milestone authority.</p>
+                </div>
+                <strong class="system-settings-mode-badge">{{ neorain_fuel_status.source_label }}</strong>
+            </div>
+            <form method="post" class="system-settings-form">
+                <input type="hidden" name="action" value="set_neorain_fuel_data_source">
+                <div class="system-settings-mode-options" role="radiogroup" aria-label="Rain fuel data source">
+                    {% for source in neorain_fuel_status.sources %}
+                    <label class="system-settings-mode-option"><input type="radio" name="fuel_data_source" value="{{ source.value }}" {% if source.value == neorain_fuel_status.source %}checked{% endif %} {% if not can_edit_system_settings %}disabled{% endif %}><span>{{ source.label }}</span></label>
+                    {% endfor %}
+                </div>
+                <p class="system-settings-mode-help">GOOGLE keeps the legacy Rain fuel display authoritative. NEO shows only final, completed canonical NeoScorpion fuel results.</p>
+                {% if can_edit_system_settings %}<button class="action-button primary-action" type="submit">SAVE RAIN FUEL SOURCE</button>{% else %}<p class="view-only-pill">VIEW ONLY</p>{% endif %}
+            </form>
+        </section>
+
         <section class="system-settings-section" aria-labelledby="neorain-transition-title" data-neorain-integration-status>
             <div class="system-settings-section-heading">
                 <div>

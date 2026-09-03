@@ -89,6 +89,15 @@ def create_app(config_class=Config, auto_bootstrap=False):
     )
 
     ensure_neoscorpion_spear_schema_compatibility(app)
+    from app.services.google_rain_integration_schema import (
+        ensure_google_rain_integration_mode_column,
+    )
+    from app.services.neorain_fuel_authority_schema import (
+        ensure_neorain_fuel_authority_schema,
+    )
+
+    ensure_google_rain_integration_mode_column(app)
+    ensure_neorain_fuel_authority_schema(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)

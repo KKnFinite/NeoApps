@@ -949,6 +949,10 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
     def _assert_neo_authoritative_mode_skips_rain(self, mode):
         self._enable()
         set_rain_integration_mode(self.gateway, "night", mode)
+        # The operational bundle is Neo-authoritative and fuel is explicitly
+        # Neo-authoritative too, so no legacy Rain read is warranted.
+        from app.services.neorain_fuel_authority import set_rain_fuel_data_source
+        set_rain_fuel_data_source(self.gateway, "night", "neo")
         db.session.commit()
         primary_reader = Mock(
             return_value={"inbound_rows": [], "outbound_rows": []}

@@ -205,7 +205,14 @@ def _run_google_rain_best_effort(
         gateway or operation.gateway,
         operation.sort_name,
     )
-    if mode != GOOGLE_PRIMARY:
+    from app.services.neorain_fuel_authority import (
+        RAIN_FUEL_SOURCE_GOOGLE,
+        rain_fuel_data_source,
+    )
+    fuel_google = rain_fuel_data_source(
+        gateway or operation.gateway, operation.sort_name
+    ) == RAIN_FUEL_SOURCE_GOOGLE
+    if mode != GOOGLE_PRIMARY and not fuel_google:
         return {
             "status": "skipped_neo_authoritative",
             "mode": mode,
@@ -220,7 +227,12 @@ def _run_google_rain_best_effort(
     try:
         rows = reader()
         rollover = gate_google_rain_rollover_rows(operation, rows=rows, now=now)
-        application = applier(operation, rows=rollover["rows"], now=now)
+        application = applier(
+            operation,
+            rows=rollover["rows"],
+            now=now,
+            apply_milestones=(mode == GOOGLE_PRIMARY),
+        )
         db.session.commit()
     except Exception as error:
         db.session.rollback()

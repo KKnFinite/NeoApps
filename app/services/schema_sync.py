@@ -89,6 +89,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "rain_integration_mode": (
             "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
         ),
+        "rain_fuel_data_source": "VARCHAR(16) NOT NULL DEFAULT 'google'",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",
@@ -302,6 +303,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "rain_integration_mode": (
             "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
         ),
+        "rain_fuel_data_source": "VARCHAR(16) NOT NULL DEFAULT 'google'",
     },
     "master_flight_schedules": {
         "aircraft_type": "VARCHAR(16)",

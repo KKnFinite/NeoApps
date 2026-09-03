@@ -6,6 +6,7 @@ from app import create_app
 from app.extensions import db
 from app.models import MotherBrainGoogleIntegrationSetting
 from app.services.google_rain_integration_schema import (
+    RAIN_FUEL_DATA_SOURCE_COLUMN,
     RAIN_INTEGRATION_MODE_COLUMN,
     RAIN_INTEGRATION_SCHEMA_LOCK_KEY,
     ensure_google_rain_integration_mode_column,
@@ -49,7 +50,7 @@ class GoogleRainIntegrationSchemaTest(unittest.TestCase):
         connection.assert_not_called()
 
     def test_current_schema_executes_no_lock_or_ddl(self):
-        with self._postgres_patches([True]) as calls:
+        with self._postgres_patches([True, True]) as calls:
             self.assertTrue(ensure_google_rain_integration_mode_column(self.app))
 
         calls["session_connection"].assert_not_called()
@@ -58,13 +59,14 @@ class GoogleRainIntegrationSchemaTest(unittest.TestCase):
         calls["rollback"].assert_not_called()
 
     def test_missing_column_is_added_once_with_default(self):
-        with self._postgres_patches([False, False]) as calls:
+        with self._postgres_patches([False, False, False, False]) as calls:
             self.assertTrue(ensure_google_rain_integration_mode_column(self.app))
 
         statements = self._statements(calls["locked_connection"])
         self.assertIn("SET LOCAL lock_timeout = '5s'", statements)
         self.assertIn("pg_advisory_xact_lock", statements)
         self.assertIn("ADD COLUMN rain_integration_mode", statements)
+        self.assertIn("ADD COLUMN rain_fuel_data_source", statements)
         self.assertIn("NOT NULL DEFAULT 'google_primary'", statements)
         self.assertEqual(
             calls["locked_connection"].execute.call_args_list[1].args[1][
@@ -75,7 +77,7 @@ class GoogleRainIntegrationSchemaTest(unittest.TestCase):
         calls["commit"].assert_called_once_with()
 
     def test_recheck_after_lock_prevents_duplicate_ddl(self):
-        with self._postgres_patches([False, True]) as calls:
+        with self._postgres_patches([False, True, True]) as calls:
             self.assertTrue(ensure_google_rain_integration_mode_column(self.app))
 
         statements = self._statements(calls["locked_connection"])
@@ -94,7 +96,7 @@ class GoogleRainIntegrationSchemaTest(unittest.TestCase):
         calls["rollback"].assert_called_once_with()
 
     def test_factory_invokes_targeted_ensure(self):
-        with patch("app.ensure_google_rain_integration_mode_column") as ensure:
+        with patch("app.services.google_rain_integration_schema.ensure_google_rain_integration_mode_column") as ensure:
             create_app(self.config)
         ensure.assert_called_once()
 

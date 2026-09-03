@@ -9,6 +9,7 @@ from flask import (
     url_for,
 )
 from sqlalchemy.exc import IntegrityError
+from flask_login import current_user
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -70,6 +71,12 @@ from app.services.neorain_crew_admin import (
 from app.services.neorain_delay_info import (
     NeoRainDelayInfoError, add_neorain_delay_info, update_neorain_delay_info,
     delete_neorain_delay_info,
+)
+from app.services.neorain_fuel_authority import (
+    RAIN_FUEL_SOURCE_NEO,
+    acknowledge_fuel_review,
+    completed_scorpion_fuel_by_mission,
+    rain_fuel_data_source,
 )
 
 
@@ -599,6 +606,46 @@ def outbound_milestone():
             "revision": neorain_outbound_revision(gateway, operation=operation),
         }
     )
+
+
+@bp.route("/outbound/fuel-reviewed", methods=["POST"])
+@gateway_node_required("rain")
+def outbound_fuel_reviewed():
+    """Acknowledge one exact, published NeoScorpion fuel revision globally."""
+    page = _neorain_page("neorain.outbound")
+    access = permission_access(page[2], page[3])
+    if not access["can_edit"]:
+        flash("Edit access is required to review fuel data.", "error")
+        return redirect(url_for("neorain.outbound"))
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    mission_id = _positive_integer(request.form.get("mission_id"))
+    requested_revision = str(request.form.get("fuel_revision") or "").strip()
+    if operation is None or mission_id is None:
+        flash("The current Rain mission is unavailable.", "error")
+        return redirect(url_for("neorain.outbound"))
+    if rain_fuel_data_source(gateway, operation.sort_name) != RAIN_FUEL_SOURCE_NEO:
+        flash("Fuel review is available only while Rain Fuel Data Source is NEO.", "error")
+        return redirect(url_for("neorain.outbound"))
+    mission = SortDateMission.query.filter_by(
+        id=mission_id,
+        sort_date_operation_id=operation.id,
+        mission_type="departure",
+    ).with_for_update().one_or_none()
+    current = completed_scorpion_fuel_by_mission(operation).get(mission_id)
+    if mission is None or current is None or current["revision"] != requested_revision:
+        db.session.rollback()
+        flash("Fuel data changed before it could be reviewed. Please review the current values.", "error")
+        return redirect(url_for("neorain.outbound"))
+    try:
+        acknowledge_fuel_review(operation, mission.id, requested_revision, current_user)
+        db.session.commit()
+        flash("Fuel data review recorded for this mission.", "success")
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("NeoRain fuel review failed safely: mission_id=%s", mission_id)
+        flash("NeoRain could not record the fuel review.", "error")
+    return redirect(url_for("neorain.outbound"))
 
 
 @bp.route("/outbound/late-inclusion", methods=["POST"])

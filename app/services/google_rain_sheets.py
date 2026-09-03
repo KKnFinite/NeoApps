@@ -32,6 +32,8 @@ GOOGLE_RAIN_OUTBOUND_RANGE_SPECS = (
     ("flight_number", "Outbound!A3:A50", 1),
     ("destination", "Outbound!C3:C50", 1),
     ("std", "Outbound!E3:E50", 1),
+    ("neo_fuel", "Outbound!J3:J50", 1),
+    ("center_fuel", "Outbound!K3:K50", 1),
     ("elmac", "Outbound!L3:L50", 1),
     ("ramp_load_complete", "Outbound!M3:M50", 1),
     ("crew_load_complete", "Outbound!N3:N50", 1),
@@ -87,17 +89,21 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
     flight_rows = _padded_rows(values[0], row_count, 1)
     destination_rows = _padded_rows(values[1], row_count, 1)
     std_rows = _padded_rows(values[2], row_count, 1)
-    elmac_rows = _padded_rows(values[3], row_count, 1)
-    ramp_load_complete_rows = _padded_rows(values[4], row_count, 1)
-    crew_load_complete_rows = _padded_rows(values[5], row_count, 1)
-    block_rows = _padded_rows(values[6], row_count, 1)
-    no_return_rows = _padded_rows(values[7], row_count, 1)
+    neo_fuel_rows = _padded_rows(values[3], row_count, 1)
+    center_fuel_rows = _padded_rows(values[4], row_count, 1)
+    elmac_rows = _padded_rows(values[5], row_count, 1)
+    ramp_load_complete_rows = _padded_rows(values[6], row_count, 1)
+    crew_load_complete_rows = _padded_rows(values[7], row_count, 1)
+    block_rows = _padded_rows(values[8], row_count, 1)
+    no_return_rows = _padded_rows(values[9], row_count, 1)
 
     rows = []
     for offset in range(row_count):
         flight_number = _cell(flight_rows[offset], 0)
         destination = _cell(destination_rows[offset], 0)
         std = _cell(std_rows[offset], 0)
+        neo_fuel = _cell(neo_fuel_rows[offset], 0)
+        center_fuel = _cell(center_fuel_rows[offset], 0)
         elmac = _cell(elmac_rows[offset], 0)
         ramp_load_complete = _cell(ramp_load_complete_rows[offset], 0)
         crew_load_complete = _cell(crew_load_complete_rows[offset], 0)
@@ -107,6 +113,8 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
             flight_number,
             destination,
             std,
+            neo_fuel,
+            center_fuel,
             elmac,
             ramp_load_complete,
             crew_load_complete,
@@ -121,6 +129,8 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
                 "flight_number": flight_number,
                 "destination": destination,
                 "std": std,
+                "neo_fuel": neo_fuel,
+                "center_fuel": center_fuel,
                 "elmac": elmac,
                 "ramp_load_complete": ramp_load_complete,
                 "crew_load_complete": crew_load_complete,
@@ -135,6 +145,8 @@ def _rain_outbound_row_has_content(
     flight_number,
     destination,
     std,
+    neo_fuel,
+    center_fuel,
     elmac,
     ramp_load_complete,
     crew_load_complete,
@@ -154,6 +166,8 @@ def _rain_outbound_row_has_content(
             flight_number,
             destination,
             std,
+            neo_fuel,
+            center_fuel,
             elmac,
             ramp_load_complete,
             crew_load_complete,

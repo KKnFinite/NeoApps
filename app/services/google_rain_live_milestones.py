@@ -17,6 +17,11 @@ from app.services.google_motherbrain_live_missions import (
     GoogleMotherBrainMissionError,
     _parse_optional_live_datetime,
 )
+from app.services.neorain_fuel_authority import (
+    RAIN_FUEL_SOURCE_GOOGLE,
+    rain_fuel_data_source,
+    record_google_rain_fuel_value,
+)
 
 
 GOOGLE_RAIN_SOURCE = "google_rain"
@@ -71,6 +76,7 @@ def apply_google_rain_departure_milestones(
     now=None,
     *,
     authority_handoff=None,
+    apply_milestones=True,
 ):
     """Apply Rain rows without creating missions, changing tails, or committing."""
     del now
@@ -108,12 +114,30 @@ def apply_google_rain_departure_milestones(
 
         try:
             with db.session.begin_nested():
-                result = _apply_row(
-                    operation,
-                    mission,
-                    row,
-                    authority_handoff=authority_handoff,
+                result = (
+                    _apply_row(
+                        operation,
+                        mission,
+                        row,
+                        authority_handoff=authority_handoff,
+                    )
+                    if apply_milestones
+                    else _fuel_only_result(row, mission)
                 )
+                if (
+                    rain_fuel_data_source(operation.gateway, operation.sort_name)
+                    == RAIN_FUEL_SOURCE_GOOGLE
+                    and (
+                        row["neo_fuel"] is not _MISSING
+                        or row["center_fuel"] is not _MISSING
+                    )
+                ):
+                    record_google_rain_fuel_value(
+                        operation,
+                        mission,
+                        None if row["neo_fuel"] is _MISSING else row["neo_fuel"],
+                        None if row["center_fuel"] is _MISSING else row["center_fuel"],
+                    )
                 db.session.flush()
         except SQLAlchemyError as error:
             if authority_handoff is not None:
@@ -129,6 +153,17 @@ def apply_google_rain_departure_milestones(
         "results": results,
         "applied_count": applied_count,
         "skipped_count": len(results) - applied_count,
+    }
+
+
+def _fuel_only_result(row, mission):
+    return {
+        "status": "applied",
+        "sheet_row": row["sheet_row"],
+        "flight_number": row["flight_number"],
+        "mission_id": mission.id,
+        "changed_fields": [],
+        "warnings": [],
     }
 
 
@@ -416,6 +451,8 @@ def _normalize_row(supplied_row):
             _first_value(supplied_row, "destination", "DEST", "C") or ""
         ).strip().upper(),
         "std": _first_supplied(supplied_row, "std", "STD", "E"),
+        "neo_fuel": _first_supplied(supplied_row, "neo_fuel", "NEO_FUEL", "J"),
+        "center_fuel": _first_supplied(supplied_row, "center_fuel", "CENTER_FUEL", "K"),
         "elmac": _first_supplied(supplied_row, "elmac", "ELMAC", "eLMAC", "L"),
         "ramp_load_complete": _first_supplied(
             supplied_row, "ramp_load_complete", "r_lc", "R-LC", "M"

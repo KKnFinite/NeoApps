@@ -30447,6 +30447,11 @@ body:has(.neostaffing-settings-console) { overflow-x:clip; }
     white-space: normal;
 }
 
+.neorain-fuel-cell { min-width: 5.25rem; }
+.neorain-fuel-source { display: block; color: var(--node-highlight); font-size: .58rem; font-weight: 800; letter-spacing: .06em; }
+.neorain-fuel-review-warning { display: block; max-width: 12rem; margin-top: 4px; color: #ffd166; font-size: .62rem; line-height: 1.2; white-space: normal; }
+.neorain-fuel-reviewed { margin-top: 4px; border: 1px solid rgba(var(--node-rgb), .42); border-radius: 3px; background: #101a27; color: var(--node-highlight); cursor: pointer; font: inherit; font-size: .64rem; font-weight: 800; padding: 3px 6px; }
+
 .neorain-outbound-table details[id^="delay-info-"] {
     display: grid;
     gap: 8px;

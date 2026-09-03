@@ -7,20 +7,21 @@ from app.models import MotherBrainGoogleIntegrationSetting
 
 
 RAIN_INTEGRATION_MODE_COLUMN = "rain_integration_mode"
+RAIN_FUEL_DATA_SOURCE_COLUMN = "rain_fuel_data_source"
 RAIN_INTEGRATION_SCHEMA_LOCK_KEY = 7_483_327_341_905
 RAIN_INTEGRATION_SCHEMA_LOCK_TIMEOUT = "5s"
 
 
 def ensure_google_rain_integration_mode_column(app):
-    """Add only the Rain mode column, with a lock-timeout bounded recheck."""
+    """Ensure the two small Rain authority columns with one bounded lock."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 
     with app.app_context():
         try:
             with db.engine.connect() as read_connection:
-                column_exists = _column_exists(read_connection)
-            if column_exists:
+                columns_current = all(_column_exists(read_connection, column) for column in _required_columns())
+            if columns_current:
                 app.logger.info("NeoRain integration schema ensure already current")
                 return True
 
@@ -35,15 +36,14 @@ def ensure_google_rain_integration_mode_column(app):
                 text("SELECT pg_advisory_xact_lock(:lock_key)"),
                 {"lock_key": RAIN_INTEGRATION_SCHEMA_LOCK_KEY},
             )
-            if not _column_exists(connection):
-                connection.execute(
-                    text(
-                        "ALTER TABLE "
-                        f"{MotherBrainGoogleIntegrationSetting.__tablename__} "
-                        f"ADD COLUMN {RAIN_INTEGRATION_MODE_COLUMN} "
-                        "VARCHAR(40) NOT NULL DEFAULT 'google_primary'"
-                    )
-                )
+            changed = False
+            if not _column_exists(connection, RAIN_INTEGRATION_MODE_COLUMN):
+                connection.execute(text("ALTER TABLE " f"{MotherBrainGoogleIntegrationSetting.__tablename__} " f"ADD COLUMN {RAIN_INTEGRATION_MODE_COLUMN} VARCHAR(40) NOT NULL DEFAULT 'google_primary'"))
+                changed = True
+            if not _column_exists(connection, RAIN_FUEL_DATA_SOURCE_COLUMN):
+                connection.execute(text("ALTER TABLE " f"{MotherBrainGoogleIntegrationSetting.__tablename__} " f"ADD COLUMN {RAIN_FUEL_DATA_SOURCE_COLUMN} VARCHAR(16) NOT NULL DEFAULT 'google'"))
+                changed = True
+            if changed:
                 db.session.commit()
             else:
                 db.session.rollback()
@@ -59,7 +59,11 @@ def ensure_google_rain_integration_mode_column(app):
     return True
 
 
-def _column_exists(connection):
+def _required_columns():
+    return (RAIN_INTEGRATION_MODE_COLUMN, RAIN_FUEL_DATA_SOURCE_COLUMN)
+
+
+def _column_exists(connection, column_name):
     return bool(
         connection.execute(
             text(
@@ -69,7 +73,7 @@ def _column_exists(connection):
                 "AND attname = :column_name "
                 "AND attnum > 0 AND NOT attisdropped"
             ),
-            {"column_name": RAIN_INTEGRATION_MODE_COLUMN},
+            {"column_name": column_name},
         ).scalar()
     )
 

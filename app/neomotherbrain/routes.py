@@ -202,6 +202,10 @@ from app.services.google_rain_integration_mode import (
     change_rain_integration_mode,
     rain_integration_status,
 )
+from app.services.neorain_fuel_authority import (
+    rain_fuel_data_source_status,
+    set_rain_fuel_data_source,
+)
 from app.services.my_alerts import my_alert_context
 from app.services.neosektor_sheets_compat import (
     NeoSektorGoogleError,
@@ -570,6 +574,15 @@ def _handle_integration_settings(gateway, can_edit):
                     f"NeoRain integration mode is now {status['mode_label']}.",
                     "success",
                 )
+            elif action == "set_neorain_fuel_data_source":
+                setting = set_rain_fuel_data_source(
+                    gateway, "night", request.form.get("fuel_data_source")
+                )
+                db.session.commit()
+                flash(
+                    f"NeoRain Fuel Data Source is now {setting.rain_fuel_data_source.upper()}.",
+                    "success",
+                )
             elif action in {"enable_google_live_polling", "disable_google_live_polling"}:
                 enabled = action == "enable_google_live_polling"
                 set_google_motherbrain_live_polling_enabled(
@@ -617,6 +630,7 @@ def _render_integration_settings(gateway, can_edit):
         neosektor_status=neosektor_integration_status(gateway),
         neosektor_shared_authority=neosektor_shared_authority,
         neorain_status=rain_integration_status(gateway, "night"),
+        neorain_fuel_status=rain_fuel_data_source_status(gateway, "night"),
         google_live_polling_status=google_motherbrain_live_polling_status(
             gateway,
             "night",

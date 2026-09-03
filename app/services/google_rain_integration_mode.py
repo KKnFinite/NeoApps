@@ -68,6 +68,7 @@ def ensure_rain_integration_setting(gateway, sort_name=DEFAULT_RAIN_SORT):
             sort_name=normalized_sort,
             live_polling_enabled=False,
             rain_integration_mode=DEFAULT_RAIN_INTEGRATION_MODE,
+            rain_fuel_data_source="google",
         )
         db.session.add(setting)
     else:
@@ -75,6 +76,8 @@ def ensure_rain_integration_setting(gateway, sort_name=DEFAULT_RAIN_SORT):
         setting.rain_integration_mode = _normalized_mode(
             setting.rain_integration_mode
         )
+        if str(getattr(setting, "rain_fuel_data_source", "") or "").strip().lower() not in {"google", "neo"}:
+            setting.rain_fuel_data_source = "google"
     db.session.flush()
     return setting
 
