@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}SPEAR Vault | NeoScorpion{% endblock %}
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Vault">
+ <header class="neoscorpion-screen-head"><h1>SPEAR Vault</h1><p>{{ spear_learning_vault.label }}{% if spear_learning_vault.bucket %} · Bucket: {{ spear_learning_vault.bucket }}{% endif %}</p></header>
+ {% if review_payload %}<section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Calibration Review</span><strong>TRAINING ELIGIBLE: NO</strong></div><pre>{{ review_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
+ {% else %}<section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Recent Calibration Reviews</span><strong>MAX 50</strong></div>{% for review in reviews %}<p><a href="{{ url_for('neoscorpion.spear_vault', review=review.key) }}">{{ review.key }}</a> · {{ review.saved_at }} · {{ review.checksum }} · TRAINING ELIGIBLE: NO</p>{% else %}<p>No saved calibration reviews.</p>{% endfor %}</section>{% endif %}
+</section>
+{% endblock %}

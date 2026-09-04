@@ -70,6 +70,14 @@ from app.services.neoscorpion_spear_calibration import (
     calibration_review_payload,
     reset_live_calibration,
 )
+from app.services.neoscorpion_learning_vault import (
+    LearningVaultUnavailable,
+    archive_calibration_review,
+    learning_vault_status,
+    list_calibration_reviews,
+    read_calibration_review,
+    test_learning_vault_connection,
+)
 
 
 FUEL_DISPATCH_VIEW_PERMISSION = "neoscorpion.fuel_dispatch.view"
@@ -1012,6 +1020,68 @@ def spear_calibration():
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.spear_settings"))
     return _spear_calibration_response(gateway, access)
+
+
+@bp.post("/settings/spear/vault/test")
+@gateway_node_required("scorpion")
+def spear_vault_test():
+    gateway = get_current_gateway()
+    access = permission_access(SETTINGS_VIEW_PERMISSION, SETTINGS_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        flash("Access denied.", "error")
+        return _spear_settings_response(gateway, access, status_code=403)
+    try:
+        test_learning_vault_connection()
+        flash("SPEAR VAULT CONNECTION VERIFIED.", "success")
+    except (LearningVaultUnavailable, ValueError):
+        flash("SPEAR Vault connection failed. Check the R2 bucket, credentials, and Render configuration.", "error")
+    return redirect(url_for("neoscorpion.spear_settings"))
+
+
+@bp.post("/settings/spear/calibration/archive")
+@gateway_node_required("scorpion")
+def spear_calibration_archive():
+    gateway = get_current_gateway()
+    access = permission_access(SETTINGS_VIEW_PERMISSION, SETTINGS_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        flash("Access denied.", "error")
+        return _spear_calibration_response(gateway, access, status_code=403)
+    dispatch = fuel_dispatch_context(gateway)
+    operation = dispatch["operation"]
+    if operation is None:
+        flash("No current sort operation is available.", "error")
+        return _spear_calibration_response(gateway, access, status_code=400)
+    try:
+        result = archive_calibration_review(
+            calibration_review_payload(operation, {(item.metric, item.scope_key): item for item in dispatch["spear_calibration"]["items"]}),
+            gateway=gateway, operation=operation, user=current_user,
+            learning_capture_enabled=dispatch["spear_settings"].learning_capture_enabled,
+        )
+        flash("ALREADY SAVED TO SPEAR VAULT." if result["already_saved"] else "SAVED TO SPEAR VAULT.", "info" if result["already_saved"] else "success")
+    except (LearningVaultUnavailable, ValueError):
+        flash("SPEAR Vault connection failed. Check the R2 bucket, credentials, and Render configuration.", "error")
+    return redirect(url_for("neoscorpion.spear_calibration"))
+
+
+@bp.get("/settings/spear/vault")
+@gateway_node_required("scorpion")
+def spear_vault():
+    gateway = get_current_gateway()
+    access = permission_access(SETTINGS_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.spear_settings"))
+    status = learning_vault_status()
+    reviews = ()
+    payload = None
+    try:
+        if status.configured:
+            key = request.args.get("review", "")
+            payload = read_calibration_review(key) if key else None
+            reviews = list_calibration_reviews() if not key else ()
+    except (LearningVaultUnavailable, ValueError):
+        flash("SPEAR Vault connection failed. Check the R2 bucket, credentials, and Render configuration.", "error")
+    return render_template("neonodes/neoscorpion/spear_vault.html", gateway=gateway, can_edit=user_can(SETTINGS_EDIT_PERMISSION), spear_learning_vault=status, reviews=reviews, review_payload=payload)
 
 
 @bp.post("/fuel-dispatch/spear-action")

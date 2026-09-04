@@ -19,6 +19,7 @@ from app.models import (
 
 
 CALIBRATION_SCHEMA_VERSION = "v1"
+SPEAR_ALGORITHM_VERSION = "spear-v1"
 MINIMUM_ACTIVE_SAMPLES = 3
 BASELINE_WEIGHT = Decimal("3")
 METRICS = (
@@ -194,6 +195,7 @@ def reset_live_calibration(operation, metric, scope_key, user, *, now_utc=None):
 def calibration_review_payload(operation, calibrations):
     return {
         "schema_version": CALIBRATION_SCHEMA_VERSION,
+        "spear_algorithm_version": SPEAR_ALGORITHM_VERSION,
         "capture_mode": "live_calibration_review",
         "operation_id": getattr(operation, "id", None),
         "training_eligible": False,
