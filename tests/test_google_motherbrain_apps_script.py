@@ -45,10 +45,10 @@ class GoogleMotherBrainAppsScriptTest(unittest.TestCase):
     def test_exact_workbook_ranges_are_committed(self):
         expected_ranges = (
             "Inbound!A4:G13",
-            "Inbound!A16:G100",
+            "Inbound!A15:G100",
             "Inbound!P4:P100",
             "Outbound!A4:G13",
-            "Outbound!A16:G100",
+            "Outbound!A15:G100",
             "Outbound!P4:P100",
             "Outbound!W4:Z100",
             "Parking Plan!BG3:BH100",
@@ -73,6 +73,7 @@ class GoogleMotherBrainAppsScriptTest(unittest.TestCase):
         self.assertIn("Boolean(tailNumber || (cancelled && flightNumber))", self.code)
         self.assertIn("values.slice(1, 7).some(Boolean)", self.code)
         self.assertIn("normalized === 'CNL' || normalized === 'CANCELLED'", self.code)
+        self.assertIn("isAlpHeaderRow_(values)", self.code)
 
     def test_tail_swaps_and_parking_keep_required_source_values(self):
         self.assertIn("if (!values[2] && !values[3])", self.code)

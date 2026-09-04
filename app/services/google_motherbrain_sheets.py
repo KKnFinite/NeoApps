@@ -14,6 +14,7 @@ try:
 except ImportError:  # Production installs the declared dependency.
     gspread = None
 
+from app.services.alp_import import is_alp_header_row
 from app.services.google_motherbrain_import import (
     GOOGLE_MOTHERBRAIN_GATEWAY_CODE,
     GOOGLE_MOTHERBRAIN_SCHEMA_VERSION,
@@ -38,10 +39,10 @@ GOOGLE_MOTHERBRAIN_RESET_PARKING_FORMULA_RANGE = "Parking Plan!BG3:BG100"
 GOOGLE_MOTHERBRAIN_RANGE_SPECS = (
     ("sort_date", "Inbound!H2", 1, 1, 2),
     ("inbound_manual", "Inbound!A4:G13", 10, 7, 4),
-    ("inbound_alp", "Inbound!A16:G100", 85, 7, 16),
+    ("inbound_alp", "Inbound!A15:G100", 86, 7, 15),
     ("inbound_official_order", "Inbound!P4:P100", 97, 1, 4),
     ("outbound_manual", "Outbound!A4:G13", 10, 7, 4),
-    ("outbound_alp", "Outbound!A16:G100", 85, 7, 16),
+    ("outbound_alp", "Outbound!A15:G100", 86, 7, 15),
     ("outbound_official_order", "Outbound!P4:P100", 97, 1, 4),
     ("outbound_tail_swaps", "Outbound!W4:Z100", 97, 4, 4),
     ("parking_assignments", "Parking Plan!BG3:BH100", 98, 2, 3),
@@ -174,7 +175,7 @@ def read_google_motherbrain_envelope(config=None, client_factory=None, now=None)
             "alp_rows": _flight_rows(
                 raw_by_key["inbound_alp"],
                 formatted_by_key["inbound_alp"],
-                start_row=16,
+                start_row=15,
                 airport_key="origin",
                 row_type="alp",
             ),
@@ -193,7 +194,7 @@ def read_google_motherbrain_envelope(config=None, client_factory=None, now=None)
             "alp_rows": _flight_rows(
                 raw_by_key["outbound_alp"],
                 formatted_by_key["outbound_alp"],
-                start_row=16,
+                start_row=15,
                 airport_key="destination",
                 row_type="alp",
             ),
@@ -545,6 +546,8 @@ def _flight_rows(raw_rows, formatted_rows, start_row, airport_key, row_type):
     results = []
     for offset, displayed_row in enumerate(formatted_rows):
         displayed = [_trim(value) for value in displayed_row]
+        if row_type == "alp" and is_alp_header_row(displayed):
+            continue
         flight_number = displayed[1]
         tail_number = displayed[3]
         status = displayed[5]

@@ -258,6 +258,14 @@ class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
             "03:09 (A)",
         )
         self.assertEqual(
+            envelope["snapshot"]["inbound"]["alp_rows"][0]["sheet_row"],
+            15,
+        )
+        self.assertEqual(
+            envelope["snapshot"]["outbound"]["alp_rows"][0]["sheet_row"],
+            15,
+        )
+        self.assertEqual(
             envelope["snapshot"]["outbound"]["tail_swaps"][0]["new_tail"],
             "N999UP",
         )
@@ -290,7 +298,50 @@ class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
         self.assertEqual([row["flight_number"] for row in inbound["manual_rows"]], ["UPS1001"])
         self.assertEqual(inbound["manual_rows"][0]["sheet_row"], 5)
         self.assertEqual([row["flight_number"] for row in inbound["alp_rows"]], ["UPS1002"])
-        self.assertEqual(inbound["alp_rows"][0]["sheet_row"], 17)
+        self.assertEqual(inbound["alp_rows"][0]["sheet_row"], 16)
+
+    def test_reader_skips_an_alp_header_at_row_15_and_keeps_row_16(self):
+        spreadsheet = self._spreadsheet()
+        serial = (date(2026, 8, 5) - date(1899, 12, 30)).days
+        spreadsheet.raw_by_key["inbound_alp"] = [
+            ["Date", "Flight", "Origin", "Tail", "Parking", "Status", "Time"],
+            [serial, "UPS1488", "DTW", "N153UP", "B02", "ARR", "03:10 (A)"],
+        ]
+        spreadsheet.formatted_by_key["inbound_alp"] = [
+            ["Date", "Flight", "Origin", "Tail", "Parking", "Status", "Time"],
+            ["8/5/2026", "UPS1488", "DTW", "N153UP", "B02", "ARR", "03:10 (A)"],
+        ]
+
+        envelope = read_google_motherbrain_envelope(
+            reader_config(), client_factory=lambda _credentials: FakeClient(spreadsheet)
+        )
+
+        rows = envelope["snapshot"]["inbound"]["alp_rows"]
+        self.assertEqual([(row["flight_number"], row["sheet_row"]) for row in rows], [("UPS1488", 16)])
+
+    def test_reader_skips_repeated_alp_headers_without_parsing_them_as_dates(self):
+        spreadsheet = self._spreadsheet()
+        serial = (date(2026, 8, 5) - date(1899, 12, 30)).days
+        spreadsheet.raw_by_key["outbound_alp"] = [
+            [serial, "UPS7831", "SDF", "N303UP", "E06", "", "06:15 (S)"],
+            ["Date", "Flight", "Destination", "Tail", "Parking", "Status", "Time"],
+            [serial, "UPS7832", "ONT", "N304UP", "E07", "", "06:20 (S)"],
+        ]
+        spreadsheet.formatted_by_key["outbound_alp"] = [
+            ["8/5/2026", "UPS7831", "SDF", "N303UP", "E06", "", "06:15 (S)"],
+            ["Date", "Flight", "Destination", "Tail", "Parking", "Status", "Time"],
+            ["8/5/2026", "UPS7832", "ONT", "N304UP", "E07", "", "06:20 (S)"],
+        ]
+
+        envelope = read_google_motherbrain_envelope(
+            reader_config(), client_factory=lambda _credentials: FakeClient(spreadsheet)
+        )
+
+        rows = envelope["snapshot"]["outbound"]["alp_rows"]
+        self.assertEqual(
+            [(row["flight_number"], row["sheet_row"]) for row in rows],
+            [("UPS7831", 15), ("UPS7832", 17)],
+        )
 
     def test_reader_rejects_wrong_locked_identity_tabs_and_ranges(self):
         cases = []

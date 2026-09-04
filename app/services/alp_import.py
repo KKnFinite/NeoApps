@@ -173,7 +173,7 @@ def _parse_alp_rows(paste_text, timezone_name=ALP_TIMEZONE):
         if not raw_line.strip():
             continue
         columns = _split_alp_line(raw_line)
-        if _is_header_row(columns):
+        if is_alp_header_row(columns):
             continue
         if len(columns) < 7:
             rows.append(
@@ -195,7 +195,8 @@ def _split_alp_line(line):
     return [column.strip() for column in re.split(r"\s{2,}", line.strip())]
 
 
-def _is_header_row(columns):
+def is_alp_header_row(columns):
+    """Identify an ALP column header before any date parsing is attempted."""
     if len(columns) < 2:
         return False
     return columns[0].strip().lower() == "date" and columns[1].strip().lower() == "flight"

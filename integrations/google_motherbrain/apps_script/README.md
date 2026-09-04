@@ -44,10 +44,10 @@ The sender reads only these ranges:
 | --- | --- |
 | Neo operation sort date | `Inbound!H2` |
 | Inbound manual rows | `Inbound!A4:G13` |
-| Inbound ALP rows | `Inbound!A16:G100` |
+| Inbound ALP rows | `Inbound!A15:G100` |
 | Inbound official order | `Inbound!P4:P100` |
 | Outbound manual rows | `Outbound!A4:G13` |
-| Outbound ALP rows | `Outbound!A16:G100` |
+| Outbound ALP rows | `Outbound!A15:G100` |
 | Outbound official order | `Outbound!P4:P100` |
 | Outbound tail swaps | `Outbound!W4:Z100` |
 | Parking normalized lookup | `Parking Plan!BG3:BH100` |

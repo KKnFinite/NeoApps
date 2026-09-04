@@ -19,10 +19,10 @@ const NEO_MOTHERBRAIN_CONFIG = Object.freeze({
 const NEO_MOTHERBRAIN_RANGES = Object.freeze({
   sortDate: 'Inbound!H2',
   inboundManual: 'Inbound!A4:G13',
-  inboundAlp: 'Inbound!A16:G100',
+  inboundAlp: 'Inbound!A15:G100',
   inboundOfficialOrder: 'Inbound!P4:P100',
   outboundManual: 'Outbound!A4:G13',
-  outboundAlp: 'Outbound!A16:G100',
+  outboundAlp: 'Outbound!A15:G100',
   outboundOfficialOrder: 'Outbound!P4:P100',
   outboundTailSwaps: 'Outbound!W4:Z100',
   parkingAssignments: 'Parking Plan!BG3:BH100',
@@ -215,6 +215,9 @@ function readFlightRows_(sheet, a1Range, airportKey, rowType, timezone) {
 
   displayedRows.forEach(function (displayed, index) {
     const values = displayed.map(trimDisplayedValue_);
+    if (rowType === 'alp' && isAlpHeaderRow_(values)) {
+      return;
+    }
     const flightNumber = values[1];
     const tailNumber = values[3];
     const status = values[5];
@@ -247,6 +250,13 @@ function readFlightRows_(sheet, a1Range, airportKey, rowType, timezone) {
   });
 
   return rows;
+}
+
+
+function isAlpHeaderRow_(values) {
+  return values.length >= 2
+    && String(values[0] || '').trim().toLowerCase() === 'date'
+    && String(values[1] || '').trim().toLowerCase() === 'flight';
 }
 
 
