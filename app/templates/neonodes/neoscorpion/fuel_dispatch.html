@@ -81,7 +81,7 @@
         <details class="neoscorpion-spear-calibration" data-spear-calibration>
             <summary>{{ spear_calibration.label }}</summary>
             <div>
-                {% for item in spear_calibration.items %}
+                {% for item in spear_calibration["items"] %}
                 <span><strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong> · configured {{ item.configured if item.configured is not none else '-' }} · using {{ item.effective if item.effective is not none else '-' }} · {{ item.samples }} samples · {{ item.confidence }}</span>
                 {% else %}<span>Collecting qualifying completed current-sort work.</span>{% endfor %}
             </div>

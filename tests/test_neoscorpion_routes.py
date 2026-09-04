@@ -373,6 +373,44 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             self.assertIn(b"UPS901", response.data)
             self.assertIn(b"SPEAR \xc2\xb7 UNAVAILABLE", response.data)
 
+    def test_fuel_dispatch_renders_populated_spear_calibration(self):
+        self._login_approved_user(role="simulator")
+        operation, _mission = self._add_current_departure(
+            flight_number="UPS901",
+            tail_number="N123UP",
+            destination="ONT",
+            planned_fuel_load=50500,
+        )
+        self._add_current_arrival(
+            operation,
+            tail_number="N123UP",
+            eta_datetime_utc=datetime(2026, 6, 26, 3, 10),
+        )
+        summary = {
+            "active_count": 1,
+            "collecting_count": 0,
+            "label": "SPEAR CALIBRATION · 1 ACTIVE",
+            "items": (
+                SimpleNamespace(
+                    metric="setup_minutes",
+                    scope_key="B757",
+                    configured="5.0",
+                    effective="6.0",
+                    samples=3,
+                    confidence="LOW",
+                ),
+            ),
+        }
+        with (
+            patch("app.services.neoscorpion.current_sort_operation", return_value=operation),
+            patch("app.services.neoscorpion.calibration_summary", return_value=summary),
+        ):
+            response = self.client.get("/neoscorpion/fuel-dispatch")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SPEAR CALIBRATION \xc2\xb7 1 ACTIVE", response.data)
+        self.assertIn(b"Setup Minutes \xc2\xb7 B757", response.data)
+
     def test_vault_test_posts_to_test_route_without_saving_settings(self):
         self._login_approved_user(role="master")
         with (
