@@ -1,105 +1,74 @@
 {% extends "base.html" %}
 
 {% macro node_label(slug, name) -%}
-<span class="rfd-node-name neo-brand-title neo-brand neo-brand--{{ slug }} neo-node-name brand-inline-name node-{{ slug }}" aria-label="Neo{{ name }}">
+<span class="gateway-node-name neo-brand-title neo-brand neo-brand--{{ slug }} neo-node-name brand-inline-name node-{{ slug }}" aria-label="Neo{{ name }}">
     <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--{{ slug }}">{{ name|upper }}</span>
 </span>
 {%- endmacro %}
 
-{% set locked_node_icons = {
-    "motherbrain": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
-    "sektor": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
-    "ermac": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
-    "scorpion": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
-    "reptile": "images/icons/neogateway/inapp/neogateway-inapp-128.png",
-    "rain": "images/icons/neogateway/inapp/neogateway-inapp-128.png",
-    "subzero": "images/icons/neogateway/inapp/neogateway-inapp-128.png"
+{% set node_logos = {
+    "motherbrain": "images/logos/newlogo_motherbrain_small.png",
+    "sektor": "images/logos/newlogo_sektor_small.png",
+    "ermac": "images/logos/newlogo_ermac_small.png",
+    "scorpion": "images/logos/newlogo_scorpion.png",
+    "rain": "images/logos/newlogo_rain_small.png",
+    "subzero": "images/logos/newlogo_subzero_small.png",
+    "reptile": "images/logos/newlogo_reptile_small.png"
 } %}
-{% set generic_node_icon = "images/icons/neogateway/inapp/neogateway-inapp-128.png" %}
 
-{% macro node_card(slug, name, coming_soon=false) -%}
-<span class="rfd-node-card-main">
-    <span class="rfd-node-card-icon-wrap" aria-hidden="true">
-        <img class="rfd-node-card-icon" src="{{ url_for('static', filename=locked_node_icons.get(slug, generic_node_icon)) }}" alt="" loading="lazy" width="72" height="72">
+{% macro node_card(slug, name, descriptor, state="available") -%}
+<span class="gateway-node-card-main">
+    <span class="gateway-node-card-icon-wrap" aria-hidden="true">
+        <img class="gateway-node-card-icon" src="{{ url_for('static', filename=node_logos[slug]) }}" alt="" loading="lazy" width="128" height="128">
     </span>
-    <span class="rfd-node-card-copy">
+    <span class="gateway-node-card-copy">
         {{ node_label(slug, name) }}
+        <small>{{ descriptor }}</small>
     </span>
 </span>
-{% if coming_soon %}
-<span class="rfd-node-availability">Coming Soon</span>
-{% endif %}
+<span class="gateway-node-availability gateway-node-availability--{{ state }}">{{ "Available" if state == "available" else "No Access" if state == "disabled" else "Coming Soon" }}</span>
 {%- endmacro %}
 
 {% block title %}{{ gateway.code }} Hub | NeoGateway{% endblock %}
 
 {% block content %}
-<section class="motherbrain-command rfd-command-layout" aria-label="{{ gateway.code }} gateway hub">
-    {% set selected_operation_id = gateway_active_sort_operation.id if gateway_active_sort_operation else none %}
-    <section class="rfd-node-menu{% if not gateway_active_sort_operation and gateway_active_sort_status %} has-rfd-sort-status{% endif %}" aria-label="{{ gateway.code }} NeoNode launcher">
-        {% if not gateway_active_sort_operation and gateway_active_sort_status %}
-        <p class="rfd-hub-sort-status">{{ gateway_active_sort_status }}</p>
-        {% endif %}
+{% set selected_operation_id = gateway_active_sort_operation.id if gateway_active_sort_operation else none %}
+<section class="gateway-command-launcher" aria-label="{{ gateway.code }} NeoGateway operational launcher">
+    <header class="gateway-page-identity">
+        <span class="gateway-page-kicker">NeoGateway</span>
+        <h1>{{ gateway.code }} Operations</h1>
+        <p>
+            <span>Current Gateway <strong>{{ gateway.code }}</strong></span>
+            <span>Current Sort <strong>{% if gateway_active_sort_operation %}{{ gateway_active_sort_operation.sort_name|upper }}{% else %}Not Configured{% endif %}</strong></span>
+            {% if gateway_active_sort_operation and gateway_active_sort_operation.sort_date %}<span>Sort Date <strong>{{ gateway_active_sort_operation.sort_date.strftime('%m/%d/%y') }}</strong></span>{% endif %}
+        </p>
+    </header>
 
+    {% if not gateway_active_sort_operation and gateway_active_sort_status %}
+    <p class="gateway-hub-sort-status rfd-hub-sort-status">{{ gateway_active_sort_status }}</p>
+    {% endif %}
+
+    <section class="gateway-node-launcher" aria-label="{{ gateway.code }} operational nodes">
         {% if can_enter_motherbrain %}
-        <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-desktop" href="{{ url_for('neomotherbrain.motherbrain', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.motherbrain') }}" aria-label="NeoMotherBrain">
-            {{ node_card("motherbrain", "MotherBrain") }}
+        <a class="gateway-node-card gateway-node-motherbrain gateway-launch-desktop" href="{{ url_for('neomotherbrain.motherbrain', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.motherbrain') }}" aria-label="Open NeoMotherBrain">
+            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning") }}
         </a>
-        <a class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-mobile" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.manage_sort') }}" aria-label="NeoMotherBrain mobile menu">
-            {{ node_card("motherbrain", "MotherBrain") }}
+        <a class="gateway-node-card gateway-node-motherbrain gateway-launch-mobile" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.manage_sort') }}" aria-label="Open NeoMotherBrain">
+            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning") }}
         </a>
         {% else %}
-        <article class="rfd-node-tile rfd-node-disabled rfd-node-motherbrain rfd-motherbrain-launch" aria-disabled="true" aria-label="NeoMotherBrain">
-            {{ node_card("motherbrain", "MotherBrain") }}
+        <article class="gateway-node-card gateway-node-motherbrain gateway-node-disabled" aria-disabled="true" aria-label="NeoMotherBrain unavailable">
+            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning", "disabled") }}
         </article>
         {% endif %}
 
-        <div class="rfd-node-grid" aria-label="{{ gateway.code }} NeoNodes">
-            <div class="rfd-node-column rfd-node-column-left" aria-label="{{ gateway.code }} left NeoNodes">
-                {% if can_launch_sektor %}
-                <a class="rfd-node-tile rfd-node-sektor" href="{{ url_for('neosektor.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neosektor.index') }}" aria-label="NeoSektor">
-                    {{ node_card("sektor", "Sektor") }}
-                </a>
-                {% else %}
-                <article class="rfd-node-tile rfd-node-disabled rfd-node-sektor" aria-disabled="true" aria-label="NeoSektor">
-                    {{ node_card("sektor", "Sektor") }}
-                </article>
-                {% endif %}
-                <article class="rfd-node-tile rfd-node-placeholder rfd-node-reptile" aria-disabled="true" aria-label="NeoReptile">
-                    {{ node_card("reptile", "Reptile", coming_soon=true) }}
-                </article>
-                {% if can_launch_rain %}
-                <a class="rfd-node-tile rfd-node-rain" href="{{ url_for('neorain.index') }}" aria-label="NeoRain">
-                    {{ node_card("rain", "Rain") }}
-                </a>
-                {% else %}
-                <article class="rfd-node-tile rfd-node-disabled rfd-node-rain" aria-disabled="true" aria-label="NeoRain">
-                    {{ node_card("rain", "Rain") }}
-                </article>
-                {% endif %}
-            </div>
-
-            <div class="rfd-node-column rfd-node-column-right" aria-label="{{ gateway.code }} right NeoNodes">
-                {% if can_launch_ermac %}
-                <a class="rfd-node-tile rfd-node-ermac" href="{{ url_for('neoermac.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoermac.index') }}" aria-label="NeoErmac">
-                    {{ node_card("ermac", "Ermac") }}
-                </a>
-                {% else %}
-                <article class="rfd-node-tile rfd-node-disabled rfd-node-ermac" aria-disabled="true" aria-label="NeoErmac">
-                    {{ node_card("ermac", "Ermac") }}
-                </article>
-                {% endif %}
-                {% if can_launch_subzero %}<a class="rfd-node-tile rfd-node-subzero" href="{{ url_for('neosubzero.index') }}" aria-label="NeoSub-Zero">{{ node_card("subzero", "Sub-Zero") }}</a>{% else %}<article class="rfd-node-tile rfd-node-disabled rfd-node-subzero" aria-disabled="true" aria-label="NeoSub-Zero">{{ node_card("subzero", "Sub-Zero") }}</article>{% endif %}
-                {% if can_launch_scorpion %}
-                <a class="rfd-node-tile rfd-node-scorpion" href="{{ url_for('neoscorpion.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoscorpion.index') }}" aria-label="NeoScorpion">
-                    {{ node_card("scorpion", "Scorpion") }}
-                </a>
-                {% else %}
-                <article class="rfd-node-tile rfd-node-disabled rfd-node-scorpion" aria-disabled="true" aria-label="NeoScorpion">
-                    {{ node_card("scorpion", "Scorpion") }}
-                </article>
-                {% endif %}
-            </div>
+        <div class="gateway-node-grid" aria-label="Operational NeoNodes">
+            {% if can_launch_sektor %}<a class="gateway-node-card gateway-node-sektor" href="{{ url_for('neosektor.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neosektor.index') }}" aria-label="Open NeoSektor">{{ node_card("sektor", "Sektor", "Routing · Ballmats · Tunnel") }}</a>{% else %}<article class="gateway-node-card gateway-node-sektor gateway-node-disabled" aria-disabled="true" aria-label="NeoSektor unavailable">{{ node_card("sektor", "Sektor", "Routing · Ballmats · Tunnel", "disabled") }}</article>{% endif %}
+            {% if can_launch_ermac %}<a class="gateway-node-card gateway-node-ermac" href="{{ url_for('neoermac.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoermac.index') }}" aria-label="Open NeoErmac">{{ node_card("ermac", "Ermac", "Doors · Pulls · Tug Ops") }}</a>{% else %}<article class="gateway-node-card gateway-node-ermac gateway-node-disabled" aria-disabled="true" aria-label="NeoErmac unavailable">{{ node_card("ermac", "Ermac", "Doors · Pulls · Tug Ops", "disabled") }}</article>{% endif %}
+            {% if can_launch_scorpion %}<a class="gateway-node-card gateway-node-scorpion" href="{{ url_for('neoscorpion.index', operation_id=selected_operation_id) if selected_operation_id else url_for('neoscorpion.index') }}" aria-label="Open NeoScorpion">{{ node_card("scorpion", "Scorpion", "Fuel · Dispatch · SPEAR") }}</a>{% else %}<article class="gateway-node-card gateway-node-scorpion gateway-node-disabled" aria-disabled="true" aria-label="NeoScorpion unavailable">{{ node_card("scorpion", "Scorpion", "Fuel · Dispatch · SPEAR", "disabled") }}</article>{% endif %}
+            {% if can_launch_rain %}<a class="gateway-node-card gateway-node-rain" href="{{ url_for('neorain.index') }}" aria-label="Open NeoRain">{{ node_card("rain", "Rain", "Outbound Operations") }}</a>{% else %}<article class="gateway-node-card gateway-node-rain gateway-node-disabled" aria-disabled="true" aria-label="NeoRain unavailable">{{ node_card("rain", "Rain", "Outbound Operations", "disabled") }}</article>{% endif %}
+            {% if can_launch_subzero %}<a class="gateway-node-card gateway-node-subzero" href="{{ url_for('neosubzero.index') }}" aria-label="Open NeoSub-Zero">{{ node_card("subzero", "Sub-Zero", "Deice · Frost · UCC") }}</a>{% else %}<article class="gateway-node-card gateway-node-subzero gateway-node-disabled" aria-disabled="true" aria-label="NeoSub-Zero unavailable">{{ node_card("subzero", "Sub-Zero", "Deice · Frost · UCC", "disabled") }}</article>{% endif %}
+            <article class="gateway-node-card gateway-node-reptile gateway-node-coming-soon" aria-disabled="true" aria-label="NeoReptile coming soon">{{ node_card("reptile", "Reptile", "Coming Soon", "coming-soon") }}</article>
         </div>
     </section>
 </section>

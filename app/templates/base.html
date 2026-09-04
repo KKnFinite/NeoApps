@@ -84,7 +84,7 @@
     })();
     </script>
 </head>
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}>
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>
     <div class="shell">
         {% if uses_operational_shell %}
         <header class="topbar operational-topbar" data-operational-topbar>
@@ -110,6 +110,8 @@
                 </div>
             </details>
         </header>
+        {% elif is_rfd_hub_page %}
+        {% include "neomotherbrain/_gateway_shell.html" %}
         {% elif not public_landing|default(false) and not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
@@ -312,6 +314,8 @@
         {% endif %}
         {% if uses_operational_shell %}
         {% include "neonodes/_operational_mobile_shell.html" %}
+        {% elif is_rfd_hub_page %}
+        {# The Gateway shell emits its compact mobile header and utility drawer above. #}
         {% elif uses_mobile_chrome %}
         {% set mobile_switch_targets = change_character_targets() %}
         {% set mobile_show_back = is_neosektor_page or request.endpoint != mobile_home_endpoint %}
@@ -584,7 +588,7 @@
     })();
     </script>
     {% endif %}
-    {% if uses_mobile_chrome and not uses_operational_shell %}
+    {% if uses_mobile_chrome and not uses_operational_shell and not is_rfd_hub_page %}
     <script>
     (() => {
         const topbar = document.querySelector("[data-mobile-topbar]");
@@ -821,6 +825,9 @@
     {% endif %}
     {% if uses_operational_shell %}
     <script src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% endif %}
+    {% if is_rfd_hub_page %}
+    <script src="{{ url_for('static', filename='js/gateway_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
     <script

@@ -1811,7 +1811,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(operations), 1)
         self.assertIn(
-            f"RFD NIGHT {sort_date.month}/{sort_date.day}/{sort_date.year % 100:02d}".encode(),
+            f"NIGHT {sort_date.month:02d}/{sort_date.day:02d}".encode(),
             response.data,
         )
         self.assertIn(f'href="/motherbrain?operation_id={existing.id}"'.encode(), response.data)

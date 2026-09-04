@@ -1,0 +1,55 @@
+{% set rfd_sort_operations = gateway_active_sort_operations if gateway_active_sort_operations is defined else [] %}
+{% macro sort_control(extra_class="") -%}
+{% if rfd_sort_operations|length > 1 %}
+<form class="gateway-sort-control {{ extra_class }}" method="get" action="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Current sort selector">
+    <label><span>Sort</span>
+        <select class="rfd-active-sort-select" name="operation_id" data-submit-on-change>
+            {% for sort_operation in rfd_sort_operations %}
+            <option value="{{ sort_operation.id }}" {% if gateway_active_sort_operation and sort_operation.id == gateway_active_sort_operation.id %}selected{% endif %}>{{ sort_operation.sort_name|upper }} {{ sort_operation.sort_date.month }}/{{ sort_operation.sort_date.day }}/{{ '%02d'|format(sort_operation.sort_date.year % 100) }}</option>
+            {% endfor %}
+        </select>
+    </label>
+</form>
+{% else %}
+<a class="gateway-context-control gateway-sort-control {{ extra_class }}" href="{{ url_for('neomotherbrain.manage_sort') }}" aria-label="Current sort">
+    <span>Sort</span><strong>{% if gateway_active_sort_operation %}{{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.strftime('%m/%d') if gateway_active_sort_operation.sort_date else '' }}{% else %}Not Configured{% endif %}</strong>
+</a>
+{% endif %}
+{%- endmacro %}
+
+<header class="gateway-shell-topbar" data-gateway-shell-header>
+    <a class="gateway-shell-app-logo" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal">
+        <img src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="48" height="48" decoding="async">
+    </a>
+    <a class="gateway-context-control" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Current Gateway"><span>Gateway</span><strong>{{ gateway.code }}</strong></a>
+    {{ sort_control() }}
+    <div class="gateway-shell-spacer" aria-hidden="true"></div>
+    {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}
+    {% set character_switcher_modifier = "character-switcher-header gateway-character-switcher" %}
+    {% set character_switcher_use_neofont = true %}
+    {% include "_change_characters.html" %}
+    <details class="gateway-shell-account-menu">
+        <summary aria-label="Account menu">{{ current_user.header_display_name|upper }}</summary>
+        <div role="menu"><a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">NeoPortal</a><form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form></div>
+    </details>
+</header>
+
+<header class="gateway-mobile-header" data-gateway-mobile-header>
+    <a class="gateway-mobile-app-logo" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal"><img src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="32" height="32" decoding="async"></a>
+    <span class="gateway-mobile-title"><strong>NeoGateway</strong><small>{{ gateway.code }} Operations</small></span>
+    <div class="gateway-mobile-actions">{% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}<button type="button" class="gateway-mobile-menu-button" data-gateway-mobile-menu-toggle aria-expanded="false" aria-controls="gateway-mobile-menu" aria-label="Open Gateway utilities">☰</button></div>
+</header>
+<button class="gateway-mobile-drawer-scrim" type="button" data-gateway-mobile-menu-close hidden aria-label="Close Gateway utilities"></button>
+<aside class="gateway-mobile-drawer" id="gateway-mobile-menu" data-gateway-mobile-drawer aria-label="NeoGateway utilities" aria-hidden="true">
+    <header><strong>NeoGateway</strong><button type="button" data-gateway-mobile-menu-close aria-label="Close Gateway utilities">×</button></header>
+    <section class="gateway-mobile-context" aria-label="Current operational context">
+        <a href="{{ url_for('neomotherbrain.rfd_hub') }}"><span>Gateway</span><strong>{{ gateway.code }}</strong></a>
+        {{ sort_control("gateway-sort-control--mobile") }}
+    </section>
+    <nav aria-label="Gateway utilities">
+        {% set character_switcher_modifier = "gateway-mobile-character-switcher" %}{% set character_switcher_use_neofont = false %}{% include "_change_characters.html" %}
+        <a href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>
+        <a href="{{ url_for('auth.portal_dashboard') }}">Account</a>
+        <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
+    </nav>
+</aside>
