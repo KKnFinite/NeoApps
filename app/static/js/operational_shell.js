@@ -58,34 +58,46 @@
 
     const header = document.querySelector("[data-operational-mobile-header]");
     const drawer = document.querySelector("[data-operational-mobile-drawer]");
-    const drawerToggle = document.querySelector("[data-operational-mobile-menu-toggle]");
+    const drawerToggles = document.querySelectorAll("[data-operational-mobile-menu-toggle]");
     const drawerClose = document.querySelector("[data-operational-mobile-menu-close]");
     const setDrawerOpen = (open) => {
         if (!drawer) return;
         drawer.classList.toggle("is-open", open);
         drawer.setAttribute("aria-hidden", String(!open));
-        drawerToggle?.setAttribute("aria-expanded", String(open));
+        drawerToggles.forEach((toggle) => toggle.setAttribute("aria-expanded", String(open)));
         if (drawerClose) drawerClose.hidden = !open;
         body.classList.toggle("operational-mobile-menu-open", open);
         if (open) body.classList.remove("operational-mobile-header-hidden");
     };
-    drawerToggle?.addEventListener("click", () => setDrawerOpen(!drawer?.classList.contains("is-open")));
+    drawerToggles.forEach((toggle) => toggle.addEventListener("click", () => setDrawerOpen(!drawer?.classList.contains("is-open"))));
     drawerClose?.addEventListener("click", () => setDrawerOpen(false));
     drawer?.addEventListener("click", (event) => {
         if (event.target.closest("a")) setDrawerOpen(false);
+    });
+    document.querySelector("[data-operational-mobile-character-toggle]")?.addEventListener("click", () => {
+        setDrawerOpen(true);
+        const switcher = drawer?.querySelector("[data-character-switcher]");
+        if (switcher) switcher.open = true;
     });
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") setDrawerOpen(false);
     });
 
     if (!header || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const headerPopoverOpen = () => Boolean(header.querySelector("details[open]"));
+    header.querySelectorAll("details").forEach((popover) => popover.addEventListener("toggle", () => {
+        if (popover.open) body.classList.remove("operational-mobile-header-hidden");
+    }));
     let lastY = Math.max(0, window.scrollY);
     let downDistance = 0;
     let upDistance = 0;
     let ticking = false;
     const updateHeader = () => {
         ticking = false;
-        if (body.classList.contains("operational-mobile-menu-open") || window.innerWidth > 900) return;
+        if (body.classList.contains("operational-mobile-menu-open") || headerPopoverOpen() || window.innerWidth > 900) {
+            body.classList.remove("operational-mobile-header-hidden");
+            return;
+        }
         const currentY = Math.max(0, window.scrollY);
         if (currentY < 16) {
             body.classList.remove("operational-mobile-header-hidden");

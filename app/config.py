@@ -38,7 +38,7 @@ def resolve_database_uri():
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY")
     NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
-    STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260904-02")
+    STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260904-03")
     DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
     DEFAULT_GATEWAY_CODE = os.getenv("DEFAULT_GATEWAY_CODE", "RFD").upper()
     DEFAULT_GATEWAY_NAME = os.getenv("DEFAULT_GATEWAY_NAME", "NeoGateway")

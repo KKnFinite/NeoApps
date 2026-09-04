@@ -6,35 +6,47 @@
 
     const header = document.querySelector("[data-gateway-mobile-header]");
     const drawer = document.querySelector("[data-gateway-mobile-drawer]");
-    const toggle = document.querySelector("[data-gateway-mobile-menu-toggle]");
+    const toggles = document.querySelectorAll("[data-gateway-mobile-menu-toggle]");
     const closeButtons = document.querySelectorAll("[data-gateway-mobile-menu-close]");
     const setDrawerOpen = (open) => {
         if (!drawer) return;
         drawer.classList.toggle("is-open", open);
         drawer.setAttribute("aria-hidden", String(!open));
-        toggle?.setAttribute("aria-expanded", String(open));
+        toggles.forEach((toggle) => toggle.setAttribute("aria-expanded", String(open)));
         closeButtons.forEach((button) => { button.hidden = !open; });
         body.classList.toggle("gateway-mobile-menu-open", open);
         if (open) body.classList.remove("gateway-mobile-header-hidden");
     };
 
-    toggle?.addEventListener("click", () => setDrawerOpen(!drawer?.classList.contains("is-open")));
+    toggles.forEach((toggle) => toggle.addEventListener("click", () => setDrawerOpen(!drawer?.classList.contains("is-open"))));
     closeButtons.forEach((button) => button.addEventListener("click", () => setDrawerOpen(false)));
     drawer?.addEventListener("click", (event) => {
         if (event.target.closest("a")) setDrawerOpen(false);
+    });
+    document.querySelector("[data-gateway-mobile-character-toggle]")?.addEventListener("click", () => {
+        setDrawerOpen(true);
+        const switcher = drawer?.querySelector("[data-character-switcher]");
+        if (switcher) switcher.open = true;
     });
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") setDrawerOpen(false);
     });
 
     if (!header || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const headerPopoverOpen = () => Boolean(header.querySelector("details[open]"));
+    header.querySelectorAll("details").forEach((popover) => popover.addEventListener("toggle", () => {
+        if (popover.open) body.classList.remove("gateway-mobile-header-hidden");
+    }));
     let lastY = Math.max(0, window.scrollY);
     let downDistance = 0;
     let upDistance = 0;
     let ticking = false;
     const updateHeader = () => {
         ticking = false;
-        if (window.innerWidth > 900 || body.classList.contains("gateway-mobile-menu-open")) return;
+        if (window.innerWidth > 900 || body.classList.contains("gateway-mobile-menu-open") || headerPopoverOpen()) {
+            body.classList.remove("gateway-mobile-header-hidden");
+            return;
+        }
         const currentY = Math.max(0, window.scrollY);
         if (currentY < 16) {
             body.classList.remove("gateway-mobile-header-hidden");

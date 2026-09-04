@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from app import create_app
 from app.extensions import db
@@ -71,6 +72,7 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertIn(b"data-operational-topbar", response.data)
                 self.assertIn(b"data-operational-sidebar", response.data)
                 self.assertIn(b"data-operational-mobile-header", response.data)
+                self.assertIn(b"operational-mobile-bottom-nav", response.data)
                 self.assertIn(b"NeoGateway", response.data)
                 self.assertIn(b"NeoPortal", response.data)
                 self.assertIn(node, response.data)
@@ -87,6 +89,22 @@ class OperationalShellTest(unittest.TestCase):
         settings = self.client.get("/neoscorpion/settings")
         self.assertEqual(settings.status_code, 200)
         self.assertNotIn(b"data-operational-board-toggle", settings.data)
+
+    def test_shared_mobile_shell_uses_safe_area_for_header_content_and_drawer(self):
+        css = Path(self.app.root_path, "static", "css", "base.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("--neo-safe-top: env(safe-area-inset-top, 0px)", css)
+        self.assertIn("--operational-mobile-header-height:calc(var(--operational-mobile-controls-height) + var(--neo-safe-top))", css)
+        self.assertIn("padding:calc(7px + var(--neo-safe-top))", css)
+        self.assertIn("padding:calc(14px + var(--neo-safe-top))", css)
+        self.assertIn("padding:calc(var(--operational-mobile-header-height) + 14px)", css)
+        script = Path(self.app.root_path, "static", "js", "operational_shell.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("const headerPopoverOpen", script)
+        self.assertIn("operational-mobile-header-hidden", script)
 
     def test_staffing_is_not_marked_as_operational_shell(self):
         for path in ("/neostaffing", "/rfd", "/portal"):

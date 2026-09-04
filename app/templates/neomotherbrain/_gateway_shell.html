@@ -53,3 +53,8 @@
         <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
     </nav>
 </aside>
+<nav class="mobile-bottom-nav gateway-mobile-bottom-nav" aria-label="NeoGateway mobile navigation">
+    <a class="mobile-bottom-nav-item mobile-bottom-nav-link" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="NeoGateway home"><span>⌂</span><span>Home</span></a>
+    <button class="mobile-bottom-nav-item mobile-bottom-nav-button" type="button" data-gateway-mobile-character-toggle aria-label="Change Character"><span>⇄</span><span>Character</span></button>
+    <button class="mobile-bottom-nav-item mobile-bottom-nav-button" type="button" data-gateway-mobile-menu-toggle aria-label="Open Gateway utilities"><span>☰</span><span>Menu</span></button>
+</nav>

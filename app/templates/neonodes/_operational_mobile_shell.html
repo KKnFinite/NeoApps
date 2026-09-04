@@ -48,4 +48,9 @@
         <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
     </section>
 </aside>
+<nav class="operational-mobile-bottom-nav" aria-label="{{ node_header_name }} mobile navigation">
+    <a href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home"><span aria-hidden="true">⌂</span><span>Home</span></a>
+    <button type="button" data-operational-mobile-character-toggle aria-label="Change Character"><span aria-hidden="true">⇄</span><span>Character</span></button>
+    <button type="button" data-operational-mobile-menu-toggle aria-expanded="false" aria-controls="operational-mobile-drawer" aria-label="Open {{ node_header_name }} menu"><span aria-hidden="true">☰</span><span>Menu</span></button>
+</nav>
 {% if operational_shell_supports_board_view %}<button class="operational-board-exit" type="button" data-operational-board-toggle hidden aria-label="Exit Board View">☰</button>{% endif %}

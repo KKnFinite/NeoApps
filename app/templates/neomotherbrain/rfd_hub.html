@@ -16,7 +16,7 @@
     "reptile": "images/logos/newlogo_reptile_small.png"
 } %}
 
-{% macro node_card(slug, name, descriptor, state="available") -%}
+{% macro node_card(slug, name, descriptor, state="available", action="Launch") -%}
 <span class="gateway-node-card-main">
     <span class="gateway-node-card-icon-wrap" aria-hidden="true">
         <img class="gateway-node-card-icon" src="{{ url_for('static', filename=node_logos[slug]) }}" alt="" loading="lazy" width="128" height="128">
@@ -27,6 +27,7 @@
     </span>
 </span>
 <span class="gateway-node-availability gateway-node-availability--{{ state }}">{{ "Available" if state == "available" else "No Access" if state == "disabled" else "Coming Soon" }}</span>
+{% if state == "available" %}<span class="gateway-node-action">{{ action }}</span>{% endif %}
 {%- endmacro %}
 
 {% block title %}{{ gateway.code }} Hub | NeoGateway{% endblock %}
@@ -35,8 +36,8 @@
 {% set selected_operation_id = gateway_active_sort_operation.id if gateway_active_sort_operation else none %}
 <section class="gateway-command-launcher" aria-label="{{ gateway.code }} NeoGateway operational launcher">
     <header class="gateway-page-identity">
-        <span class="gateway-page-kicker">NeoGateway</span>
-        <h1>{{ gateway.code }} Operations</h1>
+        <span class="gateway-page-kicker">{{ gateway.code }} Operations</span>
+        <h1>NeoGateway</h1>
         <p>
             <span>Current Gateway <strong>{{ gateway.code }}</strong></span>
             <span>Current Sort <strong>{% if gateway_active_sort_operation %}{{ gateway_active_sort_operation.sort_name|upper }}{% else %}Not Configured{% endif %}</strong></span>
@@ -44,17 +45,35 @@
         </p>
     </header>
 
+    <section class="gateway-page-mobile-context" aria-label="Current operational context">
+        <a class="gateway-context-control" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Current Gateway"><span>Gateway</span><strong>{{ gateway.code }}</strong></a>
+        {% if gateway_active_sort_operations|length > 1 %}
+        <form class="gateway-sort-control" method="get" action="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Current sort selector">
+            <label><span>Sort</span>
+                <select class="rfd-active-sort-select" name="operation_id" data-submit-on-change>
+                    {% for sort_operation in gateway_active_sort_operations %}
+                    <option value="{{ sort_operation.id }}" {% if gateway_active_sort_operation and sort_operation.id == gateway_active_sort_operation.id %}selected{% endif %}>{{ sort_operation.sort_name|upper }} {{ sort_operation.sort_date.month }}/{{ sort_operation.sort_date.day }}/{{ '%02d'|format(sort_operation.sort_date.year % 100) }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </form>
+        {% else %}
+        <a class="gateway-context-control" href="{{ url_for('neomotherbrain.manage_sort') }}" aria-label="Current sort"><span>Sort</span><strong>{% if gateway_active_sort_operation %}{{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.strftime('%m/%d') if gateway_active_sort_operation.sort_date else '' }}{% else %}Not Configured{% endif %}</strong></a>
+        {% endif %}
+    </section>
+
     {% if not gateway_active_sort_operation and gateway_active_sort_status %}
     <p class="gateway-hub-sort-status rfd-hub-sort-status">{{ gateway_active_sort_status }}</p>
     {% endif %}
 
     <section class="gateway-node-launcher" aria-label="{{ gateway.code }} operational nodes">
+        <header class="gateway-launcher-heading"><h2>Operational Nodes</h2><p>Choose a system to enter</p></header>
         {% if can_enter_motherbrain %}
         <a class="gateway-node-card gateway-node-motherbrain gateway-launch-desktop" href="{{ url_for('neomotherbrain.motherbrain', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.motherbrain') }}" aria-label="Open NeoMotherBrain">
-            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning") }}
+            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning", action="Enter") }}
         </a>
         <a class="gateway-node-card gateway-node-motherbrain gateway-launch-mobile" href="{{ url_for('neomotherbrain.manage_sort', operation_id=selected_operation_id) if selected_operation_id else url_for('neomotherbrain.manage_sort') }}" aria-label="Open NeoMotherBrain">
-            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning") }}
+            {{ node_card("motherbrain", "MotherBrain", "Operational Command & Planning", action="Enter") }}
         </a>
         {% else %}
         <article class="gateway-node-card gateway-node-motherbrain gateway-node-disabled" aria-disabled="true" aria-label="NeoMotherBrain unavailable">
