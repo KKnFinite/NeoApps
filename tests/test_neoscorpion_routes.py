@@ -33,6 +33,8 @@ from app.services.neoscorpion import (
     display_thousands_to_lbs,
     gallons_to_lbs,
     fuel_dispatch_context,
+    format_dispatch_parking_position,
+    format_dispatch_thousands,
     history_context,
     lbs_to_display_thousands,
     lbs_to_gallons,
@@ -301,7 +303,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             (b"ETD / Parking", b"Inbound"),
             (b"Inbound", b"Required"),
             (b"Required", b"Actual / APU"),
-            (b"Actual / APU", b"T/F / Est Gal"),
+            (b"Actual / APU", b"Neo Fuel"),
+            (b"Neo Fuel", b"T/F / Est Gal"),
             (b"Status", b"Action"),
             (b"Action", b"Details"),
         ):
@@ -312,6 +315,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         template = (root / "templates" / "neonodes" / "neoscorpion" / "fuel_dispatch.html").read_text(encoding="utf-8")
         menu = (root / "templates" / "neonodes" / "neoscorpion" / "_menu.html").read_text(encoding="utf-8")
         overlay = (root / "static" / "js" / "neoscorpion_menu_overlay.js").read_text(encoding="utf-8")
+        dispatch_js = (root / "static" / "js" / "neoscorpion_fuel_dispatch_live.js").read_text(encoding="utf-8")
+        css = (root / "static" / "css" / "base.css").read_text(encoding="utf-8")
 
         self.assertIn('data-neoscorpion-dispatch-details aria-expanded="false"', template)
         self.assertIn('data-neoscorpion-dispatch-detail-row hidden', template)
@@ -321,15 +326,49 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertLess(template.index('name="inbound_fuel"'), template.index('name="required_fuel"'))
         self.assertIn('class="neoscorpion-dispatch-tail"', template)
         self.assertIn('class="neoscorpion-dispatch-etd-parking"', template)
+        self.assertNotIn("PARKING {{ row.parking_position", template)
         self.assertIn('class="neoscorpion-dispatch-actual-apu"', template)
         self.assertIn('class="neoscorpion-dispatch-transfer-estimate"', template)
         self.assertLess(template.index('{{ row.destination }}'), template.index('{{ row.mission.flight_number }}'))
         self.assertIn('data-dispatch-apu-editor', template)
         self.assertIn('data-dispatch-assignment-submit', template)
+        self.assertIn('data-dispatch-board-toggle aria-expanded="true"', template)
+        self.assertIn('data-dispatch-board-area', template)
+        self.assertIn('className = "neoscorpion-dispatch-combobox"', dispatch_js)
+        self.assertIn("preserveDispatchScroll", dispatch_js)
+        self.assertIn(".neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex", css)
+        self.assertIn("text-align:center", css)
+        self.assertIn('name="assigned_fueler_user_id"', template)
+        self.assertIn('name="assigned_truck_id"', template)
+        self.assertIn('name="review_status"', template)
         self.assertIn('data-neoscorpion-menu-toggle aria-expanded="false"', menu)
         self.assertIn('data-neoscorpion-menu-scrim', menu)
         self.assertIn('event.key === "Escape"', overlay)
         self.assertIn('neoscorpion-menu-open', overlay)
+
+    def test_dispatch_display_formatting_is_compact_and_stable(self):
+        self.assertEqual(format_dispatch_thousands(52000), "52.0")
+        self.assertEqual(format_dispatch_thousands(31400), "31.4")
+        self.assertEqual(format_dispatch_parking_position("E", "EE06"), "E06")
+        self.assertEqual(format_dispatch_parking_position("B", "BB08"), "B08")
+        self.assertEqual(format_dispatch_parking_position("A", "A03"), "A03")
+        self.assertEqual(format_dispatch_parking_position("AB", "12"), "AB12")
+
+    def test_ready_for_fuel_does_not_emit_a_dispatch_flash(self):
+        self._login_approved_user(role="simulator")
+        with patch(
+            "app.neonodes.neoscorpion.routes.mark_ready_for_fuel",
+            return_value=SimpleNamespace(changed=True),
+        ):
+            response = self.client.post(
+                "/neoscorpion/fuel-dispatch/ready-for-fuel",
+                data={"assignment_id": "1"},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"READY FOR FUEL RECORDED.", response.data)
+        self.assertNotIn(b"READY FOR FUEL WAS ALREADY RECORDED.", response.data)
 
     def test_optional_spear_failures_rebuild_manual_fuel_dispatch(self):
         self._login_approved_user(role="simulator")

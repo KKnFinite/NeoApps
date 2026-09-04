@@ -36,7 +36,7 @@
         <button class="neoscorpion-spear-splash-close" type="button" data-spear-splash-close>CLOSE</button>
         <img src="{{ url_for('static', filename='images/neoscorpion/spear-promo.png', v=config.STATIC_ASSET_VERSION) }}" alt="SPEAR — Scorpion Planning Engine for Assignment and Routing">
     </aside>
-    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title" data-dispatch-board-banner>
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
         {% include "neonodes/neoscorpion/_brand_title.html" %}
         {% endwith %}
@@ -58,8 +58,12 @@
         </div>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+    <div class="neoscorpion-dispatch-board-control">
+        <button type="button" class="neoscorpion-dispatch-board-toggle" data-dispatch-board-toggle aria-expanded="true">BOARD VIEW</button>
+    </div>
 
     <section class="neoscorpion-panel">
+        <div data-dispatch-board-area>
         <div class="neoscorpion-panel-head">
             <span>Current Sort Operation</span>
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
@@ -146,6 +150,7 @@
             </div>
         </aside>
         {% endif %}
+        </div>
         {% if not operation %}
         <p class="neoscorpion-empty">No current SortDateOperation is available for Fuel Dispatch.</p>
         {% elif not rows %}
@@ -155,7 +160,7 @@
             <table class="neoscorpion-dispatch-table neoscorpion-dispatch-table--compact">
                 <thead><tr>
                     <th>Tail</th><th>Arrival</th><th>Dest / Flight</th><th>ETD / Parking</th><th>Inbound</th>
-                    <th>Required</th><th>Neo Fuel</th><th>Actual / APU</th><th>Fueler</th><th>Truck</th>
+                    <th>Required</th><th>Actual / APU</th><th>Neo Fuel</th><th>Fueler</th><th>Truck</th>
                     <th>T/F / Est Gal</th><th>Status</th><th>Action</th><th>Details</th>
                 </tr></thead>
                 <tbody>
@@ -170,11 +175,11 @@
                         </td>
                         <td class="neoscorpion-dispatch-arrival"><strong>{{ row.arrival_eta }}</strong><small>{{ row.arrival_status }}</small></td>
                         <td class="neoscorpion-dispatch-flight"><strong>{{ row.destination }}</strong><small>{{ row.mission.flight_number }}</small></td>
-                        <td class="neoscorpion-dispatch-etd-parking"><strong>{{ row.departure_time or '-' }}</strong><small>PARKING {{ row.parking_position or '-' }}</small></td>
+                        <td class="neoscorpion-dispatch-etd-parking"><strong>{{ row.departure_time or '-' }}</strong><small>{{ row.parking_position or '-' }}</small></td>
                         <td>{% if editable %}<input form="{{ assignment_form_id }}" class="neoscorpion-inline-input neoscorpion-dispatch-fuel-input" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}" data-dispatch-autosave data-autosave-field="inbound_fuel" data-mission-id="{{ row.mission.id }}" data-saved-value="{{ row.inbound_fuel_display }}"><small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>{% else %}{{ row.inbound_fuel_display or '-' }}{% endif %}</td>
                         <td>{% if editable %}<input form="{{ assignment_form_id }}" class="neoscorpion-inline-input neoscorpion-dispatch-fuel-input" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Required Fuel for {{ row.mission.flight_number }}" data-dispatch-autosave data-autosave-field="required_fuel" data-mission-id="{{ row.mission.id }}" data-saved-value="{{ row.required_fuel_display }}"><small class="neoscorpion-save-status" data-autosave-status aria-live="polite"></small>{% else %}{{ row.required_fuel_display or '-' }}{% endif %}</td>
-                        <td><strong>{{ row.neo_fuel_display if row.neo_fuel_available else '-' }}</strong></td>
                         <td class="neoscorpion-dispatch-actual-apu"><strong>{{ row.actual_fuel_display or '-' }}{% if row.actual_fuel_display %} K{% endif %}</strong><span class="neoscorpion-apu-collapsed"><strong data-dispatch-apu-effective data-dispatch-assignment-form="{{ assignment_form_id }}">{% if row.apu_allowance_lbs is none %}APU -{% else %}APU {{ row.apu_allowance_display }}K{% endif %}</strong>{% if editable and row.apu_running is sameas true %}<input form="{{ assignment_form_id }}" type="hidden" name="apu_override_present" value="1"><input form="{{ assignment_form_id }}" type="hidden" name="apu_override_enabled" value="{{ '1' if row.apu_override_enabled else '0' }}" data-dispatch-apu-override-enabled><details class="neoscorpion-apu-editor" data-dispatch-apu-editor><summary>EDIT</summary><div><label>Allowance, K lbs<input form="{{ assignment_form_id }}" class="neoscorpion-inline-input" name="apu_override_allowance" value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}" inputmode="decimal" aria-label="APU allowance for {{ row.mission.flight_number }}" data-dispatch-apu-override-value placeholder="K LBS"></label><small data-dispatch-apu-calculated>Calculated: {{ row.automatic_apu_allowance_display }}K</small><button form="{{ assignment_form_id }}" class="action-button" type="submit" data-dispatch-assignment-submit>SAVE</button>{% if row.apu_override_enabled %}<button form="{{ assignment_form_id }}" class="action-button" type="submit" data-dispatch-assignment-submit data-dispatch-apu-reset>USE CALCULATED</button>{% endif %}<button class="action-button" type="button" data-dispatch-apu-cancel>CANCEL</button></div></details>{% endif %}</span></td>
+                        <td><strong>{{ row.neo_fuel_display if row.neo_fuel_available else '-' }}</strong></td>
                         <td>{% if editable and not row.resource_swap_required %}<select form="{{ assignment_form_id }}" class="neoscorpion-inline-select" name="assigned_fueler_user_id" aria-label="Assigned fueler for {{ row.mission.flight_number }}"><option value="">Unassigned</option>{% if row.assigned_fueler and row.assigned_fueler.id not in nightly_assignment_fueler_ids %}<option value="{{ row.assigned_fueler.id }}" selected>{{ row.assigned_fueler.display_name }} (Current - unavailable)</option>{% endif %}{% for fueler in nightly_assignment_fuelers %}<option value="{{ fueler.id }}" {% if row.assigned_fueler and row.assigned_fueler.id == fueler.id %}selected{% endif %}>{{ fueler.display_name }}{% if row.assignment_recommendation and row.assignment_recommendation.available and not row.assigned_fueler and row.assignment_recommendation.fueler_id == fueler.id %} (Recommended){% endif %}</option>{% endfor %}</select>{% else %}{% if editable %}<input form="{{ assignment_form_id }}" type="hidden" name="assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}">{% endif %}{{ row.assigned_fueler.display_name if row.assigned_fueler else 'Unassigned' }}{% endif %}</td>
                         <td>{% if editable and not row.resource_swap_required %}<select form="{{ assignment_form_id }}" class="neoscorpion-inline-select" name="assigned_truck_id" aria-label="Assigned fuel truck for {{ row.mission.flight_number }}"><option value="">Unassigned</option>{% if row.assigned_truck and row.assigned_truck.id not in nightly_assignment_truck_ids %}<option value="{{ row.assigned_truck.id }}" selected>{{ row.assigned_truck.truck_number }} (Current - unavailable)</option>{% endif %}{% for truck in nightly_assignment_trucks %}<option value="{{ truck.id }}" {% if row.assigned_truck and row.assigned_truck.id == truck.id %}selected{% endif %}>{{ truck.truck_number }}{% if row.assignment_recommendation and row.assignment_recommendation.available and not row.assigned_truck and row.assignment_recommendation.truck_id == truck.id %} (Recommended){% endif %}</option>{% endfor %}</select>{% else %}{% if editable %}<input form="{{ assignment_form_id }}" type="hidden" name="assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}">{% endif %}{{ row.assigned_truck.truck_number if row.assigned_truck else 'Unassigned' }}{% endif %}{{ mission_truck_bars(row.truck_visual) }}</td>
                         <td class="neoscorpion-dispatch-transfer-estimate"><strong>T/F {{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</strong><small>EST {{ '{:,}'.format(row.estimated_fuel_gallons) if row.estimated_fuel_gallons is not none else '-' }} gal</small></td>

@@ -224,6 +224,14 @@ def format_entered_thousands(value):
     return format((amount / Decimal("1000")).normalize(), "f")
 
 
+def format_dispatch_thousands(value):
+    """Render Dispatch K-LB fields consistently without changing stored units."""
+    amount = _decimal_or_none(value)
+    if amount is None:
+        return ""
+    return f"{amount / Decimal('1000'):.1f}"
+
+
 def gallons_to_lbs(gallons, density_lbs_per_gallon):
     gallons_value = _decimal_or_none(gallons)
     density = _positive_decimal(density_lbs_per_gallon, "Fuel density must be greater than zero.")
@@ -3940,7 +3948,7 @@ def _fuel_rows(
                     "remaining_lbs": tank_state.remaining_lbs if tank_state else None,
                     "actual_lbs": tank_state.actual_lbs if tank_state else None,
                     "planned_lbs": planned_lbs,
-                    "remaining_display": format_entered_thousands(
+                    "remaining_display": format_dispatch_thousands(
                         tank_state.remaining_lbs if tank_state else None
                     ),
                     "planned_display": (
@@ -3948,7 +3956,7 @@ def _fuel_rows(
                         if planned_lbs is not None
                         else "-"
                     ),
-                    "actual_display": format_entered_thousands(
+                    "actual_display": format_dispatch_thousands(
                         tank_state.actual_lbs if tank_state else None
                     ),
                 }
@@ -4255,21 +4263,21 @@ def _fuel_rows(
                     else "NOT CONFIRMED"
                 ),
                 "apu_allowance_display": (
-                    format_apu_display_thousands(apu_allowance_lbs)
+                    format_dispatch_thousands(apu_allowance_lbs)
                     if apu_allowance_lbs is not None
                     else "INCOMPLETE"
                 ),
                 "apu_allowance_lbs": apu_allowance_lbs,
                 "automatic_apu_allowance_lbs": automatic_apu_allowance_lbs,
                 "automatic_apu_allowance_display": (
-                    format_apu_display_thousands(automatic_apu_allowance_lbs)
+                    format_dispatch_thousands(automatic_apu_allowance_lbs)
                     if automatic_apu_allowance_lbs is not None
                     else "INCOMPLETE"
                 ),
                 "apu_override_enabled": apu_override_enabled,
                 "apu_override_allowance_lbs": apu_override_allowance_lbs,
                 "apu_override_allowance_display": (
-                    format_apu_display_thousands(apu_override_allowance_lbs)
+                    format_dispatch_thousands(apu_override_allowance_lbs)
                     if apu_override_allowance_lbs is not None
                     else "-"
                 ),
@@ -4346,9 +4354,9 @@ def _fuel_rows(
                     mission.timezone,
                 ),
                 "parking_position": parking.get(tail_number, "-") if tail_number else "-",
-                "required_fuel_display": format_entered_thousands(mission.planned_fuel_load),
+                "required_fuel_display": format_dispatch_thousands(mission.planned_fuel_load),
                 "required_fuel_lbs": mission.planned_fuel_load,
-                "inbound_fuel_display": format_entered_thousands(
+                "inbound_fuel_display": format_dispatch_thousands(
                     tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
                 ),
                 "inbound_fuel_lbs": (
@@ -4928,10 +4936,26 @@ def _parking_by_tail(operation):
         tail_number = _normalize_tail(assignment.tail_number)
         lane_suffix = f" / S{assignment.lane_number}" if assignment.lane_number == 2 else ""
         positions[tail_number] = (
-            f"{assignment.ramp_code or ''}{assignment.position_code or ''}{lane_suffix}".strip()
-            or "-"
-        )
+            format_dispatch_parking_position(
+                assignment.ramp_code,
+                assignment.position_code,
+            )
+            + lane_suffix
+        ).strip() or "-"
     return positions
+
+
+def format_dispatch_parking_position(ramp_code, position_code):
+    """Return a parking code without duplicating a single-letter ramp prefix."""
+    ramp = str(ramp_code or "").strip().upper()
+    position = str(position_code or "").strip().upper()
+    if not position:
+        return ramp
+    if len(ramp) == 1:
+        matched = re.fullmatch(rf"{re.escape(ramp)}+(\d{{1,2}})", position)
+        if matched:
+            return f"{ramp}{matched.group(1)}"
+    return f"{ramp}{position}" if ramp else position
 
 
 def _assignments_by_mission(operation):

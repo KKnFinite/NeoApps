@@ -368,9 +368,6 @@ def fuel_dispatch_ready_for_fuel():
         return _dispatch_response(gateway, access, status_code=400)
     if result.changed:
         db.session.commit()
-        flash("READY FOR FUEL RECORDED.", "success")
-    else:
-        flash("READY FOR FUEL WAS ALREADY RECORDED.", "info")
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 

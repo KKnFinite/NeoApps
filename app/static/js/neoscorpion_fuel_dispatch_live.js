@@ -8,6 +8,9 @@
 
     initializeSpearSplash(root);
     initializeDispatchDetails(root);
+    initializeDispatchBoard(root);
+    initializeDispatchSelects(root);
+    const preserveDispatchScroll = initializeDispatchScroll(root);
     if (!window.NeoLiveUpdates) {
         return;
     }
@@ -52,6 +55,169 @@
             toggle.setAttribute("aria-expanded", String(!expanded));
             detail.hidden = expanded;
             detail.setAttribute("aria-hidden", String(expanded));
+        });
+    }
+
+    function initializeDispatchBoard(scope) {
+        const toggle = scope.querySelector("[data-dispatch-board-toggle]");
+        const banner = scope.querySelector("[data-dispatch-board-banner]");
+        const board = scope.querySelector("[data-dispatch-board-area]");
+        const storageKey = "neoapps.neoscorpion.fuel-dispatch.board.v1";
+        if (!toggle || !board) return;
+
+        const apply = (expanded) => {
+            toggle.setAttribute("aria-expanded", String(expanded));
+            toggle.textContent = expanded ? "BOARD VIEW" : "SHOW HEADER";
+            board.hidden = !expanded;
+            if (banner) banner.hidden = !expanded;
+        };
+        let expanded = true;
+        try {
+            expanded = window.localStorage.getItem(storageKey) !== "collapsed";
+        } catch (_error) {
+            // Board controls remain usable when browser storage is unavailable.
+        }
+        apply(expanded);
+        toggle.addEventListener("click", () => {
+            expanded = !expanded;
+            apply(expanded);
+            try {
+                window.localStorage.setItem(storageKey, expanded ? "expanded" : "collapsed");
+            } catch (_error) {
+                // A local preference is optional.
+            }
+        });
+    }
+
+    function initializeDispatchScroll(scope) {
+        const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v1";
+        const restore = () => {
+            try {
+                const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
+                if (!saved || saved.path !== window.location.pathname || !Number.isFinite(saved.y)) return;
+                window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+                    window.scrollTo({top: saved.y, left: 0, behavior: "auto"});
+                    window.sessionStorage.removeItem(storageKey);
+                }));
+            } catch (_error) {
+                // Scroll restoration must never interfere with Dispatch actions.
+            }
+        };
+        restore();
+        return () => {
+            try {
+                window.sessionStorage.setItem(storageKey, JSON.stringify({
+                    path: window.location.pathname,
+                    y: window.scrollY,
+                }));
+            } catch (_error) {
+                // Browser storage is an enhancement only.
+            }
+        };
+    }
+
+    function initializeDispatchSelects(scope) {
+        const selects = Array.from(scope.querySelectorAll(
+            ".neoscorpion-dispatch-primary-row select.neoscorpion-inline-select"
+        ));
+        let openCombobox = null;
+        const close = (combobox, returnFocus = false) => {
+            if (!combobox) return;
+            combobox.classList.remove("is-open");
+            combobox.trigger.setAttribute("aria-expanded", "false");
+            if (returnFocus) combobox.trigger.focus();
+            if (openCombobox === combobox) openCombobox = null;
+        };
+        const open = (combobox) => {
+            if (openCombobox && openCombobox !== combobox) close(openCombobox);
+            combobox.classList.add("is-open");
+            combobox.trigger.setAttribute("aria-expanded", "true");
+            openCombobox = combobox;
+        };
+
+        selects.forEach((select, index) => {
+            if (select.dataset.dispatchComboboxReady === "true") return;
+            select.dataset.dispatchComboboxReady = "true";
+            const combobox = document.createElement("div");
+            combobox.className = "neoscorpion-dispatch-combobox";
+            const trigger = document.createElement("button");
+            trigger.type = "button";
+            trigger.className = "neoscorpion-dispatch-combobox-trigger";
+            trigger.setAttribute("aria-haspopup", "listbox");
+            trigger.setAttribute("aria-expanded", "false");
+            trigger.setAttribute("aria-label", select.getAttribute("aria-label") || "Dispatch selection");
+            const panel = document.createElement("div");
+            const panelId = `neoscorpion-dispatch-options-${index}-${Date.now()}`;
+            panel.className = "neoscorpion-dispatch-combobox-options";
+            panel.id = panelId;
+            panel.setAttribute("role", "listbox");
+            trigger.setAttribute("aria-controls", panelId);
+            select.parentNode.insertBefore(combobox, select);
+            combobox.append(select, trigger, panel);
+            select.classList.add("neoscorpion-dispatch-native-select");
+            select.tabIndex = -1;
+            select.setAttribute("aria-hidden", "true");
+            combobox.trigger = trigger;
+
+            const sync = () => {
+                const selected = select.options[select.selectedIndex];
+                trigger.textContent = selected?.textContent?.trim() || "Unassigned";
+                trigger.classList.toggle("is-unassigned", !select.value);
+                panel.querySelectorAll("[role='option']").forEach((option) => {
+                    option.setAttribute("aria-selected", String(option.dataset.value === select.value));
+                });
+            };
+            Array.from(select.options).forEach((option) => {
+                const choice = document.createElement("button");
+                choice.type = "button";
+                choice.className = "neoscorpion-dispatch-combobox-option";
+                choice.setAttribute("role", "option");
+                choice.dataset.value = option.value;
+                choice.textContent = option.textContent.trim();
+                choice.addEventListener("click", () => {
+                    select.value = option.value;
+                    select.dispatchEvent(new Event("change", {bubbles: true}));
+                    sync();
+                    close(combobox, true);
+                });
+                panel.append(choice);
+            });
+            select.addEventListener("change", sync);
+            trigger.addEventListener("click", () => {
+                if (combobox.classList.contains("is-open")) close(combobox);
+                else open(combobox);
+            });
+            trigger.addEventListener("keydown", (event) => {
+                if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                event.preventDefault();
+                open(combobox);
+                const selected = panel.querySelector("[aria-selected='true']") || panel.querySelector("button");
+                selected?.focus();
+            });
+            panel.addEventListener("keydown", (event) => {
+                const options = Array.from(panel.querySelectorAll("button"));
+                const index = options.indexOf(event.target);
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    close(combobox, true);
+                } else if (index >= 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                    event.preventDefault();
+                    const next = event.key === "ArrowDown"
+                        ? Math.min(index + 1, options.length - 1)
+                        : Math.max(index - 1, 0);
+                    options[next]?.focus();
+                }
+            });
+            sync();
+        });
+        document.addEventListener("click", (event) => {
+            if (openCombobox && !openCombobox.contains(event.target)) close(openCombobox);
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && openCombobox) {
+                event.preventDefault();
+                close(openCombobox, true);
+            }
         });
     }
 
@@ -128,6 +294,7 @@
         }
         reloading = true;
         controller?.setEnabled(false);
+        preserveDispatchScroll();
         window.location.reload();
     };
 
@@ -256,13 +423,13 @@
                 effective.textContent = "-";
             } else {
                 const thousands = Number(effectiveLbs) / 1000;
-                effective.textContent = `APU ${Number.isInteger(thousands * 10) ? thousands.toFixed(1) : thousands.toFixed(2)}K`;
+                effective.textContent = `APU ${thousands.toFixed(1)}K`;
             }
         }
         if (enabled) enabled.value = payload.apu_override_enabled ? "1" : "0";
         if (allowance) {
             allowance.value = payload.apu_override_enabled
-                ? String(Number(payload.apu_override_allowance_lbs) / 1000)
+                ? (Number(payload.apu_override_allowance_lbs) / 1000).toFixed(1)
                 : "";
         }
         if (editor) editor.open = false;
@@ -373,6 +540,7 @@
         }
     });
     root.addEventListener("submit", (event) => {
+        const isAsyncAssignment = event.submitter?.matches("[data-dispatch-assignment-submit]");
         const truckCardForm = event.target.closest("[data-dispatch-truck-card-form]");
         if (truckCardForm) {
             event.preventDefault();
@@ -387,6 +555,7 @@
             : null;
         const form = button?.form || button?.closest("[data-dispatch-assignment-form]");
         if (!form) {
+            if (!isAsyncAssignment) preserveDispatchScroll();
             return;
         }
         event.preventDefault();
