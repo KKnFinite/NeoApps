@@ -6,7 +6,7 @@ planning settings.  A reset is only a small cutoff marker for the current sort.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
 
@@ -114,7 +114,10 @@ def build_live_calibration(operation, planning_settings, rows):
         cutoff = reset_cutoffs.get((metric, scope_key))
         eligible = tuple(
             item for item in items
-            if item.excluded_reason is None and (cutoff is None or item.observed_at_utc > cutoff)
+            if item.excluded_reason is None and (
+                cutoff is None
+                or _utc_naive(item.observed_at_utc) > _utc_naive(cutoff)
+            )
         )
         excluded = tuple(item for item in items if item.excluded_reason is not None)
         configured = _configured_baseline(metric, scope_key, planning_settings)
@@ -230,7 +233,7 @@ def _canonical_observations(operation_id, row_by_assignment_id):
         if row is None or event.event_type == "defuel":
             continue
         assignment = event.fuel_assignment
-        observed_at = event.ended_at_utc
+        observed_at = _utc_naive(event.ended_at_utc)
         aircraft_type = row.get("detailed_aircraft_type") or "UNKNOWN"
         exclusion = getattr(assignment, "hold_reason", None) or None
         if event.transfer_fuel_gallons and event.transfer_fuel_gallons > 0:
@@ -243,8 +246,11 @@ def _canonical_observations(operation_id, row_by_assignment_id):
                     exclusion,
                 ))
         ready = getattr(assignment, "ready_for_fuel_at_utc", None)
-        if ready and event.started_at_utc >= ready:
-            setup_minutes = _minutes_between(ready, event.started_at_utc)
+        ready = _utc_naive(ready)
+        started_at = _utc_naive(event.started_at_utc)
+        ended_at = _utc_naive(event.ended_at_utc)
+        if ready and started_at and started_at >= ready:
+            setup_minutes = _minutes_between(ready, started_at)
             if setup_minutes is not None:
                 output.append(CalibrationObservation(
                     "setup_minutes", aircraft_type, setup_minutes, observed_at,
@@ -252,8 +258,9 @@ def _canonical_observations(operation_id, row_by_assignment_id):
                     exclusion,
                 ))
         completed = getattr(assignment, "completed_at_utc", None)
-        if completed and completed >= event.ended_at_utc:
-            wrap_minutes = _minutes_between(event.ended_at_utc, completed)
+        completed = _utc_naive(completed)
+        if completed and ended_at and completed >= ended_at:
+            wrap_minutes = _minutes_between(ended_at, completed)
             if wrap_minutes is not None:
                 output.append(CalibrationObservation(
                     "finishing_minutes", aircraft_type, wrap_minutes, completed,
@@ -283,8 +290,16 @@ def _active_value(calibrations, metric, scope_key, baseline):
 def _minutes_between(start, end):
     if start is None or end is None:
         return None
-    value = Decimal(str((end - start).total_seconds())) / Decimal("60")
+    value = Decimal(str((
+        _utc_naive(end) - _utc_naive(start)
+    ).total_seconds())) / Decimal("60")
     return value if value >= 0 else None
+
+
+def _utc_naive(value):
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _decimal(value):

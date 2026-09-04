@@ -2,6 +2,7 @@ import unittest
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from sqlalchemy import event
 
@@ -29,6 +30,7 @@ from app.services.neoscorpion import (
     assignment_planning_settings,
     display_thousands_to_lbs,
     gallons_to_lbs,
+    fuel_dispatch_context,
     history_context,
     lbs_to_display_thousands,
     lbs_to_gallons,
@@ -295,6 +297,65 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             (b"Parking", b"ETD"),
         ):
             self.assertLess(header.index(earlier), header.index(later))
+
+    def test_spear_failure_keeps_manual_fuel_dispatch_available(self):
+        self._login_approved_user(role="simulator")
+        operation, mission = self._add_current_departure(
+            flight_number="UPS901",
+            tail_number="N123UP",
+            destination="ONT",
+            planned_fuel_load=50500,
+        )
+        self._add_current_arrival(
+            operation,
+            tail_number="N123UP",
+            eta_datetime_utc=datetime(2026, 6, 26, 3, 10),
+        )
+        db.session.add(NeoScorpionTailFuelState(
+            sort_date_operation_id=operation.id,
+            tail_number="N123UP",
+            inbound_fuel_lbs=13600,
+        ))
+        db.session.commit()
+
+        with (
+            patch("app.services.neoscorpion.current_sort_operation", return_value=operation),
+            patch(
+                "app.services.neoscorpion.build_live_calibration",
+                side_effect=RuntimeError("calibration fixture failure"),
+            ),
+        ):
+            context = fuel_dispatch_context(self.gateway)
+            response = self.client.get("/neoscorpion/fuel-dispatch")
+
+        self.assertEqual(context["rows"][0]["mission"].id, mission.id)
+        self.assertIsNone(context["spear_plan"])
+        self.assertTrue(context["spear_unavailable"])
+        self.assertEqual(context["spear_indicator"]["label"], "SPEAR · UNAVAILABLE")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"UPS901", response.data)
+        self.assertIn(b"SPEAR \xc2\xb7 UNAVAILABLE", response.data)
+
+    def test_vault_test_posts_to_test_route_without_saving_settings(self):
+        self._login_approved_user(role="master")
+        with (
+            patch(
+                "app.neonodes.neoscorpion.routes.test_learning_vault_connection",
+                return_value=True,
+            ) as test_vault,
+            patch(
+                "app.neonodes.neoscorpion.routes.save_spear_settings"
+            ) as save_settings,
+        ):
+            response = self.client.post(
+                "/neoscorpion/settings/spear/vault/test",
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/neoscorpion/settings/spear", response.location)
+        test_vault.assert_called_once_with()
+        save_settings.assert_not_called()
 
     def test_fuel_dispatch_includes_hot_departure_and_preserves_std(self):
         self._login_approved_user(role="simulator")

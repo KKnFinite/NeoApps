@@ -65,7 +65,11 @@
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
         </div>
         {% include "neonodes/neoscorpion/_nightly_assets.html" %}
-        {% if operation and spear_plan %}
+        {% if operation and spear_unavailable %}
+        <div class="neoscorpion-spear-fleet-status is-at-risk" data-spear-fleet-status>
+            SPEAR · UNAVAILABLE
+        </div>
+        {% elif operation and spear_plan %}
         <div class="neoscorpion-spear-fleet-status{% if spear_plan.late_count %} is-late{% elif spear_plan.at_risk_count or spear_plan.unplanned_count %} is-at-risk{% elif spear_plan.waiting_for_data_count %} is-waiting{% endif %}" data-spear-fleet-status>
             {{ spear_plan.status_text }}
         </div>

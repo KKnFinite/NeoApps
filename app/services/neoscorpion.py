@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 import re
 
+from flask import current_app
 from flask_login import current_user
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -364,6 +365,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "settings": settings,
             "truck_visuals": [],
             "spear_plan": None,
+            "spear_unavailable": False,
             "spear_settings": spear_settings,
             "spear_indicator": spear_dispatch_status(None, spear_settings),
             "spear_calibration": {"active_count": 0, "collecting_count": 0, "label": "SPEAR CALIBRATION · COLLECTING", "items": ()},
@@ -423,23 +425,37 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
         now_utc=datetime.utcnow(),
     )
-    configured_planning_settings = assignment_planning_settings(gateway, settings=settings)
-    live_calibrations = build_live_calibration(
-        operation, configured_planning_settings, rows
-    )
-    spear_plan = build_spear_plan(
-        rows,
-        operation=operation,
-        planning_settings=calibrated_planning_settings(
-            configured_planning_settings, live_calibrations
-        ),
-        spear_settings=spear_settings,
-        nightly_fuelers=asset_context["nightly_assignment_fuelers"],
-        nightly_trucks=asset_context["nightly_trucks"],
-        now_utc=datetime.utcnow(),
-        calibrations=live_calibrations,
-    )
-    _attach_spear_plan(rows, truck_visuals, spear_plan)
+    # SPEAR is dispatch enrichment, never a prerequisite for the canonical
+    # manual Fuel Dispatch board.  Keep a malformed/incomplete optimizer input
+    # from taking the operational screen down while preserving its traceback.
+    spear_plan = None
+    live_calibrations = {}
+    spear_unavailable = False
+    try:
+        configured_planning_settings = assignment_planning_settings(
+            gateway, settings=settings
+        )
+        live_calibrations = build_live_calibration(
+            operation, configured_planning_settings, rows
+        )
+        spear_plan = build_spear_plan(
+            rows,
+            operation=operation,
+            planning_settings=calibrated_planning_settings(
+                configured_planning_settings, live_calibrations
+            ),
+            spear_settings=spear_settings,
+            nightly_fuelers=asset_context["nightly_assignment_fuelers"],
+            nightly_trucks=asset_context["nightly_trucks"],
+            now_utc=datetime.utcnow(),
+            calibrations=live_calibrations,
+        )
+        _attach_spear_plan(rows, truck_visuals, spear_plan)
+    except Exception:
+        current_app.logger.exception(
+            "SPEAR enrichment failed for NeoScorpion Fuel Dispatch; serving manual dispatch."
+        )
+        spear_unavailable = True
     return {
         "operation": operation,
         "rows": rows,
@@ -448,8 +464,18 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "trucks": trucks,
         "settings": settings,
         "spear_plan": spear_plan,
+        "spear_unavailable": spear_unavailable,
         "spear_settings": spear_settings,
-        "spear_indicator": spear_dispatch_status(spear_plan, spear_settings),
+        "spear_indicator": (
+            {
+                "state": "unavailable",
+                "label": "SPEAR · UNAVAILABLE",
+                "detail": "Recommendations are unavailable for this refresh.",
+                "automation_enabled": False,
+            }
+            if spear_unavailable
+            else spear_dispatch_status(spear_plan, spear_settings)
+        ),
         "spear_calibration": calibration_summary(live_calibrations),
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,

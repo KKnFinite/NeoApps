@@ -55,7 +55,7 @@
         <section class="neoscorpion-panel neoscorpion-spear-learning-panel">
             <div class="neoscorpion-panel-head"><span>SPEAR Vault</span><strong>{{ spear_learning_vault.label }}</strong></div>
             {% if spear_learning_vault.configured %}<p>Bucket: {{ spear_learning_vault.bucket }}</p>{% else %}<p>{{ spear_learning_vault.detail }}</p>{% endif %}
-            {% if can_edit %}<form method="post" action="{{ url_for('neoscorpion.spear_vault_test') }}"><button class="action-button" type="submit">TEST SPEAR VAULT CONNECTION</button></form>{% endif %}
+            {% if can_edit %}<button class="action-button" type="submit" form="spear-vault-test-form">TEST SPEAR VAULT CONNECTION</button>{% endif %}
             {% if spear_learning_vault.configured %}<a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">VIEW SPEAR VAULT</a>{% endif %}
         </section>
 
@@ -67,6 +67,7 @@
 
         {% if can_edit %}<button class="action-button neoscorpion-save-button" type="submit">SAVE SPEAR SETTINGS</button>{% endif %}
     </form>
+    {% if can_edit %}<form id="spear-vault-test-form" method="post" action="{{ url_for('neoscorpion.spear_vault_test') }}"></form>{% endif %}
 </section>
 <script src="{{ url_for('static', filename='js/neoscorpion_spear_settings.js', v=config.STATIC_ASSET_VERSION) }}" defer></script>
 {% endblock %}

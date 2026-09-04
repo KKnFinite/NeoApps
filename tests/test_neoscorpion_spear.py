@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -131,6 +131,25 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual((step.action_type, step.truck_id, step.fueler_id), ("assign", 10, 1))
         self.assertEqual(step.risk, "COVERED")
         self.assertEqual(plan.status_text, "SPEAR: ALL LOADS COVERED")
+
+    def test_sparse_and_aware_mission_times_do_not_break_planning(self):
+        scheduled = _row(100)
+        scheduled["mission"].planned_datetime_utc = (
+            NOW + timedelta(hours=2)
+        ).replace(tzinfo=timezone.utc)
+        incomplete = _row(101)
+        incomplete["mission"].planned_datetime_utc = None
+        incomplete["arrival_mission"].actual_block_in_datetime_utc = None
+        incomplete["arrival_mission"].eta_datetime_utc = None
+        incomplete["arrival_mission"].planned_datetime_utc = None
+
+        plan = _plan([scheduled, incomplete])
+
+        self.assertEqual(plan.steps[0].mission_id, 100)
+        self.assertEqual(
+            plan.readiness_by_mission_id[101],
+            ("arrival_timing", "departure_timing"),
+        )
 
     def test_incomplete_fuel_data_is_waiting_not_covered_or_at_risk(self):
         plan = _plan([_row(demand=None)])
@@ -345,6 +364,20 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         self.assertIn("LEARNING OFF", template)
         self.assertIn("SPEAR Learning Capture is not enabled yet.", template)
         self.assertIn("LEARNING VAULT NOT CONFIGURED", settings_template)
+
+    def test_vault_test_button_uses_its_own_form(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "app/templates/neonodes/neoscorpion/spear_settings.html").read_text(encoding="utf-8")
+
+        self.assertIn('form="spear-vault-test-form"', template)
+        self.assertIn(
+            'id="spear-vault-test-form" method="post" action="{{ url_for(\'neoscorpion.spear_vault_test\') }}"',
+            template,
+        )
+        self.assertNotIn(
+            '<form method="post" action="{{ url_for(\'neoscorpion.spear_vault_test\') }}">',
+            template,
+        )
 
     def test_dispatch_renders_compact_readiness_and_collapsed_why_hook(self):
         root = Path(__file__).resolve().parents[1]

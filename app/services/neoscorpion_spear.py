@@ -1,7 +1,7 @@
 """Deterministic NeoScorpion SPEAR fleet planning and settings."""
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -265,6 +265,7 @@ def build_spear_plan(
     calibrations=None,
 ):
     """Plan the remaining sort from already-bounded canonical dispatch data."""
+    now_utc = _utc_naive(now_utc) or datetime.utcnow()
     if not spear_settings.recommendations_enabled:
         return _plan((), {}, {}, status_text="SPEAR: RECOMMENDATIONS OFF")
 
@@ -307,7 +308,7 @@ def build_spear_plan(
     ordered_rows = sorted(
         (row for row in rows if not row.get("administratively_complete")),
         key=lambda row: (
-            _departure_at(row) or datetime.max,
+            _datetime_sort_key(_departure_at(row)),
             row["mission"].id,
         ),
     )
@@ -806,8 +807,12 @@ def _spear_timing(row, operation, planning_settings):
     if arrival is None or departure is None:
         return None
     timing_mission = SimpleNamespace(
-        actual_block_in_datetime_utc=arrival.actual_block_in_datetime_utc,
-        eta_datetime_utc=arrival.eta_datetime_utc or arrival.planned_datetime_utc,
+        actual_block_in_datetime_utc=_utc_naive(
+            arrival.actual_block_in_datetime_utc
+        ),
+        eta_datetime_utc=_utc_naive(
+            arrival.eta_datetime_utc or arrival.planned_datetime_utc
+        ),
         planned_datetime_utc=departure,
     )
     spear_planning_settings = SimpleNamespace(
@@ -835,7 +840,20 @@ def _spear_timing(row, operation, planning_settings):
 
 def _departure_at(row):
     mission = row["mission"]
-    return mission.eta_datetime_utc or mission.planned_datetime_utc
+    return _utc_naive(mission.eta_datetime_utc or mission.planned_datetime_utc)
+
+
+def _utc_naive(value):
+    """Normalize legacy aware values to the app's UTC-naive model contract."""
+    if value is None or value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _datetime_sort_key(value):
+    """Keep missing and aware legacy mission times safe in one sort domain."""
+    normalized = _utc_naive(value)
+    return (normalized is None, normalized or datetime.max)
 
 
 def _schedule_pair(
@@ -864,7 +882,7 @@ def _staging_allowed_at(row, settings, now_utc):
     arrival = row.get("arrival_mission")
     if arrival is None or arrival.actual_block_in_datetime_utc is not None:
         return now_utc
-    eta = arrival.eta_datetime_utc or arrival.planned_datetime_utc
+    eta = _utc_naive(arrival.eta_datetime_utc or arrival.planned_datetime_utc)
     if eta is None:
         return now_utc
     return eta - timedelta(minutes=settings.incoming_early_staging_minutes)
@@ -887,7 +905,9 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
             if row.get("administratively_complete") and row.get("assignment") is not None
         ),
         key=lambda row: (
-            getattr(row["assignment"], "completed_at_utc", None) or datetime.min,
+            _datetime_sort_key(
+                getattr(row["assignment"], "completed_at_utc", None)
+            ),
             row["mission"].id,
         ),
     )
@@ -904,8 +924,8 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
                 mapping[identifier].ramp = ramp
                 mapping[identifier].location_source = "last_completed_assignment"
                 mapping[identifier].location_confidence = "high"
-                mapping[identifier].location_recorded_at_utc = getattr(
-                    assignment, "completed_at_utc", None
+                mapping[identifier].location_recorded_at_utc = _utc_naive(
+                    getattr(assignment, "completed_at_utc", None)
                 )
 
 
