@@ -7,6 +7,7 @@
     }
 
     initializeSpearSplash(root);
+    initializeDispatchDetails(root);
     if (!window.NeoLiveUpdates) {
         return;
     }
@@ -38,6 +39,20 @@
         splash.hidden = false;
         window.requestAnimationFrame(() => splash.classList.add("is-visible"));
         close.addEventListener("click", dismiss);
+    }
+
+    function initializeDispatchDetails(scope) {
+        scope.addEventListener("click", (event) => {
+            const toggle = event.target.closest("[data-neoscorpion-dispatch-details]");
+            if (!toggle) return;
+            event.preventDefault();
+            const detail = document.getElementById(toggle.getAttribute("aria-controls"));
+            if (!detail) return;
+            const expanded = toggle.getAttribute("aria-expanded") === "true";
+            toggle.setAttribute("aria-expanded", String(!expanded));
+            detail.hidden = expanded;
+            detail.setAttribute("aria-hidden", String(expanded));
+        });
     }
 
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);
@@ -203,12 +218,12 @@
     };
 
     const updateAssignmentBaseline = (form, payload) => {
-        const assignmentId = form.querySelector("input[name='assignment_id']");
-        const expectedFueler = form.querySelector(
-            "input[name='expected_assigned_fueler_user_id']"
+        const assignmentId = form.elements.namedItem("assignment_id");
+        const expectedFueler = form.elements.namedItem(
+            "expected_assigned_fueler_user_id"
         );
-        const expectedTruck = form.querySelector(
-            "input[name='expected_assigned_truck_id']"
+        const expectedTruck = form.elements.namedItem(
+            "expected_assigned_truck_id"
         );
         if (assignmentId) {
             assignmentId.value = String(payload.assignment_id || "");
@@ -219,20 +234,22 @@
         if (expectedTruck) {
             expectedTruck.value = String(payload.assigned_truck_id || "");
         }
-        form.querySelectorAll(
+        Array.from(form.elements).filter((control) => control.matches?.(
             "select[name='assigned_fueler_user_id'], select[name='assigned_truck_id'], "
             + "select[name='review_status'], "
             + "input[data-dispatch-apu-override-enabled], input[data-dispatch-apu-override-value]"
-        ).forEach((control) => {
+        )).forEach((control) => {
             initialControlValues.set(control, controlValue(control));
         });
     };
 
     const updateApuAllowanceDisplay = (form, payload, button) => {
         const effectiveLbs = payload.effective_apu_allowance_lbs;
-        const effective = form.querySelector("[data-dispatch-apu-effective]");
-        const enabled = form.querySelector("[data-dispatch-apu-override-enabled]");
-        const allowance = form.querySelector("[data-dispatch-apu-override-value]");
+        const effective = root.querySelector(
+            `[data-dispatch-apu-effective][data-dispatch-assignment-form='${form.id}']`
+        );
+        const enabled = form.elements.namedItem("apu_override_enabled");
+        const allowance = form.elements.namedItem("apu_override_allowance");
         const editor = form.querySelector("[data-dispatch-apu-editor]");
         if (effective) {
             if (effectiveLbs === null || effectiveLbs === undefined) {
@@ -258,8 +275,8 @@
         }
         const status = form.querySelector("[data-assignment-save-status]");
         const resetApu = button.matches("[data-dispatch-apu-reset]");
-        const apuEnabled = form.querySelector("[data-dispatch-apu-override-enabled]");
-        const apuAllowance = form.querySelector("[data-dispatch-apu-override-value]");
+        const apuEnabled = form.elements.namedItem("apu_override_enabled");
+        const apuAllowance = form.elements.namedItem("apu_override_allowance");
         if (resetApu) {
             if (apuEnabled) apuEnabled.value = "0";
             if (apuAllowance) apuAllowance.value = "";
@@ -379,18 +396,19 @@
         const cancel = event.target.closest("[data-dispatch-apu-cancel]");
         if (!cancel) return;
         const editor = cancel.closest("[data-dispatch-apu-editor]");
-        const form = cancel.closest("[data-dispatch-assignment-form]");
+        const form = cancel.closest("[data-dispatch-assignment-form]")
+            || cancel.closest("[data-neoscorpion-dispatch-detail-row]")
+                ?.querySelector("[data-dispatch-apu-override-value]")?.form;
         if (!editor || !form) return;
-        const allowance = form.querySelector("[data-dispatch-apu-override-value]");
-        const enabled = form.querySelector("[data-dispatch-apu-override-enabled]");
+        const allowance = form.elements.namedItem("apu_override_allowance");
+        const enabled = form.elements.namedItem("apu_override_enabled");
         if (allowance) allowance.value = allowance.dataset.originalValue || "";
         if (enabled) enabled.value = enabled.dataset.originalValue || enabled.value;
         editor.open = false;
     });
     root.querySelectorAll("[data-dispatch-apu-editor]").forEach((editor) => {
-        const form = editor.closest("[data-dispatch-assignment-form]");
-        const allowance = form?.querySelector("[data-dispatch-apu-override-value]");
-        const enabled = form?.querySelector("[data-dispatch-apu-override-enabled]");
+        const allowance = editor.querySelector("[data-dispatch-apu-override-value]");
+        const enabled = editor.querySelector("[data-dispatch-apu-override-enabled]");
         editor.addEventListener("toggle", () => {
             if (!editor.open) return;
             if (allowance) allowance.dataset.originalValue = allowance.value;

@@ -1,3 +1,9 @@
+<div class="neoscorpion-menu-control">
+    <button class="neoscorpion-menu-toggle" type="button" data-neoscorpion-menu-toggle aria-expanded="false" aria-controls="neoscorpion-overlay-menu">
+        <span aria-hidden="true">☰</span> MENU
+    </button>
+</div>
+<button class="neoscorpion-menu-scrim" type="button" data-neoscorpion-menu-scrim hidden aria-label="Close NeoScorpion menu"></button>
 <nav class="neoscorpion-screen-menu" aria-label="NeoScorpion screens">
     {% for item in neoscorpion_internal_menu_items() %}
     <a class="neoscorpion-screen-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" {% if item.active %}aria-current="page"{% endif %}>
@@ -5,3 +11,4 @@
     </a>
     {% endfor %}
 </nav>
+<script src="{{ url_for('static', filename='js/neoscorpion_menu_overlay.js', v=config.STATIC_ASSET_VERSION) }}"></script>

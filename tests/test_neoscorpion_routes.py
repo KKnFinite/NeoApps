@@ -1,6 +1,7 @@
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -261,7 +262,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         )
         db.session.commit()
 
-        response = self.client.get("/neoscorpion/fuel-dispatch")
+        with patch(
+            "app.services.neoscorpion.current_sort_operation", return_value=operation
+        ):
+            response = self.client.get("/neoscorpion/fuel-dispatch")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"UPS901", response.data)
@@ -273,7 +277,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"EWR", response.data)
         self.assertIn(b"22:10", response.data)
         self.assertIn(b"En Route", response.data)
-        self.assertIn(b"neoscorpion-dispatch-divider-cell", response.data)
+        self.assertIn(b"data-neoscorpion-dispatch-details", response.data)
+        self.assertIn(b"neoscorpion-dispatch-detail-row", response.data)
         self.assertIn(b"D07", response.data)
         self.assertIn(b'value="50.5"', response.data)
         self.assertIn(b'value="13.6"', response.data)
@@ -290,14 +295,33 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
         header = response.data.split(b"<thead>", 1)[1].split(b"</thead>", 1)[0]
         for earlier, later in (
-            (b"Tail", b"Arrival ETA"),
-            (b"Arrival ETA", b"Arrival Status"),
-            (b"Arrival Status", b"Departure Flight"),
-            (b"Departure Flight", b"Dest"),
-            (b"Dest", b"Parking"),
-            (b"Parking", b"ETD"),
+            (b"Tail", b"Arrival"),
+            (b"Arrival", b"Flight / Dest"),
+            (b"Flight / Dest", b"Ramp"),
+            (b"Ramp", b"ETD"),
+            (b"ETD", b"Required"),
+            (b"Status", b"Action"),
+            (b"Action", b"Details"),
         ):
             self.assertLess(header.index(earlier), header.index(later))
+
+    def test_fuel_dispatch_menu_overlay_and_compact_detail_hooks(self):
+        root = Path(self.app.root_path)
+        template = (root / "templates" / "neonodes" / "neoscorpion" / "fuel_dispatch.html").read_text(encoding="utf-8")
+        menu = (root / "templates" / "neonodes" / "neoscorpion" / "_menu.html").read_text(encoding="utf-8")
+        overlay = (root / "static" / "js" / "neoscorpion_menu_overlay.js").read_text(encoding="utf-8")
+
+        self.assertIn('data-neoscorpion-dispatch-details aria-expanded="false"', template)
+        self.assertIn('data-neoscorpion-dispatch-detail-row hidden', template)
+        self.assertIn('WHY SPEAR?', template)
+        self.assertIn('data-dispatch-autosave data-autosave-field="required_fuel"', template)
+        self.assertIn('data-dispatch-autosave data-autosave-field="inbound_fuel"', template)
+        self.assertIn('data-dispatch-apu-editor', template)
+        self.assertIn('data-dispatch-assignment-submit', template)
+        self.assertIn('data-neoscorpion-menu-toggle aria-expanded="false"', menu)
+        self.assertIn('data-neoscorpion-menu-scrim', menu)
+        self.assertIn('event.key === "Escape"', overlay)
+        self.assertIn('neoscorpion-menu-open', overlay)
 
     def test_optional_spear_failures_rebuild_manual_fuel_dispatch(self):
         self._login_approved_user(role="simulator")
