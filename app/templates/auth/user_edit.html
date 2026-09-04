@@ -57,39 +57,39 @@
 
         <section class="panel-subsection user-edit-section">
             <h2>PORTAL APP ACCESS</h2>
+            {% if not target_user.email_verified_at %}<div class="portal-email-warning"><strong>EMAIL UNVERIFIED</strong><span>This user has not completed email verification. Normal approval requires verification; an authorized override grants access only.</span></div>{% endif %}
+            <div class="portal-app-access-grid">
             {% for row in app_access_rows %}
             {% set access = row.access %}
-            <div class="user-edit-role-field">
-                <span>{{ row.app.name }}</span>
-                <select name="app_status_{{ row.app.code }}">
-                    {% for status in ("none", "pending", "approved", "denied") %}
-                    <option value="{{ status }}" {% if (access.status if access else "none") == status %}selected{% endif %}>{{ status|status_label }}</option>
-                    {% endfor %}
-                </select>
+            <div class="user-edit-role-field portal-app-access-card">
+                <strong>{{ row.app.name }}</strong><small>{{ (access.status if access else 'pending')|status_label }}</small>
+                <label><span>STATUS</span><select name="app_status_{{ row.app.code }}">
+                        {% for status in ("none", "pending", "approved", "denied") %}
+                        <option value="{{ status }}" {% if (access.status if access else "none") == status %}selected{% endif %}>{{ status|status_label }}</option>
+                        {% endfor %}
+                </select></label>
                 {% if row.app.code == "neogateway" %}
                 <span class="muted compact-access-note">Access only - RFD NeoNode roles are managed below.</span>
                 {% else %}
-                <span class="role-select-wrap">
+                <label class="role-select-wrap"><span>ROLE</span>
                     <select name="app_role_{{ row.app.code }}">
                         {% for role in ("watcher", "operator", "simulator", "master", "grandmaster") %}
                         <option value="{{ role }}" {% if access and access.role == role %}selected{% endif %}>{{ role|role_label }}</option>
                         {% endfor %}
                     </select>
-                </span>
+                </label>
                 {% endif %}
                 <label class="checkbox-line centered-checkbox-line">
                     <input type="checkbox" name="app_active_{{ row.app.code }}" value="1" {% if not access or access.is_active %}checked{% endif %}>
                     <span>ACTIVE</span>
                 </label>
-                <label>
+                <label class="portal-app-access-notes">
                     <span>NOTES</span>
                     <input name="app_notes_{{ row.app.code }}">
                 </label>
             </div>
             {% endfor %}
-            {% if not target_user.email_verified_at %}
-            <p class="muted">Email not verified yet. App approval will be blocked until verification is complete.</p>
-            {% endif %}
+            </div>
         </section>
 
         <section class="panel-subsection user-edit-section">
@@ -114,9 +114,7 @@
                 <span>DENIAL NOTES</span>
                 <input name="denial_notes" value="{{ membership.denial_notes if membership and membership.denial_notes else '' }}">
             </label>
-            {% if not target_user.email_verified_at %}
-            <p class="muted">Email not verified yet. Approval will be blocked until verification is complete.</p>
-            {% endif %}
+            {% if not target_user.email_verified_at %}<label class="portal-bypass-checkbox"><input type="checkbox" name="bypass_email_verification" value="1"> <span>BYPASS EMAIL VERIFICATION FOR THIS SAVE</span><small>Access approval only. Email remains unverified.</small></label>{% endif %}
         </section>
 
         <section class="panel-subsection user-edit-section user-edit-roles-section">

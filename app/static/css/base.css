@@ -21764,6 +21764,70 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
         drop-shadow(0 16px 28px rgba(0, 0, 0, 0.7));
 }
 
+/* Portal/User Management: compact, wide access controls without affecting nodes. */
+.portal-email-warning {
+    display: grid;
+    gap: 4px;
+    margin: 0 0 12px;
+    border: 1px solid #9c4a75;
+    border-left: 4px solid #d45a91;
+    background: rgba(75, 18, 48, .36);
+    color: #ffd5e8;
+    padding: 10px 12px;
+    font-size: .78rem;
+}
+
+.portal-email-unverified,
+.portal-override-action,
+.portal-edit-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border: 1px solid #cb5d96;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #76264f, #4e193d);
+    color: #ffe4f1;
+    padding: 5px 9px;
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .05em;
+    text-decoration: none;
+}
+
+.portal-email-unverified { min-height: auto; padding: 3px 6px; }
+.portal-override-action { cursor: pointer; }
+.portal-unverified-copy { color: #e8b4cc; font-size: .62rem; }
+
+.portal-app-access-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 10px;
+}
+
+.portal-app-access-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 7px 10px;
+    align-items: end;
+    min-width: 0;
+    border: 1px solid rgba(172, 78, 132, .5);
+    background: rgba(33, 13, 29, .5);
+    padding: 10px;
+}
+
+.portal-app-access-card > strong { grid-column: 1 / -1; color: #ffe0ef; }
+.portal-app-access-card > small { color: #e7a8c6; }
+.portal-app-access-card > label { display: grid; gap: 4px; min-width: 0; }
+.portal-app-access-card > label > span { color: #e7a8c6; font-size: .62rem; font-weight: 800; letter-spacing: .06em; }
+.portal-app-access-notes { grid-column: 1 / -1; }
+.portal-bypass-checkbox { display: grid; gap: 4px; margin-top: 10px; color: #ffd5e8; }
+.portal-bypass-checkbox small { color: #d7aac0; }
+
+@media (max-width: 700px) {
+    .portal-app-access-card { grid-template-columns: 1fr; }
+}
+
 /* State messages are not routing instructions: remove their arrow entirely. */
 .blueprint-neosektor .driver-arrow[hidden] {
     display: none !important;

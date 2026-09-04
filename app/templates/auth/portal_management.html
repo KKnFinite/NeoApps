@@ -67,7 +67,7 @@
                         <td data-label="App">{{ app_definition_by_code[access.app_code].name if access.app_code in app_definition_by_code else access.app_code }}</td>
                         <td data-label="Status"><span class="portal-request-status is-{{ access.status }}">{{ access.status|replace("_", " ")|title }}</span></td>
                         <td data-label="Email">{{ access.user.email or "" }}</td>
-                        <td data-label="Verified">{{ "Yes" if access.user.email_verified_at else "Email not verified yet" }}</td>
+                        <td data-label="Verified">{% if access.user.email_verified_at %}<span class="portal-request-status is-approved">VERIFIED</span>{% else %}<span class="portal-email-unverified">EMAIL UNVERIFIED</span>{% endif %}</td>
                         <td data-label="Requested">{{ access.created_at.strftime("%Y-%m-%d %H:%M") if access.created_at else "" }}</td>
                         <td data-label="Actions">
                             <div class="table-actions">
@@ -90,8 +90,14 @@
                                     <input class="compact-action-input" name="notes" placeholder="Approval notes">
                                     <button type="submit">APPROVE</button>
                                 </form>
-                                {% else %}
-                                <span class="muted">Email not verified yet</span>
+                                {% elif can_edit_portal_management %}
+                                <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
+                                    <input type="hidden" name="action" value="approve_without_verification">
+                                    <input type="hidden" name="return_app" value="{{ selected_app or '' }}"><input type="hidden" name="return_status" value="{{ selected_status }}">
+                                    <input type="hidden" name="role" value="{{ access.role or 'watcher' }}">
+                                    <button class="portal-override-action" type="submit">APPROVE WITHOUT VERIFICATION</button>
+                                </form>
+                                <small class="portal-unverified-copy">Does not verify the email.</small>
                                 {% endif %}
                                 <form class="inline-button-form" method="post" action="{{ url_for('auth.update_portal_app_access', access_id=access.id) }}">
                                     <input type="hidden" name="action" value="deny">

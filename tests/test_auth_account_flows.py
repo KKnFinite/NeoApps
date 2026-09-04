@@ -30,6 +30,7 @@ from app.services.auth_session_security import (
     FORCED_PASSWORD_CHANGE_SESSION_TTL_SECONDS,
 )
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
@@ -56,6 +57,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -331,6 +333,94 @@ class AuthAccountFlowsTest(unittest.TestCase):
             )
         )
         self.assertIsNotNone(unverified_user)
+
+    def test_authorized_gateway_bypass_preserves_email_verification_and_token(self):
+        grandmaster = self._admin("bypass_gateway_admin", "grandmaster")
+        user, membership = self._pending_user(
+            "bypass_gateway_user",
+            "bypass-gateway@example.com",
+            verified=False,
+        )
+        raw_token, _token = create_user_token(user, EMAIL_VERIFICATION)
+        db.session.commit()
+        self._login(grandmaster.username)
+
+        review = self.client.get("/admin/access-requests")
+
+        response = self.client.post(
+            f"/admin/access-requests/{membership.id}/approve",
+            data={"bypass_email_verification": "1", "approval_notes": "Operational need."},
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated_membership = db.session.get(GatewayMembership, membership.id)
+        updated_user = db.session.get(User, user.id)
+
+        self.assertEqual(review.status_code, 200)
+        self.assertIn(b"EMAIL UNVERIFIED", review.data)
+        self.assertIn(b"APPROVE WITHOUT VERIFICATION", review.data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(updated_membership.status, "approved")
+        self.assertIsNone(updated_user.email_verified_at)
+        self.assertIn("EMAIL VERIFICATION BYPASS", updated_membership.approval_notes)
+        self.assertIsNotNone(get_valid_token_record(raw_token, EMAIL_VERIFICATION))
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
+            len(DEFAULT_NEONODES),
+        )
+
+    def test_edit_user_requires_explicit_bypass_before_approving_unverified_access(self):
+        administrator = self._admin("edit_bypass_admin", "grandmaster")
+        target, membership = self._pending_user(
+            "edit_bypass_target",
+            "edit-bypass@example.com",
+            verified=False,
+        )
+        db.session.commit()
+        self._login(administrator.username)
+
+        data = {
+            "first_name": target.first_name,
+            "last_name": target.last_name,
+            "employee_id": target.employee_id,
+            "email": target.email,
+            "supervisor_name": "",
+            "work_area": "",
+            "access_reason": "",
+            "membership_status": "pending",
+            "membership_is_active": "1",
+            "app_status_neostaffing": "approved",
+            "app_active_neostaffing": "1",
+            "app_role_neostaffing": "watcher",
+        }
+        blocked = self.client.post(
+            f"/portal/manage/users/{target.id}/edit",
+            data=data,
+            follow_redirects=False,
+        )
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIsNone(
+            PortalAppAccess.query.filter_by(
+                user_id=target.id,
+                app_code="neostaffing",
+            ).first()
+        )
+        data["bypass_email_verification"] = "1"
+        approved = self.client.post(
+            f"/portal/manage/users/{target.id}/edit",
+            data=data,
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        access = PortalAppAccess.query.filter_by(
+            user_id=target.id,
+            app_code="neostaffing",
+        ).one()
+
+        self.assertEqual(access.status, "approved")
+        self.assertEqual(approved.status_code, 302)
+        self.assertIsNone(db.session.get(User, target.id).email_verified_at)
+        self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "pending")
 
     def test_denial_sends_no_email(self):
         grandmaster = self._admin("grand_admin", "grandmaster")

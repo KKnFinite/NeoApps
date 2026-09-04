@@ -506,6 +506,7 @@ def portal_management():
         selected_app=selected_app,
         selected_status=selected_status,
         can_list_all_users=user_can(USER_MANAGEMENT_VIEW_PERMISSION),
+        can_edit_portal_management=user_can(PORTAL_MANAGEMENT_EDIT_PERMISSION),
     )
 
 
@@ -521,8 +522,11 @@ def update_portal_app_access(access_id):
     notes = request.form.get("notes", "").strip() or None
 
     try:
-        if action == "approve":
-            _approve_portal_app_access(access, role, notes)
+        if action in {"approve", "approve_without_verification"}:
+            _approve_portal_app_access(
+                access, role, notes,
+                bypass_email_verification=(action == "approve_without_verification"),
+            )
             flash("App access approved.", "info")
         elif action == "deny":
             _deny_portal_app_access(access, notes)
@@ -661,6 +665,7 @@ def user_detail(user_id):
             and not bool(target_user.email_verified_at)
             and user_can(EMAIL_VERIFICATION_RESEND_PERMISSION)
         ),
+        can_edit_user=user_can(USER_MANAGEMENT_EDIT_PERMISSION),
     )
 
 
@@ -721,9 +726,12 @@ def edit_user(user_id):
     if request.method == "POST":
         try:
             _apply_user_edit_form(target_user, form)
-            membership = _apply_gateway_membership_edit_form(target_user, gateway, membership)
+            bypass_email_verification = _email_verification_bypass_requested()
+            membership = _apply_gateway_membership_edit_form(
+                target_user, gateway, membership, bypass_email_verification
+            )
             if _has_app_access_form_fields():
-                _apply_portal_app_access_form(target_user)
+                _apply_portal_app_access_form(target_user, bypass_email_verification)
             if _has_node_role_form_fields():
                 if not _membership_is_approved_active(membership):
                     raise ValueError(
@@ -807,6 +815,7 @@ def update_user_gateway_membership(user_id):
                     else request.form.get("role", "watcher").strip().lower() or "watcher"
                 ),
                 node_role_values=node_role_values,
+                bypass_email_verification=_email_verification_bypass_requested(),
             )
             flash("Access request approved.", "info")
         elif action == "deny":
@@ -844,6 +853,7 @@ def access_requests():
         memberships=memberships,
         approval_node_rows=_approval_node_role_rows(),
         role_choices=ROLE_CHOICES,
+        can_edit_access_requests=user_can(ACCESS_REQUESTS_EDIT_PERMISSION),
     )
 
 
@@ -863,6 +873,7 @@ def approve_access_request(membership_id):
                 else request.form.get("role", "watcher").strip().lower() or "watcher"
             ),
             node_role_values=node_role_values,
+            bypass_email_verification=_email_verification_bypass_requested(),
         )
     except ValueError as error:
         db.session.rollback()
@@ -1044,7 +1055,23 @@ def _has_app_access_form_fields():
     return any(key.startswith("app_status_") for key in request.form)
 
 
-def _apply_portal_app_access_form(target_user):
+def _email_verification_bypass_requested():
+    """The checkbox is intentionally per-request, never a user-level grant."""
+    return str(request.form.get("bypass_email_verification", "")).lower() in {
+        "1", "true", "on", "yes"
+    }
+
+
+def _approval_notes_with_verification_bypass(notes, bypass):
+    if not bypass:
+        return notes
+    marker = "EMAIL VERIFICATION BYPASS"
+    if marker in str(notes or ""):
+        return notes
+    return f"{marker} · {notes}" if notes else marker
+
+
+def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
     for app in portal_app_definitions():
         app_code = app["code"]
         status = request.form.get(f"app_status_{app_code}", "none").strip().lower()
@@ -1078,18 +1105,22 @@ def _apply_portal_app_access_form(target_user):
                 role,
                 request.form.get(f"app_notes_{app_code}", "").strip() or None,
                 is_active=is_active,
+                bypass_email_verification=bypass_email_verification,
             )
         elif status == "denied":
             _deny_portal_app_access(access, request.form.get(f"app_notes_{app_code}", "").strip() or None)
 
 
-def _approve_portal_app_access(access, role, notes, is_active=True):
+def _approve_portal_app_access(
+    access, role, notes, is_active=True, bypass_email_verification=False
+):
     if not access:
         raise ValueError("App access request was not found.")
     if role not in ROLE_CHOICES:
         raise ValueError("Unsupported app role selected.")
-    if not access.user.email_verified_at:
+    if not access.user.email_verified_at and not bypass_email_verification:
         raise ValueError("Email not verified yet.")
+    notes = _approval_notes_with_verification_bypass(notes, bypass_email_verification)
 
     if access.app_code == "neogateway":
         gateway = get_current_gateway()
@@ -1103,7 +1134,10 @@ def _approve_portal_app_access(access, role, notes, is_active=True):
             )
             db.session.add(membership)
             db.session.flush()
-        _approve_membership(membership, notes, seed_role=role)
+        _approve_membership(
+            membership, notes, seed_role=role,
+            bypass_email_verification=bypass_email_verification,
+        )
 
     access.status = "approved"
     access.role = role
@@ -1327,7 +1361,9 @@ def _render_user_edit_form(target_user, gateway, membership, form):
     )
 
 
-def _apply_gateway_membership_edit_form(target_user, gateway, membership):
+def _apply_gateway_membership_edit_form(
+    target_user, gateway, membership, bypass_email_verification=False
+):
     if "membership_status" not in request.form:
         return membership
 
@@ -1354,6 +1390,7 @@ def _apply_gateway_membership_edit_form(target_user, gateway, membership):
             _approve_membership(
                 membership,
                 request.form.get("approval_notes", "").strip() or None,
+                bypass_email_verification=bypass_email_verification,
             )
         membership.is_active = is_active
     elif status == "denied":
@@ -1882,13 +1919,15 @@ def _approve_membership(
     notes,
     seed_role="watcher",
     node_role_values=None,
+    bypass_email_verification=False,
 ):
     if not membership:
         raise ValueError("Gateway membership request was not found.")
     if seed_role not in ROLE_CHOICES:
         raise ValueError("Unsupported node role selected.")
-    if not membership.user.email_verified_at:
+    if not membership.user.email_verified_at and not bypass_email_verification:
         raise ValueError("Email not verified yet.")
+    notes = _approval_notes_with_verification_bypass(notes, bypass_email_verification)
 
     was_approved = membership.status == "approved"
     membership.status = "approved"

@@ -62,7 +62,10 @@
                     {% set access = row.access %}
                     <tr>
                         <td>{{ row.app.name }}</td>
-                        <td>{{ access.status if access else "none" }}</td>
+                        <td>
+                            {{ access.status if access else "none" }}
+                            {% if access and access.approval_notes and "EMAIL VERIFICATION BYPASS" in access.approval_notes %}<small class="portal-unverified-copy">ACCESS APPROVED BY ADMIN OVERRIDE</small>{% endif %}
+                        </td>
                         <td>
                             {% if row.app.code == "neogateway" %}
                             Access only
@@ -86,6 +89,7 @@
             <div><dt>ACTIVE</dt><dd>{{ "Yes" if membership.is_active else "No" }}</dd></div>
             <div><dt>APPROVED AT</dt><dd>{{ membership.approved_at.strftime("%Y-%m-%d %H:%M") if membership.approved_at else "" }}</dd></div>
             <div><dt>DENIED AT</dt><dd>{{ membership.denied_at.strftime("%Y-%m-%d %H:%M") if membership.denied_at else "" }}</dd></div>
+            {% if membership.approval_notes and "EMAIL VERIFICATION BYPASS" in membership.approval_notes %}<div><dt>ACCESS OVERRIDE</dt><dd>ACCESS APPROVED BY ADMIN OVERRIDE</dd></div>{% endif %}
         </dl>
         {% else %}
         <p class="muted">No {{ gateway.code }} membership exists for this user.</p>
@@ -117,8 +121,12 @@
                     </label>
                     <button type="submit">APPROVE ACCESS</button>
                 </form>
-                {% else %}
-                <p class="muted">Email not verified yet.</p>
+                {% elif can_edit_user %}
+                <div class="portal-email-warning"><strong>EMAIL UNVERIFIED</strong><span>Normal approval requires verification. This does not verify the email.</span></div>
+                <form class="operation-form inline-operation-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=target_user.id) }}">
+                    <input type="hidden" name="action" value="approve"><input type="hidden" name="bypass_email_verification" value="1">
+                    <button class="portal-override-action" type="submit">APPROVE WITHOUT VERIFICATION</button>
+                </form>
                 {% endif %}
                 <form class="operation-form inline-operation-form" method="post" action="{{ url_for('auth.update_user_gateway_membership', user_id=target_user.id) }}">
                     <input type="hidden" name="action" value="deny">

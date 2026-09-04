@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models import PortalAppAccess, User
 from app.services.access_control import PORTAL_APPS, backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class PortalManagementAppFiltersTest(unittest.TestCase):
@@ -26,6 +27,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
         self.client = self.app.test_client()
 
         self.admin = self._user("filter_admin", verified=True)
@@ -239,6 +241,41 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
             "denied",
         )
 
+    def test_unverified_app_access_requires_explicit_bypass_and_stays_unverified(self):
+        access = self._access("unverified_override", "neostaffing", "pending", verified=False)
+        db.session.commit()
+
+        blocked = self.client.post(
+            f"/portal/manage/app-access/{access.id}/update",
+            data={"action": "approve", "role": "watcher"},
+            follow_redirects=True,
+        )
+        approved = self.client.post(
+            f"/portal/manage/app-access/{access.id}/update",
+            data={"action": "approve_without_verification", "role": "watcher"},
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        updated = db.session.get(PortalAppAccess, access.id)
+
+        self.assertIn(b"Email not verified yet", blocked.data)
+        self.assertEqual(approved.status_code, 302)
+        self.assertEqual(updated.status, "approved")
+        self.assertIsNone(updated.user.email_verified_at)
+        self.assertIn("EMAIL VERIFICATION BYPASS", updated.approval_notes)
+
+    def test_portal_management_renders_unverified_override_action_for_editors(self):
+        access = self._access("unverified_ui", "neostaffing", "pending", verified=False)
+        db.session.commit()
+
+        response = self.client.get("/portal/manage", query_string={"status": "pending"})
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(access.user.email, html)
+        self.assertIn("EMAIL UNVERIFIED", html)
+        self.assertIn("APPROVE WITHOUT VERIFICATION", html)
+
     def _assert_filter_redirect(self, location):
         parsed = urlparse(location)
         query = parse_qs(parsed.query)
@@ -247,8 +284,8 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.assertEqual(query.get("status"), ["pending"])
         self.assertEqual(query.get("q"), ["Filtered"])
 
-    def _access(self, username, app_code, status):
-        user = self._user(username, verified=True)
+    def _access(self, username, app_code, status, *, verified=True):
+        user = self._user(username, verified=verified)
         access = PortalAppAccess(
             user_id=user.id,
             app_code=app_code,

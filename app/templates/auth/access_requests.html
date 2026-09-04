@@ -44,7 +44,29 @@
                     <label class="access-notes-field"><span>APPROVAL NOTES</span><input name="approval_notes" placeholder="Optional notes"></label>
                     <button type="submit">APPROVE ACCESS</button>
                 </form>
-                {% else %}<p class="muted access-approval-blocked">Approval is available after email verification.</p>{% endif %}
+                {% else %}
+                <div class="portal-email-warning"><strong>EMAIL UNVERIFIED</strong><span>Normal approval requires verification. This grants access only and does not verify the email.</span></div>
+                {% if can_edit_access_requests %}
+                <form class="access-approval-form" method="post" action="{{ url_for('auth.approve_access_request', membership_id=membership.id) }}">
+                    <input type="hidden" name="bypass_email_verification" value="1">
+                    <fieldset class="node-role-fieldset">
+                        <legend>NEONODE ROLES</legend>
+                        <div class="node-role-grid">
+                            {% for row in approval_node_rows %}
+                            <label class="node-role-control">
+                                <span>{{ row.node.name }}</span>
+                                <select name="node_{{ row.node.id }}" aria-label="{{ row.node.name }} role">
+                                    {% for role in row.role_choices %}<option value="{{ role }}" {% if row.effective_role == role %}selected{% endif %}>{{ role|role_label }}</option>{% endfor %}
+                                </select>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    <label class="access-notes-field"><span>APPROVAL NOTES</span><input name="approval_notes" placeholder="Optional notes"></label>
+                    <button class="portal-override-action" type="submit">APPROVE WITHOUT VERIFICATION</button>
+                </form>
+                {% endif %}
+                {% endif %}
                 <form class="access-denial-form" method="post" action="{{ url_for('auth.deny_access_request', membership_id=membership.id) }}">
                     <label class="access-notes-field"><span>DENIAL NOTES</span><input name="denial_notes" placeholder="Optional notes"></label>
                     <button type="submit">DENY</button>
