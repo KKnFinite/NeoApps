@@ -329,6 +329,78 @@ def _fuel_assignments_revision_for_operation(operation):
 
 
 def fuel_dispatch_context(gateway, *, include_asset_choices=False):
+    """Build core Dispatch first, then add optional planning intelligence."""
+    context = _manual_fuel_dispatch_context(
+        gateway, include_asset_choices=include_asset_choices
+    )
+    if context["operation"] is None:
+        return context
+
+    stage = "assignment recommendations"
+    try:
+        # Read-only enrichment must remain isolated from operational Dispatch.
+        # A savepoint keeps a provider/ORM failure from contaminating the manual
+        # context assembly; the fallback below still rolls back and rebuilds.
+        with db.session.begin_nested():
+            _attach_dispatch_assignment_recommendations(
+                context["rows"],
+                operation=context["operation"],
+                gateway=gateway,
+                settings=context["settings"],
+                nightly_assignment_fuelers=context["nightly_assignment_fuelers"],
+                nightly_assignment_trucks=context["nightly_assignment_trucks"],
+                nightly_truck_states_by_truck_id=context[
+                    "nightly_truck_states_by_truck_id"
+                ],
+                now_utc=datetime.utcnow(),
+            )
+            stage = "live calibration"
+            configured_planning_settings = assignment_planning_settings(
+                gateway, settings=context["settings"]
+            )
+            live_calibrations = build_live_calibration(
+                context["operation"], configured_planning_settings, context["rows"]
+            )
+            stage = "SPEAR plan"
+            spear_plan = build_spear_plan(
+                context["rows"],
+                operation=context["operation"],
+                planning_settings=calibrated_planning_settings(
+                    configured_planning_settings, live_calibrations
+                ),
+                spear_settings=context["spear_settings"],
+                nightly_fuelers=context["nightly_assignment_fuelers"],
+                nightly_trucks=context["nightly_trucks"],
+                now_utc=datetime.utcnow(),
+                calibrations=live_calibrations,
+            )
+            stage = "SPEAR presentation"
+            _attach_spear_plan(context["rows"], context["truck_visuals"], spear_plan)
+    except Exception:
+        current_app.logger.exception(
+            "SPEAR optional enrichment failed during %s; rebuilding manual Fuel Dispatch.",
+            stage,
+        )
+        db.session.rollback()
+        # A failed ORM/database operation can expire or poison the objects used
+        # above.  Never pass them to Jinja: rebuild canonical manual state.
+        context = _manual_fuel_dispatch_context(
+            gateway, include_asset_choices=include_asset_choices
+        )
+        _mark_spear_unavailable(context)
+        return context
+
+    context.update(
+        spear_plan=spear_plan,
+        spear_unavailable=False,
+        spear_indicator=spear_dispatch_status(spear_plan, context["spear_settings"]),
+        spear_calibration=calibration_summary(live_calibrations),
+    )
+    return context
+
+
+def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
+    """Return a fully renderable canonical manual Dispatch context only."""
     operation = current_sort_operation(gateway)
     refresh_setting = live_screen_refresh_value(
         gateway,
@@ -415,72 +487,66 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         rows,
         truck_visuals,
     )
-    _attach_dispatch_assignment_recommendations(
-        rows,
-        operation=operation,
-        gateway=gateway,
-        settings=settings,
-        nightly_assignment_fuelers=asset_context["nightly_assignment_fuelers"],
-        nightly_assignment_trucks=asset_context["nightly_assignment_trucks"],
-        nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
-        now_utc=datetime.utcnow(),
-    )
-    # SPEAR is dispatch enrichment, never a prerequisite for the canonical
-    # manual Fuel Dispatch board.  Keep a malformed/incomplete optimizer input
-    # from taking the operational screen down while preserving its traceback.
-    spear_plan = None
-    live_calibrations = {}
-    spear_unavailable = False
-    try:
-        configured_planning_settings = assignment_planning_settings(
-            gateway, settings=settings
-        )
-        live_calibrations = build_live_calibration(
-            operation, configured_planning_settings, rows
-        )
-        spear_plan = build_spear_plan(
-            rows,
-            operation=operation,
-            planning_settings=calibrated_planning_settings(
-                configured_planning_settings, live_calibrations
-            ),
-            spear_settings=spear_settings,
-            nightly_fuelers=asset_context["nightly_assignment_fuelers"],
-            nightly_trucks=asset_context["nightly_trucks"],
-            now_utc=datetime.utcnow(),
-            calibrations=live_calibrations,
-        )
-        _attach_spear_plan(rows, truck_visuals, spear_plan)
-    except Exception:
-        current_app.logger.exception(
-            "SPEAR enrichment failed for NeoScorpion Fuel Dispatch; serving manual dispatch."
-        )
-        spear_unavailable = True
-    return {
+    context = {
         "operation": operation,
         "rows": rows,
         "truck_visuals": truck_visuals,
         "fuelers": fuelers,
         "trucks": trucks,
         "settings": settings,
-        "spear_plan": spear_plan,
-        "spear_unavailable": spear_unavailable,
+        "spear_plan": None,
+        "spear_unavailable": False,
         "spear_settings": spear_settings,
-        "spear_indicator": (
-            {
-                "state": "unavailable",
-                "label": "SPEAR · UNAVAILABLE",
-                "detail": "Recommendations are unavailable for this refresh.",
-                "automation_enabled": False,
-            }
-            if spear_unavailable
-            else spear_dispatch_status(spear_plan, spear_settings)
-        ),
-        "spear_calibration": calibration_summary(live_calibrations),
+        "spear_indicator": spear_dispatch_status(None, spear_settings),
+        "spear_calibration": _empty_spear_calibration(),
         "fuel_dispatch_refresh": refresh_setting,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
+        "nightly_truck_states_by_truck_id": nightly_truck_states_by_truck_id,
         **asset_context,
     }
+    _clear_optional_dispatch_enrichment(context)
+    return context
+
+
+def _empty_spear_calibration():
+    return {
+        "active_count": 0,
+        "collecting_count": 0,
+        "label": "SPEAR CALIBRATION · COLLECTING",
+        "items": (),
+    }
+
+
+def _clear_optional_dispatch_enrichment(context):
+    for row in context["rows"]:
+        row.update(
+            assignment_recommendation=None,
+            assignment_recommendation_display=None,
+            assignment_recommendation_time_display=None,
+            assignment_recommendation_reason_display=None,
+            spear_step=None,
+            spear_risk=None,
+            spear_waiting_for_data=None,
+            spear_readiness_reasons=(),
+            spear_problem=None,
+        )
+    for visual in context["truck_visuals"]:
+        visual["spear_recommendation"] = None
+
+
+def _mark_spear_unavailable(context):
+    _clear_optional_dispatch_enrichment(context)
+    context.update(
+        spear_plan=None,
+        spear_unavailable=True,
+        spear_indicator={
+            "state": "unavailable",
+            "label": "SPEAR · UNAVAILABLE",
+            "detail": "Recommendations are unavailable for this refresh.",
+            "automation_enabled": False,
+        },
+        spear_calibration=_empty_spear_calibration(),
+    )
 
 
 def hanzo_context(gateway):

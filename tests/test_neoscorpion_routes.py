@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from sqlalchemy import event
+from sqlalchemy.exc import SQLAlchemyError
 
 from app import create_app
 from app.extensions import db
@@ -298,7 +299,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         ):
             self.assertLess(header.index(earlier), header.index(later))
 
-    def test_spear_failure_keeps_manual_fuel_dispatch_available(self):
+    def test_optional_spear_failures_rebuild_manual_fuel_dispatch(self):
         self._login_approved_user(role="simulator")
         operation, mission = self._add_current_departure(
             flight_number="UPS901",
@@ -318,23 +319,59 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         ))
         db.session.commit()
 
-        with (
-            patch("app.services.neoscorpion.current_sort_operation", return_value=operation),
-            patch(
-                "app.services.neoscorpion.build_live_calibration",
-                side_effect=RuntimeError("calibration fixture failure"),
-            ),
+        with patch(
+            "app.services.neoscorpion.current_sort_operation", return_value=operation
         ):
             context = fuel_dispatch_context(self.gateway)
-            response = self.client.get("/neoscorpion/fuel-dispatch")
 
         self.assertEqual(context["rows"][0]["mission"].id, mission.id)
-        self.assertIsNone(context["spear_plan"])
-        self.assertTrue(context["spear_unavailable"])
-        self.assertEqual(context["spear_indicator"]["label"], "SPEAR · UNAVAILABLE")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"UPS901", response.data)
-        self.assertIn(b"SPEAR \xc2\xb7 UNAVAILABLE", response.data)
+        self.assertIsNotNone(context["spear_plan"])
+
+        failures = (
+            (
+                "recommendations",
+                "app.services.neoscorpion._attach_dispatch_assignment_recommendations",
+                RuntimeError("recommendation fixture failure"),
+            ),
+            (
+                "calibration",
+                "app.services.neoscorpion.build_live_calibration",
+                RuntimeError("calibration fixture failure"),
+            ),
+            (
+                "plan",
+                "app.services.neoscorpion.build_spear_plan",
+                RuntimeError("plan fixture failure"),
+            ),
+            (
+                "presentation",
+                "app.services.neoscorpion._attach_spear_plan",
+                RuntimeError("presentation fixture failure"),
+            ),
+            (
+                "database",
+                "app.services.neoscorpion.build_live_calibration",
+                SQLAlchemyError("calibration query fixture failure"),
+            ),
+        )
+        for label, target, error in failures:
+            with self.subTest(stage=label), patch(
+                "app.services.neoscorpion.current_sort_operation", return_value=operation
+            ), patch(target, side_effect=error):
+                failed = fuel_dispatch_context(self.gateway)
+                response = self.client.get("/neoscorpion/fuel-dispatch")
+
+            self.assertEqual(failed["rows"][0]["mission"].id, mission.id)
+            self.assertIsNone(failed["spear_plan"])
+            self.assertTrue(failed["spear_unavailable"])
+            self.assertEqual(
+                failed["spear_indicator"]["label"], "SPEAR · UNAVAILABLE"
+            )
+            self.assertIsNone(failed["rows"][0]["assignment_recommendation"])
+            self.assertIsNone(failed["rows"][0]["spear_step"])
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"UPS901", response.data)
+            self.assertIn(b"SPEAR \xc2\xb7 UNAVAILABLE", response.data)
 
     def test_vault_test_posts_to_test_route_without_saving_settings(self):
         self._login_approved_user(role="master")
