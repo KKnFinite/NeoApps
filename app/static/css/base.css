@@ -31836,26 +31836,32 @@ body.neosubzero-ucc-tv-mode { background:#06101a; } body.neosubzero-ucc-tv-mode 
 .neoscorpion-dispatch-table--compact { min-width: 1080px; table-layout: fixed; }
 .neoscorpion-dispatch-table--compact th,
 .neoscorpion-dispatch-table--compact td { min-width: 0; padding: 7px 5px; overflow-wrap: anywhere; }
-.neoscorpion-dispatch-table--compact th:nth-child(1) { width: 7%; }
+.neoscorpion-dispatch-table--compact th:nth-child(1) { width: 8%; }
 .neoscorpion-dispatch-table--compact th:nth-child(2) { width: 7%; }
 .neoscorpion-dispatch-table--compact th:nth-child(3) { width: 9%; }
-.neoscorpion-dispatch-table--compact th:nth-child(4) { width: 5%; }
-.neoscorpion-dispatch-table--compact th:nth-child(5) { width: 5%; }
-.neoscorpion-dispatch-table--compact th:nth-child(6),
-.neoscorpion-dispatch-table--compact th:nth-child(7) { width: 8%; }
-.neoscorpion-dispatch-table--compact th:nth-child(8) { width: 6%; }
+.neoscorpion-dispatch-table--compact th:nth-child(4) { width: 7%; }
+.neoscorpion-dispatch-table--compact th:nth-child(5),
+.neoscorpion-dispatch-table--compact th:nth-child(6) { width: 6%; }
+.neoscorpion-dispatch-table--compact th:nth-child(7) { width: 6%; }
+.neoscorpion-dispatch-table--compact th:nth-child(8) { width: 8%; }
 .neoscorpion-dispatch-table--compact th:nth-child(9),
-.neoscorpion-dispatch-table--compact th:nth-child(10) { width: 10%; }
-.neoscorpion-dispatch-table--compact th:nth-child(11) { width: 5%; }
-.neoscorpion-dispatch-table--compact th:nth-child(12) { width: 9%; }
-.neoscorpion-dispatch-table--compact th:nth-child(13) { width: 9%; }
+.neoscorpion-dispatch-table--compact th:nth-child(10) { width: 9%; }
+.neoscorpion-dispatch-table--compact th:nth-child(11) { width: 7%; }
+.neoscorpion-dispatch-table--compact th:nth-child(12) { width: 8%; }
+.neoscorpion-dispatch-table--compact th:nth-child(13) { width: 7%; }
 .neoscorpion-dispatch-table--compact th:nth-child(14) { width: 5%; }
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-input,
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-select { min-width: 0; width: 100%; font-size: .72rem; }
 .neoscorpion-dispatch-tail small,
 .neoscorpion-dispatch-arrival small,
-.neoscorpion-dispatch-flight small { display: block; margin-top: 2px; color: var(--muted); font-size: .61rem; line-height: 1.15; }
-.neoscorpion-dispatch-flight .neoscorpion-spear-risk { display: inline-flex; margin-top: 4px; padding: 2px 4px; font-size: .52rem; white-space: nowrap; }
+.neoscorpion-dispatch-flight small,
+.neoscorpion-dispatch-etd-parking small,
+.neoscorpion-dispatch-transfer-estimate small { display: block; margin-top: 2px; color: var(--muted); font-size: .61rem; line-height: 1.15; }
+.neoscorpion-dispatch-tail .neoscorpion-spear-risk { display: inline-flex; margin-top: 4px; padding: 2px 4px; font-size: .52rem; white-space: nowrap; }
+.neoscorpion-dispatch-fuel-input { display: block; width: min(100%, 58px) !important; margin: 0 auto; text-align: center; }
+.neoscorpion-dispatch-actual-apu { display: grid; gap: 3px; }
+.neoscorpion-dispatch-actual-apu > strong { font-size: .68rem; }
+.neoscorpion-dispatch-transfer-estimate { white-space: nowrap; }
 .neoscorpion-dispatch-action-cell { min-width: 0; }
 .neoscorpion-dispatch-action-cell .action-button { min-height: 24px; margin: 1px; padding: 3px 5px; font-size: .57rem; }
 .neoscorpion-dispatch-details-toggle { width: 100%; min-height: 27px; padding: 4px; font-size: .53rem; white-space: nowrap; }

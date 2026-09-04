@@ -296,10 +296,12 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         header = response.data.split(b"<thead>", 1)[1].split(b"</thead>", 1)[0]
         for earlier, later in (
             (b"Tail", b"Arrival"),
-            (b"Arrival", b"Flight / Dest"),
-            (b"Flight / Dest", b"Ramp"),
-            (b"Ramp", b"ETD"),
-            (b"ETD", b"Required"),
+            (b"Arrival", b"Dest / Flight"),
+            (b"Dest / Flight", b"ETD / Parking"),
+            (b"ETD / Parking", b"Inbound"),
+            (b"Inbound", b"Required"),
+            (b"Required", b"Actual / APU"),
+            (b"Actual / APU", b"T/F / Est Gal"),
             (b"Status", b"Action"),
             (b"Action", b"Details"),
         ):
@@ -316,6 +318,12 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn('WHY SPEAR?', template)
         self.assertIn('data-dispatch-autosave data-autosave-field="required_fuel"', template)
         self.assertIn('data-dispatch-autosave data-autosave-field="inbound_fuel"', template)
+        self.assertLess(template.index('name="inbound_fuel"'), template.index('name="required_fuel"'))
+        self.assertIn('class="neoscorpion-dispatch-tail"', template)
+        self.assertIn('class="neoscorpion-dispatch-etd-parking"', template)
+        self.assertIn('class="neoscorpion-dispatch-actual-apu"', template)
+        self.assertIn('class="neoscorpion-dispatch-transfer-estimate"', template)
+        self.assertLess(template.index('{{ row.destination }}'), template.index('{{ row.mission.flight_number }}'))
         self.assertIn('data-dispatch-apu-editor', template)
         self.assertIn('data-dispatch-assignment-submit', template)
         self.assertIn('data-neoscorpion-menu-toggle aria-expanded="false"', menu)
