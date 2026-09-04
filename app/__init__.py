@@ -259,7 +259,7 @@ def register_template_helpers(app):
                 "endpoint": "neomotherbrain.motherbrain",
                 "minimum_role": "simulator",
                 "path_prefixes": ("/motherbrain", "/admin/users", "/admin/permissions"),
-                "icon_src": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
+                "icon_src": "images/logos/newlogo_motherbrain_small.png",
             },
             {
                 "key": "ermac",
@@ -268,7 +268,7 @@ def register_template_helpers(app):
                 "endpoint": "neoermac.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neoermac",),
-                "icon_src": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
+                "icon_src": "images/logos/newlogo_ermac_small.png",
             },
             {
                 "key": "sektor",
@@ -277,7 +277,7 @@ def register_template_helpers(app):
                 "endpoint": "neosektor.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neosektor",),
-                "icon_src": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
+                "icon_src": "images/logos/newlogo_sektor_small.png",
             },
             {
                 "key": "scorpion",
@@ -286,7 +286,7 @@ def register_template_helpers(app):
                 "endpoint": "neoscorpion.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neoscorpion",),
-                "icon_src": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
+                "icon_src": "images/logos/newlogo_scorpion.png",
             },
             {
                 "key": "reptile",
@@ -295,6 +295,7 @@ def register_template_helpers(app):
                 "endpoint": "neoreptile.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neoreptile",),
+                "icon_src": "images/logos/newlogo_reptile_small.png",
             },
             {
                 "key": "subzero",
@@ -303,6 +304,7 @@ def register_template_helpers(app):
                 "endpoint": "neosubzero.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neosubzero", "/neosub-zero", "/neo-sub-zero"),
+                "icon_src": "images/logos/newlogo_subzero_small.png",
             },
             {
                 "key": "rain",
@@ -311,6 +313,7 @@ def register_template_helpers(app):
                 "endpoint": "neorain.index",
                 "minimum_role": "watcher",
                 "path_prefixes": ("/neorain",),
+                "icon_src": "images/logos/newlogo_rain_small.png",
             },
         )
         prime_user_node_roles_for_request(

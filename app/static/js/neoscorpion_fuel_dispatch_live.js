@@ -8,7 +8,6 @@
 
     initializeSpearSplash(root);
     initializeDispatchDetails(root);
-    initializeDispatchBoard(root);
     initializeDispatchSelects(root);
     const preserveDispatchScroll = initializeDispatchScroll(root);
     if (!window.NeoLiveUpdates) {
@@ -55,37 +54,6 @@
             toggle.setAttribute("aria-expanded", String(!expanded));
             detail.hidden = expanded;
             detail.setAttribute("aria-hidden", String(expanded));
-        });
-    }
-
-    function initializeDispatchBoard(scope) {
-        const toggle = scope.querySelector("[data-dispatch-board-toggle]");
-        const banner = scope.querySelector("[data-dispatch-board-banner]");
-        const board = scope.querySelector("[data-dispatch-board-area]");
-        const storageKey = "neoapps.neoscorpion.fuel-dispatch.board.v1";
-        if (!toggle || !board) return;
-
-        const apply = (expanded) => {
-            toggle.setAttribute("aria-expanded", String(expanded));
-            toggle.textContent = expanded ? "BOARD VIEW" : "SHOW HEADER";
-            board.hidden = !expanded;
-            if (banner) banner.hidden = !expanded;
-        };
-        let expanded = true;
-        try {
-            expanded = window.localStorage.getItem(storageKey) !== "collapsed";
-        } catch (_error) {
-            // Board controls remain usable when browser storage is unavailable.
-        }
-        apply(expanded);
-        toggle.addEventListener("click", () => {
-            expanded = !expanded;
-            apply(expanded);
-            try {
-                window.localStorage.setItem(storageKey, expanded ? "expanded" : "collapsed");
-            } catch (_error) {
-                // A local preference is optional.
-            }
         });
     }
 

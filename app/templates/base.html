@@ -84,9 +84,33 @@
     })();
     </script>
 </head>
-<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav %} has-mobile-bottom-nav{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}">
+<body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}>
     <div class="shell">
-        {% if not public_landing|default(false) and not is_neosektor_driver_page %}
+        {% if uses_operational_shell %}
+        <header class="topbar operational-topbar" data-operational-topbar>
+            <a class="operational-app-logo" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal">
+                <img src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="48" height="48" decoding="async">
+            </a>
+            <a class="operational-topbar-context" href="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Gateway selector">
+                <span>Gateway</span><strong>{{ default_gateway.code }}</strong>
+            </a>
+            <a class="operational-topbar-context operational-topbar-sort" href="{{ url_for('neomotherbrain.manage_sort') }}" aria-label="Sort selector">
+                <span>Sort</span><strong>{% if motherbrain_shell_operation %}{{ motherbrain_shell_operation.sort_name|upper }}{% else %}Current Sort{% endif %}</strong>
+            </a>
+            <div class="operational-topbar-spacer" aria-hidden="true"></div>
+            {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}
+            {% set character_switcher_modifier = "character-switcher-header operational-character-switcher" %}
+            {% set character_switcher_use_neofont = true %}
+            {% include "_change_characters.html" %}
+            <details class="operational-account-menu">
+                <summary aria-label="Account menu"><span>{{ current_user.header_display_name|upper }}</span></summary>
+                <div role="menu">
+                    <a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">NeoPortal</a>
+                    <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form>
+                </div>
+            </details>
+        </header>
+        {% elif not public_landing|default(false) and not is_neosektor_driver_page %}
         <header class="topbar">
             {% if uses_node_header %}
             {% if not is_neorain_page %}
@@ -286,7 +310,9 @@
             </div>
         </header>
         {% endif %}
-        {% if uses_mobile_chrome %}
+        {% if uses_operational_shell %}
+        {% include "neonodes/_operational_mobile_shell.html" %}
+        {% elif uses_mobile_chrome %}
         {% set mobile_switch_targets = change_character_targets() %}
         {% set mobile_show_back = is_neosektor_page or request.endpoint != mobile_home_endpoint %}
         <header class="mobile-topbar node-{{ mobile_shell_key }}" data-mobile-topbar>
@@ -358,10 +384,12 @@
         </header>
         {% endif %}
 
-        {% if uses_motherbrain_header %}
+        {% if uses_operational_shell and is_motherbrain_page %}
         {% include "neomotherbrain/_motherbrain_desktop_sidebar.html" %}
-        {% elif uses_node_desktop_shell %}
+        {% elif uses_operational_shell %}
         {% include "neonodes/_node_desktop_sidebar.html" %}
+        {% elif uses_motherbrain_header %}
+        {% include "neomotherbrain/_motherbrain_desktop_sidebar.html" %}
         {% endif %}
 
         <main class="content">
@@ -381,7 +409,7 @@
             {% block content %}{% endblock %}
         </main>
         {% block page_overlay %}{% endblock %}
-        {% if show_mobile_bottom_nav %}
+        {% if show_mobile_bottom_nav and not uses_operational_shell %}
         <nav class="mobile-bottom-nav node-{{ mobile_shell_key }}" aria-label="Mobile navigation" data-mobile-bottom-nav>
             <a class="mobile-bottom-nav-item mobile-bottom-nav-link" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2-1.3 1.5L18 11.3V20h-4.5v-5h-3v5H6v-8.7l-1.7 1.4L3 11.2Z"/></svg>
@@ -556,7 +584,7 @@
     })();
     </script>
     {% endif %}
-    {% if uses_mobile_chrome %}
+    {% if uses_mobile_chrome and not uses_operational_shell %}
     <script>
     (() => {
         const topbar = document.querySelector("[data-mobile-topbar]");
@@ -790,6 +818,9 @@
         });
     })();
     </script>
+    {% endif %}
+    {% if uses_operational_shell %}
+    <script src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
     <script

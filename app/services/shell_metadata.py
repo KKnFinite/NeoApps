@@ -11,48 +11,57 @@ NODE_IDENTITIES = {
         "name": "NeoMotherBrain",
         "word": "MotherBrain",
         "home_endpoint": "neomotherbrain.motherbrain",
-        "locked_icon": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
-        "desktop_icon": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-256.png",
-        "icon_alt": "NeoMotherBrain icon",
+        "locked_icon": "images/logos/newlogo_motherbrain_small.png",
+        "desktop_icon": "images/logos/newlogo_motherbrain.png",
+        "icon_alt": "NeoMotherBrain logo",
     },
     "ermac": {
         "name": "NeoErmac",
         "word": "Ermac",
         "home_endpoint": "neoermac.index",
-        "locked_icon": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
-        "desktop_icon": "images/icons/neoermac/inapp/neoermac-inapp-256.png",
-        "icon_alt": "NeoErmac icon",
+        "locked_icon": "images/logos/newlogo_ermac_small.png",
+        "desktop_icon": "images/logos/newlogo_ermac.png",
+        "icon_alt": "NeoErmac logo",
     },
     "sektor": {
         "name": "NeoSektor",
         "word": "Sektor",
         "home_endpoint": "neosektor.index",
-        "locked_icon": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
-        "desktop_icon": "images/icons/neosektor/inapp/neosektor-icon-256x256.png",
-        "icon_alt": "NeoSektor icon",
+        "locked_icon": "images/logos/newlogo_sektor_small.png",
+        "desktop_icon": "images/logos/newlogo_sektor.png",
+        "icon_alt": "NeoSektor logo",
     },
     "scorpion": {
         "name": "NeoScorpion",
         "word": "Scorpion",
         "home_endpoint": "neoscorpion.index",
-        "locked_icon": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
-        "desktop_icon": "images/icons/neoscorpion/inapp/neoscorpion-256x256.png",
-        "icon_alt": "NeoScorpion icon",
+        "locked_icon": "images/logos/newlogo_scorpion.png",
+        "desktop_icon": "images/logos/newlogo_scorpion.png",
+        "icon_alt": "NeoScorpion logo",
     },
     "reptile": {
         "name": "NeoReptile",
         "word": "Reptile",
         "home_endpoint": "neoreptile.index",
+        "locked_icon": "images/logos/newlogo_reptile_small.png",
+        "desktop_icon": "images/logos/newlogo_reptile.png",
+        "icon_alt": "NeoReptile logo",
     },
     "subzero": {
         "name": "NeoSub-Zero",
         "word": "Sub-Zero",
         "home_endpoint": "neosubzero.index",
+        "locked_icon": "images/logos/newlogo_subzero_small.png",
+        "desktop_icon": "images/logos/newlogo_subzero.png",
+        "icon_alt": "NeoSub-Zero logo",
     },
     "rain": {
         "name": "NeoRain",
         "word": "Rain",
         "home_endpoint": "neorain.index",
+        "locked_icon": "images/logos/newlogo_rain_small.png",
+        "desktop_icon": "images/logos/newlogo_rain.png",
+        "icon_alt": "NeoRain logo",
     },
 }
 
@@ -227,22 +236,20 @@ def resolve_shell_metadata(
         is_neosektor_live_counts_page=is_neosektor_live_counts_page,
     )
 
-    uses_node_desktop_shell = (
-        is_neoermac_page
-        or is_neoscorpion_page
-        or is_neorain_page
-        or (is_neosektor_page and not is_neosektor_driver_page)
-    )
-    is_neosektor_landing = is_neosektor_page and normalized_path == "/neosektor"
-    uses_node_header = (
-        uses_motherbrain_header
+    uses_operational_shell = (
+        is_motherbrain_page
         or is_neoermac_page
         or is_neoscorpion_page
+        or is_neosektor_page
         or is_neoreptile_page
         or is_neosubzero_page
         or is_neorain_page
-        or (is_neosektor_page and not is_neosektor_driver_page)
     )
+    uses_node_desktop_shell = (
+        uses_operational_shell and not is_motherbrain_page
+    )
+    is_neosektor_landing = is_neosektor_page and normalized_path == "/neosektor"
+    uses_node_header = uses_operational_shell or uses_motherbrain_header
 
     node_key = _node_key(
         is_neosektor_page=is_neosektor_page,
@@ -253,16 +260,8 @@ def resolve_shell_metadata(
         is_neorain_page=is_neorain_page,
     )
     node_identity = NODE_IDENTITIES[node_key]
-    header_identity_key = (
-        "sektor"
-        if is_neosektor_page
-        else "ermac"
-        if is_neoermac_page
-        else "scorpion"
-        if is_neoscorpion_page
-        else "motherbrain"
-        if uses_motherbrain_header
-        else None
+    header_identity_key = node_key if uses_operational_shell else (
+        "motherbrain" if uses_motherbrain_header else None
     )
     header_identity = (
         NODE_IDENTITIES[header_identity_key] if header_identity_key else None
@@ -287,6 +286,10 @@ def resolve_shell_metadata(
         if is_neoscorpion_page
         else neorain_current_label
         if is_neorain_page
+        else "OPERATIONS"
+        if is_neosubzero_page
+        else "DASHBOARD"
+        if is_neoreptile_page
         else motherbrain_current_label
     )
     has_node_shell_identity = (
@@ -372,6 +375,18 @@ def resolve_shell_metadata(
         else mobile_shell_word
     )
     uses_gateway_mobile_shell = is_rfd_hub_page or has_node_shell_identity
+    operational_shell_supports_board_view = uses_operational_shell and not any(
+        marker in path
+        for marker in (
+            "/settings",
+            "/system-settings",
+            "/permissions",
+            "/gateway-matrix",
+            "/sort-timeline",
+            "/manage-api",
+            "/portal-manage",
+        )
+    )
     uses_google_live_poll_heartbeat = (
         is_rfd_hub_page
         or is_motherbrain_page
@@ -405,7 +420,9 @@ def resolve_shell_metadata(
         "is_neoreptile_page": is_neoreptile_page,
         "is_neosubzero_page": is_neosubzero_page,
         "is_neorain_page": is_neorain_page,
+        "uses_operational_shell": uses_operational_shell,
         "uses_node_desktop_shell": uses_node_desktop_shell,
+        "operational_shell_supports_board_view": operational_shell_supports_board_view,
         "is_neosektor_landing": is_neosektor_landing,
         "is_gateway_matrix_page": is_gateway_matrix_page,
         "is_master_schedule_page": is_master_schedule_page,

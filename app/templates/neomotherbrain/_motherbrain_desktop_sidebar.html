@@ -1,6 +1,9 @@
 {% from "_neo_brand.html" import neo_brand %}
 {% set sidebar_operation = motherbrain_shell_operation if motherbrain_shell_operation is defined else none %}
-<aside class="motherbrain-desktop-side-nav" aria-label="MotherBrain desktop navigation" data-motherbrain-desktop-side-nav>
+<aside class="motherbrain-desktop-side-nav operational-desktop-sidebar node-motherbrain" aria-label="MotherBrain navigation" data-motherbrain-desktop-side-nav data-operational-sidebar>
+    <div class="operational-sidebar-topline">
+        <button class="operational-sidebar-collapse" type="button" data-operational-sidebar-toggle aria-expanded="true" aria-label="Collapse NeoMotherBrain menu"><span aria-hidden="true">‹</span></button>
+    </div>
     <a class="motherbrain-desktop-side-brand" href="{{ url_for('neomotherbrain.operation_detail', operation_id=sidebar_operation.id) if sidebar_operation else url_for('neomotherbrain.manage_sort') }}" aria-label="NeoMotherBrain manage sort">
         <img src="{{ url_for('static', filename=motherbrain_desktop_sidebar_icon) }}" alt="NeoMotherBrain icon" width="256" height="256" decoding="async">
         <span class="motherbrain-sidebar-brand-title neo-brand-title neo-brand neo-brand--motherbrain neo-node-name neo-node-motherbrain brand-inline-name node-motherbrain" aria-label="NeoMotherBrain">
@@ -73,5 +76,10 @@
         {% endif %}
         {% endif %}
 
+    </nav>
+    <nav class="operational-sidebar-utilities" aria-label="Global operational navigation">
+        {% if operational_shell_supports_board_view %}<button class="operational-sidebar-utility" type="button" data-operational-board-toggle aria-expanded="false"><span>▣</span><strong>Board View</strong></button>{% endif %}
+        <a class="operational-sidebar-utility" href="{{ url_for('neomotherbrain.rfd_hub') }}"><span>G</span><strong>NeoGateway</strong></a>
+        <a class="operational-sidebar-utility" href="{{ url_for('auth.portal_dashboard') }}"><span>P</span><strong>NeoPortal</strong></a>
     </nav>
 </aside>

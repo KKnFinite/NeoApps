@@ -21766,6 +21766,15 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
         drop-shadow(0 16px 28px rgba(0, 0, 0, 0.7));
 }
 
+@media (min-width: 901px) {
+    body.operational-shell-page.blueprint-neosektor.neosektor-driver-page .content {
+        height:auto;
+        min-height:100vh;
+        overflow:visible;
+        padding:calc(var(--operational-topbar-height) + 20px) 24px 40px calc(var(--operational-sidebar-width) + 24px);
+    }
+}
+
 /* Portal/User Management: compact, wide access controls without affecting nodes. */
 .portal-email-warning {
     display: flex;
@@ -21878,6 +21887,172 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     .portal-app-access-row,
     .portal-app-access-row.is-neogateway { grid-template-columns: 1fr; gap: 9px; }
     .portal-app-access-row > label > span { display: block; }
+}
+
+/* Shared operational shell. NeoStaffing, NeoGateway, and NeoPortal retain
+   their dedicated shells; these rules activate only on operational nodes. */
+.operational-mobile-header,
+.operational-mobile-drawer,
+.operational-mobile-drawer-scrim,
+.operational-board-exit { display: none; }
+
+@media (min-width: 901px) {
+    body.operational-shell-page {
+        --operational-topbar-height: 64px;
+        --operational-sidebar-width: 248px;
+        background: #07090d;
+    }
+
+    body.operational-shell-page .shell { width: 100%; max-width: none; }
+    body.operational-shell-page .operational-topbar {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: var(--operational-topbar-height);
+        margin: 0;
+        padding: 8px 16px;
+        border: 0;
+        border-bottom: 1px solid rgba(201, 208, 214, .15);
+        border-radius: 0;
+        background: linear-gradient(90deg, rgba(var(--node-rgb), .13), transparent 24%), #080a0e;
+        box-shadow: 0 5px 18px rgba(0,0,0,.38);
+        backdrop-filter: none;
+    }
+    body.operational-shell-page .operational-topbar::before,
+    body.operational-shell-page .operational-topbar::after { display: none; }
+    .operational-app-logo { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; }
+    .operational-app-logo img { width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,.14)); }
+    .operational-topbar-context {
+        display: grid;
+        min-width: 92px;
+        padding: 4px 10px;
+        border-left: 1px solid rgba(201,208,214,.14);
+        color: var(--text);
+        line-height: 1.05;
+        text-decoration: none;
+    }
+    .operational-topbar-context span { color: var(--muted); font-size: .55rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .operational-topbar-context strong { font-size: .73rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+    .operational-topbar-context:hover { color: var(--node-highlight); background: rgba(255,255,255,.035); }
+    .operational-topbar-spacer { flex: 1 1 auto; min-width: 12px; }
+    .operational-topbar .character-switcher-trigger,
+    .operational-account-menu > summary {
+        min-height: 34px;
+        padding: 7px 10px;
+        border: 1px solid rgba(201,208,214,.18);
+        border-radius: 4px;
+        background: #11151b;
+        color: var(--text);
+        font-size: .64rem;
+        font-weight: 850;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+    .operational-account-menu { position: relative; }
+    .operational-account-menu > summary { cursor: pointer; list-style: none; }
+    .operational-account-menu > summary::-webkit-details-marker { display: none; }
+    .operational-account-menu > div { position: absolute; top: calc(100% + 8px); right: 0; display: grid; min-width: 150px; padding: 7px; border: 1px solid rgba(var(--node-rgb), .38); background: #0b0e13; box-shadow: 0 14px 32px rgba(0,0,0,.48); }
+    .operational-account-menu a,.operational-account-menu button { width: 100%; padding: 8px; border: 0; color: var(--text); background: transparent; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+
+    body.operational-shell-page .operational-desktop-sidebar {
+        position: fixed;
+        top: var(--operational-topbar-height);
+        bottom: 0;
+        left: 0;
+        z-index: 999;
+        display: grid;
+        grid-template-rows: auto auto auto minmax(0,1fr) auto;
+        gap: 10px;
+        width: var(--operational-sidebar-width);
+        padding: 10px;
+        overflow: hidden auto;
+        border: 0;
+        border-right: 1px solid rgba(201,208,214,.14);
+        border-radius: 0;
+        background: linear-gradient(180deg, rgba(var(--node-rgb),.15), transparent 24%), #0a0d12;
+        box-shadow: none;
+    }
+    .operational-sidebar-topline { display:flex; justify-content:flex-end; min-height:22px; }
+    .operational-sidebar-collapse { display:grid; place-items:center; width:26px; height:26px; border:1px solid rgba(201,208,214,.2); border-radius:4px; color:var(--text); background:#10151c; cursor:pointer; font-size:1.2rem; line-height:1; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-brand { grid-template-columns: 54px minmax(0,1fr); grid-template-rows: auto; min-height: 64px; padding: 0 4px 10px; gap: 8px; justify-items:start; text-align:left; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-brand img { width:54px; height:54px; min-width:54px; min-height:54px; max-width:54px; max-height:54px; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-sidebar-brand-title { justify-content:flex-start; width:100%; font-size:1rem; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-context { padding:8px; border-radius:4px; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-menu { gap:4px; overflow:auto; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link { gap:8px; min-height:36px; padding:7px 9px; border-radius:4px; }
+    .operational-side-link-icon { display:grid; place-items:center; width:20px; height:20px; flex:0 0 20px; border:1px solid rgba(var(--node-rgb),.34); border-radius:3px; color:var(--node-highlight); font-size:.58rem; font-weight:950; }
+    .operational-side-link-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .operational-sidebar-utilities { display:grid; gap:4px; padding-top:10px; border-top:1px solid rgba(201,208,214,.16); }
+    .operational-sidebar-utility { display:flex; align-items:center; gap:8px; min-height:34px; padding:7px 8px; border:1px solid rgba(201,208,214,.13); border-radius:4px; color:var(--muted); background:transparent; font:800 .64rem/1 var(--font-sans); letter-spacing:.05em; text-align:left; text-decoration:none; text-transform:uppercase; cursor:pointer; }
+    .operational-sidebar-utility:hover,.operational-sidebar-utility:focus-visible { color:var(--text); border-color:rgba(var(--node-rgb),.5); outline:0; background:rgba(var(--node-rgb),.1); }
+    .operational-sidebar-utility span { display:grid; place-items:center; width:18px; color:var(--node-highlight); }
+    .operational-sidebar-utility strong { font:inherit; }
+    body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:calc(var(--operational-topbar-height) + 20px) 24px 40px calc(var(--operational-sidebar-width) + 24px); }
+    body.operational-shell-page.operational-sidebar-collapsed { --operational-sidebar-width: 68px; }
+    body.operational-shell-page.operational-sidebar-collapsed .operational-sidebar-collapse span { transform: rotate(180deg); }
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-brand { grid-template-columns:1fr; justify-items:center; }
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-sidebar-brand-title,
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-context,
+    body.operational-shell-page.operational-sidebar-collapsed .operational-side-link-label,
+    body.operational-shell-page.operational-sidebar-collapsed .operational-sidebar-utility strong { display:none; }
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-link,
+    body.operational-shell-page.operational-sidebar-collapsed .operational-sidebar-utility { justify-content:center; padding-inline:4px; }
+    body.operational-shell-page.operational-board-view .operational-topbar,
+    body.operational-shell-page.operational-board-view .operational-desktop-sidebar { display:none; }
+    body.operational-shell-page.operational-board-view .content { padding:18px; }
+    .operational-board-exit { position:fixed; top:8px; left:8px; z-index:1100; width:28px; height:28px; padding:0; border:1px solid rgba(201,208,214,.3); border-radius:0 0 5px 0; color:var(--text); background:rgba(5,7,10,.78); cursor:pointer; }
+    body.operational-board-view .operational-board-exit { display:grid; place-items:center; }
+}
+
+@media (max-width: 900px) {
+    body.operational-shell-page { background:#07090d; }
+    body.operational-shell-page > .shell { width:100%; max-width:none; }
+    body.operational-shell-page .operational-topbar,
+    body.operational-shell-page .operational-desktop-sidebar { display:none !important; }
+    .operational-mobile-header { position:fixed; inset:0 0 auto; z-index:1100; display:grid; grid-template-columns:42px minmax(0,1fr) auto; align-items:center; min-height:58px; padding:7px max(10px, env(safe-area-inset-right)) 7px max(10px, env(safe-area-inset-left)); border-bottom:1px solid rgba(201,208,214,.16); background:#090c11; box-shadow:0 5px 16px rgba(0,0,0,.36); transform:translateY(0); transition:transform 180ms ease; }
+    body.operational-mobile-header-hidden .operational-mobile-header { transform:translateY(calc(-100% - 1px)); }
+    .operational-mobile-menu-button { width:36px; height:36px; border:1px solid rgba(var(--node-rgb),.42); border-radius:4px; color:var(--text); background:#121820; cursor:pointer; font-size:1rem; }
+    .operational-mobile-identity { display:flex; align-items:center; gap:7px; min-width:0; color:var(--text); text-decoration:none; }
+    .operational-mobile-identity img { width:32px; height:32px; object-fit:contain; }
+    .operational-mobile-identity span { display:grid; min-width:0; }
+    .operational-mobile-identity strong,.operational-mobile-identity small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .operational-mobile-identity strong { font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; }
+    .operational-mobile-identity small { color:var(--muted); font-size:.57rem; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+    .operational-mobile-actions { display:flex; align-items:center; gap:5px; }
+    .operational-mobile-account-menu { position:relative; }
+    .operational-mobile-account-menu summary { display:grid; place-items:center; width:34px; height:34px; border:1px solid rgba(201,208,214,.25); border-radius:50%; color:var(--text); background:#171c24; cursor:pointer; font-size:.7rem; font-weight:900; list-style:none; }
+    .operational-mobile-account-menu summary::-webkit-details-marker { display:none; }
+    .operational-mobile-account-menu div { position:absolute; top:calc(100% + 7px); right:0; display:grid; min-width:130px; padding:6px; border:1px solid rgba(var(--node-rgb),.38); background:#0b0e13; box-shadow:0 14px 28px rgba(0,0,0,.46); }
+    .operational-mobile-account-menu a,.operational-mobile-account-menu button { width:100%; padding:8px; border:0; color:var(--text); background:transparent; font:inherit; text-align:left; }
+    body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:72px 10px calc(18px + env(safe-area-inset-bottom)); }
+    .operational-mobile-drawer-scrim { position:fixed; inset:0; z-index:1110; border:0; background:rgba(0,0,0,.62); }
+    .operational-mobile-drawer { position:fixed; inset:0 auto 0 0; z-index:1120; display:grid; grid-template-rows:auto minmax(0,1fr) auto auto; width:min(330px, calc(100vw - 44px)); padding:max(14px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom)); overflow:auto; border-right:1px solid rgba(var(--node-rgb),.4); background:linear-gradient(180deg, rgba(var(--node-rgb),.16), transparent 22%), #0a0d12; box-shadow:18px 0 35px rgba(0,0,0,.5); transform:translateX(-104%); transition:transform 190ms ease; }
+    .operational-mobile-drawer.is-open { transform:translateX(0); }
+    .operational-mobile-drawer-brand { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid rgba(201,208,214,.16); color:var(--text); font-size:.92rem; font-weight:900; letter-spacing:.06em; text-transform:uppercase; }
+    .operational-mobile-drawer-brand img { width:52px; height:52px; object-fit:contain; }
+    .operational-mobile-drawer-nav { display:grid; align-content:start; gap:4px; padding:12px 0; }
+    .operational-mobile-drawer-nav a,.operational-mobile-drawer-utilities > a,.operational-mobile-drawer-utilities button,.operational-mobile-drawer-utilities .character-switcher-trigger { display:flex; align-items:center; width:100%; min-height:40px; padding:9px 10px; border:1px solid rgba(201,208,214,.12); border-radius:4px; color:var(--text); background:rgba(255,255,255,.025); font:800 .7rem/1 var(--font-sans); letter-spacing:.05em; text-decoration:none; text-transform:uppercase; }
+    .operational-mobile-drawer-context { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:10px 0; border-top:1px solid rgba(201,208,214,.16); }
+    .operational-mobile-drawer-context a { display:grid; gap:3px; padding:8px; color:var(--text); border:1px solid rgba(var(--node-rgb),.28); background:#10151c; text-decoration:none; }
+    .operational-mobile-drawer-context span { color:var(--muted); font-size:.55rem; font-weight:850; letter-spacing:.1em; text-transform:uppercase; }
+    .operational-mobile-drawer-context strong { font-size:.68rem; text-transform:uppercase; }
+    .operational-mobile-drawer-utilities { display:grid; gap:5px; padding-top:10px; border-top:1px solid rgba(201,208,214,.16); }
+    .operational-mobile-drawer-utilities .character-switcher { width:100%; }
+    .operational-mobile-drawer-utilities .character-switcher-panel { position:static; width:100%; margin-top:5px; }
+    .operational-mobile-drawer-utilities form { margin:0; }
+    body.operational-shell-page.operational-board-view .operational-mobile-header { display:none; }
+    body.operational-shell-page.operational-board-view .content { padding-top:12px; }
+    .operational-board-exit { position:fixed; top:4px; left:4px; z-index:1200; width:26px; height:26px; padding:0; border:1px solid rgba(201,208,214,.3); border-radius:0 0 4px 0; color:var(--text); background:rgba(5,7,10,.8); cursor:pointer; }
+    body.operational-board-view .operational-board-exit { display:grid; place-items:center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .operational-mobile-header,
+    .operational-mobile-drawer { transition:none; }
 }
 
 /* State messages are not routing instructions: remove their arrow entirely. */
@@ -31937,5 +32112,29 @@ body.neosubzero-ucc-tv-mode { background:#06101a; } body.neosubzero-ucc-tv-mode 
     .neosubzero-staffing-search button,
     .neosubzero-staffing-table button {
         min-height: 42px;
+    }
+}
+
+/* The shared shell owns node navigation.  Retire legacy in-page menus only
+   while this shell is active; their original pages remain untouched elsewhere. */
+body.operational-shell-page .neoscorpion-menu-control,
+body.operational-shell-page .neoscorpion-menu-scrim,
+body.operational-shell-page .neoscorpion-screen-menu,
+body.operational-shell-page .neosektor-internal-menu,
+body.operational-shell-page .neosubzero-nav { display:none !important; }
+
+/* This declaration intentionally follows the legacy Scorpion overlay block. */
+@media (min-width: 901px) {
+    body.operational-shell-page.neoscorpion-node-page .operational-desktop-sidebar {
+        transform: none;
+        pointer-events: auto;
+    }
+
+    body.operational-shell-page.neoscorpion-node-page .content {
+        padding-left: calc(var(--operational-sidebar-width) + 24px);
+    }
+
+    body.operational-shell-page.neoscorpion-node-page.operational-sidebar-collapsed .content {
+        padding-left: calc(var(--operational-sidebar-collapsed-width) + 24px);
     }
 }

@@ -58,12 +58,8 @@
         </div>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
-    <div class="neoscorpion-dispatch-board-control">
-        <button type="button" class="neoscorpion-dispatch-board-toggle" data-dispatch-board-toggle aria-expanded="true">BOARD VIEW</button>
-    </div>
-
     <section class="neoscorpion-panel">
-        <div data-dispatch-board-area>
+        <div>
         <div class="neoscorpion-panel-head">
             <span>Current Sort Operation</span>
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
