@@ -1393,6 +1393,8 @@ def _apply_gateway_membership_edit_form(
                 bypass_email_verification=bypass_email_verification,
             )
         membership.is_active = is_active
+        if membership.is_active:
+            _restore_approved_membership_operational_state(membership)
     elif status == "denied":
         _deny_membership(
             membership,
@@ -1725,6 +1727,17 @@ def _neogateway_seed_role_for_membership(user, membership):
 
 
 def _apply_node_role_form(target_user, membership):
+    if not _membership_is_approved_active(membership):
+        raise ValueError("User must have approved RFD gateway access before assigning node roles.")
+
+    # A role edit must work for every canonical approved membership, including
+    # one approved by the explicit email-verification override.  Seed any
+    # missing active NeoNodes before applying independent changes.
+    seed_gateway_node_roles(
+        membership,
+        _neogateway_seed_role_for_membership(target_user, membership),
+        overwrite_existing=False,
+    )
     nodes = NeoNode.query.filter_by(is_active=True).all()
     existing_roles = {
         role.node_id: role
@@ -1912,6 +1925,21 @@ def _membership_is_approved_active(membership):
         and membership.gateway
         and membership.gateway.is_active
     )
+
+
+def _restore_approved_membership_operational_state(membership):
+    """Keep an approved active RFD membership usable for independent roles."""
+    if not _membership_is_approved_active(membership):
+        return
+    if not membership.gateway or membership.gateway.code != get_current_gateway().code:
+        return
+
+    app_access = ensure_user_app_access(membership.user, "neogateway")
+    app_access.status = "approved"
+    app_access.is_active = True
+    if app_access.role not in ROLE_CHOICES:
+        app_access.role = "watcher"
+    seed_gateway_node_roles(membership, app_access.role, overwrite_existing=False)
 
 
 def _approve_membership(

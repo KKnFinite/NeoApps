@@ -352,18 +352,43 @@ class AuthAccountFlowsTest(unittest.TestCase):
             data={"bypass_email_verification": "1", "approval_notes": "Operational need."},
             follow_redirects=False,
         )
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        detail = self.client.get(f"/portal/manage/users/{user.id}")
+        edit = self.client.get(f"/portal/manage/users/{user.id}/edit")
+        role_save = self.client.post(
+            f"/portal/manage/users/{user.id}/roles",
+            data={f"node_{motherbrain.id}": "master"},
+            follow_redirects=False,
+        )
         db.session.expire_all()
         updated_membership = db.session.get(GatewayMembership, membership.id)
         updated_user = db.session.get(User, user.id)
+        motherbrain_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=motherbrain.id,
+        ).one()
+        sektor_role = GatewayNodeRole.query.filter_by(
+            gateway_membership_id=membership.id,
+            node_id=sektor.id,
+        ).one()
 
         self.assertEqual(review.status_code, 200)
         self.assertIn(b"EMAIL UNVERIFIED", review.data)
         self.assertIn(b"APPROVE WITHOUT VERIFICATION", review.data)
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn(b"MANAGE NODE ROLES", detail.data)
+        self.assertEqual(edit.status_code, 200)
+        self.assertIn(f'name="node_{motherbrain.id}"'.encode(), edit.data)
+        self.assertEqual(role_save.status_code, 302)
         self.assertEqual(updated_membership.status, "approved")
+        self.assertTrue(updated_membership.is_active)
         self.assertIsNone(updated_user.email_verified_at)
         self.assertIn("EMAIL VERIFICATION BYPASS", updated_membership.approval_notes)
         self.assertIsNotNone(get_valid_token_record(raw_token, EMAIL_VERIFICATION))
+        self.assertEqual(motherbrain_role.role, "master")
+        self.assertEqual(sektor_role.role, "watcher")
         self.assertEqual(
             GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
             len(DEFAULT_NEONODES),
@@ -399,6 +424,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(blocked.status_code, 400)
+        self.assertIn(b"portal-app-access-matrix", blocked.data)
+        self.assertIn(b"Access only \xc2\xb7 RFD NeoNode roles are managed below.", blocked.data)
+        self.assertNotIn(b'name="app_role_neogateway"', blocked.data)
         self.assertIsNone(
             PortalAppAccess.query.filter_by(
                 user_id=target.id,
@@ -421,6 +449,49 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertEqual(approved.status_code, 302)
         self.assertIsNone(db.session.get(User, target.id).email_verified_at)
         self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "pending")
+
+    def test_reactivating_approved_gateway_membership_restores_canonical_node_roles(self):
+        administrator = self._admin("reactivate_roles_admin", "grandmaster")
+        target, membership = self._pending_user(
+            "reactivate_roles_target",
+            "reactivate-roles@example.com",
+            verified=False,
+        )
+        membership.status = "approved"
+        membership.is_active = False
+        db.session.commit()
+        self._login(administrator.username)
+
+        response = self.client.post(
+            f"/portal/manage/users/{target.id}/edit",
+            data={
+                "first_name": target.first_name,
+                "last_name": target.last_name,
+                "employee_id": target.employee_id,
+                "email": target.email,
+                "supervisor_name": "",
+                "work_area": "",
+                "access_reason": "",
+                "membership_status": "approved",
+                "membership_is_active": "1",
+            },
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+        app_access = PortalAppAccess.query.filter_by(
+            user_id=target.id,
+            app_code="neogateway",
+        ).one()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(db.session.get(GatewayMembership, membership.id).is_active)
+        self.assertEqual(app_access.status, "approved")
+        self.assertTrue(app_access.is_active)
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
+            len(DEFAULT_NEONODES),
+        )
+        self.assertIsNone(db.session.get(User, target.id).email_verified_at)
 
     def test_denial_sends_no_email(self):
         grandmaster = self._admin("grand_admin", "grandmaster")

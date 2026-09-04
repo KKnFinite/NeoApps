@@ -3,7 +3,7 @@
 {% block title %}{{ target_user.display_name }} | User Management{% endblock %}
 
 {% block content %}
-<section class="panel centered-command-page">
+<section class="panel centered-command-page portal-user-detail-page">
     <div class="section-heading">
         <h1>{{ target_user.display_name }}</h1>
         <p class="muted">{{ target_user.employee_id or target_user.email or "" }}</p>
@@ -11,7 +11,7 @@
 
     <div class="action-row">
         <a class="action-button" href="{{ url_for('auth.edit_user', user_id=target_user.id) }}">EDIT USER</a>
-        {% if membership and membership.status == "approved" and membership.is_active %}
+        {% if membership and membership.status == "approved" and membership.is_active and can_edit_user %}
         <a class="action-button" href="{{ url_for('auth.user_roles', user_id=target_user.id) }}">MANAGE NODE ROLES</a>
         {% endif %}
         {% if target_user.id != current_user.id %}

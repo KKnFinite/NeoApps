@@ -21766,15 +21766,17 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 
 /* Portal/User Management: compact, wide access controls without affecting nodes. */
 .portal-email-warning {
-    display: grid;
-    gap: 4px;
-    margin: 0 0 12px;
-    border: 1px solid #9c4a75;
-    border-left: 4px solid #d45a91;
-    background: rgba(75, 18, 48, .36);
-    color: #ffd5e8;
-    padding: 10px 12px;
-    font-size: .78rem;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 9px;
+    margin: 0 0 10px;
+    border: 1px solid rgba(191, 68, 119, .58);
+    border-left: 3px solid #c2477c;
+    background: rgba(25, 12, 20, .88);
+    color: #f4c8dd;
+    padding: 7px 10px;
+    font-size: .72rem;
 }
 
 .portal-email-unverified,
@@ -21799,33 +21801,79 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .portal-override-action { cursor: pointer; }
 .portal-unverified-copy { color: #e8b4cc; font-size: .62rem; }
 
-.portal-app-access-grid {
+.portal-user-edit-page,
+.portal-user-detail-page {
+    width: min(1180px, calc(100vw - 32px));
+    max-width: 1180px;
+}
+
+.portal-app-access-matrix {
+    overflow: hidden;
+    border: 1px solid rgba(171, 67, 112, .42);
+    border-radius: 6px;
+    background: #0e0e12;
+}
+
+.portal-app-access-header,
+.portal-app-access-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    grid-template-columns: minmax(150px, 1.15fr) minmax(130px, .78fr) minmax(130px, .78fr) minmax(78px, .48fr) minmax(220px, 1.5fr);
     gap: 10px;
+    align-items: center;
 }
 
-.portal-app-access-card {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 7px 10px;
-    align-items: end;
+.portal-app-access-header {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(171, 67, 112, .34);
+    background: #171319;
+    color: #c594aa;
+    font-size: .62rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+}
+
+.portal-app-access-row {
     min-width: 0;
-    border: 1px solid rgba(172, 78, 132, .5);
-    background: rgba(33, 13, 29, .5);
-    padding: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+    background: #101014;
 }
 
-.portal-app-access-card > strong { grid-column: 1 / -1; color: #ffe0ef; }
-.portal-app-access-card > small { color: #e7a8c6; }
-.portal-app-access-card > label { display: grid; gap: 4px; min-width: 0; }
-.portal-app-access-card > label > span { color: #e7a8c6; font-size: .62rem; font-weight: 800; letter-spacing: .06em; }
-.portal-app-access-notes { grid-column: 1 / -1; }
+.portal-app-access-row:last-child { border-bottom: 0; }
+.portal-app-identity { display: grid; gap: 3px; min-width: 0; }
+.portal-app-identity strong { color: #f6e8ee; }
+.portal-app-identity small,
+.portal-app-access-only { color: #bba6ae; font-size: .67rem; }
+.portal-app-access-row > label { display: grid; gap: 3px; min-width: 0; }
+.portal-app-access-row > label > span { color: #b998a8; font-size: .58rem; font-weight: 900; letter-spacing: .06em; }
+.portal-app-access-row select,
+.portal-app-access-row input {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    border: 1px solid #493441;
+    background: #08080b;
+    color: #f7eaf0;
+}
+.portal-app-access-row select:focus,
+.portal-app-access-row input:focus { border-color: #c44d82; outline: 2px solid rgba(196, 77, 130, .22); }
+.portal-app-active-field { display: inline-flex !important; align-items: center; gap: 7px !important; }
+.portal-app-active-field > span { color: #ead7df !important; font-size: .68rem !important; }
+.portal-app-active-field input { width: auto; min-height: 0; accent-color: #be477d; }
 .portal-bypass-checkbox { display: grid; gap: 4px; margin-top: 10px; color: #ffd5e8; }
 .portal-bypass-checkbox small { color: #d7aac0; }
 
+@media (min-width: 701px) {
+    .portal-app-access-row > label > span { display: none; }
+}
+
 @media (max-width: 700px) {
-    .portal-app-access-card { grid-template-columns: 1fr; }
+    .portal-user-edit-page,
+    .portal-user-detail-page { width: min(100% - 18px, 1180px); }
+    .portal-app-access-header { display: none; }
+    .portal-app-access-row,
+    .portal-app-access-row.is-neogateway { grid-template-columns: 1fr; gap: 9px; }
+    .portal-app-access-row > label > span { display: block; }
 }
 
 /* State messages are not routing instructions: remove their arrow entirely. */
