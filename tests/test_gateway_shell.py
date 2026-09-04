@@ -79,8 +79,15 @@ class GatewayShellTest(unittest.TestCase):
         self.assertIn(b"images/logos/newlogo_motherbrain_small.png", response.data)
         self.assertIn(b"images/logos/newlogo_sektor_small.png", response.data)
         self.assertIn(b"images/logos/newlogo_reptile_small.png", response.data)
-        self.assertIn(b"Operational Command &amp; Planning", response.data)
+        self.assertIn(b"Operational Brain", response.data)
+        self.assertIn(b"Inbound Ops", response.data)
+        self.assertIn(b"Shift Ops", response.data)
+        self.assertIn(b"Fueling Ops \xc2\xb7 SPEAR", response.data)
+        self.assertIn(b"Load Planning Ops", response.data)
+        self.assertIn(b"Deice Ops \xc2\xb7 FROST", response.data)
+        self.assertIn(b"Ramp Ops", response.data)
         self.assertIn(b"Coming Soon", response.data)
+        self.assertNotIn(b">Available<", response.data)
         self.assertIn(b"js/gateway_shell.js", response.data)
 
     def test_gateway_preserves_operation_forwarding_for_node_launches(self):
