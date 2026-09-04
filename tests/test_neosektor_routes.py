@@ -35,6 +35,7 @@ from app.services.password_policy import set_user_password
 from app.services.gateway_matrix import save_gateway_matrix
 from app.services.neosektor_live_counts import (
     _active_wave_left_to_unload,
+    _driver_wave_route,
     driver_routing_state_payload,
 )
 from app.services.sort_timeline import ensure_sort_timeline_settings
@@ -1391,6 +1392,17 @@ class NeoSektorRoutesTest(unittest.TestCase):
         routing = response.get_json()["state"]["routing"]
         self.assertEqual(routing["routes"]["first"]["target"], "West Ballmat Stay Left")
         self.assertEqual(routing["routes"]["second"]["target"], "West Ballmat Stay Left")
+
+    def test_driver_routing_uses_open_bay_capacity_as_net_pressure(self):
+        west_capacity_route = _driver_wave_route(2, 0, 0, 9, 0)
+        east_capacity_route = _driver_wave_route(8, 3, 7, 0, 0)
+        no_open_bay_route = _driver_wave_route(6, 4, 0, 0, 0)
+        offset_route = _driver_wave_route(6, 4, 0, 0, 2)
+
+        self.assertEqual(west_capacity_route["direction"], "west")
+        self.assertEqual(east_capacity_route["direction"], "east")
+        self.assertEqual(no_open_bay_route["direction"], "west")
+        self.assertEqual(offset_route["direction"], "east")
 
     def test_driver_routing_west_offset_changes_standalone_threshold_output(self):
         self._login_approved_user(role="simulator")

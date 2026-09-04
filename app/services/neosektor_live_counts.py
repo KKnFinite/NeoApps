@@ -1855,20 +1855,14 @@ def _driver_routing_calculation(gateway, sort_state, sides, waves, driver_routes
 
 
 def _driver_wave_route(east_value, west_value, east_open_bays, west_open_bays, west_offset):
-    if east_value == 0 and west_value == 0:
-        if east_open_bays >= west_open_bays:
-            return {
-                "target": "East Ballmat Stay Right",
-                "direction": "east",
-                "arrow": "right",
-            }
-        return {
-            "target": "West Ballmat Stay Left",
-            "direction": "west",
-            "arrow": "left",
-        }
+    # Open bays are available capacity, so route to the lower net pressure.
+    # Keep the West offset as a routing-only threshold bias; it never changes
+    # the persisted/count displays used elsewhere in Sektor.
+    east_pressure = max(east_value or 0, 0) - max(east_open_bays or 0, 0)
+    west_pressure = max(west_value or 0, 0) - max(west_open_bays or 0, 0)
+    effective_west_pressure = west_pressure + max(west_offset or 0, 0)
 
-    if east_value <= west_value + west_offset:
+    if east_pressure <= effective_west_pressure:
         return {
             "target": "East Ballmat Stay Right",
             "direction": "east",
