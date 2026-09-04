@@ -13,6 +13,7 @@ from app.models import (
     GatewayMembership,
     GatewayNodeRole,
     NeoNode,
+    PermissionRule,
     PortalAppAccess,
     User,
     UserToken,
@@ -492,6 +493,82 @@ class AuthAccountFlowsTest(unittest.TestCase):
             len(DEFAULT_NEONODES),
         )
         self.assertIsNone(db.session.get(User, target.id).email_verified_at)
+
+    def test_portal_grandmaster_can_raise_bypass_approved_user_roles_without_node_role_shortcut(self):
+        administrator = self._user("canonical_portal_admin", verified=True)
+        administrator.role = "grandmaster"
+        # Reproduce the production state: system-level Portal authority is
+        # Grandmaster while the current MotherBrain node role is only Watcher.
+        backfill_default_gateway_node_roles(administrator, role="watcher")
+        target, membership = self._pending_user(
+            "canonical_bypass_target",
+            "canonical-bypass@example.com",
+            verified=False,
+        )
+        db.session.commit()
+        self._login(administrator.username)
+
+        self.client.post(
+            f"/admin/access-requests/{membership.id}/approve",
+            data={"bypass_email_verification": "1"},
+            follow_redirects=False,
+        )
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
+        sektor = NeoNode.query.filter_by(code="sektor").one()
+        edit = self.client.get(f"/portal/manage/users/{target.id}/edit")
+        saved = self.client.post(
+            f"/portal/manage/users/{target.id}/roles",
+            data={f"node_{motherbrain.id}": "master"},
+            follow_redirects=False,
+        )
+        db.session.expire_all()
+
+        self.assertIn(f'<option value="master"'.encode(), edit.data)
+        self.assertIn(f'<option value="grandmaster"'.encode(), edit.data)
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(
+                gateway_membership_id=membership.id,
+                node_id=motherbrain.id,
+            ).one().role,
+            "master",
+        )
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(
+                gateway_membership_id=membership.id,
+                node_id=sektor.id,
+            ).one().role,
+            "watcher",
+        )
+        self.assertIsNone(db.session.get(User, target.id).email_verified_at)
+
+    def test_role_assignment_cannot_reach_an_actor_authority_level(self):
+        PermissionRule.query.filter_by(
+            permission_key="neoapps.user_management.edit",
+        ).one().minimum_role = "master"
+        administrator = self._admin("bounded_role_admin", "master")
+        target, membership = self._approved_user(
+            "bounded_role_target",
+            "bounded-role@example.com",
+        )
+        db.session.commit()
+        self._login(administrator.username)
+        motherbrain = NeoNode.query.filter_by(code="motherbrain").one()
+
+        response = self.client.post(
+            f"/portal/manage/users/{target.id}/roles",
+            data={f"node_{motherbrain.id}": "master"},
+            follow_redirects=True,
+        )
+
+        self.assertIn(b"You cannot assign a role equal to or higher", response.data)
+        self.assertEqual(
+            GatewayNodeRole.query.filter_by(
+                gateway_membership_id=membership.id,
+                node_id=motherbrain.id,
+            ).one().role,
+            "watcher",
+        )
 
     def test_denial_sends_no_email(self):
         grandmaster = self._admin("grand_admin", "grandmaster")

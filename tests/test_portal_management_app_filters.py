@@ -276,6 +276,19 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         self.assertIn("EMAIL UNVERIFIED", html)
         self.assertIn("APPROVE WITHOUT VERIFICATION", html)
 
+    def test_user_search_renders_nonwrapping_edit_user_action(self):
+        target = self._user("edit_button_target", verified=True)
+        db.session.commit()
+
+        response = self.client.get(
+            "/portal/manage/users/edit-users",
+            query_string={"q": target.email},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="portal-edit-action"', response.get_data(as_text=True))
+        self.assertIn("EDIT USER", response.get_data(as_text=True))
+
     def _assert_filter_redirect(self, location):
         parsed = urlparse(location)
         query = parse_qs(parsed.query)

@@ -42,7 +42,7 @@
                 <td data-label="Last Login">{{ row.user.last_login|local_datetime if row.user.last_login else "Never" }}</td>
                 <td class="action-cell" data-label="">
                     <div class="table-actions">
-                        <a class="portal-edit-action" href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">EDIT</a>
+                        <a class="portal-edit-action" href="{{ url_for('auth.edit_user', user_id=row.user.id) }}">EDIT USER</a>
                     </div>
                 </td>
             </tr>

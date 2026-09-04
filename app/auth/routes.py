@@ -1836,24 +1836,23 @@ def _guard_role_assignment_allowed(selected_role, existing_role):
 
 
 def _current_user_can_assign_role(role):
-    if role not in ROLE_LEVELS:
+    if role not in ROLE_LEVELS or not user_can(USER_MANAGEMENT_EDIT_PERMISSION):
         return False
 
-    if _is_kessler_account(current_user):
-        return ROLE_LEVELS[role] <= ROLE_LEVELS["grandmaster"]
-
-    current_role = get_user_node_role(current_user, get_current_gateway().code, "motherbrain")
-    current_level = ROLE_LEVELS.get(current_role, 0)
-    return ROLE_LEVELS[role] < current_level
-
-
-def _is_kessler_account(user):
-    identifiers = {
-        (getattr(user, "username", "") or "").strip().lower(),
-        (getattr(user, "email", "") or "").strip().lower(),
-        (getattr(user, "employee_id", "") or "").strip().lower(),
-    }
-    return "kessler" in identifiers or "kessler@local.neoapps" in identifiers
+    # User-management authority is a NeoApps system permission, whose
+    # canonical role is the account role.  A user's current MotherBrain node
+    # role may be lower (or temporarily unavailable) without reducing the
+    # authority already granted by that centralized permission.
+    system_role = getattr(current_user, "role", None)
+    system_level = ROLE_LEVELS.get(system_role, 0)
+    node_role = get_user_node_role(
+        current_user,
+        get_current_gateway().code,
+        "motherbrain",
+    )
+    authority_level = max(system_level, ROLE_LEVELS.get(node_role, 0))
+    requested_level = ROLE_LEVELS[role]
+    return requested_level <= authority_level if authority_level == ROLE_LEVELS["grandmaster"] else requested_level < authority_level
 
 
 def _would_remove_last_grandmaster(node, selected_role, existing_role):

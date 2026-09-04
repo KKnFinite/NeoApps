@@ -2490,13 +2490,15 @@ a {
     .portal-management-page .user-role-table th:nth-child(8) { width: 8%; }
     .portal-management-page .user-role-table th:nth-child(9) { width: 4%; }
 
-    .all-users-table th:nth-child(1) { width: 14%; }
-    .all-users-table th:nth-child(2) { width: 12%; }
-    .all-users-table th:nth-child(3) { width: 16%; }
-    .all-users-table th:nth-child(4) { width: 18%; }
-    .all-users-table th:nth-child(5) { width: 9%; }
-    .all-users-table th:nth-child(6) { width: 23%; }
-    .all-users-table th:nth-child(7) { width: 8%; }
+    .all-users-table th:nth-child(1) { width: 12%; }
+    .all-users-table th:nth-child(2) { width: 9%; }
+    .all-users-table th:nth-child(3) { width: 14%; }
+    .all-users-table th:nth-child(4) { width: 12%; }
+    .all-users-table th:nth-child(5) { width: 8%; }
+    .all-users-table th:nth-child(6) { width: 9%; }
+    .all-users-table th:nth-child(7) { width: 17%; }
+    .all-users-table th:nth-child(8) { width: 8%; }
+    .all-users-table th:nth-child(9) { width: 11%; }
 
     .portal-management-page .data-table th,
     .portal-management-page .data-table td {
@@ -21800,6 +21802,8 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
 .portal-email-unverified { min-height: auto; padding: 3px 6px; }
 .portal-override-action { cursor: pointer; }
 .portal-unverified-copy { color: #e8b4cc; font-size: .62rem; }
+.all-users-table .action-cell { min-width: 96px; overflow-wrap: normal; }
+.all-users-table .portal-edit-action { min-width: 94px; white-space: nowrap; }
 
 .portal-user-edit-page,
 .portal-user-detail-page {
