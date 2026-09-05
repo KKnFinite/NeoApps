@@ -11,7 +11,7 @@
         <div class="neoscorpion-panel-head"><span>Current Sort</span><strong>{{ spear_calibration.label }}</strong></div>
         {% if not operation %}<p class="neoscorpion-empty">No current sort is available.</p>{% endif %}
         <div class="neoscorpion-spear-calibration-list">
-        {% for item in spear_calibration.items %}
+        {% for item in spear_calibration["items"] %}
             <article>
                 <strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong>
                 <span>Configured {{ item.configured if item.configured is not none else '-' }} · Observed {{ item.observed if item.observed is not none else '-' }} · SPEAR Using {{ item.effective if item.effective is not none else '-' }}</span>

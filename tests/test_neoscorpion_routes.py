@@ -482,6 +482,36 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"SPEAR CALIBRATION \xc2\xb7 1 ACTIVE", response.data)
         self.assertIn(b"Setup Minutes \xc2\xb7 B757", response.data)
 
+    def test_standalone_spear_calibration_renders_empty_items(self):
+        self._login_approved_user(role="master")
+        with patch("app.neonodes.neoscorpion.routes.fuel_dispatch_context", return_value={
+            "operation": None,
+            "spear_calibration": {"label": "SPEAR CALIBRATION · COLLECTING", "items": []},
+        }):
+            response = self.client.get("/neoscorpion/settings/spear/calibration")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Collecting qualifying completed current-sort work.", response.data)
+
+    def test_standalone_spear_calibration_renders_populated_items(self):
+        from app.services.neoscorpion_spear_calibration import LiveCalibration
+        self._login_approved_user(role="master")
+        item = LiveCalibration(
+            metric="setup_minutes", scope_key="B757", configured=Decimal("5"),
+            observed=Decimal("7"), effective=Decimal("6"), samples=3, excluded_samples=0,
+            first_observation_utc=None, most_recent_observation_utc=None,
+            observations=(), excluded_observations=(),
+        )
+        with patch("app.neonodes.neoscorpion.routes.fuel_dispatch_context", return_value={
+            "operation": None,
+            "spear_calibration": {"label": "SPEAR CALIBRATION · 1 ACTIVE", "items": [item]},
+        }):
+            response = self.client.get("/neoscorpion/settings/spear/calibration")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Setup Minutes · B757".encode(), response.data)
+        self.assertIn(b"Configured 5", response.data)
+        self.assertIn(b"SPEAR Using 6", response.data)
+        self.assertIn(b"3 qualifying", response.data)
+
     def test_vault_test_posts_to_test_route_without_saving_settings(self):
         self._login_approved_user(role="master")
         with (
