@@ -32349,23 +32349,24 @@ body.operational-shell-page .neosubzero-nav { display:none !important; }
     .gateway-page-mobile-context .gateway-sort-control select { min-width:0; max-width:100%; font:850 .72rem/1.2 var(--font-sans); }
     .gateway-node-launcher { gap:10px; }
     .gateway-node-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:9px; }
-    .gateway-node-card { grid-template-rows:auto minmax(0, 1fr) auto; min-height:128px; padding:10px; gap:6px; border-left-width:2px; }
+    .gateway-node-card { grid-template-rows:auto minmax(0, 1fr) auto; height:clamp(106px, 14svh, 120px); min-height:0; padding:8px; gap:4px; border-left-width:2px; }
     .gateway-node-mobile-title { display:block; width:100%; min-width:0; line-height:1; overflow:visible; }
     .gateway-node-mobile-title .gateway-node-name { display:inline-flex; width:auto; max-width:100%; min-width:0; overflow:visible; font-size:clamp(.78rem, 3.7vw, .98rem); line-height:1; letter-spacing:.01em; white-space:nowrap; text-overflow:clip; }
     .gateway-node-mobile-title .gateway-node-title--short { font-size:clamp(.84rem, 3.95vw, 1.04rem); }
     .gateway-node-mobile-title .gateway-node-title--medium { font-size:clamp(.8rem, 3.8vw, 1rem); }
     .gateway-node-mobile-title .gateway-node-title--long { font-size:clamp(.76rem, 3.55vw, .94rem); }
     .gateway-node-card-copy .gateway-node-desktop-title { display:none; }
-    .gateway-node-card-main { display:grid; grid-template-columns:44px minmax(0,1fr); align-items:center; gap:7px; width:100%; min-width:0; }
-    .gateway-node-card-icon-wrap { width:44px; height:44px; flex-basis:44px; }
-    .gateway-node-card-icon { width:43px; height:43px; }
+    .gateway-node-card-main { display:grid; grid-template-columns:38px minmax(0,1fr); align-items:center; gap:7px; width:100%; min-width:0; }
+    .gateway-node-card-icon-wrap { width:38px; height:38px; flex-basis:38px; }
+    .gateway-node-card-icon { width:37px; height:37px; }
     .gateway-node-card-copy { gap:4px; min-width:0; }
     .gateway-node-card-copy small { max-width:100%; overflow:visible; font-size:.53rem; line-height:1.2; letter-spacing:.025em; white-space:nowrap; }
-    .gateway-node-action { min-width:82px; padding:7px 9px; border:1px solid rgba(var(--node-rgb),.62); border-radius:5px; background:rgba(var(--node-rgb),.06); text-align:center; }
+    .gateway-node-action { min-width:78px; padding:6px 8px; border:1px solid rgba(var(--node-rgb),.62); border-radius:5px; background:rgba(var(--node-rgb),.06); text-align:center; }
     .gateway-node-availability { font-size:.5rem; letter-spacing:.08em; }
-    .gateway-node-motherbrain { grid-column:1 / -1; min-height:134px; padding:14px; }
+    .gateway-node-motherbrain { grid-column:1 / -1; height:clamp(128px, 16svh, 142px); min-height:0; padding:14px; }
     .gateway-node-motherbrain { grid-template-rows:unset; }
     .gateway-node-motherbrain .gateway-node-mobile-title { display:none; }
+    .gateway-node-motherbrain .gateway-node-card-copy .gateway-node-desktop-title { display:inline-flex; max-width:100%; overflow:visible; white-space:nowrap; }
     .gateway-node-motherbrain .gateway-node-card-icon-wrap { width:66px; height:66px; flex-basis:66px; }
     .gateway-node-motherbrain .gateway-node-card-icon { width:64px; height:64px; }
     .gateway-node-motherbrain .gateway-node-name { font-size:clamp(.96rem, 4.3vw, 1.15rem); }
@@ -32375,10 +32376,10 @@ body.operational-shell-page .neosubzero-nav { display:none !important; }
 }
 
 @media (max-width: 390px) {
-    .gateway-node-card { min-height:124px; padding:9px; }
-    .gateway-node-card-main { grid-template-columns:40px minmax(0,1fr); }
-    .gateway-node-card-icon-wrap { width:40px; height:40px; flex-basis:40px; }
-    .gateway-node-card-icon { width:39px; height:39px; }
+    .gateway-node-card { height:clamp(102px, 14svh, 112px); padding:8px; }
+    .gateway-node-card-main { grid-template-columns:36px minmax(0,1fr); }
+    .gateway-node-card-icon-wrap { width:36px; height:36px; flex-basis:36px; }
+    .gateway-node-card-icon { width:35px; height:35px; }
     .gateway-node-mobile-title .gateway-node-title--short { font-size:clamp(.76rem, 3.55vw, .9rem); }
     .gateway-node-mobile-title .gateway-node-title--medium { font-size:clamp(.72rem, 3.4vw, .86rem); }
     .gateway-node-mobile-title .gateway-node-title--long { font-size:clamp(.68rem, 3.2vw, .82rem); }
