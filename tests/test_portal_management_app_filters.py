@@ -12,6 +12,38 @@ from app.services.permission_rules import ensure_default_permission_rules
 
 
 class PortalManagementAppFiltersTest(unittest.TestCase):
+    def test_launcher_assets_and_two_approved_apps(self):
+        rows = [{'app': app, 'access': {'status':'approved', 'is_active':True}} for app in PORTAL_APPS]
+        with patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=rows):
+            response = self.client.get('/portal')
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        launcher = html.split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
+        self.assertEqual(launcher.count('data-portal-app='), 2)
+        self.assertNotIn('neobid', launcher.lower())
+        for asset in ('hero_neopapps.png', 'hero_neopapps_small.png', 'icon_gateway.png', 'icon_gateway_small.png', 'icon_staffing.png', 'icon_staffing_small.png'):
+            self.assertIn(asset, launcher)
+        self.assertLess(launcher.index('data-portal-app="neogateway"'), launcher.index('data-portal-app="neostaffing"'))
+        self.assertIn('href="/rfd"', launcher)
+        self.assertIn('href="/neostaffing"', launcher)
+        self.assertNotIn('Approved', launcher)
+
+    def test_launcher_pending_remains_non_launchable(self):
+        rows = [{'app': app, 'access': {'status':'pending', 'is_active':True}} for app in PORTAL_APPS]
+        with patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=rows):
+            html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
+        self.assertEqual(html.count('disabled>PENDING REVIEW'), 2)
+        self.assertNotIn('href=', html)
+
+    def test_launcher_other_states_preserve_request_form(self):
+        for access in (None, {'status':'denied','is_active':True}, {'status':'approved','is_active':False}, {'status':'pending','is_active':False}):
+            with self.subTest(access=access), patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=[{'app': app, 'access':access} for app in PORTAL_APPS]):
+                html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
+                self.assertEqual(html.count('action="/portal/request-access"'), 2)
+                self.assertEqual(html.count('name="csrf_token"'), 2)
+                for code in ('neogateway','neostaffing'):
+                    self.assertIn(f'name="app_code" value="{code}"', html)
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",

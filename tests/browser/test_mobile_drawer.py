@@ -347,6 +347,49 @@ class MobileDrawerBrowserTest(unittest.TestCase):
     def test_chromium(self):
         self.run_engine("chromium")
 
+    def test_portal_launcher(self):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080))), ('webkit', ((390,844),))):
+            browser = getattr(self.pw, engine).launch()
+            context = browser.new_context()
+            context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
+            page = context.new_page()
+            page.set_default_timeout(8000)
+            try:
+                self.login(page)
+                for width, height in sizes:
+                    with self.subTest(engine=engine,width=width):
+                        page.set_viewport_size({'width':width,'height':height})
+                        self.ready(page, '/portal')
+                        self.assertEqual(page.locator('[data-portal-app]').count(), 2)
+                        self.assertEqual(page.locator('[data-portal-app="neobid"]').count(), 0)
+                        result = page.evaluate('''() => {
+                            const cards=[...document.querySelectorAll('.portal-launch-card')];
+                            const hero=document.querySelector('.portal-launcher-hero img'), h=hero.getBoundingClientRect();
+                            return {overflow:document.documentElement.scrollWidth>innerWidth,
+                                intact:Math.abs(h.width/h.height-hero.naturalWidth/hero.naturalHeight)<.01,
+                                names:cards.every(c=>{const e=c.querySelector('h2'),r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=c.getBoundingClientRect();return getComputedStyle(e).fontFamily.includes('NeoFont') && t.right<b.right-8 && t.height<=parseFloat(getComputedStyle(e).lineHeight)+1;}),
+                                layout:innerWidth>900 ? Math.abs(cards[0].offsetTop-cards[1].offsetTop)<1 : cards[1].offsetTop>cards[0].offsetTop};
+                        }''')
+                        self.assertEqual(result, {'overflow':False,'intact':True,'names':True,'layout':True})
+                        page.screenshot(path=str(self.evidence / f'{engine}-portal-launcher-{width}.png'))
+                        if width <= 900:
+                            page.evaluate('scrollTo(0,document.documentElement.scrollHeight)')
+                            page.wait_for_function('scrollY >= document.documentElement.scrollHeight-innerHeight-1')
+                            action=page.locator('.portal-launch-action').last.bounding_box()
+                            dock=page.locator('.neo-mobile-bottom').bounding_box()
+                            self.assertLessEqual(action['y']+action['height'],dock['y']-20)
+                            page.screenshot(path=str(self.evidence / f'{engine}-portal-launcher-bottom-{width}.png'))
+                            page.locator('[data-drawer-nodes]').click()
+                            expect(page.locator('[data-drawer-view="nodes"]')).to_be_visible()
+                            page.locator('[data-drawer-toggle]').click()
+                            expect(page.locator('[data-drawer-view="menu"]')).to_be_visible()
+                            expect(page.locator('[data-drawer-view="nodes"]')).to_be_hidden()
+                            self.assertEqual(page.locator('[data-mobile-drawer] [data-operational-board-toggle]').count(),0)
+                            page.keyboard.press('Escape')
+            finally:
+                context.close()
+                browser.close()
+
     def test_desktop_only_board_view(self):
         browser = self.pw.chromium.launch()
         context = browser.new_context(viewport={"width":390,"height":844})
