@@ -98,9 +98,10 @@ class OperationalShellTest(unittest.TestCase):
         self.assertIn("--neo-safe-top: env(safe-area-inset-top, 0px)", css)
         self.assertIn("--operational-mobile-header-height:calc(var(--operational-mobile-controls-height) + var(--neo-safe-top))", css)
         self.assertIn("padding:calc(7px + var(--neo-safe-top))", css)
-        self.assertIn("padding:calc(14px + var(--neo-safe-top))", css)
+        drawer_css = Path(self.app.root_path, "static", "css", "mobile_drawer.css").read_text(encoding="utf-8")
+        self.assertIn("padding:calc(12px + var(--neo-safe-top))", drawer_css)
         self.assertIn("padding:calc(var(--operational-mobile-header-height) + 14px)", css)
-        script = Path(self.app.root_path, "static", "js", "operational_shell.js").read_text(
+        script = Path(self.app.root_path, "static", "js", "mobile_drawer.js").read_text(
             encoding="utf-8"
         )
         self.assertIn("const headerPopoverOpen", script)

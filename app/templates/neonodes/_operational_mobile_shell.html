@@ -1,56 +1,10 @@
 <header class="operational-mobile-header" data-operational-mobile-header>
-    <button class="operational-mobile-menu-button" type="button" data-operational-mobile-menu-toggle aria-expanded="false" aria-controls="operational-mobile-drawer" aria-label="Open {{ node_header_name }} menu"><span aria-hidden="true">☰</span></button>
     <a class="operational-mobile-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
         <img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="34" height="34" decoding="async">
         <span><strong>{{ node_header_name }}</strong><small>{{ node_current_label }}</small></span>
     </a>
     <div class="operational-mobile-actions">
         {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}
-        <details class="operational-mobile-account-menu">
-            <summary aria-label="Account menu">{{ mobile_account_initial }}</summary>
-            <div role="menu"><a href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">Account</a><form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" role="menuitem">Logout</button></form></div>
-        </details>
     </div>
 </header>
-<button class="operational-mobile-drawer-scrim" type="button" data-operational-mobile-menu-close hidden aria-label="Close menu"></button>
-<aside class="operational-mobile-drawer" id="operational-mobile-drawer" aria-label="{{ node_header_name }} menu" data-operational-mobile-drawer aria-hidden="true">
-    <div class="operational-mobile-drawer-brand">
-        <img src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}" width="56" height="56" decoding="async">
-        <span>{{ node_header_name }}</span>
-    </div>
-    <nav class="operational-mobile-drawer-nav" aria-label="{{ node_header_name }} navigation">
-        {% if is_neoermac_page %}
-        <a href="{{ url_for('neoermac.index') }}">Dashboard</a><a href="{{ url_for('neoermac.door_view') }}">Door View</a><a href="{{ url_for('neoermac.building_lineup') }}">Building Lineup</a><a href="{{ url_for('neoermac.view_outbound') }}">View Outbound</a><a href="{{ url_for('neoermac.upcoming_pulls') }}">Upcoming Pulls</a><a href="{{ url_for('neoermac.tug_assignments') }}">Tug Assignments</a>{% if user_can('neoermac.settings.view') %}<a href="{{ url_for('neoermac.settings') }}">Settings</a>{% endif %}
-        {% elif is_neosektor_page %}
-        <a href="{{ url_for('neosektor.index') }}">Dashboard</a>{% for item in neosektor_internal_menu_items() %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
-        {% elif is_neoscorpion_page %}
-        {% for item in neoscorpion_internal_menu_items() %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
-        {% elif is_neorain_page %}
-        {% for item in neorain_menu_items() %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
-        {% elif is_neosubzero_page %}
-        {% for label, endpoint in neosubzero_menu_items() %}<a href="{{ url_for(endpoint) }}">{{ label }}</a>{% endfor %}
-        {% elif is_neoreptile_page %}
-        <a href="{{ url_for('neoreptile.index') }}">Dashboard</a>
-        {% elif is_motherbrain_page %}
-        {% set motherbrain_mobile_item_class = "" %}{% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
-        {% endif %}
-    </nav>
-    <section class="operational-mobile-drawer-context" aria-label="Operational context">
-        <a href="{{ url_for('neomotherbrain.rfd_hub') }}"><span>Gateway</span><strong>{{ default_gateway.code }}</strong></a>
-        <a href="{{ url_for('neomotherbrain.manage_sort') }}"><span>Sort</span><strong>{% if motherbrain_shell_operation %}{{ motherbrain_shell_operation.sort_name|upper }}{% else %}Current Sort{% endif %}</strong></a>
-    </section>
-    <section class="operational-mobile-drawer-utilities" aria-label="Utilities">
-        {% set character_switcher_modifier = "operational-mobile-character-switcher" %}{% set character_switcher_use_neofont = false %}{% include "_change_characters.html" %}
-        {% if operational_shell_supports_board_view %}<button type="button" data-operational-board-toggle aria-expanded="false">Board View</button>{% endif %}
-        <a href="{{ url_for('neomotherbrain.rfd_hub') }}">NeoGateway</a>
-        <a href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>
-        <a href="{{ url_for('auth.portal_dashboard') }}">Account</a>
-        <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
-    </section>
-</aside>
-<nav class="operational-mobile-bottom-nav" aria-label="{{ node_header_name }} mobile navigation">
-    <a href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home"><span aria-hidden="true">⌂</span><span>Home</span></a>
-    <button type="button" data-operational-mobile-character-toggle aria-label="Change Character"><span aria-hidden="true">⇄</span><span>Character</span></button>
-    <button type="button" data-operational-mobile-menu-toggle aria-expanded="false" aria-controls="operational-mobile-drawer" aria-label="Open {{ node_header_name }} menu"><span aria-hidden="true">☰</span><span>Menu</span></button>
-</nav>
 {% if operational_shell_supports_board_view %}<button class="operational-board-exit" type="button" data-operational-board-toggle hidden aria-label="Exit Board View">☰</button>{% endif %}

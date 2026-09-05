@@ -16,6 +16,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('favicon_16') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION) }}">
     <script src="{{ url_for('static', filename='js/live_updates.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script>
@@ -84,6 +85,7 @@
     })();
     </script>
 </head>
+{% set uses_shared_mobile_drawer = uses_operational_shell or is_rfd_hub_page or is_portal_page %}
 <body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>
     <div class="shell">
         {% if uses_operational_shell %}
@@ -370,7 +372,7 @@
                 {% if my_alert_tray %}
                 {% include "_my_alert_tray.html" %}
                 {% endif %}
-                <details class="mobile-account-menu" data-mobile-account-menu>
+                {% if not uses_shared_mobile_drawer %}<details class="mobile-account-menu" data-mobile-account-menu>
                     <summary class="mobile-account-trigger" aria-label="Account menu">
                         <span class="mobile-account-fallback" aria-hidden="true">{{ mobile_account_initial }}</span>
                     </summary>
@@ -383,7 +385,7 @@
                             <button type="submit" role="menuitem">Logout</button>
                         </form>
                     </div>
-                </details>
+                </details>{% endif %}
             </div>
         </header>
         {% endif %}
@@ -413,7 +415,7 @@
             {% block content %}{% endblock %}
         </main>
         {% block page_overlay %}{% endblock %}
-        {% if show_mobile_bottom_nav and not uses_operational_shell %}
+        {% if show_mobile_bottom_nav and not uses_shared_mobile_drawer %}
         <nav class="mobile-bottom-nav node-{{ mobile_shell_key }}" aria-label="Mobile navigation" data-mobile-bottom-nav>
             <a class="mobile-bottom-nav-item mobile-bottom-nav-link" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.2 12 4l9 7.2-1.3 1.5L18 11.3V20h-4.5v-5h-3v5H6v-8.7l-1.7 1.4L3 11.2Z"/></svg>
@@ -518,6 +520,7 @@
         </dialog>
         {% endif %}
     </div>
+    {% if uses_shared_mobile_drawer %}{% include "_mobile_drawer.html" %}{% endif %}
     {% if uses_node_header %}
     <script>
     (() => {
@@ -560,7 +563,8 @@
     {% if is_authenticated_app and not is_rfd_hub_page %}
     <script>
     (() => {
-        const switchers = Array.from(document.querySelectorAll("[data-character-switcher]"));
+        const switchers = Array.from(document.querySelectorAll("[data-character-switcher]"))
+            .filter((switcher) => !switcher.closest("[data-mobile-navigation]"));
         if (!switchers.length) {
             return;
         }
@@ -588,7 +592,7 @@
     })();
     </script>
     {% endif %}
-    {% if uses_mobile_chrome and not uses_operational_shell and not is_rfd_hub_page %}
+    {% if uses_mobile_chrome and not uses_shared_mobile_drawer %}
     <script>
     (() => {
         const topbar = document.querySelector("[data-mobile-topbar]");
@@ -823,11 +827,11 @@
     })();
     </script>
     {% endif %}
+    {% if uses_shared_mobile_drawer %}
+    <script src="{{ url_for('static', filename='js/mobile_drawer.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% endif %}
     {% if uses_operational_shell %}
     <script src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
-    {% endif %}
-    {% if is_rfd_hub_page %}
-    <script src="{{ url_for('static', filename='js/gateway_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
     <script

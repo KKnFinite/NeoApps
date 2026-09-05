@@ -1,0 +1,18 @@
+{% set rfd_sort_operations = gateway_active_sort_operations if gateway_active_sort_operations is defined else [] %}
+{% macro sort_control(extra_class="") -%}
+{% if rfd_sort_operations|length > 1 %}
+<form class="gateway-sort-control {{ extra_class }}" method="get" action="{{ url_for('neomotherbrain.rfd_hub') }}" aria-label="Current sort selector">
+    <label><span>Sort</span>
+        <select class="rfd-active-sort-select" name="operation_id" data-submit-on-change>
+            {% for sort_operation in rfd_sort_operations %}
+            <option value="{{ sort_operation.id }}" {% if gateway_active_sort_operation and sort_operation.id == gateway_active_sort_operation.id %}selected{% endif %}>{{ sort_operation.sort_name|upper }} {{ sort_operation.sort_date.month }}/{{ sort_operation.sort_date.day }}/{{ '%02d'|format(sort_operation.sort_date.year % 100) }}</option>
+            {% endfor %}
+        </select>
+    </label>
+</form>
+{% else %}
+<a class="gateway-context-control gateway-sort-control {{ extra_class }}" href="{{ url_for('neomotherbrain.manage_sort') }}" aria-label="Current sort">
+    <span>Sort</span><strong>{% if gateway_active_sort_operation %}{{ gateway_active_sort_operation.sort_name|upper }} {{ gateway_active_sort_operation.sort_date.strftime('%m/%d') if gateway_active_sort_operation.sort_date else '' }}{% else %}Not Configured{% endif %}</strong>
+</a>
+{% endif %}
+{%- endmacro %}

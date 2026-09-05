@@ -93,7 +93,7 @@ class GatewayShellTest(unittest.TestCase):
         self.assertIn(b"Ramp Ops", response.data)
         self.assertIn(b"Coming Soon", response.data)
         self.assertNotIn(b">Available<", response.data)
-        self.assertIn(b"js/gateway_shell.js", response.data)
+        self.assertIn(b"js/mobile_drawer.js", response.data)
 
     def test_gateway_mobile_hero_keeps_its_title_in_a_separate_row(self):
         css = (Path(__file__).resolve().parents[1] / "app" / "static" / "css" / "base.css").read_text(

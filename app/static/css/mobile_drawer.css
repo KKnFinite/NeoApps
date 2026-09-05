@@ -1,0 +1,53 @@
+/* Shared MOBILE navigation only. Desktop sidebars and NeoStaffing are separate. */
+.neo-mobile-navigation { display:none; }
+@media (max-width:900px) {
+    .neo-mobile-navigation { display:block; position:relative; z-index:5000; }
+    .neo-mobile-navigation [hidden] { display:none !important; }
+    .neo-mobile-backdrop { position:fixed; inset:0; z-index:1200; background:rgba(0,0,0,.65); }
+    .neo-mobile-drawer {
+        position:fixed; inset:0 0 calc(88px + var(--neo-safe-bottom)) auto; z-index:1210;
+        width:min(380px, calc(100% - 24px - var(--neo-safe-left)));
+        max-height:calc(100dvh - 88px - var(--neo-safe-bottom)); box-sizing:border-box;
+        padding:calc(12px + var(--neo-safe-top)) calc(14px + var(--neo-safe-right)) 16px 14px;
+        overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y;
+        background:linear-gradient(160deg, rgba(var(--node-rgb, 145,67,130),.12), transparent 35%), #0b0e14;
+        border-left:1px solid rgba(185,195,210,.3); box-shadow:-12px 0 30px #0008;
+        animation:neo-drawer-enter 180ms ease-out;
+    }
+    .neo-mobile-drawer > * { min-width:0; max-width:100%; }
+    .neo-drawer-close { display:block; margin-left:auto; min-height:44px; padding:8px 12px; border:1px solid #667080; border-radius:5px; color:#fff; background:#171d27; font:600 .85rem/1.3 var(--font-sans); }
+    .neo-drawer-identity { display:grid; grid-template-columns:48px minmax(0,1fr); align-items:center; gap:10px; margin:12px 0; }
+    .neo-drawer-identity strong { grid-column:1/-1; font:400 clamp(.86rem, 4.1vw, 1.14rem)/1.5 "NeoFont", sans-serif; letter-spacing:0; white-space:nowrap; text-transform:uppercase; }
+    .neo-drawer-identity img { width:48px; height:48px; object-fit:contain; }
+    .neo-drawer-identity span { font:600 .82rem/1.4 var(--font-sans); overflow-wrap:anywhere; }
+    .neo-drawer-links { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; padding:12px 0; border-top:1px solid #ffffff24; }
+    .neo-drawer-links :is(a,button,summary) { box-sizing:border-box; min-width:0; max-width:100%; min-height:44px; padding:10px; color:#edf1f6; background:#151b24; border:1px solid #ffffff20; border-radius:5px; text-decoration:none; font:600 .88rem/1.4 var(--font-sans); letter-spacing:0; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
+    .neo-drawer-links > :is(a,button), .neo-drawer-links form > button { width:100%; text-align:left; }
+    .neo-drawer-links form { margin:0; min-width:0; }
+    .neo-drawer-links select { width:100%; min-width:0; max-width:100%; }
+    .neo-drawer-user { overflow-wrap:anywhere; color:#aeb8c7; font:.85rem/1.4 var(--font-sans); }
+    .neo-mobile-drawer .character-switcher { width:100%; min-width:0; }
+    body .neo-mobile-navigation .neo-mobile-drawer .character-switcher { position:relative; inset:auto; grid-area:auto; width:100%; margin:0; }
+    body .neo-mobile-navigation .neo-mobile-drawer .character-switcher-trigger { min-height:44px; height:auto; padding:10px; font:600 .88rem/1.4 var(--font-sans); text-align:left; overflow:visible; }
+    .neo-mobile-drawer .character-switcher-panel { position:static; width:100%; min-width:0; max-width:100%; transform:none; margin:6px 0; padding:0; }
+    .neo-mobile-drawer .character-switcher-link { display:flex; flex-wrap:wrap; gap:6px; }
+    .neo-mobile-drawer .character-switcher-label { min-width:0; }
+    .neo-mobile-drawer .character-switcher-label .neo-brand { font-size:.68rem; white-space:nowrap; }
+    .neo-drawer-share img { display:block; width:min(180px,100%); height:auto; margin:10px auto; }
+    .neo-mobile-navigation .neo-mobile-bottom {
+        position:fixed; z-index:1220; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right));
+        bottom:calc(10px + var(--neo-safe-bottom)); display:flex; align-items:center; justify-content:space-around;
+        width:auto; max-width:none; min-height:58px; box-sizing:border-box; padding:6px; gap:4px;
+        border:1px solid #7d657c; border-radius:999px; background:#0c111af5; box-shadow:0 6px 22px #0008; transform:none;
+    }
+    .neo-mobile-bottom :is(a,button) { display:grid; place-items:center; gap:3px; flex:1 1 0; min-width:0; min-height:44px; padding:4px; border:0; background:transparent; color:#edf1f6; font:700 .66rem/1.2 var(--font-sans); text-transform:uppercase; text-decoration:none; cursor:pointer; }
+    .neo-mobile-bottom svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
+    .neo-mobile-navigation :focus-visible { outline:2px solid #d3b9ed; outline-offset:2px; }
+    body.operational-board-view .neo-mobile-navigation { display:none; }
+    body.operational-shell-page .operational-mobile-header { grid-template-columns:minmax(0,1fr) auto; }
+    body.neo-mobile-drawer-open :is(.operational-mobile-header,.gateway-mobile-header,[data-mobile-topbar]) { transform:translateY(0); }
+    body.neo-mobile-header-hidden [data-mobile-topbar] { transform:translateY(calc(-100% - 1px)); }
+    body.portal-shell-page .content { padding-bottom:calc(104px + var(--neo-safe-bottom)); }
+}
+@keyframes neo-drawer-enter { from { transform:translateX(100%); } to { transform:translateX(0); } }
+@media (prefers-reduced-motion:reduce) { .neo-mobile-drawer { animation:none; } }
