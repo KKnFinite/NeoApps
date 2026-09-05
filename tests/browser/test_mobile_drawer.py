@@ -390,6 +390,50 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 context.close()
                 browser.close()
 
+    def test_gateway_hero(self):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080))), ('webkit', ((390,844),))):
+            browser = getattr(self.pw, engine).launch()
+            context = browser.new_context()
+            context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
+            page = context.new_page()
+            page.set_default_timeout(8000)
+            try:
+                self.login(page)
+                for width, height in sizes:
+                    with self.subTest(engine=engine,width=width):
+                        page.set_viewport_size({'width':width,'height':height})
+                        self.ready(page, '/rfd')
+                        self.assertEqual(page.locator('.gateway-dashboard-hero img').count(),1)
+                        self.assertTrue(page.locator('.gateway-dashboard-hero img').evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes('hero_gateway') && getComputedStyle(e).objectFit==='contain'"))
+                        self.assertTrue(page.evaluate('''() => [...document.querySelectorAll('.gateway-node-name')].filter(e=>e.getClientRects().length).every(e=>{
+                            const range=document.createRange(); range.selectNodeContents(e);
+                            const r=range.getBoundingClientRect(), c=e.closest('.gateway-node-card').getBoundingClientRect();
+                            return r.left>=c.left && r.right<=c.right-2 && r.height<=parseFloat(getComputedStyle(e).fontSize)*1.6;
+                        })'''))
+                        self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
+                        self.assertEqual(page.locator('.gateway-node-grid > *').count(),6)
+                        hero=page.locator('.gateway-dashboard-hero').bounding_box()
+                        if width<=900:
+                            self.assertAlmostEqual(hero['width']/hero['height'],3,delta=.01)
+                            controls=page.locator('.gateway-page-mobile-context')
+                            expect(controls).to_be_visible()
+                            self.assertLessEqual(hero['y']+hero['height'],controls.bounding_box()['y'])
+                            expect(controls.locator('a').first).to_have_attribute('href','/rfd')
+                        else:
+                            self.assertLessEqual(hero['height'],300)
+                            expect(page.locator('[data-gateway-shell-header]')).to_be_visible()
+                        page.screenshot(path=str(self.evidence / f'{engine}-gateway-hero-{width}.png'))
+                        if width<=900:
+                            page.evaluate('scrollTo(0,document.documentElement.scrollHeight)')
+                            page.wait_for_function('scrollY >= document.documentElement.scrollHeight-innerHeight-1')
+                            last=page.locator('.gateway-node-grid > :last-child').bounding_box()
+                            dock=page.locator('.neo-mobile-bottom').bounding_box()
+                            self.assertLessEqual(last['y']+last['height'],dock['y']-20+1)
+                            page.screenshot(path=str(self.evidence / f'{engine}-gateway-hero-bottom-{width}.png'))
+            finally:
+                context.close()
+                browser.close()
+
     def test_desktop_only_board_view(self):
         browser = self.pw.chromium.launch()
         context = browser.new_context(viewport={"width":390,"height":844})

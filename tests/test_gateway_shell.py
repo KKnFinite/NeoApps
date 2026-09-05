@@ -94,6 +94,25 @@ class GatewayShellTest(unittest.TestCase):
         self.assertIn(b"Coming Soon", response.data)
         self.assertNotIn(b">Available<", response.data)
         self.assertIn(b"js/mobile_drawer.js", response.data)
+        self.assertIn(b'images/hero/hero_gateway.png', response.data)
+        self.assertIn(b'images/hero/hero_gateway_small.png', response.data)
+        self.assertIn(b'width="2172" height="724"', response.data)
+        self.assertEqual(response.data.count(b'class="gateway-dashboard-hero"'), 1)
+        self.assertNotIn(b'Choose a system to enter', response.data)
+        self.assertNotIn(b'gateway-page-identity', response.data)
+
+    def test_gateway_retains_selected_sort_controls(self):
+        operations = [SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                      sort_date=date(2026,9,4), sort_name=name) for name in ('am','pm')]
+        db.session.add_all(operations)
+        db.session.commit()
+        selected = operations[1]
+        with patch('app.neomotherbrain.routes._current_sort_state', return_value={'operations':operations}):
+            response = self.client.get(f'/rfd?operation_id={selected.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f'value="{selected.id}" selected'.encode(), response.data)
+        self.assertIn(b'name="operation_id" data-submit-on-change', response.data)
+        self.assertIn(f'href="/motherbrain/manage-sort?operation_id={selected.id}"'.encode(), response.data)
 
     def test_gateway_mobile_hero_keeps_its_title_in_a_separate_row(self):
         css = (Path(__file__).resolve().parents[1] / "app" / "static" / "css" / "base.css").read_text(
