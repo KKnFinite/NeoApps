@@ -449,6 +449,25 @@ def register_template_helpers(app):
         }
 
 
+PUBLIC_ASSET_ENDPOINTS = frozenset({
+    "static",
+    "pwa_manifest",
+    "pwa_manifest_by_key",
+    "service_worker",
+    "apple_touch_icon",
+    "apple_touch_icon_precomposed",
+    "favicon_32",
+    "favicon_16",
+    "favicon_ico",
+})
+
+
+def _is_public_asset_request():
+    # Explicit public handlers only: private resources (including the share QR)
+    # retain authentication, and unsafe requests retain the normal guards.
+    return request.method in {"GET", "HEAD"} and request.endpoint in PUBLIC_ASSET_ENDPOINTS
+
+
 def register_request_guards(app):
     @app.before_request
     def retire_legacy_flight_api_auto_poll_client():
@@ -514,6 +533,8 @@ def register_request_guards(app):
 
     @app.before_request
     def force_required_password_change():
+        if _is_public_asset_request():
+            return None
         if not current_user.is_authenticated:
             return None
 
@@ -529,7 +550,6 @@ def register_request_guards(app):
         allowed_endpoints = {
             "auth.change_password",
             "auth.logout",
-            "static",
         }
         if request.endpoint in allowed_endpoints:
             return None
@@ -544,11 +564,11 @@ def register_request_guards(app):
 
     @app.before_request
     def ensure_gateway_operation_lifecycle():
-        if request.method not in {"GET", "HEAD"}:
+        if _is_public_asset_request() or request.method not in {"GET", "HEAD"}:
             return None
         if (
-            not current_user.is_authenticated
-            or not _is_operational_gateway_path(request.path)
+            not _is_operational_gateway_path(request.path)
+            or not current_user.is_authenticated
         ):
             return None
 

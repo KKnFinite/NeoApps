@@ -5,10 +5,12 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from flask import Flask
+from flask import Flask, g
+from sqlalchemy import event
+from sqlalchemy.exc import OperationalError
 
 from app import create_app
-from app.extensions import db
+from app.extensions import db, login_manager
 from app.models import SortDateOperation, User
 from app.services.gateway_matrix import current_gateway_local_date
 from scripts.seed_dev_user import LOCAL_SQLITE_FALLBACK_PASSWORD, seed_dev_grandmaster
@@ -36,6 +38,90 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.context.pop()
+
+    def _asset_test_login(self):
+        seed_dev_grandmaster(self.app)
+        response = self.client.post('/login', data={
+            'email': 'kessler@local.neoapps', 'password': LOCAL_SQLITE_FALLBACK_PASSWORD,
+        })
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertIn('_user_id', session)
+        g.pop('_login_user', None)
+
+    def _assert_public_assets_without_auth_work(self, *, broken_loader=False):
+        self._asset_test_login()
+        paths = [
+            '/static/css/base.css', '/static/js/mobile_drawer.js',
+            '/static/fonts/neofont/NeoFont.woff2',
+            '/static/images/icons/neoapps/inapp/neoapps-inapp-128.png',
+            '/manifest.webmanifest', '/manifest/neosektor.webmanifest',
+            '/service-worker.js', '/apple-touch-icon.png',
+            '/apple-touch-icon-precomposed.png', '/favicon-32x32.png',
+            '/favicon-16x16.png', '/favicon.ico',
+        ]
+        calls = []
+        def record(*args):
+            calls.append(args[2])
+        loader_options = ({'side_effect': OperationalError('simulated unavailable DB', {}, None)}
+                          if broken_loader else {'wraps': login_manager._user_callback})
+        with patch.object(login_manager, '_user_callback', **loader_options) as loader:
+            for method in ('GET', 'HEAD'):
+                for path in paths + ['/static/missing-asset.png', '/manifest/missing.webmanifest']:
+                    with self.subTest(method=method, path=path, broken=broken_loader):
+                        # The fixture holds an app context; remove its cached user
+                        # so every measured request behaves like a fresh WSGI request.
+                        g.pop('_login_user', None)
+                        calls.clear()
+                        event.listen(db.engine, 'before_cursor_execute', record)
+                        try:
+                            response = self.client.open(path, method=method)
+                        finally:
+                            event.remove(db.engine, 'before_cursor_execute', record)
+                        self.assertEqual(response.status_code, 404 if 'missing' in path else 200)
+                        self.assertEqual(calls, [])
+                        loader.assert_not_called()
+                        self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')
+                        response.close()
+
+    def test_public_assets_with_login_cookie_do_no_auth_or_database_work(self):
+        self._assert_public_assets_without_auth_work()
+
+    def test_public_assets_survive_user_loader_database_failure(self):
+        self._assert_public_assets_without_auth_work(broken_loader=True)
+        g.pop('_login_user', None)
+        with patch.object(login_manager, '_user_callback', side_effect=OperationalError(
+            'simulated unavailable DB', {}, None,
+        )) as loader:
+            with self.assertRaises(OperationalError):
+                self.client.get('/share/neoapps-qr.svg')
+            loader.assert_called_once()
+
+    def test_asset_exemption_preserves_session_invalidation_and_private_qr(self):
+        self._asset_test_login()
+        user = User.query.filter_by(username='Kessler').one()
+        user.auth_session_version += 1
+        db.session.commit()
+        response = self.client.get('/static/css/base.css')
+        self.assertEqual(response.status_code, 200)
+        response.close()
+        g.pop('_login_user', None)
+        response = self.client.get('/portal')
+        self.assertEqual(response.location, '/login')
+        g.pop('_login_user', None)
+        private = self.client.get('/share/neoapps-qr.svg')
+        self.assertEqual(private.status_code, 302)
+        self.assertIn('/login', private.location)
+
+    def test_asset_exemption_preserves_forced_password_change_on_private_routes(self):
+        self._asset_test_login()
+        user = User.query.filter_by(username='Kessler').one()
+        user.password_policy_update_required = True
+        db.session.commit()
+        self.assertEqual(self.client.get('/manifest.webmanifest').status_code, 200)
+        for path in ('/portal', '/share/neoapps-qr.svg'):
+            g.pop('_login_user', None)
+            self.assertEqual(self.client.get(path).location, '/change-password')
 
     def test_run_py_imports_current_flask_app(self):
         with patch.dict(os.environ, {"NEOAPPS_ENV": "development"}, clear=False):
