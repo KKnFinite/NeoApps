@@ -133,6 +133,23 @@ def apply_google_motherbrain_live_mission_batch(
     )
     seen_flight_keys = set()
     results = []
+    links = {
+        (link.source_sheet, link.source_row): link
+        for link in SortDateGoogleMissionLink.query.filter_by(
+            sort_date_operation_id=operation.id, mission_type=mission_type,
+        ).all()
+    } if ordered_rows else {}
+    missions = {
+        mission.id: mission
+        for mission in SortDateMission.query.filter_by(
+            sort_date_operation_id=operation.id, mission_type=mission_type,
+        ).all()
+    } if ordered_rows else {}
+    flight_keys = {mission.id: alp_flight_key(mission.flight_number) for mission in missions.values()}
+    flights = {}
+    for mission_id, key in flight_keys.items():
+        if key:
+            flights.setdefault(key, {})[mission_id] = missions[mission_id]
 
     for batch_index, supplied_row in enumerate(ordered_rows, start=1):
         try:
@@ -152,16 +169,30 @@ def apply_google_motherbrain_live_mission_batch(
 
         try:
             with db.session.begin_nested():
-                result = _apply_live_row(
+                result, link, mission = _apply_live_row(
                     operation,
                     mission_type,
                     row,
                     user=user,
                     applied_at=applied_at,
+                    links=links, missions=missions, flights=flights,
                 )
                 db.session.flush()
         except (GoogleMotherBrainMissionError, ParkingPlanError, SQLAlchemyError) as error:
             result = _skipped_result(row, str(error) or "Live mission application failed.")
+        else:
+            # Publish only after the savepoint succeeds; rolled-back creations and
+            # flight renames must never leak into later rows' identity lookups.
+            links[(row["source_sheet"], row["sheet_row"])] = link
+            if mission is not None:
+                old_key = flight_keys.get(mission.id)
+                if old_key:
+                    flights[old_key].pop(mission.id, None)
+                key = alp_flight_key(mission.flight_number)
+                missions[mission.id] = mission
+                flight_keys[mission.id] = key
+                if key:
+                    flights.setdefault(key, {})[mission.id] = mission
         results.append(result)
 
     applied_count = sum(result["status"] in {"applied", "preserved"} for result in results)
@@ -173,7 +204,7 @@ def apply_google_motherbrain_live_mission_batch(
     }
 
 
-def _apply_live_row(operation, mission_type, row, *, user, applied_at):
+def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, missions, flights):
     if not row["sheet_row"]:
         raise GoogleMotherBrainMissionError("Google sheet row must be a positive integer.")
     if not row["effective_tail"]:
@@ -181,10 +212,10 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at):
             raise GoogleMotherBrainMissionError("Effective tail is invalid.")
         raise GoogleMotherBrainMissionError("Effective tail is required.")
 
-    link = _link_for_row(operation, mission_type, row)
-    mission = _linked_mission(operation, mission_type, link)
+    link = links.get((row["source_sheet"], row["sheet_row"]))
+    mission = _linked_mission(link, missions)
     if mission is None and row["flight_number"]:
-        matches = _matching_missions(operation, mission_type, row["flight_number"])
+        matches = list(flights.get(alp_flight_key(row["flight_number"]), {}).values())
         if len(matches) > 1:
             raise GoogleMotherBrainMissionError(
                 "Multiple current-sort missions share this flight number."
@@ -192,7 +223,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at):
         mission = matches[0] if matches else None
 
     if mission_type == "departure" and row["destination_mode"] == "spare":
-        return _apply_spare_row(
+        link = link or _new_link(operation, mission_type, row)
+        result = _apply_spare_row(
             operation,
             row,
             link=link,
@@ -200,6 +232,7 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at):
             user=user,
             applied_at=applied_at,
         )
+        return result, link, mission
 
     if not row["flight_number"]:
         raise GoogleMotherBrainMissionError("Flight number is required.")
@@ -268,7 +301,7 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at):
         "warnings": warnings,
         "parking": parking_result,
         "pending_tail_number": link.pending_tail_number,
-    }
+    }, link, mission
 
 
 def _apply_spare_row(
@@ -596,15 +629,6 @@ def _ensure_standalone_google_spare(operation, tail_number):
     return state
 
 
-def _link_for_row(operation, mission_type, row):
-    return SortDateGoogleMissionLink.query.filter_by(
-        sort_date_operation_id=operation.id,
-        mission_type=mission_type,
-        source_sheet=row["source_sheet"],
-        source_row=row["sheet_row"],
-    ).first()
-
-
 def _new_link(operation, mission_type, row):
     link = SortDateGoogleMissionLink(
         sort_date_operation=operation,
@@ -616,32 +640,14 @@ def _new_link(operation, mission_type, row):
     return link
 
 
-def _linked_mission(operation, mission_type, link):
+def _linked_mission(link, missions):
     if link is None or link.sort_date_mission_id is None:
         return None
-    mission = db.session.get(SortDateMission, link.sort_date_mission_id)
-    if (
-        mission is None
-        or mission.sort_date_operation_id != operation.id
-        or mission.mission_type != mission_type
-    ):
+    mission = missions.get(link.sort_date_mission_id)
+    if mission is None:
         link.sort_date_mission = None
         return None
     return mission
-
-
-def _matching_missions(operation, mission_type, flight_number):
-    target_key = alp_flight_key(flight_number)
-    if not target_key:
-        return []
-    return [
-        mission
-        for mission in SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id,
-            mission_type=mission_type,
-        ).all()
-        if alp_flight_key(mission.flight_number) == target_key
-    ]
 
 
 def _missions_for_tail(operation, tail_number, mission_type):

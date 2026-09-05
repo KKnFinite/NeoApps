@@ -1,6 +1,7 @@
 from datetime import date, datetime, time
 import unittest
 from unittest.mock import patch
+from sqlalchemy import event
 
 from app import create_app
 from app.extensions import db
@@ -104,6 +105,98 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual([row["status"] for row in result["results"]], ["applied", "skipped"])
         mission = SortDateMission.query.one()
         self.assertEqual((mission.assigned_tail_number, mission.origin), ("N457UP", "SDF"))
+
+    def test_ambiguous_current_flight_is_rejected_but_source_link_wins(self):
+        first = self._apply_arrivals(self._inbound(4, "947", "N457UP"))
+        self._mission("arrival", "UPS0947", tail="N458UP")
+        db.session.commit()
+        ambiguous = self._apply_arrivals(self._inbound(5, "947", "N459UP"))
+        self.assertIn("Multiple current-sort missions", ambiguous["results"][0]["reason"])
+        linked = self._apply_arrivals(self._inbound(4, "947", "N457UP"))
+        self.assertEqual(linked["results"][0]["mission_id"], first["results"][0]["mission_id"])
+        self.assertEqual(linked["results"][0]["correlation_id"], first["results"][0]["correlation_id"])
+
+    def test_same_batch_created_link_and_renamed_flight_index_are_visible(self):
+        result = self._apply_arrivals(
+            self._inbound(4, "947", "N457UP"),
+            self._inbound(4, "955", "N457UP"),
+        )
+        first, renamed = result["results"]
+        self.assertEqual(result["applied_count"], 2)
+        self.assertEqual(first["mission_id"], renamed["mission_id"])
+        self.assertEqual(first["correlation_id"], renamed["correlation_id"])
+        self.assertFalse(renamed["created"])
+        self.assertEqual(SortDateMission.query.one().flight_number, "UPS0955")
+
+    def test_renamed_existing_mission_releases_old_flight_key_in_batch(self):
+        original = self._apply_arrivals(self._inbound(4, "947", "N457UP"))["results"][0]
+        db.session.commit()
+        result = self._apply_arrivals(
+            self._inbound(4, "955", "N457UP"),
+            self._inbound(5, "947", "N458UP"),
+        )
+        self.assertEqual(result["results"][0]["mission_id"], original["mission_id"])
+        self.assertTrue(result["results"][1]["created"])
+        self.assertEqual(SortDateMission.query.count(), 2)
+
+    def test_failed_row_does_not_publish_link_or_flight_index_changes(self):
+        from app.services.parking_plan import ParkingPlanError
+        from app.services import google_motherbrain_live_missions as service
+        original = self._apply_arrivals(self._inbound(4, "947", "N457UP"))["results"][0]
+        db.session.commit()
+        parking = service._apply_row_parking
+        def fail_first(operation, row, **kwargs):
+            if row["sheet_row"] == 4:
+                raise ParkingPlanError("Injected row failure")
+            return parking(operation, row, **kwargs)
+        with patch.object(service, "_apply_row_parking", side_effect=fail_first):
+            result = self._apply_arrivals(
+                self._inbound(4, "955", "N457UP"),
+                self._inbound(5, "947", "N457UP"),
+            )
+        self.assertEqual(result["results"][0]["status"], "skipped")
+        self.assertEqual(result["results"][1]["mission_id"], original["mission_id"])
+        self.assertFalse(result["results"][1]["created"])
+
+    def test_identity_lookup_queries_are_constant_per_batch(self):
+        counts = []
+        for size in (1, 10):
+            statements = []
+            def record(connection, cursor, statement, parameters, context, executemany):
+                sql = statement.lower()
+                if sql.lstrip().startswith("select") and any(
+                    f"from {table} " in sql.replace("\n", " ")
+                    for table in ("sort_date_google_mission_links", "sort_date_missions")
+                ):
+                    statements.append(statement)
+            event.listen(db.engine, "before_cursor_execute", record)
+            try:
+                # Invalid time stops after identity resolution, isolating these
+                # lookups from intentionally unchanged tail/parking queries.
+                result = self._apply_arrivals(*[
+                    self._inbound(4+i, str(900+i), "N457UP", planned="invalid")
+                    for i in range(size)
+                ])
+                self.assertEqual(result["skipped_count"], size)
+            finally:
+                event.remove(db.engine, "before_cursor_execute", record)
+            counts.append(len(statements))
+        self.assertEqual(counts, [2, 2], f"Identity SELECTs for 1/10 rows: {counts}")
+
+    def test_failed_creation_does_not_leave_a_phantom_batch_link(self):
+        from app.services.parking_plan import ParkingPlanError
+        with patch(
+            "app.services.google_motherbrain_live_missions._apply_row_parking",
+            side_effect=[ParkingPlanError("Injected row failure"), None],
+        ):
+            result = self._apply_arrivals(
+                self._inbound(4, "947", "N457UP"),
+                self._inbound(4, "955", "N457UP"),
+            )
+        self.assertEqual(result["results"][0]["status"], "skipped")
+        self.assertTrue(result["results"][1]["created"])
+        self.assertEqual(SortDateMission.query.one().flight_number, "UPS0955")
+        self.assertEqual(SortDateGoogleMissionLink.query.count(), 1)
 
     def test_correlation_is_operation_and_direction_scoped(self):
         arrival = self._apply_arrivals(self._inbound(4, "947", "N457UP"))
