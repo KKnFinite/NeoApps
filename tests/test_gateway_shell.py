@@ -1,5 +1,6 @@
 import unittest
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
@@ -93,6 +94,21 @@ class GatewayShellTest(unittest.TestCase):
         self.assertIn(b"Coming Soon", response.data)
         self.assertNotIn(b">Available<", response.data)
         self.assertIn(b"js/gateway_shell.js", response.data)
+
+    def test_gateway_mobile_hero_keeps_its_title_in_a_separate_row(self):
+        css = (Path(__file__).resolve().parents[1] / "app" / "static" / "css" / "base.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            ".gateway-node-motherbrain { grid-column:1 / -1; grid-template-rows:auto minmax(0, 1fr) auto;",
+            css,
+        )
+        self.assertIn(".gateway-node-motherbrain .gateway-node-mobile-title { display:block; }", css)
+        self.assertIn(
+            ".gateway-node-motherbrain .gateway-node-card-copy .gateway-node-desktop-title { display:none; }",
+            css,
+        )
 
     def test_gateway_preserves_operation_forwarding_for_node_launches(self):
         operation = SortDateOperation(
