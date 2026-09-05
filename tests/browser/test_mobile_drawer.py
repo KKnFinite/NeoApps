@@ -286,11 +286,8 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             self.geometry(page)
             self.assertGreaterEqual(page.locator("[data-drawer-close]").bounding_box()["y"], 47)
             page.screenshot(path=str(self.evidence / f"{engine}-safe-area-open.png"))
-            page.locator("[data-mobile-drawer] [data-operational-board-toggle]").click()
-            expect(page.locator("body")).to_have_class(__import__("re").compile("operational-board-view"))
-            expect(page.locator("[data-mobile-drawer]")).to_be_hidden()
-            self.assertFalse(page.locator(".shell").evaluate("(el) => el.inert"))
-            page.locator(".operational-board-exit").click()
+            self.assertEqual(page.locator("[data-mobile-drawer] [data-operational-board-toggle]").count(), 0)
+            page.keyboard.press("Escape")
             # Navigation from the modal returns a fully usable page.
             page.locator("[data-drawer-toggle]").click()
             page.locator(".neo-mobile-bottom a").click()
@@ -349,6 +346,51 @@ class MobileDrawerBrowserTest(unittest.TestCase):
 
     def test_chromium(self):
         self.run_engine("chromium")
+
+    def test_desktop_only_board_view(self):
+        browser = self.pw.chromium.launch()
+        context = browser.new_context(viewport={"width":390,"height":844})
+        context.route("**/*", lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
+        page = context.new_page()
+        key = 'neoapps.operational-shell.board.v1:/motherbrain'
+        active = lambda: page.locator('body').evaluate("el => el.classList.contains('operational-board-view')")
+        try:
+            self.login(page)
+            page.evaluate('(key) => localStorage.setItem(key, "on")', key)
+            self.ready(page, '/motherbrain')
+            self.assertFalse(active())
+            self.assertEqual(page.evaluate('(key) => localStorage.getItem(key)', key), 'on')
+            self.assertEqual(page.locator('[data-mobile-drawer] [data-operational-board-toggle]').count(), 0)
+            expect(page.locator('.operational-board-exit')).to_be_hidden()
+            page.locator('[data-drawer-toggle]').click()
+            expect(page.locator('[data-drawer-view="menu"]')).to_be_visible()
+            page.locator('[data-drawer-nodes]').click()
+            expect(page.locator('[data-drawer-view="nodes"]')).to_be_visible()
+            page.locator('[data-drawer-nodes]').click()
+            expect(page.locator('[data-mobile-drawer]')).to_be_hidden()
+            page.set_viewport_size({'width':1920,'height':1080})
+            page.wait_for_function("document.body.classList.contains('operational-board-view')")
+            expect(page.locator('.operational-board-exit')).to_be_visible()
+            page.locator('.operational-board-exit').click()
+            self.assertFalse(active())
+            self.assertEqual(page.evaluate('(key) => localStorage.getItem(key)', key), 'off')
+            page.locator('[data-operational-sidebar] [data-operational-board-toggle]').click()
+            self.assertTrue(active())
+            page.set_viewport_size({'width':900,'height':844})
+            page.wait_for_function("!document.body.classList.contains('operational-board-view')")
+            expect(page.locator('.operational-board-exit')).to_be_hidden()
+            expect(page.locator('.neo-mobile-bottom')).to_be_visible()
+            self.assertEqual(page.evaluate('(key) => localStorage.getItem(key)', key), 'on')
+            # Even a programmatic click on a hidden desktop control is inert on mobile.
+            page.locator('.operational-board-exit').dispatch_event('click')
+            self.assertFalse(active())
+            self.ready(page, '/motherbrain')
+            self.assertFalse(active())
+            page.set_viewport_size({'width':1920,'height':1080})
+            page.wait_for_function("document.body.classList.contains('operational-board-view')")
+        finally:
+            context.close()
+            browser.close()
 
     def test_webkit(self):
         self.run_engine("webkit")

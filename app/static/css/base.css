@@ -22040,8 +22040,6 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     body.operational-shell-page.operational-board-view .operational-mobile-header { display:none; }
     body.operational-shell-page.operational-board-view .operational-mobile-bottom-nav { display:none; }
     body.operational-shell-page.operational-board-view .content { padding-top:12px; }
-    .operational-board-exit { position:fixed; top:calc(4px + var(--neo-safe-top)); left:calc(4px + var(--neo-safe-left)); z-index:1200; width:26px; height:26px; padding:0; border:1px solid rgba(201,208,214,.3); border-radius:0 0 4px 0; color:var(--text); background:rgba(5,7,10,.8); cursor:pointer; }
-    body.operational-board-view .operational-board-exit { display:grid; place-items:center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

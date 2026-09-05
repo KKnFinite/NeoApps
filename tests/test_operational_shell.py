@@ -85,6 +85,10 @@ class OperationalShellTest(unittest.TestCase):
         self.assertIn(b"data-operational-board-toggle", response.data)
         self.assertIn(b"js/operational_shell.js", response.data)
         self.assertNotIn(b"data-dispatch-board-toggle", response.data)
+        drawer = response.data.split(b'data-mobile-drawer', 1)[1].split(b'</aside>', 1)[0]
+        self.assertNotIn(b'data-operational-board-toggle', drawer)
+        mobile_template = Path(self.app.root_path, 'templates', 'neonodes', '_operational_mobile_shell.html').read_text(encoding='utf-8')
+        self.assertNotIn('operational-board-exit', mobile_template)
 
         settings = self.client.get("/neoscorpion/settings")
         self.assertEqual(settings.status_code, 200)

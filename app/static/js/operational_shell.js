@@ -33,11 +33,13 @@
     }
 
     const boardSupported = body.dataset.operationalBoardSupported === "true";
+    const mobile = window.matchMedia("(max-width: 900px)");
     const boardKey = `neoapps.operational-shell.board.v1:${window.location.pathname}`;
     const boardButtons = Array.from(document.querySelectorAll("[data-operational-board-toggle]"));
     const boardExit = document.querySelector(".operational-board-exit");
     const setBoardView = (enabled) => {
         if (!boardSupported) return;
+        enabled = enabled && !mobile.matches;
         if (enabled) document.dispatchEvent(new Event("neo:board-enter"));
         body.classList.toggle("operational-board-view", enabled);
         if (boardExit) boardExit.hidden = !enabled;
@@ -48,12 +50,16 @@
                 label.textContent = enabled ? "Exit Board" : "Board View";
             }
         });
-        storage.set(boardKey, enabled ? "on" : "off");
     };
     if (boardSupported && boardButtons.length) {
         setBoardView(storage.get(boardKey) === "on");
+        // Breakpoint changes affect presentation, never the desktop preference.
+        mobile.addEventListener("change", () => setBoardView(storage.get(boardKey) === "on"));
         boardButtons.forEach((button) => button.addEventListener("click", () => {
-            setBoardView(!body.classList.contains("operational-board-view"));
+            if (mobile.matches) return;
+            const enabled = !body.classList.contains("operational-board-view");
+            setBoardView(enabled);
+            storage.set(boardKey, enabled ? "on" : "off");
         }));
     }
 
