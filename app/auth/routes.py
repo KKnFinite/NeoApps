@@ -22,6 +22,7 @@ from app.services.access_control import (
     request_app_access_for_user,
     request_default_gateway_access_for_user,
     seed_gateway_node_roles,
+    user_has_app_access,
     user_has_gateway_access,
 )
 from app.services.permission_rules import (

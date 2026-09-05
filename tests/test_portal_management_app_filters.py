@@ -44,6 +44,40 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
                 for code in ('neogateway','neostaffing'):
                     self.assertIn(f'name="app_code" value="{code}"', html)
 
+    def test_neobid_approved_access_renders_existing_placeholder(self):
+        db.session.add(PortalAppAccess(user_id=self.admin.id, app_code="neobid",
+                                      status="approved", role="watcher", is_active=True))
+        db.session.commit()
+        response = self.client.get('/neobid')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Coming Soon', response.data)
+        self.assertIn(b'href="/portal"', response.data)
+
+    def test_neobid_unapproved_or_inactive_access_redirects_to_portal(self):
+        access = PortalAppAccess(user_id=self.admin.id, app_code="neobid",
+                                 status="pending", role="watcher", is_active=True)
+        db.session.add(access)
+        for status, active in (('pending', True), ('denied', True), ('approved', False)):
+            with self.subTest(status=status, active=active):
+                access.status, access.is_active = status, active
+                db.session.commit()
+                response = self.client.get('/neobid')
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.location, '/portal')
+
+    def test_neobid_still_requires_placeholder_permission_and_authentication(self):
+        db.session.add(PortalAppAccess(user_id=self.admin.id, app_code="neobid",
+                                      status="approved", role="watcher", is_active=True))
+        db.session.commit()
+        with patch('app.auth.routes.user_can', return_value=False) as permission:
+            response = self.client.get('/neobid')
+        self.assertEqual(response.location, '/portal')
+        permission.assert_called_once_with('neobid.placeholder.view')
+        self.client.post('/logout')
+        response = self.client.get('/neobid')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/login', response.location)
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",
