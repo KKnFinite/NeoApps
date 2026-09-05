@@ -28,7 +28,7 @@ from app.auth.permissions import (
     can_manage_system,
     can_manage_users,
 )
-from app.config import Config, configure_secret_key
+from app.config import Config, configure_runtime_database_options, configure_secret_key
 from app.extensions import db, login_manager
 from app.services.access_control import (
     prime_user_node_roles_for_request,
@@ -69,6 +69,7 @@ def create_app(config_class=Config, auto_bootstrap=False):
     if config_class is not Config:
         app.config.from_object(config_class)
     configure_secret_key(app.config)
+    configure_runtime_database_options(app.config)
 
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
 

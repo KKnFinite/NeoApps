@@ -183,6 +183,23 @@ class DevelopmentConfig(Config):
     NEOAPPS_ENV = "development"
 
 
+def configure_runtime_database_options(config):
+    """Validate pooled PostgreSQL connections on demand, never while idle.
+
+    Resolve after app-specific config so SQLite tests do not inherit PostgreSQL
+    connect arguments. Preserve deployment-bootstrap's explicit engine options.
+    """
+    uri = str(config.get("SQLALCHEMY_DATABASE_URI", "")).lower()
+    if not uri.startswith(("postgresql:", "postgresql+", "postgres:", "postgres+")):
+        return
+    options = dict(config.get("SQLALCHEMY_ENGINE_OPTIONS") or {})
+    connect_args = dict(options.get("connect_args") or {})
+    options.setdefault("pool_pre_ping", True)
+    connect_args.setdefault("connect_timeout", 5)
+    options["connect_args"] = connect_args
+    config["SQLALCHEMY_ENGINE_OPTIONS"] = options
+
+
 def configure_secret_key(config):
     """Require a non-default signing key unless this is an explicit dev/test app."""
     secret_key = config.get("SECRET_KEY")
