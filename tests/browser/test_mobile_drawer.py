@@ -135,12 +135,16 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         self.assertEqual(page.locator("[data-mobile-shell-menu-panel], [data-gateway-mobile-drawer], [data-operational-mobile-drawer]").count(), 0)
         toggle = page.locator("[data-drawer-toggle]")
         product = page.locator('.neo-mobile-product-name, [data-mobile-topbar] .mobile-topbar-brand').filter(visible=True).first
-        self.assertTrue(product.evaluate("""el => {
+        if path == '/portal':
+            expect(page.locator('[data-mobile-topbar] .mobile-topbar-node-icon')).to_be_visible()
+            self.assertEqual(product.count(), 0)
+        else:
+            self.assertTrue(product.evaluate("""el => {
             const r=document.createRange(); r.selectNodeContents(el);
             const t=r.getBoundingClientRect(), b=el.getBoundingClientRect();
             return getComputedStyle(el).fontFamily.includes('NeoFont') && t.width <= b.width + 1 &&
                 t.right <= innerWidth - 8 && t.height <= parseFloat(getComputedStyle(el).lineHeight) + 1;
-        }"""), "Complete one-line NeoFont header")
+            }"""), "Complete one-line NeoFont header")
         alerts = page.locator('[data-operational-mobile-header] summary, [data-gateway-mobile-header] summary, [data-mobile-topbar] [data-motherbrain-alert-toggle]').filter(visible=True)
         if alerts.count():
             bounds = alerts.first.bounding_box()
@@ -360,6 +364,11 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     with self.subTest(engine=engine,width=width):
                         page.set_viewport_size({'width':width,'height':height})
                         self.ready(page, '/portal')
+                        header = page.locator('[data-mobile-topbar]' if width <= 900 else '.topbar')
+                        brand = header.locator('.mobile-topbar-node-icon-link' if width <= 900 else '.brand').first
+                        self.assertEqual(brand.inner_text().strip(), '')
+                        expect(brand).to_have_attribute('href', '/portal')
+                        expect(brand.locator('img')).to_be_visible()
                         self.assertEqual(page.locator('[data-portal-app]').count(), 2)
                         self.assertEqual(page.locator('[data-portal-app="neobid"]').count(), 0)
                         result = page.evaluate('''() => {
@@ -386,6 +395,36 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                             expect(page.locator('[data-drawer-view="nodes"]')).to_be_hidden()
                             self.assertEqual(page.locator('[data-mobile-drawer] [data-operational-board-toggle]').count(),0)
                             page.keyboard.press('Escape')
+            finally:
+                context.close()
+                browser.close()
+
+    def test_login_hero(self):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080))), ('webkit', ((390,844),))):
+            browser = getattr(self.pw, engine).launch()
+            context = browser.new_context()
+            context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
+            page = context.new_page()
+            page.set_default_timeout(8000)
+            try:
+                for width, height in sizes:
+                    page.set_viewport_size({'width':width,'height':height})
+                    self.ready(page, '/login')
+                    hero = page.locator('.portal-login-hero img')
+                    self.assertTrue(hero.evaluate('e => e.complete && e.naturalWidth>0 && e.currentSrc.includes("hero_neopapps")'))
+                    box = hero.bounding_box()
+                    self.assertAlmostEqual(box['width']/box['height'], 1672/941, delta=.01)
+                    form = page.locator('.command-login-form')
+                    self.assertGreaterEqual(form.bounding_box()['y'], box['y']+box['height'])
+                    self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
+                    expect(page.locator('#dashboard-email')).to_have_attribute('autocomplete','email')
+                    expect(page.locator('#dashboard-password')).to_have_attribute('autocomplete','current-password')
+                    page.evaluate('scrollTo(0,0)')
+                    page.screenshot(path=str(self.evidence / f'{engine}-login-hero-{width}.png'), full_page=True)
+                    page.get_by_role('link', name='Forgot Password').scroll_into_view_if_needed()
+                    expect(page.get_by_role('link', name='Forgot Password')).to_be_in_viewport()
+                self.login(page)
+                self.assertIn('/portal', page.url)
             finally:
                 context.close()
                 browser.close()

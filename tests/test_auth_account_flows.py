@@ -1636,8 +1636,11 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"portal-brand-logo portal-login-logo", response.data)
-        self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
+        self.assertIn(b'class="portal-login-hero"', response.data)
+        self.assertIn(b'images/hero/hero_neopapps.png', response.data)
+        self.assertIn(b'images/hero/hero_neopapps_small.png', response.data)
+        self.assertIn(b'width="1672"', response.data)
+        self.assertNotIn(b'images/neoapps_logo_transparent.png', response.data)
         self.assertNotIn(b'class="topbar"', response.data)
         self.assertNotIn(b"mobile-account-trigger", response.data)
         self.assertNotIn(b"data-mobile-topbar", response.data)

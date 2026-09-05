@@ -187,10 +187,6 @@
                                 height="128"
                                 decoding="async"
                             >
-                            <span class="portal-header-title neo-brand-title neo-brand neo-brand--apps neo-node-name brand-inline-name node-apps" aria-label="NeoApps">
-                                <span class="neo-brand__neo neo-word neo-brand-title__neo">NEO</span><span class="neo-brand__node node-word neo-brand-title__node neo-brand-title__node--apps">APPS</span>
-                            </span>
-                            <span class="portal-header-word neo-menu-text">PORTAL</span>
                         </span>
                         {% else %}
                         {{ neo_brand("Apps", "apps") }}
@@ -342,6 +338,10 @@
                     <span class="mobile-topbar-page-name neo-page-title">{{ mobile_shell_label }}</span>
                 </a>
                 {% endif %}
+                {% elif is_portal_page %}
+                <a class="mobile-topbar-node-icon-link" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal">
+                    <img class="mobile-topbar-node-icon" src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="32" height="32">
+                </a>
                 {% else %}
                 <a class="mobile-topbar-title" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
                     <span>

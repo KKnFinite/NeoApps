@@ -4,15 +4,18 @@
 {% block title %}NeoApps{% endblock %}
 
 {% block content %}
-<section class="motherbrain-command public-command" aria-label="NeoApps login">
+<section class="motherbrain-command public-command portal-login-page" aria-label="NeoApps login">
     <section class="motherbrain-core">
-        <div class="portal-login-brand">
+        <div class="portal-login-hero">
             <img
-                class="portal-brand-logo portal-login-logo"
-                src="{{ url_for('static', filename='images/neoapps_logo_transparent.png') }}"
+                src="{{ url_for('static', filename='images/hero/hero_neopapps.png') }}"
+                srcset="{{ url_for('static', filename='images/hero/hero_neopapps_small.png') }} 1024w, {{ url_for('static', filename='images/hero/hero_neopapps.png') }} 1672w"
+                sizes="(max-width: 900px) calc(100vw - 24px), 640px"
                 alt="NeoApps"
-                width="1874"
-                height="312"
+                width="1672"
+                height="941"
+                loading="eager"
+                fetchpriority="high"
                 decoding="async"
             >
         </div>

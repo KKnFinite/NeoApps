@@ -8671,6 +8671,12 @@ h2 {
     width: min(100%, 680px);
 }
 
+.portal-login-page { min-height:0; width:100%; }
+.portal-login-page .motherbrain-core { width:min(100%,640px); gap:12px; }
+.portal-login-hero { width:100%; }
+.portal-login-hero img { display:block; width:100%; height:auto; object-fit:contain; }
+.portal-login-page .command-enter-button { margin-top:4px; }
+
 .portal-header-brandline {
     display: inline-flex;
     align-items: center;
