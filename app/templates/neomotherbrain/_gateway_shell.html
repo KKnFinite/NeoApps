@@ -1,4 +1,5 @@
 {% from "neomotherbrain/_gateway_sort_control.html" import sort_control with context %}
+{% from "_neo_brand.html" import neo_brand %}
 
 <header class="gateway-shell-topbar" data-gateway-shell-header>
     <a class="gateway-shell-app-logo" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal">
@@ -19,6 +20,6 @@
 
 <header class="gateway-mobile-header" data-gateway-mobile-header>
     <a class="gateway-mobile-app-logo" href="{{ url_for('auth.portal_dashboard') }}" aria-label="NeoApps Portal"><img src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="32" height="32" decoding="async"></a>
-    <span class="gateway-mobile-title"><strong>NeoGateway</strong><small>{{ gateway.code }} Operations</small></span>
+    <span class="gateway-mobile-title"><strong class="neo-mobile-product-name">{{ neo_brand('Gateway', 'gateway') }}</strong><small>{{ gateway.code }} Operations</small></span>
     <div class="gateway-mobile-actions">{% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}</div>
 </header>

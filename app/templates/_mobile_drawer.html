@@ -1,11 +1,25 @@
 {% from "neomotherbrain/_gateway_sort_control.html" import sort_control with context %}
+{% from "_neo_brand.html" import neo_brand %}
 {% set drawer_name = node_header_name if uses_operational_shell else ("NeoGateway" if is_rfd_hub_page else "NeoPortal") %}
 {% set drawer_home = node_home_endpoint if uses_operational_shell else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard") %}
 {# Bottom controls belong to this same modal region, never to an inert background. #}
-<div class="neo-mobile-navigation" data-mobile-navigation aria-label="{{ drawer_name }} navigation">
+<div class="neo-mobile-navigation" data-mobile-navigation data-menu-title="{{ drawer_name }} menu" aria-label="{{ drawer_name }} navigation">
     <div class="neo-mobile-backdrop" data-drawer-backdrop hidden></div>
     <aside id="neo-mobile-drawer" class="neo-mobile-drawer" data-mobile-drawer aria-label="{{ drawer_name }} menu" hidden inert>
         <button class="neo-drawer-close" type="button" data-drawer-close aria-label="Close menu">Close <span aria-hidden="true">×</span></button>
+        <section data-drawer-view="nodes" hidden inert aria-label="Nodes">
+            <h2 class="neo-drawer-view-title">Nodes</h2>
+            <nav class="neo-drawer-links neo-drawer-node-links" aria-label="Accessible NeoNodes">
+                {% for target in change_character_targets() %}
+                <a class="neo-drawer-node-link node-{{ target.key }}{% if target.is_current %} is-active{% endif %}" href="{{ target.href }}" {% if target.is_current %}aria-current="page"{% endif %}>
+                    <img src="{{ url_for('static', filename=target.icon_src|default('images/icons/' ~ target.key ~ '/icon_192.png')) }}" alt="" width="28" height="28">
+                    {{ neo_brand(target.node_word, target.key) }}
+                    {% if target.suffix %}<small>{{ target.suffix }}</small>{% endif %}
+                </a>
+                {% endfor %}
+            </nav>
+        </section>
+        <section data-drawer-view="menu" hidden inert>
         <header class="neo-drawer-identity">
             <strong>{{ drawer_name }}</strong>
             {% if uses_operational_shell %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="48" height="48"><span>{{ node_current_label }}</span>{% endif %}
@@ -37,7 +51,6 @@
         <section class="neo-drawer-links" aria-label="Operational context">{{ sort_control() }}</section>
         {% endif %}
         <section class="neo-drawer-links" aria-label="Utilities">
-            {% set character_switcher_modifier = "neo-drawer-character" %}{% set character_switcher_use_neofont = false %}{% include "_change_characters.html" %}
             {% if operational_shell_supports_board_view %}<button type="button" data-operational-board-toggle aria-expanded="false">Board View</button>{% endif %}
             {% if not is_portal_page %}<a href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>{% endif %}
             {% if is_portal_page and user_can('neoapps.portal_management.view') %}<a href="{{ url_for('auth.portal_management') }}">Portal Management</a>{% endif %}
@@ -47,10 +60,11 @@
             <span class="neo-drawer-user">{{ current_user.header_display_name }}</span>
             <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">Logout</button></form>
         </section>
+        </section>
     </aside>
     <nav class="neo-mobile-bottom {% if uses_operational_shell %}operational-mobile-bottom-nav{% elif is_rfd_hub_page %}gateway-mobile-bottom-nav{% endif %}" aria-label="{{ drawer_name }} mobile navigation">
         <a href="{{ url_for(drawer_home) }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>Home</span></a>
-        <button type="button" data-drawer-character aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg><span>Character</span></button>
+        <button type="button" data-drawer-nodes aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3ZM14 3h7v7h-7ZM3 14h7v7H3ZM14 14h7v7h-7Z"/></svg><span data-drawer-nodes-label>Nodes</span></button>
         <button type="button" data-drawer-toggle aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M3 12h18M3 19h18"/></svg><span data-drawer-toggle-label>Menu</span></button>
     </nav>
 </div>

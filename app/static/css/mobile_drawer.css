@@ -1,13 +1,19 @@
 /* Shared MOBILE navigation only. Desktop sidebars and NeoStaffing are separate. */
 .neo-mobile-navigation { display:none; }
 @media (max-width:900px) {
+    body:has(> .neo-mobile-navigation) {
+        --neo-dock-controls:54px;
+        --neo-dock-height:calc(var(--neo-dock-controls) + var(--neo-safe-bottom));
+        --neo-dock-fade:20px;
+        --neo-dock-clearance:calc(var(--neo-dock-height) + var(--neo-dock-fade));
+    }
     .neo-mobile-navigation { display:block; position:relative; z-index:5000; }
     .neo-mobile-navigation [hidden] { display:none !important; }
     .neo-mobile-backdrop { position:fixed; inset:0; z-index:1200; background:rgba(0,0,0,.65); }
     .neo-mobile-drawer {
-        position:fixed; inset:0 0 calc(88px + var(--neo-safe-bottom)) auto; z-index:1210;
+        position:fixed; inset:0 0 var(--neo-dock-clearance) auto; z-index:1210;
         width:min(380px, calc(100% - 24px - var(--neo-safe-left)));
-        max-height:calc(100dvh - 88px - var(--neo-safe-bottom)); box-sizing:border-box;
+        max-height:calc(100dvh - var(--neo-dock-clearance)); box-sizing:border-box;
         padding:calc(12px + var(--neo-safe-top)) calc(14px + var(--neo-safe-right)) 16px 14px;
         overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y;
         background:linear-gradient(160deg, rgba(var(--node-rgb, 145,67,130),.12), transparent 35%), #0b0e14;
@@ -26,28 +32,48 @@
     .neo-drawer-links form { margin:0; min-width:0; }
     .neo-drawer-links select { width:100%; min-width:0; max-width:100%; }
     .neo-drawer-user { overflow-wrap:anywhere; color:#aeb8c7; font:.85rem/1.4 var(--font-sans); }
-    .neo-mobile-drawer .character-switcher { width:100%; min-width:0; }
-    body .neo-mobile-navigation .neo-mobile-drawer .character-switcher { position:relative; inset:auto; grid-area:auto; width:100%; margin:0; }
-    body .neo-mobile-navigation .neo-mobile-drawer .character-switcher-trigger { min-height:44px; height:auto; padding:10px; font:600 .88rem/1.4 var(--font-sans); text-align:left; overflow:visible; }
-    .neo-mobile-drawer .character-switcher-panel { position:static; width:100%; min-width:0; max-width:100%; transform:none; margin:6px 0; padding:0; }
-    .neo-mobile-drawer .character-switcher-link { display:flex; flex-wrap:wrap; gap:6px; }
-    .neo-mobile-drawer .character-switcher-label { min-width:0; }
-    .neo-mobile-drawer .character-switcher-label .neo-brand { font-size:.68rem; white-space:nowrap; }
+    .neo-drawer-view-title { font:600 1rem/1.4 var(--font-sans); }
+    .neo-drawer-links .neo-drawer-node-link { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+    .neo-drawer-node-link img { width:28px; height:28px; object-fit:contain; }
+    .neo-drawer-node-link .neo-brand { font:400 clamp(.65rem, 3.2vw, .82rem)/1.4 NeoFont,sans-serif; white-space:nowrap; }
+    .neo-drawer-node-link small { font:500 .72rem/1.4 var(--font-sans); }
+    .neo-drawer-node-link.is-active { border-color:var(--node-highlight, #c6b6d3); }
     .neo-drawer-share img { display:block; width:min(180px,100%); height:auto; margin:10px auto; }
     .neo-mobile-navigation .neo-mobile-bottom {
-        position:fixed; z-index:1220; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right));
-        bottom:calc(10px + var(--neo-safe-bottom)); display:flex; align-items:center; justify-content:space-around;
-        width:auto; max-width:none; min-height:58px; box-sizing:border-box; padding:6px; gap:4px;
-        border:1px solid #7d657c; border-radius:999px; background:#0c111af5; box-shadow:0 6px 22px #0008; transform:none;
+        position:fixed; z-index:1220; left:0; right:0;
+        bottom:0; display:flex; align-items:center; justify-content:space-around;
+        width:auto; max-width:none; height:var(--neo-dock-height); min-height:0; box-sizing:border-box;
+        padding:4px max(6px,var(--neo-safe-right)) calc(4px + var(--neo-safe-bottom)) max(6px,var(--neo-safe-left)); gap:4px;
+        border:0; border-top:1px solid #ffffff26; border-radius:0; background:#0c111a; box-shadow:none; transform:none;
+        backdrop-filter:none; -webkit-backdrop-filter:none;
     }
+    @supports ((backdrop-filter:blur(10px)) or (-webkit-backdrop-filter:blur(10px))) {
+        .neo-mobile-navigation .neo-mobile-bottom { background:rgba(12,17,26,.88); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+    }
+    .neo-mobile-bottom::before { content:""; position:absolute; bottom:100%; left:0; right:0; height:var(--neo-dock-fade); background:linear-gradient(transparent,rgba(12,17,26,.8)); pointer-events:none; }
     .neo-mobile-bottom :is(a,button) { display:grid; place-items:center; gap:3px; flex:1 1 0; min-width:0; min-height:44px; padding:4px; border:0; background:transparent; color:#edf1f6; font:700 .66rem/1.2 var(--font-sans); text-transform:uppercase; text-decoration:none; cursor:pointer; }
     .neo-mobile-bottom svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
+    body .neo-mobile-navigation .neo-mobile-bottom button { box-shadow:none; border-bottom:2px solid transparent; }
+    body .neo-mobile-navigation .neo-mobile-bottom button[aria-expanded="true"] { border-bottom-color:var(--node-highlight, #c6b6d3); }
+    body .neo-mobile-navigation .neo-mobile-bottom button:is(:hover,:active,:focus,[aria-expanded="true"]) { background:rgba(210,220,235,.07); color:#edf1f6; }
     .neo-mobile-navigation :focus-visible { outline:2px solid #d3b9ed; outline-offset:2px; }
     body.operational-board-view .neo-mobile-navigation { display:none; }
-    body.operational-shell-page .operational-mobile-header { grid-template-columns:minmax(0,1fr) auto; }
+    body.operational-shell-page .operational-mobile-header { grid-template-columns:minmax(0,1fr) 44px; }
+    body .gateway-mobile-header { grid-template-columns:40px minmax(0,1fr) 44px; }
+    body :is(.gateway-mobile-actions,.operational-mobile-actions) { width:44px; justify-content:flex-end; }
     body.neo-mobile-drawer-open :is(.operational-mobile-header,.gateway-mobile-header,[data-mobile-topbar]) { transform:translateY(0); }
     body.neo-mobile-header-hidden [data-mobile-topbar] { transform:translateY(calc(-100% - 1px)); }
-    body.portal-shell-page .content { padding-bottom:calc(104px + var(--neo-safe-bottom)); }
+    body:has(> .neo-mobile-navigation):not(.operational-board-view) > .shell > .content { padding-bottom:var(--neo-dock-clearance); }
+    body .operational-mobile-header .neo-mobile-product-name,
+    body .gateway-mobile-header .neo-mobile-product-name,
+    body:has(> .neo-mobile-navigation) .mobile-topbar .mobile-topbar-brand {
+        font:400 clamp(.65rem, 3.3vw, .86rem)/1.5 NeoFont,sans-serif; letter-spacing:0; white-space:nowrap; overflow:visible; text-overflow:clip;
+    }
+    body .operational-mobile-header .neo-mobile-product-name .neo-brand,
+    body .gateway-mobile-header .neo-mobile-product-name .neo-brand { display:inline-flex; flex-wrap:nowrap; font:inherit; letter-spacing:inherit; }
+    body .operational-mobile-header .neo-mobile-product-name .neo-brand > span,
+    body .gateway-mobile-header .neo-mobile-product-name .neo-brand > span { display:inline; font:inherit; }
+    body:has(> .neo-mobile-navigation) .mobile-topbar-title strong { font-family:var(--font-sans); }
 }
 @keyframes neo-drawer-enter { from { transform:translateX(100%); } to { transform:translateX(0); } }
 @media (prefers-reduced-motion:reduce) { .neo-mobile-drawer { animation:none; } }

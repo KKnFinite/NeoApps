@@ -16932,9 +16932,9 @@ select::-ms-expand {
     body.rfd-hub-page.mobile-app-chrome,
     body.rfd-hub-page.mobile-app-chrome .shell,
     body.rfd-hub-page.mobile-app-chrome .content {
-        height: 100dvh;
-        max-height: 100dvh;
-        overflow: hidden;
+        height: auto;
+        max-height: none;
+        overflow: visible;
     }
 
     .rfd-node-sektor {
@@ -22033,7 +22033,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     .operational-mobile-header .motherbrain-alert-button::before { content:"!"; color:var(--node-highlight); font-size:1rem; font-weight:950; line-height:1; }
     .operational-mobile-header .motherbrain-alert-count { position:absolute; right:-3px; bottom:-3px; min-width:18px; height:18px; padding:0 5px; font-size:.58rem; }
     .operational-mobile-header .motherbrain-alert-panel { right:0; width:min(330px, calc(100vw - var(--neo-safe-left) - var(--neo-safe-right) - 18px)); max-width:calc(100vw - var(--neo-safe-left) - var(--neo-safe-right) - 18px); }
-    body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:calc(var(--operational-mobile-header-height) + 14px) max(10px, var(--neo-safe-right)) calc(98px + var(--neo-safe-bottom)) max(10px, var(--neo-safe-left)); }
+    body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:calc(var(--operational-mobile-header-height) + 14px) max(10px, var(--neo-safe-right)) var(--neo-dock-clearance) max(10px, var(--neo-safe-left)); }
     .operational-mobile-bottom-nav { position:fixed; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right)); bottom:calc(10px + var(--neo-safe-bottom)); z-index:1080; display:flex; align-items:center; justify-content:space-around; gap:4px; min-height:58px; padding:8px; border:1px solid rgba(var(--node-rgb),.38); border-radius:999px; background:linear-gradient(135deg, rgba(238,246,255,.08), transparent 34%), linear-gradient(180deg, rgba(12,15,21,.9), rgba(3,4,7,.88)); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.5),0 0 24px rgba(var(--node-rgb),.2); backdrop-filter:blur(16px); }
     .operational-mobile-bottom-nav a,.operational-mobile-bottom-nav button { display:grid; place-items:center; gap:2px; flex:1 1 0; min-width:0; min-height:40px; border:0; color:var(--text); background:transparent; font:800 .58rem/1 var(--font-sans); letter-spacing:.05em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
     .operational-mobile-bottom-nav a > span:first-child,.operational-mobile-bottom-nav button > span:first-child { color:var(--node-highlight); font-size:1.05rem; line-height:1; }
@@ -32304,7 +32304,7 @@ body.operational-shell-page .neosubzero-nav { display:none !important; }
     .gateway-mobile-bottom-nav { position:fixed; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right)); bottom:calc(10px + var(--neo-safe-bottom)); z-index:1080; display:flex; align-items:center; justify-content:space-around; gap:4px; width:auto; max-width:none; min-height:58px; padding:8px; border:1px solid rgba(var(--node-gateway-highlight-rgb),.38); border-radius:999px; background:linear-gradient(135deg, rgba(238,246,255,.08), transparent 34%), linear-gradient(180deg, rgba(12,15,21,.9), rgba(3,4,7,.88)); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.5),0 0 24px rgba(var(--node-gateway-primary-rgb),.2); transform:none; backdrop-filter:blur(16px); }
     .gateway-mobile-bottom-nav .mobile-bottom-nav-item { flex:1 1 0; }
     .gateway-mobile-bottom-nav .mobile-bottom-nav-link,.gateway-mobile-bottom-nav .mobile-bottom-nav-button { font-family:var(--font-sans); }
-    .gateway-shell-page .content { min-height:100vh; padding:calc(var(--gateway-shell-height) + 20px) max(12px, var(--neo-safe-right)) calc(104px + var(--neo-safe-bottom)) max(12px, var(--neo-safe-left)); }
+    .gateway-shell-page .content { min-height:100vh; padding:calc(var(--gateway-shell-height) + 20px) max(12px, var(--neo-safe-right)) var(--neo-dock-clearance) max(12px, var(--neo-safe-left)); }
     .gateway-command-launcher { gap:12px; }
     .gateway-page-identity { display:none; }
     .gateway-page-identity h1 { font-size:1.15rem; }

@@ -10,12 +10,25 @@
     const panel = root.querySelector("[data-mobile-drawer]");
     const backdrop = root.querySelector("[data-drawer-backdrop]");
     const toggle = root.querySelector("[data-drawer-toggle]");
-    const character = root.querySelector("[data-drawer-character]");
+    const nodes = root.querySelector("[data-drawer-nodes]");
+    const views = Array.from(panel.querySelectorAll("[data-drawer-view]"));
     const mobile = window.matchMedia("(max-width: 900px)");
     const header = document.querySelector("[data-operational-mobile-header], [data-gateway-mobile-header], [data-mobile-topbar]");
     const hiddenClass = body.hasAttribute("data-operational-shell") ? "operational-mobile-header-hidden" :
         body.hasAttribute("data-gateway-shell") ? "gateway-mobile-header-hidden" : "neo-mobile-header-hidden";
     let open = false, opener = null, savedY = 0, savedStyle = "", inactive = [], gesture = null;
+    let mode = "closed";
+    const setMode = (next) => {
+        mode = next;
+        views.forEach(view => { view.hidden = view.dataset.drawerView !== mode; view.inert = view.hidden; });
+        toggle.setAttribute("aria-expanded", String(mode === "menu"));
+        nodes.setAttribute("aria-expanded", String(mode === "nodes"));
+        toggle.querySelector("[data-drawer-toggle-label]").textContent = mode === "menu" ? "Close" : "Menu";
+        nodes.querySelector("[data-drawer-nodes-label]").textContent = mode === "nodes" ? "Close" : "Nodes";
+        root.setAttribute("aria-label", mode === "nodes" ? "Nodes" : root.dataset.menuTitle);
+        panel.setAttribute("aria-label", root.getAttribute("aria-label"));
+        panel.scrollTop = 0;
+    };
     let lastY = window.scrollY, down = 0, up = 0, ticking = false, settling = false;
     const focusable = () => Array.from(root.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex="0"]'))
         .filter(el => !el.disabled && !el.closest("[inert]") && el.getClientRects().length);
@@ -28,8 +41,7 @@
         open = false; gesture = null;
         panel.hidden = true; panel.inert = true; backdrop.hidden = true;
         root.removeAttribute("role"); root.removeAttribute("aria-modal");
-        toggle.setAttribute("aria-expanded", "false"); character.setAttribute("aria-expanded", "false");
-        toggle.querySelector("[data-drawer-toggle-label]").textContent = "Menu";
+        setMode("closed");
         body.classList.remove("neo-mobile-drawer-open");
         inactive.forEach(([el, inert]) => { el.inert = inert; }); inactive = [];
         body.style.cssText = savedStyle;
@@ -42,8 +54,15 @@
         if (restoreFocus && opener?.isConnected) opener.focus({preventScroll:true});
         requestAnimationFrame(() => { resetHeader(); settling = false; });
     };
-    const show = (source) => {
-        if (open || !mobile.matches || body.classList.contains("operational-board-view")) return;
+    const show = (source, next) => {
+        if (!mobile.matches || body.classList.contains("operational-board-view")) return;
+        if (open) {
+            if (mode === next) { close(); return; }
+            opener = source;
+            setMode(next);
+            panel.querySelector("[data-drawer-close]").focus({preventScroll:true});
+            return;
+        }
         opener = source; savedY = window.scrollY; savedStyle = body.style.cssText;
         open = true;
         /* Root is a direct body child; bottom CLOSE stays inside the active region. */
@@ -53,24 +72,14 @@
         body.classList.add("neo-mobile-drawer-open");
         root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true");
         panel.hidden = false; panel.inert = false; backdrop.hidden = false;
-        toggle.setAttribute("aria-expanded", "true");
-        character.setAttribute("aria-expanded", "true");
-        toggle.querySelector("[data-drawer-toggle-label]").textContent = "Close";
+        setMode(next);
         resetHeader();
         panel.querySelector("[data-drawer-close]").focus({preventScroll:true});
     };
-    toggle.addEventListener("click", () => open ? close() : show(toggle));
+    toggle.addEventListener("click", () => show(toggle, "menu"));
     root.querySelector("[data-drawer-close]").addEventListener("click", () => close());
     backdrop.addEventListener("click", () => close());
-    character.addEventListener("click", () => {
-        show(character);
-        const switcher = panel.querySelector("[data-character-switcher]");
-        if (switcher) {
-            switcher.open = true;
-            switcher.querySelector("summary").focus({preventScroll:true});
-            switcher.scrollIntoView({block:"nearest"});
-        }
-    });
+    nodes.addEventListener("click", () => show(nodes, "nodes"));
     document.addEventListener("keydown", event => {
         if (!open) return;
         if (event.key === "Escape") { event.preventDefault(); close(); }

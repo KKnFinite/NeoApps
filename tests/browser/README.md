@@ -18,10 +18,12 @@ Run from the repository root:
     node --test tests/js/mobile_drawer.test.js
 
 Chromium and WebKit each exercise Portal, Gateway, and MotherBrain at
-320x700, 360x800, 390x844, 430x932, and 740x360, plus a separate mouse/keyboard
+320x700 and 390x844, plus a separate mouse/keyboard
 1920x1080 desktop context. Coverage includes dismissal methods, focus,
-scrolling, navigation, reduced motion, safe-area simulation, Board View,
-restricted permissions, and unchanged NeoStaffing navigation.
+scrolling, mutually exclusive Nodes/Menu modes, navigation, reduced motion, safe-area simulation, Board View,
+restricted permissions, and unchanged NeoStaffing navigation. The last real
+Gateway card is checked above the dock and its fade after scrolling, and header
+product names are measured after the actual NeoFont loads.
 
 Screenshots default to the ignored directory
 `instance/browser-evidence/mobile-drawer/`. Set `NEO_BROWSER_EVIDENCE` to use

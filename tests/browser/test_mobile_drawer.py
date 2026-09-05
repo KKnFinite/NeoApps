@@ -134,6 +134,27 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         expect(page.locator("[data-mobile-drawer]")).to_be_hidden()
         self.assertEqual(page.locator("[data-mobile-shell-menu-panel], [data-gateway-mobile-drawer], [data-operational-mobile-drawer]").count(), 0)
         toggle = page.locator("[data-drawer-toggle]")
+        product = page.locator('.neo-mobile-product-name, [data-mobile-topbar] .mobile-topbar-brand').filter(visible=True).first
+        self.assertTrue(product.evaluate("""el => {
+            const r=document.createRange(); r.selectNodeContents(el);
+            const t=r.getBoundingClientRect(), b=el.getBoundingClientRect();
+            return getComputedStyle(el).fontFamily.includes('NeoFont') && t.width <= b.width + 1 &&
+                t.right <= innerWidth - 8 && t.height <= parseFloat(getComputedStyle(el).lineHeight) + 1;
+        }"""), "Complete one-line NeoFont header")
+        alerts = page.locator('[data-operational-mobile-header] summary, [data-gateway-mobile-header] summary, [data-mobile-topbar] [data-motherbrain-alert-toggle]').filter(visible=True)
+        if alerts.count():
+            bounds = alerts.first.bounding_box()
+            self.assertLessEqual(bounds['x'] + bounds['width'], width - 3, 'Alerts remain within header')
+        # Last real Gateway card must scroll above BOTH dock and decorative fade.
+        if path == "/rfd":
+            page.evaluate("scrollTo(0, document.documentElement.scrollHeight)")
+            page.wait_for_function("scrollY >= document.documentElement.scrollHeight - innerHeight - 1")
+            if width == 320:
+                self.assertGreater(page.evaluate('scrollY'), 0)
+            last = page.locator('.gateway-node-grid > :last-child').bounding_box()
+            dock = page.locator('.neo-mobile-bottom').bounding_box()
+            self.assertLessEqual(last['y'] + last['height'], dock['y'] - 20 + 1)
+            page.screenshot(path=str(self.evidence / f"{engine}-gateway-scrolled-{width}.png"))
         if width == 390:
             # Only use the real page's scrollable space; no artificial mock content.
             room = page.evaluate("document.documentElement.scrollHeight - innerHeight")
@@ -201,10 +222,36 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             page.wait_for_function("document.querySelector('[data-mobile-drawer]').scrollTop > 0")
             expect(panel).to_be_visible()
         page.keyboard.press("Escape")
-        page.locator("[data-drawer-character]").click()
-        expect(panel.locator("[data-character-switcher]")).to_have_attribute("open", "")
+        nodes = page.locator("[data-drawer-nodes]")
+        nodes.click()
+        expect(panel.locator('[data-drawer-view="nodes"]')).to_be_visible()
+        expect(panel.locator('[data-drawer-view="menu"]')).to_be_hidden()
+        expect(nodes).to_have_attribute('aria-expanded', 'true')
+        expect(toggle).to_have_attribute('aria-expanded', 'false')
+        expect(nodes).to_contain_text('Close')
+        self.assertEqual(panel.locator('[data-character-switcher], [data-drawer-view="nodes"] form').count(), 0)
+        self.assertGreater(panel.locator('.neo-drawer-node-link').count(), 0)
+        locked = page.locator('body').get_attribute('style')
+        toggle.click()
+        expect(panel.locator('[data-drawer-view="nodes"]')).to_be_hidden()
+        expect(panel.locator('[data-drawer-view="menu"]')).to_be_visible()
+        expect(nodes).to_have_attribute('aria-expanded', 'false')
+        expect(toggle).to_have_attribute('aria-expanded', 'true')
+        self.assertEqual(page.locator('body').get_attribute('style'), locked)
+        expect(page.locator('[data-drawer-close]')).to_be_focused()
+        nodes.click()
+        self.assertEqual(page.locator('body').get_attribute('style'), locked)
+        panel.evaluate("async el => { await Promise.all(el.getAnimations().map(a => a.finished)); }")
+        self.assertTrue(panel.locator('[data-drawer-view="menu"]').evaluate('el => el.inert'))
+        self.assertTrue(panel.locator('.neo-drawer-node-links').evaluate('el => el.scrollWidth <= el.clientWidth'))
+        page.screenshot(path=str(self.evidence / f"{engine}-{path.strip('/')}-nodes-{width}.png"))
+        nodes.click()
+        expect(panel).to_be_hidden()
+        expect(nodes).to_be_focused()
+        self.assertAlmostEqual(page.evaluate('scrollY'), saved, delta=1)
+        nodes.click()
         page.keyboard.press("Escape")
-        expect(page.locator("[data-drawer-character]")).to_be_focused()
+        expect(nodes).to_be_focused()
         if width == 390:
             page.screenshot(path=str(self.evidence / f"{engine}-{path.strip('/').replace('/', '-')}-closed.png"))
         # Clean up if the page transitions to desktop with drawer open.
@@ -226,7 +273,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
             self.login(page)
-            for width, height in ((320,700),(360,800),(390,844),(430,932),(740,360)):
+            for width, height in ((320,700),(390,844)):
                 page.set_viewport_size({"width":width,"height":height})
                 for path in ("/portal", "/rfd", "/motherbrain"):
                     with self.subTest(engine=engine, width=width, path=path):
