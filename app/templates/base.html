@@ -401,6 +401,9 @@
         {% if uses_operational_shell and operational_shell_supports_board_view %}<button class="operational-board-exit" type="button" data-operational-board-toggle hidden aria-label="Exit Board View">☰</button>{% endif %}
         <main class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if public_landing|default(false) %}
+                {% set messages = messages|rejectattr('1', 'equalto', 'Please log in to access this page.')|list %}
+                {% endif %}
                 {% if messages %}
                 <div class="flash-stack" aria-live="polite">
                     {% for category, message in messages %}

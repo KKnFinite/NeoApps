@@ -4,12 +4,11 @@
 {% block content %}
 <section class="portal-launcher" aria-labelledby="portal-launcher-heading">
     <h1 id="portal-launcher-heading" class="portal-launcher-heading">NeoApps Portal</h1>
-    <div class="portal-launcher-hero">
-        <img src="{{ url_for('static', filename='images/hero/hero_neopapps.png') }}"
-             srcset="{{ url_for('static', filename='images/hero/hero_neopapps_small.png') }} 1024w, {{ url_for('static', filename='images/hero/hero_neopapps.png') }} 1672w"
-             sizes="(max-width: 900px) calc(100vw - 24px), 1120px"
+    <picture class="portal-launcher-hero neo-auth-environment">
+        <source media="(max-width: 900px)" srcset="{{ url_for('static', filename='images/hero/neoapps_portal_mobile.png') }}" width="941" height="1672">
+        <img src="{{ url_for('static', filename='images/hero/neoapps_portal_desktop.png') }}"
              width="1672" height="941" alt="NeoApps Portal" fetchpriority="high">
-    </div>
+    </picture>
     <div class="portal-launcher-apps" aria-label="NeoApps applications">
         {% for code in ('neogateway', 'neostaffing') %}
         {% for row in app_rows if row.app.code == code %}

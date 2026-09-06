@@ -6,11 +6,10 @@
 {% block content %}
 <section class="motherbrain-command public-command portal-login-page" aria-label="NeoApps login">
     <section class="motherbrain-core">
-        <div class="portal-login-hero">
+        <picture class="portal-login-hero neo-auth-environment">
+            <source media="(max-width: 900px)" srcset="{{ url_for('static', filename='images/hero/neoapps_login_mobile.png') }}" width="941" height="1672">
             <img
-                src="{{ url_for('static', filename='images/hero/hero_neopapps.png') }}"
-                srcset="{{ url_for('static', filename='images/hero/hero_neopapps_small.png') }} 1024w, {{ url_for('static', filename='images/hero/hero_neopapps.png') }} 1672w"
-                sizes="(max-width: 752px) calc(100vw - 32px), 720px"
+                src="{{ url_for('static', filename='images/hero/neoapps_login_desktop.png') }}"
                 alt="NeoApps"
                 width="1672"
                 height="941"
@@ -18,7 +17,7 @@
                 fetchpriority="high"
                 decoding="async"
             >
-        </div>
+        </picture>
 
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">
             <div class="command-login-fields">

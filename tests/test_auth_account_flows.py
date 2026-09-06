@@ -1636,9 +1636,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'class="portal-login-hero"', response.data)
-        self.assertIn(b'images/hero/hero_neopapps.png', response.data)
-        self.assertIn(b'images/hero/hero_neopapps_small.png', response.data)
+        self.assertIn(b'class="portal-login-hero neo-auth-environment"', response.data)
+        self.assertIn(b'images/hero/neoapps_login_desktop.png', response.data)
+        self.assertIn(b'images/hero/neoapps_login_mobile.png', response.data)
         self.assertIn(b'width="1672"', response.data)
         self.assertNotIn(b'images/neoapps_logo_transparent.png', response.data)
         self.assertNotIn(b'class="topbar"', response.data)
@@ -1655,6 +1655,17 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn(b"NeoSektor", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
         self.assertNotIn(b'href="https://neosektor.onrender.com/"', response.data)
+
+    def test_login_hides_only_obsolete_login_required_notice(self):
+        with self.client.session_transaction() as session:
+            session['_flashes'] = [
+                ('message', 'Please log in to access this page.'),
+                ('error', 'Invalid email or password.'),
+            ]
+        response = self.client.get('/login')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'Please log in to access this page.', response.data)
+        self.assertIn(b'Invalid email or password.', response.data)
 
     def test_create_account_form_collects_split_name_and_not_username(self):
         response = self.client.get("/create-account")

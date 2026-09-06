@@ -371,16 +371,18 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                         expect(brand.locator('img')).to_be_visible()
                         self.assertEqual(page.locator('[data-portal-app]').count(), 2)
                         self.assertEqual(page.locator('[data-portal-app="neobid"]').count(), 0)
+                        self.assertTrue(page.locator('.portal-launcher-hero img').evaluate(
+                            "e => e.currentSrc.includes(innerWidth<=900 ? 'neoapps_portal_mobile.png' : 'neoapps_portal_desktop.png')"))
                         result = page.evaluate('''() => {
                             const cards=[...document.querySelectorAll('.portal-launch-card')];
                             const hero=document.querySelector('.portal-launcher-hero img'), h=hero.getBoundingClientRect();
                             return {overflow:document.documentElement.scrollWidth>innerWidth,
-                                intact:Math.abs(h.width/h.height-hero.naturalWidth/hero.naturalHeight)<.01,
+                                intact:Math.abs(h.width/h.height-hero.naturalWidth/hero.naturalHeight)<.01 && Math.abs(h.width-innerWidth)<1,
                                 names:cards.every(c=>{const e=c.querySelector('h2'),r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=c.getBoundingClientRect();return getComputedStyle(e).fontFamily.includes('NeoFont') && t.right<b.right-8 && t.height<=parseFloat(getComputedStyle(e).lineHeight)+1;}),
                                 layout:innerWidth>900 ? Math.abs(cards[0].offsetTop-cards[1].offsetTop)<1 : cards[1].offsetTop>cards[0].offsetTop};
                         }''')
                         self.assertEqual(result, {'overflow':False,'intact':True,'names':True,'layout':True})
-                        page.screenshot(path=str(self.evidence / f'{engine}-portal-launcher-{width}.png'))
+                        page.screenshot(path=str(self.evidence / f'{engine}-portal-launcher-{width}.png'), full_page=width>900)
                         if width <= 900:
                             page.evaluate('scrollTo(0,document.documentElement.scrollHeight)')
                             page.wait_for_function('scrollY >= document.documentElement.scrollHeight-innerHeight-1')
@@ -400,7 +402,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 browser.close()
 
     def test_login_hero(self):
-        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080))), ('webkit', ((390,844),))):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080),(390,420))), ('webkit', ((390,844),))):
             browser = getattr(self.pw, engine).launch()
             context = browser.new_context()
             context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
@@ -411,18 +413,21 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     page.set_viewport_size({'width':width,'height':height})
                     self.ready(page, '/login')
                     hero = page.locator('.portal-login-hero img')
-                    self.assertTrue(hero.evaluate('e => e.complete && e.naturalWidth>0 && e.currentSrc.includes("hero_neopapps")'))
+                    self.assertTrue(hero.evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes(innerWidth<=900 ? 'neoapps_login_mobile.png' : 'neoapps_login_desktop.png')"))
                     box = hero.bounding_box()
-                    self.assertAlmostEqual(box['width']/box['height'], 1672/941, delta=.01)
+                    self.assertAlmostEqual(box['width'], width, delta=1)
+                    self.assertAlmostEqual(box['width']/box['height'], 941/1672 if width<=900 else 1672/941, delta=.01)
                     form = page.locator('.command-login-form')
-                    self.assertGreaterEqual(form.bounding_box()['y'], box['y']+box['height'])
+                    self.assertGreaterEqual(form.bounding_box()['y'], box['y']+box['height']*(.52 if width<=900 else .67))
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
                     expect(page.locator('#dashboard-email')).to_have_attribute('autocomplete','email')
                     expect(page.locator('#dashboard-password')).to_have_attribute('autocomplete','current-password')
                     page.evaluate('scrollTo(0,0)')
-                    page.screenshot(path=str(self.evidence / f'{engine}-login-hero-{width}.png'), full_page=True)
+                    page.screenshot(path=str(self.evidence / f'{engine}-login-hero-{width}-{height}.png'), full_page=True)
                     page.get_by_role('link', name='Forgot Password').scroll_into_view_if_needed()
                     expect(page.get_by_role('link', name='Forgot Password')).to_be_in_viewport()
+                    if height == 420:
+                        page.screenshot(path=str(self.evidence / f'{engine}-login-short-scrolled.png'))
                 page.set_viewport_size({'width':390,'height':844})
                 self.ready(page, '/login')
                 page.locator('#dashboard-email').fill('drawer-admin@example.test')

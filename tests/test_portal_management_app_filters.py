@@ -21,7 +21,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         launcher = html.split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
         self.assertEqual(launcher.count('data-portal-app='), 2)
         self.assertNotIn('neobid', launcher.lower())
-        for asset in ('hero_neopapps.png', 'hero_neopapps_small.png', 'icon_gateway.png', 'icon_gateway_small.png', 'icon_staffing.png', 'icon_staffing_small.png'):
+        for asset in ('neoapps_portal_desktop.png', 'neoapps_portal_mobile.png', 'icon_gateway.png', 'icon_gateway_small.png', 'icon_staffing.png', 'icon_staffing_small.png'):
             self.assertIn(asset, launcher)
         self.assertLess(launcher.index('data-portal-app="neogateway"'), launcher.index('data-portal-app="neostaffing"'))
         self.assertIn('href="/rfd"', launcher)
