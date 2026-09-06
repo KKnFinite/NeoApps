@@ -28,7 +28,6 @@ from app.services.google_motherbrain_parking import apply_google_motherbrain_par
 from app.services.night_sorting import sort_datetime_for_local_time
 from app.services.parking_plan import (
     ParkingPlanError,
-    TAIL_STATUS_NORMAL,
     TAIL_STATUS_SPARE,
     mark_arrival_tail_spare,
     set_tail_hot,

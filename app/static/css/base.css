@@ -6570,8 +6570,7 @@ h2 {
 
 .status-card,
 .panel,
-.node-strip article,
-.login-panel {
+.node-strip article {
     border: 1px solid var(--line);
     border-radius: 6px;
     background:
@@ -14981,18 +14980,6 @@ select::-ms-expand {
     border-left-color: var(--steel);
 }
 
-.login-stage {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
-    gap: 48px;
-    align-items: center;
-    min-height: 520px;
-}
-
-.login-identity {
-    position: relative;
-}
-
 .motherbrain-sigil {
     position: relative;
     width: 132px;
@@ -15034,60 +15021,6 @@ select::-ms-expand {
     width: 78px;
     height: 78px;
     margin-bottom: 18px;
-}
-
-.login-panel {
-    display: grid;
-    gap: 14px;
-    padding: 28px;
-}
-
-.login-panel h2 {
-    margin-bottom: 0;
-    font-size: 1.55rem;
-}
-
-.login-panel label {
-    color: var(--steel);
-    font-size: 0.86rem;
-    font-weight: 700;
-}
-
-.login-panel input {
-    width: 100%;
-    min-height: 46px;
-    border: 1px solid rgba(235, 241, 246, 0.22);
-    border-radius: 4px;
-    background: rgba(3, 4, 6, 0.72);
-    color: var(--text);
-    font: inherit;
-    padding: 11px 12px;
-    outline: none;
-}
-
-.login-panel input:focus {
-    border-color: rgba(255, 47, 47, 0.78);
-    box-shadow: 0 0 0 3px rgba(255, 47, 47, 0.12);
-}
-
-.login-panel button {
-    min-height: 48px;
-    margin-top: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.36);
-    border-radius: 4px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 47, 47, 0.22)),
-        #16171b;
-    color: var(--text);
-    cursor: pointer;
-    font: inherit;
-    font-weight: 800;
-    text-transform: uppercase;
-}
-
-.login-panel button:hover {
-    border-color: rgba(255, 47, 47, 0.86);
-    box-shadow: 0 0 26px rgba(255, 47, 47, 0.22);
 }
 
 @media (max-width: 760px) {
@@ -15494,7 +15427,6 @@ select::-ms-expand {
 
     .topbar,
     .dashboard-hero,
-    .login-stage,
     .motherbrain-command {
         align-items: flex-start;
         grid-template-columns: 1fr;

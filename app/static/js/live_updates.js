@@ -821,18 +821,21 @@
         }
         const destination = document.querySelector('#people-selection-form select[name="work_area_unit_id"]');
         if (destination && !destination.dataset.peopleHierarchyPicker) {
-            const root = {};
+            const root = Object.create(null);
             Array.from(destination.options).filter((option) => option.value).forEach((option) => {
                 let branch = root;
                 option.textContent.split(" / ").forEach((part, index, parts) => {
-                    branch[part] ||= { children: {}, option: null };
+                    branch[part] ||= { children: Object.create(null), option: null };
                     if (index === parts.length - 1) branch[part].option = option;
                     branch = branch[part].children;
                 });
             });
             const picker = document.createElement("details");
             picker.className = "neostaffing-people-destination-picker";
-            picker.innerHTML = '<summary data-people-destination-label>Select Work Area</summary>';
+            const label = document.createElement("summary");
+            label.dataset.peopleDestinationLabel = "";
+            label.textContent = "Select Work Area";
+            picker.append(label);
             const render = (items) => {
                 const list = document.createElement("ul");
                 Object.entries(items).forEach(([name, item]) => {
@@ -849,7 +852,9 @@
                     } else {
                         const group = document.createElement("details");
                         group.open = destination.selectedOptions[0]?.textContent.includes(name) || false;
-                        group.innerHTML = `<summary>${name}</summary>`;
+                        const summary = document.createElement("summary");
+                        summary.textContent = name;
+                        group.append(summary);
                         group.append(render(item.children)); row.append(group);
                     }
                     list.append(row);
