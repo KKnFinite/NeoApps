@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1] / 'app/static/images/icons/neoapps'
-SOURCE_SHA = '4f99b3e6f4ec694f84c3b1d450a5f60c083f40c4d50559c413455c0ffc84fad5'
+SOURCE_SHA = 'c226ebbb10167a3cd5c8b9d553147999e9befd8a647a031470245036a9bd18dd'
 PWA_SIZES = (72, 96, 128, 144, 152, 167, 180, 192, 256, 384, 512, 1024)
 INAPP_SIZES = (32, 40, 48, 64, 72, 96, 128, 160, 192, 256, 384, 512)
 FAVICON_SIZES = (16, 24, 32, 48, 64)

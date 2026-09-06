@@ -1,8 +1,8 @@
 NeoApps locked icon/logo pack
 
-Approved source: NeoApps_New_Icon_Master.png, 1254x1254 RGB PNG.
+Approved source: NeoApps_Approved_Icon_Master_v2.png, 1254x1254 RGB PNG.
 Chrome NA mark and energy slash in the red/blue cosmic portal environment.
-SHA-256: 4f99b3e6f4ec694f84c3b1d450a5f60c083f40c4d50559c413455c0ffc84fad5
+SHA-256: c226ebbb10167a3cd5c8b9d553147999e9befd8a647a031470245036a9bd18dd
 source/neoapps-icon-original.png is a byte-for-byte copy of the approved source.
 source/neoapps-icon-master-1024.png is its Lanczos-downsampled canonical master.
 All other sizes derive from that master without recoloring, cropping or sharpening.

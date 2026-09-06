@@ -16,7 +16,7 @@
     const header = document.querySelector("[data-operational-mobile-header], [data-gateway-mobile-header], [data-mobile-topbar]");
     const hiddenClass = body.hasAttribute("data-operational-shell") ? "operational-mobile-header-hidden" :
         body.hasAttribute("data-gateway-shell") ? "gateway-mobile-header-hidden" : "neo-mobile-header-hidden";
-    let open = false, opener = null, savedY = 0, savedStyle = "", inactive = [], gesture = null;
+    let open = false, opener = null, savedY = 0, inactive = [], gesture = null, touchY = null;
     let mode = "closed";
     const setMode = (next) => {
         mode = next;
@@ -44,7 +44,7 @@
         setMode("closed");
         body.classList.remove("neo-mobile-drawer-open");
         inactive.forEach(([el, inert]) => { el.inert = inert; }); inactive = [];
-        body.style.cssText = savedStyle;
+        document.documentElement.classList.remove("neo-drawer-scroll-locked");
         settling = true;
         const scrollBehavior = document.documentElement.style.scrollBehavior;
         document.documentElement.style.scrollBehavior = "auto";
@@ -63,12 +63,12 @@
             panel.querySelector("[data-drawer-close]").focus({preventScroll:true});
             return;
         }
-        opener = source; savedY = window.scrollY; savedStyle = body.style.cssText;
+        opener = source; savedY = window.scrollY;
         open = true;
         /* Root is a direct body child; bottom CLOSE stays inside the active region. */
         inactive = Array.from(body.children).filter(el => el !== root && !["SCRIPT", "STYLE", "LINK"].includes(el.tagName)).map(el => [el, el.inert]);
         inactive.forEach(([el]) => { el.inert = true; });
-        body.style.position = "fixed"; body.style.top = `-${savedY}px`; body.style.width = "100%";
+        document.documentElement.classList.add("neo-drawer-scroll-locked");
         body.classList.add("neo-mobile-drawer-open");
         root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true");
         panel.hidden = false; panel.inert = false; backdrop.hidden = false;
@@ -80,6 +80,22 @@
     root.querySelector("[data-drawer-close]").addEventListener("click", () => close());
     backdrop.addEventListener("click", () => close());
     nodes.addEventListener("click", () => show(nodes, "nodes"));
+    /* Lock only while this drawer is active. Never move the body/fixed dock.
+       Boundary guards also prevent rubber-band scroll chaining on iOS. */
+    document.addEventListener("touchstart", event => {
+        touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+    }, {passive:true});
+    document.addEventListener("touchmove", event => {
+        if (!open || event.touches.length !== 1 || touchY === null) return;
+        const dy = event.touches[0].clientY - touchY;
+        touchY = event.touches[0].clientY;
+        if (!panel.contains(event.target) ||
+            (dy > 0 && panel.scrollTop <= 0) ||
+            (dy < 0 && panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1)) event.preventDefault();
+    }, {passive:false});
+    document.addEventListener("wheel", event => {
+        if (open && !panel.contains(event.target)) event.preventDefault();
+    }, {passive:false});
     document.addEventListener("keydown", event => {
         if (!open) return;
         if (event.key === "Escape") { event.preventDefault(); close(); }

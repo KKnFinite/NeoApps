@@ -1,6 +1,8 @@
 /* Shared MOBILE navigation only. Desktop sidebars and NeoStaffing are separate. */
 .neo-mobile-navigation { display:none; }
 @media (max-width:900px) {
+    html.neo-drawer-scroll-locked { overflow:hidden; overscroll-behavior:none; }
+    body.neo-mobile-drawer-open { overflow:hidden; overscroll-behavior:none; }
     body:has(> .neo-mobile-navigation) {
         --neo-dock-controls:54px;
         --neo-dock-height:calc(var(--neo-dock-controls) + var(--neo-safe-bottom));

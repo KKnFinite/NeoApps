@@ -21,7 +21,7 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         launcher = html.split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
         self.assertEqual(launcher.count('data-portal-app='), 2)
         self.assertNotIn('neobid', launcher.lower())
-        for asset in ('neoapps_portal_desktop.png', 'neoapps_portal_mobile.png', 'icon_gateway.png', 'icon_gateway_small.png', 'icon_staffing.png', 'icon_staffing_small.png'):
+        for asset in ('neoapps_portal_desktop.png', 'neoapps_login_mobile.png', 'icon_gateway.png', 'icon_gateway_small.png', 'icon_staffing.png', 'icon_staffing_small.png'):
             self.assertIn(asset, launcher)
         self.assertLess(launcher.index('data-portal-app="neogateway"'), launcher.index('data-portal-app="neostaffing"'))
         self.assertIn('href="/rfd"', launcher)
@@ -32,7 +32,9 @@ class PortalManagementAppFiltersTest(unittest.TestCase):
         rows = [{'app': app, 'access': {'status':'pending', 'is_active':True}} for app in PORTAL_APPS]
         with patch('app.auth.routes.portal_dashboard_rows_for_user', return_value=rows):
             html = self.client.get('/portal').get_data(as_text=True).split('<section class="portal-launcher"', 1)[1].split('</main>', 1)[0]
-        self.assertEqual(html.count('disabled>PENDING REVIEW'), 2)
+        self.assertEqual(html.count('aria-disabled="true"'), 2)
+        self.assertEqual(html.count('PENDING REVIEW'), 2)
+        self.assertNotIn('<button', html)
         self.assertNotIn('href=', html)
 
     def test_launcher_other_states_preserve_request_form(self):

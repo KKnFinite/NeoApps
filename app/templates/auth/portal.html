@@ -1,11 +1,20 @@
 {% extends "base.html" %}
 {% from "_neo_brand.html" import neo_brand %}
 {% block title %}NeoApps{% endblock %}
+{% macro card_content(key, cue) %}
+    <img class="portal-launch-icon" src="{{ url_for('static', filename='images/icons/icon_' ~ key ~ '_small.png') }}"
+         srcset="{{ url_for('static', filename='images/icons/icon_' ~ key ~ '_small.png') }} 1x, {{ url_for('static', filename='images/icons/icon_' ~ key ~ '.png') }} 3x"
+         width="80" height="80" alt="" decoding="async">
+    <span class="portal-launch-copy">
+        <span class="portal-app-name" role="heading" aria-level="2">{{ neo_brand('Gateway' if key == 'gateway' else 'Staffing', key) }}</span>
+        <span class="portal-launch-action">{{ cue }}</span>
+    </span>
+{% endmacro %}
 {% block content %}
 <section class="portal-launcher" aria-labelledby="portal-launcher-heading">
     <h1 id="portal-launcher-heading" class="portal-launcher-heading">NeoApps Portal</h1>
     <picture class="portal-launcher-hero neo-auth-environment">
-        <source media="(max-width: 900px)" srcset="{{ url_for('static', filename='images/hero/neoapps_portal_mobile.png') }}" width="941" height="1672">
+        <source media="(max-width: 900px)" srcset="{{ url_for('static', filename='images/hero/neoapps_login_mobile.png') }}" width="941" height="1672">
         <img src="{{ url_for('static', filename='images/hero/neoapps_portal_desktop.png') }}"
              width="1672" height="941" alt="NeoApps Portal" fetchpriority="high">
     </picture>
@@ -16,25 +25,23 @@
         {% set access = row.access %}
         {% set status = access.status if access else 'none' %}
         {% set key = 'gateway' if code == 'neogateway' else 'staffing' %}
-        <article class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}">
-            <img class="portal-launch-icon" src="{{ url_for('static', filename='images/icons/icon_' ~ key ~ '_small.png') }}"
-                 srcset="{{ url_for('static', filename='images/icons/icon_' ~ key ~ '_small.png') }} 1x, {{ url_for('static', filename='images/icons/icon_' ~ key ~ '.png') }} 3x"
-                 width="80" height="80" alt="" decoding="async">
-            <div class="portal-launch-copy">
-                <h2>{{ neo_brand('Gateway' if key == 'gateway' else 'Staffing', key) }}</h2>
-                {% if status == 'approved' and access.is_active %}
-                <a class="portal-launch-action" href="{{ url_for(app.endpoint) }}">Launch</a>
-                {% elif status == 'pending' and access.is_active %}
-                <button class="portal-launch-action" type="button" disabled>PENDING REVIEW</button>
-                {% else %}
-                <form method="post" action="{{ url_for('auth.request_portal_app_access') }}">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="app_code" value="{{ app.code }}">
-                    <button class="portal-launch-action" type="submit">REQUEST ACCESS</button>
-                </form>
-                {% endif %}
-            </div>
+        {% if status == 'approved' and access.is_active %}
+        <a class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" href="{{ url_for(app.endpoint) }}">
+            {{ card_content(key, 'LAUNCH') }}
+        </a>
+        {% elif status == 'pending' and access.is_active %}
+        <article class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" aria-disabled="true">
+            {{ card_content(key, 'PENDING REVIEW') }}
         </article>
+        {% else %}
+        <form class="portal-request-form" method="post" action="{{ url_for('auth.request_portal_app_access') }}">
+            {{ csrf_field() }}
+            <input type="hidden" name="app_code" value="{{ app.code }}">
+            <button class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" type="submit">
+                {{ card_content(key, 'REQUEST ACCESS') }}
+            </button>
+        </form>
+        {% endif %}
         {% endfor %}
         {% endfor %}
     </div>

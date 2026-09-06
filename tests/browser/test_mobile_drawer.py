@@ -4,6 +4,7 @@ Install dev browsers: pip install -r tests/requirements-browser.txt
                       python -m playwright install chromium webkit
 """
 import logging
+import json
 import base64
 import os
 import subprocess
@@ -352,6 +353,118 @@ class MobileDrawerBrowserTest(unittest.TestCase):
     def test_chromium(self):
         self.run_engine("chromium")
 
+    def test_stationary_dock_lifecycle(self):
+        measure = '''() => {
+            const dock=document.querySelector('.neo-mobile-bottom');
+            const rect=e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];};
+            return {dock:rect(dock),controls:[...dock.querySelectorAll('a,button')].map(e=>({
+                control:rect(e),icon:rect(e.querySelector('svg')),labelY:e.querySelector('span').getBoundingClientRect().y}))};
+        }'''
+        for engine in ('chromium','webkit'):
+            browser=getattr(self.pw,engine).launch()
+            context=browser.new_context(viewport={'width':390,'height':760},has_touch=True)
+            context.route(lambda url:not url.startswith(self.origin),lambda route:route.abort())
+            page=context.new_page()
+            try:
+                self.login(page)
+                # Existing Gateway page provides genuine scrollable content.
+                self.ready(page,'/rfd')
+                page.evaluate('scrollTo(0,150)')
+                page.wait_for_function('scrollY>0')
+                saved=page.evaluate('scrollY')
+                base=page.evaluate(measure)
+                evidence={'closed':base}
+                for label,selector in [('menu-open','[data-drawer-toggle]'),('menu-close','[data-drawer-toggle]'),
+                                       ('nodes-open','[data-drawer-nodes]'),('nodes-to-menu','[data-drawer-toggle]'),
+                                       ('menu-to-nodes','[data-drawer-nodes]'),('nodes-close','[data-drawer-nodes]')]:
+                    page.locator(selector).click()
+                    actual=page.evaluate(measure)
+                    evidence[label]=actual
+                    self.assertEqual(actual,base, label)
+                    self.assertAlmostEqual(page.evaluate('scrollY'),saved,delta=1)
+                    self.assertNotEqual(page.locator('body').evaluate('e=>e.style.position'),'fixed')
+                    if page.locator('[data-mobile-drawer]').is_visible():
+                        self.assertTrue(page.locator('.shell').evaluate('e=>e.inert'))
+                        page.mouse.move(2,200)
+                        page.mouse.wheel(0,200)
+                        page.wait_for_timeout(100)
+                        self.assertAlmostEqual(page.evaluate('scrollY'),saved,delta=1)
+                (self.evidence/f'{engine}-dock-geometry.json').write_text(json.dumps(evidence,indent=2))
+                # Reuse existing focus, scrolling, swipe, Escape and breakpoint checks.
+                self.exercise(page,engine,'/rfd',390,760)
+                self.ready(page,'/motherbrain')
+                page.locator('[data-drawer-toggle]').click()
+                panel=page.locator('[data-mobile-drawer]')
+                panel.evaluate('async e=>{await Promise.all(e.getAnimations().map(a=>a.finished));}')
+                self.assertTrue(panel.evaluate('e=>e.scrollHeight>e.clientHeight'))
+                panel.evaluate('e=>e.scrollTop=0')
+                page.mouse.move(200,300)
+                page.mouse.wheel(0,120)
+                page.wait_for_function("document.querySelector('[data-mobile-drawer]').scrollTop>0")
+                # Cancelable touch events exercise the iOS boundary guard, not OS gestures.
+                guarded=page.evaluate('''() => {
+                    const p=document.querySelector('[data-mobile-drawer]');
+                    const drag=(el,start,end)=>{
+                        // WebKit does not expose the Touch constructor on this host.
+                        const touch=(type,y)=>{const e=new Event(type,{bubbles:true,cancelable:true});
+                            Object.defineProperty(e,'touches',{value:[{identifier:1,target:el,clientY:y}]});return e;};
+                        el.dispatchEvent(touch('touchstart',start));
+                        const move=touch('touchmove',end);
+                        el.dispatchEvent(move);return move.defaultPrevented;
+                    };
+                    p.scrollTop=0;const top=drag(p,100,130);
+                    p.scrollTop=p.scrollHeight;const bottom=drag(p,130,100);
+                    p.scrollTop=20;const middle=drag(p,130,120);
+                    return {top,bottom,middle,backdrop:drag(document.querySelector('[data-drawer-backdrop]'),130,100)};
+                }''')
+                self.assertEqual(guarded,dict(top=True,bottom=True,middle=False,backdrop=True))
+                page.keyboard.press('Escape')
+            finally:
+                context.close()
+                browser.close()
+
+    def test_portal_whole_card_actions(self):
+        browser=self.pw.chromium.launch()
+        context=browser.new_context(viewport={'width':390,'height':760})
+        context.route(lambda url:not url.startswith(self.origin),lambda route:route.abort())
+        page=context.new_page()
+        try:
+            self.login(page,'drawer-watcher')
+            self.ready(page,'/portal')
+            cards=page.locator('.portal-launch-card')
+            self.assertTrue(cards.evaluate_all("es=>es.every(e=>e.tagName==='A'&&!e.querySelector('a,button,input,select'))"))
+            page.locator('[data-portal-app="neogateway"]').click(position={'x':5,'y':5})
+            page.wait_for_url(self.origin+'/rfd')
+            with self.app.app_context():
+                user=User.query.filter_by(username='drawer-watcher').one()
+                user_id=user.id
+                access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
+                access.status='denied'
+                db.session.commit()
+            self.ready(page,'/portal')
+            request=page.locator('button[data-portal-app="neostaffing"]')
+            self.assertEqual(request.locator('a,button,input').count(),0)
+            tokens=page.locator('.portal-request-form input[name="csrf_token"]').evaluate_all('es=>es.map(e=>e.value)')
+            self.assertTrue(tokens and all(token==tokens[0] and token for token in tokens))
+            denied=context.request.post(self.origin+'/portal/request-access',form={'app_code':'neostaffing'})
+            self.assertEqual(denied.status,400)
+            with page.expect_response(lambda r:r.url.endswith('/portal/request-access') and r.request.method=='POST') as posted:
+                request.click(position={'x':5,'y':5})
+            # Playwright's integration-blocking route can follow the local redirect.
+            self.assertIn(posted.value.status,(200,302))
+            pending=page.locator('article[data-portal-app="neostaffing"]')
+            expect(pending).to_have_attribute('aria-disabled','true')
+            self.assertEqual(pending.locator('a,button,input').count(),0)
+            expect(pending).to_contain_text('PENDING REVIEW')
+            with self.app.app_context():
+                access=PortalAppAccess.query.filter_by(user_id=user_id,app_code='neostaffing').one()
+                self.assertEqual(access.status,'pending')
+                access.status='approved'
+                db.session.commit()
+        finally:
+            context.close()
+            browser.close()
+
     def test_neoapps_square_identity_surfaces(self):
         browser = self.pw.chromium.launch()
         context = browser.new_context()
@@ -428,7 +541,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             browser.close()
 
     def test_portal_launcher(self):
-        for engine, sizes in (('chromium', ((320,700),(390,844),(390,760),(1920,1080))), ('webkit', ((390,844),(390,760)))):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(390,760),(1920,1080))), ('webkit', ((320,700),(390,844),(390,760)))):
             browser = getattr(self.pw, engine).launch()
             context = browser.new_context()
             context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
@@ -448,20 +561,21 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                         self.assertEqual(page.locator('[data-portal-app]').count(), 2)
                         self.assertEqual(page.locator('[data-portal-app="neobid"]').count(), 0)
                         self.assertTrue(page.locator('.portal-launcher-hero img').evaluate(
-                            "e => e.currentSrc.includes(innerWidth<=900 ? 'neoapps_portal_mobile.png' : 'neoapps_portal_desktop.png')"))
+                            "e => e.currentSrc.includes(innerWidth<=900 ? 'neoapps_login_mobile.png' : 'neoapps_portal_desktop.png')"))
                         result = page.evaluate('''() => {
                             const cards=[...document.querySelectorAll('.portal-launch-card')];
                             const hero=document.querySelector('.portal-launcher-hero img'), h=hero.getBoundingClientRect();
                             return {overflow:document.documentElement.scrollWidth>innerWidth,
-                                intact:getComputedStyle(hero).objectFit==='contain' && Math.abs(h.width-innerWidth)<1,
-                                names:cards.every(c=>{const e=c.querySelector('h2'),r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=c.getBoundingClientRect();return getComputedStyle(e).fontFamily.includes('NeoFont') && t.right<b.right-8 && t.height<=parseFloat(getComputedStyle(e).lineHeight)+1;}),
+                                intact:getComputedStyle(hero).objectFit===(innerWidth<=900?'cover':'contain') && Math.abs(h.width-innerWidth)<1,
+                                names:cards.every(c=>{const e=c.querySelector('.portal-app-name'),r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=c.getBoundingClientRect();return getComputedStyle(e).fontFamily.includes('NeoFont') && t.right<b.right-8 && t.height<=parseFloat(getComputedStyle(e).lineHeight)+1;}),
                                 layout:innerWidth>900 ? Math.abs(cards[0].offsetTop-cards[1].offsetTop)<1 : cards[1].offsetTop>cards[0].offsetTop};
                         }''')
                         self.assertEqual(result, {'overflow':False,'intact':True,'names':True,'layout':True})
                         self.assertTrue(page.evaluate('''() => {
                             const e=document.querySelector('.portal-launcher-hero img'), b=e.getBoundingClientRect();
-                            const artHeight=Math.min(b.height,b.width*e.naturalHeight/e.naturalWidth);
-                            return document.querySelector('.portal-launcher-apps').getBoundingClientRect().top >= b.top+artHeight*(innerWidth<=900?.57:.75);
+                            const artHeight=(innerWidth<=900?Math.max:Math.min)(b.height,b.width*e.naturalHeight/e.naturalWidth);
+                            const artTop=b.top+(innerWidth<=900?(b.height-artHeight)/2:0);
+                            return document.querySelector('.portal-launcher-apps').getBoundingClientRect().top >= artTop+artHeight*(innerWidth<=900?.51:.75);
                         }'''))
                         self.assertFalse(page.evaluate('document.documentElement.scrollHeight>innerHeight+1'))
                         self.assertTrue(page.locator('.portal-launch-action').evaluate_all("es=>es.every(e=>getComputedStyle(e).fontFamily.includes('NeoFont') && e.getBoundingClientRect().bottom<=innerHeight)"))
@@ -478,12 +592,15 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                             self.assertLessEqual(action['y']+action['height'],dock['y']-20)
                             page.screenshot(path=str(self.evidence / f'{engine}-portal-launcher-bottom-{width}.png'))
                             page.locator('[data-drawer-nodes]').click()
+                            self.assertEqual(page.locator('.neo-mobile-bottom').bounding_box(),dock)
                             expect(page.locator('[data-drawer-view="nodes"]')).to_be_visible()
                             page.locator('[data-drawer-toggle]').click()
+                            self.assertEqual(page.locator('.neo-mobile-bottom').bounding_box(),dock)
                             expect(page.locator('[data-drawer-view="menu"]')).to_be_visible()
                             expect(page.locator('[data-drawer-view="nodes"]')).to_be_hidden()
                             self.assertEqual(page.locator('[data-mobile-drawer] [data-operational-board-toggle]').count(),0)
                             page.keyboard.press('Escape')
+                            self.assertEqual(page.locator('.neo-mobile-bottom').bounding_box(),dock)
             finally:
                 context.close()
                 browser.close()
