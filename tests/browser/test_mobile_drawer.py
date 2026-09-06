@@ -351,6 +351,42 @@ class MobileDrawerBrowserTest(unittest.TestCase):
     def test_chromium(self):
         self.run_engine("chromium")
 
+    def test_share_qr_contrast_and_copy_link(self):
+        browser = self.pw.chromium.launch()
+        context = browser.new_context(viewport={'width':390,'height':844},
+                                      permissions=['clipboard-read','clipboard-write'])
+        context.route(lambda url: not url.startswith(self.origin), lambda route: route.abort())
+        page = context.new_page()
+        try:
+            self.login(page)
+            self.ready(page, '/portal')
+            page.locator('[data-drawer-toggle]').click()
+            page.locator('.neo-drawer-share summary').click()
+            qr = page.locator('.neo-drawer-share img')
+            qr.scroll_into_view_if_needed()
+            qr.evaluate('e=>e.decode()')
+            expect(qr).to_be_in_viewport(ratio=1)
+            pixels = qr.evaluate('''e => {
+                const c=document.createElement('canvas'); c.width=c.height=220;
+                const ctx=c.getContext('2d'); ctx.drawImage(e,0,0,220,220);
+                const p=ctx.getImageData(0,0,220,220).data;
+                const white=(x,y)=>{const i=(y*220+x)*4;return p[i]===255&&p[i+1]===255&&p[i+2]===255&&p[i+3]===255;};
+                return {opaque:[...p].filter((v,i)=>i%4===3).every(v=>v===255),
+                    whiteEdges:Array.from({length:220},(_,i)=>white(i,0)&&white(i,219)&&white(0,i)&&white(219,i)).every(Boolean),
+                    black:[...p].some((v,i)=>i%4===0&&v===0&&p[i+1]===0&&p[i+2]===0),
+                    clean:[e,e.parentElement].every(n=>{const s=getComputedStyle(n);return s.opacity==='1'&&s.filter==='none'&&s.mixBlendMode==='normal';})};
+            }''')
+            self.assertEqual(pixels, dict(opaque=True,whiteEdges=True,black=True,clean=True))
+            self.assertTrue(qr.evaluate('''e=>{const r=e.getBoundingClientRect();return [[1,1],[r.width-1,1],[1,r.height-1],[r.width-1,r.height-1]].every(([x,y])=>document.elementFromPoint(r.left+x,r.top+y)===e);}'''))
+            page.screenshot(path=str(self.evidence/'chromium-share-qr-390.png'))
+            qr.screenshot(path=str(self.evidence/'share-qr-black-white.png'))
+            page.locator('[data-drawer-copy-link]').click()
+            expect(page.locator('[data-drawer-copy-status]')).to_have_text('Link copied')
+            self.assertEqual(page.evaluate('navigator.clipboard.readText()'), self.origin + '/nodes/')
+        finally:
+            context.close()
+            browser.close()
+
     def test_portal_launcher(self):
         for engine, sizes in (('chromium', ((320,700),(390,844),(390,760),(1920,1080))), ('webkit', ((390,844),(390,760)))):
             browser = getattr(self.pw, engine).launch()

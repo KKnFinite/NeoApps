@@ -77,14 +77,17 @@ def neoapps_share_qr():
     """Render a local QR for the public NeoApps root without an external service."""
     from reportlab.graphics import renderSVG
     from reportlab.graphics.barcode.qr import QrCodeWidget
-    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.shapes import Drawing, Rect
+    from reportlab.lib.colors import black, white
 
     target = url_for("neonodes.index", _external=True)
     qr = QrCodeWidget(target)
-    x1, y1, x2, y2 = qr.getBounds()
+    qr.barBorder = 4  # Four-module quiet zone on every side, inside the white square.
+    qr.barFillColor = black
     size = 220
-    scale = size / max(x2 - x1, y2 - y1)
-    drawing = Drawing(size, size, transform=[scale, 0, 0, scale, 0, 0])
+    qr.barWidth = qr.barHeight = size
+    drawing = Drawing(size, size)
+    drawing.add(Rect(0, 0, size, size, fillColor=white, strokeColor=None))
     drawing.add(qr)
     return Response(
         renderSVG.drawToString(drawing),

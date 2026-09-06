@@ -3,6 +3,7 @@ import importlib
 import os
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 from flask import Flask, g
@@ -112,6 +113,34 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         private = self.client.get('/share/neoapps-qr.svg')
         self.assertEqual(private.status_code, 302)
         self.assertIn('/login', private.location)
+
+    def test_share_qr_has_opaque_background_black_modules_and_four_module_quiet_zone(self):
+        from reportlab.graphics.barcode.qr import QrCodeWidget
+
+        self._asset_test_login()
+        with patch('reportlab.graphics.barcode.qr.QrCodeWidget', wraps=QrCodeWidget) as widget:
+            response = self.client.get('/share/neoapps-qr.svg')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, 'image/svg+xml')
+        widget.assert_called_once_with('http://localhost/nodes/')
+        self.assertEqual(response.headers['Cache-Control'], 'private, max-age=300')
+        svg = ET.fromstring(response.data)
+        self.assertEqual(svg.attrib['viewBox'], '0 0 220 220')
+        rects = svg.findall('.//{http://www.w3.org/2000/svg}g//{http://www.w3.org/2000/svg}rect')
+        background = rects[0]
+        self.assertIn('fill: rgb(100%,100%,100%);', background.attrib['style'])
+        self.assertEqual([float(background.attrib[k]) for k in ('x','y','width','height')], [0,0,220,220])
+        self.assertNotIn('opacity', response.get_data(as_text=True))
+        modules = [r for r in rects if 'fill: rgb(0%,0%,0%);' in r.get('style','')]
+        self.assertGreater(len(modules), 20)
+        unit = min(float(r.attrib['height']) for r in modules)
+        for r in modules:
+            x, y, w, h = (float(r.attrib[k]) for k in ('x','y','width','height'))
+            self.assertGreaterEqual(min(x, y, 220-x-w, 220-y-h), 4*unit-1e-8)
+            self.assertNotIn('rx', r.attrib)
+        for r in rects:
+            self.assertTrue(any(fill in r.get('style','') for fill in (
+                'fill: none;', 'fill: rgb(0%,0%,0%);', 'fill: rgb(100%,100%,100%);')))
 
     def test_asset_exemption_preserves_forced_password_change_on_private_routes(self):
         self._asset_test_login()
