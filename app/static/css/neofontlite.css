@@ -1,0 +1,17 @@
+@font-face {
+    font-family: "NeoFontLite";
+    src: url("../fonts/neofontlite/NeoFontLite.woff2") format("woff2"),
+         url("../fonts/neofontlite/NeoFontLite.ttf") format("truetype");
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* First use only: product identity in the mobile Gateway header. */
+@media (max-width: 900px) {
+    body .gateway-mobile-header .neo-mobile-product-name {
+        font-family: "NeoFontLite", sans-serif;
+        font-weight: 300;
+        font-synthesis: none;
+    }
+}

@@ -23,6 +23,9 @@
     {% if uses_operational_shell or is_rfd_hub_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION) }}">
     {% endif %}
+    {% if is_rfd_hub_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
