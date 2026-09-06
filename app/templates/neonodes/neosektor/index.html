@@ -1,33 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}NeoSektor | NeoGateway{% endblock %}
+{% block title %}Dashboard | NeoSektor{% endblock %}
 
 {% block content %}
-<section class="neosektor-standalone-page neosektor-dashboard-shell mode-view" aria-label="NeoSektor dashboard">
-    <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
-        <div class="header-title">
-            <p>{% include "neonodes/neosektor/_brand_title.html" %}</p>
-            <h1>Operations Menu</h1>
-        </div>
-        <span class="header-link header-link-static">{{ gateway.code }}</span>
+<section class="sektor-command" aria-label="NeoSektor dashboard">
+    <picture class="sektor-command-art">
+        <source media="(max-width: 900px)" srcset="{{ url_for('static', filename='images/neosektor/dashboard_mobile.png') }}">
+        <img src="{{ url_for('static', filename='images/neosektor/dashboard_desktop.png') }}" alt="" width="1672" height="941" fetchpriority="high">
+    </picture>
+    <header class="sektor-command-heading">
+        <h1>{% include "neonodes/neosektor/_brand_title.html" %}<small>Dashboard</small></h1>
     </header>
 
-    <main class="counts-wrap neosektor-dashboard-wrap">
-        <section class="neosektor-mobile-dashboard" data-neosektor-mobile-dashboard aria-label="NeoSektor dashboard actions">
-            <div class="neosektor-mobile-dashboard-head">
-                <span>OPERATIONS</span>
-                <strong>{{ gateway.code }}</strong>
-            </div>
-            <nav class="neosektor-mobile-dashboard-grid" aria-label="NeoSektor operations" data-node-desktop-dashboard data-node-dashboard="sektor">
-                {% for item in mobile_dashboard_items %}
+        <section class="sektor-command-menu" data-neosektor-mobile-dashboard aria-label="NeoSektor dashboard actions">
+            <nav class="sektor-command-grid" aria-label="NeoSektor operations" data-node-desktop-dashboard data-node-dashboard="sektor">
+                {% for key in ['ebm', 'wbm', 'tunnel', 'driver-routing', 'discharge', 'settings', 'live-counts'] %}
+                {% for item in mobile_dashboard_items if item.key == key %}
                 <a
-                    class="neosektor-mobile-dashboard-tile neosektor-mobile-dashboard-tile-{{ item.key }}{% if item.active %} is-active{% endif %}"
+                    class="sektor-command-tile sektor-command-tile--{{ item.key }}"
                     href="{{ url_for(item.endpoint) }}"
                     data-neosektor-mobile-tile="{{ item.key }}"
                     data-node-dashboard-tile="{{ item.key }}"
                     {% if item.active %}aria-current="page"{% endif %}
                 >
-                    <span class="neosektor-mobile-dashboard-icon" aria-hidden="true">
+                    <span class="sektor-command-icon" aria-hidden="true">
                         {% if item.key == "live-counts" %}
                         <svg viewBox="0 0 24 24"><path d="M4 17h3V8H4v9Zm6 0h3V4h-3v13Zm6 0h4v-6h-4v6ZM3 20h18v-2H3v2Z"/></svg>
                         {% elif item.key == "tunnel" %}
@@ -38,17 +34,19 @@
                         <svg viewBox="0 0 24 24"><path d="M9 5h10v4H9V5ZM5 8l3-3v6L5 8Zm0 3h14v4H5v-4Zm4 6h10v2H9v-2Z"/></svg>
                         {% elif item.key == "discharge" %}
                         <svg viewBox="0 0 24 24"><path d="M4 6h16v9H4V6Zm2 2v5h12V8H6Zm1 9h3v2H7v-2Zm7 0h3v2h-3v-2Zm-3-1h2v4h-2v-4Z"/></svg>
+                        {% elif item.key == "settings" %}
+                        <svg viewBox="0 0 24 24"><path d="m10 2-.6 3-2 .9-2.7-1.1-2 3.4 2.2 2-.2 2.3L2.5 15l2 3.4 2.8-.9 2 1.2.7 3.3h4l.7-3.3 2-1.2 2.8.9 2-3.4-2.2-2.5-.2-2.3 2.2-2-2-3.4-2.7 1.1-2-.9L14 2h-4Zm2 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg>
                         {% else %}
                         <svg viewBox="0 0 24 24"><path d="M4 7h9.6l-2-2L13 3.6 17.4 8 13 12.4 11.6 11l2-2H4V7Zm16 10h-9.6l2 2-1.4 1.4L6.6 16l4.4-4.4 1.4 1.4-2 2H20v2Z"/></svg>
                         {% endif %}
                     </span>
-                    <span class="neosektor-mobile-dashboard-copy">
+                    <span class="sektor-command-copy">
                         <strong>{{ item.label }}</strong>
                     </span>
                 </a>
                 {% endfor %}
+                {% endfor %}
             </nav>
         </section>
-    </main>
 </section>
 {% endblock %}

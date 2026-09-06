@@ -96,11 +96,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoSektor", response.data)
         self.assertIn(b"node-desktop-nav-page", response.data)
-        self.assertIn(b"data-node-desktop-side-nav", response.data)
-        self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
-        desktop_sidebar = response.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
-        self.assertIn(b"newlogo_sektor.png", desktop_sidebar)
-        self.assertNotIn(b"neosektor-icon-128x128.png", desktop_sidebar)
+        self.assertNotIn(b"data-node-desktop-side-nav", response.data)
+        self.assertIn(b"sektor-dashboard-identity", response.data)
         self.assertIn(b'<small>DASHBOARD</small>', response.data)
         self.assertIn(b"neo-brand--sektor", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)
@@ -123,13 +120,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard-tile="discharge"', response.data)
         self.assertIn(b'data-node-dashboard-tile="driver-routing"', response.data)
         self.assertNotIn(b"data-live-counts", response.data)
-        self.assertIn(b"Operations Menu", response.data)
-        self.assertIn(b"neosektor-standalone-header mobile-shell-duplicate-title", response.data)
+        self.assertIn(b"sektor-command-heading", response.data)
+        self.assertIn(b"sektor-command-art", response.data)
         self.assertNotIn(b"class=\"readonly-count\"", response.data)
         self.assertIn(b'href="/neosektor/live-counts"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="ebm"', response.data)
-        self.assertIn(b"data-node-desktop-side-nav", response.data)
-        self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+        self.assertNotIn(b"data-node-desktop-side-nav", response.data)
+        self.assertIn(b'data-node-dashboard="sektor"', response.data)
         self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
 
@@ -152,23 +149,23 @@ class NeoSektorRoutesTest(unittest.TestCase):
         alert_expiration.assert_not_called()
         commit.assert_not_called()
 
-    def test_neosektor_desktop_dashboard_preserves_tiles_and_shared_sidebar_context(self):
+    def test_neosektor_desktop_dashboard_uses_hero_without_redundant_sidebar(self):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neosektor")
         css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"node-desktop-side-context", response.data)
-        self.assertIn(b"RFD OPERATIONS", response.data)
-        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr));', css)
-        self.assertIn('aspect-ratio: 1.18 / 1;', css)
-        self.assertIn('height: calc(100vh - 140px);', css)
-        self.assertIn('grid-template-rows: auto minmax(0, 1fr);', css)
+        self.assertNotIn(b"data-operational-sidebar", response.data)
+        self.assertIn(b"images/neosektor/dashboard_desktop.png", response.data)
+        self.assertIn(b"images/neosektor/dashboard_mobile.png", response.data)
+        tiles = document(response).findall(**{'data-node-dashboard-tile':None})
+        self.assertEqual([t.attrs['data-node-dashboard-tile'] for t in tiles],
+                         ['ebm','wbm','tunnel','driver-routing','discharge','settings','live-counts'])
 
     def test_node_desktop_shell_portal_return_precedes_character_switcher(self):
         self._login_approved_user(role='operator')
-        response=self.client.get('/neosektor')
+        response=self.client.get('/neosektor/live-counts')
         self.assertEqual(response.status_code,200)
         root=document(response)
         bar=root.one('header', **{'data-operational-topbar':None})
@@ -336,7 +333,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard-tile="wbm"', response.data)
         self.assertIn(b'data-node-dashboard-tile="discharge"', response.data)
         self.assertIn(b'data-node-dashboard-tile="driver-routing"', response.data)
-        self.assertIn(b"neosektor-mobile-dashboard-grid", response.data)
+        self.assertIn(b"sektor-command-grid", response.data)
         self.assertIn(b'data-neosektor-mobile-tile="live-counts"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="tunnel"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="ebm"', response.data)
@@ -442,8 +439,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get("/neosektor")
 
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(b"data-node-desktop-side-nav", response.data)
-                self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+                self.assertNotIn(b"data-node-desktop-side-nav", response.data)
+                self.assertIn(b'data-node-dashboard="sektor"', response.data)
                 self.assertNotIn(b"motherbrain-header-nav", response.data)
                 self.assertNotIn(b"data-neosektor-internal-menu", response.data)
                 for label in expected_labels[role]:
@@ -490,8 +487,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     continue
                 else:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
-                    self.assertIn(b"data-node-desktop-side-nav", response.data)
-                    self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
+                    if path == '/neosektor':
+                        self.assertNotIn(b"data-node-desktop-side-nav", response.data)
+                        self.assertIn(b'data-node-dashboard="sektor"', response.data)
+                    else:
+                        self.assertIn(b"data-node-desktop-side-nav", response.data)
+                        self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
                     self.assertNotIn(b"motherbrain-header-nav", response.data)
                 for label in (
                     b"Live Counts",
@@ -3926,7 +3927,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         for response in responses.values():
             self.assertEqual(response.status_code, 200)
 
-        self.assertIn(b"neosektor-mobile-dashboard-grid", responses["dashboard"].data)
+        self.assertIn(b"sektor-command-grid", responses["dashboard"].data)
         self.assertIn(b"id=\"neosektor-live-title\">Live Counts</h1>", responses["live"].data)
         self.assertIn(b"data-live-bay=\"Bay 1\"", responses["live"].data)
         self.assertIn(b"data-live-bay=\"Bay 5\"", responses["live"].data)
@@ -4130,7 +4131,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         live_counts = self.client.get("/neosektor/live-counts", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn(b"Operations Menu", dashboard.data)
+        self.assertIn(b"sektor-command-heading", dashboard.data)
         self.assertIn(b"data-neosektor-mobile-dashboard", dashboard.data)
         self.assertIn(b'href="/neosektor/live-counts"', dashboard.data)
         self.assertNotIn(b"data-live-counts", dashboard.data)

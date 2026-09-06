@@ -68,4 +68,4 @@ class NeoFontLiteTest(unittest.TestCase):
         self.assertIn('body .gateway-mobile-header .neo-mobile-product-name',css)
         self.assertNotIn('!important',css)
         template=(ROOT/'app/templates/base.html').read_text()
-        self.assertIn("{% if is_rfd_hub_page %}\n    <link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/neofontlite.css'",template)
+        self.assertIn("{% if is_rfd_hub_page or is_sektor_dashboard %}\n    <link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/neofontlite.css'",template)

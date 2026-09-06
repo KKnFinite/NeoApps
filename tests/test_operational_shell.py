@@ -71,7 +71,10 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b"data-operational-shell", response.data)
                 self.assertIn(b"data-operational-topbar", response.data)
-                self.assertIn(b"data-operational-sidebar", response.data)
+                if path == '/neosektor':
+                    self.assertNotIn(b"data-operational-sidebar", response.data)
+                else:
+                    self.assertIn(b"data-operational-sidebar", response.data)
                 self.assertIn(b"data-operational-mobile-header", response.data)
                 self.assertIn(b"operational-mobile-bottom-nav", response.data)
                 self.assertIn(b"NeoGateway", response.data)
