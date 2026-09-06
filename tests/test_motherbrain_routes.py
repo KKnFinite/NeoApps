@@ -11383,8 +11383,23 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Suggest Plan failed safely", response.data)
         self.assertIn(b"Optimizer failed before solver completed", response.data)
-        self.assertIn(b"found no matches", response.data)
+        self.assertNotIn(b"found no matches", response.data)
         self.assertIn(b"MODEL DIAGNOSTICS", response.data)
+
+    def test_parking_optimizer_database_details_never_reach_preview(self):
+        from sqlalchemy.exc import IntegrityError
+        operation = self._parking_operation()
+        self._parking_pair(operation, "N457UP", aircraft_type="757")
+        db.session.commit()
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        with patch("app.neomotherbrain.routes.parking_optimizer_preview", side_effect=error), \
+             self.assertLogs(self.app.logger, level="ERROR") as logs:
+            response = self.client.post(f"/motherbrain/parking-plan/{operation.id}/optimize")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Optimizer failed before solver completed. Please try again.", response.data)
+        for marker in (b"SECRET_SQL", b"PRIVATE_PARAMETER", b"PRIVATE_CONSTRAINT"):
+            self.assertNotIn(marker, response.data)
+            self.assertNotIn(marker.decode(), " ".join(logs.output))
 
     def test_parking_optimizer_remote_and_throat_off_still_allow_normal_ramps(self):
         operation = self._parking_operation()

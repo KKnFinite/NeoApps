@@ -54,7 +54,10 @@ def current_sort_preview():
         if request.content_length is not None and request.content_length > maximum_bytes:
             return _error_response(413, "payload_too_large", "Request body is too large.")
 
-        raw_body = request.get_data(cache=True)
+        # WSGI servers mark terminated/chunked streams with input_terminated.
+        # Keep Werkzeug's safe fallback for unframed streams; never read the
+        # unbounded raw environ input or buffer the entire request first.
+        raw_body = request.stream.read(maximum_bytes + 1)
         if len(raw_body) > maximum_bytes:
             return _error_response(413, "payload_too_large", "Request body is too large.")
         try:

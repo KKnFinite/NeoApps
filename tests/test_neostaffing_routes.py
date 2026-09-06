@@ -2,6 +2,9 @@ from datetime import date, datetime
 from pathlib import Path
 import re
 import unittest
+from unittest.mock import patch
+
+from sqlalchemy.exc import IntegrityError
 
 from flask import g
 
@@ -3127,6 +3130,71 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(StaffingDailyAttendance.query.filter_by(status="here").count(), 2)
         self.assertIn(b"Here", saved.data)
         self.assertEqual(db.session.get(StaffingPerson, first_person.id).employee_status, "fmla")
+
+    def test_database_errors_are_sanitized_with_rollback_and_safe_logging(self):
+        user = self._user("safe_errors")
+        self._grant_app_access(user, "neostaffing", "grandmaster")
+        _, _, _, unit = self._staffing_hierarchy()
+        unit_id = unit.id
+        db.session.commit()
+        self._login(user.username)
+        cases = (
+            (f"/neostaffing/app-management/hierarchy/units/{unit_id}/update",
+             "staffing_service.validated_unit_update_values", "update Staffing unit"),
+            ("/neostaffing/app-management/hierarchy/units",
+             "staffing_service.create_unit", "save Staffing changes"),
+            ("/neostaffing/settings/floating-holidays",
+             "vacation_service.save_qualifying_holiday", "save floating holiday settings"),
+        )
+        for path, target, action in cases:
+            with self.subTest(path=path):
+                error = IntegrityError("INSERT SECRET_SQL", {"secret": "PRIVATE_PARAMETER"},
+                                       Exception("PRIVATE_CONSTRAINT"))
+                with patch("app.neostaffing.routes." + target, side_effect=error), \
+                     patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
+                     self.assertLogs(self.app.logger, level="ERROR") as logs:
+                    response = self.client.post(path, data={})
+                self.assertEqual(response.status_code, 302)
+                rollback.assert_called_once()
+                with self.client.session_transaction() as session:
+                    self.assertIn(("error", f"Unable to {action}. Please try again."), session["_flashes"])
+                rendered = self.client.get(response.location)
+                self.assertEqual(rendered.status_code, 200)
+                evidence = rendered.get_data(as_text=True) + " ".join(logs.output)
+                for marker in ("SECRET_SQL", "PRIVATE_PARAMETER", "PRIVATE_CONSTRAINT"):
+                    self.assertNotIn(marker, evidence)
+                self.assertIn("IntegrityError", " ".join(logs.output))
+                self.assertIn("location=", " ".join(logs.output))
+
+    def test_intentional_validation_message_is_preserved(self):
+        user = self._user("safe_validation")
+        self._grant_app_access(user, "neostaffing", "grandmaster")
+        db.session.commit()
+        self._login(user.username)
+        with patch("app.neostaffing.routes.vacation_service.save_qualifying_holiday",
+                   side_effect=ValueError("Holiday name is required.")), \
+             patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback:
+            response = self.client.post("/neostaffing/settings/floating-holidays", data={})
+        self.assertEqual(response.status_code, 302)
+        rollback.assert_called_once()
+        with self.client.session_transaction() as session:
+            self.assertIn(("error", "Holiday name is required."), session["_flashes"])
+
+    def test_shift_flow_json_database_error_is_sanitized(self):
+        user = self._user("safe_json")
+        self._grant_app_access(user, "neostaffing", "grandmaster")
+        person = staffing_service.create_person({"employee_id": "ERR100", "first_name": "Test", "last_name": "Person", "seniority_date": "2020-01-01", "classification": "part_time", "employee_status": "active"})
+        person_id = person.id
+        db.session.commit()
+        self._login(user.username)
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        with patch("app.neostaffing.routes.staffing_service.move_shift_flow_final_door", side_effect=error), \
+             patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            response = self.client.post(f"/neostaffing/shift-flow/{person_id}/final-door", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json(), {"ok": False, "error": "Unable to move shift flow final door. Please try again."})
+        rollback.assert_called_once()
 
     def _user(self, username):
         user = User(

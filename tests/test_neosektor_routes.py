@@ -4256,6 +4256,27 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.fail("CSRF token not found in response.")
         return match.group(1).decode()
 
+    def test_manage_employees_database_error_is_sanitized(self):
+        from sqlalchemy.exc import IntegrityError
+        self._login_approved_user(role="grandmaster")
+        user = User.query.filter_by(username="sektor_grandmaster_user").one()
+        user.management_level = "manager"
+        db.session.add(PortalAppAccess(user_id=user.id, app_code="neostaffing",
+                                      status="approved", role="grandmaster", is_active=True))
+        db.session.commit()
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        with patch("app.neonodes.neosektor.routes.staffing_service.save_operational_manage_attendance", side_effect=error), \
+             patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
+             self.assertLogs(self.app.logger, level="ERROR") as logs:
+            response = self.client.post("/neosektor/manage-employees?area=ebm", data={})
+        self.assertEqual(response.status_code, 302)
+        rollback.assert_called_once()
+        with self.client.session_transaction() as session:
+            self.assertIn(("error", "Unable to save attendance. Please try again."), session["_flashes"])
+            evidence = str(session["_flashes"]) + " ".join(logs.output)
+        for marker in ("SECRET_SQL", "PRIVATE_PARAMETER", "PRIVATE_CONSTRAINT"):
+            self.assertNotIn(marker, evidence)
+
     def _login_approved_user(self, role):
         user = User(
             username=f"sektor_{role}_user",

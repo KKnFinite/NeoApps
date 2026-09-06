@@ -320,6 +320,19 @@ class GoogleMotherBrainParkingTest(unittest.TestCase):
         reader.assert_not_called()
         self.assertFalse(google_motherbrain_live_polling_enabled(self.gateway, "night"))
 
+    def test_row_database_error_is_not_exposed_in_results(self):
+        from sqlalchemy.exc import IntegrityError
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        with patch("app.services.google_motherbrain_parking.assign_tail_to_lane", side_effect=error), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            result = self._apply("N457UP", "A1")
+        self.assertEqual(result["status"], "skipped")
+        self.assertIn("Unable to apply parking", result["reason"])
+        for marker in ("SECRET_SQL", "PRIVATE_PARAMETER", "PRIVATE_CONSTRAINT"):
+            self.assertNotIn(marker, str(result))
+        db.session.commit()
+        self.assertEqual(SortDateParkingAssignment.query.count(), 0)
+
     def _apply(self, tail_number, parking_value, **source):
         return apply_google_motherbrain_parking(
             self.operation,

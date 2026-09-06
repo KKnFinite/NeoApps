@@ -6,6 +6,7 @@ from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.services.parking_physical_validator import (
     parking_physical_validation_context,
     sync_parking_physical_alerts,
@@ -131,7 +132,7 @@ def apply_google_motherbrain_parking_batch(operation, rows, *, user=None):
                     raw_parking,
                     source_sheet,
                     source_row,
-                    str(error) or "Parking application failed.",
+                    safe_mutation_error(error, "apply parking") or "Parking application failed.",
                 )
             )
             continue

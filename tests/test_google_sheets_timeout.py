@@ -12,6 +12,23 @@ from tests.test_google_motherbrain_sheets import reader_config
 
 
 class GoogleSheetsTimeoutTest(unittest.TestCase):
+    def test_google_service_account_signing_with_runtime_crypto(self):
+        # Real local RSA/Google-auth path; no credentials or network integration.
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding, rsa
+        from google.oauth2 import service_account
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_pem = key.private_bytes(serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode("ascii")
+        credentials = service_account.Credentials.from_service_account_info({
+            "type": "service_account", "client_email": "test@example.invalid",
+            "token_uri": "https://example.invalid/token", "private_key": private_pem,
+        })
+        message = b"isolated dependency smoke test"
+        signature = credentials.sign_bytes(message)
+        key.public_key().verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
+
     def test_defaults_overrides_and_invalid_values_reach_http_transport(self):
         for configured, expected in ((None, 5), ('2.5', 2.5), (0, 5), (-1, 5),
                                      ('bad', 5), ('nan', 5), ('inf', 5)):

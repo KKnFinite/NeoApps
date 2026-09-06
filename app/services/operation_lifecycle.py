@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.models import SortDateOperation, SortTimelineSettings
 from app.services.gateway_matrix import (
     SORT_ORDER,
@@ -253,7 +254,7 @@ def create_manual_current_sort_operation(
             status["sort_name"],
         )
         if not operation:
-            raise ManualSortCreationError(str(error)) from error
+            raise ManualSortCreationError(safe_mutation_error(error, "create sort")) from error
         return {"operation": operation, "created": False, "status": status}
     return {"operation": operation, "created": True, "status": status}
 

@@ -313,3 +313,163 @@ regression file. No approved artwork or unrelated work is included.
 Total tracked Git-blob bytes: **81,856,351 -> 80,629,080**; net reduction:
 **1,227,271 bytes** (including this report and regression tests). This is
 checkout content, not compressed Git-history storage.
+
+## Follow-up — security and external boundaries — 2026-09-06
+
+Starting main: `9b901501f47d059fbe71061c161f496ed6a53934`. This section appends
+implementation evidence; the historical findings and baseline above are unchanged.
+No production database, Google workbook, R2 bucket, deployment or UI was changed.
+The stash, ignored `_local_archive/`, and unrelated untracked Scorpion image remain
+untouched. Test databases and resolver reports live under ignored
+`instance/security-boundaries/`.
+
+### Closed findings
+
+- **P1 Vault expansion/integrity:** `read_calibration_review()` still reads at most
+  1,000,001 compressed bytes and rejects over 1,000,000. Gzip-mode zlib decompression
+  uses `max_length=4,000,001`, rejecting output over **4,000,000 bytes** immediately;
+  no unbounded flush/decompress occurs. v1 stores aggregate calibration rows, not
+  observations: a synthetic 4,096-row canonical review occupies less than 1 MB.
+  There is no finite canonical row-count ceiling, so 4 MB is an explicit operational
+  budget with substantial headroom, not a claimed mathematical maximum. Exact-boundary
+  and 32 MB compression-bomb tests cover it. Writes enforce the same output budget.
+  Gzip EOF/CRC, truncation, extra members, trailing bytes, UTF-8, JSON syntax,
+  duplicate keys, non-finite constants and excessive nesting fail closed.
+- **P1 Vault archive trust:** validate v1/manual/non-training flags; gateway/sort/date
+  identity; archival timestamp/user ID; known metric/aggregate/count/confidence
+  shapes; and the SHA-256 shared by the payload, path and optional R2 metadata.
+  Reconstruct the *original* canonical review by removing archival fields and
+  restoring `live_calibration_review` before hashing. The historical minimal v1
+  fixture (both algorithm and operation ID absent) remains accepted without inventing
+  hash inputs. Modern fields must match when present. Unknown schema/extra fields
+  fail closed. Tests include real canonical populated reviews and validly shaped
+  value tampering, not merely malformed JSON.
+- **P2 Vault networking:** repository constants supply botocore `Config` with
+  connect timeout **5 s**, read timeout **10 s**, standard mode and
+  `total_max_attempts=1` (initial attempt only). Reads/listing use one operation;
+  archive uses HEAD then PUT only on a confirmed HTTP 404; duplicate HEAD stops
+  without a write. Connection testing uses PUT/HEAD/DELETE with bounded best-effort
+  cleanup on earlier failure, never retrying a failed DELETE. Client construction,
+  response-body reads and provider failures are sanitized. No retries, worker,
+  keepalive or Google timeout changes. These are socket-operation bounds, not a
+  hard end-to-end deadline including DNS or a continuously trickling response.
+  See [botocore Config](https://docs.aws.amazon.com/botocore/latest/reference/config.html).
+- **P1 Staffing SQL disclosure:** replaced 59 raw exception-message sites, including
+  holiday/vacation mutations, update-unit, shared mutation helpers and three
+  shift-flow JSON endpoints. `operator_errors.safe_mutation_error()` retains domain
+  validation messages but replaces SQLAlchemy errors with action-specific generic
+  errors. Logs contain action, exception class and traceback file/line/function only,
+  not driver text, SQL, parameters, source lines or submitted-record locals. Existing
+  catch types, rollback, redirects/status codes and permissions remain unchanged.
+- **Additional confirmed browser/API leaks:** Ermac and Sektor `manage_employees`
+  attendance handlers; Google live-mission and parking row-result reasons;
+  `create_manual_current_sort_operation()`'s wrapped IntegrityError; and MotherBrain
+  optimizer-preview diagnostics. All have injected-error regressions. Other matched
+  `str(error)` paths were retained where they handle deliberate domain validation or
+  existing sanitized provider errors. This is not a guarantee that all future error
+  paths are safe. Optimizer SQL errors also use sanitized diagnostics; its existing
+  server-only traceback logging for non-database failures is unchanged.
+- **P2 preview body allocation:** after feature/token/MIME checks and the existing
+  Content-Length rejection, use `request.stream.read(MAX + 1)` instead of buffering
+  the request with `get_data()`. Default MAX remains **524,288 bytes**. Werkzeug's
+  terminated/chunked stream contract handles unknown lengths; unframed streams retain
+  its safe empty fallback. A 10,000-byte unknown-length test with MAX=64 proves only
+  65 bytes are consumed. Known oversized bodies, bad tokens and disabled requests
+  consume zero body bytes. No global size setting or new DB sizing work was added.
+
+### Dependency decisions
+
+Before/after `pip install --dry-run --ignore-installed --report ... -r requirements.txt`
+both resolve successfully. Reports preserve package dependency metadata locally.
+ReportLab 4.5.1 requires Pillow>=9.0.0; current google-auth requires cryptography
+>=38.0.3 on Python<3.14 (>=41.0.5 on newer Python). Thus old vulnerable versions
+were allowed by the actual runtime graph, not merely present in developer tools.
+Only two requirements were added: **Pillow>=12.3.0**, **cryptography>=50.0.0**.
+No unrelated requirement or boto version range changed.
+
+[Pillow 12.2.0 advisory metadata](https://pypi.org/pypi/pillow/12.2.0/json)
+identifies fixes in 12.3.0, including font/image resource-exhaustion issues.
+Direct PIL use remains trusted asset/font tooling and tests; ReportLab is a
+runtime PDF/QR consumer. No public untrusted-image exploit was demonstrated.
+[Cryptography advisory GHSA-g6cj-pr64-35w5](https://github.com/advisories/GHSA-g6cj-pr64-35w5)
+concerns PKCS7 EnvelopedData decryption and is fixed in 50.0.0; no repository
+`pkcs7_decrypt_*` use was found. The floor protects the dependency boundary without
+adding crypto functionality. This is not an assertion about versions deployed on Render.
+
+The isolated Python 3.13 environment installed the patched minima Pillow 12.3.0
+and cryptography 50.0.0, plus ReportLab 4.5.1, google-auth 2.56.3, boto3/botocore
+1.43.89. Runtime imports, real local Google service-account RSA signing, PDF
+generation/parsing, SVG QR/auth tests and SDK configuration tests pass. Fresh full
+resolution selects google-auth 2.57.1 and cryptography 50.0.1; these resolver outputs
+are distinct from the tested installed minima. Both isolated and original-repo
+`python -m pip check` pass. No external service was contacted by these tests.
+
+Pip is not added to runtime requirements. Deployment docs use an unpinned
+`pip install -r requirements.txt`; there is no repo-controlled vulnerable pip pin
+to correct. Actual Render build-tool version remediation remains an environment
+follow-up, not a reason to mutate application dependencies.
+
+### Reproducible validation and comparison
+
+Commands below use `instance/security-boundaries/venv/Scripts/python.exe` as
+`python` for final tests. Starting focused/broader runs used `.venv/Scripts/python.exe`
+before edits. The isolated environment was created locally, then installed with
+`Pillow==12.3.0 cryptography==50.0.0 boto3==1.43.89` and `-r requirements.txt pytest`.
+
+```text
+python -m pytest -q tests/test_neoscorpion_learning_vault.py tests/test_neoscorpion_spear_calibration.py tests/test_neoscorpion_spear.py tests/test_neostaffing_routes.py tests/test_neostaffing_vacation_reports.py tests/test_google_motherbrain_import.py tests/test_security_headers.py tests/test_auth_account_flows.py --tb=no --disable-warnings --junitxml=instance/security-boundaries/focused-after.xml
+Starting: 181 passed, 6 failures, 46 subtests passed.
+Final: 202 passed, 5 failures, 75 subtests passed.
+
+python -m pytest -q tests/test_google_motherbrain_live_missions.py tests/test_google_motherbrain_parking.py tests/test_operation_lifecycle.py tests/test_neoermac_routes.py --tb=no --disable-warnings --junitxml=instance/security-boundaries/broader-after.xml
+Starting: 186 passed, 70 failures/subfailures, 37 subtests passed.
+Final: 190 passed, same 70 failures/subfailures, 37 subtests passed.
+
+python -m pytest -q tests/test_google_sheets_timeout.py tests/test_google_rain_sheets.py tests/test_google_motherbrain_live_poll_execution.py tests/test_google_motherbrain_live_poll_lease.py tests/test_db_free_liveness.py tests/test_request_access_cache.py --tb=no --disable-warnings --junitxml=instance/security-boundaries/contracts-after.xml
+67 passed, 37 subtests passed.
+
+python -m pytest -q tests/test_neoscorpion_routes.py -k "vault or standalone_spear_calibration or settings_model_routes_smoke" --tb=short --disable-warnings --junitxml=instance/security-boundaries/vault-routes-after.xml
+4 passed, 6 subtests passed.
+
+python -m pytest -q tests/test_motherbrain_routes.py -k "optimizer_route_renders_safe_failure or optimizer_database_details" --tb=short --disable-warnings --junitxml=instance/security-boundaries/optimizer-after.xml
+2 passed.
+
+python -m pytest -q tests/test_neosektor_routes.py -k "manage or permission or unauthenticated" --tb=short --disable-warnings --junitxml=instance/security-boundaries/sektor-after.xml
+Starting: 1 passed, 5 subtests passed. Final: 2 passed, 5 subtests passed.
+
+python -m compileall -q app scripts tools init_db.py run.py
+python -m pip check
+git diff --check
+All passed. No JavaScript changed; JS checks not applicable.
+```
+
+Final non-overlapping slices: **467 passed + 160 subtests passed**, with the
+**75 retained baseline failures/subfailures** explicitly reported, not suppressed.
+XML comparison by testcase identity/category/type/multiplicity found zero new
+failures in the starting slices. One related harness defect was removed: an
+imported production `test_learning_vault_connection` action was accidentally
+collected as a pytest test and called unconfigured; aliasing its import fixes
+collection, not a production defect. The remaining focused failures are the
+Staffing Portal-tile assertion and four AuthAccountFlows Portal UI assertions.
+The 70 broader failures/subfailures remain in Ermac. Their identities match
+`baseline.xml` / `broader-before.xml`. The existing optimizer test intentionally
+changed from expecting arbitrary exception text to asserting its absence, as
+required by this security fix. New fixture mistakes were corrected before these
+final runs. The unrelated historical 405-failure suite was not rerun or repaired.
+
+### Remaining priorities and limits
+
+1. **P1:** triage the historical test failures by actual contract; do not call all
+   of them stale UI expectations. No new failures were hidden by this pass.
+2. **P1 DB/Neon:** Staffing notification/maintenance GET work and per-person
+   relationship loads remain untouched; profile isolated realistic data before
+   scoped batching/transaction changes. No scale-to-zero changes were made.
+3. **P2:** runtime build-tool advisory ownership, the existing CSS decomposition
+   backlog and storage-denied People drawer behavior remain separate work.
+4. Archive SHA-256 validation detects inconsistent content; it is **not a signature**
+   against an attacker able to rewrite both object and content-addressed key.
+   Archival metadata was not included in the historical checksum and cannot be
+   retroactively authenticated; its types/path relationships are checked instead.
+   No real historical bucket inventory or live R2 latency test was performed.
+5. Socket timeouts are not a strict whole-action deadline. No production/physical
+   browser/deployment verification is claimed; this pass changes no page layout.

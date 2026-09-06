@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.models import SortDateOperation
 from app.models.user import MANAGEMENT_LEVELS
 from app.neonodes.neosektor import bp
@@ -769,7 +770,7 @@ def manage_employees():
             flash(f"Attendance saved for {saved} people.", "success")
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
-            flash(str(getattr(exc, "orig", None) or exc), "error")
+            flash(safe_mutation_error(exc, "save attendance"), "error")
         return redirect(url_for("neosektor.manage_employees", area=area))
     context = staffing_service.operational_manage_employees_context(area_ids)
     tab_labels = {"dis": "DISCHARGE", "ebm": "EBM", "wbm": "WBM"}

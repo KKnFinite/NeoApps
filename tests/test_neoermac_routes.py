@@ -79,6 +79,26 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
+    def test_manage_employees_database_error_is_sanitized(self):
+        from sqlalchemy.exc import IntegrityError
+        self._login_approved_user(role="grandmaster")
+        user = User.query.filter_by(username="neoermac_grandmaster_user").one()
+        db.session.add(PortalAppAccess(user_id=user.id, app_code="neostaffing",
+                                      status="approved", role="grandmaster", is_active=True))
+        db.session.commit()
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        with patch("app.neonodes.neoermac.routes.staffing_service.save_operational_manage_attendance", side_effect=error), \
+             patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
+             self.assertLogs(self.app.logger, level="ERROR") as logs:
+            response = self.client.post("/neoermac/door-view/manage-employees", data={})
+        self.assertEqual(response.status_code, 302)
+        rollback.assert_called_once()
+        with self.client.session_transaction() as session:
+            self.assertIn(("error", "Unable to save attendance. Please try again."), session["_flashes"])
+            evidence = str(session["_flashes"]) + " ".join(logs.output)
+        for marker in ("SECRET_SQL", "PRIVATE_PARAMETER", "PRIVATE_CONSTRAINT"):
+            self.assertNotIn(marker, evidence)
+
     def test_unauthenticated_users_cannot_access_neoermac_pages(self):
         for path in self._neoermac_paths():
             with self.subTest(path=path):

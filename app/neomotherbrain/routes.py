@@ -16,12 +16,13 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.auth.decorators import gateway_node_required
 from app.auth.permissions import can_manage_system
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.models import (
     FlightApiReviewItem,
     MasterFlightSchedule,
@@ -1186,17 +1187,20 @@ def optimize_parking_plan(operation_id):
             tail_rows=context["tail_rows"],
         )
     except Exception as exc:
-        current_app.logger.exception(
-            "Parking optimizer preview failed for operation %s",
-            operation.id,
-        )
+        if isinstance(exc, SQLAlchemyError):
+            safe_mutation_error(exc, "suggest parking plan")
+        else:
+            current_app.logger.exception(
+                "Parking optimizer preview failed for operation %s",
+                operation.id,
+            )
         optimizer_preview = parking_optimizer_error_preview(
             gateway,
             operation,
             include_remote=include_remote,
             include_throat=include_throat,
             tail_rows=context["tail_rows"],
-            message=f"Optimizer failed before solver completed: {exc}",
+            message="Optimizer failed before solver completed. Please try again.",
         )
         flash("Suggest Plan failed safely. Existing assignments were preserved.", "error")
     if context.get("parking_physical_alert_sync", {}).get("changed"):

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.neonodes.neoermac import bp
 from app.services.access_control import (
     access_initialization_changed_this_request,
@@ -511,7 +512,7 @@ def manage_employees():
                 flash(f"Attendance saved for {saved} people.", "success")
             except (ValueError, IntegrityError) as exc:
                 db.session.rollback()
-                flash(str(getattr(exc, "orig", None) or exc), "error")
+                flash(safe_mutation_error(exc, "save attendance"), "error")
         return redirect(url_for("neoermac.manage_employees"))
     context = staffing_service.operational_manage_employees_context(
         area_ids, later_final_area_ids=area_ids

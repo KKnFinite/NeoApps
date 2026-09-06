@@ -60,6 +60,20 @@ class OperationLifecycleTest(unittest.TestCase):
         db.session.flush()
         self.client = self.app.test_client()
 
+    def test_manual_sort_database_error_is_sanitized(self):
+        from app.services.operation_lifecycle import create_manual_current_sort_operation, ManualSortCreationError
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        status = {"current_operation": None, "existing_operation": None, "scheduled": True,
+                  "sort_date": date(2026, 9, 6), "sort_name": "night"}
+        with patch("app.services.operation_lifecycle.manual_current_sort_creation_status", return_value=status), \
+             patch("app.services.operation_lifecycle.generate_sort_date_operation_from_master", side_effect=error), \
+             patch("app.services.operation_lifecycle._operation_for_key", return_value=None), \
+             patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
+             self.assertLogs(self.app.logger, level="ERROR"), \
+             self.assertRaisesRegex(ManualSortCreationError, "^Unable to create sort. Please try again.$"):
+            create_manual_current_sort_operation(self.gateway, None)
+        rollback.assert_called_once()
+
     def tearDown(self):
         db.session.remove()
         db.drop_all()

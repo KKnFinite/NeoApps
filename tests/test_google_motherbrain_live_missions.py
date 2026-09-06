@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 import unittest
 from unittest.mock import patch
 from sqlalchemy import event
+from sqlalchemy.exc import IntegrityError
 
 from app import create_app
 from app.extensions import db
@@ -1103,6 +1104,17 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertIn("departed", constraint_sql)
         self.assertIn("scheduled", constraint_sql)
         self.assertIn("sort_date_google_mission_links", db.inspect(db.engine).get_table_names())
+
+    def test_row_database_error_is_not_exposed_in_results(self):
+        error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
+        with patch("app.services.google_motherbrain_live_missions._apply_live_row", side_effect=error), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            result = self._apply_arrivals(self._inbound(15, "947", "N457UP"))
+        self.assertIn("Unable to apply live mission", str(result))
+        for marker in ("SECRET_SQL", "PRIVATE_PARAMETER", "PRIVATE_CONSTRAINT"):
+            self.assertNotIn(marker, str(result))
+        db.session.commit()
+        self.assertEqual(SortDateMission.query.count(), 0)
 
     def _apply_arrivals(self, *rows, now=None):
         return apply_google_motherbrain_live_mission_batch(

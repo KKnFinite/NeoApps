@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.services.departure_progress import (
     recompute_departure_status_after_external_clear,
     repair_orphaned_external_departed_status,
@@ -178,7 +179,7 @@ def apply_google_motherbrain_live_mission_batch(
                 )
                 db.session.flush()
         except (GoogleMotherBrainMissionError, ParkingPlanError, SQLAlchemyError) as error:
-            result = _skipped_result(row, str(error) or "Live mission application failed.")
+            result = _skipped_result(row, safe_mutation_error(error, "apply live mission") or "Live mission application failed.")
         else:
             # Publish only after the savepoint succeeds; rolled-back creations and
             # flight renames must never leak into later rows' identity lookups.

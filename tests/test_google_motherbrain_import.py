@@ -1,8 +1,10 @@
 from copy import deepcopy
 from datetime import date, datetime
 import json
+import io
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
@@ -90,6 +92,61 @@ class GoogleMotherBrainImportTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["preview_only"])
         self.assertEqual(response.get_json()["operation"]["id"], self.operation.id)
+
+    def _stream_post(self, body, *, length=None, token=TOKEN):
+        class TrackingStream(io.BytesIO):
+            def __init__(self, value):
+                super().__init__(value)
+                self.requested = []
+            def read(self, size=-1):
+                if size < 0:
+                    raise AssertionError("Unbounded body read")
+                self.requested.append(size)
+                return super().read(size)
+            def readinto(self, buffer):
+                self.requested.append(len(buffer))
+                return super().readinto(buffer)
+        stream = TrackingStream(body)
+        environ = {"wsgi.input": stream, "wsgi.input_terminated": True,
+                   "CONTENT_TYPE": "application/json", "CONTENT_LENGTH": "" if length is None else str(length)}
+        response = self.client.open(ENDPOINT, method="POST", environ_overrides=environ,
+                                   headers={"X-Neo-Integration-Token": token})
+        return response, stream
+
+    def test_unknown_length_valid_body_is_bounded(self):
+        response, stream = self._stream_post(json.dumps(self.payload).encode())
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(sum(stream.requested), self.app.config['GOOGLE_MOTHERBRAIN_MAX_REQUEST_BYTES'] + 1)
+
+    def test_unknown_length_over_limit_does_not_read_remainder(self):
+        self.app.config['GOOGLE_MOTHERBRAIN_MAX_REQUEST_BYTES'] = 64
+        with patch('app.integrations.google_motherbrain.resolve_google_motherbrain_operation') as resolve:
+            response, stream = self._stream_post(b' ' * 10000)
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(stream.tell(), 65)
+        self.assertEqual(sum(stream.requested), 65)
+        resolve.assert_not_called()
+
+    def test_known_oversize_rejects_without_reading(self):
+        self.app.config['GOOGLE_MOTHERBRAIN_MAX_REQUEST_BYTES'] = 64
+        response, stream = self._stream_post(b' ' * 10000, length=10000)
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(stream.tell(), 0)
+        self.assertEqual(stream.requested, [])
+
+    def test_unknown_length_malformed_json_is_controlled(self):
+        response, _stream = self._stream_post(b'{bad')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()['error']['code'], 'malformed_json')
+
+    def test_auth_and_disable_checks_precede_stream_reads(self):
+        response, stream = self._stream_post(b' ' * 10000, token='wrong')
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(stream.requested, [])
+        self.app.config['GOOGLE_MOTHERBRAIN_IMPORT_ENABLED'] = False
+        response, stream = self._stream_post(b' ' * 10000)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(stream.requested, [])
 
     def test_wrong_content_type_returns_415(self):
         response = self.client.post(

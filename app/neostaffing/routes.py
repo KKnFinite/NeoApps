@@ -14,6 +14,7 @@ from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
+from app.services.operator_errors import safe_mutation_error
 from app.models import (
     StaffingGroup,
     StaffingLeadershipAssignment,
@@ -248,7 +249,7 @@ def staffing_groups():
             db.session.commit()
         except (ValueError, IntegrityError) as error:
             db.session.rollback()
-            flash(str(getattr(error, "orig", None) or error), "error")
+            flash(safe_mutation_error(error, "save Staffing groups"), "error")
         else:
             flash(success_message, "success")
         return redirect(url_for("neostaffing.staffing_groups"))
@@ -298,7 +299,7 @@ def save_shift_flow(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "save shift flow"), "error")
     else:
         flash("Shift Flow plan saved.", "success")
     return redirect(url_for("neostaffing.shift_flow", phase=phase, person_id=person_id))
@@ -326,7 +327,7 @@ def move_shift_flow_final_door(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(getattr(error, "orig", None) or error)}), 400
+        return jsonify({"ok": False, "error": safe_mutation_error(error, "move shift flow final door")}), 400
 
     plan = result["plan"]
     return jsonify(
@@ -364,7 +365,7 @@ def move_shift_flow_lane(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(getattr(error, "orig", None) or error)}), 400
+        return jsonify({"ok": False, "error": safe_mutation_error(error, "move shift flow lane")}), 400
 
     plan = result["plan"]
     return jsonify(
@@ -400,7 +401,7 @@ def move_shift_flow_final_composite(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(getattr(error, "orig", None) or error)}), 400
+        return jsonify({"ok": False, "error": safe_mutation_error(error, "move shift flow final composite")}), 400
     plan = result["plan"]
     return jsonify({
         "ok": True, "changed": result["changed"], "person_id": person.id,
@@ -519,7 +520,7 @@ def bulk_change():
                 db.session.commit()
             except (ValueError, IntegrityError) as error:
                 db.session.rollback()
-                flash(str(getattr(error, "orig", None) or error), "error")
+                flash(safe_mutation_error(error, "bulk change"), "error")
             else:
                 flash(
                     "Applied the complete Bulk Change package in one transaction "
@@ -534,7 +535,7 @@ def bulk_change():
                     db.session.commit()
             except (ValueError, IntegrityError) as error:
                 db.session.rollback()
-                flash(str(getattr(error, "orig", None) or error), "error")
+                flash(safe_mutation_error(error, "bulk change"), "error")
             else:
                 if result["requests"]:
                     flash(
@@ -582,7 +583,7 @@ def submit_change_request():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "submit change request"), "error")
     else:
         if change_request.status == "completed":
             flash("Employee changes applied and recorded.", "success")
@@ -606,7 +607,7 @@ def decide_change_request_item(item_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "decide change request item"), "error")
     else:
         status = rows[0].status if rows else "updated"
         flash(f"Request field {status}.", "success")
@@ -627,7 +628,7 @@ def decide_change_request_remaining(request_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "decide change request remaining"), "error")
     else:
         flash(f"Updated {len(rows)} Pending request fields.", "success")
     return redirect(_change_requests_return_url())
@@ -647,7 +648,7 @@ def withdraw_change_request_item(item_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "withdraw change request item"), "error")
     else:
         flash("Request field withdrawn.", "success")
     return redirect(_change_requests_return_url())
@@ -666,7 +667,7 @@ def withdraw_change_request_remaining(request_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "withdraw change request remaining"), "error")
     else:
         flash(f"Withdrew {count} remaining request fields.", "success")
     return redirect(_change_requests_return_url())
@@ -686,7 +687,7 @@ def reverse_change_request_item(item_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "reverse change request item"), "error")
     else:
         flash("Request decision reversed to Pending.", "success")
     return redirect(_change_requests_return_url())
@@ -716,7 +717,7 @@ def _handle_attendance():
             db.session.commit()
         except (ValueError, IntegrityError) as error:
             db.session.rollback()
-            flash(str(getattr(error, "orig", None) or error), "error")
+            flash(safe_mutation_error(error, "save attendance"), "error")
         else:
             flash(f"Attendance saved for {saved} people.", "success")
         return redirect(
@@ -929,7 +930,7 @@ def vacation_management_capacity():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management capacity"), "error")
     else:
         flash("Management vacation capacity updated.", "success")
     return redirect(
@@ -955,7 +956,7 @@ def vacation_management_initialize():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management initialize"), "error")
     else:
         flash(
             f"Carried forward {len(created)} Management capacity setting(s).",
@@ -981,7 +982,7 @@ def vacation_management_reduced_capacity():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management reduced capacity"), "error")
     else:
         flash("Weekly reduced-capacity setting updated.", "success")
     return redirect(
@@ -1010,7 +1011,7 @@ def vacation_management_select():
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management select"), "error")
     else:
         flash(f"Added {len(saved)} Management vacation week(s).", "success")
     return redirect(
@@ -1032,7 +1033,7 @@ def vacation_management_change_request():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management change request"), "error")
     else:
         flash("Management vacation change request submitted.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1049,7 +1050,7 @@ def vacation_management_change_request_cancel(request_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management change request cancel"), "error")
     else:
         flash("Management vacation change request cancelled.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1069,7 +1070,7 @@ def vacation_management_change_request_review(request_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management change request review"), "error")
     else:
         flash("Management vacation change request resolved.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1089,7 +1090,7 @@ def vacation_management_selection_move(selection_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management selection move"), "error")
     else:
         flash("Management vacation week moved.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1108,7 +1109,7 @@ def vacation_management_selection_cancel(selection_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management selection cancel"), "error")
     else:
         flash("Management vacation week removed and bank restored.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1128,7 +1129,7 @@ def vacation_management_split():
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management split"), "error")
     else:
         flash("Management vacation week split into five days.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1153,7 +1154,7 @@ def vacation_management_pass():
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management pass"), "error")
     else:
         flash("Management vacation turn advanced.", "success")
     return redirect(
@@ -1194,7 +1195,7 @@ def vacation_union_calendar_carry_forward(calendar_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union calendar carry forward"), "error")
         return redirect(url_for("neostaffing.vacation_union_calendars"))
     flash(f"Created {created.name} for {created.vacation_year}.", "success")
     return redirect(
@@ -1239,7 +1240,7 @@ def vacation_union_select(calendar_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union select"), "error")
     else:
         flash("Union vacation week reserved.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
@@ -1260,7 +1261,7 @@ def vacation_union_split(calendar_id):
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union split"), "error")
     else:
         flash("Optional Week split into five vacation days.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
@@ -1281,7 +1282,7 @@ def vacation_split_day_schedule():
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation split day schedule"), "error")
     else:
         flash("Split vacation day scheduled.", "success")
     return redirect(_vacation_program_url(program, vacation_year))
@@ -1297,7 +1298,7 @@ def vacation_split_day_cancel(day_id):
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation split day cancel"), "error")
     else:
         flash("Split vacation day removed.", "success")
     return redirect(_vacation_program_url(program, vacation_year))
@@ -1321,7 +1322,7 @@ def vacation_day_schedule():
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation day schedule"), "error")
     else:
         flash("Vacation day scheduled.", "success")
     return redirect(_vacation_program_url(program, vacation_year))
@@ -1337,7 +1338,7 @@ def vacation_day_cancel(day_id):
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation day cancel"), "error")
     else:
         flash("Vacation day removed; entitlement restored.", "success")
     return redirect(_vacation_program_url(program, vacation_year))
@@ -1357,7 +1358,7 @@ def vacation_management_availability():
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management availability"), "error")
     else:
         flash("Management availability updated.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1372,7 +1373,7 @@ def vacation_management_availability_remove(day_id):
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management availability remove"), "error")
     else:
         flash("Management availability entry removed.", "success")
     return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
@@ -1388,7 +1389,7 @@ def vacation_split_week_recombine(conversion_id):
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation split week recombine"), "error")
     else:
         flash("Five split days recombined into one unused vacation week.", "success")
     return redirect(_vacation_program_url(program, vacation_year))
@@ -1411,7 +1412,7 @@ def vacation_union_selection_review(selection_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union selection review"), "error")
     else:
         flash("Union vacation selection reviewed.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
@@ -1430,7 +1431,7 @@ def vacation_union_selection_cancel(selection_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union selection cancel"), "error")
     else:
         flash("Union vacation selection cancelled.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendars", year=vacation_year))
@@ -1450,7 +1451,7 @@ def vacation_union_selection_move(selection_id):
         db.session.commit()
     except (TypeError, ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union selection move"), "error")
     else:
         flash("Union vacation week moved.", "success")
     return redirect(
@@ -1472,7 +1473,7 @@ def vacation_union_calendar_new():
             db.session.commit()
         except (ValueError, IntegrityError) as error:
             db.session.rollback()
-            flash(str(getattr(error, "orig", None) or error), "error")
+            flash(safe_mutation_error(error, "update vacation union calendar new"), "error")
         else:
             flash("Union vacation calendar created.", "success")
             return redirect(
@@ -1504,7 +1505,7 @@ def vacation_union_calendar_edit(calendar_id):
             db.session.commit()
         except (ValueError, IntegrityError) as error:
             db.session.rollback()
-            flash(str(getattr(error, "orig", None) or error), "error")
+            flash(safe_mutation_error(error, "update vacation union calendar edit"), "error")
         else:
             flash("Union vacation calendar updated.", "success")
             return redirect(
@@ -1525,7 +1526,7 @@ def vacation_union_calendar_delete(calendar_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union calendar delete"), "error")
     else:
         flash("Union vacation calendar deleted; employee selections were preserved.", "success")
     return redirect(
@@ -1546,7 +1547,7 @@ def vacation_union_calendar_shares(calendar_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union calendar shares"), "error")
     else:
         flash("View Only calendar sharing updated.", "success")
     return redirect(
@@ -1588,7 +1589,7 @@ def vacation_union_calendar_copy(calendar_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union calendar copy"), "error")
     else:
         flash("Independent View Only calendar created from shared scope.", "success")
         return redirect(
@@ -1631,7 +1632,7 @@ def vacation_union_calendar_reset(calendar_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation union calendar reset"), "error")
     else:
         flash("Official Union calendar reset to its fresh-year state.", "success")
     return redirect(url_for("neostaffing.vacation_union_calendar_admin"))
@@ -1650,7 +1651,7 @@ def vacation_management_reset():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update vacation management reset"), "error")
     else:
         flash("Management calendar reset to its fresh-year state.", "success")
     return redirect(
@@ -1693,7 +1694,7 @@ def save_floating_holiday_setting():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "save floating holiday settings"), "error")
     else:
         flash("Floating Holiday rule saved.", "success")
     return redirect(url_for("neostaffing.settings"))
@@ -1730,7 +1731,7 @@ def people_assign_work_area(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "assign a work area"), "error")
     else:
         flash("Work area assignment updated.", "success")
     return redirect(_people_return_url(person_id))
@@ -1744,7 +1745,7 @@ def people_clear_work_area(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "clear a work area"), "error")
     else:
         flash("Work area assignment cleared.", "success")
     return redirect(_people_return_url(person_id))
@@ -1766,7 +1767,7 @@ def people_bulk_work_area():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update work area assignments"), "error")
     else:
         flash(f"Bulk work-area action updated {result['updated']} people.", "success")
         if result["skipped"]:
@@ -1868,7 +1869,7 @@ def update_reporting_relationship(person_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update reporting relationship"), "error")
     else:
         flash("Reports To updated.", "success")
     return redirect(
@@ -1917,7 +1918,7 @@ def update_unit(unit_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "update Staffing unit"), "error")
     else:
         flash("Staffing unit updated.", "success")
     return redirect(
@@ -1976,7 +1977,7 @@ def update_planned_staffing(unit_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        message = str(getattr(error, "orig", None) or error)
+        message = safe_mutation_error(error, "update planned staffing")
         flash(message, "error")
     else:
         flash("Planned staffing updated.", "success")
@@ -2061,7 +2062,7 @@ def create_person():
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
         person = None
-        message = str(getattr(error, "orig", None) or error)
+        message = safe_mutation_error(error, "create person")
         flash(f"Person was not created: {message}", "error")
     else:
         flash("Person added.", "success")
@@ -2081,7 +2082,7 @@ def create_people_bulk():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "create people bulk"), "error")
     else:
         flash(f"Added {len(people)} employees.", "success")
     return redirect(_people_return_url(people[0].id if len(people) == 1 else None))
@@ -2214,7 +2215,7 @@ def create_management_assignment():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "create management assignment"), "error")
     else:
         flash("Management assignment added.", "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
@@ -2240,7 +2241,7 @@ def delete_management_assignment(assignment_id):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "delete management assignment"), "error")
     else:
         flash("Management assignment deactivated.", "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
@@ -2272,7 +2273,7 @@ def apply_management_relationship_review():
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        flash(str(getattr(error, "orig", None) or error), "error")
+        flash(safe_mutation_error(error, "apply management relationship review"), "error")
     else:
         flash("Operational assignment and Reports To review applied.", "success")
     return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
@@ -2417,7 +2418,7 @@ def _mutate(callback, success_message, redirect_endpoint, redirect_values=None):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        message = str(getattr(error, "orig", None) or error)
+        message = safe_mutation_error(error, "save Staffing changes")
         flash(message, "error")
     else:
         flash(success_message, "success")
@@ -2448,7 +2449,7 @@ def _mutate_to_people(callback, success_message, person_id=None):
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
-        message = str(getattr(error, "orig", None) or error)
+        message = safe_mutation_error(error, "save people changes")
         flash(message, "error")
     else:
         flash(success_message, "success")
