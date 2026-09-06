@@ -1,107 +1,126 @@
-"""Trace the approved specimen, following the NeoFont OpenCV/FontBuilder pipeline.
+"""NeoFontLite V2: canonical SVG polygon offsets, never raster tracing.
 
-Build-only dependencies: Pillow, opencv-python-headless, fonttools, brotli.
-No existing NeoFont files are read as glyph sources or modified.
+Build-only dependencies: fonttools, brotli, shapely==2.1.2.
 """
 import argparse
 import hashlib
-import shutil
+import json
+import re
 from pathlib import Path
-
-import cv2
-import numpy as np
-from PIL import Image
+from xml.etree import ElementTree as ET
+from shapely import affinity
+from shapely.geometry import Polygon
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 
-SOURCE_SHA = '50d9b3faefae694d2a24eb16e9ff5f49c0049b31517915a447c960a9470c3c15'
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / 'app/static/fonts/neofont/glyphs'
 OUTPUT = ROOT / 'app/static/fonts/neofontlite'
-# Explicit source cells exclude the decorative title and example words. Some
-# glyphs have disconnected strokes, so connected components are NOT letters.
-ROWS = (
-    ('ABCDEFGHI', 310, 415, 400, ((60,200),(220,350),(380,500),(520,650),(680,800),(830,950),(970,1100),(1130,1270),(1300,1375))),
-    ('JKLMNOPQR', 470, 579, 558, ((60,170),(200,310),(340,455),(480,625),(650,780),(800,935),(950,1080),(1100,1230),(1270,1385))),
-    ('STUVWXYZ', 625, 728, 714, ((100,230),(250,370),(400,530),(550,690),(710,883),(907,1030),(1050,1190),(1210,1350))),
-)
-THRESHOLD = 170  # Luminous stroke core, excluding the blue glow; same NeoFont threshold.
-SCALE = 720 / 75  # One uniform x/y scale for ALL glyphs; retain relative proportions.
-BEARING = 40
+CAP_HEIGHT, BEARING, TARGET_WEIGHT = 720, 40, .625
 
 
-def build(source, output=OUTPUT):
-    source = Path(source)
-    if hashlib.sha256(source.read_bytes()).hexdigest() != SOURCE_SHA:
-        raise ValueError('Approved specimen SHA-256 mismatch; no outputs written.')
-    image = Image.open(source)
-    if image.size != (1448, 1086) or image.mode != 'RGB':
-        raise ValueError('Unexpected approved specimen format.')
-    gray = np.array(image.convert('L'))
-    (output / 'source').mkdir(parents=True, exist_ok=True)
-    (output / 'glyphs').mkdir(exist_ok=True)
-    target = output / 'source/neo-font-lite-alphabet-specimen.png'
-    if source.resolve() != target.resolve():
-        shutil.copyfile(source, target)
+def polygons(shape):
+    return [shape] if shape.geom_type == 'Polygon' else list(shape.geoms)
+
+
+def topology(shape):
+    return sorted(len(p.interiors) for p in polygons(shape))
+
+
+def canonical(path):
+    """Canonical input consists of closed M/L polygons with even-odd fill."""
+    shape = Polygon()
+    for element in ET.parse(path).iter('{http://www.w3.org/2000/svg}path'):
+        data = element.attrib['d']
+        if set(re.findall('[A-Za-z]',data)) - {'M','L','Z'}:
+            raise ValueError(f'Unsupported SVG commands: {path}')
+        for contour in data.strip().split('Z'):
+            if not contour.strip():
+                continue
+            numbers = list(map(float, re.findall(r'-?\d+(?:\.\d+)?', contour)))
+            ring = Polygon(list(zip(numbers[::2], numbers[1::2])))
+            if not ring.is_valid:
+                raise ValueError(f'Invalid contour: {path}')
+            shape = shape.symmetric_difference(ring)
+    if shape.is_empty or not shape.is_valid:
+        raise ValueError(f'Invalid glyph: {path}')
+    x0,y0,x1,y1 = shape.bounds
+    scale = CAP_HEIGHT/(y1-y0)
+    return affinity.scale(affinity.translate(shape,-x0,-y0),scale,scale,origin=(0,0))
+
+
+def lighter(original):
+    # Optical cleanup of sub-unit kinks (<0.14% cap height) prevents tiny
+    # near-collinear canonical edges growing into mitre spikes during offset.
+    clean = original.simplify(1, preserve_topology=True)
+    low, high = 0., 60.
+    for _ in range(48):
+        inset = (low+high)/2
+        candidate = clean.buffer(-inset, join_style='mitre', mitre_limit=2)
+        if candidate.is_empty:
+            high = inset
+            continue
+        x0,y0,x1,y1 = candidate.bounds
+        scale = CAP_HEIGHT/(y1-y0)
+        if candidate.area*scale*scale/original.area > TARGET_WEIGHT:
+            low = inset
+        else:
+            high = inset
+    shape = clean.buffer(-low, join_style='mitre', mitre_limit=2)
+    if topology(shape) != topology(original):
+        raise ValueError('Thinning changed counters/components; optical correction required')
+    x0,y0,x1,y1 = shape.bounds
+    scale = CAP_HEIGHT/(y1-y0)
+    return affinity.scale(affinity.translate(shape,-x0,-y0),scale,scale,origin=(0,0)), low
+
+
+def build(output=OUTPUT):
+    output = Path(output)
+    if output.resolve().is_relative_to(SOURCE.parent.resolve()):
+        raise ValueError('Never overwrite NeoFont')
     letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    glyphs = {name: TTGlyphPen(None).glyph() for name in ('.notdef','space')}
-    metrics = {'.notdef': (400,0), 'space':(320,0)}
-    for row, top, bottom, baseline, cells in ROWS:
-        for letter, (left,right) in zip(row,cells,strict=True):
-            _, mask = cv2.threshold(gray[top:bottom,left:right],THRESHOLD,255,cv2.THRESH_BINARY)
-            ys,xs = np.where(mask>0)
-            if not len(xs):
-                raise ValueError(f'Empty glyph {letter}')
-            xmin,xmax,ymin,ymax = int(xs.min()),int(xs.max()),int(ys.min()),int(ys.max())
-            contours,hierarchy = cv2.findContours(mask,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-            pen = TTGlyphPen(None)
-            paths=[]
-            for i,contour in enumerate(contours):
-                if cv2.contourArea(contour)<2:
-                    continue
-                points=cv2.approxPolyDP(contour,0.45,True).reshape(-1,2)
-                if len(points)<3:
-                    continue
-                paths.append('M '+' L '.join(f'{x-xmin+1},{y-ymin+1}' for x,y in points)+' Z')
-                mapped=[(round((int(x)-xmin)*SCALE+BEARING),round((baseline-top-int(y))*SCALE)) for x,y in points]
-                depth=0; parent=int(hierarchy[0][i][3])
-                while parent!=-1:
-                    depth+=1; parent=int(hierarchy[0][parent][3])
-                area=sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(mapped,mapped[1:]+mapped[:1]))
-                if (depth%2==0 and area>0) or (depth%2==1 and area<0):
-                    mapped.reverse()
-                pen.moveTo(mapped[0])
-                for point in mapped[1:]: pen.lineTo(point)
+    shapes = {c:canonical(SOURCE/f'{c}.svg') for c in letters}
+    derived = {c:lighter(shapes[c]) for c in letters}
+    (output/'glyphs').mkdir(parents=True, exist_ok=True)
+    glyphs = {n:TTGlyphPen(None).glyph() for n in ('.notdef','space')}
+    metrics = {'.notdef':(400,0),'space':(320,0)}
+    report = {}
+    for c,(shape,inset) in derived.items():
+        pen,paths = TTGlyphPen(None),[]
+        for polygon in polygons(shape):
+            for hole,ring in [(False,polygon.exterior)]+[(True,r) for r in polygon.interiors]:
+                points = [(round(x+BEARING),round(CAP_HEIGHT-y)) for x,y in list(ring.coords)[:-1]]
+                area = sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(points,points[1:]+points[:1]))
+                if (not hole and area>0) or (hole and area<0):
+                    points.reverse()
+                pen.moveTo(points[0])
+                for point in points[1:]:
+                    pen.lineTo(point)
                 pen.closePath()
-            glyphs[letter]=pen.glyph()
-            metrics[letter]=(round((xmax-xmin)*SCALE)+BEARING*2,BEARING)
-            svg=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {xmax-xmin+2} {ymax-ymin+2}"><path fill="black" fill-rule="evenodd" d="{" ".join(paths)}"/></svg>\n'
-            (output / f'glyphs/{letter}.svg').write_text(svg,encoding='utf-8')
-            print(letter, 'source bounds', (left+xmin,top+ymin,left+xmax,top+ymax), 'advance',metrics[letter][0])
-    fb=FontBuilder(1000,isTTF=True)
+                paths.append('M '+' L '.join(f'{x},{CAP_HEIGHT-y}' for x,y in points)+' Z')
+        glyphs[c] = pen.glyph()
+        width = round(shape.bounds[2])+BEARING*2
+        metrics[c] = (width,BEARING)
+        (output/f'glyphs/{c}.svg').write_text(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 720"><path fill="black" fill-rule="evenodd" d="{" ".join(paths)}"/></svg>\n',encoding='utf-8')
+        report[c] = dict(source_sha256=hashlib.sha256((SOURCE/f'{c}.svg').read_bytes()).hexdigest(),area_ratio=round(shape.area/shapes[c].area,6),inset=round(inset,4),topology=topology(shape),advance=width)
+    fb = FontBuilder(1000,isTTF=True)
     fb.setupGlyphOrder(['.notdef','space']+list(letters))
     fb.setupCharacterMap({32:'space',**{ord(c):c for c in letters},**{ord(c.lower()):c for c in letters}})
-    fb.setupGlyf(glyphs)
-    fb.setupHorizontalMetrics(metrics)
+    fb.setupGlyf(glyphs); fb.setupHorizontalMetrics(metrics)
     fb.setupHorizontalHeader(ascent=850,descent=-150)
     fb.setupOS2(sTypoAscender=850,sTypoDescender=-150,usWinAscent=850,usWinDescent=150,sCapHeight=720,usWeightClass=300)
-    fb.setupNameTable(dict(familyName='NeoFontLite',styleName='Regular',uniqueFontIdentifier='NeoFontLite Regular 1.000',fullName='NeoFontLite Regular',psName='NeoFontLite-Regular',version='Version 1.000'))
-    fb.setupPost(); fb.setupMaxp()
-    fb.font.recalcTimestamp=False
+    fb.setupNameTable(dict(familyName='NeoFontLite',styleName='Regular',uniqueFontIdentifier='NeoFontLite Regular 2.000',fullName='NeoFontLite Regular',psName='NeoFontLite-Regular',version='Version 2.000'))
+    fb.setupPost(); fb.setupMaxp(); fb.font.recalcTimestamp=False
     fb.font['head'].created=fb.font['head'].modified=3861000000
     fb.font.save(output/'NeoFontLite.ttf')
     font=TTFont(output/'NeoFontLite.ttf',recalcTimestamp=False)
     font.flavor='woff2'; font.save(output/'NeoFontLite.woff2')
-    for suffix in ('ttf','woff2'):
-        with TTFont(output/f'NeoFontLite.{suffix}') as result:
-            assert result['name'].getDebugName(1)=='NeoFontLite'
-            for letter in letters:
-                assert result.getBestCmap()[ord(letter)]==letter
-                assert result['glyf'][letter].numberOfContours>0
+    (output/'build-metrics.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    print('Built 26 vector glyphs; topology preserved; target filled area 62.5%.')
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('source',type=Path)
-    args=parser.parse_args()
-    build(args.source)
+    parser.add_argument('--output',type=Path,default=OUTPUT)
+    build(parser.parse_args().output)

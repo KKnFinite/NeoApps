@@ -1,0 +1,236 @@
+{
+  "A": {
+    "source_sha256": "dd69c7314fd4560c9494844d26bd087af87da37537ab4a8e0f9759a8cc9b9f65",
+    "area_ratio": 0.625,
+    "inset": 36.1559,
+    "topology": [
+      0
+    ],
+    "advance": 1209
+  },
+  "B": {
+    "source_sha256": "654c90cd75c603e885f09fcda65989398e1b9f1078644d6f7227a5c60f28beb8",
+    "area_ratio": 0.625,
+    "inset": 37.1272,
+    "topology": [
+      1
+    ],
+    "advance": 1148
+  },
+  "C": {
+    "source_sha256": "1ab193ec807d38a944c2f3570206fe85ce70f669b7538ac58291e8e0848fadb5",
+    "area_ratio": 0.625,
+    "inset": 35.2966,
+    "topology": [
+      0
+    ],
+    "advance": 1132
+  },
+  "D": {
+    "source_sha256": "04af67ef387e1ea26906f4b2b8b6e3510f9c21adbad8ccfb2483670a293ea615",
+    "area_ratio": 0.625,
+    "inset": 36.0599,
+    "topology": [
+      0
+    ],
+    "advance": 1080
+  },
+  "E": {
+    "source_sha256": "29fcde35cc3d413cd43dce05f9ccc82fc3dbde803e249e11eb71b5d3da99a7c7",
+    "area_ratio": 0.625,
+    "inset": 35.2826,
+    "topology": [
+      0
+    ],
+    "advance": 1118
+  },
+  "F": {
+    "source_sha256": "c802d2bf0f5a5983a8159830ef179284dd5ce621054291b4fcce853da19420b5",
+    "area_ratio": 0.625,
+    "inset": 35.1401,
+    "topology": [
+      0
+    ],
+    "advance": 1110
+  },
+  "G": {
+    "source_sha256": "c4d1eae5512a996622d2e92cc09bb2d03902d979642b39ca92236acc1c025040",
+    "area_ratio": 0.625,
+    "inset": 35.5479,
+    "topology": [
+      0
+    ],
+    "advance": 1089
+  },
+  "H": {
+    "source_sha256": "a9226f76ee5035a8be11368562fb54f79b75a9a92419c255b34a35401cba1191",
+    "area_ratio": 0.625,
+    "inset": 35.6841,
+    "topology": [
+      0
+    ],
+    "advance": 1113
+  },
+  "I": {
+    "source_sha256": "d81815b8fd01e6b7f86b89edd3cce14692cb1a690bd3ce8a61ad48e7fb483ece",
+    "area_ratio": 0.625,
+    "inset": 35.851,
+    "topology": [
+      0
+    ],
+    "advance": 172
+  },
+  "J": {
+    "source_sha256": "d918f0eff6acddb29345c9b8048945bed6d9aa60bf219e6a4589c1aca3267776",
+    "area_ratio": 0.625,
+    "inset": 37.6998,
+    "topology": [
+      0
+    ],
+    "advance": 1045
+  },
+  "K": {
+    "source_sha256": "7da392b0bb65f6dab3d242d1539a1aef3b067d70273e114b8f84c444d658d72b",
+    "area_ratio": 0.625,
+    "inset": 34.7408,
+    "topology": [
+      0
+    ],
+    "advance": 1050
+  },
+  "L": {
+    "source_sha256": "c4542dd8bba91be76a10720b6c49ce7d95cc7d2b32186edfcbcb04b882268294",
+    "area_ratio": 0.625,
+    "inset": 33.9052,
+    "topology": [
+      0
+    ],
+    "advance": 1044
+  },
+  "M": {
+    "source_sha256": "1bfc8718aab0a299635676c29951d0f1035554d07597033a793c7f815f2969e3",
+    "area_ratio": 0.625,
+    "inset": 37.5629,
+    "topology": [
+      0
+    ],
+    "advance": 1246
+  },
+  "N": {
+    "source_sha256": "623bf9c809c5d3816b7eaeafede63cfae31445722bf181fdb6b69f1eeb85e7a8",
+    "area_ratio": 0.625,
+    "inset": 37.1602,
+    "topology": [
+      0
+    ],
+    "advance": 1092
+  },
+  "O": {
+    "source_sha256": "ad4b36294ecd9e95353c24c31bc4e0fbf911f07e4602c7e03da5dd2ea69d2158",
+    "area_ratio": 0.625,
+    "inset": 36.2974,
+    "topology": [
+      1
+    ],
+    "advance": 1143
+  },
+  "P": {
+    "source_sha256": "5f613c7599803660e7745c9be5e383e38cda5ab92872b9a34d9e8b5fd2c7d052",
+    "area_ratio": 0.625,
+    "inset": 34.3884,
+    "topology": [
+      0
+    ],
+    "advance": 1107
+  },
+  "Q": {
+    "source_sha256": "334879abcfa31b0faeb58e7e7ae99a57ecd77e2b78b4c4c2e8c1e0a864285c5d",
+    "area_ratio": 0.625,
+    "inset": 31.946,
+    "topology": [
+      1
+    ],
+    "advance": 1000
+  },
+  "R": {
+    "source_sha256": "1d5bc3442c28903ab5b1c2217e06d49c0fca73256876a6150ba6d9702ea03332",
+    "area_ratio": 0.625,
+    "inset": 35.3172,
+    "topology": [
+      0
+    ],
+    "advance": 1112
+  },
+  "S": {
+    "source_sha256": "b7e844bbef5a5673a9d48807b01525d0d0ad1ac94915fc01e47c8090c5700340",
+    "area_ratio": 0.625,
+    "inset": 34.8489,
+    "topology": [
+      0
+    ],
+    "advance": 1127
+  },
+  "T": {
+    "source_sha256": "57ae77baded6179c883ea4b41e113a7ac824cd13e5b06ad35b18a63e71f5e12f",
+    "area_ratio": 0.625,
+    "inset": 33.7183,
+    "topology": [
+      0
+    ],
+    "advance": 1192
+  },
+  "U": {
+    "source_sha256": "3bc05963c25793d8a6d2081c08149db8b99ddab74b655890cd0e3142304714a2",
+    "area_ratio": 0.625,
+    "inset": 35.7241,
+    "topology": [
+      0
+    ],
+    "advance": 1126
+  },
+  "V": {
+    "source_sha256": "737231257ae597b3631b56dbaa698c788d7b3cc17d0e4bbe17b9148bd7304d33",
+    "area_ratio": 0.625,
+    "inset": 35.6416,
+    "topology": [
+      0
+    ],
+    "advance": 1169
+  },
+  "W": {
+    "source_sha256": "a703f3e523d6c93f3b2e648680c411cc17791b86e2255780e293d48ee9ecb681",
+    "area_ratio": 0.625,
+    "inset": 37.1057,
+    "topology": [
+      0
+    ],
+    "advance": 1453
+  },
+  "X": {
+    "source_sha256": "3604a909f663c46291893f87e4345e017dfd17d59443d57078ee8ef5f3734160",
+    "area_ratio": 0.625,
+    "inset": 33.3782,
+    "topology": [
+      0
+    ],
+    "advance": 1036
+  },
+  "Y": {
+    "source_sha256": "a313d4b9c79a6e1412e15766c947d3abac5d67a70d1e08c64aa4d702722bcfb1",
+    "area_ratio": 0.625,
+    "inset": 34.0942,
+    "topology": [
+      0
+    ],
+    "advance": 1054
+  },
+  "Z": {
+    "source_sha256": "3159e81e75cda18e9a8271d1fc9a62bb3c5901b22dd26269ac58e5fca9242fb2",
+    "area_ratio": 0.625,
+    "inset": 36.0475,
+    "topology": [
+      0
+    ],
+    "advance": 1095
+  }
+}

@@ -1,5 +1,6 @@
 """Font/static regressions without adding build dependencies to the runtime suite."""
 import hashlib
+import json
 import string
 import struct
 import unittest
@@ -11,9 +12,24 @@ FONT=ROOT/'app/static/fonts/neofontlite'
 
 
 class NeoFontLiteTest(unittest.TestCase):
-    def test_source_is_approved(self):
+    def test_historical_specimen_is_preserved_but_not_used(self):
         self.assertEqual(hashlib.sha256((FONT/'source/neo-font-lite-alphabet-specimen.png').read_bytes()).hexdigest(),
                          '50d9b3faefae694d2a24eb16e9ff5f49c0049b31517915a447c960a9470c3c15')
+        builder=(ROOT/'tools/neofontlite_build.py').read_text()
+        self.assertNotIn('import cv2',builder)
+        self.assertNotIn('from PIL',builder)
+        self.assertIn("app/static/fonts/neofont/glyphs",builder)
+
+    def test_vector_source_hashes_weight_and_baseline(self):
+        metrics=json.loads((FONT/'build-metrics.json').read_text())
+        self.assertEqual(set(metrics),set(string.ascii_uppercase))
+        for c,entry in metrics.items():
+            with self.subTest(letter=c):
+                source=ROOT/f'app/static/fonts/neofont/glyphs/{c}.svg'
+                self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),entry['source_sha256'])
+                self.assertAlmostEqual(entry['area_ratio'],.625,places=5)
+                tree=ElementTree.parse(FONT/f'glyphs/{c}.svg')
+                self.assertEqual(tree.getroot().get('viewBox'),f"0 0 {entry['advance']} 720")
 
     def test_font_formats_mapping_and_sample_words(self):
         data=(FONT/'NeoFontLite.ttf').read_bytes()

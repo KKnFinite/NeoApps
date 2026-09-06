@@ -1,43 +1,40 @@
-"""One focused mobile Gateway check using the existing isolated app fixture."""
+"""NeoFontLite V2 on real Sektor UI, isolated SQLite and no integrations."""
 import unittest
 from pathlib import Path
 from tests.browser import test_mobile_drawer as existing
 
 
 class NeoFontLiteBrowserTest(unittest.TestCase):
-    def test_mobile_gateway_and_specimen(self):
+    def test_mobile_vector_font(self):
         fixture_type=existing.MobileDrawerBrowserTest
         fixture_type.setUpClass()
         fixture=fixture_type()
-        evidence=Path('instance/neofontlite-build/evidence')
+        evidence=Path('instance/neofontlite-v2/evidence')
         evidence.mkdir(parents=True,exist_ok=True)
-        browser=fixture.pw.chromium.launch()
         try:
-            page=browser.new_page(viewport={'width':390,'height':760})
-            fixture.login(page)
-            fixture.ready(page,'/rfd')
-            page.evaluate("async()=>{await document.fonts.load('300 16px NeoFontLite');await document.fonts.ready;}")
-            result=page.locator('.gateway-mobile-header .neo-mobile-product-name').evaluate('''e=>{
-                const style=getComputedStyle(e),r=document.createRange();r.selectNodeContents(e);
-                const b=e.getBoundingClientRect(),t=r.getBoundingClientRect();
-                return {text:e.textContent.trim(),family:style.fontFamily,weight:style.fontWeight,
-                    fits:t.left>=b.left && t.right<=b.right+1 && t.height<=b.height+1,
-                    overflow:document.documentElement.scrollWidth>innerWidth+1,
-                    loaded:[...document.fonts].some(f=>f.family==='NeoFontLite' && f.status==='loaded')};
-            }''')
-            self.assertEqual(result['text'],'NeoGateway')
-            self.assertIn('NeoFontLite',result['family'])
-            self.assertEqual(result['weight'],'300')
-            self.assertTrue(result['fits'] and result['loaded'])
-            self.assertFalse(result['overflow'])
-            self.assertNotIn('NeoFontLite',page.locator('.gateway-mobile-title small').evaluate('e=>getComputedStyle(e).fontFamily'))
-            self.assertNotIn('NeoFontLite',page.locator('.neo-mobile-bottom').evaluate('e=>getComputedStyle(e).fontFamily'))
-            page.screenshot(path=str(evidence/'gateway-390-760.png'))
-            page.goto(Path('app/static/fonts/neofontlite/preview.html').resolve().as_uri())
-            page.evaluate("async()=>{await document.fonts.load('300 32px NeoFontLite');await document.fonts.ready;await Promise.all([...document.images].map(i=>i.decode()));}")
-            self.assertEqual(page.locator('.alphabet span').all_text_contents(),list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
-            self.assertEqual(page.locator('.samples p').all_text_contents(),['NEOGATEWAY','PORTAL','HOME','NODES','MENU','SETTINGS','DASHBOARD'])
-            page.screenshot(path=str(evidence/'font-preview.png'),full_page=True)
+            for engine in ['chromium','webkit']:
+                with self.subTest(engine=engine):
+                    browser=getattr(fixture.pw,engine).launch()
+                    try:
+                        page=browser.new_page(viewport={'width':390,'height':760})
+                        fixture.login(page)
+                        fixture.ready(page,'/neosektor')
+                        page.evaluate("async()=>{await document.fonts.load('300 16px NeoFontLite');await document.fonts.ready;}")
+                        self.assertTrue(page.evaluate("[...document.fonts].some(f=>f.family==='NeoFontLite' && f.status==='loaded')"))
+                        self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                        self.assertEqual(page.locator('.sektor-command-copy strong').all_text_contents(),['EBM','WBM','Tunnel Conductor','Driver Routing','Discharge','Settings','Live Counts'])
+                        self.assertTrue(page.locator('.sektor-command-copy strong').evaluate_all('''es=>es.every(e=>{
+                            const r=document.createRange();r.selectNodeContents(e);
+                            const t=r.getBoundingClientRect(),b=e.closest('a').getBoundingClientRect();
+                            return getComputedStyle(e).fontFamily.includes('NeoFontLite') && t.left>=b.left && t.right<=b.right && t.top>=b.top && t.bottom<=b.bottom;
+                        })'''))
+                        page.screenshot(path=str(evidence/f'{engine}-sektor-390-760.png'),full_page=True)
+                        page.goto(Path('app/static/fonts/neofontlite/preview.html').resolve().as_uri())
+                        page.set_viewport_size({'width':1200,'height':1000})
+                        page.evaluate("async()=>{await document.fonts.load('300 16px NeoFontLite');await document.fonts.load('16px NeoFont');await document.fonts.ready;}")
+                        self.assertEqual(page.locator('.alphabet span').all_text_contents(),list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
+                        page.screenshot(path=str(evidence/f'{engine}-font-preview.png'),full_page=True)
+                    finally:
+                        browser.close()
         finally:
-            browser.close()
             fixture_type.tearDownClass()

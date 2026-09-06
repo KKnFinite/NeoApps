@@ -2,9 +2,10 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NeoFontLite specimen comparison</title>
+<title>NeoFontLite V2 vector comparison</title>
 <style>
 @font-face { font-family:NeoFontLite; src:url(NeoFontLite.woff2) format('woff2'); font-weight:300; }
+@font-face { font-family:NeoFont; src:url(../neofont/NeoFont.woff2) format('woff2'); }
 body { margin:24px; background:#080d13; color:#e9f4ff; font-family:system-ui,sans-serif; }
 h1 { font:300 32px NeoFontLite,sans-serif; }
 .alphabet,.samples { font:300 clamp(16px,3vw,36px)/1.7 NeoFontLite,sans-serif; font-synthesis:none; }
@@ -17,6 +18,17 @@ img { width:min(100%,900px); height:auto; }
 <div class="alphabet" aria-label="A to Z">
 <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span><span>I</span><span>J</span><span>K</span><span>L</span><span>M</span><span>N</span><span>O</span><span>P</span><span>Q</span><span>R</span><span>S</span><span>T</span><span>U</span><span>V</span><span>W</span><span>X</span><span>Y</span><span>Z</span>
 </div>
-<section class="samples" aria-label="Sample words"><p>NEOGATEWAY</p><p>PORTAL</p><p>HOME</p><p>NODES</p><p>MENU</p><p>SETTINGS</p><p>DASHBOARD</p></section>
-<img src="source/neo-font-lite-alphabet-specimen.png" width="1448" height="1086" alt="Approved alphabet and sample words for comparison">
+<section class="samples" aria-label="Sample words"><p>NEOGATEWAY</p><p>PORTAL</p><p>HOME</p><p>NODES</p><p>MENU</p><p>SETTINGS</p><p>DASHBOARD</p><p>NEOSEKTOR</p><p>EBM</p><p>WBM</p><p>TUNNEL CONDUCTOR</p><p>DRIVER ROUTING</p><p>DISCHARGE</p><p>LIVE COUNTS</p></section>
+<section id="sizes" aria-label="Real UI sizes"></section>
+<script>
+for (const size of [12,16,24]) {
+ const block=document.createElement('section');
+ const label=document.createElement('h2');label.textContent=size+'px: NeoFont / NeoFontLite';block.append(label);
+ for (const family of ['NeoFont','NeoFontLite']) {
+  const p=document.createElement('p');p.style.font=`300 ${size}px/1.8 ${family}`;
+  p.textContent='E G P R S O D — NEOSEKTOR DASHBOARD EBM WBM TUNNEL CONDUCTOR DRIVER ROUTING DISCHARGE SETTINGS LIVE COUNTS HOME NODES MENU';block.append(p);
+ }
+ document.querySelector('#sizes').append(block);
+}
+</script>
 </html>
