@@ -1,3 +1,4 @@
+from tests.html_contracts import document, assert_mobile_drawer
 import re
 import unittest
 from datetime import date, datetime, time, timedelta
@@ -97,17 +98,17 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-node-desktop-side-nav", response.data)
         self.assertIn(b'data-node-desktop-shell="sektor"', response.data)
         desktop_sidebar = response.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
-        self.assertIn(b"neosektor-icon-256x256.png", desktop_sidebar)
+        self.assertIn(b"newlogo_sektor.png", desktop_sidebar)
         self.assertNotIn(b"neosektor-icon-128x128.png", desktop_sidebar)
-        self.assertIn(b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>', response.data)
+        self.assertIn(b'<small>DASHBOARD</small>', response.data)
         self.assertIn(b"neo-brand--sektor", response.data)
         self.assertIn(b"neo-brand__neo neo-word", response.data)
         self.assertIn(b"neo-brand__node node-word", response.data)
         self.assertIn(
-            b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"',
+            b'src="/static/images/logos/newlogo_sektor_small.png"',
             response.data,
         )
-        self.assertIn(b"neosektor-header-title neo-brand-title", response.data)
+        self.assertIn(b"neo-mobile-product-name", response.data)
         self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
         self.assertIn(b"neo-brand-title__node--sektor", response.data)
         self.assertNotIn(b'src="/static/images/neosektor_logo1.png"', response.data)
@@ -150,35 +151,32 @@ class NeoSektorRoutesTest(unittest.TestCase):
         alert_expiration.assert_not_called()
         commit.assert_not_called()
 
-    def test_neosektor_desktop_dashboard_uses_compact_tiles_without_sidebar_context_card(self):
+    def test_neosektor_desktop_dashboard_preserves_tiles_and_shared_sidebar_context(self):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neosektor")
         css = Path("app/static/css/base.css").read_text()
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b"node-desktop-side-context", response.data)
-        self.assertNotIn(b"RFD OPERATIONS", response.data)
+        self.assertIn(b"node-desktop-side-context", response.data)
+        self.assertIn(b"RFD OPERATIONS", response.data)
         self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr));', css)
         self.assertIn('aspect-ratio: 1.18 / 1;', css)
         self.assertIn('height: calc(100vh - 140px);', css)
         self.assertIn('grid-template-rows: auto minmax(0, 1fr);', css)
 
     def test_node_desktop_shell_portal_return_precedes_character_switcher(self):
-        self._login_approved_user(role="operator")
-
-        response = self.client.get("/neosektor")
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('class="node-desktop-portal-link neo-menu-text" href="/portal"', html)
-        self.assertIn("Back to NeoPortal", html)
-        self.assertLess(html.index("node-desktop-portal-link"), html.index("data-character-switcher"))
-        self.assertIn(".node-desktop-portal-link {\n    display: none;", css)
-        desktop_portal_link = css.rsplit(".node-desktop-portal-link {", 1)[1].split("}", 1)[0]
-        self.assertIn("display: inline-flex;", desktop_portal_link)
-        self.assertIn("font-size: 0.58rem;", desktop_portal_link)
+        self._login_approved_user(role='operator')
+        response=self.client.get('/neosektor')
+        self.assertEqual(response.status_code,200)
+        root=document(response)
+        bar=root.one('header', **{'data-operational-topbar':None})
+        self.assertEqual(bar.one('a', 'operational-app-logo').attrs['href'], '/portal')
+        self.assertEqual(len(bar.findall(**{'data-character-switcher':None})),1)
+        self.assertEqual(bar.one('form', action='/logout').attrs['method'],'post')
+        sidebar=root.one(**{'data-operational-sidebar':None})
+        self.assertTrue(sidebar.findall('a',href='/portal'))
+        self.assertTrue(sidebar.findall('a',href='/rfd'))
 
     def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
         css = Path("app/static/css/base.css").read_text()
@@ -268,8 +266,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         expected_labels = {
-            "/neosektor/tunnel-conductor": "TUNNEL",
-            "/neosektor/live-counts": "COUNTS",
+            "/neosektor/tunnel-conductor": "TUNNEL CONDUCTOR",
+            "/neosektor/live-counts": "LIVE COUNTS",
             "/neosektor/ebm": "EBM",
             "/neosektor/wbm": "WBM",
             "/neosektor/discharge": "DISCHARGE",
@@ -280,7 +278,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(
-                    f'<span class="mobile-topbar-page-name neo-page-title">{label}</span>'.encode(),
+                    f'<small>{label}</small>'.encode(),
                     response.data,
                 )
 
@@ -361,24 +359,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
 
     def test_neosektor_mobile_menu_is_compact_single_column_list(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.get("/neosektor")
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-        menu_html = html.split('data-mobile-shell-menu-panel', 1)[1].split("</div>", 1)[0]
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("mobile-bottom-menu-panel", html)
-        self.assertIn("Live Counts", menu_html)
-        self.assertIn("Tunnel Conductor", menu_html)
-        self.assertIn("East Ballmat", menu_html)
-        self.assertIn("West Ballmat", menu_html)
-        self.assertIn("Driver Routing", menu_html)
-        self.assertIn("Discharge", menu_html)
-        self.assertNotIn("OPEN", menu_html)
-        self.assertNotIn("Inbound operations", menu_html)
-        self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
+        self._login_approved_user(role='simulator')
+        root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor'))
+        menu=drawer.one(**{'data-drawer-view':'menu'})
+        for label in ('Live Counts','Tunnel Conductor','East Ballmat','West Ballmat','Driver Routing','Discharge'):
+            self.assertIn(label,menu.text)
+        self.assertFalse(menu.findall(cls='neo-drawer-node-link'))
+        self.assertNotIn('Inbound operations',menu.text)
+        self.assertNotIn('OPEN',menu.text)
 
     def test_neosektor_mobile_dashboard_tiles_do_not_render_subtitles(self):
         self._login_approved_user(role="simulator")
@@ -387,39 +375,26 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"data-neosektor-mobile-dashboard", response.data)
-        self.assertNotIn(b"<small>", response.data)
+        self.assertFalse(document(response).one(**{"data-neosektor-mobile-dashboard":None}).findall("small"))
         self.assertNotIn(b"Live counts overview.", response.data)
         self.assertNotIn(b"Tunnel conductor controls.", response.data)
 
     def test_neosektor_mobile_subpages_back_to_dashboard(self):
-        self._login_approved_user(role="simulator")
-
-        for path in (
-            "/neosektor/live-counts",
-            "/neosektor/tunnel-conductor",
-            "/neosektor/ebm",
-            "/neosektor/wbm",
-            "/neosektor/discharge",
-        ):
+        self._login_approved_user(role='simulator')
+        for path in ('/neosektor/live-counts','/neosektor/tunnel-conductor','/neosektor/ebm','/neosektor/wbm','/neosektor/discharge'):
             with self.subTest(path=path):
-                response = self.client.get(path)
-
-                self.assertEqual(response.status_code, 200)
-                self.assertIn(b'class="mobile-topbar-back"', response.data)
-                self.assertIn(b'href="/neosektor"', response.data)
-                self.assertIn(b'data-mobile-back-target="/neosektor"', response.data)
-                self.assertIn(b'aria-label="Back to NeoSektor"', response.data)
+                root,drawer,dock=assert_mobile_drawer(self,self.client.get(path))
+                self.assertEqual(dock.one('a').attrs['href'],'/neosektor')
+                header=root.one('header', **{'data-operational-mobile-header':None})
+                self.assertEqual(header.one('a').attrs['href'],'/neosektor')
 
     def test_neosektor_dashboard_mobile_back_points_to_gateway(self):
-        self._login_approved_user(role="simulator")
-
-        response = self.client.get("/neosektor")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'class="mobile-topbar-back"', response.data)
-        self.assertIn(b'href="/rfd"', response.data)
-        self.assertIn(b'data-mobile-back-target="/rfd"', response.data)
-        self.assertIn(b'aria-label="Back to Gateway"', response.data)
+        self._login_approved_user(role='simulator')
+        root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor'))
+        self.assertEqual(dock.one('a').attrs['href'],'/neosektor')
+        menu=drawer.one(**{'data-drawer-view':'menu'})
+        self.assertEqual(menu.one('a',href='/rfd').text,'NeoGateway \u00b7 RFD')
+        self.assertEqual(menu.one('a',href='/portal').text,'NeoPortal')
 
     def test_neosektor_internal_menu_filters_links_by_role(self):
         # Node access exposes operational pages read-only.  Action permissions
@@ -510,7 +485,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertNotIn(b"motherbrain-header-nav", response.data)
                     self.assertIn(b'href="/neosektor"', response.data)
                     self.assertIn(b"Back", response.data)
-                    self.assertNotIn(b"Change Characters", response.data)
+                    self.assertIn(b"Change Characters", response.data)
                     continue
                 else:
                     self.assertEqual(response.data.count(b"data-neosektor-internal-menu"), 0)
@@ -1050,9 +1025,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"visibilitychange", response.data)
         self.assertIn(b'href="/neosektor"', response.data)
         self.assertIn(b"Back", response.data)
-        self.assertNotIn(b"Change Characters", response.data)
+        self.assertIn(b"Change Characters", response.data)
         self.assertNotIn(b"Logged in", response.data)
-        self.assertNotIn(b"Logout", response.data)
+        self.assertIn(b"Logout", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
         self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"VIEW ONLY", response.data)
@@ -1569,8 +1544,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(driver_routing.status_code, 200)
         self.assertIn(b'href="/neosektor"', driver_routing.data)
         self.assertIn(b"Back", driver_routing.data)
-        self.assertNotIn(b'href="/neosektor/driver-routing"', driver_routing.data)
-        self.assertNotIn(b'aria-current="page"', driver_routing.data)
+        self.assertIn(b'href="/neosektor/driver-routing"', driver_routing.data)
+        sidebar = document(driver_routing).one(**{"data-operational-sidebar":None})
+        self.assertEqual(len(sidebar.findall('a', 'is-active', href='/neosektor/driver-routing')), 1)
 
     def test_tunnel_conductor_loads_for_view_authorized_user(self):
         self._login_approved_user(role="simulator")
@@ -2394,7 +2370,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(
-            b'<span class="neo-page-title motherbrain-desktop-top-title-text">SETTINGS</span>',
+            b'<small>SETTINGS</small>',
             response.data,
         )
         self.assertIn(
@@ -3400,7 +3376,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBallmatCount.query.count(), 2)
         self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
         self.assertEqual(NeoSektorBayStatus.query.count(), 5)
-        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 5)
+        # Five route/override settings plus five per-bay priority switches.
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 10)
 
         with (
             patch(

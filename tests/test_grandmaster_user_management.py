@@ -14,6 +14,7 @@ from app.services.access_control import (
     user_can_access_node,
 )
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class GrandmasterUserManagementTest(unittest.TestCase):
@@ -32,6 +33,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -80,10 +82,11 @@ class GrandmasterUserManagementTest(unittest.TestCase):
                 self.assertNotIn(b"MotherBrain Home", response.data)
                 self.assertNotIn(b"Back to NeoMotherBrain", response.data)
                 self.assertNotIn(b"BACK TO NeoGateway", response.data)
-                self.assertIn(b"PORTAL MANAGEMENT", response.data)
-                self.assertIn(b"GATEWAY MATRIX", response.data)
-                self.assertIn(b"MASTER SCHEDULE", response.data)
-                self.assertIn(b"MANAGE SORT", response.data)
+                # The node sidebar contains node screens; global management is
+                # reached through the Portal, not a duplicate node-menu item.
+                self.assertIn(b'href="/portal"', response.data)
+                self.assertIn(b'href="/motherbrain/master-schedule"', response.data)
+                self.assertIn(b'href="/motherbrain/manage-sort"', response.data)
                 self.assertIn(b'href="/motherbrain"', response.data)
                 self.assertIn(b"neo-brand--motherbrain", response.data)
                 self.assertIn(b'data-motherbrain-desktop-side-nav', response.data)
@@ -183,7 +186,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(name_response.status_code, 200)
         self.assertIn(b"Alpha User", name_response.data)
         self.assertNotIn(b"Beta User", name_response.data)
-        self.assertIn(b">EDIT</a>", name_response.data)
+        self.assertIn(b">EDIT USER</a>", name_response.data)
         self.assertIn(b"2026-06-05 13:30", name_response.data)
         self.assertIn(b"NeoMotherBrain: Watcher", name_response.data)
         self.assertNotIn(b"Watcher fallback", name_response.data)
@@ -335,7 +338,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertIn(b"Access only", detail_response.data)
         self.assertNotIn(b'name="app_role_neogateway"', response.data)
         self.assertIn(b'name="app_role_neostaffing"', response.data)
-        self.assertIn(b"Access only - RFD NeoNode roles are managed below.", response.data)
+        self.assertIn("Access only · RFD NeoNode roles are managed below.".encode(), response.data)
         self.assertIn(b"2026-01-15 06:00", detail_response.data)
         self.assertIn(b"RFD NeoNode ROLES", roles_response.data)
         self.assertIn(b"user-role-page", roles_response.data)
@@ -503,7 +506,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertTrue(user_can_access_node(user, "RFD", "sektor", "master"))
         self.assertTrue(user_can_access_node(user, "RFD", "ermac", "simulator"))
 
-    def test_approval_role_authority_is_enforced_per_node(self):
+    def test_canonical_grandmaster_authority_can_approve_a_grandmaster_node_role(self):
         grandmaster = self._admin("approval_guard_grandmaster", "grandmaster")
         user, membership = self._pending_user(
             "approval_guard_user",
@@ -524,10 +527,12 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "pending")
+        self.assertEqual(db.session.get(GatewayMembership, membership.id).status, "approved")
         self.assertEqual(
-            GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id).count(),
-            0,
+            GatewayNodeRole.query.filter_by(
+                gateway_membership_id=membership.id, node_id=motherbrain.id,
+            ).one().role,
+            "grandmaster",
         )
 
     def test_denial_sets_metadata_and_sends_no_email(self):
@@ -718,7 +723,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self.assertEqual(db.session.get(User, user.id).first_name, "Updated")
         self.assertEqual(send_approved.call_count, 0)
 
-    def test_non_kessler_grandmaster_cannot_assign_grandmaster_role(self):
+    def test_grandmaster_role_assignment_does_not_depend_on_reserved_username(self):
         grandmaster = self._admin("ordinary_grandmaster", "grandmaster")
         user, membership = self._approved_user("future_grandmaster", "future@example.com")
         db.session.commit()
@@ -738,10 +743,10 @@ class GrandmasterUserManagementTest(unittest.TestCase):
             gateway_membership_id=membership.id,
             node_id=motherbrain.id,
         ).first()
-        self.assertEqual(response.status_code, 400)
-        self.assertIn(b"You cannot assign a role equal to or higher than your own role.", response.data)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"You cannot assign a role equal to or higher than your own role.", response.data)
         self.assertIsNotNone(role)
-        self.assertEqual(role.role, "watcher")
+        self.assertEqual(role.role, "grandmaster")
 
     def test_kessler_can_assign_grandmaster_role(self):
         kessler = self._admin("Kessler", "grandmaster")

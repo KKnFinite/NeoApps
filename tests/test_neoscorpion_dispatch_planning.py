@@ -50,6 +50,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 18, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -59,7 +60,12 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         db.create_all()
         self.gateway = ensure_default_gateway_and_nodes()
         ensure_default_permission_rules()
+        creator = User(username="manual-operation-creator", is_active=False)
+        set_user_password(creator, "TestPassword123!")
+        db.session.add(creator)
+        db.session.flush()
         self.operation = SortDateOperation(
+            generated_by_user_id=creator.id,
             gateway_id=self.gateway.id,
             sort_date=date(2026, 8, 18),
             gateway_code=self.gateway.code,
@@ -413,7 +419,12 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
 
         self.assertEqual(len(context["rows"]), 150)
-        self.assertLessEqual(len(statements), 20)
+        # Includes current/prior-date scope selection and the current SPEAR
+        # calibration/history contract. These remain batch reads for 150 rows.
+        self.assertEqual(len(statements), 26)
+        for table in ("neoscorpion_fuel_assignments", "neoscorpion_fuel_work_states",
+                      "neoscorpion_spear_calibration_resets"):
+            self.assertEqual(sum(f"FROM {table} " in sql for sql in statements), 1)
 
     def test_dispatch_recommendations_are_advisory_and_support_partial_assignments(self):
         fueler = self._login_user("suggested_fueler", "operator")

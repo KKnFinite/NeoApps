@@ -49,6 +49,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             "neoscorpion_fuel_trucks",
             "neoscorpion_settings",
             "neoscorpion_spear_audit_entries",
+            "neoscorpion_spear_calibration_resets",
             "neoscorpion_sort_asset_states",
             "neoscorpion_sort_fuelers",
             "neoscorpion_sort_trucks",
@@ -92,6 +93,8 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             {
                 "fuel_on_board_at_utc",
                 "fuel_on_board_by_user_id",
+                "ready_for_fuel_at_utc",
+                "ready_for_fuel_by_user_id",
                 "completed_at_utc",
                 "completed_by_user_id",
                 "confirmed_tail_number",

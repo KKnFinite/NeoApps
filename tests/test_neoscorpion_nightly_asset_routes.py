@@ -42,6 +42,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
             },
         )
         self.app = create_app(TestConfig)
@@ -123,6 +124,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         self.assertIn(b"TRUCK 7", complete.data)
 
         self._add_operation(date(2026, 8, 18))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 8, 18, 22, 0)
         next_sort = self.client.get("/neoscorpion/fuel-dispatch?assets=open")
         self.assertIn(b"ASSETS NOT SET", next_sort.data)
         self.assertNotIn(b"6000 gal", next_sort.data)
@@ -639,6 +641,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
 
     def _add_operation(self, sort_date):
         operation = SortDateOperation(
+            generated_by_user_id=User.query.order_by(User.id).first().id,
             gateway_id=self.gateway.id,
             sort_date=sort_date,
             gateway_code=self.gateway.code,

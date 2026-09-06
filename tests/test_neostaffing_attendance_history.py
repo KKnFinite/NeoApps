@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 from datetime import date, datetime
 import inspect as python_inspect
 import unittest
@@ -367,7 +368,7 @@ class NeoStaffingAttendanceHistoryTest(unittest.TestCase):
 
         self.assertLessEqual(len(statements), 7)
 
-    def test_schema_is_additive_idempotent_and_factory_invokes_ensure(self):
+    def test_schema_is_additive_idempotent_and_factory_leaves_it_to_bootstrap(self):
         self.assertIn(
             "staffing_attendance_summaries",
             set(inspect(db.engine).get_table_names()),
@@ -393,9 +394,9 @@ class NeoStaffingAttendanceHistoryTest(unittest.TestCase):
         self.assertTrue(all(call.kwargs["checkfirst"] for call in create.call_args_list))
         self.assertEqual(commit.call_count, 2)
 
-        with patch("app.ensure_neostaffing_attendance_summary_table") as ensure:
-            app = create_app(self.config)
-        ensure.assert_called_once_with(app)
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.neostaffing_attendance_history_schema.ensure_neostaffing_attendance_summary_table"
+        )
 
     def test_attendance_get_has_user_driven_rollover_hook(self):
         source = python_inspect.getsource(staffing_routes._handle_attendance)

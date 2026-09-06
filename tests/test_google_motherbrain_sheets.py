@@ -555,6 +555,8 @@ class GoogleMotherBrainSheetsRouteTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        from app.services.permission_rules import ensure_default_permission_rules
+        ensure_default_permission_rules()
         self.user = User(username="Kessler", role="grandmaster")
         set_user_password(self.user, "TestPassword123!")
         db.session.add(self.user)

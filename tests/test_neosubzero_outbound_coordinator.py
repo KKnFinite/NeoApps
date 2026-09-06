@@ -433,12 +433,14 @@ class NeoSubZeroRouteAccessTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
-    def test_outbound_and_coordinator_use_independent_subzero_permissions(self):
+    def test_outbound_and_coordinator_are_readable_without_settings_edit_access(self):
         watcher = self._user("subzero_watcher", "watcher")
         self._login(watcher)
         self.assertEqual(self.client.get("/neosubzero/outbound").status_code, 200)
         denied = self.client.get("/neosubzero/coordinator", follow_redirects=False)
-        self.assertEqual(denied.status_code, 302)
+        self.assertEqual(denied.status_code, 200)
+        settings = self.client.post("/neosubzero/settings", data={"action": "save_fluids"})
+        self.assertEqual(settings.status_code, 403)
 
         simulator = self._user("subzero_simulator", "simulator")
         self._login(simulator)

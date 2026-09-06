@@ -48,6 +48,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -279,6 +280,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self._save_complete(assignment)
         db.session.commit()
         self._assignment(day=date(2026, 8, 18), flight_number="UPS802")
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 8, 18, 22, 0)
 
         with self.assertRaisesRegex(ValueError, "current sort operation"):
             complete_fuel_on_board(
@@ -308,7 +310,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NEO FUEL", response.data.upper())
         self.assertNotIn(b"data-copy-neo-fuel", response.data)
-        self.assertIn(b">FUEL ON BOARD</button>", response.data)
+        self.assertIn(b">FOB</button>", response.data)
         self.assertIsNone(assignment.fuel_on_board_at_utc)
 
     def _save_complete(self, assignment):
@@ -334,6 +336,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         flight_number="UPS801",
     ):
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,

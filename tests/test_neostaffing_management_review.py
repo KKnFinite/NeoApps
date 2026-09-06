@@ -19,6 +19,7 @@ from app.models import (
 from app.services import neostaffing as staffing_service
 from app.services import neostaffing_management_review as review_service
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class NeoStaffingManagementReviewTest(unittest.TestCase):
@@ -37,6 +38,7 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -552,23 +554,17 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         db.session.commit()
         self._login(editor.username)
 
-        preview = self.client.post(
-            "/neostaffing/app-management/management-assignments",
-            data={
-                "person_id": subject.id,
-                "unit_id": work_area.id,
-                "leadership_level": "work_area",
-                "return_unit_id": work_area.id,
-            },
+        # Direct assignment POST now saves immediately (7939e17). Build a
+        # genuine review using the canonical service to exercise the retained
+        # explicit review-apply endpoint, without accidentally saving twice.
+        review = review_service.prepare_management_relationship_review(
+            review_service.assignment_add_mutation(subject.id, work_area.id, "work_area")
         )
-        revision = re.search(
-            rb'name="review_revision" value="([^"]+)"',
-            preview.data,
-        ).group(1).decode()
-        relationship_revision = re.search(
-            rb'name="relationship_revision_' + str(subject.id).encode() + rb'" value="([^"]+)"',
-            preview.data,
-        ).group(1).decode()
+        revision = review["revision"]
+        relationship_revision = next(
+            row["relationship_revision"] for row in review["rows"]
+            if row["person"].id == subject.id
+        )
 
         applied = self.client.post(
             "/neostaffing/app-management/management-review/apply",

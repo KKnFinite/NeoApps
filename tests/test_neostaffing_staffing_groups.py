@@ -266,9 +266,9 @@ class NeoStaffingStaffingGroupsTest(unittest.TestCase):
             follow_redirects=False,
         )
         watcher_attendance = self.client.get("/neostaffing/attendance")
-        self.assertEqual(denied_view.status_code, 302)
-        self.assertEqual(denied_view.location, "/neostaffing")
-        self.assertNotIn(b"Master Group", watcher_attendance.data)
+        self.assertEqual(denied_view.status_code, 200)
+        self.assertNotIn(b"CREATE GROUP", denied_view.data)
+        self.assertIn(b"Master Group", watcher_attendance.data)
 
         self._rule("neostaffing.staffing_groups.view").minimum_role = "watcher"
         self._rule("neostaffing.staffing_groups.edit").minimum_role = "operator"

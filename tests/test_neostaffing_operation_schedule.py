@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 from datetime import date, datetime
 import unittest
 from unittest.mock import Mock, patch
@@ -374,10 +375,10 @@ class NeoStaffingOperationScheduleTest(unittest.TestCase):
         self.assertNotIn("DELETE FROM", statements)
         self.assertEqual(commit.call_count, 2)
 
-    def test_factory_invokes_targeted_operation_schedule_ensure(self):
-        with patch("app.ensure_neostaffing_operation_schedule_table") as ensure:
-            app = create_app(self.config)
-        ensure.assert_called_once_with(app)
+    def test_factory_does_not_invoke_targeted_operation_schedule_ensure(self):
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.neostaffing_operation_schedule_schema.ensure_neostaffing_operation_schedule_table"
+        )
 
 
 if __name__ == "__main__":

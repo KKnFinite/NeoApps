@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 import unittest
 from unittest.mock import Mock, patch
 
@@ -146,11 +147,10 @@ class GoogleMotherBrainLivePollSchemaTest(unittest.TestCase):
         broad_sync.assert_not_called()
         self.assertIn("Google live-poll state table ensure failed safely", "\n".join(logs.output))
 
-    def test_factory_invokes_the_targeted_startup_ensure(self):
-        with patch("app.ensure_google_motherbrain_live_poll_state_table") as ensure:
-            app = create_app(self.config)
-
-        ensure.assert_called_once_with(app)
+    def test_factory_does_not_invoke_the_targeted_startup_ensure(self):
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.google_motherbrain_live_poll_schema.ensure_google_motherbrain_live_poll_state_table"
+        )
 
 
 if __name__ == "__main__":

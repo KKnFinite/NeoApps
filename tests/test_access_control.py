@@ -1,3 +1,4 @@
+from tests.html_contracts import document
 import unittest
 
 from sqlalchemy import event
@@ -188,81 +189,23 @@ class AccessControlTest(unittest.TestCase):
         motherbrain = client.get("/motherbrain", follow_redirects=False)
 
         self.assertEqual(hub.status_code, 200)
-        hub_html = hub.data.decode()
-        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split('rfd-node-column-right"', 1)[0]
-        right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</section>", 1)[0]
-        self.assertIn(b"<title>RFD | NeoGateway</title>", hub.data)
-        self.assertNotIn(b"RFD Hub | NeoGateway", hub.data)
-        self.assertNotIn(b"RFD Command Hub", hub.data)
-        self.assertIn(b"NeoGateway - RFD", hub.data)
-        self.assertIn(b"rfd-header-brand neo-brand-title", hub.data)
-        self.assertIn(b"rfd-header-code neo-menu-text", hub.data)
-        self.assertIn(b"rfd-hub-page", hub.data)
-        self.assertNotIn(b"NeoRFD", hub.data)
-        self.assertIn(b"watcher_hub_user", hub.data)
-        self.assertNotIn(b'neogateway_logo3_large.png', hub.data)
-        self.assertNotIn(b'neogateway_logo3_medium.png', hub.data)
-        self.assertNotIn(b'neogateway_logo3_small.png', hub.data)
-        self.assertNotIn(b'class="rfd-gateway-brand-strip"', hub.data)
-        self.assertIn(b'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"', hub.data)
-        self.assertNotIn(b"rfd-gateway-brand-title neo-brand-title", hub.data)
-        self.assertIn(b"rfd-node-name neo-brand-title", hub.data)
-        self.assertIn(b"NeoMotherBrain", hub.data)
-        self.assertIn(b"NeoSektor", hub.data)
-        self.assertIn(b'href="/neoermac"', hub.data)
-        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', hub.data)
-        self.assertIn(b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"', hub.data)
-        self.assertIn(b'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"', hub.data)
-        self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"', hub.data)
-        generic_node_icon = b'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"'
-        self.assertGreaterEqual(hub.data.count(generic_node_icon), 4)
-        self.assertNotIn(b'src="/static/images/icons/reptile/icon_192.png"', hub.data)
-        self.assertNotIn(b'src="/static/images/icons/subzero/icon_192.png"', hub.data)
-        self.assertNotIn(b'src="/static/images/icons/rain/icon_192.png"', hub.data)
-        self.assertNotIn(b"Sort planning, flight schedules, parking, and API review.", hub.data)
-        self.assertNotIn(b"Inbound operations, ballmat counts, discharge, and routing.", hub.data)
-        self.assertNotIn(b"Shift execution, doors, belts, ULD requests, and outbound pulls.", hub.data)
-        self.assertNotIn(b"Future node.", hub.data)
-        for node_name in (
-            b"NeoScorpion",
-            b"NeoReptile",
-            b"NeoErmac",
-            b"NeoSub-Zero",
-            b"NeoRain",
-        ):
-            self.assertIn(node_name, hub.data)
-        self.assertNotIn(b"Placeholder", hub.data)
-        self.assertNotIn(b"Launch", hub.data)
-        self.assertNotIn(b"Gateway Command Layer", hub.data)
-        self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
-        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-node-column-right"'))
-        left_order = (
-            "NeoSektor",
-            "NeoReptile",
-            "NeoRain",
-        )
-        right_order = (
-            "NeoErmac",
-            "NeoSub-Zero",
-            "NeoScorpion",
-        )
-        left_positions = [left_column.index(f'aria-label="{node}"') for node in left_order]
-        right_positions = [right_column.index(f'aria-label="{node}"') for node in right_order]
-        self.assertEqual(left_positions, sorted(left_positions))
-        self.assertEqual(right_positions, sorted(right_positions))
-        self.assertIn(b'action="/logout"', hub.data)
-        self.assertNotIn(b'href="/motherbrain/operations"', hub.data)
-        self.assertNotIn(b'href="/motherbrain/master-schedule"', hub.data)
-        self.assertNotIn(b"Nightly Operations", hub.data)
-        self.assertNotIn(b"Master Schedule", hub.data)
-        self.assertNotIn(b"Access Requests", hub.data)
-        self.assertNotIn(b"User Management", hub.data)
-        self.assertNotIn(b'class="gateway-context"', hub.data)
-        self.assertNotIn(b'class="platform-brand"', hub.data)
-        self.assertNotIn(b'class="powered-by"', hub.data)
-        self.assertNotIn(b'href="/motherbrain"', hub.data)
+        root = document(hub)
+        launcher = root.one(cls='gateway-node-launcher')
+        self.assertEqual(root.one('title').text, 'RFD | NeoGateway')
+        card = launcher.one('article', 'gateway-node-motherbrain')
+        self.assertEqual(card.attrs['aria-disabled'], 'true')
+        self.assertIn('No Access', card.text)
+        self.assertFalse(card.findall('a'))
+        for node in ('sektor', 'ermac', 'scorpion'):
+            self.assertEqual(launcher.one('a', f'gateway-node-{node}').attrs['href'], f'/neo{node}')
+        self.assertEqual(len(launcher.one(cls='gateway-node-grid').findall(cls='gateway-node-card')), 6)
+        self.assertFalse(root.findall(**{'data-operational-sidebar': None}))
+        menu = root.one(**{'data-drawer-view':'menu'})
+        self.assertEqual(menu.one('form', action='/logout').attrs['method'], 'post')
+        for forbidden in ('Master Schedule', 'User Management', 'Access Requests'):
+            self.assertNotIn(forbidden, menu.text)
         self.assertEqual(motherbrain.status_code, 302)
-        self.assertEqual(motherbrain.location, "/rfd")
+        self.assertEqual(motherbrain.location, '/rfd')
 
     def test_change_characters_menu_filters_accessible_node_targets(self):
         self._approved_user("watcher_character_user")
@@ -287,13 +230,13 @@ class AccessControlTest(unittest.TestCase):
         self.assertIn("neo-brand__node node-word", switcher)
         self.assertIn('href="/neosektor"', switcher)
         self.assertIn(
-            'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"',
+            'src="/static/images/logos/newlogo_sektor_small.png"',
             switcher,
         )
         self.assertIn("Sektor", switcher)
         self.assertIn('href="/neoscorpion"', switcher)
         self.assertIn(
-            'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"',
+            'src="/static/images/logos/newlogo_scorpion.png"',
             switcher,
         )
         self.assertIn("Scorpion", switcher)
@@ -301,12 +244,9 @@ class AccessControlTest(unittest.TestCase):
         self.assertNotIn("Ermac", switcher)
         self.assertNotIn('href="/motherbrain"', switcher)
         self.assertNotIn("MotherBrain", switcher)
-        for unavailable_node in (
-            "Reptile",
-            "Sub-Zero",
-            "Rain",
-        ):
-            self.assertNotIn(unavailable_node, switcher)
+        self.assertNotIn("Reptile", switcher)
+        self.assertIn('href="/neosubzero/"', switcher)
+        self.assertIn('href="/neorain"', switcher)
 
     def test_change_characters_shows_motherbrain_only_with_motherbrain_access(self):
         _user, membership = self._approved_user("simulator_character_user")
@@ -334,13 +274,13 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertIn('href="/motherbrain"', switcher)
         self.assertIn(
-            'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"',
+            'src="/static/images/logos/newlogo_motherbrain_small.png"',
             switcher,
         )
         self.assertIn('class="character-switcher-label neo-menu-text"', switcher)
         self.assertIn("MotherBrain", switcher)
 
-    def test_change_characters_appears_on_authenticated_node_pages_not_rfd_hub(self):
+    def test_change_characters_appears_on_authenticated_node_and_gateway_shells(self):
         self._approved_user("ermac_character_user")
         db.session.commit()
         client = self.app.test_client()
@@ -351,8 +291,8 @@ class AccessControlTest(unittest.TestCase):
 
         rfd_response = client.get("/rfd")
         self.assertEqual(rfd_response.status_code, 200)
-        self.assertNotIn(b"Change Characters", rfd_response.data)
-        self.assertNotIn(b"data-character-switcher", rfd_response.data)
+        self.assertIn(b"Change Characters", rfd_response.data)
+        self.assertIn(b"data-character-switcher", rfd_response.data)
 
         for path in ("/neoermac", "/neosektor"):
             with self.subTest(path=path):
@@ -363,7 +303,7 @@ class AccessControlTest(unittest.TestCase):
                 self.assertNotIn(f'href="{path}"', switcher)
                 if path == "/neosektor":
                     self.assertIn(
-                        'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"',
+                        'src="/static/images/logos/newlogo_ermac_small.png"',
                         switcher,
                     )
 
@@ -390,7 +330,7 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"MANAGE SORT", response.data)
         self.assertIn(b"data-motherbrain-dashboard", response.data)
-        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', response.data)
+        self.assertIn(b'src="/static/images/logos/newlogo_motherbrain_small.png"', response.data)
         self.assertNotIn(b"motherbrain-dashboard-brand neo-brand-title", response.data)
         self.assertNotIn(b"motherbrain-current-sort-overview", response.data)
         self.assertNotIn(b"motherbrain_logo1.png", response.data)

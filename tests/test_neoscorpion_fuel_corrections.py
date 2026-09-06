@@ -47,6 +47,7 @@ class NeoScorpionFuelCorrectionTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -282,13 +283,14 @@ class NeoScorpionFuelCorrectionTest(unittest.TestCase):
 
         db.session.refresh(work)
         self.assertEqual(work.off_at_utc, old_off)
+        self.assertEqual(assignment.transfer_fuel_gallons, 150)
         self.assertEqual(
             classify_fuel_movement(
                 assignment,
                 work,
                 tank_states=list(work.tank_states),
             ),
-            "not_moved",
+            "moved",  # Positive T/F still proves movement after gauge correction.
         )
         audits = NeoScorpionFuelAuditEntry.query.order_by(
             NeoScorpionFuelAuditEntry.field_name
@@ -383,6 +385,7 @@ class NeoScorpionFuelCorrectionTest(unittest.TestCase):
     def _assignment(self):
         day = date(2026, 8, 17)
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,
@@ -482,7 +485,7 @@ class NeoScorpionFuelCorrectionTest(unittest.TestCase):
             "actual_ctr": actual_ctr,
             "remaining_right": "10.0",
             "actual_right": actual_right,
-            "transfer_fuel_gallons": "",
+            "transfer_fuel_gallons": "150",
             "notes": "",
         }
 

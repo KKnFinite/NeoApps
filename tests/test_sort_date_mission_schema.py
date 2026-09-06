@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 from contextlib import ExitStack
 import unittest
 from unittest.mock import MagicMock, Mock, patch
@@ -230,13 +231,10 @@ class SortDateMissionSchemaTest(unittest.TestCase):
         calls["commit"].assert_not_called()
         calls["rollback"].assert_called_once_with()
 
-    def test_factory_invokes_targeted_departure_status_ensure(self):
-        with patch(
-            "app.ensure_sort_date_mission_departure_status_constraint"
-        ) as ensure:
-            app = create_app(self.config)
-
-        ensure.assert_called_once_with(app)
+    def test_factory_does_not_invoke_targeted_departure_status_ensure(self):
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.sort_date_mission_schema.ensure_sort_date_mission_departure_status_constraint"
+        )
 
     def _postgresql_ensure_patches(
         self,

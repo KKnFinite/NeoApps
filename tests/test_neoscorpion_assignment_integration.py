@@ -36,6 +36,7 @@ class NeoScorpionAssignmentIntegrationTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
             },
         )
         self.app = create_app(TestConfig)
@@ -433,6 +434,7 @@ class NeoScorpionAssignmentIntegrationTest(unittest.TestCase):
             flight_number="UPS402",
             tail_number="N402UP",
         )
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 8, 18, 22, 0)
         db.session.commit()
 
         response = self.client.post(
@@ -465,6 +467,7 @@ class NeoScorpionAssignmentIntegrationTest(unittest.TestCase):
         tail_number="N400UP",
     ):
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=sort_date,
             gateway_code=self.gateway.code,

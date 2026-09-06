@@ -72,6 +72,7 @@ class UnmatchedReviewAlertsTest(unittest.TestCase):
         db.session.add(self.operation)
         db.session.flush()
         self.grandmaster = self._user("alerts_grandmaster", "grandmaster")
+        self.operation.generated_by_user_id = self.grandmaster.id
         self.simulator = self._user("alerts_simulator", "simulator")
         self.operator = self._user("alerts_operator", "operator")
         db.session.commit()

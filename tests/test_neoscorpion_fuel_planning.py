@@ -46,6 +46,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -353,8 +354,11 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertEqual(incomplete.status_code, 200)
         self.assertIn(b"NEO HANZO PLAN", incomplete.data)
         self.assertIn(b"Awaiting fuel readings", incomplete.data)
-        self.assertNotIn(b"<input", incomplete.data)
-        self.assertNotIn(b"<select", incomplete.data)
+        # Account/CSRF and context controls belong to the shared shell. Hanzo's
+        # actual content, rather than the whole document, is read-only.
+        hanzo_content = incomplete.data.split(b'neoscorpion-hanzo"', 1)[1].split(b'</section>', 1)[0]
+        self.assertNotIn(b"<input", hanzo_content)
+        self.assertNotIn(b"<select", hanzo_content)
 
         save_fueler_entry(
             self.gateway,
@@ -446,6 +450,7 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
 
     def _assignment(self):
         operation = SortDateOperation(
+            generated_by_user_id=self.user.id,
             gateway_id=self.gateway.id,
             sort_date=date(2026, 8, 17),
             gateway_code=self.gateway.code,

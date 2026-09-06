@@ -1407,7 +1407,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoStaffing", response.data)
-        self.assertIn(b"Approved Operator", response.data)
+        self.assertNotIn(b"Approved Operator", response.data)
+        self.assertIn(b'data-portal-app="neostaffing" href="/neostaffing"', response.data)
         self.assertIn(b'href="/neostaffing"', response.data)
 
     def test_seniority_url_redirects_approved_user_to_reports_without_a_navigation_tile(self):

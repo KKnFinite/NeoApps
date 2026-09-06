@@ -165,7 +165,14 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             # Only use the real page's scrollable space; no artificial mock content.
             room = page.evaluate("document.documentElement.scrollHeight - innerHeight")
             if room > 100:
-                page.evaluate("scrollTo(0, 0)")
+                # scrollY changes synchronously, but the direction-aware header
+                # samples scroll events in requestAnimationFrame. Let the top
+                # reset render before issuing the opposite scroll; otherwise
+                # both events can coalesce and look like one upward movement.
+                page.evaluate("""async () => {
+                    scrollTo(0, 0);
+                    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                }""")
                 page.wait_for_function("scrollY === 0")
                 page.evaluate("scrollTo(0, 90)")
                 page.wait_for_function("document.body.className.includes('mobile-header-hidden')")
@@ -279,10 +286,10 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
             self.login(page)
-            for width, height in ((320,700),(390,844)):
+            for width, height in ((320,700),(390,844),(390,760)):
                 page.set_viewport_size({"width":width,"height":height})
                 for path in ("/portal", "/rfd", "/motherbrain"):
-                    with self.subTest(engine=engine, width=width, path=path):
+                    with self.subTest(engine=engine, width=width, height=height, path=path):
                         self.exercise(page, engine, path, width, height)
             # Explicit safe-area contract emulation (not a physical iPhone assertion).
             page.set_viewport_size({"width":390,"height":844})

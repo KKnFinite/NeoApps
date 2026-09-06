@@ -56,6 +56,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 6, 25, 22, 0),
             },
         )
         self.app = create_app(TestConfig)
@@ -103,10 +104,10 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"data-node-desktop-side-nav", dashboard.data)
         self.assertIn(b'data-node-desktop-shell="scorpion"', dashboard.data)
         desktop_sidebar = dashboard.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
-        self.assertEqual(desktop_sidebar.count(b">Dashboard</a>"), 1)
-        self.assertIn(b"neoscorpion-256x256.png", desktop_sidebar)
+        self.assertEqual(desktop_sidebar.count(b">Dashboard</span>"), 1)
+        self.assertIn(b"newlogo_scorpion.png", desktop_sidebar)
         self.assertNotIn(b"neoscorpion-128x128.png", desktop_sidebar)
-        self.assertIn(b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>', dashboard.data)
+        self.assertIn(b'<small>DASHBOARD</small>', dashboard.data)
         self.assertIn(b"neo-brand-title__node--scorpion", dashboard.data)
         self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-256x256.png"', dashboard.data)
         self.assertIn(b"data-node-desktop-dashboard", dashboard.data)
@@ -152,11 +153,11 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self._login_approved_user(role="master")
 
         expected_labels = {
-            "/neoscorpion/fuel-dispatch": "DISPATCH",
+            "/neoscorpion/fuel-dispatch": "FUEL DISPATCH",
             "/neoscorpion/fueler": "FUELER",
-            "/neoscorpion/truck-manager": "TRUCKS",
+            "/neoscorpion/truck-manager": "TRUCK MANAGER",
             "/neoscorpion/settings": "SETTINGS",
-            "/neoscorpion/history": "HISTORY",
+            "/neoscorpion/history": "FUEL HISTORY",
         }
 
         for path, label in expected_labels.items():
@@ -164,14 +165,14 @@ class NeoScorpionRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(
-                    f'<span class="mobile-topbar-page-name neo-page-title">{label}</span>'.encode(),
+                    f'<small>{label}</small>'.encode(),
                     response.data,
                 )
 
         hub = self.client.get("/rfd")
         self.assertEqual(hub.status_code, 200)
         self.assertIn(b'href="/neoscorpion"', hub.data)
-        self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"', hub.data)
+        self.assertIn(b'src="/static/images/logos/newlogo_scorpion.png"', hub.data)
 
     def test_settings_model_routes_smoke_after_spear_contract(self):
         self._login_approved_user(role="master")
@@ -332,8 +333,11 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertLess(template.index('{{ row.destination }}'), template.index('{{ row.mission.flight_number }}'))
         self.assertIn('data-dispatch-apu-editor', template)
         self.assertIn('data-dispatch-assignment-submit', template)
-        self.assertIn('data-dispatch-board-toggle aria-expanded="true"', template)
-        self.assertIn('data-dispatch-board-area', template)
+        self.assertNotIn('data-dispatch-board-toggle', template)
+        self.assertNotIn('data-dispatch-board-area', template)
+        shared_shell = (root / "templates" / "base.html").read_text(encoding="utf-8")
+        self.assertIn('data-operational-board-toggle', shared_shell)
+        self.assertIn('operational_shell_supports_board_view', shared_shell)
         self.assertIn('className = "neoscorpion-dispatch-combobox"', dispatch_js)
         self.assertIn("preserveDispatchScroll", dispatch_js)
         self.assertIn(".neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex", css)
@@ -814,7 +818,9 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
 
         self.assertEqual(len(context["completed_rows"]), 30)
-        self.assertLessEqual(len(statements), 10)
+        # Four current-sort eligibility reads and seven batched history collections.
+        self.assertEqual(len(statements), 11)
+        self.assertEqual(sum("FROM neoscorpion_fuel_assignments " in sql for sql in statements), 1)
 
     def _login_approved_user(self, role="watcher"):
         user = User(
@@ -865,7 +871,12 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             sort_name="night",
         ).first()
         if not operation:
+            creator = User(username="manual_sort_creator", role="watcher", is_active=False)
+            set_user_password(creator, "TestPassword123!")
+            db.session.add(creator)
+            db.session.flush()
             operation = SortDateOperation(
+                generated_by_user_id=creator.id,
                 gateway_id=self.gateway.id,
                 sort_date=date(2026, 6, 25),
                 gateway_code=self.gateway.code,

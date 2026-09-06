@@ -5,9 +5,10 @@ from unittest.mock import patch
 
 from app import create_app
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, SortDateOperation, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, PermissionRule, SortDateOperation, User
 from app.services.access_control import user_can_access_node
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import DEFAULT_PERMISSION_RULES, user_can
 from scripts.seed_dev_user import (
     LOCAL_SQLITE_FALLBACK_PASSWORD,
     seed_dev_grandmaster,
@@ -80,6 +81,20 @@ class SeedDevUserTest(unittest.TestCase):
         user = User.query.filter_by(username="Kessler").first()
         self.assertTrue(result["used_fallback_password"])
         self.assertTrue(user.check_password(LOCAL_SQLITE_FALLBACK_PASSWORD))
+
+    def test_explicit_local_seed_initializes_capabilities_idempotently(self):
+        with patch.dict(os.environ, {}, clear=True):
+            seed_dev_grandmaster(self.app)
+            rule = PermissionRule.query.filter_by(permission_key="neoermac.building_lineup.edit").one()
+            rule.minimum_role = "master"
+            db.session.commit()
+            seed_dev_grandmaster(self.app)
+        self.assertEqual({row.permission_key for row in PermissionRule.query.all()},
+                         {entry[0] for entry in DEFAULT_PERMISSION_RULES})
+        self.assertEqual(rule.minimum_role, "master")
+        user = User.query.filter_by(username="Kessler").one()
+        self.assertTrue(user_can("neomotherbrain.manage_sort.view", user))
+        self.assertTrue(user_can("neoapps.user_management.edit", user))
 
     def test_seed_rejects_passwords_that_fail_shared_policy(self):
         with patch.dict(

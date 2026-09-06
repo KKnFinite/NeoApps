@@ -51,6 +51,7 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -447,6 +448,7 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
         _mission, assignment = self._assignment(operation)
         self._ready_work(assignment, movement="not_moved", transfer_gallons=None)
         self._operation(day=date(2026, 8, 18))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 8, 18, 22, 0)
 
         with self.assertRaisesRegex(ValueError, "current sort operation"):
             complete_fueled_assignment(
@@ -536,6 +538,7 @@ class NeoScorpionDispatcherCompleteTest(unittest.TestCase):
 
     def _operation(self, *, day=date(2026, 8, 17)):
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,

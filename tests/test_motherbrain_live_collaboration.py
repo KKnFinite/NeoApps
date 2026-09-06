@@ -2,6 +2,7 @@ from collections import Counter
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 import json
+import re
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +26,7 @@ from app.services.access_control import backfill_default_gateway_node_roles
 from app.services.alp_preview_state import save_alp_preview_state
 from app.services.live_collaboration import entity_version
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 from app.services.planning_collaboration import planning_state_revision
 from app.services.sort_timeline import ensure_sort_timeline_settings
 
@@ -52,6 +54,7 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
 
         self.gateway = Gateway.query.filter_by(code="RFD").first()
         if self.gateway is None:
@@ -257,7 +260,7 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
                 self.assertNotIn("fragments", payload)
                 collections.assert_not_called()
 
-    def test_unchanged_planning_poll_remains_two_selects(self):
+    def test_unchanged_planning_poll_has_bounded_security_and_revision_reads(self):
         for mission_type in ("arrival", "departure"):
             with self.subTest(mission_type=mission_type):
                 revision = planning_state_revision(
@@ -272,7 +275,13 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertFalse(response.get_json()["changed"])
-                self.assertEqual(capture["kinds"]["SELECT"], 2)
+                # Current request authorization and cadence enforcement each
+                # add one read to the gateway/revision pair. No row hydration.
+                self.assertEqual(capture["kinds"]["SELECT"], 4)
+                # Gateway access folds a permission lookup into its SELECT;
+                # the route capability check is the second referencing query.
+                self.assertEqual(self._select_count(capture["selects"], "permission_rules"), 2)
+                self.assertEqual(self._select_count(capture["selects"], "live_screen_refresh_settings"), 1)
                 self.assertEqual(capture["writes"], [])
                 self.assertEqual(capture["commits"], 0)
 
@@ -406,7 +415,11 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
                 selects = capture["selects"]
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(payload["changed"])
-                self.assertLessEqual(len(selects), 12)
+                # Includes three current permission checks, refresh policy and
+                # the permission-filtered alert/navigation queries. Collection
+                # assertions below still forbid per-mission N+1 reads.
+                self.assertEqual(self._select_count(selects, "permission_rules"), 4)
+                self.assertLessEqual(len(selects), 15)
                 self.assertEqual(capture["writes"], [])
                 self.assertEqual(capture["commits"], 0)
                 self.assertEqual(
@@ -1087,7 +1100,8 @@ class MotherBrainLiveCollaborationTest(unittest.TestCase):
     @staticmethod
     def _select_count(statements, table_name):
         return sum(
-            1 for statement in statements if table_name in statement.lower()
+            1 for statement in statements
+            if re.search(r"\b(?:from|join)\s+" + re.escape(table_name) + r"\b", statement, re.I)
         )
 
 

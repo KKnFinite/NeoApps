@@ -652,3 +652,231 @@ Portal access states, rule safeguards and ALP planning contracts are covered.
    parent/request/status predicates may merit plan-based index review later.
    No schema, process-global cache, idle traffic, polling, startup, health,
    security-boundary, infrastructure, UI or asset changes were made.
+
+## Follow-up: full regression baseline triage (2026-09-06)
+
+Starting main: `e9483e0ce6958aed9e89ace896ca181d98761c27`. This section
+supersedes historical failure-count estimates, not the historical audit itself.
+The stash, ignored `_local_archive/`, and unrelated untracked SPEAR dashboard
+image were preserved. No production database, Google, R2, or deployment calls
+were used for test execution. No package installation or new browser harness.
+
+### Evidence and counting
+
+The machine-readable [failure ledger](2026-09-06-test-triage.json) classifies
+every starting Python failure element and all four starting JavaScript failures.
+It retains exact pytest identities (including subtest parameters), assertion
+excerpts, parent durations, complete-traceback hashes, source references and
+the repair rationale. Shared evidence groups avoid repeating the same contract
+hundreds of times. Additional defects reached after fixture repair are recorded
+separately from the first baseline failure.
+
+Full reports/tracebacks, intermediate focused runs and screenshots remain local
+and ignored under `instance/test-triage-2026-09-06/`:
+
+- `python-before.xml`, `python-before.log`, `python-before.xml.failures.json`.
+- `python-after.xml`, `python-after.log`.
+- `js-before.xml`, `js-after.xml` (all eight tracked JS test files).
+- `browser-before.xml`, `browser-after.xml`, corresponding logs and screenshot
+  directories `browser-before/`, `browser-after/`.
+- `browser-first-after.xml` records the intermittent browser test failure;
+  `header-race.json` and `header-race.log` document its deterministic reproduction.
+
+Fresh Python baseline: **2,373 passed parent tests, 300 failed parent tests,
+1,171 passed subtests and 104 failed subtests**. Thus 404 failure records span
+323 distinct parent identities; 23 parent tests completed but contained failed
+subtests. These are not 404 independent product defects. There were no collection
+or setup errors reported as pytest errors, skips, xfails or xpasses. Duration:
+869.06 seconds. XML contains parent-duration values, not independent subtest
+durations; do not sum repeated durations in the ledger.
+
+Fresh JS baseline: **35 passed, 4 failed**. Fresh browser baseline:
+**10 passed parent tests, 29 passed subtests, zero failures or skips**.
+
+Primary classification of the 404 Python failure records:
+
+| Classification | Failure records | Distinct parent identities |
+| --- | ---: | ---: |
+| Stale test | 137 | 88 |
+| Test fixture defect | 254 | 229 |
+| Real application bug | 13 | 6 |
+| Security bug / environment / needs decision / unknown | 0 | 0 |
+
+The four JS failures were stale test seams. One browser timing defect was
+discovered during final validation, although the starting browser run passed.
+It is classified **FLAKY / NONDETERMINISTIC**, not a new application regression.
+These classification counts describe failure records, not the number of files
+edited or independent root causes. Three distinct application/tool defects were
+fixed; Ermac's defect became visible after repairing current-sort fixtures.
+
+### Contract-based repairs
+
+1. **Isolated permissions fixtures:** Grandmaster management, MotherBrain live
+   collaboration/Google preview and Staffing reporting/review fixtures created
+   tables and roles without seeding canonical capability rules. Missing rules
+   correctly failed closed. Explicit fixture seeds now allow the intended route
+   assertions to execute; production permission defaults and denial behavior
+   were not weakened. Last-critical-admin, lower-role and scoped mutation tests
+   remain. Username-specific Grandmaster privilege assertions were superseded
+   by `_current_user_can_assign_role` capability/role authority.
+2. **Current-sort fixtures:** historical manual operations lacked creator
+   provenance or used the real wall clock. Supply `generated_by_user_id`, freeze
+   gateway-local time, and deliberately advance it for cross-sort tests.
+   Canonical current/prior-day scope selection is unchanged. Repeated
+   destinations remain separate `SortDateMission` identities; no tail, parking
+   or pull records were merged to satisfy tests.
+3. **Bootstrap-only schema:** sixteen obsolete factory tests patched removed
+   app-level ensure imports and expected worker mutation. A small shared
+   assertion now creates a non-TESTING PostgreSQL app with `Engine.connect`
+   configured to fail, proving neither connection nor targeted ensure occurs.
+   Existing additive-schema/idempotence tests remain. SPEAR expected tables and
+   columns now include calibration resets and Ready for Fuel metadata.
+4. **Current approved UI:** replace retired icon/header/card/left-right-grid/
+   floating-popover assertions with scoped semantic HTML contracts. Portal has
+   exactly Gateway and Staffing: approved whole-card links, pending non-actions,
+   and CSRF-protected request forms. Gateway preserves exact launch destinations,
+   desktop/mobile MotherBrain differences and operation forwarding. The shared
+   drawer has distinct hidden/inert Nodes/Menu modes, HOME/NODES/MENU controls,
+   no competing account panel and no mobile Board View. Locked node logos and
+   full current titles replace retired assets/abbreviations. Production CSS,
+   artwork, fonts and shared navigation code were not changed.
+5. **Read-only capability contracts:** approved watchers can view the specified
+   Staffing/SubZero/Scorpion/Ermac screens, while edits remain forbidden. System
+   Settings' parent is accessible when another child is permitted, even if
+   integration-view is denied. Tests assert exact 200/302/403 responses at each
+   boundary, rather than accepting a range of statuses.
+6. **Workflow fixtures:** positive transfer gallons remain required for OFF;
+   OFF and FOB use separate valid form operations; a reserved truck cannot be
+   topped off. Correcting gauges does not erase positive transfer history.
+   Staffing direct management assignment intentionally saves immediately;
+   its separate review-apply test now prepares a genuine canonical review with
+   revision checks instead of treating a completed direct POST as a preview.
+   The CSRF mutation fixture explicitly chooses Neo-only operational mode so an
+   unavailable Google provider cannot obscure CSRF behavior.
+7. **Exact measured query budgets:** restore valid scope/permission fixtures
+   before measurement; count SQL `FROM`/`JOIN` references rather than column-name
+   substrings. MotherBrain unchanged/changed planning polls use 4/15 SELECTs;
+   Scorpion 150-row planning uses 26, 30-row history 11; Ermac autosave 23 and
+   Outbound state 13; Sektor tunnel writes 21 after consistently expiring the
+   fixture's cached login user. Assertions retain individual batched collection
+   counts and commit/write guarantees. These are current-contract budgets,
+   **not query reductions or claimed Neon savings**. Sektor mirror recovery
+   expects `MIRROR_CELL_ORDER`, including derived E2/E3, not only read cells.
+8. **JS seams:** current resource-select dirty protection, dataset autosave
+   failure state, valid Jinja conditional, action-cell name and APU form-submit
+   handler replace obsolete string matches. No production JS changes.
+
+### Three genuine defects fixed
+
+- `scripts/seed_dev_user.py::seed_dev_grandmaster`: explicit local setup seeded
+  roles but not capabilities after worker startup became DB-free. Seed canonical
+  default rules after explicit schema sync. The new idempotence test preserves
+  customized rule thresholds and verifies local admin capabilities. No schema
+  work was moved back into web startup.
+- `app/services/neoermac_door_view.py::door_tab_pull_alerts`: the inactive-tab
+  counter used the legacy destination map, ignoring completed mission-linked
+  pulls. Reuse `_door_pull_for_mission`, including its guarded legacy fallback.
+  Existing linked-counterpart regression and a new distinct-SDF-mission test
+  prove completion clears only the correct mission's alert.
+- `app/templates/neonodes/neoscorpion/fuel_dispatch.html`: follow-up controls
+  required `editable`, which excludes completed assignments, although
+  `follow_up_available` intentionally requires completion. Use `can_edit` plus
+  the existing eligibility predicate. Completed fuel inputs remain read-only;
+  operator controls remain absent and unauthorized follow-up POST remains 403.
+
+No security bug was confirmed, and no authentication, capability policy,
+business calculation, schema, polling, network bound or DB-pool behavior changed.
+
+### Browser timing repair and visual evidence
+
+`MobileDrawerBrowserTest.test_stationary_dock_lifecycle` passed initially but
+one later run timed out waiting for the header to hide. The helper scrolled from
+the bottom to zero and immediately to 90, waiting only for synchronous `scrollY`.
+The production header samples scroll direction on an animation frame, so those
+events could coalesce into one upward move. Wait two rendering frames at zero
+before scrolling down; no arbitrary sleep, retry, wider timeout or production
+workaround. A real-page experiment reproduced the coalesced failure **5/5 times
+in Chromium and 5/5 in WebKit** and verified the synchronized version **10/10**.
+
+Existing browser fixtures use temporary SQLite, synthetic users, real login and
+CSRF, blocked external integrations, and actual font/image readiness. Coverage
+includes Portal, Gateway, MotherBrain, restricted navigation, desktop sidebar,
+NeoStaffing separation, drawer focus/inert/scroll restoration, all dismissal
+paths, dock geometry, QR/copy, and desktop-only Board View. Shared-shell checks
+now include 390x760 as well as 390x844 and 320x700; desktop is 1920x1080.
+Both Chromium and WebKit ran. No separate landscape or physical-device run
+was added to this bounded test-repair matrix.
+
+Representative images inspected under `browser-after/`:
+
+- `chromium-motherbrain-open.png`, `webkit-safe-area-open.png`.
+- `webkit-gateway-scrolled-390.png` (last cards clear dock/fade).
+- `webkit-portal-fit-390-760.png`, `chromium-portal-fit-1920-1080.png`.
+- `chromium-login-hero-390-760.png`.
+- `chromium-desktop-before-collapse.png`, compared with its baseline counterpart.
+
+The last comparison exposes an **existing uncovered desktop visual issue**:
+MotherBrain's long sidebar branding clips and the operational top bar uses a
+spread-out legacy composition. Both starting and final screenshots show it;
+sidebar/navigation lifecycle tests do not establish pixel-perfect design.
+No CSS redesign was folded into this test-repair pass. A focused subsequent
+desktop CSS/cascade pass should establish the intended identity/header geometry
+and add bounded visual assertions. This is not an unresolved failing test or a
+claim that the approved desktop design has been visually certified.
+
+### Validation commands and final state
+
+`python` below is the existing
+`instance/security-boundaries/venv/Scripts/python.exe`; `node` is the existing
+Codex runtime `C:/Users/kknfi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe`.
+
+```text
+python -m pytest -q tests --ignore=tests/browser --tb=short --disable-warnings --junitxml=instance/test-triage-2026-09-06/python-before.xml
+python -m pytest -q tests --ignore=tests/browser --tb=short --disable-warnings --junitxml=instance/test-triage-2026-09-06/python-after.xml
+
+# PowerShell expands every tracked tests/js/*.test.js file:
+$triageTests = (Get-ChildItem tests/js -Filter '*.test.js').FullName
+node --test --test-reporter=junit $triageTests
+# Captured separately as js-before.xml and js-after.xml.
+
+$env:NEO_BROWSER_EVIDENCE = 'instance/test-triage-2026-09-06/browser-after'
+python -m pytest -q tests/browser --tb=short --disable-warnings --junitxml=instance/test-triage-2026-09-06/browser-after.xml
+
+python -m compileall -q app scripts tools init_db.py run.py
+python -m pip check
+git diff --check
+```
+
+Final totals are recorded below after the complete run, not inferred by adding
+overlapping focused test slices. No test was skipped/xfail-marked or meaningful
+testcase deleted to obtain a passing result. New coverage includes explicit
+local-seed idempotence, repeated-mission alert separation and valid independent
+OFF/FOB saves. Test reports do not imply physical-iPhone/PWA or production
+deployment verification. No deployment was manually triggered.
+
+Final complete-run results:
+
+| Suite | Starting result | Final result |
+| --- | --- | --- |
+| Non-browser Python | 2,373 passed / 300 failed parents; 1,171 passed / 104 failed subtests | **2,676 passed parents; 1,304 passed subtests; zero failures** |
+| JavaScript | 35 passed / 4 failed | **39 passed / zero failures** |
+| Browser | 10 passed + 29 subtests | **10 passed + 35 subtests; zero failures** |
+
+Final Python duration: 886.69 seconds; browser: 84.35 seconds. Final XML
+reports zero errors/skips; no xfails/xpasses or unresolved failing identities.
+The three additional Python testcases and newly reached subtest branches account
+for the count increase. The JS XML records individual test durations; tests run
+across files, so their summed duration is not a wall-clock claim.
+
+`compileall` and `git diff --check` passed. `pip check` reported **No broken
+requirements found**. Full Python output contains 661,428 warnings, chiefly
+existing SQLAlchemy legacy/deprecation noise; these were not hidden with new
+filters, converted into failures, or repaired by broad ORM rewrites. The
+`--disable-warnings` option only suppresses the verbose warning summary in the
+console; pytest still counts them. Warning-debt reduction and the documented
+desktop visual gap remain follow-up work, not unexplained test failures.
+
+No remaining NEEDS PRODUCT DECISION, UNKNOWN, unavailable-engine, security or
+environment failure remains in the executed suite. All classification records
+are resolved. No production deployment or physical-iPhone/PWA behavior is
+claimed verified by these local results.

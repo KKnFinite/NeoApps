@@ -45,6 +45,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         ensure_default_permission_rules()
         self.operation = self._add_operation(date(2026, 6, 11))
         self.user = self._add_user("first")
+        self.operation.generated_by_user_id = self.user.id
         db.session.commit()
         self.client = self.app.test_client()
         self._login(self.user)
@@ -153,6 +154,8 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
     def test_new_sort_starts_with_a_fresh_selection(self):
         self.client.get("/neoermac/door-view?door=D9")
         next_operation = self._add_operation(date(2026, 6, 12))
+        next_operation.generated_by_user_id = self.user.id
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 23, 0)
         db.session.commit()
 
         fresh = self.client.get("/neoermac/door-view")

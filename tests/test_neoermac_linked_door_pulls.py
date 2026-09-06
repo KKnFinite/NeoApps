@@ -70,6 +70,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         )
         db.session.add(self.mission)
         self.user = self._add_user()
+        self.operation.generated_by_user_id = self.user.id
         db.session.commit()
         self.client = self.app.test_client()
         self.client.post(
@@ -380,6 +381,36 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
             self._pulls_by_door()["D4"].actual_pure_pull_time_local,
             time(22, 58),
         )
+
+    def test_tab_alert_does_not_reuse_completed_pull_from_another_sdf_mission(self):
+        self._supervise("D1", "D4")
+        self._set_planned_pulls(time(22, 50), time(23, 30))
+        self.mission.departure_status = "departed"
+        second = SortDateMission(
+            sort_date=self.operation.sort_date, gateway_code=self.gateway.code,
+            sort_name="night", sort_date_operation_id=self.operation.id,
+            mission_type="departure", mission_source="master",
+            flight_number="UPS303", origin="RFD", destination="SDF",
+            assigned_tail_number="N303UP", timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 8, 11, 3, 0),
+            planned_datetime_utc=datetime(2026, 8, 11, 8, 0),
+            departure_status="scheduled", pure_pull_time_local=time(22, 50),
+            mix_pull_time_local=time(23, 30),
+        )
+        db.session.add(second)
+        db.session.add(NeoErmacDoorPull(
+            gateway_id=self.gateway.id, sort_date_operation_id=self.operation.id,
+            sort_date_mission_id=self.mission.id, door="D4", destination="SDF",
+            actual_pure_pull_time_local=time(22, 58),
+        ))
+        db.session.commit()
+        self.assertEqual(self._state("D1")["door_tab_alerts"]["D4"]["state"], "late")
+        response = self._save("D1", "pure", "22:59", apply_to_both=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["state"]["door_tab_alerts"]["D4"]["state"], "")
+        saved = NeoErmacDoorPull.query.filter_by(door="D4").order_by(NeoErmacDoorPull.id).all()
+        self.assertEqual([row.sort_date_mission_id for row in saved], [self.mission.id, second.id])
+        self.assertEqual(saved[0].actual_pure_pull_time_local, time(22, 58))
 
     def test_tab_alert_css_blinks_green_and_red_only_on_inactive_tabs(self):
         css = Path("app/static/css/base.css").read_text()

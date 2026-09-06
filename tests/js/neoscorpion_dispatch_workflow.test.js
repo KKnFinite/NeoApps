@@ -23,8 +23,14 @@ test("dispatch autosave adopts its own revision and excludes autosave fields fro
     assert.doesNotMatch(script, /input\.closest\("form"\)/);
     assert.match(template, /data-autosave-field="required_fuel" data-mission-id="\{\{ row\.mission\.id \}\}"/);
     assert.match(template, /data-autosave-field="inbound_fuel" data-mission-id="\{\{ row\.mission\.id \}\}"/);
-    assert.match(script, /:not\(\[data-dispatch-autosave\]\)/);
-    assert.match(script, /data-autosave-failed/);
+    // Dirty protection now explicitly selects only the two resource selects;
+    // autosaved Required/Inbound inputs never enter that collection.
+    const protectedControls = script.split("const protectedControls =")[1].split("protectedControls().forEach")[0];
+    assert.match(protectedControls, /select\[name='assigned_fueler_user_id'\]:not\(\[disabled\]\)/);
+    assert.match(protectedControls, /select\[name='assigned_truck_id'\]:not\(\[disabled\]\)/);
+    assert.doesNotMatch(protectedControls, /input|textarea|data-dispatch-autosave/);
+    assert.match(script, /input\.dataset\.autosaveFailed = "true"/);
+    assert.match(script, /input\.dataset\.autosaveFailed = "false"/);
     assert.match(script, /event\.preventDefault\(\)/);
     assert.match(script, /data-dispatch-assignment-submit/);
     assert.match(script, /button\?\.form \|\| button\?\.closest\("\[data-dispatch-assignment-form\]"\)/);
@@ -48,7 +54,7 @@ test("dispatch compact rows retain authoritative copy data and exceptional fuel 
     assert.match(template, />COPY<\/button>/);
     assert.doesNotMatch(template, /COPY LOAD PLANNING/);
     assert.doesNotMatch(template, /load_planning_note/);
-    assert.match(template, /row\.aircraft_type && row\.aircraft_type != "UNKNOWN"/);
+    assert.match(template, /row\.aircraft_type if row\.aircraft_type and row\.aircraft_type != "UNKNOWN" else "-"/);
     assert.match(template, /row\.apu_allowance_lbs is none/);
     assert.match(template, /load_planning_placeholder/);
 });
@@ -125,7 +131,7 @@ test("dispatch assignment controls remain compact while silent dirty protection 
     assert.match(script, /if \(!hasUnsavedControls\(\)\)/);
     assert.match(script, /window\.location\.reload\(\)/);
     assert.match(template, /data-dispatch-assignment-submit/);
-    assert.match(template, /neoscorpion-dispatch-assignment-cell/);
+    assert.match(template, /neoscorpion-dispatch-action-cell/);
     assert.match(css, /neoscorpion-dispatch-assignment-action/);
     assert.match(css, /white-space: nowrap/);
     assert.match(css, /\.neoscorpion-dispatch-save-status \{/);
@@ -180,7 +186,10 @@ test("APU allowance UI is collapsed to the effective value and keeps inline edit
     assert.doesNotMatch(fuelerTemplate, /Override Allowance/);
     assert.match(dispatch, /data-dispatch-apu-reset/);
     assert.match(dispatch, /updateApuAllowanceDisplay/);
-    assert.match(editor, /data-apu-editor-save/);
+    assert.match(editor, /editorForm\.addEventListener\("submit", async/);
+    assert.match(editor, /event\.preventDefault\(\)/);
+    assert.match(editor, /fetch\(editorForm\.action/);
+    assert.match(editor, /body: new FormData\(editorForm\)/);
     assert.match(editor, /data-apu-reset/);
     assert.match(editor, /data-apu-editor-cancel/);
 });

@@ -14,6 +14,7 @@ from app.extensions import db  # noqa: E402
 from app.models import User  # noqa: E402
 from app.services.access_control import backfill_default_gateway_node_roles  # noqa: E402
 from app.services.password_policy import set_user_password  # noqa: E402
+from app.services.permission_rules import ensure_default_permission_rules  # noqa: E402
 from app.services.schema_sync import sync_database_schema  # noqa: E402
 
 
@@ -34,6 +35,9 @@ def seed_dev_grandmaster(app=None):
 
         db.create_all()
         sync_database_schema(app)
+        # This explicit local setup command must seed capabilities as well as
+        # roles; DB-free web startup deliberately does not seed them for us.
+        ensure_default_permission_rules()
 
         user = User.query.filter_by(username=username).first()
         created = user is None

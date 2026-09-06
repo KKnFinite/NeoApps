@@ -1408,7 +1408,8 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
 
         self.assertEqual(retry.status_code, 302)
         self.assertFalse(NeoSektorOperationalSetting.query.one().google_mirror_sync_needed)
-        self.assertEqual(set(cell for cell, _value in healthy.updates), set(SHEET_CELL_ORDER))
+        # Mirrors also publish the two derived left-to-unload outputs; reads do not.
+        self.assertEqual(set(cell for cell, _value in healthy.updates), set(SHEET_CELL_ORDER) | {"E2", "E3"})
 
     def test_neo_only_performs_no_operational_google_reads_or_writes(self):
         self._set_mode(NEO_ONLY)
@@ -1607,9 +1608,14 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         )
         for url, payload in actions:
             with self.subTest(url=url):
+                # Match fresh request identity-map/user-loader state, including the first action.
+                from flask import g
+                db.session.expire_all()
+                g.pop("_login_user", None)
                 response, metrics = self._capture_post_metrics(url, payload)
                 self.assertEqual(response.status_code, 200)
-                self.assertLessEqual(metrics["selects"], 17)
+                # 7 auth/gateway + 8 bundle + 6 current-sort/live-refresh reads.
+                self.assertEqual(metrics["selects"], 21)
                 self.assertEqual(metrics["commits"], 1)
                 self.assertTrue(
                     all(count == 1 for count in metrics["table_selects"].values())

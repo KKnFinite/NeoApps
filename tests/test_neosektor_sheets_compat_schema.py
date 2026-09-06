@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 import unittest
 from unittest.mock import Mock, patch
 
@@ -140,11 +141,10 @@ class NeoSektorSheetsCompatSchemaTest(unittest.TestCase):
         self.assertEqual(commit.call_count, 2)
         broad_sync.assert_not_called()
 
-    def test_factory_invokes_targeted_column_ensure(self):
-        with patch("app.ensure_neosektor_sheets_compat_columns") as ensure:
-            app = create_app(self.config)
-
-        ensure.assert_called_once_with(app)
+    def test_factory_does_not_invoke_targeted_column_ensure(self):
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.neosektor_sheets_compat_schema.ensure_neosektor_sheets_compat_columns"
+        )
 
 
 if __name__ == "__main__":

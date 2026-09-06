@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 import unittest
 from datetime import date
 from unittest.mock import Mock, patch
@@ -465,12 +466,10 @@ class NeoStaffingTwentyCFoundationTest(unittest.TestCase):
         create_table.assert_called_once_with(bind=connection, checkfirst=True)
         commit.assert_called_once()
 
-    def test_factory_invokes_twenty_c_schema_ensure(self):
-        with patch(
-            "app.ensure_neostaffing_twenty_c_affiliation_table"
-        ) as ensure:
-            app = create_app(self.config)
-        ensure.assert_called_once_with(app)
+    def test_factory_does_not_invoke_twenty_c_schema_ensure(self):
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.neostaffing_twenty_c_schema.ensure_neostaffing_twenty_c_affiliation_table"
+        )
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -306,6 +307,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
     def _assignment(self, tail_number="N412UP"):
         day = date(2026, 8, 17)
         operation = SortDateOperation(
+            generated_by_user_id=self.user.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,

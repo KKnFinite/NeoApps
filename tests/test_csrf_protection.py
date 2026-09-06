@@ -9,6 +9,7 @@ from app.models import (
     GatewayMembership,
     GatewayNodeRole,
     NeoNode,
+    NeoSektorOperationalSetting,
     PortalAppAccess,
     StaffingWorkAssignment,
     User,
@@ -161,6 +162,12 @@ class CsrfProtectionTest(unittest.TestCase):
         self.assertEqual(send_verification.call_count, 1)
 
     def test_neosektor_fetch_mutation_requires_and_accepts_csrf_header(self):
+        # Exercise the local mutation, not Google-primary unconfigured-provider
+        # fallback. Integration-mode/network contracts have their own tests.
+        db.session.add(NeoSektorOperationalSetting(
+            gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+            integration_mode="neo_only",
+        ))
         user = self._user("csrf_sektor")
         self._grant_gateway_node_access(user, "sektor", "simulator")
         db.session.commit()

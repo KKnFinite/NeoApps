@@ -51,6 +51,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -449,6 +450,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
 
     def _assignment(self, *, required_lbs, tail_number="N412UP"):
         operation = SortDateOperation(
+            generated_by_user_id=self.operator.id,
             gateway_id=self.gateway.id,
             sort_date=date(2026, 8, 17),
             gateway_code=self.gateway.code,

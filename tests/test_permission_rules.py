@@ -498,7 +498,7 @@ class PermissionRulesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.location, "/rfd")
 
-    def test_motherbrain_menu_hides_denied_page_and_direct_route_is_denied(self):
+    def test_settings_parent_remains_visible_for_other_children_when_integrations_denied(self):
         system_rule = PermissionRule.query.filter_by(
             permission_key="neomotherbrain.system_settings.view"
         ).one()
@@ -513,9 +513,17 @@ class PermissionRulesTest(unittest.TestCase):
         direct = self.client.get("/motherbrain/system-settings", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
-        self.assertNotIn(b'href="/motherbrain/system-settings"', dashboard.data)
-        self.assertEqual(direct.status_code, 302)
-        self.assertEqual(direct.location, "/rfd")
+        self.assertIn(b'href="/motherbrain/system-settings"', dashboard.data)
+        self.assertEqual(direct.status_code, 200)
+        self.assertIn(b"System Settings", direct.data)
+        mutation = self.client.post("/motherbrain/system-settings/integrations",
+                                    data={"action": "save_google_live_polling"})
+        self.assertEqual(mutation.status_code, 302)
+        self.assertEqual(mutation.location, "/rfd")
+        # Parent access is any permitted child, not permission to mutate integrations.
+        parent_post = self.client.post("/motherbrain/system-settings",
+                                       data={"action": "save_google_live_polling"})
+        self.assertEqual(parent_post.status_code, 403)
 
     def test_missing_mutation_rule_blocks_direct_post_even_for_grandmaster(self):
         edit_rule = PermissionRule.query.filter_by(

@@ -785,7 +785,9 @@ def door_tab_pull_alerts(
                 "pure": _planned_pull_time(timing_data, master, "pure"),
                 "mix": _planned_pull_time(timing_data, master, "mix"),
             }
-            door_pull = door_pulls.get((door, destination))
+            door_pull = _door_pull_for_mission(
+                bundle, door, destination, mission, legacy_lookup=door_pulls
+            )
             actual = {
                 "pure": _time_value(
                     getattr(door_pull, "actual_pure_pull_time_local", None)

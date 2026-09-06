@@ -65,6 +65,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -264,14 +265,14 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         )
         db.session.commit()
 
-        topping = mark_nightly_truck_topping_off(
-            operation,
-            old_truck,
-            changed_by_user=self.dispatcher,
-        )
-        self.assertTrue(topping.changed)
-        db.session.commit()
-        self.assertEqual(assignment.operational_status, "hold_review")
+        # TOP OFF now refuses a truck that still has an assigned future job.
+        # Rejection must not silently hold or detach that job.
+        with self.assertRaisesRegex(ValueError, "Truck has a future assigned job"):
+            mark_nightly_truck_topping_off(
+                operation, old_truck, changed_by_user=self.dispatcher,
+            )
+        db.session.rollback()
+        self.assertEqual(assignment.operational_status, "active")
         with self.assertRaisesRegex(ValueError, "assigned to active fuel work"):
             remove_nightly_truck(operation, old_truck)
         db.session.rollback()
@@ -508,6 +509,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             day=date(2026, 8, 18),
             flight_number="UPS1302",
         )
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 8, 18, 22, 0)
         self._save_work(
             assignment2,
             actual_left="11.0",
@@ -602,6 +604,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         tail_number="N412UP",
     ):
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,

@@ -39,6 +39,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 19, 22, 0),
             },
         )
         self.app = create_app(TestConfig)
@@ -478,6 +479,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
 
     def _operation_and_mission(self):
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=date(2026, 8, 19),
             gateway_code=self.gateway.code,

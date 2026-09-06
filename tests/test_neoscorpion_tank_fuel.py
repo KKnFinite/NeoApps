@@ -44,6 +44,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -274,7 +275,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         self.assertEqual(NeoScorpionSortAssetState.query.count(), 0)
         db.session.rollback()
 
-        with self.assertRaisesRegex(ValueError, "cannot be negative"):
+        with self.assertRaisesRegex(ValueError, "Fuel value must be a nonnegative K-LB value with up to two decimals"):
             save_fueler_entry(
                 self.gateway,
                 self.user,
@@ -310,6 +311,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
             day=date(2026, 8, 18),
             flight_number="UPS602",
         )
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 8, 18, 22, 0)
         with self.assertRaisesRegex(ValueError, "not configured"):
             save_fueler_entry(
                 self.gateway,
@@ -468,6 +470,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         flight_number="UPS601",
     ):
         operation = SortDateOperation(
+            generated_by_user_id=self.user.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,

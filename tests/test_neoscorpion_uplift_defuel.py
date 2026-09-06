@@ -542,6 +542,9 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
     def test_direction_mismatch_and_capacity_failure_are_atomic(self):
         for cycle_type, actual in (("uplift", (8, 10, 10)), ("defuel", (12, 10, 10))):
             operation = self._operation(day=date(2026, 8, 17 if cycle_type == "uplift" else 18))
+            self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
+                operation.sort_date, time(22, 0)
+            )
             _mission, assignment = self._assignment(
                 operation,
                 flight=f"UPS-{cycle_type}",
@@ -666,9 +669,21 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertEqual(dispatch.status_code, 200)
         self.assertIn(b"START UPLIFT", dispatch.data)
         self.assertIn(b"START DEFUEL", dispatch.data)
+        # Completion must retain follow-up controls, not reopen normal fuel editing.
+        self.assertNotIn(b'data-dispatch-autosave data-autosave-field="required_fuel"', dispatch.data)
+        self._login(self.other_fueler)
+        readonly = self.client.get("/neoscorpion/fuel-dispatch")
+        self.assertEqual(readonly.status_code, 200)
+        self.assertNotIn(b"START UPLIFT", readonly.data)
+        self.assertNotIn(b"START DEFUEL", readonly.data)
+        denied = self.client.post("/neoscorpion/fuel-dispatch/start-follow-up", data={
+            "assignment_id": assignment.id, "cycle_type": "uplift",
+        })
+        self.assertEqual(denied.status_code, 403)
 
     def _operation(self, *, day=date(2026, 8, 17)):
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,

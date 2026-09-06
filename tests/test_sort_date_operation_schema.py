@@ -1,3 +1,4 @@
+from tests.factory_contracts import assert_factory_leaves_schema_to_bootstrap
 import unittest
 from unittest.mock import Mock, patch
 
@@ -147,11 +148,10 @@ class SortDateOperationSchemaTest(unittest.TestCase):
         self.assertNotIn("ADD CONSTRAINT", statements)
         commit.assert_called_once_with()
 
-    def test_factory_invokes_targeted_operation_window_ensure(self):
-        with patch("app.ensure_sort_date_operation_window_nullable") as ensure:
-            app = create_app(self.config)
-
-        ensure.assert_called_once_with(app)
+    def test_factory_does_not_invoke_targeted_operation_window_ensure(self):
+        assert_factory_leaves_schema_to_bootstrap(
+            self, "app.services.sort_date_operation_schema.ensure_sort_date_operation_window_nullable"
+        )
 
 
 if __name__ == "__main__":

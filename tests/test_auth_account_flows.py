@@ -1,3 +1,4 @@
+from tests.html_contracts import document
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import unittest
@@ -1746,52 +1747,35 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self._login(user.username)
         response = self.client.get("/portal")
         html = response.get_data(as_text=True)
-        app_card_section = html.split('<section class="portal-app-grid"', 1)[1].split("</section>", 1)[0]
-
         self.assertEqual(response.status_code, 200)
-        self.assertIn('class="portal-header-logo portal-header-logo-icon"', html)
-        self.assertIn("portal-shell-page", html)
-        self.assertIn('src="/static/images/icons/neoapps/inapp/neoapps-inapp-128.png"', html)
-        self.assertIn('class="portal-header-title neo-brand-title', html)
-        self.assertIn("neo-brand-title__node--apps", html)
-        self.assertIn('<span class="portal-header-word neo-menu-text">PORTAL</span>', html)
-        self.assertIn('class="character-switcher-trigger neo-menu-text"', html)
-        self.assertIn("Change Characters", html)
-        self.assertIn("character-switcher-link node-motherbrain", html)
-        self.assertIn("character-switcher-label neo-menu-text", html)
-        self.assertNotIn("portal-dashboard-logo", html)
-        self.assertNotIn("Choose an approved", html)
-        self.assertNotIn("Gateway operations and NeoNode systems.", app_card_section)
-        self.assertNotIn("Staffing operations and workforce planning.", app_card_section)
-        self.assertNotIn("Bid tools placeholder for future buildout.", app_card_section)
-        self.assertIn('class="portal-app-icon"', app_card_section)
-        self.assertIn('src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"', app_card_section)
-        self.assertIn('src="/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png"', app_card_section)
-        self.assertIn('class="portal-app-icon portal-app-icon-fallback node-bid"', app_card_section)
-        self.assertNotIn('src="/static/images/icons/neobid/icon_192.png"', app_card_section)
-        self.assertIn(b"NeoGateway", response.data)
-        self.assertIn(b"portal-app-title neo-brand-title", response.data)
-        self.assertIn(b"neo-brand-title__node--gateway", response.data)
-        self.assertIn(b"neo-brand-title__node--staffing", response.data)
-        self.assertIn(b"neo-brand-title__node--bid", response.data)
-        self.assertIn(b"neo-brand--gateway", response.data)
-        self.assertIn(b"neo-brand__neo neo-word", response.data)
-        self.assertIn(b"neo-brand__node node-word", response.data)
-        self.assertNotIn(b"<h2>NeoGateway</h2>", response.data)
-        self.assertIn(b"Approved", response.data)
-        self.assertIn(b'class="portal-app-access-status">Approved Simulator</span>', response.data)
-        self.assertIn(b"Launch", response.data)
-        self.assertNotIn(b">OPEN</a>", response.data)
-        self.assertIn(b'href="/rfd"', response.data)
-        self.assertIn(b"NeoStaffing", response.data)
-        self.assertIn(b"PENDING", response.data)
-        self.assertIn(b"NeoBid", response.data)
-        self.assertIn(b"REQUEST ACCESS", response.data)
-        self.assertNotIn('class="action-row"', html)
-        self.assertNotIn(">LOGOUT</a>", html)
-        self.assertNotIn('class="portal-install-section"', html)
-        self.assertNotIn("data-install-button", html)
-        self.assertNotIn("beforeinstallprompt", html)
+        root = document(response)
+        cards = root.one(cls='portal-launcher-apps')
+        self.assertEqual([c.attrs['data-portal-app'] for c in cards.findall(cls='portal-launch-card')], ['neogateway','neostaffing'])
+        gateway_card = cards.one('a', **{'data-portal-app':'neogateway'})
+        self.assertEqual(gateway_card.attrs['href'], '/rfd')
+        self.assertEqual(gateway_card.one(cls='portal-launch-action').text, 'LAUNCH')
+        self.assertFalse(gateway_card.findall('button'))
+        pending = cards.one('article', **{'data-portal-app':'neostaffing'})
+        self.assertEqual(pending.attrs['aria-disabled'], 'true')
+        self.assertEqual(pending.one(cls='portal-launch-action').text, 'PENDING REVIEW')
+        self.assertFalse(pending.findall('a'))
+        self.assertFalse(pending.findall('button'))
+        self.assertNotIn('NeoBid', cards.text)
+        for key in ('gateway','staffing'):
+            self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'], f'/static/images/icons/icon_{key}_small.png')
+        self.assertNotIn('portal-header-word', html)
+        self.assertIn('data-drawer-nodes', html)
+        # The third state now belongs to an existing launcher app, not retired NeoBid.
+        access = PortalAppAccess.query.filter_by(user_id=user.id, app_code='neostaffing').one()
+        access.status = 'denied'
+        db.session.commit()
+        request_page = document(self.client.get('/portal'))
+        request_form = request_page.one('form', 'portal-request-form')
+        self.assertEqual(request_form.attrs['method'], 'post')
+        self.assertEqual(request_form.attrs['action'], '/portal/request-access')
+        self.assertEqual(request_form.one('input', name='app_code').attrs['value'], 'neostaffing')
+        self.assertEqual(request_form.one('button').one(cls='portal-launch-action').text, 'REQUEST ACCESS')
+        self.assertFalse(request_form.one('button').findall('a'))
 
     def test_portal_mobile_hides_approved_role_status_without_hiding_other_app_states(self):
         user, _membership = self._approved_user("mobileportalstatus", "mobileportalstatus@example.com")
@@ -1799,23 +1783,13 @@ class AuthAccountFlowsTest(unittest.TestCase):
 
         self._login(user.username)
         response = self.client.get("/portal")
-        css = Path("app/static/css/base.css").read_text()
-
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'class="portal-app-access-status">Approved Watcher</span>', response.data)
-        self.assertIn(b"Coming Soon", response.data)
-        self.assertIn(
-            "body.mobile-app-chrome.portal-shell-page .portal-app-card.is-approved "
-            ".portal-app-access-status {\n"
-            "        display: none;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.portal-shell-page .portal-app-card.is-approved "
-            ".portal-app-state {\n"
-            "        gap: 0;",
-            css,
-        )
+        cards = document(response).one(cls='portal-launcher-apps')
+        self.assertEqual(cards.one('a', **{'data-portal-app':'neogateway'}).attrs['href'], '/rfd')
+        self.assertEqual(cards.one('button', **{'data-portal-app':'neostaffing'}).one(cls='portal-launch-action').text, 'REQUEST ACCESS')
+        self.assertNotIn('Approved', cards.text)
+        self.assertNotIn('Coming Soon', cards.text)
+        self.assertNotIn('NeoBid', cards.text)
 
     def test_portal_desktop_branding_css_widens_cards_and_scopes_neofont_menu_text(self):
         css = Path("app/static/css/base.css").read_text()
@@ -1862,30 +1836,15 @@ class AuthAccountFlowsTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(html.count('class="portal-app-card '), 3)
-        app_card_section = html.split('<section class="portal-app-grid"', 1)[1].split("</section>", 1)[0]
-        self.assertIn('src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"', app_card_section)
-        self.assertIn('src="/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png"', app_card_section)
-        self.assertIn('class="portal-app-icon portal-app-icon-fallback node-bid"', app_card_section)
-        self.assertNotIn('src="/static/images/icons/neobid/icon_192.png"', app_card_section)
-        self.assertNotIn('class="portal-install-section"', html)
-        self.assertNotIn("portal-install-help", html)
-        self.assertNotIn("Open in Safari.", html)
-        self.assertNotIn("Add to Home Screen.", html)
-        self.assertNotIn('data-manifest-url="/manifest/neogateway.webmanifest"', html)
-        self.assertNotIn('data-start-url="/rfd"', html)
-        self.assertNotIn("Gateway operations and NeoNode systems.", html)
-        self.assertNotIn("Ballmat counts, routing, and discharge operations.", html)
-        self.assertNotIn("Outbound door, lineup, and pull visibility.", html)
-        self.assertNotIn('data-manifest-url="/manifest/sektor.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/ermac.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/scorpion.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/reptile.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/subzero.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/rain.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
-        self.assertNotIn('data-manifest-url="/manifest/neobid.webmanifest"', html)
+        cards = document(response).one(cls='portal-launcher-apps')
+        self.assertEqual(len(cards.findall(cls='portal-launch-card')), 2)
+        self.assertEqual(cards.one('a').attrs['href'], '/rfd')
+        self.assertEqual(cards.one('article').one(cls='portal-launch-action').text, 'PENDING REVIEW')
+        for key in ('gateway', 'staffing'):
+            self.assertEqual(cards.one(**{'data-portal-app':f'neo{key}'}).one('img').attrs['src'], f'/static/images/icons/icon_{key}_small.png')
+        for retired in ('portal-install-section', 'portal-install-help', 'data-manifest-url=', 'data-install-button',
+                        'Open in Safari.', 'Add to Home Screen.', 'Bid tools placeholder'):
+            self.assertNotIn(retired, html)
 
     def test_portal_dashboard_keeps_install_ui_hidden_for_accessible_apps_and_nodes(self):
         user = self._admin("installmaster", "simulator")
@@ -1905,14 +1864,17 @@ class AuthAccountFlowsTest(unittest.TestCase):
         html = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('class="portal-app-card portal-app-neogateway is-approved"', html)
-        self.assertIn('class="portal-app-card portal-app-neostaffing is-approved"', html)
-        self.assertIn('class="portal-app-card portal-app-neobid is-', html)
-        self.assertNotIn('class="portal-install-section"', html)
-        self.assertNotIn('data-manifest-url="/manifest/motherbrain.webmanifest"', html)
-        self.assertNotIn('data-start-url="/motherbrain"', html)
-        self.assertNotIn('data-manifest-url="/manifest/neostaffing.webmanifest"', html)
-        self.assertNotIn('data-start-url="/neostaffing"', html)
+        cards = document(response).one(cls='portal-launcher-apps')
+        self.assertEqual(len(cards.findall(cls='portal-launch-card')), 2)
+        for code, destination in (('neogateway', '/rfd'), ('neostaffing', '/neostaffing')):
+            card = cards.one('a', **{'data-portal-app':code})
+            self.assertEqual(card.attrs['href'], destination)
+            self.assertEqual(card.one(cls='portal-launch-action').text, 'LAUNCH')
+            self.assertFalse(card.findall('a'))
+            self.assertFalse(card.findall('button'))
+        self.assertFalse(cards.findall('form'))
+        for retired in ('portal-install-section', 'data-manifest-url=', 'data-start-url='):
+            self.assertNotIn(retired, html)
 
     def test_portal_dashboard_does_not_render_install_prompt_script(self):
         user, _membership = self._approved_user("installscript", "installscript@example.com")

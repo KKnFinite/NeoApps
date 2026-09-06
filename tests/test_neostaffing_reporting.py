@@ -17,6 +17,7 @@ from app.models import (
 )
 from app.services import neostaffing as staffing_service
 from app.services.password_policy import set_user_password
+from app.services.permission_rules import ensure_default_permission_rules
 
 
 class NeoStaffingReportingTest(unittest.TestCase):
@@ -35,6 +36,7 @@ class NeoStaffingReportingTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
+        ensure_default_permission_rules()
         self.client = self.app.test_client()
 
     def tearDown(self):

@@ -10,6 +10,8 @@ from flask import Flask, g
 from sqlalchemy import event
 from sqlalchemy.exc import OperationalError
 
+from tests.html_contracts import document, assert_mobile_drawer
+
 from app import create_app
 from app.extensions import db, login_manager
 from app.models import SortDateOperation, User
@@ -181,32 +183,19 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(logo_path.name, "neogateway-inapp-128.png")
         self.assertGreater(logo_path.stat().st_size, 0)
 
-    def test_rfd_launcher_icons_use_explicit_or_safe_fallback_paths(self):
+    def test_rfd_launcher_uses_all_seven_locked_node_logos(self):
         template = Path("app/templates/neomotherbrain/rfd_hub.html").read_text()
-        generic_icon = "images/icons/neogateway/inapp/neogateway-inapp-128.png"
         expected_icons = {
-            "motherbrain": "images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png",
-            "sektor": "images/icons/neosektor/inapp/neosektor-icon-128x128.png",
-            "ermac": "images/icons/neoermac/inapp/neoermac-inapp-128.png",
-            "scorpion": "images/icons/neoscorpion/inapp/neoscorpion-128x128.png",
-            "reptile": generic_icon,
-            "rain": generic_icon,
-            "subzero": generic_icon,
+            "motherbrain": "newlogo_motherbrain_small.png", "sektor": "newlogo_sektor_small.png",
+            "ermac": "newlogo_ermac_small.png", "scorpion": "newlogo_scorpion.png",
+            "rain": "newlogo_rain_small.png", "subzero": "newlogo_subzero_small.png",
+            "reptile": "newlogo_reptile_small.png",
         }
-
-        self.assertIn('{% set generic_node_icon = "' + generic_icon + '" %}', template)
-        self.assertIn("locked_node_icons.get(slug, generic_node_icon)", template)
-        self.assertNotIn("'images/icons/' ~ icon_folder ~ '/icon_192.png'", template)
-        self.assertNotIn("icon_folder", template)
-
-        unknown_node_icon = expected_icons.get("test-node", generic_icon)
-        self.assertEqual(unknown_node_icon, generic_icon)
-        self.assertTrue(Path("app/static", unknown_node_icon).is_file())
-
-        for slug, icon_path in expected_icons.items():
+        self.assertIn('filename=node_logos[slug]', template)
+        for slug, filename in expected_icons.items():
             with self.subTest(slug=slug):
-                self.assertIn('"' + slug + '": "' + icon_path + '"', template)
-                self.assertTrue(Path("app/static", icon_path).is_file())
+                self.assertIn(f'"{slug}": "images/logos/{filename}"', template)
+                self.assertTrue(Path('app/static/images/logos', filename).is_file())
 
     def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
         css = Path("app/static/css/base.css").read_text()
@@ -487,8 +476,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 ],
             ),
             "reptile": ("NeoReptile", "NeoReptile", "/nodes/", "#70e13b", None),
-            "subzero": ("NeoSub-Zero", "Sub-Zero", "/nodes/", "#4db7ff", None),
-            "rain": ("NeoRain", "NeoRain", "/nodes/", "#7f4dff", None),
+            "subzero": ("NeoSub-Zero", "Sub-Zero", "/neosubzero", "#4db7ff", None),
+            "rain": ("NeoRain", "NeoRain", "/neorain", "#7f4dff", None),
         }
 
         for manifest_key, (name, short_name, start_url, theme_color, expected_icons) in expected_manifests.items():
@@ -703,8 +692,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"portal-brand-logo portal-login-logo", response.data)
-        self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
+        self.assertIn(b'class="portal-login-hero neo-auth-environment"', response.data)
+        self.assertIn(b'src="/static/images/hero/neoapps_login_desktop.png"', response.data)
+        self.assertIn(b'srcset="/static/images/hero/neoapps_login_mobile.png"', response.data)
         self.assertNotIn(b'class="topbar"', response.data)
         self.assertNotIn(b"mobile-account-trigger", response.data)
         self.assertNotIn(b"data-mobile-topbar", response.data)
@@ -749,8 +739,9 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         response = self.client.get("/login")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"portal-brand-logo portal-login-logo", response.data)
-        self.assertIn(b'src="/static/images/neoapps_logo_transparent.png"', response.data)
+        self.assertIn(b'class="portal-login-hero neo-auth-environment"', response.data)
+        self.assertIn(b'src="/static/images/hero/neoapps_login_desktop.png"', response.data)
+        self.assertIn(b'srcset="/static/images/hero/neoapps_login_mobile.png"', response.data)
         self.assertNotIn(b'class="topbar"', response.data)
         self.assertNotIn(b"mobile-account-trigger", response.data)
         self.assertNotIn(b"data-mobile-topbar", response.data)
@@ -817,51 +808,20 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("<strong>Fallback Display</strong>", user_chip)
 
     def test_shared_desktop_shell_uses_compact_neofont_utility_controls(self):
-        seed_dev_grandmaster(self.app)
-        user = User.query.filter_by(username="Kessler").first()
-        user.last_name = "Kessler"
-        db.session.commit()
-
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        for path in (
-            "/motherbrain",
-            "/neoermac",
-            "/neosektor",
-            "/neoscorpion",
-        ):
+        self._asset_test_login()
+        for path, marker in [('/motherbrain', 'data-operational-topbar'), ('/neoermac', 'data-operational-topbar'),
+                             ('/neosektor', 'data-operational-topbar'), ('/neoscorpion', 'data-operational-topbar'),
+                             ('/rfd', 'data-gateway-shell-header')]:
             with self.subTest(path=path):
                 response = self.client.get(path)
-                topbar = response.data.decode().split('<header class="topbar">', 1)[1]
-
                 self.assertEqual(response.status_code, 200)
-                self.assertIn('class="node-desktop-portal-link neo-menu-text"', topbar)
-                self.assertIn("data-character-switcher", topbar)
-                self.assertIn('class="user-chip desktop-shell-user-chip"', topbar)
-                self.assertIn("<span>Logged In</span>", topbar)
-                self.assertIn("<strong>KESSLER</strong>", topbar)
-                self.assertIn('class="logout-link neo-menu-text"', topbar)
-                self.assertLess(topbar.index("node-desktop-portal-link"), topbar.index("data-character-switcher"))
-                self.assertLess(topbar.index("data-character-switcher"), topbar.index("desktop-shell-user-chip"))
-                self.assertLess(topbar.index("desktop-shell-user-chip"), topbar.index("logout-link neo-menu-text"))
-
-        rfd_response = self.client.get("/rfd")
-        rfd_topbar = rfd_response.data.decode().split('<header class="topbar">', 1)[1]
-        self.assertEqual(rfd_response.status_code, 200)
-        self.assertIn('class="user-chip desktop-shell-user-chip"', rfd_topbar)
-        self.assertIn("<span>Logged In</span>", rfd_topbar)
-        self.assertIn("<strong>KESSLER</strong>", rfd_topbar)
-        self.assertIn('class="logout-link neo-menu-text"', rfd_topbar)
-
-        css = Path("app/static/css/base.css").read_text()
-        self.assertIn("Shared NeoGateway desktop shell: compact, single-line top-right utilities.", css)
-        self.assertIn("flex-wrap: nowrap;", css)
-        self.assertIn('font-family: "NeoFont", Arial, sans-serif;', css)
-        self.assertIn(".desktop-shell-user-chip", css)
-        self.assertIn("@media (min-width: 901px)", css)
+                bar = document(response).one('header', **{marker: None})
+                self.assertEqual(bar.findall('img')[0].attrs['src'], '/static/images/icons/neoapps/inapp/neoapps-inapp-128.png')
+                self.assertIn('Gateway', bar.text)
+                self.assertIn('Sort', bar.text)
+                self.assertEqual(len(bar.findall(**{'data-character-switcher': None})), 1)
+                self.assertIn('KESSLER', bar.text)
+                self.assertEqual(bar.one('form', action='/logout').attrs['method'], 'post')
 
     def test_shared_desktop_character_menu_uses_compact_neofont_labels(self):
         seed_dev_grandmaster(self.app)
@@ -886,142 +846,44 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("font-size: 0.54rem;", css)
 
     def test_mobile_shell_renders_motherbrain_topbar_alerts_and_bottom_nav(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/motherbrain/manage-sort")
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('class="mobile-topbar node-motherbrain"', html)
-        self.assertIn("data-mobile-bottom-nav", html)
-        self.assertIn("data-mobile-alert-nav", html)
-        self.assertIn("motherbrain-alert-count", html)
-        self.assertIn("data-mobile-shell-menu-button", html)
-        self.assertIn("mobile-topbar-node-icon-link", html)
-        self.assertIn("neomotherbrain-inapp-128.png", html)
-        self.assertIn("mobile-topbar-page-name neo-page-title", html)
-        self.assertIn(">Dashboard</span>", html)
-        self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">K</span>', html)
-        self.assertIn("Back to", html)
-        self.assertIn("neo-brand--apps", html)
-        self.assertIn("Portal", html)
-        self.assertNotIn("neo-brand--portal", html)
-        self.assertIn('action="/logout"', html)
-        self.assertIn("<span>Home</span>", html)
-        self.assertIn("<span>Alerts</span>", html)
-        self.assertIn("<span>Switch</span>", html)
-        self.assertIn("<span>Menu</span>", html)
-        self.assertIn(
-            "body.mobile-app-chrome .mobile-topbar .motherbrain-alert-tray {\n"
-            "        flex: 0 0 40px;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button {\n"
-            "        display: inline-grid;\n"
-            "        place-items: center;\n"
-            "        width: 40px;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome .mobile-topbar .motherbrain-alert-count {\n"
-            "        right: -4px;",
-            css,
-        )
+        self._asset_test_login()
+        response = self.client.get('/motherbrain/manage-sort')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        header = root.one('header', **{'data-operational-mobile-header': None})
+        self.assertEqual(header.one('img').attrs['src'], '/static/images/logos/newlogo_motherbrain_small.png')
+        self.assertEqual('NeoMotherBrain', header.one('strong', 'neo-mobile-product-name').text.strip())
+        self.assertEqual(len(header.findall(cls='motherbrain-alert-tray')), 1)
+        self.assertEqual(dock.one('a').attrs['href'], '/motherbrain')
+        self.assertEqual(drawer.one('form', action='/logout').attrs['method'], 'post')
 
     def test_mobile_motherbrain_landing_is_tile_menu_only(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/motherbrain/manage-sort", follow_redirects=True)
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("motherbrain-mobile-landing-shell", html)
-        self.assertIn("data-motherbrain-mobile-nav", html)
-        self.assertIn("motherbrain-mobile-landing-extra", html)
-        self.assertNotIn("data-motherbrain-mobile-dashboard", html)
-        for nav_label in (
-            "Manage Sort",
-            "Arrival Planning",
-            "Departure Planning",
-            "Parking Plan",
-            "Parking Rules",
-            "Gateway Matrix",
-            "Master Schedule",
-            "Sort Timeline",
-            "Manage API",
-            "Unmatched Queue",
-            "Portal Management",
-            "Permission Rules",
-        ):
-            self.assertIn(nav_label, html)
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-mobile-landing-shell,\n"
-            "    body.mobile-app-chrome.motherbrain-mobile-landing-shell .shell,\n"
-            "    body.mobile-app-chrome.motherbrain-mobile-landing-shell .content {\n"
-            "        height: 100dvh;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-mobile-landing-shell .manage-sort-page > .section-heading,\n"
-            "    body.mobile-app-chrome.motherbrain-mobile-landing-shell .motherbrain-mobile-landing-extra {\n"
-            "        display: none;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.motherbrain-mobile-landing-shell .motherbrain-mobile-nav-grid {\n"
-            "        align-content: start;",
-            css,
-        )
+        self._asset_test_login()
+        response = self.client.get('/motherbrain/manage-sort')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        self.assertIn(b'data-motherbrain-mobile-nav', response.data)
+        menu = drawer.one(**{'data-drawer-view': 'menu'})
+        for label in ('Manage Sort', 'Arrival Planning', 'Departure Planning', 'Parking Plan',
+                      'Parking Rules', 'Master Schedule', 'System Settings', 'Unmatched Queue'):
+            self.assertIn(label, menu.text)
+        for retired in ('Gateway Matrix', 'Sort Timeline', 'Manage API', 'Permission Rules'):
+            self.assertNotIn(retired, menu.text)
+        self.assertIn('NeoPortal', menu.text)
 
     def test_mobile_gateway_node_topbar_standard_order_and_account_menu(self):
-        seed_dev_grandmaster(self.app)
-        user = User.query.filter_by(username="Kessler").first()
-        user.first_name = "Alpha"
-        user.last_name = "Zulu"
+        self._asset_test_login()
+        user = User.query.filter_by(username='Kessler').one()
+        user.first_name, user.last_name = 'Alpha', 'Zulu'
         db.session.commit()
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/motherbrain/manage-sort")
-        html = response.data.decode()
-        topbar = html.split('class="mobile-topbar node-motherbrain"', 1)[1].split(
-            '<aside class="motherbrain-desktop-side-nav"',
-            1,
-        )[0]
-        topbar_left = topbar.split('class="mobile-topbar-left"', 1)[1].split(
-            'class="mobile-topbar-actions"',
-            1,
-        )[0]
-        topbar_actions = topbar.split('class="mobile-topbar-actions"', 1)[1]
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("mobile-topbar-back", topbar_left)
-        self.assertLess(topbar_left.index("mobile-topbar-node-icon-link"), topbar_left.index("mobile-topbar-page-link"))
-        self.assertIn("neomotherbrain-inapp-128.png", topbar_left)
-        self.assertIn("mobile-topbar-page-name neo-page-title", topbar_left)
-        self.assertIn(">Dashboard</span>", topbar_left)
-        self.assertNotIn(">Sort</span>", topbar_left)
-        self.assertNotIn("Manage Sort", topbar_left)
-        self.assertLess(topbar_actions.index("motherbrain-alert-tray"), topbar_actions.index("mobile-account-menu"))
-        self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">Z</span>', topbar_actions)
-        self.assertIn('href="/portal"', topbar_actions)
-        self.assertIn("Portal", topbar_actions)
-        self.assertIn('action="/logout"', topbar_actions)
-        self.assertIn('<nav class="mobile-bottom-nav', html)
-        self.assertIn("data-mobile-bottom-nav", html)
+        response = self.client.get('/motherbrain/manage-sort')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        header = root.one('header', **{'data-operational-mobile-header': None})
+        identity = header.one('a', 'operational-mobile-identity')
+        self.assertEqual(identity.attrs['href'], '/motherbrain')
+        self.assertEqual(identity.one('img').attrs['src'], '/static/images/logos/newlogo_motherbrain_small.png')
+        self.assertEqual(header.one('small').text.strip(), 'Manage Sort')
+        self.assertEqual(drawer.one(cls='neo-drawer-user').text, user.header_display_name)
+        self.assertEqual(drawer.one('form', action='/logout').attrs['method'], 'post')
+        self.assertFalse(header.findall('details', 'mobile-account-menu'))
 
     def test_mobile_topbar_never_uses_ellipsis_for_page_titles(self):
         css = Path("app/static/css/base.css").read_text()
@@ -1035,318 +897,97 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("text-overflow: clip", topbar_css)
         self.assertIn(".mobile-topbar-title > span,", topbar_css)
 
-    def test_mobile_gateway_landing_uses_topbar_launch_items_without_bottom_nav(self):
-        seed_dev_grandmaster(self.app)
-        operation = SortDateOperation(
-            sort_date=current_gateway_local_date(),
-            gateway_code="RFD",
-            sort_name="night",
-        )
+    def test_mobile_gateway_preserves_launch_routes_and_shared_bottom_dock(self):
+        self._asset_test_login()
+        operation = SortDateOperation(sort_date=current_gateway_local_date(), gateway_code='RFD', sort_name='night')
         db.session.add(operation)
         db.session.commit()
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get(f"/rfd?operation_id={operation.id}")
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-        topbar = html.split('class="mobile-topbar node-gateway"', 1)[1].split(
-            "</header>",
-            1,
-        )[0]
-        motherbrain_desktop_tile = html.split('class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-desktop"', 1)[1].split(
-            "</a>",
-            1,
-        )[0]
-        motherbrain_mobile_tile = html.split('class="rfd-node-tile rfd-node-motherbrain rfd-motherbrain-launch rfd-motherbrain-launch-mobile"', 1)[1].split(
-            "</a>",
-            1,
-        )[0]
-        sektor_tile = html.split('class="rfd-node-tile rfd-node-sektor"', 1)[1].split(
-            "</a>",
-            1,
-        )[0]
-        ermac_tile = html.split('class="rfd-node-tile rfd-node-ermac"', 1)[1].split(
-            "</a>",
-            1,
-        )[0]
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("mobile-topbar-node-icon-link", topbar)
-        self.assertIn("neogateway-inapp-128.png", topbar)
-        self.assertIn("mobile-topbar-gateway-brand-link", topbar)
-        self.assertIn("mobile-topbar-brand neo-brand-title", topbar)
-        self.assertIn("neo-brand--gateway", topbar)
-        self.assertIn("mobile-topbar-page-context", topbar)
-        self.assertIn(">RFD</span>", topbar)
-        self.assertIn("mobile-account-menu", topbar)
-        self.assertIn("mobile-account-trigger", topbar)
-        self.assertNotIn("<strong>DASHBOARD</strong>", topbar)
-        self.assertNotIn('<nav class="mobile-bottom-nav', html)
-        self.assertNotIn("has-mobile-bottom-nav", html)
-        self.assertIn(f'href="/motherbrain?operation_id={operation.id}"', motherbrain_desktop_tile)
-        self.assertIn(f'href="/motherbrain/manage-sort?operation_id={operation.id}"', motherbrain_mobile_tile)
-        self.assertIn("neomotherbrain-inapp-128.png", motherbrain_mobile_tile)
-        self.assertIn("rfd-node-name neo-brand-title", motherbrain_mobile_tile)
-        self.assertIn('href="/neosektor', sektor_tile)
-        self.assertIn("neosektor-icon-128x128.png", sektor_tile)
-        self.assertIn("rfd-node-name neo-brand-title", sektor_tile)
-        self.assertIn('href="/neoermac', ermac_tile)
-        self.assertIn("neoermac-inapp-128.png", ermac_tile)
-        self.assertIn("rfd-node-name neo-brand-title", ermac_tile)
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .rfd-node-tile {\n"
-            "        width: 100%;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .rfd-node-card-icon-wrap {\n"
-            "        width: 46px;",
-            css,
-        )
-        self.assertIn(".rfd-motherbrain-launch-mobile {\n    display: none;", css)
-        self.assertIn(".rfd-node-card-main {\n    display: contents;", css)
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-desktop {\n"
-            "        display: none;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .rfd-motherbrain-launch-mobile {\n"
-            "        display: grid;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .mobile-topbar-left {\n"
-            "        flex: 1 1 auto;\n"
-            "        gap: 6px;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon-link,\n"
-            "    body.rfd-hub-page.mobile-app-chrome .mobile-account-trigger {\n"
-            "        width: 34px;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {\n"
-            "        width: 100%;\n"
-            "        max-width: none;\n"
-            "        font-size: clamp(0.7rem, 3.6vw, 0.86rem);\n"
-            "        text-overflow: clip;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page.mobile-app-chrome,\n"
-            "    body.rfd-hub-page.mobile-app-chrome .shell,\n"
-            "    body.rfd-hub-page.mobile-app-chrome .content {\n"
-            "        height: 100dvh;",
-            css,
-        )
-        self.assertIn(
-            "body.mobile-app-chrome.has-mobile-bottom-nav .mobile-bottom-nav {\n"
-            "        position: fixed;",
-            css,
-        )
+        with patch('app.neomotherbrain.routes._current_sort_state', return_value={'operations': [operation]}):
+            response = self.client.get(f'/rfd?operation_id={operation.id}')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        header = root.one('header', **{'data-gateway-mobile-header': None})
+        self.assertEqual(header.one('img').attrs['src'], '/static/images/icons/neoapps/inapp/neoapps-inapp-128.png')
+        self.assertEqual(header.one('small').text, 'RFD Operations')
+        launcher = root.one(cls='gateway-node-launcher')
+        self.assertEqual(launcher.one('a', 'gateway-launch-desktop').attrs['href'], f'/motherbrain?operation_id={operation.id}')
+        self.assertEqual(launcher.one('a', 'gateway-launch-mobile').attrs['href'], f'/motherbrain/manage-sort?operation_id={operation.id}')
+        for node in ('sektor', 'ermac', 'scorpion'):
+            self.assertEqual(launcher.one('a', f'gateway-node-{node}').attrs['href'], f'/neo{node}?operation_id={operation.id}')
+        self.assertEqual(dock.one('a').attrs['href'], '/rfd')
+        self.assertFalse(root.findall(**{'data-operational-sidebar': None}))
 
     def test_desktop_gateway_landing_uses_compact_application_launcher(self):
-        seed_dev_grandmaster(self.app)
-        operation = SortDateOperation(
-            sort_date=current_gateway_local_date(),
-            gateway_code="RFD",
-            sort_name="night",
-        )
-        db.session.add(operation)
-        db.session.commit()
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get(f"/rfd?operation_id={operation.id}")
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-
+        self._asset_test_login()
+        response = self.client.get('/rfd')
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn("rfd-gateway-brand-strip", html)
-        self.assertIn('class="rfd-node-tile rfd-node-motherbrain', html)
-        self.assertIn('class="rfd-node-tile rfd-node-sektor"', html)
-        self.assertEqual(html.count('class="rfd-node-availability">Coming Soon</span>'), 2)
-        self.assertIn('href="/neorain"', html)
-        self.assertIn("Compact desktop RFD application launcher", css)
-        self.assertIn("grid-template-columns: repeat(8, minmax(0, 1fr));", css)
-        self.assertIn("width: min(100%, 1480px);", css)
-        self.assertIn("--rfd-launch-first-row: 1;", css)
-        self.assertIn("--rfd-launch-second-row: 2;", css)
-        self.assertIn("grid-template-rows: auto repeat(2, minmax(94px, 108px));", css)
-        self.assertIn("grid-column: 7 / span 2;", css)
-        self.assertIn("grid-row: var(--rfd-launch-second-row);", css)
-        self.assertIn("height: calc(100dvh - 70px);", css)
-        self.assertIn(
-            "body.rfd-hub-page .rfd-node-grid,\n"
-            "    body.rfd-hub-page .rfd-node-column {\n"
-            "        display: contents;",
-            css,
-        )
-        self.assertEqual(
-            html.count('class="rfd-node-card-main"'),
-            html.count('class="rfd-node-tile'),
-        )
-        self.assertIn("display: flex;\n        flex-direction: column;", css)
-        self.assertIn("align-items: center;\n        justify-content: center;", css)
-        self.assertIn(
-            "body.rfd-hub-page .rfd-node-card-main {\n"
-            "        display: flex;\n"
-            "        align-items: center;\n"
-            "        justify-content: center;\n"
-            "        gap: 8px;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page .rfd-node-card-copy {\n"
-            "        display: flex;\n"
-            "        align-items: center;\n"
-            "        justify-content: center;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page .rfd-motherbrain-launch-mobile {\n"
-            "        display: none;",
-            css,
-        )
-        self.assertIn(
-            "body.rfd-hub-page .rfd-motherbrain-launch-desktop {\n"
-            "        display: flex;",
-            css,
-        )
-        self.assertIn("padding: 11px 8px;", css)
-        self.assertIn("font-size: clamp(0.86rem, 1.08vw, 1.08rem);", css)
-        self.assertIn("white-space: nowrap;", css)
+        root = document(response)
+        launcher = root.one(cls='gateway-node-launcher')
+        grid = launcher.one(cls='gateway-node-grid')
+        cards = grid.findall(cls='gateway-node-card')
+        self.assertEqual([c.attrs['class'].split()[1] for c in cards],
+                         ['gateway-node-' + n for n in ('sektor', 'ermac', 'scorpion', 'rain', 'subzero', 'reptile')])
+        self.assertEqual(len(launcher.findall(cls='gateway-node-motherbrain')), 2)
+        self.assertEqual(len(grid.findall(cls='gateway-node-coming-soon')), 1)
+        self.assertFalse(root.findall(**{'data-operational-sidebar': None}))
+        self.assertIn(b'images/hero/hero_gateway_small.png', response.data)
+        self.assertNotIn(b'rfd-node-column-left', response.data)
 
-    def test_gateway_temporary_nodes_use_shared_icon_and_card_hooks(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/rfd")
-        html = response.data.decode()
-        generic_node_icon = 'src="/static/images/icons/neogateway/inapp/neogateway-inapp-128.png"'
-
+    def test_reptile_is_coming_soon_while_rain_and_subzero_launch(self):
+        self._asset_test_login()
+        response = self.client.get('/rfd')
         self.assertEqual(response.status_code, 200)
-        for node in ("reptile", "subzero"):
-            with self.subTest(node=node):
-                card_start = html.index(f'class="rfd-node-tile rfd-node-placeholder rfd-node-{node}"')
-                card_end = html.index("</article>", card_start)
-                card = html[card_start:card_end]
-                self.assertIn('class="rfd-node-card-main"', card)
-                self.assertIn('class="rfd-node-card-icon-wrap"', card)
-                self.assertIn('class="rfd-node-card-icon"', card)
-                self.assertIn('class="rfd-node-card-copy"', card)
-                self.assertIn(generic_node_icon, card)
-                self.assertIn('class="rfd-node-availability">Coming Soon</span>', card)
+        grid = document(response).one(cls='gateway-node-grid')
+        reptile = grid.one('article', 'gateway-node-reptile')
+        self.assertEqual(reptile.attrs['aria-disabled'], 'true')
+        self.assertIn('Coming Soon', reptile.text)
+        self.assertFalse(reptile.findall('a'))
+        self.assertFalse(reptile.findall('button'))
+        for node in ('reptile', 'rain', 'subzero'):
+            card = grid.one(cls=f'gateway-node-{node}')
+            self.assertEqual(card.one('img').attrs['src'], f'/static/images/logos/newlogo_{node}_small.png')
+        for node in ('rain', 'subzero'):
+            self.assertEqual(grid.one('a', f'gateway-node-{node}').attrs['href'], '/neosubzero/' if node == 'subzero' else '/neorain')
 
-        self.assertNotIn("images/icons/reptile/icon_192.png", html)
-        self.assertNotIn("images/icons/rain/icon_192.png", html)
-        self.assertNotIn("images/icons/subzero/icon_192.png", html)
-
-    def test_mobile_portal_header_uses_neofont_neoapps_brand(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/portal")
-        html = response.data.decode()
-        topbar = html.split('class="mobile-topbar node-apps"', 1)[1].split(
-            "</header>",
-            1,
-        )[0]
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("mobile-topbar-brand neo-brand-title", topbar)
-        self.assertIn("neo-brand--apps", topbar)
-        self.assertIn("<strong>PORTAL</strong>", topbar)
+    def test_mobile_portal_header_is_icon_only(self):
+        self._asset_test_login()
+        response = self.client.get('/portal')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        bar = root.one('header', **{'data-mobile-topbar': None})
+        identity = bar.one('a', **{'aria-label': 'NeoApps Portal'})
+        self.assertEqual(identity.attrs['href'], '/portal')
+        self.assertEqual(identity.one('img').attrs['src'], '/static/images/icons/neoapps/inapp/neoapps-inapp-128.png')
+        self.assertEqual(identity.text.strip(), '')
+        self.assertFalse(identity.findall('strong'))
 
     def test_motherbrain_mobile_short_titles_and_full_menu_labels(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        cases = (
-            ("/motherbrain/parking-plan", "Parking"),
-            ("/motherbrain/gateway-matrix", "Matrix"),
-            ("/motherbrain/parking-rules", "Rules"),
-        )
-        for path, short_title in cases:
+        self._asset_test_login()
+        for path, title in (('/motherbrain/parking-plan', 'Parking Plan'),
+                            ('/motherbrain/gateway-matrix', 'Gateway Matrix'),
+                            ('/motherbrain/parking-rules', 'Parking Rules')):
             with self.subTest(path=path):
                 response = self.client.get(path)
-                html = response.data.decode()
-                topbar = html.split('class="mobile-topbar node-motherbrain"', 1)[1].split(
-                    "</header>",
-                    1,
-                )[0]
-                menu = html.split('data-mobile-shell-menu-panel', 1)[1].split("</div>", 1)[0]
+                root, drawer, dock = assert_mobile_drawer(self, response)
+                header = root.one('header', **{'data-operational-mobile-header': None})
+                self.assertEqual(header.one('small').text, title)
+                menu = drawer.one(**{'data-drawer-view': 'menu'})
+                for label in ('Manage Sort', 'Arrival Planning', 'Departure Planning', 'Parking Plan',
+                              'Parking Rules', 'Master Schedule', 'System Settings', 'Unmatched Queue'):
+                    self.assertIn(label, menu.text)
+                self.assertIn('NeoPortal', menu.text)
 
-                self.assertEqual(response.status_code, 200)
-                self.assertIn(f">{short_title}</span>", topbar)
-                self.assertIn("Manage Sort", menu)
-                self.assertIn("Arrival Planning", menu)
-                self.assertIn("Departure Planning", menu)
-                self.assertIn("Parking Plan", menu)
-                self.assertIn("Parking Rules", menu)
-                self.assertIn("Gateway Matrix", menu)
-                self.assertIn("Master Schedule", menu)
-                self.assertIn("Sort Timeline", menu)
-                self.assertIn("Manage API", menu)
-                self.assertIn("Unmatched Queue", menu)
-                self.assertIn("Portal Management", menu)
-                self.assertIn("Permission Rules", menu)
-
-    def test_mobile_bottom_popovers_anchor_to_switch_and_menu_buttons(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/neosektor")
-        html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('data-mobile-popover-trigger="switch"', html)
-        self.assertIn('data-mobile-popover-anchor="switch"', html)
-        self.assertIn("data-mobile-switcher-button", html)
-        self.assertIn('aria-expanded="false" data-mobile-switcher-button', html)
-        self.assertIn("mobile-bottom-popover--switch", html)
-        self.assertIn('data-mobile-popover-trigger="menu"', html)
-        self.assertIn('data-mobile-popover-anchor="menu"', html)
-        self.assertIn('aria-controls="mobile-bottom-menu-panel"', html)
-        self.assertIn('id="mobile-bottom-menu-panel"', html)
-        self.assertIn("mobile-bottom-popover--menu", html)
-        self.assertIn("mobile-bottom-menu-panel mobile-shell-menu-panel", html)
-        self.assertIn("Back to", html)
-        self.assertIn("neo-brand--apps", html)
-        self.assertNotIn("neo-brand--portal", html)
-        self.assertIn('src="/static/images/icons/neoapps/inapp/neoapps-inapp-128.png"', html)
-        self.assertNotIn("images/icons/neoportal/icon_192.png", html)
-        self.assertIn("mobile-bottom-switcher-label neo-menu-text", html)
-        self.assertIn("@keyframes mobile-bottom-pop", css)
-        self.assertIn("@keyframes mobile-bottom-pop-close", css)
-        self.assertIn(".mobile-bottom-popover.is-opening", css)
-        self.assertIn(".mobile-bottom-popover.is-closing", css)
-        self.assertIn("transform-origin: var(--mobile-popover-origin-x, calc(100% - 24px)) 100%;", css)
-        self.assertIn("--mobile-popover-origin-x: 50%;", css)
-        self.assertIn("--mobile-popover-origin-x: calc(100% - 24px);", css)
-        self.assertIn("grid-template-columns: minmax(0, 1fr);", css)
-        self.assertIn(".mobile-bottom-menu-panel.is-open", css)
+    def test_mobile_nodes_and_menu_share_one_drawer(self):
+        self._asset_test_login()
+        response = self.client.get('/neosektor')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        nodes = drawer.one(**{'data-drawer-view': 'nodes'})
+        menu = drawer.one(**{'data-drawer-view': 'menu'})
+        self.assertTrue(nodes.findall('a', 'neo-drawer-node-link'))
+        self.assertFalse(menu.findall('a', 'neo-drawer-node-link'))
+        self.assertFalse(nodes.findall('form'))
+        self.assertEqual(drawer.one('button', **{'data-drawer-close': None}).attrs['type'], 'button')
+        self.assertEqual(len(root.findall(**{'data-drawer-backdrop': None})), 1)
+        self.assertNotIn(b'data-mobile-popover-trigger', response.data)
+        self.assertIn(b'js/mobile_drawer.js', response.data)
 
     def test_global_press_feedback_styles_and_hook_render(self):
         response = self.client.get("/")
@@ -1407,55 +1048,28 @@ class LocalLaunchNavigationTest(unittest.TestCase):
             css,
         )
 
-    def test_mobile_account_uses_last_name_initial_and_node_icons(self):
-        seed_dev_grandmaster(self.app)
-        user = User.query.filter_by(username="Kessler").first()
-        user.first_name = "Alpha"
-        user.last_name = "Zulu"
+    def test_mobile_account_moves_into_drawer_and_preserves_node_icons(self):
+        self._asset_test_login()
+        user = User.query.filter_by(username='Kessler').one()
+        user.first_name, user.last_name = 'Alpha', 'Zulu'
         db.session.commit()
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        expected_icons = {
-            "/motherbrain/manage-sort": "neomotherbrain-inapp-128.png",
-            "/neoermac": "neoermac-inapp-128.png",
-            "/neosektor": "neosektor-icon-128x128.png",
-        }
-
-        for path, node_icon_name in expected_icons.items():
+        for path, icon in (('/motherbrain/manage-sort', 'motherbrain'), ('/neoermac', 'ermac'), ('/neosektor', 'sektor')):
             with self.subTest(path=path):
                 response = self.client.get(path)
-                html = response.data.decode()
+                root, drawer, dock = assert_mobile_drawer(self, response)
+                header = root.one('header', **{'data-operational-mobile-header': None})
+                self.assertEqual(header.one('img').attrs['src'], f'/static/images/logos/newlogo_{icon}_small.png')
+                self.assertEqual(drawer.one(cls='neo-drawer-user').text, user.header_display_name)
+                self.assertFalse(header.findall(cls='mobile-account-trigger'))
 
-                self.assertEqual(response.status_code, 200)
-                self.assertIn("data-mobile-topbar", html)
-                self.assertIn("data-mobile-bottom-nav", html)
-                self.assertIn("mobile-topbar-node-icon-link", html)
-                self.assertIn(node_icon_name, html)
-                self.assertIn('<span class="mobile-account-fallback" aria-hidden="true">Z</span>', html)
-                self.assertNotIn("mobile-account-icon", html)
-                self.assertNotIn("account-motherbrain-128.png", html)
-                self.assertNotIn("ninja-ermac-128.png", html)
-                self.assertNotIn("ninja-sektor-128.png", html)
-                self.assertNotIn("-1024.png", html)
-
-    def test_mobile_shell_uses_safe_fallback_account_avatar_on_portal(self):
-        seed_dev_grandmaster(self.app)
-        self.client.post(
-            "/login",
-            data={"username": "Kessler", "password": LOCAL_SQLITE_FALLBACK_PASSWORD},
-        )
-
-        response = self.client.get("/portal")
-        html = response.data.decode()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("data-mobile-topbar", html)
-        self.assertIn("data-mobile-bottom-nav", html)
-        self.assertIn("mobile-account-fallback", html)
-        self.assertNotIn('role="menuitem">Back to', html)
+    def test_portal_account_uses_shared_drawer_without_second_avatar_menu(self):
+        self._asset_test_login()
+        response = self.client.get('/portal')
+        root, drawer, dock = assert_mobile_drawer(self, response)
+        self.assertEqual(dock.one('a').attrs['href'], '/portal')
+        self.assertEqual(drawer.one(cls='neo-drawer-user').text, 'Kessler')
+        self.assertEqual(drawer.one('form', action='/logout').attrs['method'], 'post')
+        self.assertFalse(root.findall(cls='mobile-account-trigger'))
 
     def test_public_pages_do_not_render_authenticated_mobile_shell(self):
         response = self.client.get("/")
@@ -1500,62 +1114,16 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
 
         hub_response = self.client.get("/rfd")
-        nav_html = hub_response.data.decode().split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
-        hub_html = hub_response.data.decode()
-        left_column = hub_html.split('rfd-node-column-left"', 1)[1].split("</div>", 1)[0]
-        right_column = hub_html.split('rfd-node-column-right"', 1)[1].split("</div>", 1)[0]
-        self.assertNotIn(b'neogateway_logo3_large.png', hub_response.data)
-        self.assertNotIn(b'neogateway_logo3_medium.png', hub_response.data)
-        self.assertNotIn(b'neogateway_logo3_small.png', hub_response.data)
-        self.assertNotIn(b'class="rfd-gateway-brand-strip"', hub_response.data)
-        self.assertNotIn(b'class="rfd-gateway-brand"', hub_response.data)
-        self.assertIn(b'src="/static/images/icons/neomotherbrain/inapp/neomotherbrain-inapp-128.png"', hub_response.data)
-        self.assertIn(b'src="/static/images/icons/neosektor/inapp/neosektor-icon-128x128.png"', hub_response.data)
-        self.assertIn(b'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"', hub_response.data)
-        self.assertIn(b'src="/static/images/icons/neoscorpion/inapp/neoscorpion-128x128.png"', hub_response.data)
-        self.assertIn(b"NeoMotherBrain", hub_response.data)
-        self.assertIn(b"NeoSektor", hub_response.data)
-        self.assertIn(b'href="/neoermac"', hub_response.data)
-        for node_name in (
-            b"NeoScorpion",
-            b"NeoReptile",
-            b"NeoErmac",
-            b"NeoSub-Zero",
-            b"NeoRain",
-        ):
-            self.assertIn(node_name, hub_response.data)
-        self.assertNotIn(b"Placeholder", hub_response.data)
-        self.assertNotIn(b"Launch", hub_response.data)
-        self.assertNotIn(b"Gateway Command Layer", hub_response.data)
-        self.assertLess(hub_html.index('aria-label="NeoMotherBrain"'), hub_html.index('class="rfd-node-grid"'))
-        self.assertLess(hub_html.index('rfd-node-column-left"'), hub_html.index('rfd-node-column-right"'))
-        left_order = (
-            "NeoSektor",
-            "NeoReptile",
-            "NeoRain",
-        )
-        right_order = (
-            "NeoErmac",
-            "NeoSub-Zero",
-            "NeoScorpion",
-        )
-        left_positions = [left_column.index(f'aria-label="{node}"') for node in left_order]
-        right_positions = [right_column.index(f'aria-label="{node}"') for node in right_order]
-        self.assertEqual(left_positions, sorted(left_positions))
-        self.assertEqual(right_positions, sorted(right_positions))
-        self.assertIn(b'action="/logout"', hub_response.data)
-        self.assertIn("Logout", nav_html)
-        self.assertNotIn("NeoRFD", nav_html)
-        self.assertNotIn("NeoMotherBrain", nav_html)
-        self.assertNotIn("NeoSektor", nav_html)
-        self.assertNotIn("Nightly Operations", nav_html)
-        self.assertNotIn("Master Schedule", nav_html)
-        self.assertNotIn("Access Requests", nav_html)
-        self.assertNotIn("User Management", nav_html)
-        self.assertNotIn(b"Nightly Operations", hub_response.data)
-        self.assertNotIn(b"Master Schedule", hub_response.data)
-        self.assertNotIn(b"Access Requests", hub_response.data)
-        self.assertNotIn(b"User Management", hub_response.data)
+        self.assertEqual(hub_response.status_code, 200)
+        root, drawer, dock = assert_mobile_drawer(self, hub_response)
+        launcher = root.one(cls='gateway-node-launcher')
+        for node in ('motherbrain', 'sektor', 'ermac', 'scorpion', 'rain', 'subzero'):
+            self.assertTrue(launcher.findall('a', f'gateway-node-{node}'))
+        menu = drawer.one(**{'data-drawer-view': 'menu'})
+        self.assertEqual(menu.one('form', action='/logout').attrs['method'], 'post')
+        self.assertFalse(menu.findall(cls='gateway-node-card'))
+        for label in ('Master Schedule', 'User Management', 'Access Requests'):
+            self.assertNotIn(label, menu.text)
 
 
 if __name__ == "__main__":

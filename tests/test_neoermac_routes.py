@@ -63,6 +63,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 6, 11, 1, 0),
             },
         )
         self.app = create_app(TestConfig)
@@ -71,6 +72,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.create_all()
         self.gateway = ensure_default_gateway_and_nodes()
         ensure_default_permission_rules()
+        self.operation_creator = User(username="manual-operation-creator", is_active=False)
+        set_user_password(self.operation_creator, "TestPassword123!")
+        db.session.add(self.operation_creator)
         db.session.commit()
         self.client = self.app.test_client()
 
@@ -118,7 +122,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"data-node-desktop-side-nav", response.data)
         self.assertIn(b'data-node-desktop-shell="ermac"', response.data)
         desktop_sidebar = response.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
-        self.assertIn(b'neoermac-inapp-256.png', desktop_sidebar)
+        self.assertIn(b'newlogo_ermac.png', desktop_sidebar)
         self.assertNotIn(b'neoermac-inapp-128.png', desktop_sidebar)
         sidebar_css = Path("app/static/css/base.css").read_text()
         self.assertIn("grid-template-rows: 220px auto;", sidebar_css)
@@ -129,7 +133,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("flex-wrap: wrap;", sidebar_css)
         self.assertIn("font-size: clamp(1.05rem, 7.5cqi, 1.45rem);", sidebar_css)
         self.assertIn("white-space: normal;", sidebar_css)
-        self.assertIn(b'<span class="neo-page-title motherbrain-desktop-top-title-text">DASHBOARD</span>', response.data)
+        self.assertIn(b'data-operational-topbar', response.data)
         self.assertIn(b'class="neoermac-dashboard-brand"', response.data)
         self.assertIn(b"neoermac-dashboard-title neo-brand-title", response.data)
         self.assertIn(b"neo-brand-title__neo", response.data)
@@ -139,8 +143,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neoermac_logo1_large.png", response.data)
         self.assertNotIn(b"neoermac_logo1_medium.png", response.data)
         self.assertNotIn(b"neoermac_logo1_small.png", response.data)
-        self.assertIn(b'src="/static/images/icons/neoermac/inapp/neoermac-inapp-128.png"', response.data)
-        self.assertIn(b"neoermac-header-title", response.data)
+        self.assertIn(b'src="/static/images/logos/newlogo_ermac_small.png"', response.data)
+        self.assertIn(b"neo-mobile-product-name", response.data)
         self.assertIn(b"data-node-desktop-dashboard", response.data)
         self.assertIn(b'data-node-dashboard="ermac"', response.data)
         self.assertIn(b'data-node-dashboard-tile="door-view"', response.data)
@@ -597,7 +601,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             )
         )
 
-    def test_upcoming_pulls_state_keeps_outside_window_status_authoritative(self):
+    def test_upcoming_pulls_refresh_policy_is_independent_of_sort_window(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026, 6, 11, 21, 0
         )
@@ -614,8 +618,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(response.status_code, 200)
         self.assertFalse(payload["changed"])
-        self.assertFalse(payload["refresh"]["auto_refresh_enabled"])
-        self.assertEqual(payload["refresh"]["reason"], "outside_sort_window")
+        self.assertTrue(payload["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["refresh"]["reason"], "active")
 
     def test_neoermac_auto_refresh_is_limited_to_live_operation_pages(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 1, 0)
@@ -651,7 +655,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"window.NeoLiveUpdates.create", outbound_response.data)
         self.assertIn(b"intervalMs: 5000", outbound_response.data)
         self.assertNotIn(b"data-operation-refresh-reload", outbound_response.data)
-        self.assertNotIn(b"window.location.reload()", outbound_response.data)
+        self.assertIn(b'if (response.status === 428)', outbound_response.data)
+        self.assertNotIn(b"setInterval(() => window.location.reload()", outbound_response.data)
 
         door_response = self.client.get("/neoermac/door-view?door=D34")
         self.assertEqual(door_response.status_code, 200)
@@ -664,7 +669,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         non_refresh_pages = (
             "/neoermac",
-            "/neoermac/building-lineup",
             "/neoermac/tug-assignments",
         )
         for path in non_refresh_pages:
@@ -2101,8 +2105,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
             if row.startswith(("insert", "update", "delete"))
         ]
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(len(selects), 20)
-        self.assertEqual(len(selects), len(set(selects)))
+        # Current/prior-day operation selection and the mission-aware pull
+        # aggregator are explicit bounded phases, not repeated per door.
+        self.assertEqual(len(selects), 23)
+        self.assertEqual(sum("from gateway_sort_matrix" in row for row in selects), 2)
+        self.assertEqual(sum("from neoermac_door_pulls" in row for row in selects), 2)
         self.assertEqual(commits[0], 1)
         self.assertEqual(sum(row.startswith("insert") for row in writes), 1)
         self.assertEqual(sum(row.startswith("update") for row in writes), 1)
@@ -2112,7 +2119,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "master_flight_schedules",
             "sort_date_parking_assignments",
             "sort_date_google_mission_links",
-            "neoermac_door_pulls",
             "neoermac_uld_requests",
             "neosektor_uld_on_the_way_events",
         ):
@@ -2176,7 +2182,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertTrue(payload["state"]["refresh"]["auto_refresh_enabled"])
         self.assertEqual(payload["state"]["refresh"]["reason"], "active")
-        self.assertEqual(payload["state"]["refresh"]["window_label"], "14:00-05:00")
+        self.assertNotIn("window_label", payload["state"]["refresh"])
+        self.assertGreater(payload["state"]["refresh"]["live_screen_refresh_interval_ms"], 0)
         self.assertEqual(saved.actual_pure_pull_time_local, time(1, 45))
         self.assertEqual(mission.actual_pure_pull_time_local, time(1, 45))
         self.assertEqual(mission.departure_status, "departed")
@@ -2203,10 +2210,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         db.session.refresh(mission)
         self.assertEqual(outside_response.status_code, 200)
         self.assertTrue(outside_payload["ok"])
-        self.assertFalse(outside_payload["state"]["refresh"]["auto_refresh_enabled"])
+        self.assertTrue(outside_payload["state"]["refresh"]["auto_refresh_enabled"])
         self.assertEqual(
             outside_payload["state"]["refresh"]["reason"],
-            "outside_sort_window",
+            "active",
         )
         self.assertEqual(saved.actual_pure_pull_time_local, time(1, 46))
         self.assertEqual(mission.actual_pure_pull_time_local, time(1, 46))
@@ -2883,6 +2890,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             sort_name="night",
         )
         current_operation = SortDateOperation(
+            generated_by_user_id=self.operation_creator.id,
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
             sort_date=current_sort_date,
@@ -4012,13 +4020,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn("#d9dde4", css)
         self.assertIn(".neoermac-lineup-autosave-status", css)
 
-    def test_user_without_building_lineup_view_cannot_open_page(self):
+    def test_node_watcher_can_read_building_lineup_but_cannot_mutate_it(self):
         self._login_approved_user(role="watcher")
 
         response = self.client.get("/neoermac/building-lineup", follow_redirects=False)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/neoermac", response.location)
+        self.assertEqual(response.status_code, 200)
+        denied = self.client.post("/neoermac/building-lineup", data={})
+        self.assertEqual(denied.status_code, 403)
+        self.assertIsNone(denied.location)
 
     def test_ermac_route_is_not_used(self):
         self._login_approved_user()
@@ -4220,8 +4230,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(response.status_code, 200)
         self.assertFalse(payload["changed"])
-        self.assertFalse(payload["refresh"]["auto_refresh_enabled"])
-        self.assertEqual(payload["refresh"]["reason"], "historical_sort")
+        self.assertTrue(payload["refresh"]["auto_refresh_enabled"])
+        self.assertEqual(payload["refresh"]["reason"], "active")
 
     def test_view_outbound_state_is_read_only_and_bounded(self):
         from app.services.neoermac_building_lineup import get_building_lineup_rows
@@ -4261,7 +4271,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ]
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["changed"])
-        self.assertLessEqual(len(selects), 10)
+        # Includes live-refresh policy plus current/prior-date scope reads.
+        self.assertEqual(len(selects), 13)
         self.assertEqual(writes, [])
         self.assertEqual(commits[0], 0)
 
@@ -4400,11 +4411,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(
-            b'<span class="mobile-topbar-page-name neo-page-title">OUTBOUND</span>',
+            b'<small>VIEW OUTBOUND</small>',
             response.data,
         )
         self.assertIn(
-            b'<span class="neo-page-title motherbrain-desktop-top-title-text">VIEW OUTBOUND</span>',
+            b'data-operational-topbar',
             response.data,
         )
         self.assertIn(b"data-neoermac-outbound-mobile-list", response.data)
@@ -4444,11 +4455,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         expected_labels = {
-            "/neoermac/building-lineup": "LINEUP",
-            "/neoermac/door-view": "DOORS",
-            "/neoermac/view-outbound": "OUTBOUND",
-            "/neoermac/upcoming-pulls": "PULLS",
-            "/neoermac/tug-assignments": "TUGS",
+            "/neoermac/building-lineup": "Building Lineup",
+            "/neoermac/door-view": "Door View",
+            "/neoermac/view-outbound": "View Outbound",
+            "/neoermac/upcoming-pulls": "Upcoming Pulls",
+            "/neoermac/tug-assignments": "Tug Assignments",
         }
 
         for path, label in expected_labels.items():
@@ -4456,7 +4467,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(
-                    f'<span class="mobile-topbar-page-name neo-page-title">{label}</span>'.encode(),
+                    f'<small>{label.upper()}</small>'.encode(),
                     response.data,
                 )
 
@@ -4613,6 +4624,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ).first()
         if operation is None:
             operation = SortDateOperation(
+                generated_by_user_id=self.operation_creator.id,
                 gateway_id=self.gateway.id,
                 sort_date=date(2026, 6, 11),
                 gateway_code=self.gateway.code,

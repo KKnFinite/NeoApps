@@ -5058,7 +5058,13 @@ class FlightApiTestPageTest(unittest.TestCase):
         self.assertEqual(pending_review_items_for_operation(future_operation), [future_item])
 
     def _review_operation(self, sort_name="night", sort_date=None):
+        # A manual current sort must have provenance and a deterministic local day.
+        if "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE" not in self.app.config:
+            self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
+                sort_date or date.today(), time(22, 0)
+            )
         operation = SortDateOperation(
+            generated_by_user_id=User.query.filter_by(username="Kessler").one().id,
             gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,
             sort_date=sort_date or date.today(),

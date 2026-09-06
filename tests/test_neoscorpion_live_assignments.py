@@ -76,8 +76,9 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
 
         self._login(watcher)
         response = self.client.get("/neoscorpion/fuel-assignments/revision")
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["ok"], False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"ok": True, "current_operation": False,
+                                              "operation_id": None, "revision": 0})
 
     def test_revision_endpoint_is_one_fingerprint_query_and_never_writes(self):
         operator = self._add_user("query_operator", "operator")
@@ -144,8 +145,9 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
 
         self._login(watcher)
         response = self.client.get("/neoscorpion/fuel-dispatch/revision")
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.get_json()["error"], "Access denied.")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"current_operation": False,
+                                              "operation_id": None, "revision": 0})
 
     def test_fuel_dispatch_revision_active_operation_is_read_only_and_bounded(self):
         operator = self._add_user("dispatch_query_operator", "operator")

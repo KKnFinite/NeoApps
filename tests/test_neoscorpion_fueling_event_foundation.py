@@ -45,6 +45,7 @@ class NeoScorpionFuelingEventFoundationTest(unittest.TestCase):
                 "TESTING": True,
                 "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+                "CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE": datetime(2026, 8, 17, 22, 0),
                 "AUTO_BOOTSTRAP_DATABASE": False,
             },
         )
@@ -218,9 +219,10 @@ class NeoScorpionFuelingEventFoundationTest(unittest.TestCase):
         self.assertEqual(statements, [])
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
-    def test_existing_save_off_and_fuel_on_board_create_no_events(self):
+    def test_existing_save_and_off_create_no_events(self):
         _operation, _mission, assignment = self._assignment()
         saved = self._save_complete(assignment)
+        assignment.transfer_fuel_gallons = 150
         db.session.commit()
         self.assertEqual(saved.revision, 1)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
@@ -230,18 +232,23 @@ class NeoScorpionFuelingEventFoundationTest(unittest.TestCase):
         self.assertEqual(off.revision, 2)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
+    def test_fuel_on_board_without_transfer_creates_no_events(self):
+        _operation, _mission, assignment = self._assignment()
+        self._save_complete(assignment)
+        db.session.commit()
         completed = complete_fuel_on_board(
             self.gateway,
             self.dispatcher,
             assignment.id,
         )
         db.session.commit()
-        self.assertEqual(completed.revision, 3)
+        self.assertEqual(completed.revision, 2)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
     def _assignment(self):
         day = date(2026, 8, 17)
         operation = SortDateOperation(
+            generated_by_user_id=self.dispatcher.id,
             gateway_id=self.gateway.id,
             sort_date=day,
             gateway_code=self.gateway.code,
