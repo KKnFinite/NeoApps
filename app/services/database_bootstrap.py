@@ -27,6 +27,7 @@ LOCAL_SQLITE_FALLBACK_PASSWORD = "LocalDevPassphrase2026!"
 
 
 def bootstrap_database(app=None):
+    """Canonical explicit schema compatibility, verification and seed pipeline."""
     if app is None:
         from app import create_app
 
@@ -50,6 +51,12 @@ def bootstrap_database(app=None):
 def _bootstrap_database_once(app, username, email, password, used_fallback):
     db.create_all()
     sync_database_schema(app)
+    if not _is_sqlite_database(app):
+        # Sync owns additive DDL; verify in the same transaction before seeds.
+        # Do not replay the former worker-startup ALTER/CREATE ensures here.
+        from app.services.neoscorpion_spear_schema import _verify_spear_schema_contract
+
+        _verify_spear_schema_contract(db.session.connection())
     gateway = ensure_default_gateway_and_nodes()
     ensure_default_permission_rules()
     ensure_sheets_compatibility_setting(gateway)

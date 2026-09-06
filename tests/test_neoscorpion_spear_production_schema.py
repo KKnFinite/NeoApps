@@ -25,14 +25,14 @@ class NeoScorpionSpearProductionSchemaTest(unittest.TestCase):
             },
         )
 
-    def test_factory_runs_the_targeted_spear_compatibility_ensure(self):
+    def test_factory_never_runs_the_targeted_spear_compatibility_ensure(self):
         with patch(
             "app.services.neoscorpion_spear_schema."
             "ensure_neoscorpion_spear_schema_compatibility"
         ) as ensure:
             app = create_app(self.config, auto_bootstrap=False)
 
-        ensure.assert_called_once_with(app)
+        ensure.assert_not_called()
 
     def test_postgresql_ensure_is_narrow_locked_and_idempotent(self):
         app = create_app(self.config, auto_bootstrap=False)

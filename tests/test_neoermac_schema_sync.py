@@ -292,6 +292,8 @@ class NeoErmacDoorPullSchemaSyncTest(unittest.TestCase):
             statements,
         )
         self.assertIn("SET no_mix_pull = TRUE", statements)
+        self.assertIn("ALTER COLUMN no_first_mix_pull SET DEFAULT FALSE", statements)
+        self.assertIn("ALTER COLUMN no_second_mix_pull SET DEFAULT FALSE", statements)
 
     def _create_legacy_door_pull_table(self, include_current_mix_columns=False):
         current_columns = ""

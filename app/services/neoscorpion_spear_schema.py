@@ -1,4 +1,8 @@
-"""Narrow startup compatibility ensure for the SPEAR model contract."""
+"""SPEAR contract verification and legacy explicit-maintenance helper.
+
+Canonical bootstrap uses schema_sync for DDL and this module for verification.
+Never invoke the ensure from web construction, requests, or polling.
+"""
 
 from sqlalchemy import inspect, text
 
@@ -31,7 +35,7 @@ SPEAR_ASSIGNMENT_COLUMNS = {
 
 
 def ensure_neoscorpion_spear_schema_compatibility(app):
-    """Ensure only the additive SPEAR PostgreSQL contract before route queries."""
+    """Explicit maintenance only; normal deployment uses the canonical bootstrap."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 

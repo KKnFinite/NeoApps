@@ -95,10 +95,10 @@ class GoogleRainIntegrationSchemaTest(unittest.TestCase):
         calls["commit"].assert_not_called()
         calls["rollback"].assert_called_once_with()
 
-    def test_factory_invokes_targeted_ensure(self):
+    def test_factory_never_invokes_targeted_ensure(self):
         with patch("app.services.google_rain_integration_schema.ensure_google_rain_integration_mode_column") as ensure:
             create_app(self.config)
-        ensure.assert_called_once()
+        ensure.assert_not_called()
 
     def _postgres_patches(self, column_states):
         self.app.config.update(

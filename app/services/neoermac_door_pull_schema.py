@@ -1,4 +1,7 @@
-"""Targeted production compatibility repair for legacy Door Pull columns."""
+"""Legacy explicit-maintenance helper; deployment schema_sync owns this repair.
+
+Never invoke from web construction, requests, or polling.
+"""
 
 from sqlalchemy import text
 
@@ -16,7 +19,7 @@ MISSION_AWARE_DOOR_PULL_COLUMN = "sort_date_mission_id"
 
 
 def ensure_neoermac_door_pull_legacy_defaults(app):
-    """Repair the narrow PostgreSQL Door Pull compatibility surface at startup."""
+    """Explicitly repair the narrow PostgreSQL Door Pull compatibility surface."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 

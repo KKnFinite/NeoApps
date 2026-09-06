@@ -212,6 +212,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
     },
     "neoscorpion_fuel_assignments": {
+        "ready_for_fuel_at_utc": "DATETIME",
+        "ready_for_fuel_by_user_id": "INTEGER",
         "fuel_on_board_at_utc": "DATETIME",
         "fuel_on_board_by_user_id": "INTEGER",
         "completed_at_utc": "DATETIME",
@@ -417,6 +419,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
     },
     "neoscorpion_fuel_assignments": {
+        "ready_for_fuel_at_utc": "TIMESTAMP",
+        "ready_for_fuel_by_user_id": "INTEGER",
         "fuel_on_board_at_utc": "TIMESTAMP",
         "fuel_on_board_by_user_id": "INTEGER",
         "completed_at_utc": "TIMESTAMP",
@@ -567,6 +571,7 @@ def sync_database_schema(app):
             )
             existing_columns.add(column_name)
 
+    _sync_neoermac_legacy_defaults_postgres(inspector, table_names)
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_staffing_leadership_level_constraint_postgres(table_names)
     _sync_sort_date_mission_status_constraints_postgres(table_names)
@@ -583,6 +588,23 @@ def sync_database_schema(app):
     _backfill_neoermac_door_pull_timestamps(table_names, table_columns)
     _migrate_legacy_second_mix_pull_values(table_names, table_columns)
     db.session.flush()
+
+
+def _sync_neoermac_legacy_defaults_postgres(inspector, table_names):
+    """Repair retained legacy columns during explicit schema sync, not startup."""
+    from app.services.neoermac_door_pull_schema import LEGACY_DOOR_PULL_BOOLEAN_COLUMNS
+
+    table_name = "neoermac_door_pulls"
+    if table_name not in table_names:
+        return
+    for column in inspector.get_columns(table_name):
+        if column["name"] not in LEGACY_DOOR_PULL_BOOLEAN_COLUMNS:
+            continue
+        if str(column.get("default") or "").strip().lower() in {"false", "false::boolean"}:
+            continue
+        db.session.execute(text(
+            f"ALTER TABLE {table_name} ALTER COLUMN {column['name']} SET DEFAULT FALSE"
+        ))
 
 
 def _backfill_motherbrain_parking_rule_defaults(table_names, table_columns):
@@ -1622,6 +1644,8 @@ def _create_missing_application_tables(existing_table_names):
         NeoRainCrewAdminAssignment,
         NeoRainDelayInfo,
         NeoRainGoogleRolloverState,
+        NeoRainFuelReviewAcknowledgement,
+        NeoRainGoogleFuelValue,
         NeoSubZeroPretreatState,
         NeoSubZeroDepartureDeiceEvent,
         NeoSubZeroSetting,
@@ -1639,6 +1663,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoScorpionFuelWorkState,
         NeoScorpionSettings,
         NeoScorpionSpearAuditEntry,
+        NeoScorpionSpearCalibrationReset,
         NeoScorpionSortAssetState,
         NeoScorpionSortFueler,
         NeoScorpionSortTruck,
@@ -1694,6 +1719,8 @@ def _create_missing_application_tables(existing_table_names):
         NeoRainCrewAdminAssignment,
         NeoRainDelayInfo,
         NeoRainGoogleRolloverState,
+        NeoRainFuelReviewAcknowledgement,
+        NeoRainGoogleFuelValue,
         NeoSubZeroPretreatState,
         NeoSubZeroDepartureDeiceEvent,
         NeoSubZeroSetting,
@@ -1712,6 +1739,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoScorpionAircraftFuelSetting,
         NeoScorpionSettings,
         NeoScorpionSpearAuditEntry,
+        NeoScorpionSpearCalibrationReset,
         NeoScorpionSortAssetState,
         NeoScorpionSortFueler,
         NeoScorpionSortTruck,

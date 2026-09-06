@@ -1,4 +1,7 @@
-"""Targeted production schema ensure for NeoRain integration authority."""
+"""Legacy explicit-maintenance helper; deployment schema_sync owns these columns.
+
+Never invoke from web construction, requests, or polling.
+"""
 
 from sqlalchemy import text
 

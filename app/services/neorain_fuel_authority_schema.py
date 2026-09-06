@@ -1,4 +1,7 @@
-"""Narrow production compatibility ensure for Rain fuel review audit rows."""
+"""Legacy explicit-maintenance helper; deployment schema_sync owns these tables.
+
+Never invoke from web construction, requests, or polling.
+"""
 
 from sqlalchemy import text
 

@@ -1,4 +1,7 @@
-"""Bounded retries for transient database failures during application startup."""
+"""Bounded retries for explicit bootstrap and local SQLite synchronization.
+
+PostgreSQL web-worker construction never invokes database initialization/retries.
+"""
 
 import time
 

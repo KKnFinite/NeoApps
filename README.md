@@ -98,6 +98,11 @@ does not alter that sheet layout.
 
 ## Production Bootstrap
 
+PostgreSQL web-worker construction is database-free. All production schema
+compatibility and seed work runs through `python scripts/bootstrap_database.py`,
+never through startup ensures or first-request migrations. `/healthz` is DB-free
+process liveness, not a database readiness check. `init_db.py` is SQLite-only.
+
 Database bootstrap is an idempotent manual/deployment step, not a web-worker or
 Render Free Build Command step. Paid Render services can use the Pre-Deploy
 Command; Render Free schema changes require the one-time command documented in

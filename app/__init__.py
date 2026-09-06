@@ -57,12 +57,10 @@ from app.services.live_refresh_guard import enforce_live_refresh_request_cadence
 
 
 def create_app(config_class=Config, auto_bootstrap=False):
-    """Create the web application without broad Gunicorn worker bootstrap.
+    """Construct PostgreSQL web workers without opening database connections.
 
-    Database schema/bootstrap work belongs in the deployment bootstrap command.
-    Keeping it opt-in here prevents long PostgreSQL retries before the web
-    process can bind its port. Short, lock-protected targeted ensures handle
-    only additive or constraint changes required by the active model.
+    Production schema/seed work belongs exclusively to explicit bootstrap.
+    Non-testing local SQLite retains its schema synchronization convenience.
     """
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
@@ -76,33 +74,12 @@ def create_app(config_class=Config, auto_bootstrap=False):
     db.init_app(app)
     login_manager.init_app(app)
 
-    # Broad PostgreSQL schema work remains in deployment bootstrap.  This
-    # narrowly bounded compatibility ensure repairs the Door Pull column
-    # required before mission-aware views can serve a request.
     sync_existing_local_schema(app)
-    from app.services.neoermac_door_pull_schema import (
-        ensure_neoermac_door_pull_legacy_defaults,
-    )
-
-    ensure_neoermac_door_pull_legacy_defaults(app)
-    from app.services.neoscorpion_spear_schema import (
-        ensure_neoscorpion_spear_schema_compatibility,
-    )
-
-    ensure_neoscorpion_spear_schema_compatibility(app)
-    from app.services.google_rain_integration_schema import (
-        ensure_google_rain_integration_mode_column,
-    )
-    from app.services.neorain_fuel_authority_schema import (
-        ensure_neorain_fuel_authority_schema,
-    )
-
-    ensure_google_rain_integration_mode_column(app)
-    ensure_neorain_fuel_authority_schema(app)
 
     if auto_bootstrap:
         maybe_auto_bootstrap_database(app)
     initialize_auth_rate_limit_storage(app)
+    register_liveness(app)
     app.before_request(enforce_live_refresh_request_cadence)
     register_pwa_assets(app)
     register_blueprints(app)
@@ -112,6 +89,21 @@ def create_app(config_class=Config, auto_bootstrap=False):
     record_process_memory_checkpoint("app_startup", app=app)
 
     return app
+
+
+def register_liveness(app):
+    @app.get("/healthz")
+    def healthz():
+        response = app.response_class("ok", mimetype="text/plain")
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.before_request
+    def serve_liveness_before_request_guards():
+        # Only this GET/HEAD endpoint bypasses the later auth, CSRF and live
+        # refresh guards. Normal after-request security headers still apply.
+        if request.endpoint == "healthz" and request.method in {"GET", "HEAD"}:
+            return healthz()
 
 
 def sync_existing_local_schema(app):

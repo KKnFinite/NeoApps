@@ -52,8 +52,8 @@ class RuntimeDatabaseOptionsTest(unittest.TestCase):
             'TESTING': True, 'SECRET_KEY': 'test',
             'SQLALCHEMY_DATABASE_URI': 'postgresql://user@example.invalid/test',
         })
-        # TESTING skips the existing targeted production schema ensures. This
-        # checks the real factory wiring, not a claim that those ensures are lazy.
+        # Test isolation still avoids SQLite schema synchronization; production
+        # PostgreSQL construction is separately covered by test_render_startup.
         with (
             patch('psycopg2.connect', side_effect=AssertionError('Unexpected connection')) as connect,
             patch('app.maybe_auto_bootstrap_database') as bootstrap,

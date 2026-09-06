@@ -76,14 +76,14 @@ class NeoErmacDoorPullCompatibilitySchemaTest(unittest.TestCase):
 
         connection.assert_not_called()
 
-    def test_factory_invokes_the_targeted_compatibility_ensure(self):
+    def test_factory_never_invokes_the_targeted_compatibility_ensure(self):
         with patch(
             "app.services.neoermac_door_pull_schema."
             "ensure_neoermac_door_pull_legacy_defaults"
         ) as ensure:
             app = create_app(self.config)
 
-        ensure.assert_called_once_with(app)
+        ensure.assert_not_called()
 
 
 if __name__ == "__main__":

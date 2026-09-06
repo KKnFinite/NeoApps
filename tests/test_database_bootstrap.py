@@ -2,14 +2,14 @@ import io
 import os
 import unittest
 from contextlib import redirect_stdout
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app import create_app, maybe_auto_bootstrap_database
 from app.config import resolve_database_uri
 from app.extensions import db
 from datetime import time
 
-from sqlalchemy import inspect, text
+from sqlalchemy import Column, MetaData, Table, inspect, text
 
 from app.models import (
     Gateway,
@@ -30,6 +30,10 @@ from app.services.database_bootstrap import (
     bootstrap_database,
 )
 from app.services.schema_sync import (
+    LOCAL_SQLITE_OPTIONAL_COLUMNS,
+    POSTGRES_OPTIONAL_COLUMNS,
+    _create_missing_application_tables,
+    _sync_neoermac_legacy_defaults_postgres,
     _mark_existing_approved_users_for_password_policy_update,
     _migrate_legacy_second_mix_pull_values,
 )
@@ -62,6 +66,137 @@ class DatabaseBootstrapTest(unittest.TestCase):
 
         with patch.dict(os.environ, {"DATABASE_URL": neon_url}, clear=False):
             self.assertEqual(resolve_database_uri(), neon_url)
+
+    def test_bootstrap_repairs_former_worker_contracts_and_remains_idempotent(self):
+        from app.models import (
+            NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue,
+            NeoScorpionSpearAuditEntry, NeoScorpionSpearCalibrationReset,
+        )
+        from app.services.neoscorpion_spear_schema import SPEAR_SETTINGS_COLUMNS, SPEAR_ASSIGNMENT_COLUMNS
+
+        db.create_all()
+        missing_columns = {
+            "neoermac_door_pulls": ["sort_date_mission_id"],
+            "neoscorpion_settings": list(SPEAR_SETTINGS_COLUMNS),
+            "neoscorpion_fuel_assignments": list(SPEAR_ASSIGNMENT_COLUMNS),
+            "motherbrain_google_integration_settings": ["rain_integration_mode", "rain_fuel_data_source"],
+        }
+        for table, columns in missing_columns.items():
+            # Model-derived legacy fixture without constraints referencing the
+            # not-yet-introduced columns (SQLite cannot DROP those in place).
+            legacy = Table(table, MetaData(), *(
+                Column(c.name, c.type, primary_key=c.primary_key,
+                       nullable=c.nullable, server_default=c.server_default)
+                for c in db.metadata.tables[table].columns if c.name not in columns
+            ))
+            db.metadata.tables[table].drop(db.engine)
+            legacy.create(db.engine)
+        missing_tables = (
+            NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue,
+            NeoScorpionSpearAuditEntry, NeoScorpionSpearCalibrationReset,
+        )
+        for model in missing_tables:
+            model.__table__.drop(db.engine)
+
+        for _ in range(2):
+            bootstrap_database(self.app)
+            inspector = inspect(db.engine)
+            for table, columns in missing_columns.items():
+                self.assertTrue(set(columns) <= {c["name"] for c in inspector.get_columns(table)})
+            for model in missing_tables:
+                self.assertTrue(inspector.has_table(model.__tablename__))
+            self.assertEqual(User.query.count(), 1)
+
+        # Both dialect maps, not duplicate bootstrap ALTERs, own the columns.
+        for column, ddl in SPEAR_SETTINGS_COLUMNS.items():
+            self.assertEqual(POSTGRES_OPTIONAL_COLUMNS["neoscorpion_settings"][column], ddl)
+        for table, columns in missing_columns.items():
+            self.assertTrue(set(columns) <= POSTGRES_OPTIONAL_COLUMNS[table].keys())
+            self.assertTrue(set(columns) <= LOCAL_SQLITE_OPTIONAL_COLUMNS[table].keys())
+
+    def test_schema_sync_creates_missing_rain_and_calibration_tables_only_once(self):
+        from app.models import NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue, NeoScorpionSpearCalibrationReset
+        db.create_all()
+        models = (NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue, NeoScorpionSpearCalibrationReset)
+        for model in models:
+            model.__table__.drop(db.engine)
+        _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
+        for model in models:
+            self.assertTrue(inspect(db.engine).has_table(model.__tablename__))
+        with patch("sqlalchemy.sql.schema.Table.create", side_effect=AssertionError("Redundant CREATE")):
+            _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
+
+    def test_postgres_legacy_door_defaults_are_missing_only_and_non_destructive(self):
+        inspector = Mock()
+        columns = [{"name": name, "default": None} for name in ("no_first_mix_pull", "no_second_mix_pull")]
+        columns.append({"name": "unrelated", "default": None})
+        inspector.get_columns.return_value = columns
+        def apply_default(statement):
+            column_name = str(statement).split("ALTER COLUMN ")[1].split()[0]
+            next(c for c in columns if c["name"] == column_name)["default"] = "false"
+        with patch.object(db.session, "execute", side_effect=apply_default) as execute:
+            _sync_neoermac_legacy_defaults_postgres(inspector, {"neoermac_door_pulls"})
+            self.assertEqual(execute.call_count, 2)
+            _sync_neoermac_legacy_defaults_postgres(inspector, {"neoermac_door_pulls"})
+            self.assertEqual(execute.call_count, 2)
+            self.assertTrue(all("SET DEFAULT FALSE" in str(c.args[0]) for c in execute.call_args_list))
+        self.assertIsNone(columns[-1]["default"])
+
+    def test_postgres_bootstrap_verifies_schema_before_any_seed_and_fails_loudly(self):
+        from app.services.schema_sync import sync_database_schema
+        # Real local schema synchronization, with the PostgreSQL verification
+        # branch selected. No external server or fixture configuration is used.
+        order = []
+        def sync(app):
+            order.append("sync")
+            sync_database_schema(app)
+        def fail_verification(connection):
+            order.append("verify")
+            raise RuntimeError("SPEAR contract missing")
+        with (
+            patch("app.services.database_bootstrap._is_sqlite_database", return_value=False),
+            patch.dict(os.environ, {"BOOTSTRAP_ADMIN_PASSWORD": "CircuitRiverQuartz2026!"}),
+            patch("app.services.database_bootstrap.sync_database_schema", side_effect=sync),
+            patch("app.services.neoscorpion_spear_schema._verify_spear_schema_contract", side_effect=fail_verification),
+            patch("app.services.database_bootstrap.ensure_default_gateway_and_nodes") as seed,
+            patch.object(db.session, "commit") as commit,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "SPEAR contract missing"):
+                bootstrap_database(self.app)
+            seed.assert_not_called()
+            commit.assert_not_called()
+        self.assertEqual(order, ["sync", "verify"])
+
+    def test_bootstrap_success_order_includes_verification_before_seeds_and_commit(self):
+        from contextlib import ExitStack
+        from app.services import database_bootstrap as pipeline
+        from app.services import neoscorpion_spear_schema as spear_schema
+        order = []
+        def tracked(label, function):
+            def invoke(*args, **kwargs):
+                order.append(label)
+                return function(*args, **kwargs)
+            return invoke
+        # Exercise real schema/verification/seeding on isolated SQLite; choose
+        # the production verification branch without making a Postgres socket.
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(pipeline, "_is_sqlite_database", return_value=False))
+            stack.enter_context(patch.dict(os.environ, {"BOOTSTRAP_ADMIN_PASSWORD": "CircuitRiverQuartz2026!"}))
+            for owner, name, label in (
+                (db, "create_all", "create"),
+                (pipeline, "sync_database_schema", "sync"),
+                (spear_schema, "_verify_spear_schema_contract", "verify"),
+                (pipeline, "ensure_default_gateway_and_nodes", "gateway"),
+                (pipeline, "ensure_default_permission_rules", "permissions"),
+                (pipeline, "ensure_sheets_compatibility_setting", "sheets"),
+                (pipeline, "ensure_google_motherbrain_live_polling_setting", "poll"),
+                (pipeline, "_find_or_create_bootstrap_user", "admin"),
+                (pipeline, "backfill_default_gateway_node_roles", "access"),
+                (db.session, "commit", "commit"),
+            ):
+                stack.enter_context(patch.object(owner, name, side_effect=tracked(label, getattr(owner, name))))
+            bootstrap_database(self.app)
+        self.assertEqual(order, ["create", "sync", "verify", "gateway", "permissions", "sheets", "poll", "admin", "access", "commit"])
 
     def test_sqlite_fallback_is_used_when_database_url_missing(self):
         with patch.dict(os.environ, {}, clear=True):
