@@ -123,17 +123,21 @@ def preview_alp_paste(
 
 
 def apply_alp_paste(operation, mission_type, paste_text, user=None, timezone_name=ALP_TIMEZONE):
+    mission_type = _validate_mission_type(mission_type)
+    missions = _missions_for_operation(operation, mission_type)
+    missions_by_id = {mission.id: mission for mission in missions}
     preview = preview_alp_paste(
         operation,
         mission_type,
         paste_text,
         timezone_name=timezone_name,
+        missions=missions,
     )
     now_utc = datetime.utcnow()
     applied_rows = []
 
     for row in preview["matched_rows"]:
-        mission = db.session.get(SortDateMission, row["mission_id"])
+        mission = missions_by_id.get(row["mission_id"])
         if not mission or mission.sort_date_operation_id != operation.id:
             continue
         if mission.mission_type != preview["mission_type"]:

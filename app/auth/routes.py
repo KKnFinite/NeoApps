@@ -1039,16 +1039,20 @@ def _portal_management_return_url():
 
 def _portal_app_access_rows(user):
     rows = []
+    access_by_code = None
     for app in portal_app_definitions():
+        if app["code"] != "neogateway" and access_by_code is None:
+            access_by_code = {access.app_code: access for access in PortalAppAccess.query.filter(
+                PortalAppAccess.user_id == user.id,
+                PortalAppAccess.app_code.in_([definition["code"] for definition in portal_app_definitions()
+                                             if definition["code"] != "neogateway"]),
+            ).all()}
         rows.append(
             {
                 "app": app,
                 "access": ensure_user_app_access(user, app["code"])
                 if app["code"] == "neogateway"
-                else PortalAppAccess.query.filter_by(
-                    user_id=user.id,
-                    app_code=app["code"],
-                ).first(),
+                else access_by_code.get(app["code"]),
             }
         )
     return rows
@@ -1797,11 +1801,21 @@ def _approval_node_role_values_from_form():
 
 def _apply_permission_rule_form():
     rule_ids = request.form.getlist("rule_ids")
-    for rule_id in rule_ids:
+    parsed_ids = []
+    for value in rule_ids:
         try:
-            rule = db.session.get(PermissionRule, int(rule_id))
+            parsed_ids.append(int(value))
         except (TypeError, ValueError):
+            parsed_ids.append(None)
+    rules = {rule.id: rule for rule in PermissionRule.query.filter(
+        PermissionRule.id.in_({value for value in parsed_ids if value is not None}),
+    ).all()} if any(value is not None for value in parsed_ids) else {}
+    # Replay original order: missing IDs are skipped and duplicates retained.
+    # A malformed later ID must not mask an earlier role/configurability error.
+    for rule_id in parsed_ids:
+        if rule_id is None:
             raise ValueError("Unsupported permission rule selected.")
+        rule = rules.get(rule_id)
         if not rule:
             continue
         if not permission_is_configurable(rule.permission_key):

@@ -4515,17 +4515,34 @@ def _persist_alp_unmatched_rows(operation, mission_type, preview):
         if item.review_key not in active_review_keys:
             db.session.delete(item)
 
+    items_by_key = {item.review_key: item for item in FlightApiReviewItem.query.filter(
+        FlightApiReviewItem.sort_date_operation_id == operation.id,
+        FlightApiReviewItem.review_key.in_(active_review_keys),
+    ).all()} if active_review_keys else {}
+    needs_missions = any(not row.get("reason_detail") and str(row.get("reason") or "").strip().lower() in {
+        "no current operation mission match.", "multiple current operation missions share this flight.",
+    } for row in rows)
+    candidates = SortDateMission.query.filter_by(
+        sort_date_operation_id=operation.id, mission_type=mission_type,
+    ).all() if needs_missions else []
     for row in rows:
         row = {**row, "mission_type": mission_type}
         review_key = _alp_planning_review_key(operation, mission_type, row)
-        existing = FlightApiReviewItem.query.filter_by(
-            sort_date_operation_id=operation.id,
-            review_key=review_key,
-        ).first()
+        existing = items_by_key.get(review_key)
         if existing and existing.review_status in {"ignored", "accepted"}:
             continue
         row["review_key"] = review_key
-        _record_alp_planning_marker(operation, row, "pending", sync_alert=False)
+        if not row.get("reason_detail"):
+            airport = str(row.get("airport") or "").strip().upper()
+            # Match the original SQL upper(column) predicate, without trimming
+            # stored airport values or admitting another operation/direction.
+            matching_candidates = [mission for mission in candidates if not airport or str(
+                (mission.origin if mission_type == "arrival" else mission.destination) or ""
+            ).upper() == airport]
+            row["reason_detail"] = _alp_planning_mismatch_detail(
+                operation, mission_type, row, missions=matching_candidates,
+            )
+        _record_alp_planning_marker(operation, row, "pending", sync_alert=False, items_by_key=items_by_key)
     db.session.flush()
     sync_unmatched_review_alerts_for_operation(
         operation,
@@ -4766,6 +4783,7 @@ def _record_alp_planning_marker(
     mission=None,
     *,
     sync_alert=True,
+    items_by_key=None,
 ):
     review_key = row.get("review_key") or _alp_planning_review_key(
         operation,
@@ -4775,7 +4793,7 @@ def _record_alp_planning_marker(
     item = FlightApiReviewItem.query.filter_by(
         sort_date_operation_id=operation.id,
         review_key=review_key,
-    ).first()
+    ).first() if items_by_key is None else items_by_key.get(review_key)
     was_pending = bool(item and item.review_status == "pending")
     if not item:
         item = FlightApiReviewItem(
@@ -4788,6 +4806,8 @@ def _record_alp_planning_marker(
             review_key=review_key,
         )
         db.session.add(item)
+        if items_by_key is not None:
+            items_by_key[review_key] = item
     item.review_status = review_status
     item.flight_number = row["normalized_flight_number"]
     item.call_sign = None
@@ -4804,8 +4824,8 @@ def _record_alp_planning_marker(
             "source": "ALP",
             "line_number": row.get("line_number"),
             "reason": row.get("reason"),
-            "reason_detail": row.get("reason_detail")
-            or _alp_planning_mismatch_detail(operation, row["mission_type"], row),
+            "reason_detail": row.get("reason_detail") if items_by_key is not None
+            else row.get("reason_detail") or _alp_planning_mismatch_detail(operation, row["mission_type"], row),
         },
         sort_keys=True,
     )

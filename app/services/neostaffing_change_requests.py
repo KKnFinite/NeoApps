@@ -912,9 +912,52 @@ def reverse_change_request_item(item_id, reason, user, expected_revision):
     return locked_item
 
 
-def cleanup_change_request_retention(now=None):
+def retention_scope_for_page(user, filters=None, now=None):
+    """Match the requested queue, or personal notification/request relevance.
+
+    The All queue deliberately exposes all requests under the existing policy;
+    its retention work remains date-filtered across that same visible scope.
+    JSON routing stays decoded in Python, including historical encodings.
+    """
+    now = now or datetime.utcnow()
+    person = notification_service.notification_person(user)
+    queue = str((filters or {}).get("queue") or _default_queue_scope(person)).strip().lower()
+    if queue not in {"routed", "purview", "unassigned", "all"}:
+        queue = _default_queue_scope(person)
+    if queue == "all":
+        scope = True if filters is not None else False
+    elif queue == "unassigned":
+        scope = StaffingChangeRequest.unassigned_approval.is_(True)
+    elif not person:
+        scope = False
+    elif queue == "routed":
+        old = db.session.query(StaffingChangeRequest.id, StaffingChangeRequest.routed_approver_person_ids_json).filter(or_(
+            (StaffingChangeRequest.status == "pending") & (StaffingChangeRequest.submitted_at < now - timedelta(days=REQUEST_LIFETIME_DAYS)),
+            (StaffingChangeRequest.status == "completed") & (StaffingChangeRequest.completed_at < now - timedelta(days=REQUEST_HISTORY_DAYS)),
+        )).yield_per(200)
+        ids = [row.id for row in old if person.id in _decode_person_ids(row.routed_approver_person_ids_json)]
+        scope = StaffingChangeRequest.id.in_(ids)
+    else:
+        linked_supervisors = db.session.query(StaffingTwentyCAffiliation.ft_supervisor_person_id).filter(
+            StaffingTwentyCAffiliation.twenty_c_person_id == person.id, StaffingTwentyCAffiliation.active.is_(True))
+        roots = db.session.query(StaffingLeadershipAssignment.unit_id).filter(
+            StaffingLeadershipAssignment.active.is_(True), or_(
+                StaffingLeadershipAssignment.person_id == person.id,
+                StaffingLeadershipAssignment.person_id.in_(linked_supervisors)))
+        units = notification_service.descendant_unit_ids(roots)
+        scope = or_(StaffingChangeRequest.source_work_area_unit_id.in_(units),
+                    StaffingChangeRequest.destination_work_area_unit_id.in_(units))
+    if filters is None:
+        scope = or_(scope, StaffingChangeRequest.submitted_by_user_id == user.id,
+                    StaffingChangeRequest.id.in_(db.session.query(StaffingNotification.change_request_id).filter(
+                        StaffingNotification.recipient_user_id == user.id)))
+    return scope
+
+
+def cleanup_change_request_retention(now=None, *, scope=True):
     now = now or datetime.utcnow()
     expired_requests = StaffingChangeRequest.query.filter(
+        scope,
         StaffingChangeRequest.status == "pending",
         StaffingChangeRequest.submitted_at
         < now - timedelta(days=REQUEST_LIFETIME_DAYS),
@@ -922,7 +965,7 @@ def cleanup_change_request_retention(now=None):
     expired_ids = {row.id for row in expired_requests}
     expired_items = StaffingChangeRequestItem.query.filter(
         StaffingChangeRequestItem.request_id.in_(expired_ids or {-1})
-    ).with_for_update().all()
+    ).with_for_update().all() if expired_ids else []
     items_by_request = {}
     for item in expired_items:
         items_by_request.setdefault(item.request_id, []).append(item)
@@ -963,6 +1006,7 @@ def cleanup_change_request_retention(now=None):
     )
 
     purge_rows = StaffingChangeRequest.query.filter(
+        scope,
         StaffingChangeRequest.status == "completed",
         StaffingChangeRequest.completed_at
         < now - timedelta(days=REQUEST_HISTORY_DAYS),

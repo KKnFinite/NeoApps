@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 import json
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select, and_, cast, String, literal
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -93,6 +93,8 @@ def notify_submitter_updates_batch(updates, now=None):
     """Create bounded submitter notifications for request state transitions."""
     now = now or datetime.utcnow()
     normalized = [row for row in updates or [] if row.get("request")]
+    if not normalized:
+        return 0
     submitter_person_ids = {
         row["request"].submitted_by_person_id
         for row in normalized
@@ -204,22 +206,23 @@ def notify_submitter_updates_batch(updates, now=None):
     return _insert_notification_rows(rows)
 
 
-def maintain_notifications(now=None):
+def maintain_notifications(now=None, *, user=None):
     """Purge old history and materialize one reminder per overdue recipient."""
     now = now or datetime.utcnow()
+    expired_query = db.session.query(StaffingNotification.id).filter(
+        StaffingNotification.created_at < now - timedelta(days=NOTIFICATION_RETENTION_DAYS))
+    if user is not None:
+        expired_query = expired_query.filter(StaffingNotification.recipient_user_id == user.id)
     expired_ids = [
         notification_id
-        for (notification_id,) in db.session.query(StaffingNotification.id).filter(
-            StaffingNotification.created_at
-            < now - timedelta(days=NOTIFICATION_RETENTION_DAYS)
-        ).all()
+        for (notification_id,) in expired_query.all()
     ]
     purged = 0
     if expired_ids:
         purged = StaffingNotification.query.filter(
             StaffingNotification.id.in_(expired_ids)
         ).delete(synchronize_session=False)
-    overdue_created = _materialize_overdue_notifications(now)
+    overdue_created = _materialize_overdue_notifications(now, user=user)
     changed = bool(purged or overdue_created)
     if changed:
         db.session.flush()
@@ -295,13 +298,7 @@ def _resolve_notification_navigation_state(user):
     if app_role == "watcher" or not user_can(CHANGE_REQUEST_APPROVE_PERMISSION, user):
         return {"unread_notifications": unread, "actionable_requests": 0}
 
-    employee_id = str(getattr(user, "employee_id", "") or "").strip().lower()
-    if not employee_id:
-        return {"unread_notifications": unread, "actionable_requests": 0}
-    person = StaffingPerson.query.filter(
-        StaffingPerson.active.is_(True),
-        func.lower(StaffingPerson.employee_id) == employee_id,
-    ).first()
+    person = notification_person(user)
     if not person or person.classification not in {
         "full_time_supervisor",
         "twenty_c_full_time_supervisor",
@@ -309,145 +306,138 @@ def _resolve_notification_navigation_state(user):
     }:
         return {"unread_notifications": unread, "actionable_requests": 0}
 
-    pending = db.session.query(
-        StaffingChangeRequest.id,
-        StaffingChangeRequest.routed_approver_person_ids_json,
-        StaffingChangeRequest.source_work_area_unit_id,
-        StaffingChangeRequest.destination_work_area_unit_id,
-    ).filter(StaffingChangeRequest.status == "pending").all()
     if person.classification in {
         "full_time_supervisor",
         "twenty_c_full_time_supervisor",
     }:
+        pending = db.session.query(StaffingChangeRequest.routed_approver_person_ids_json).filter(
+            StaffingChangeRequest.status == "pending").yield_per(200)
         actionable = sum(
             1
             for row in pending
             if person.id in _decode_person_ids(row.routed_approver_person_ids_json)
         )
     else:
-        led_unit_ids = {
-            unit_id
-            for (unit_id,) in db.session.query(
-                StaffingLeadershipAssignment.unit_id
-            ).filter_by(person_id=person.id, active=True).all()
-        }
-        units = db.session.query(
-            StaffingUnit.id,
-            StaffingUnit.parent_id,
-        ).all()
-        parent_by_id = {row.id: row.parent_id for row in units}
-        actionable = sum(
-            1
-            for row in pending
-            if any(
-                _unit_is_within(unit_id, led_unit_ids, parent_by_id)
-                for unit_id in (
-                    row.source_work_area_unit_id,
-                    row.destination_work_area_unit_id,
-                )
-                if unit_id
-            )
-        )
+        actionable = StaffingChangeRequest.query.filter(
+            StaffingChangeRequest.status == "pending", manager_request_scope(person.id),
+        ).count()
     return {"unread_notifications": unread, "actionable_requests": actionable}
 
 
-def _materialize_overdue_notifications(now):
-    overdue_requests = StaffingChangeRequest.query.filter(
+def notification_person(user):
+    employee_id = str(getattr(user, "employee_id", "") or "").strip().lower()
+    if not employee_id:
+        return None
+    return request_cached("staffing.notification_person", user.id, lambda: StaffingPerson.query.filter(
+        StaffingPerson.active.is_(True), func.lower(StaffingPerson.employee_id) == employee_id,
+    ).first())
+
+
+def descendant_unit_ids(roots):
+    """Cycle-safe, SQL-scoped hierarchy; inactive units retain legacy ancestry."""
+    tree = select(StaffingUnit.id).where(StaffingUnit.id.in_(roots)).cte(recursive=True)
+    tree = tree.union(select(StaffingUnit.id).join(tree, StaffingUnit.parent_id == tree.c.id))
+    return select(tree.c.id)
+
+
+def manager_request_scope(person_id):
+    roots = select(StaffingLeadershipAssignment.unit_id).where(
+        StaffingLeadershipAssignment.person_id == person_id,
+        StaffingLeadershipAssignment.active.is_(True))
+    units = descendant_unit_ids(roots)
+    return or_(StaffingChangeRequest.source_work_area_unit_id.in_(units),
+               StaffingChangeRequest.destination_work_area_unit_id.in_(units))
+
+
+def _materialize_overdue_notifications(now, *, user=None):
+    """Materialize in 200-request batches; GET callers supply their recipient."""
+    query = db.session.query(
+        StaffingChangeRequest.id, StaffingChangeRequest.source_work_area_unit_id,
+        StaffingChangeRequest.destination_work_area_unit_id,
+        StaffingChangeRequest.routed_approver_person_ids_json,
+    ).filter(
         StaffingChangeRequest.status == "pending",
-        StaffingChangeRequest.submitted_at
-        <= now - timedelta(hours=REQUEST_OVERDUE_HOURS),
-    ).order_by(StaffingChangeRequest.id).all()
-    if not overdue_requests:
-        return 0
-
-    routed_ids = {
-        person_id
-        for change_request in overdue_requests
-        for person_id in _decode_person_ids(
-            change_request.routed_approver_person_ids_json
-        )
-    }
-    people = StaffingPerson.query.filter(
-        StaffingPerson.active.is_(True),
-        or_(
-            StaffingPerson.id.in_(routed_ids or {-1}),
-            StaffingPerson.classification == "manager",
-        ),
-    ).all()
-    people_by_id = {row.id: row for row in people}
-    manager_ids = {
-        row.id for row in people if row.classification == "manager"
-    }
-    manager_ids_by_unit = {}
-    if manager_ids:
-        leadership = StaffingLeadershipAssignment.query.filter(
-            StaffingLeadershipAssignment.active.is_(True),
-            StaffingLeadershipAssignment.person_id.in_(manager_ids),
-        ).all()
-        for assignment in leadership:
-            manager_ids_by_unit.setdefault(assignment.unit_id, set()).add(
-                assignment.person_id
-            )
-    units = db.session.query(StaffingUnit.id, StaffingUnit.parent_id).all()
-    parent_by_id = {row.id: row.parent_id for row in units}
-
-    recipient_person_ids_by_request = {}
-    for change_request in overdue_requests:
-        recipient_ids = {
-            person_id
-            for person_id in _decode_person_ids(
-                change_request.routed_approver_person_ids_json
-            )
-            if people_by_id.get(person_id)
-            and people_by_id[person_id].classification in {
-                "full_time_supervisor",
-                "twenty_c_full_time_supervisor",
+        StaffingChangeRequest.submitted_at <= now - timedelta(hours=REQUEST_OVERDUE_HOURS),
+    )
+    person = None
+    if user is not None:
+        person = notification_person(user)
+        if (not user.is_active or not get_user_app_role(user, "neostaffing") or not person
+                or person.classification not in {"manager", "full_time_supervisor", "twenty_c_full_time_supervisor"}):
+            return 0
+        # Existing keys need no hierarchy/user resolution or attempted INSERT.
+        key = literal("overdue:") + cast(StaffingChangeRequest.id, String) + literal(f":user:{user.id}")
+        query = query.filter(~select(StaffingNotification.id).where(
+            StaffingNotification.dedupe_key == key).exists())
+        if person.classification == "manager":
+            query = query.filter(manager_request_scope(person.id))
+    total, last_id = 0, 0
+    while True:
+        batch = query.filter(StaffingChangeRequest.id > last_id).order_by(StaffingChangeRequest.id).limit(200).all()
+        if not batch:
+            break
+        last_id = batch[-1].id
+        if user is not None:
+            recipients = {
+                row.id: {user.id} for row in batch
+                if person.classification == "manager"
+                or person.id in _decode_person_ids(row.routed_approver_person_ids_json)
             }
-        }
-        for unit_id in (
-            change_request.source_work_area_unit_id,
-            change_request.destination_work_area_unit_id,
-        ):
-            current_id = unit_id
-            visited = set()
-            while current_id and current_id not in visited:
-                visited.add(current_id)
-                recipient_ids.update(manager_ids_by_unit.get(current_id, set()))
-                current_id = parent_by_id.get(current_id)
-        recipient_person_ids_by_request[change_request.id] = recipient_ids
+        else:
+            recipients = _overdue_recipients(batch)
+        rows = [
+            _notification_row(
+                recipient_user_id=user_id, change_request_id=row.id,
+                notification_type="request_overdue",
+                message=f"Employee change request #{row.id} is overdue and still has Pending fields.",
+                dedupe_key=f"overdue:{row.id}:user:{user_id}",
+                details={"request_id": row.id}, now=now,
+            )
+            for row in batch for user_id in recipients.get(row.id, ())
+        ]
+        total += _insert_notification_rows(rows)
+        if len(batch) < 200:
+            break
+    return total
 
-    recipient_person_ids = {
-        person_id
-        for values in recipient_person_ids_by_request.values()
-        for person_id in values
-    }
-    recipient_people = [
-        people_by_id[person_id]
-        for person_id in recipient_person_ids
-        if person_id in people_by_id
-    ]
-    user_ids_by_person = _linked_user_ids_by_person(recipient_people)
-    rows = []
-    for change_request in overdue_requests:
-        for person_id in recipient_person_ids_by_request[change_request.id]:
-            for user_id in user_ids_by_person.get(person_id, ()):
-                rows.append(
-                    _notification_row(
-                        recipient_user_id=user_id,
-                        change_request_id=change_request.id,
-                        notification_type="request_overdue",
-                        message=(
-                            f"Employee change request #{change_request.id} is overdue "
-                            "and still has Pending fields."
-                        ),
-                        dedupe_key=(
-                            f"overdue:{change_request.id}:user:{user_id}"
-                        ),
-                        details={"request_id": change_request.id},
-                        now=now,
-                    )
-                )
-    return _insert_notification_rows(rows)
+
+def _overdue_recipients(requests):
+    routed_ids = {person_id for row in requests
+                  for person_id in _decode_person_ids(row.routed_approver_person_ids_json)}
+    area_ids = {unit_id for row in requests for unit_id in
+                (row.source_work_area_unit_id, row.destination_work_area_unit_id) if unit_id}
+    ancestry = select(StaffingUnit.id, StaffingUnit.parent_id).where(
+        StaffingUnit.id.in_(area_ids)).cte(recursive=True)
+    ancestry = ancestry.union(select(StaffingUnit.id, StaffingUnit.parent_id).join(
+        ancestry, StaffingUnit.id == ancestry.c.parent_id))
+    parents = dict(db.session.execute(select(ancestry.c.id, ancestry.c.parent_id)).all())
+    # Only routed supervisors and managers leading an actual ancestor are needed.
+    records = db.session.query(StaffingPerson, StaffingLeadershipAssignment.unit_id).outerjoin(
+        StaffingLeadershipAssignment, and_(StaffingLeadershipAssignment.person_id == StaffingPerson.id,
+                                           StaffingLeadershipAssignment.active.is_(True)),
+    ).filter(StaffingPerson.active.is_(True), or_(
+        and_(StaffingPerson.id.in_(routed_ids), StaffingPerson.classification.in_(
+            ("full_time_supervisor", "twenty_c_full_time_supervisor"))),
+        and_(StaffingPerson.classification == "manager", StaffingLeadershipAssignment.unit_id.in_(parents)),
+    )).order_by(StaffingPerson.id).all()
+    people = {person.id: person for person, _ in records}
+    managers = {}
+    for person, unit_id in records:
+        if person.classification == "manager":
+            managers.setdefault(unit_id, set()).add(person.id)
+    users = _linked_user_ids_by_person(people.values())
+    recipients = {}
+    for row in requests:
+        ids = {person_id for person_id in _decode_person_ids(row.routed_approver_person_ids_json)
+               if person_id in people and people[person_id].classification != "manager"}
+        for unit_id in (row.source_work_area_unit_id, row.destination_work_area_unit_id):
+            visited = set()
+            while unit_id and unit_id not in visited:
+                visited.add(unit_id)
+                ids.update(managers.get(unit_id, ()))
+                unit_id = parents.get(unit_id)
+        recipients[row.id] = {user_id for person_id in ids for user_id in users.get(person_id, ())}
+    return recipients
 
 
 def _active_people(person_ids, classifications=None):
@@ -556,14 +546,3 @@ def _decode_person_ids(value):
     except (TypeError, ValueError):
         return []
     return sorted({int(row) for row in rows if str(row).isdigit()})
-
-
-def _unit_is_within(unit_id, ancestor_ids, parent_by_id):
-    current_id = unit_id
-    visited = set()
-    while current_id and current_id not in visited:
-        if current_id in ancestor_ids:
-            return True
-        visited.add(current_id)
-        current_id = parent_by_id.get(current_id)
-    return False

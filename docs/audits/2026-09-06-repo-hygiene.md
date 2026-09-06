@@ -473,3 +473,182 @@ final runs. The unrelated historical 405-failure suite was not rerun or repaired
    No real historical bucket inventory or live R2 latency test was performed.
 5. Socket timeouts are not a strict whole-action deadline. No production/physical
    browser/deployment verification is claimed; this pass changes no page layout.
+
+## 2026-09-06 follow-up: measured DB batching and scoped Staffing maintenance
+
+Starting main: `01920f205c7ee0deaeb5c2052d3e758ea8e66738`. This section appends
+implementation evidence; it does not replace the historical audit above.
+All measurements use synthetic SQLite fixtures, with fixture creation, login and
+deliberate fixture refreshes outside the measured interval. No Neon production
+records, CU measurements, external integrations or deployment actions were used.
+The existing Neon skill's isolation guidance informed this local-only approach.
+
+### Findings addressed
+
+- **P1 Staffing passive maintenance: reduced, not declared wholly eliminated.**
+  GET/HEAD requests pass a recipient into notification maintenance. Expired
+  notification history is recipient-scoped. Overdue reminders are evaluated at
+  visit time for that recipient, excluding existing dedupe keys before fetching
+  candidates. A visit no longer creates every other account's reminders.
+  Request expiry/purge uses the requested queue's routing/purview, or the
+  notification visitor's related requests. Explicit All/unassigned queues retain
+  their existing visible scope. The 48-hour reminder, 30-day expiry, 14-day
+  request-history rules and notification retention are unchanged. No scheduler
+  replaces time-driven evaluation. No-change maintenance does not commit.
+- **P1 navigation/materialization:** manager actionable counts now use a scoped
+  recursive ancestry predicate and SQL COUNT, without loading pending requests
+  or all unit parents. Supervisor navigation streams only routing JSON strings
+  and retains the exact legacy decoder. The active StaffingPerson is reused in
+  the existing request cache, never process-global memory. Explicit global
+  maintenance remains supported, but uses 200-request keyset batches, only
+  relevant ancestors/managers/routed supervisors and one linked-user lookup per
+  batch. Recursive UNION is cycle-safe. Existing notification conflict/dedupe
+  protection is retained. An empty submitter-update batch no longer queries PT
+  supervision, and empty expiry skips the request-item query.
+- **P2 Portal:** one user-scoped non-Gateway access lookup replaces two catalog
+  lookups. Canonical Gateway membership synchronization runs unchanged. Missing
+  rows stay missing; catalog ordering and launcher exclusion are untouched.
+- **P2 permission forms:** `_apply_permission_rule_form` preloads submitted rule
+  IDs once, then replays validation/mutation in submitted order. Existing missing
+  ID skipping and duplicate handling are preserved (not replaced with a new
+  rejection policy). Malformed later IDs do not mask earlier validation errors.
+  Caller rollback/commit ownership and non-configurable rule safeguards remain.
+- **P2 MotherBrain:** `_persist_alp_unmatched_rows` preloads operation-scoped
+  review keys, updates its map when inserting and preserves accepted/ignored
+  records. Missing mismatch explanations reuse one operation/direction-scoped
+  mission list with the original airport comparison semantics. This also avoids
+  autoflushing partially populated markers and then updating their payloads.
+  Existing marker flushes, alert synchronization and caller transaction remain.
+- **P2 ALP:** reuse the operation/direction mission list already needed by
+  preview for application by ID. Row order, missing/foreign/wrong-direction
+  skips, duplicate/ambiguous preview behavior, tail-state updates and final
+  commit are unchanged. The Google source-link path was not modified.
+
+### Measured statements per invocation
+
+Each tuple is **SELECT / INSERT / UPDATE / DELETE / COMMIT**. INSERT/UPDATE
+counts are SQL statement executions, not affected-row counts; ORM executemany
+batching can update several rows per statement. COMMIT counts use SQLAlchemy's
+connection commit event. These are fewer DB round trips/writes per invocation,
+not a claimed production Neon CU reduction.
+
+| Path / fixture size | Before | After |
+|---|---|---|
+| Staffing supervisor navigation, 6 and 18 pending | 5 / 0 / 0 / 0 / 0 | 5 / 0 / 0 / 0 / 0 |
+| Staffing manager navigation, 6 and 18 pending | 7 / 0 / 0 / 0 / 0 | 5 / 0 / 0 / 0 / 0 |
+| Ordinary Staffing dashboard GET, 6 and 18 pending | 18 / 0 / 0 / 0 / 0 | 18 / 0 / 0 / 0 / 0 |
+| Requests GET, reminders needed, 6 and 18 pending | 30 / 1 / 0 / 0 / 1 | 26 / 1 / 0 / 0 / 1 |
+| Requests GET, unchanged, 6 and 18 pending | 28 / 0 / 0 / 0 / 0 | 22 / 0 / 0 / 0 / 0 |
+| Notifications GET, already materialized, 6 and 18 | 20 / 0 / 0 / 0 / 0 | 14 / 0 / 0 / 0 / 0 |
+| Explicit global overdue materialization, new, 6 and 18 | 7 / 1 / 0 / 0 / 1 | 6 / 1 / 0 / 0 / 1 |
+| Explicit global overdue materialization, unchanged, 6 and 18 | 7 / 0 / 0 / 0 / 0 | 6 / 0 / 0 / 0 / 0 |
+| Portal catalog access, canonical Gateway already initialized | 12 / 0 / 0 / 0 / 0 | 11 / 0 / 0 / 0 / 0 |
+| Permission form, 6 rules plus caller flush | 6 / 0 / 6 / 0 / 0 | 1 / 0 / 1 / 0 / 0 |
+| Permission form, 18 rules plus caller flush | 18 / 0 / 18 / 0 / 0 | 1 / 0 / 3 / 0 / 0 |
+| ALP apply, 6 rows | 13 / 6 / 6 / 0 / 1 | 7 / 6 / 6 / 0 / 1 |
+| ALP apply, 18 rows | 37 / 18 / 18 / 0 / 1 | 19 / 18 / 18 / 0 / 1 |
+| Unmatched review, 6 rows without precomputed explanation | 25 / 7 / 6 / 1 / 0 | 9 / 7 / 0 / 1 / 0 |
+| Unmatched review, 18 rows without precomputed explanation | 61 / 19 / 18 / 1 / 0 | 9 / 19 / 0 / 1 / 0 |
+
+Requests GET previously created 2*N notification rows for the fixture's linked
+FT supervisor and manager; now it creates N for the visiting supervisor only.
+The manager gets the same N reminders on their visit. Explicit global service
+calls still create 2*N rows. Tests include a watcher-linked second account,
+unrelated managerial branch, newly crossing overdue threshold, repeat visits,
+inactive person/leadership and a 205-request batch boundary (410 notifications,
+at most 11 SELECTs rather than per-recipient lookups).
+
+The first review measurement supplied a precomputed explanation (19/43 SELECTs
+at 6/18 rows). The final fixture models the real missing-explanation path;
+starting-main function bodies were re-executed locally to measure its 25/61
+SELECTs. This is an additional identified lookup, not a claimed comparison of
+different inputs. Review's retained extra INSERT/DELETE belongs to alert sync.
+Permission updates affect the same 6/18 records; their smaller statement count
+comes from batching, not dropping audit/version changes.
+
+### Regression evidence and commands
+
+Interpreter: existing `instance/security-boundaries/venv/Scripts/python.exe`;
+no dependency changes. `python` below denotes that interpreter.
+
+```text
+python -m pytest -q tests/test_neostaffing_notifications.py tests/test_neostaffing_change_requests.py tests/test_neostaffing_bulk_change.py tests/test_permission_rules.py tests/test_neostaffing_permissions.py tests/test_request_access_cache.py --tb=no --disable-warnings --junitxml=instance/db-efficiency-baseline.xml
+Before: 81 passed, 1 failed, 202 subtests passed.
+
+python -m pytest -q tests/test_db_query_batching.py tests/test_neostaffing_notifications.py tests/test_neostaffing_change_requests.py tests/test_neostaffing_bulk_change.py tests/test_permission_rules.py tests/test_neostaffing_permissions.py tests/test_request_access_cache.py --tb=no --disable-warnings --junitxml=instance/db-focused-final.xml
+After: 90 passed, same 1 failed, 202 subtests passed.
+
+python -m pytest -q tests/test_motherbrain_routes.py -k "alp or planning" --tb=no --disable-warnings --junitxml=instance/db-motherbrain-after.xml
+Before and after: 56 passed, same 2 failed, 8 subtests passed (424 deselected).
+Before evidence: instance/db-motherbrain-before.xml.
+
+python -m pytest -q tests/test_auth_account_flows.py tests/test_neostaffing_routes.py tests/test_render_startup.py tests/test_db_free_liveness.py --tb=no --disable-warnings --junitxml=instance/db-broader-after.xml
+Before and after: 131 passed, same 5 failed, 40 subtests passed.
+Before evidence: instance/db-broader-before.xml.
+
+python -m pytest -q tests/test_google_motherbrain_live_missions.py tests/test_google_motherbrain_live_poll_execution.py tests/test_google_motherbrain_live_poll_lease.py --tb=no --disable-warnings --junitxml=instance/db-google-after.xml
+105 passed, 23 subtests passed.
+
+python -m pytest -q -s tests/test_db_query_batching.py --tb=short --disable-warnings --junitxml=instance/db-query-after.xml
+9 passed. Prints per-path statement metrics; enforces post-change budgets.
+
+python -m compileall -q app scripts tools init_db.py run.py
+git diff --check
+Both passed. No JS changed; JS tests not applicable.
+```
+
+Baseline-before-edits covers the targeted Staffing/permission and ALP/planning
+slice. Additional broader baseline and refined measurements used only the
+changed function definitions read from `git show <starting-SHA>:<path>`, compiled
+with Python AST into the imported modules in a disposable test process. No
+files were reset or overwritten; route decorators were not re-registered.
+Post-change query ceilings alone were disabled during old-code measurements.
+New fixture construction mistakes and an initial decorated-function replay
+mistake were corrected before final runs; they are not baseline failures.
+
+Non-overlapping final total: **382 passed + 273 subtests passed, 8 unchanged
+failures**. All 9 added regressions pass. The 8 retained failure identities are:
+
+- `PermissionRulesTest.test_motherbrain_menu_hides_denied_page_and_direct_route_is_denied`
+- `MotherBrainRoutesTest.test_mobile_arrival_planning_renders_simple_current_sort_list`
+- `MotherBrainRoutesTest.test_mobile_departure_planning_renders_simple_current_sort_list`
+- `AuthAccountFlowsTest.test_portal_dashboard_hides_install_section_and_keeps_app_cards`
+- `AuthAccountFlowsTest.test_portal_dashboard_keeps_install_ui_hidden_for_accessible_apps_and_nodes`
+- `AuthAccountFlowsTest.test_portal_dashboard_shows_approved_pending_and_request_states`
+- `AuthAccountFlowsTest.test_portal_mobile_hides_approved_role_status_without_hiding_other_app_states`
+- `NeoStaffingRoutesTest.test_portal_tile_opens_neostaffing_for_approved_user`
+
+The prior 75-failure security slice and historical 405-failure full suite were
+not rerun wholesale or repaired. Failure identity/multiplicity comparison in
+the selected before/after slices found no new failures. Startup/liveness,
+notification read/open behavior, request submit/approve/deny/supervisor routing,
+Portal access states, rule safeguards and ALP planning contracts are covered.
+
+### Remaining DB-cost work (not silently claimed closed)
+
+1. **P1 / bounded-memory but still linear supervisor routing:** legacy routed
+   approvers are JSON text. Navigation streams every pending routing string;
+   scoped supervisor overdue evaluation and routed retention also decode
+   candidate strings. Portable text/JSON shortcuts could change historical ID
+   semantics. A normalized routing relation or carefully validated DB-specific
+   predicate/index is separate schema work; no index benefit is asserted
+   without PostgreSQL query plans.
+2. **P1 / existing requests UI context:** `change_request_context()` still loads
+   the people/unit/active-assignment collections needed for the existing queue,
+   submit form and filters. This is not overdue maintenance. The All queue can
+   still require global date-filtered retention. Safely paginating/scoping its
+   display/form contracts needs a separate measured workflow task. No global
+   scan is claimed eliminated from that entire page.
+3. **P2 / explicit global maintenance:** non-passive callers preserve their
+   global contract, using bounded batches but total work proportional to overdue
+   requests. Recipient-scoped GETs avoid other accounts' notification inserts.
+   No background process was added to eagerly clean untouched scopes.
+4. **P2 / canonical tail-state reads:** ALP mission resolution is now one SELECT,
+   but `ensure_tail_state_for_mission()` still performs a read per applied row.
+   Its tail identity/conflict and mutation contract was not folded into this
+   ID-lookup optimization. Tail-state writes and the final transaction remain.
+5. **P2 / PostgreSQL plans:** recursive hierarchy queries were exercised through
+   SQLAlchemy on isolated SQLite; no live Neon EXPLAIN/latency/CU claim. Existing
+   parent/request/status predicates may merit plan-based index review later.
+   No schema, process-global cache, idle traffic, polling, startup, health,
+   security-boundary, infrastructure, UI or asset changes were made.

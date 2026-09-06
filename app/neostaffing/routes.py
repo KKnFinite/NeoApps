@@ -2554,8 +2554,13 @@ def _people_return_url(person_id=None):
 
 
 def _maintain_change_request_activity():
-    request_cleanup = change_request_service.cleanup_change_request_retention()
-    notification_cleanup = notification_service.maintain_notifications()
+    passive = request.method in {"GET", "HEAD"}
+    scope = change_request_service.retention_scope_for_page(
+        current_user,
+        request.args if request.endpoint == "neostaffing.change_requests" else None,
+    ) if passive else True
+    request_cleanup = change_request_service.cleanup_change_request_retention(scope=scope)
+    notification_cleanup = notification_service.maintain_notifications(user=current_user if passive else None)
     return {
         "request_cleanup": request_cleanup,
         "notification_cleanup": notification_cleanup,
