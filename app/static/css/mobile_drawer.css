@@ -51,7 +51,7 @@
         .neo-mobile-navigation .neo-mobile-bottom { background:rgba(12,17,26,.88); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
     }
     .neo-mobile-bottom::before { content:""; position:absolute; bottom:100%; left:0; right:0; height:var(--neo-dock-fade); background:linear-gradient(transparent,rgba(12,17,26,.8)); pointer-events:none; }
-    .neo-mobile-bottom :is(a,button) { display:grid; place-items:center; gap:3px; flex:1 1 0; min-width:0; min-height:44px; padding:4px; border:0; background:transparent; color:#edf1f6; font:700 .66rem/1.2 var(--font-sans); text-transform:uppercase; text-decoration:none; cursor:pointer; }
+    .neo-mobile-bottom :is(a,button) { display:grid; place-items:center; gap:3px; flex:1 1 0; min-width:0; min-height:44px; padding:4px; border:0; background:transparent; color:#edf1f6; font:400 .66rem/1.2 NeoFont,sans-serif; text-transform:uppercase; text-decoration:none; cursor:pointer; }
     .neo-mobile-bottom svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
     body .neo-mobile-navigation .neo-mobile-bottom button { box-shadow:none; border-bottom:2px solid transparent; }
     body .neo-mobile-navigation .neo-mobile-bottom button[aria-expanded="true"] { border-bottom-color:var(--node-highlight, #c6b6d3); }

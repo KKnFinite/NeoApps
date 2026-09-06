@@ -352,7 +352,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
         self.run_engine("chromium")
 
     def test_portal_launcher(self):
-        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080))), ('webkit', ((390,844),))):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(390,760),(1920,1080))), ('webkit', ((390,844),(390,760)))):
             browser = getattr(self.pw, engine).launch()
             context = browser.new_context()
             context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
@@ -377,13 +377,24 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                             const cards=[...document.querySelectorAll('.portal-launch-card')];
                             const hero=document.querySelector('.portal-launcher-hero img'), h=hero.getBoundingClientRect();
                             return {overflow:document.documentElement.scrollWidth>innerWidth,
-                                intact:Math.abs(h.width/h.height-hero.naturalWidth/hero.naturalHeight)<.01 && Math.abs(h.width-innerWidth)<1,
+                                intact:getComputedStyle(hero).objectFit==='contain' && Math.abs(h.width-innerWidth)<1,
                                 names:cards.every(c=>{const e=c.querySelector('h2'),r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=c.getBoundingClientRect();return getComputedStyle(e).fontFamily.includes('NeoFont') && t.right<b.right-8 && t.height<=parseFloat(getComputedStyle(e).lineHeight)+1;}),
                                 layout:innerWidth>900 ? Math.abs(cards[0].offsetTop-cards[1].offsetTop)<1 : cards[1].offsetTop>cards[0].offsetTop};
                         }''')
                         self.assertEqual(result, {'overflow':False,'intact':True,'names':True,'layout':True})
+                        self.assertTrue(page.evaluate('''() => {
+                            const e=document.querySelector('.portal-launcher-hero img'), b=e.getBoundingClientRect();
+                            const artHeight=Math.min(b.height,b.width*e.naturalHeight/e.naturalWidth);
+                            return document.querySelector('.portal-launcher-apps').getBoundingClientRect().top >= b.top+artHeight*(innerWidth<=900?.57:.75);
+                        }'''))
+                        self.assertFalse(page.evaluate('document.documentElement.scrollHeight>innerHeight+1'))
+                        self.assertTrue(page.locator('.portal-launch-action').evaluate_all("es=>es.every(e=>getComputedStyle(e).fontFamily.includes('NeoFont') && e.getBoundingClientRect().bottom<=innerHeight)"))
+                        for card in page.locator('.portal-launch-card').all():
+                            expect(card).to_be_in_viewport(ratio=1)
+                        page.screenshot(path=str(self.evidence / f'{engine}-portal-fit-{width}-{height}.png'))
                         page.screenshot(path=str(self.evidence / f'{engine}-portal-launcher-{width}.png'), full_page=width>900)
                         if width <= 900:
+                            self.assertTrue(page.locator('.neo-mobile-bottom :is(a,button)').evaluate_all("es=>es.every(e=>getComputedStyle(e).fontFamily.includes('NeoFont'))"))
                             page.evaluate('scrollTo(0,document.documentElement.scrollHeight)')
                             page.wait_for_function('scrollY >= document.documentElement.scrollHeight-innerHeight-1')
                             action=page.locator('.portal-launch-action').last.bounding_box()
@@ -402,10 +413,11 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 browser.close()
 
     def test_login_hero(self):
-        for engine, sizes in (('chromium', ((320,700),(390,844),(1920,1080),(390,420))), ('webkit', ((390,844),))):
+        for engine, sizes in (('chromium', ((320,700),(390,844),(390,760),(1920,1080))), ('webkit', ((390,844),(390,760)))):
             browser = getattr(self.pw, engine).launch()
             context = browser.new_context()
-            context.route('**/*', lambda route: route.continue_() if route.request.url.startswith(self.origin) else route.abort())
+            # Do not intercept local 401 navigation responses; block external traffic only.
+            context.route(lambda url: not url.startswith(self.origin), lambda route: route.abort())
             page = context.new_page()
             page.set_default_timeout(8000)
             try:
@@ -416,9 +428,13 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     self.assertTrue(hero.evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes(innerWidth<=900 ? 'neoapps_login_mobile.png' : 'neoapps_login_desktop.png')"))
                     box = hero.bounding_box()
                     self.assertAlmostEqual(box['width'], width, delta=1)
-                    self.assertAlmostEqual(box['width']/box['height'], 941/1672 if width<=900 else 1672/941, delta=.01)
+                    self.assertEqual(hero.evaluate('e=>getComputedStyle(e).objectFit'), 'contain')
                     form = page.locator('.command-login-form')
-                    self.assertGreaterEqual(form.bounding_box()['y'], box['y']+box['height']*(.52 if width<=900 else .67))
+                    art_height = hero.evaluate('e=>Math.min(e.clientHeight,e.clientWidth*e.naturalHeight/e.naturalWidth)')
+                    self.assertGreaterEqual(form.bounding_box()['y'], box['y']+art_height*(.52 if width<=900 else .67))
+                    self.assertFalse(page.evaluate('document.documentElement.scrollHeight>innerHeight+1'))
+                    self.assertTrue(page.locator('.command-enter-button strong, .command-link-row a').evaluate_all("es=>es.every(e=>getComputedStyle(e).fontFamily.includes('NeoFont'))"))
+                    expect(form).to_be_in_viewport(ratio=1)
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
                     expect(page.locator('#dashboard-email')).to_have_attribute('autocomplete','email')
                     expect(page.locator('#dashboard-password')).to_have_attribute('autocomplete','current-password')
@@ -426,13 +442,15 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     page.screenshot(path=str(self.evidence / f'{engine}-login-hero-{width}-{height}.png'), full_page=True)
                     page.get_by_role('link', name='Forgot Password').scroll_into_view_if_needed()
                     expect(page.get_by_role('link', name='Forgot Password')).to_be_in_viewport()
-                    if height == 420:
-                        page.screenshot(path=str(self.evidence / f'{engine}-login-short-scrolled.png'))
                 page.set_viewport_size({'width':390,'height':844})
                 self.ready(page, '/login')
                 page.locator('#dashboard-email').fill('drawer-admin@example.test')
                 page.locator('#dashboard-password').fill('IncorrectPassword123!')
-                page.locator('button[type="submit"]').click()
+                # A rejected POST returns 401 at the same URL, not a redirect.
+                # Wait for that response explicitly rather than click's navigation heuristic.
+                with page.expect_response(lambda r: r.url == self.origin + '/login' and r.request.method == 'POST', timeout=30000) as rejected:
+                    page.locator('button[type="submit"]').click(no_wait_after=True)
+                self.assertEqual(rejected.value.status, 401)
                 expect(page.locator('.flash')).to_be_visible()
                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
                 page.evaluate('scrollTo(0,0)')
