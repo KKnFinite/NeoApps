@@ -4,6 +4,7 @@ Install dev browsers: pip install -r tests/requirements-browser.txt
                       python -m playwright install chromium webkit
 """
 import logging
+import base64
 import os
 import subprocess
 import tempfile
@@ -350,6 +351,45 @@ class MobileDrawerBrowserTest(unittest.TestCase):
 
     def test_chromium(self):
         self.run_engine("chromium")
+
+    def test_neoapps_square_identity_surfaces(self):
+        browser = self.pw.chromium.launch()
+        context = browser.new_context()
+        context.route(lambda url: not url.startswith(self.origin), lambda route: route.abort())
+        page = context.new_page()
+        try:
+            self.login(page)
+            icon_path = 'images/icons/neoapps/inapp/neoapps-inapp-128.png'
+            expected = Path('app/static', icon_path).read_bytes()
+            for width,height in ((390,844),(1920,1080)):
+                page.set_viewport_size({'width':width,'height':height})
+                for path in ('/portal','/rfd','/motherbrain'):
+                    with self.subTest(width=width,path=path):
+                        self.ready(page,path)
+                        header = page.locator(('[data-mobile-topbar]' if path=='/portal' else '.gateway-mobile-header' if path=='/rfd' else '.operational-mobile-header') if width<=900 else '.gateway-shell-topbar' if path=='/rfd' else '.topbar').first
+                        expect(header).to_be_visible()
+                        icons = header.locator(f'img[src*="{icon_path}"]')
+                        # Operational mobile headers keep their node-specific logo.
+                        if path != '/motherbrain' or width>900:
+                            self.assertEqual(icons.count(),1)
+                            icon=header.locator('img[alt="NeoApps"]').first
+                            expect(icon).to_be_in_viewport(ratio=1)
+                            self.assertEqual(context.request.get(icon.evaluate('e=>e.src')).body(),expected)
+                            self.assertTrue(icon.evaluate('e=>{const r=e.getBoundingClientRect();return e.naturalWidth===128&&e.naturalHeight===128&&Math.abs(r.width-r.height)<1&&r.width<=48;}'))
+                            baseline = os.environ.get('NEO_COMPARE_BASELINE')
+                            if baseline:
+                                geometry = header.bounding_box()
+                                current_src = icon.get_attribute('src')
+                                previous = subprocess.check_output(['git','show',baseline+':app/static/'+icon_path])
+                                icon.evaluate('(e,src)=>{e.src=src;return e.decode();}', 'data:image/png;base64,'+base64.b64encode(previous).decode())
+                                self.assertEqual(header.bounding_box(),geometry)
+                                icon.evaluate('(e,src)=>{e.src=src;return e.decode();}',current_src)
+                        else:
+                            self.assertIn('newlogo_motherbrain',header.locator('img').first.get_attribute('src'))
+                        page.screenshot(path=str(self.evidence / f'neoapps-icon-{path.strip("/")}-{width}.png'))
+        finally:
+            context.close()
+            browser.close()
 
     def test_share_qr_contrast_and_copy_link(self):
         browser = self.pw.chromium.launch()
