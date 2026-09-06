@@ -19,7 +19,7 @@
             >
         </picture>
 
-        <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}">
+        <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}" data-interaction-form>
             <div class="command-login-fields">
                 <label for="dashboard-email">Email</label>
                 <input id="dashboard-email" name="email" type="email" autocomplete="email" required autofocus>

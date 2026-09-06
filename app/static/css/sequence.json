@@ -1,0 +1,181 @@
+{
+  "description": "Original cascade order. Do not regroup by scope or append all node rules after foundation. Each source byte is retained once.",
+  "original_sha256_lf": "d1c8f8e86b01b78e582445781cfa7322f9f92627e0067caec8358c38a24045cb",
+  "original_bytes_lf": 983978,
+  "stylesheets": [
+    {
+      "file": "base.css",
+      "scope": "shared",
+      "bytes": 72264,
+      "sha256": "5db8d361b631d34935aa1343baa1a5555d48302c64ae03c98a3e9da029ca4459"
+    },
+    {
+      "file": "01-neoermac.css",
+      "scope": "neoermac",
+      "bytes": 8064,
+      "sha256": "bf77be4ee24a11bb2733fdeb1d2acfbefaed51fa8dcff70fce9a9d447cfa51e7"
+    },
+    {
+      "file": "02-shared.css",
+      "scope": "shared",
+      "bytes": 47214,
+      "sha256": "0362f65718cd3a334f828c02c79faa661eb941efe84a2ecdd6cea2754985abfd"
+    },
+    {
+      "file": "03-neoermac.css",
+      "scope": "neoermac",
+      "bytes": 12745,
+      "sha256": "cdef124b32740730264e6bd8acc9e702bad4e968cdc5ed2bde00d3a42920384f"
+    },
+    {
+      "file": "04-shared.css",
+      "scope": "shared",
+      "bytes": 2962,
+      "sha256": "3111814a11ce6c7c504c95ef382c797a3f2da84530e2ba23b35ce418eccb008f"
+    },
+    {
+      "file": "05-neoermac.css",
+      "scope": "neoermac",
+      "bytes": 8826,
+      "sha256": "dacd30040e067602b909b6105825d836c7cf54e70968eafe8e5c637c8e40a362"
+    },
+    {
+      "file": "06-shared.css",
+      "scope": "shared",
+      "bytes": 76721,
+      "sha256": "4bfaf9f4aee4827217e3e0d26bb845bbd0aaa8d6d4f1bdc0c4621e14fe2d9fc0"
+    },
+    {
+      "file": "07-neostaffing.css",
+      "scope": "neostaffing",
+      "bytes": 60132,
+      "sha256": "580ba2f4fa1ae14512bc6c503afc6df2e4e780862088414cabb8370b1a483495"
+    },
+    {
+      "file": "08-shared.css",
+      "scope": "shared",
+      "bytes": 88,
+      "sha256": "0a50df241f9094feedb9ebb0ded8585fab6999b567f30cb29704f2fcdf0dd565"
+    },
+    {
+      "file": "09-neostaffing.css",
+      "scope": "neostaffing",
+      "bytes": 19743,
+      "sha256": "c7ac5a9b43ebcc4f1ec5cfb22e995bc574a72685bb65a5842c76e9efcb9867e3"
+    },
+    {
+      "file": "10-shared.css",
+      "scope": "shared",
+      "bytes": 140624,
+      "sha256": "8f527a5266a45bb764da302220b390f89ea92dac9d1b5294ceb02c7d2eae8dd0"
+    },
+    {
+      "file": "11-neoermac.css",
+      "scope": "neoermac",
+      "bytes": 35487,
+      "sha256": "5b625a7960e65d817c4884ca7b09812a5d20ba4546633fcd95cdc02cdb7b5fb9"
+    },
+    {
+      "file": "12-neosektor.css",
+      "scope": "neosektor",
+      "bytes": 35011,
+      "sha256": "809b8af8b419512ba13aebcc2c6d23799c843c20666822d33c94dc9566932593"
+    },
+    {
+      "file": "13-shared.css",
+      "scope": "shared",
+      "bytes": 126691,
+      "sha256": "4805d56181031e5a14ae957c4bca32ebb67f22f65fea9ed4eb09be874d3fbd0a"
+    },
+    {
+      "file": "14-neoscorpion.css",
+      "scope": "neoscorpion",
+      "bytes": 26996,
+      "sha256": "25ba2383ffb86078cd83f69c82d5ee579e3e98b2dacb186df843c6c0f0d6bc1e"
+    },
+    {
+      "file": "15-shared.css",
+      "scope": "shared",
+      "bytes": 25435,
+      "sha256": "ab8d8757ec1359c72a3758abaf9d22e270b8998897f4067636dc6c53f33f9477"
+    },
+    {
+      "file": "16-neosektor.css",
+      "scope": "neosektor",
+      "bytes": 20797,
+      "sha256": "47343e8e70bd591ee04bf1c5e42e635d4b739d15a0ed10efa51e15985cbcaab8"
+    },
+    {
+      "file": "17-shared.css",
+      "scope": "shared",
+      "bytes": 41691,
+      "sha256": "535868ac4660449431cba95034590e514145a3aef9f29b1ac185b3927282e9b4"
+    },
+    {
+      "file": "18-neostaffing.css",
+      "scope": "neostaffing",
+      "bytes": 35173,
+      "sha256": "83c5d3706b50804807340b85c6ee60f92679c87f42563fe4f7a326cf54580c0a"
+    },
+    {
+      "file": "19-shared.css",
+      "scope": "shared",
+      "bytes": 96,
+      "sha256": "fc08df36d11c770e1e351dd03089e6437de2a47749723f5a9922e20d6225976c"
+    },
+    {
+      "file": "20-neostaffing.css",
+      "scope": "neostaffing",
+      "bytes": 95234,
+      "sha256": "12b8bd28e1abc14d3e01c044acf7c3ba0fa5b1e285808e0c6ea87a30be037280"
+    },
+    {
+      "file": "21-shared.css",
+      "scope": "shared",
+      "bytes": 7327,
+      "sha256": "065029338e60584cd86b5d6b04dfc17dc179ebcb8c100a71fe134a1420ec07e2"
+    },
+    {
+      "file": "22-neorain.css",
+      "scope": "neorain",
+      "bytes": 22509,
+      "sha256": "6c21d6e89cfbd5cd3627f8602559ea0302187998a5b2b90d88fad35e0cc48720"
+    },
+    {
+      "file": "23-neosubzero.css",
+      "scope": "neosubzero",
+      "bytes": 14597,
+      "sha256": "7aa11f8189a809916b58806f6fc036c33dcad7652bb50e2e7b794a6dc738696a"
+    },
+    {
+      "file": "24-shared.css",
+      "scope": "shared",
+      "bytes": 2646,
+      "sha256": "5706f69406534de0ecfc58ceb53552ad945eb6bddf436843cc6cca63b3573f8a"
+    },
+    {
+      "file": "25-neosubzero.css",
+      "scope": "neosubzero",
+      "bytes": 8639,
+      "sha256": "4161cf48c01df0ec2814a874d6855f1e747e53af838f89b5bb58360d75dc2d7f"
+    },
+    {
+      "file": "26-neoscorpion.css",
+      "scope": "neoscorpion",
+      "bytes": 9310,
+      "sha256": "49a985b1f3799abdbd9b1ad6381ae124ebb076b81eb08f330247f3c759167a2e"
+    },
+    {
+      "file": "27-neosubzero.css",
+      "scope": "neosubzero",
+      "bytes": 8666,
+      "sha256": "a0890dde1f7a3873ddd12a48908b7007efea931e4046e502387770035812a95c"
+    },
+    {
+      "file": "28-shared.css",
+      "scope": "shared",
+      "bytes": 18525,
+      "sha256": "e0298911719cd28790015f0ad5cfc4173d77c3d2b0f236d327bdc8fb63f8c9f7"
+    }
+  ]
+}

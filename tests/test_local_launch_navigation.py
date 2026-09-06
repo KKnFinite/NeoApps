@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date
 import importlib
 import os
@@ -198,7 +199,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
                 self.assertTrue(Path('app/static/images/logos', filename).is_file())
 
     def test_base_css_uses_cyber_topbar_without_vertical_grid_background(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".centered-command-page", css)
         self.assertIn(".centered-command-page .operation-form", css)
@@ -260,7 +261,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn("linear-gradient(90deg, rgba(201, 208, 214, 0.035) 1px", css)
 
     def test_base_css_prevents_accidental_mobile_zoom(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn("-webkit-text-size-adjust: 100%;", css)
         self.assertIn("text-size-adjust: 100%;", css)
@@ -271,7 +272,8 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_base_template_cache_busts_stylesheet(self):
         template = Path("app/templates/base.html").read_text()
 
-        self.assertIn("filename='css/base.css', v=config.STATIC_ASSET_VERSION", template)
+        self.assertIn("for stylesheet in page_stylesheets", template)
+        self.assertIn("filename=stylesheet, v=config.STATIC_ASSET_VERSION", template)
         self.assertIn(
             "url_for('pwa_manifest_by_key', manifest_key=current_pwa_manifest_key(), v=config.STATIC_ASSET_VERSION)",
             template,
@@ -713,7 +715,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn(b'neogateway_logo3_medium.png', response.data)
         self.assertNotIn(b"motherbrain_logo1.png", response.data)
         self.assertNotIn(b"NeoMotherBrain", response.data)
-        self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
+        self.assertIn(b'<form class="command-login-form" method="post" action="/login" data-interaction-form>', response.data)
         self.assertIn(b'<label for="dashboard-email">Email</label>', response.data)
         self.assertIn(b'name="email"', response.data)
         self.assertNotIn(b'name="username"', response.data)
@@ -753,7 +755,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertNotIn(b'neogateway_logo3_small.png', response.data)
         self.assertNotIn(b'neogateway_logo3_medium.png', response.data)
         self.assertNotIn(b"Gateway Command Layer", response.data)
-        self.assertIn(b'<form class="command-login-form" method="post" action="/login">', response.data)
+        self.assertIn(b'<form class="command-login-form" method="post" action="/login" data-interaction-form>', response.data)
         self.assertIn(b"ENTER", response.data)
 
     def test_seeded_kessler_login_is_case_insensitive_and_enters_rfd_hub(self):
@@ -838,7 +840,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn("MotherBrain", menu)
         self.assertIn("Scorpion", menu)
 
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         self.assertIn("width: min(238px, calc(100vw - 32px));", css)
         self.assertIn("grid-template-columns: 20px minmax(0, 1fr) auto;", css)
         self.assertIn('.character-switcher-label {\n        min-width: 0;', css)
@@ -886,7 +888,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertFalse(header.findall('details', 'mobile-account-menu'))
 
     def test_mobile_topbar_never_uses_ellipsis_for_page_titles(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         topbar_css = css[
             css.index("    .mobile-topbar {", css.index("@media (max-width: 760px) {", 20000)):
             css.index("    .mobile-account-menu {", css.index("@media (max-width: 760px) {", 20000))
@@ -992,7 +994,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
     def test_global_press_feedback_styles_and_hook_render(self):
         response = self.client.get("/")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("@keyframes neo-press-feedback", css)
@@ -1007,7 +1009,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertIn(".mobile-topbar-page-link", html)
 
     def test_neobid_theme_stays_blue(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         manifest = self.client.get("/manifest/neobid.webmanifest").get_json()
 
         self.assertIn("--node-bid-primary: #4db7ff;", css)
@@ -1015,7 +1017,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(manifest["theme_color"], "#4db7ff")
 
     def test_portal_branding_uses_red_purple_without_pink(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         manifest = self.client.get("/manifest/neoportal.webmanifest").get_json()
 
         self.assertIn("--node-portal-primary: #d9362e;", css)
@@ -1035,7 +1037,7 @@ class LocalLaunchNavigationTest(unittest.TestCase):
         self.assertEqual(manifest["theme_color"], "#d9362e")
 
     def test_mobile_duplicate_neosektor_body_title_is_hidden_by_css(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(
             "body.mobile-app-chrome .mobile-shell-duplicate-title {\n"

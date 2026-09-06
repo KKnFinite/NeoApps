@@ -1,0 +1,143 @@
+
+[data-vacation-share-results] { display:flex; flex-wrap:wrap; gap:3px; }
+.neostaffing-vacation-share-selected { display:flex; flex-wrap:wrap; gap:4px; }
+.neostaffing-vacation-delete-calendar { display:flex; justify-content:flex-end; padding-top:8px; }
+.neostaffing-vacation-delete-calendar button { padding:5px 8px; border:1px solid #71484b; background:#321f22; color:#e7aeb1; font-size:.55rem; font-weight:900; }
+.neostaffing-vacation-admin-table { overflow:auto; margin-top:8px; border:1px solid #1d4148; }
+.neostaffing-vacation-admin-table table { width:100%; border-collapse:collapse; font-size:.63rem; }
+.neostaffing-vacation-admin-table th,.neostaffing-vacation-admin-table td { padding:6px 7px; border-bottom:1px solid #1b3d44; text-align:left; }
+.neostaffing-vacation-admin-table th { color:#75999d; font-size:.54rem; text-transform:uppercase; }
+.neostaffing-vacation-admin-table a { color:#78d2cc; font-weight:900; }
+.neostaffing-vacation-view-roster { margin-top:8px; border:1px solid #1d4148; }
+.neostaffing-vacation-view-roster > div { display:grid; grid-template-columns:minmax(180px,.5fr) 1fr; gap:8px; padding:5px 8px; border-bottom:1px solid #18383f; font-size:.62rem; }
+.neostaffing-vacation-view-roster > div span,.neostaffing-vacation-view-roster p { color:#78999d; }
+@media (max-width:800px) { .neostaffing-vacation-calendar-sections { grid-template-columns:1fr; } .neostaffing-vacation-sharing > form { grid-template-columns:1fr; } }
+
+/* NeoStaffing Settings console */
+.neostaffing-settings-console { display:grid; grid-template-columns:clamp(144px,10vw,184px) minmax(0,1fr); width:calc(100vw - 32px); height:calc(100vh - 122px); min-height:520px; margin:-18px calc(50% - 50vw + 16px) -54px; overflow:hidden; border:1px solid #18333a; border-radius:7px; background:#071317; color:#d3e5e6; }
+body:has(.neostaffing-settings-console) { overflow-x:clip; }
+.neostaffing-settings-console > .neostaffing-rail { box-sizing:border-box; width:auto; min-width:0; height:100%; overflow-y:auto; border-right:1px solid #19353c; background:#0a161c; }
+.neostaffing-settings-workspace { min-width:0; overflow:auto; padding:10px 12px 18px; }
+.neostaffing-settings-header,.neostaffing-settings-panel > header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.neostaffing-settings-header { min-height:45px; padding-bottom:8px; border-bottom:1px solid #1c3c43; }
+.neostaffing-settings-header h1,.neostaffing-settings-panel h2 { margin:0; color:#e1f2f2; font-size:.92rem; letter-spacing:.08em; }
+.neostaffing-settings-header span,.neostaffing-settings-header > strong,.neostaffing-settings-panel > header > span { color:#6dbdb9; font-size:.57rem; font-weight:900; letter-spacing:.07em; }
+.neostaffing-settings-panel { margin-top:10px; border:1px solid #1c4047; border-radius:5px; background:#0a1b21; }
+.neostaffing-settings-panel > header { padding:9px 10px; border-bottom:1px solid #1c4047; background:#0d2228; }
+.neostaffing-settings-panel > header p,.neostaffing-settings-note { margin:2px 0 0; color:#78979b; font-size:.62rem; }
+.neostaffing-settings-add,.neostaffing-settings-holidays article { display:grid; grid-template-columns:repeat(6,minmax(92px,1fr)) auto; align-items:end; gap:7px; padding:7px 10px; }
+.neostaffing-settings-add { border-bottom:1px solid #193a41; }
+.neostaffing-settings-add label,.neostaffing-settings-holidays label { display:grid; gap:3px; color:#76989c; font-size:.53rem; font-weight:900; text-transform:uppercase; }
+.neostaffing-settings-add input,.neostaffing-settings-add select,.neostaffing-settings-holidays input,.neostaffing-settings-holidays select { box-sizing:border-box; width:100%; min-height:28px; padding:4px 7px; border:1px solid #28545b; border-radius:3px; background:#10272d; color:#e3eeee; color-scheme:dark; font-size:.66rem; }
+.neostaffing-settings-holidays article { grid-template-columns:minmax(0,1fr) auto; border-bottom:1px solid rgba(35,72,79,.68); }
+.neostaffing-settings-holidays article > form:first-child { display:grid; grid-template-columns:repeat(6,minmax(92px,1fr)) minmax(150px,auto) auto; align-items:end; gap:7px; }
+.neostaffing-settings-holidays output { align-self:center; color:#83bdbc; font-size:.59rem; font-weight:800; }
+.neostaffing-settings-holidays button { min-height:27px; padding:4px 8px; border:1px solid #2b6267; border-radius:3px; background:#12343a; color:#9cdbd7; font-size:.56rem; font-weight:900; cursor:pointer; }
+.neostaffing-settings-holidays button.is-danger { border-color:#6d4647; background:#302023; color:#e9aeb0; }
+.neostaffing-settings-empty { margin:0; padding:18px 10px; color:#78979b; font-size:.65rem; text-align:center; }
+.neostaffing-settings-note { padding:7px 10px 9px; }
+@media (max-width:800px) { .neostaffing-settings-console { display:block; width:100%; height:auto; min-height:0; margin:0; overflow:visible; } .neostaffing-settings-console > .neostaffing-rail { display:none; } .neostaffing-settings-workspace { overflow:visible; } .neostaffing-settings-add,.neostaffing-settings-holidays article,.neostaffing-settings-holidays article > form:first-child { grid-template-columns:1fr; } }
+
+.neostaffing-portal-link,.neostaffing-mobile-portal-link { color:#8dd8d3; font-size:.62rem; font-weight:900; letter-spacing:.05em; text-decoration:none; }
+.neostaffing-portal-link { padding:5px 8px; border:1px solid #28545b; border-radius:3px; background:#10272d; }
+.neostaffing-mobile-portal-link { padding:5px 6px; }
+/* NeoRain current-sort outbound board. */
+.neorain-outbound-shell {
+    max-width: none;
+    color: #d6dee8;
+}
+
+.system-settings-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.9rem;
+}
+
+.system-settings-dashboard-card {
+    display: grid;
+    gap: 0.35rem;
+    min-height: 7rem;
+    padding: 1rem;
+    border: 1px solid rgba(122, 170, 206, 0.28);
+    border-radius: 0.8rem;
+    color: inherit;
+    background: rgba(7, 20, 32, 0.72);
+    text-decoration: none;
+}
+
+.system-settings-dashboard-card:hover,
+.system-settings-dashboard-card:focus-visible {
+    border-color: var(--neo-accent, #53b7e8);
+    background: rgba(13, 39, 58, 0.88);
+}
+
+.system-settings-dashboard-card strong {
+    color: var(--neo-accent, #78cfff);
+    text-transform: uppercase;
+}
+
+.system-settings-dashboard-card span,
+.node-refresh-identity small {
+    color: var(--muted-text, #9aa9b6);
+}
+
+.system-settings-child-heading,
+.node-refresh-row,
+.node-refresh-state {
+    display: flex;
+    align-items: center;
+}
+
+.system-settings-child-heading {
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.node-refresh-list {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.node-refresh-row {
+    gap: 0.75rem;
+    padding: 0.7rem;
+    border-top: 1px solid rgba(122, 170, 206, 0.16);
+}
+
+.node-refresh-identity {
+    display: grid;
+    min-width: 13rem;
+}
+
+.node-refresh-state {
+    flex: 1;
+    gap: 1rem;
+    margin: 0;
+}
+
+.node-refresh-state div {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.node-refresh-state dt {
+    color: var(--muted-text, #9aa9b6);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+
+.node-refresh-state dd {
+    margin: 0;
+}
+
+@media (max-width: 760px) {
+    .node-refresh-row,
+    .node-refresh-state {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .node-refresh-identity {
+        min-width: 0;
+    }
+}

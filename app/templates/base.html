@@ -15,9 +15,23 @@
     <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{{ url_for('apple_touch_icon_precomposed') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('favicon_16') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% for stylesheet in page_stylesheets %}
+    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION) }}">
+    {% endfor %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
+    <script defer src="{{ url_for('static', filename='js/interaction_states.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% if uses_operational_shell or is_rfd_hub_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% endif %}
+    {% if is_authenticated_app %}
+    <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% endif %}
+    {% if uses_live_update_controller %}
     <script src="{{ url_for('static', filename='js/live_updates.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% endif %}
+    {% if is_neostaffing_page %}
+    <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% endif %}
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script>
     (() => {
@@ -832,10 +846,10 @@
     </script>
     {% endif %}
     {% if uses_shared_mobile_drawer %}
-    <script src="{{ url_for('static', filename='js/mobile_drawer.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    <script defer src="{{ url_for('static', filename='js/mobile_drawer.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_operational_shell %}
-    <script src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    <script defer src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
     <script
@@ -931,6 +945,8 @@
             ".action-button",
             ".table-row-button",
             ".portal-app-card",
+            ".portal-launch-card",
+            ".gateway-node-card",
             ".portal-install-card",
             ".portal-install-button",
             ".command-card-link",

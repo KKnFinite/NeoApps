@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date, datetime
 from pathlib import Path
 import unittest
@@ -779,7 +780,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             f"/motherbrain/operations/{operation.id}/missions/new?mission_type=arrival&amp;return_to=neorain.inbound".encode(),
             inbound.data,
         )
-        css = Path("app/static/css/base.css").read_bytes()
+        css = stylesheet_source().encode()
         for hook in (
             b'grid-template-columns: minmax(4.5rem, .55fr)',
             b'.neorain-outbound-late-summary strong',

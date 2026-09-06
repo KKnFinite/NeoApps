@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date, datetime
 from pathlib import Path
 import re
@@ -47,7 +48,7 @@ class NeoStaffingManagementReviewTest(unittest.TestCase):
         self.context.pop()
 
     def test_relationship_review_console_css_is_full_width_and_locally_scrollable(self):
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn(".neostaffing-relationship-review-console { display:grid", css)
         self.assertIn("width:calc(100vw - 32px)", css)

@@ -1,0 +1,1806 @@
+
+
+/* Use the shared operation refresh banner include for live operation-window status. */
+.operation-refresh-banner {
+    display: grid;
+    gap: 3px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid rgba(var(--node-rgb), 0.42);
+    border-radius: 7px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.16), rgba(10, 10, 14, 0.82)),
+        rgba(14, 15, 20, 0.86);
+    color: var(--neo-silver);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.operation-refresh-banner > span {
+    color: rgba(236, 240, 246, 0.76);
+    font-size: 0.66rem;
+    letter-spacing: 0.03em;
+}
+
+.operation-refresh-banner[hidden] {
+    display: none;
+}
+
+.live-update-status {
+    justify-self: end;
+    min-height: 24px;
+    padding: 4px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 6px;
+    background: rgba(7, 10, 14, 0.78);
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.live-update-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    justify-self: end;
+    gap: 6px;
+    min-width: 0;
+}
+
+.live-update-controls .live-update-status {
+    justify-self: auto;
+}
+
+.live-update-monitor-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 4px 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.32);
+    border-radius: 6px;
+    background: rgba(7, 10, 14, 0.78);
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.live-update-monitor-toggle[aria-pressed="true"] {
+    border-color: rgba(30, 196, 174, 0.58);
+    color: var(--neo-teal-light);
+    background: rgba(9, 39, 35, 0.9);
+}
+
+.live-update-monitor-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.live-update-monitor-state {
+    color: rgba(238, 246, 255, 0.58);
+}
+
+.live-update-monitor-toggle[aria-pressed="true"] .live-update-monitor-state {
+    color: var(--neo-teal-light);
+}
+
+.live-update-status[data-live-update-state="active"] {
+    color: var(--neo-teal-light);
+    border-color: rgba(30, 196, 174, 0.46);
+}
+
+.live-update-status[data-live-update-state="reconnecting"] {
+    color: #ffd27a;
+    border-color: rgba(255, 180, 72, 0.52);
+}
+
+.live-update-status[data-live-update-state="inactive"] {
+    color: #ffd27a;
+    border-color: rgba(255, 180, 72, 0.52);
+}
+
+[data-live-row].is-live-updated {
+    animation: neo-live-row-updated 1.6s ease-out;
+}
+
+[data-live-row].is-live-conflict {
+    outline: 1px solid rgba(255, 180, 72, 0.78);
+    outline-offset: -1px;
+}
+
+.live-conflict-panel {
+    display: grid;
+    gap: 7px;
+    margin: 7px;
+    padding: 8px;
+    border: 1px solid rgba(255, 180, 72, 0.66);
+    border-radius: 6px;
+    background: rgba(34, 23, 8, 0.96);
+    color: #ffe3a6;
+    font-size: 0.76rem;
+}
+
+.live-conflict-panel p {
+    margin: 0;
+}
+
+.live-conflict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.live-conflict-actions button {
+    min-height: 32px;
+}
+
+@keyframes neo-live-row-updated {
+    0% {
+        background-color: rgba(30, 196, 174, 0.22);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+@media (max-width: 900px) {
+    .live-update-status:not([data-live-update-state="reconnecting"]):not([data-live-update-state="inactive"]) {
+        display: none;
+    }
+
+    .live-update-controls {
+        flex-wrap: wrap;
+    }
+
+    .live-update-monitor-toggle {
+        margin-left: auto;
+    }
+}
+
+/* Compact NeoSektor live boards can opt into Tunnel Conductor's reference sizing. */
+@media (min-width: 901px) {
+    .operation-refresh-banner--neosektor-tunnel-standard {
+        min-height: 0;
+        padding: 5px 8px;
+    }
+}
+
+@media (max-width: 760px) {
+    .operation-refresh-banner--neosektor-tunnel-standard {
+        min-height: 0;
+        margin: 0;
+        padding: 5px 8px;
+        gap: 2px;
+        font-size: 0.58rem;
+        line-height: 1.15;
+    }
+
+    .operation-refresh-banner--neosektor-tunnel-standard > span {
+        font-size: 0.5rem;
+        line-height: 1.1;
+    }
+}
+
+.neoermac-upcoming-board {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+}
+
+.neoermac-upcoming-board h3 {
+    margin: 0;
+    color: #eef6ff;
+    font-size: 0.82rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-upcoming-sides {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.neoermac-upcoming-side {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(201, 208, 214, 0.18);
+    border-radius: 5px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 34%),
+        rgba(4, 6, 9, 0.66);
+}
+
+.neoermac-upcoming-side-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid rgba(201, 208, 214, 0.14);
+}
+
+.neoermac-upcoming-side-header span {
+    color: var(--node-ermac-secondary);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.neoermac-upcoming-side-header strong {
+    color: var(--steel);
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neoermac-upcoming-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.neoermac-upcoming-row {
+    display: grid;
+    grid-template-columns: 3.4rem 4.2rem minmax(0, 1fr);
+    gap: 4px 7px;
+    align-items: center;
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid rgba(201, 208, 214, 0.14);
+    border-radius: 4px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 42%),
+        rgba(1, 3, 6, 0.68);
+}
+
+.neoermac-upcoming-time {
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+}
+
+.neoermac-upcoming-type {
+    color: var(--node-ermac-secondary);
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.neoermac-upcoming-detail {
+    min-width: 0;
+    overflow: hidden;
+    color: #eef6ff;
+    font-size: 0.76rem;
+    font-weight: 950;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neoermac-upcoming-location {
+    grid-column: 3;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--steel);
+    font-size: 0.62rem;
+    font-weight: 850;
+    letter-spacing: 0.04em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.neoermac-upcoming-empty,
+.neoermac-upcoming-side-empty {
+    justify-self: center;
+    padding: 12px;
+    border: 1px solid rgba(201, 208, 214, 0.16);
+    border-radius: 5px;
+    background: rgba(4, 6, 9, 0.58);
+    color: var(--steel);
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-upcoming-empty {
+    width: min(100%, 360px);
+    text-transform: none;
+}
+
+.neoermac-dashboard-menu {
+    justify-self: center;
+}
+
+.neoermac-readonly-note {
+    margin: -6px 0 0;
+    color: var(--node-ermac-secondary);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-align: center;
+    text-shadow: 0 0 14px rgba(54, 226, 123, 0.28);
+}
+
+.neoermac-lineup-form {
+    display: grid;
+    gap: 18px;
+    width: 100%;
+}
+
+.neoermac-runout-list {
+    display: grid;
+    gap: 14px;
+    width: 100%;
+}
+
+.neoermac-runout-card {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid rgba(201, 208, 214, 0.24);
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(var(--node-rgb), 0.14), transparent 16rem),
+        radial-gradient(circle at 92% 12%, rgba(54, 226, 123, 0.08), transparent 12rem),
+        linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 34%),
+        rgba(5, 6, 9, 0.76);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 22px rgba(var(--node-rgb), 0.1);
+    text-align: left;
+}
+
+.neoermac-runout-card h2,
+.neoermac-runout-card h3 {
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.neoermac-runout-card h2 {
+    color: #eef6ff;
+    font-size: clamp(1rem, 2vw, 1.28rem);
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 14px rgba(var(--node-rgb), 0.34);
+}
+
+.neoermac-runout-slots {
+    display: grid;
+    gap: 9px;
+}
+
+.neoermac-runout-slots label {
+    display: grid;
+    gap: 5px;
+    padding: 10px;
+    border: 1px solid rgba(201, 208, 214, 0.16);
+    border-radius: 5px;
+    background: rgba(3, 4, 6, 0.48);
+}
+
+.neoermac-runout-slots label span {
+    color: var(--muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.neoermac-door-context {
+    display: none;
+}
+
+.neoermac-destination-select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid rgba(201, 208, 214, 0.3);
+    border-radius: 4px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.1), transparent 30%),
+        linear-gradient(180deg, rgba(24, 27, 32, 0.96), rgba(6, 7, 10, 0.96));
+    color: #eef6ff;
+    font: inherit;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    padding: 9px 10px;
+    text-transform: uppercase;
+}
+
+.neoermac-destination-select:focus {
+    border-color: rgba(54, 226, 123, 0.72);
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(54, 226, 123, 0.1),
+        0 0 18px rgba(var(--node-rgb), 0.16);
+}
+
+.neoermac-destination-select:disabled {
+    color: rgba(238, 246, 255, 0.74);
+    opacity: 0.82;
+}
+
+.neoermac-lineup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+
+.neoermac-lineup-actions .neoermac-menu-link {
+    min-width: min(100%, 230px);
+}
+
+.neoermac-door-launcher-grid {
+    display: none;
+}
+
+@media (min-width: 761px) {
+    body.node-desktop-nav-page .neoermac-door-shell.neoermac-door-launcher {
+        align-content: start;
+        justify-items: stretch;
+        width: min(100%, 1040px);
+        max-width: 1040px;
+        gap: 10px;
+        padding: 16px 18px 18px;
+    }
+
+    body.node-desktop-nav-page .neoermac-door-launcher .neoermac-door-selector,
+    body.node-desktop-nav-page .neoermac-door-launcher .neoermac-door-empty {
+        display: none;
+    }
+
+    .neoermac-door-launcher-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
+    }
+
+    .neoermac-door-launcher-button {
+        display: grid;
+        place-items: center;
+        min-height: 50px;
+        padding: 8px;
+        border: 1px solid rgba(238, 246, 255, 0.3);
+        border-radius: 5px;
+        color: #eef6ff;
+        background:
+            linear-gradient(135deg, rgba(238, 246, 255, 0.12), transparent 32%),
+            linear-gradient(180deg, rgba(var(--node-rgb), 0.62), rgba(88, 8, 16, 0.76)),
+            linear-gradient(180deg, rgba(28, 31, 37, 0.94), rgba(8, 9, 12, 0.94));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 0 16px rgba(var(--node-rgb), 0.16);
+        font-size: 0.92rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        text-align: center;
+        text-decoration: none;
+        text-transform: uppercase;
+    }
+
+    .neoermac-door-launcher-button:hover,
+    .neoermac-door-launcher-button:focus-visible {
+        border-color: rgba(54, 226, 123, 0.72);
+        outline: none;
+        color: #ffffff;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.2),
+            0 0 20px rgba(var(--node-rgb), 0.28),
+            0 0 14px rgba(54, 226, 123, 0.18);
+    }
+
+    .neoermac-lineup-shell {
+        width: min(100%, 1320px);
+    }
+
+    .neoermac-runout-list {
+        gap: 6px;
+        padding: 12px;
+        border: 1px solid rgba(var(--node-rgb), 0.34);
+        border-radius: 8px;
+        background:
+            linear-gradient(90deg, rgba(var(--node-rgb), 0.08), transparent 14% 86%, rgba(var(--node-rgb), 0.08)),
+            linear-gradient(180deg, rgba(22, 8, 12, 0.72), rgba(4, 5, 7, 0.9));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.09),
+            0 0 30px rgba(var(--node-rgb), 0.12);
+    }
+
+    .neoermac-runout-card {
+        grid-template-columns: minmax(92px, 130px) minmax(0, 1fr);
+        gap: 0;
+        overflow: hidden;
+        padding: 0;
+        border-color: rgba(var(--node-rgb), 0.34);
+        border-radius: 5px;
+        background: rgba(10, 3, 6, 0.72);
+        box-shadow: none;
+    }
+
+    .neoermac-runout-card h2 {
+        display: grid;
+        place-items: center;
+        min-height: 108px;
+        padding: 10px 8px;
+        border-right: 1px solid rgba(255, 224, 229, 0.28);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 22%),
+            linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 24%) 0%, var(--node-primary) 46%, color-mix(in srgb, var(--node-primary), black 44%) 100%);
+        color: #fff7f8;
+        font-size: clamp(0.82rem, 1.2vw, 1.05rem);
+        line-height: 1.05;
+        text-align: center;
+        text-shadow:
+            0 0 12px rgba(255, 255, 255, 0.3),
+            0 2px 0 rgba(0, 0, 0, 0.7);
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+    }
+
+    .neoermac-runout-card:first-child {
+        border-color: rgba(54, 226, 123, 0.38);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 24px rgba(54, 226, 123, 0.12),
+            0 0 22px rgba(var(--node-rgb), 0.1);
+    }
+
+    .neoermac-runout-slots {
+        grid-template-columns: minmax(0, 1fr) minmax(96px, 120px) minmax(0, 1fr);
+        grid-template-areas:
+            "east1 door west1"
+            "east2 door west2";
+        gap: 0;
+        align-items: stretch;
+        min-height: 108px;
+    }
+
+    .neoermac-slot-east-1 {
+        grid-area: east1;
+    }
+
+    .neoermac-slot-east-2 {
+        grid-area: east2;
+    }
+
+    .neoermac-slot-west-1 {
+        grid-area: west1;
+    }
+
+    .neoermac-slot-west-2 {
+        grid-area: west2;
+    }
+
+    .neoermac-door-context {
+        grid-area: door;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 10px 6px;
+        border-inline: 2px solid rgba(255, 225, 230, 0.34);
+        border-radius: 0;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 20%),
+            linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 28%) 0%, var(--node-primary) 44%, color-mix(in srgb, var(--node-primary), black 46%) 100%);
+        color: #fff5f7;
+        font-size: 0.58rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        line-height: 1.05;
+        text-align: center;
+        text-transform: uppercase;
+    }
+
+    .neoermac-door-context::before,
+    .neoermac-door-context::after {
+        content: "";
+        width: 76%;
+        min-height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(255, 234, 238, 0.82), transparent);
+    }
+
+    .neoermac-door-context span {
+        color: #ffdbe0;
+        font-size: clamp(1.2rem, 2.1vw, 2rem);
+        letter-spacing: 0.04em;
+        text-shadow:
+            0 0 12px rgba(255, 255, 255, 0.26),
+            0 2px 0 rgba(0, 0, 0, 0.7);
+    }
+
+    .neoermac-door-context strong {
+        color: #fff2f4;
+        font-size: clamp(0.58rem, 0.9vw, 0.78rem);
+        letter-spacing: 0.1em;
+        line-height: 1;
+        text-shadow:
+            0 0 14px rgba(255, 255, 255, 0.36),
+            0 2px 0 rgba(0, 0, 0, 0.74);
+    }
+
+    .neoermac-door-context em {
+        color: #fff;
+        font-size: clamp(0.72rem, 1.05vw, 0.98rem);
+        font-style: normal;
+        font-weight: 950;
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+        text-shadow:
+            0 0 12px rgba(255, 255, 255, 0.3),
+            0 2px 0 rgba(0, 0, 0, 0.74);
+    }
+
+    .neoermac-runout-card:first-child .neoermac-door-context em {
+        color: #f7fff9;
+        text-shadow:
+            0 0 14px rgba(54, 226, 123, 0.42),
+            0 2px 0 rgba(0, 0, 0, 0.74);
+    }
+
+    .neoermac-runout-slots label {
+        justify-content: stretch;
+        gap: 7px;
+        min-height: 54px;
+        padding: 8px 10px;
+        border: 1px solid rgba(120, 13, 23, 0.32);
+        border-radius: 0;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 26%),
+            linear-gradient(180deg, #ffd5dc 0%, #f1a3af 100%);
+        color: #41050b;
+    }
+
+    .neoermac-runout-slots label span {
+        color: rgba(65, 5, 11, 0.78);
+        font-size: 0.58rem;
+        letter-spacing: 0.05em;
+    }
+
+    .neoermac-slot-east-1,
+    .neoermac-slot-west-1 {
+        border-bottom-color: rgba(120, 13, 23, 0.24);
+    }
+
+    .neoermac-slot-east-1,
+    .neoermac-slot-east-2 {
+        border-right: 2px solid rgba(120, 13, 23, 0.28);
+    }
+
+    .neoermac-slot-west-1,
+    .neoermac-slot-west-2 {
+        border-left: 2px solid rgba(120, 13, 23, 0.28);
+    }
+
+    .neoermac-destination-select {
+        min-height: 34px;
+        padding: 6px 8px;
+        border-color: rgba(74, 4, 10, 0.4);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 38%),
+            #ffe8ec;
+        color: #2b0307;
+        font-size: 0.96rem;
+        text-align: center;
+        text-align-last: center;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.52),
+            0 0 0 1px rgba(255, 255, 255, 0.18);
+    }
+}
+
+.rfd-command-hub {
+    margin-bottom: 0;
+}
+
+.neoermac-door-shell {
+    box-sizing: border-box;
+    width: min(100%, 920px);
+    gap: 12px;
+    padding: clamp(12px, 3vw, 22px);
+    overflow-x: clip;
+    overflow-y: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-door-hero h1 {
+    font-size: clamp(2rem, 11vw, 3.4rem);
+}
+
+.neoermac-door-selector,
+.neoermac-door-pull-form,
+.neoermac-uld-form {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+}
+
+.neoermac-pull-scope {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 8px;
+    padding: 6px 8px;
+    border: 1px solid rgba(var(--node-ermac-primary-rgb), 0.72);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--node-ermac-primary) 12%, #050709);
+    color: var(--node-ermac-secondary);
+    font-size: 0.62rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.neo-segmented-control {
+    display: inline-flex;
+    overflow: hidden;
+    border: 1px solid var(--segmented-control-border);
+    border-radius: var(--segmented-control-radius, 3px);
+}
+
+.neo-segmented-control > :is(a, button) {
+    border: 0;
+    border-radius: 0;
+    background: var(--segmented-control-background, transparent);
+    color: var(--segmented-control-color, inherit);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.neo-segmented-control > :is(a, button) + :is(a, button) {
+    border-left: 1px solid var(--segmented-control-divider, var(--segmented-control-border));
+}
+
+.neo-segmented-control > :is(a, button):hover,
+.neo-segmented-control > :is(a, button):focus-visible {
+    background: var(--segmented-control-hover-background, var(--segmented-control-background, transparent));
+    color: var(--segmented-control-hover-color, var(--segmented-control-color, inherit));
+}
+
+.neo-segmented-control > :is(a, button):focus-visible {
+    outline: 2px solid var(--segmented-control-focus, currentColor);
+    outline-offset: -2px;
+}
+
+.neo-segmented-control > :is(a[aria-current="page"], button[aria-pressed="true"]) {
+    background: var(--segmented-control-active-background);
+    color: var(--segmented-control-active-color, #fff);
+}
+
+.neoermac-pull-scope-options {
+    --segmented-control-border: var(--node-ermac-primary);
+    --segmented-control-radius: 5px;
+    --segmented-control-background: color-mix(in srgb, var(--node-ermac-primary) 18%, #08090b);
+    --segmented-control-color: var(--node-ermac-highlight);
+    --segmented-control-hover-background: color-mix(in srgb, var(--node-ermac-primary) 38%, #08090b);
+    --segmented-control-hover-color: #fff;
+    --segmented-control-focus: var(--node-ermac-highlight);
+    --segmented-control-active-background: var(--node-ermac-primary);
+    box-shadow: 0 0 0 1px rgba(var(--node-ermac-highlight-rgb), 0.08);
+}
+
+.neoermac-pull-scope-options button {
+    min-height: 25px;
+    padding: 3px 8px;
+    font: inherit;
+    font-size: 0.58rem;
+    line-height: 1;
+}
+
+.neoermac-pull-scope-options button[aria-pressed="true"] {
+    box-shadow: inset 0 -2px 0 var(--node-ermac-highlight);
+}
+
+.neoermac-pull-scope small {
+    flex-basis: 100%;
+    color: color-mix(in srgb, var(--node-ermac-secondary) 82%, transparent);
+    font-size: 0.56rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    text-transform: none;
+}
+
+.neoermac-door-selector > label,
+.neoermac-door-panel h2 {
+    margin: 0;
+    color: var(--node-ermac-secondary);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-door-selector-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    width: 100%;
+}
+
+.neoermac-door-selector-row .neoermac-menu-link {
+    min-height: 42px;
+    padding-inline: 14px;
+}
+
+.neoermac-door-fixed-controls {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+}
+
+@media (max-width: 760px) {
+    body.blueprint-neoermac.mobile-app-chrome .neoermac-door-fixed-controls {
+        position: sticky;
+        top: calc(60px + env(safe-area-inset-top));
+        z-index: 1500;
+        align-self: start;
+        gap: 6px;
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 4px 0 7px;
+        background: linear-gradient(180deg, rgba(5, 6, 9, 0.99), rgba(5, 6, 9, 0.96));
+        box-shadow: 0 10px 18px rgba(0, 0, 0, 0.34);
+    }
+}
+
+.neoermac-door-supervision {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.neoermac-door-tabs {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+}
+
+.neoermac-door-tab {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    min-width: 64px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 5px;
+    color: rgba(238, 246, 255, 0.78);
+    background: rgba(7, 9, 12, 0.9);
+    font-size: 0.78rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.neoermac-door-tab.is-active {
+    border-color: rgba(54, 226, 123, 0.72);
+    color: #ffffff;
+    background:
+        linear-gradient(180deg, rgba(54, 226, 123, 0.14), rgba(7, 9, 12, 0.94)),
+        rgba(7, 9, 12, 0.94);
+    box-shadow:
+        inset 0 0 0 1px rgba(54, 226, 123, 0.08),
+        0 0 14px rgba(54, 226, 123, 0.18);
+}
+
+.neoermac-door-tab:not(.is-active).is-pull-due-now,
+.neoermac-door-tab:not(.is-active).is-pull-late {
+    color: #ffffff;
+    animation: neoermac-door-tab-pull-pulse 1.05s ease-in-out infinite;
+}
+
+.neoermac-door-tab:not(.is-active).is-pull-due-now {
+    --neoermac-door-tab-alert-rgb: 54, 226, 123;
+    border-color: rgba(54, 226, 123, 0.94);
+    background:
+        linear-gradient(180deg, rgba(54, 226, 123, 0.32), rgba(4, 36, 18, 0.92)),
+        rgba(7, 9, 12, 0.94);
+}
+
+.neoermac-door-tab:not(.is-active).is-pull-late {
+    --neoermac-door-tab-alert-rgb: 255, 48, 79;
+    border-color: rgba(255, 48, 79, 0.96);
+    background:
+        linear-gradient(180deg, rgba(255, 48, 79, 0.34), rgba(45, 0, 9, 0.94)),
+        rgba(7, 9, 12, 0.94);
+}
+
+@keyframes neoermac-door-tab-pull-pulse {
+    0%,
+    100% {
+        box-shadow:
+            inset 0 0 0 1px rgba(var(--neoermac-door-tab-alert-rgb), 0.22),
+            0 0 7px rgba(var(--neoermac-door-tab-alert-rgb), 0.26);
+    }
+    50% {
+        box-shadow:
+            inset 0 0 0 1px rgba(var(--neoermac-door-tab-alert-rgb), 0.62),
+            0 0 22px rgba(var(--neoermac-door-tab-alert-rgb), 0.74);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .neoermac-door-tab:not(.is-active).is-pull-due-now,
+    .neoermac-door-tab:not(.is-active).is-pull-late {
+        animation: none;
+    }
+}
+
+.neoermac-door-supervision-edit {
+    min-height: 40px;
+    white-space: nowrap;
+}
+
+.neoermac-door-supervision-dialog {
+    width: min(92vw, 620px);
+    max-width: calc(100vw - 24px);
+    max-height: min(82vh, 720px);
+    padding: 0;
+    overflow: auto;
+    border: 1px solid rgba(var(--node-rgb), 0.62);
+    border-radius: 7px;
+    color: #eef6ff;
+    background:
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.18), transparent 120px),
+        #090b0e;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.72);
+}
+
+.neoermac-door-supervision-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.76);
+    backdrop-filter: blur(3px);
+}
+
+.neoermac-door-supervision-dialog form {
+    display: grid;
+    gap: 16px;
+    padding: 18px;
+}
+
+.neoermac-door-supervision-dialog header {
+    display: grid;
+    gap: 5px;
+    text-align: center;
+}
+
+.neoermac-door-supervision-dialog h2,
+.neoermac-door-supervision-dialog p {
+    margin: 0;
+}
+
+.neoermac-door-supervision-dialog h2 {
+    color: #ffffff;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+}
+
+.neoermac-door-supervision-dialog p {
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.neoermac-door-supervision-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.neoermac-door-supervision-grid label {
+    display: grid;
+    place-items: center;
+    min-height: 52px;
+    cursor: pointer;
+}
+
+.neoermac-door-supervision-grid input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.neoermac-door-supervision-grid span {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-height: 48px;
+    border: 1px solid rgba(var(--node-rgb), 0.34);
+    border-radius: 5px;
+    background: rgba(4, 5, 7, 0.86);
+    color: rgba(238, 246, 255, 0.76);
+    font-size: 0.82rem;
+    font-weight: 950;
+}
+
+.neoermac-door-supervision-grid input:checked + span {
+    border-color: rgba(54, 226, 123, 0.72);
+    color: #ffffff;
+    background: rgba(54, 226, 123, 0.13);
+    box-shadow: 0 0 14px rgba(54, 226, 123, 0.16);
+}
+
+.neoermac-door-supervision-grid input:focus-visible + span {
+    outline: 2px solid rgba(54, 226, 123, 0.78);
+    outline-offset: 2px;
+}
+
+.neoermac-door-supervision-dialog footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.neoermac-selected-door {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    width: 100%;
+    min-height: 100%;
+    padding: 12px;
+    border: 1px solid rgba(54, 226, 123, 0.34);
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(54, 226, 123, 0.12), transparent 12rem),
+        linear-gradient(180deg, rgba(18, 22, 24, 0.9), rgba(4, 5, 7, 0.92));
+}
+
+.neoermac-selected-door span,
+.neoermac-door-card-head span,
+.neoermac-door-planned span,
+.neoermac-door-actual span,
+.neoermac-uld-grid span {
+    color: var(--muted);
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neoermac-selected-door strong {
+    color: #eef6ff;
+    font-size: clamp(2.2rem, 8vw, 4rem);
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    line-height: 0.95;
+    text-shadow:
+        0 0 20px rgba(var(--node-rgb), 0.38),
+        0 0 18px rgba(54, 226, 123, 0.18);
+}
+
+.neoermac-door-top-grid {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr);
+    gap: 10px;
+    width: 100%;
+    align-items: stretch;
+}
+
+.neoermac-door-support-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    min-width: 0;
+}
+
+.neoermac-uld-workspace {
+    width: 100%;
+    min-width: 0;
+}
+
+.neoermac-door-support-panel {
+    align-content: start;
+    gap: 8px;
+    padding: 10px;
+}
+
+.neoermac-door-panel {
+    display: grid;
+    gap: 13px;
+    width: 100%;
+    padding: 14px;
+    border: 1px solid rgba(201, 208, 214, 0.22);
+    border-radius: 6px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.07), transparent 32%),
+        rgba(5, 6, 9, 0.68);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 18px rgba(var(--node-rgb), 0.1);
+}
+
+.neoermac-door-destination-list {
+    display: grid;
+    gap: 12px;
+}
+
+.neoermac-door-destination-card {
+    position: relative;
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 7px 8px;
+    overflow: hidden;
+    border: 1px solid rgba(var(--node-rgb), 0.58);
+    border-radius: 6px;
+    background:
+        linear-gradient(90deg, rgba(var(--node-rgb), 0.18), transparent 16%),
+        radial-gradient(circle at 10% 0%, rgba(var(--node-rgb), 0.14), transparent 12rem),
+        linear-gradient(180deg, rgba(17, 19, 23, 0.94), rgba(5, 6, 9, 0.94));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 0 0 1px rgba(var(--node-secondary-rgb), 0.16),
+        0 0 16px rgba(var(--node-rgb), 0.16),
+        0 10px 18px rgba(0, 0, 0, 0.2);
+}
+
+.neoermac-door-card-head {
+    display: grid;
+    grid-template-columns:
+        minmax(74px, 0.9fr)
+        minmax(58px, 0.68fr)
+        minmax(82px, 0.86fr)
+        minmax(68px, 0.72fr);
+    gap: 5px;
+    align-items: center;
+    padding-bottom: 2px;
+    border-bottom: 1px solid rgba(var(--node-rgb), 0.18);
+}
+
+/* NeoSektor EBM/WBM standalone operating layout */
+.neosektor-ballmat-operator-page,
+.neosektor-tunnel-operator-page,
+.neosektor-live-counts-page {
+    min-height: 100svh;
+    overflow-x: hidden;
+}
+
+.blueprint-neosektor .neosektor-numeric-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.blueprint-neosektor .neosektor-numeric-input::-webkit-inner-spin-button,
+.blueprint-neosektor .neosektor-numeric-input::-webkit-outer-spin-button {
+    margin: 0;
+    -webkit-appearance: none;
+}
+
+.blueprint-neosektor .neosektor-inline-edit-error {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid rgba(255, 118, 118, 0.55);
+    border-radius: 6px;
+    background: rgba(90, 10, 10, 0.66);
+    color: #ffd9d9;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-inline-edit-error[hidden] {
+    display: none;
+}
+
+.neosektor-ballmat-operator-page .topbar,
+.neosektor-tunnel-operator-page .topbar,
+.neosektor-live-counts-page .topbar {
+    display: none;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page {
+    --neosektor-ballmat-count-card-height: 92px;
+    --neosektor-ballmat-count-control-height: 58px;
+    --neosektor-ballmat-count-size: clamp(1.82rem, 6vw, 2.42rem);
+}
+
+.neosektor-ballmat-operator-page .shell,
+.neosektor-ballmat-operator-page .content,
+.neosektor-tunnel-operator-page .shell,
+.neosektor-tunnel-operator-page .content,
+.neosektor-live-counts-page .shell,
+.neosektor-live-counts-page .content {
+    width: 100%;
+    max-width: none;
+    min-height: 100svh;
+    margin: 0;
+    padding: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    width: min(100%, 590px);
+    min-height: 100svh;
+    margin: 0 auto;
+    padding: 18px 18px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header.app-header {
+    width: 100%;
+    padding-inline: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap {
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip,
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card {
+    min-height: 118px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+    min-height: calc(100svh - 214px);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column {
+    min-height: 100%;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card {
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: var(--neosektor-ballmat-count-card-height);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-self: stretch;
+    margin-top: 0;
+    min-height: var(--neosektor-ballmat-count-control-height);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .counter-control {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-control button,
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .readonly-count {
+    min-height: var(--neosektor-ballmat-count-control-height);
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-number,
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count,
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .readonly-count {
+    font-size: var(--neosektor-ballmat-count-size);
+    line-height: 0.9;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .readonly-count {
+    display: grid;
+    place-items: center;
+    margin: 0;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-status,
+.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-inline-status {
+    display: none;
+}
+
+@media (max-width: 430px) {
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell {
+        padding-inline: 14px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .ops-grid {
+        gap: 7px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .counter-control {
+        grid-template-columns: 43px minmax(0, 1fr) 43px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-open-bay-control .counter-control {
+        grid-template-columns: 43px minmax(0, 1fr) 43px;
+    }
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 10px;
+    width: min(100%, 590px);
+    min-height: 100svh;
+    margin: 0 auto;
+    padding: 18px 8px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header.app-header {
+    width: 100%;
+    padding-inline: 0;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap {
+    grid-template-rows: auto auto auto auto;
+    gap: 10px;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-grid,
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-panel {
+    gap: 9px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel {
+    align-content: start;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control {
+    grid-template-columns: 52px minmax(0, 1fr) 52px;
+    margin-top: 0;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-number,
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control button {
+    min-height: 52px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-offset-panel {
+    grid-column: auto;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-offset-control-card {
+    display: grid;
+    gap: 7px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-offset-control-card > span {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-driver-offset-control {
+    grid-template-columns: 52px minmax(0, 1fr) 52px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-driver-offset-control button,
+.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-driver-offset-control input {
+    min-height: 52px;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-readonly-card {
+    min-height: clamp(94px, 15svh, 132px);
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card {
+    min-height: clamp(62px, 8svh, 78px);
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number,
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control button {
+    min-height: 38px;
+    font-size: 1.28rem;
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-card {
+    min-height: clamp(66px, 8.8svh, 82px);
+}
+
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 430px) {
+    .blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell {
+        padding-inline: 6px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-grid,
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-grid {
+        gap: 6px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-panel {
+        padding: 7px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card {
+        min-height: 58px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .counter-number,
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-ballmat-card .tunnel-count-control button {
+        min-height: 34px;
+        font-size: 1.24rem;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wave-panel .counter-control,
+    .blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-driver-offset-control {
+        grid-template-columns: 44px minmax(0, 1fr) 44px;
+    }
+
+    .blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-bay-grid {
+        gap: 5px;
+    }
+}
+
+.neoermac-door-card-head div,
+.neoermac-door-planned,
+.neoermac-door-actual,
+.neoermac-uld-grid label,
+.neoermac-uld-status span {
+    display: grid;
+    align-content: center;
+    gap: 4px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px;
+    border: 1px solid rgba(201, 208, 214, 0.16);
+    border-radius: 5px;
+    background: rgba(2, 3, 5, 0.56);
+    text-align: center;
+}
+
+.neoermac-door-card-head strong,
+.neoermac-door-planned strong,
+.neoermac-door-static strong,
+.neoermac-uld-status strong {
+    overflow-wrap: anywhere;
+    color: #eef6ff;
+    font-size: 1.02rem;
+    font-weight: 950;
+    letter-spacing: 0.04em;
+}
+
+.neoermac-door-card-head div {
+    min-height: 30px;
+    padding: 2px 4px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-door-card-head .neoermac-door-destination {
+    position: relative;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-door-destination::before {
+    content: none;
+    display: none;
+}
+
+.neoermac-door-destination strong {
+    color: var(--node-ermac-secondary);
+    font-size: 0.92rem;
+    text-shadow: 0 0 14px rgba(54, 226, 123, 0.16);
+}
+
+.neoermac-door-destination .neoermac-door-destination-title {
+    color: var(--node-ermac-secondary);
+    font-size: 1.34rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    line-height: 0.95;
+    text-shadow:
+        0 0 18px rgba(var(--node-secondary-rgb), 0.54),
+        0 0 16px rgba(var(--node-rgb), 0.38);
+}
+
+.neoermac-door-status strong {
+    color: var(--node-ermac-secondary);
+    font-size: 0.76rem;
+}
+
+.neoermac-door-window-row {
+    display: flex;
+    justify-content: center;
+}
+
+.neoermac-door-window {
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+    padding: 4px 10px;
+    border: 1px solid rgba(54, 226, 123, 0.24);
+    border-radius: 999px;
+    color: var(--node-ermac-secondary);
+    background: rgba(54, 226, 123, 0.08);
+    font-size: 1rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.neoermac-door-planned em {
+    color: var(--steel);
+    font-size: 0.54rem;
+    font-style: normal;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.neoermac-door-pull-grid {
+    display: grid;
+    gap: 0;
+}
+
+.neoermac-door-complete-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(54, 226, 123, 0.38);
+    border-radius: 5px;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(54, 226, 123, 0.12), transparent 9rem),
+        rgba(2, 8, 8, 0.7);
+}
+
+.neoermac-door-complete-summary[hidden],
+.neoermac-door-destination-card:not(.is-pulls-collapsed) .neoermac-door-complete-summary {
+    display: none;
+}
+
+.neoermac-door-complete-summary span,
+.neoermac-door-complete-summary strong {
+    grid-column: 1;
+    min-width: 0;
+}
+
+.neoermac-door-complete-summary span {
+    color: #eef6ff;
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neoermac-door-complete-summary strong {
+    color: #d8e5f2;
+    font-size: 0.86rem;
+    font-weight: 950;
+    line-height: 1.2;
+}
+
+.neoermac-door-edit-pulls {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    min-height: 38px;
+    padding-inline: 10px;
+    font-size: 0.62rem;
+}
+
+.neoermac-door-destination-card.is-pulls-collapsed .neoermac-door-card-head,
+.neoermac-door-destination-card.is-pulls-collapsed .neoermac-door-window-row,
+.neoermac-door-destination-card.is-pulls-collapsed .neoermac-door-pull-grid {
+    display: none;
+}
+
+.neoermac-door-autosave-error {
+    margin: 0;
+    padding: 5px 7px;
+    border: 1px solid rgba(255, 77, 101, 0.42);
+    border-radius: 5px;
+    background: rgba(87, 0, 14, 0.36);
+    color: #ffdbe0;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+}
+
+.neoermac-door-autosave-error[hidden] {
+    display: none;
+}
+
+.neoermac-door-autosave-status {
+    margin: 0;
+    min-height: 14px;
+    color: rgba(185, 255, 218, 0.84);
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-align: right;
+}
+
+.neoermac-door-autosave-status[data-state="saving"] {
+    color: rgba(234, 245, 255, 0.78);
+}
+
+.neoermac-door-autosave-status[hidden] {
+    display: none;
+}
+
+.neoermac-door-destination-card.is-pull-saving {
+    border-color: rgba(54, 226, 123, 0.26);
+}
+
+.neoermac-door-pull-row {
+    display: grid;
+    grid-template-columns: minmax(72px, 0.84fr) minmax(86px, 0.96fr) minmax(68px, 0.72fr);
+    gap: 5px;
+    align-items: stretch;
+    padding-block: 4px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.12);
+}
+
+.neoermac-door-pull-row:first-child {
+    border-top: 0;
+}
+
+.neoermac-door-planned {
+    min-height: 34px;
+    padding: 2px 3px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-door-toggle {
+    min-height: 34px;
+    padding: 2px 3px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-door-pull-row.is-pull-due-soon .neoermac-door-planned,
+.neoermac-door-pull-row.is-pull-due-soon .neoermac-door-actual,
+.neoermac-door-pull-row.is-pull-due-soon .neoermac-door-toggle {
+    --neoermac-pull-alert-rgb: 255, 203, 87;
+    border-color: rgba(255, 203, 87, 0.72);
+    background:
+        linear-gradient(135deg, rgba(255, 203, 87, 0.16), rgba(2, 3, 5, 0.68)),
+        rgba(30, 20, 4, 0.74);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 203, 87, 0.12),
+        0 0 12px rgba(255, 203, 87, 0.12);
+    animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;
+}
+
+.neoermac-door-pull-row.is-pull-due-now .neoermac-door-planned,
+.neoermac-door-pull-row.is-pull-due-now .neoermac-door-actual,
+.neoermac-door-pull-row.is-pull-due-now .neoermac-door-toggle {
+    --neoermac-pull-alert-rgb: 54, 226, 123;
+    border-color: rgba(54, 226, 123, 0.88);
+    background:
+        linear-gradient(135deg, rgba(54, 226, 123, 0.22), rgba(0, 24, 12, 0.8)),
+        rgba(0, 32, 16, 0.82);
+    box-shadow:
+        inset 0 0 0 1px rgba(54, 226, 123, 0.18),
+        0 0 16px rgba(54, 226, 123, 0.24);
+    animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;
+}
+
+.neoermac-door-pull-row.is-pull-late .neoermac-door-planned,
+.neoermac-door-pull-row.is-pull-late .neoermac-door-actual,
+.neoermac-door-pull-row.is-pull-late .neoermac-door-toggle {
+    --neoermac-pull-alert-rgb: 255, 62, 86;
+    border-color: rgba(255, 62, 86, 0.9);
+    background:
+        linear-gradient(135deg, rgba(255, 62, 86, 0.24), rgba(35, 0, 7, 0.84)),
+        rgba(40, 0, 8, 0.86);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 62, 86, 0.2),
+        0 0 18px rgba(255, 62, 86, 0.28);
+    animation: neoermac-pull-critical-pulse 1.15s ease-in-out infinite;
+}
+
+.neoermac-pull-alert-badge {
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: #161006;
+    background: #ffcb57;
+    font-size: 0.56rem;
+    font-weight: 950;
+    letter-spacing: 0.09em;
+    line-height: 1.1;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.neoermac-door-pull-row.is-pull-late .neoermac-pull-alert-badge {
+    color: #fff5f6;
+    background: #ff304f;
+    box-shadow: 0 0 12px rgba(255, 48, 79, 0.42);
+}
+
+.neoermac-door-pull-row.is-pull-due-now .neoermac-pull-alert-badge {
+    color: #02160b;
+    background: #36e27b;
+    box-shadow: 0 0 12px rgba(54, 226, 123, 0.38);
+}
+
+@keyframes neoermac-pull-critical-pulse {
+    0%,
+    100% {
+        box-shadow:
+            inset 0 0 0 1px rgba(var(--neoermac-pull-alert-rgb), 0.18),
+            0 0 12px rgba(var(--neoermac-pull-alert-rgb), 0.2);
+    }
+    50% {
+        box-shadow:
+            inset 0 0 0 1px rgba(var(--neoermac-pull-alert-rgb), 0.4),
+            0 0 24px rgba(var(--neoermac-pull-alert-rgb), 0.46);
+    }
+}

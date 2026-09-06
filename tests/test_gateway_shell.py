@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import unittest
 from datetime import date
 from pathlib import Path
@@ -115,9 +116,7 @@ class GatewayShellTest(unittest.TestCase):
         self.assertIn(f'href="/motherbrain/manage-sort?operation_id={selected.id}"'.encode(), response.data)
 
     def test_gateway_mobile_hero_keeps_its_title_in_a_separate_row(self):
-        css = (Path(__file__).resolve().parents[1] / "app" / "static" / "css" / "base.css").read_text(
-            encoding="utf-8"
-        )
+        css = stylesheet_source()
 
         self.assertIn(
             ".gateway-node-motherbrain { grid-column:1 / -1; grid-template-rows:auto minmax(0, 1fr) auto;",

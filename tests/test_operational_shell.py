@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import unittest
 from pathlib import Path
 
@@ -95,9 +96,7 @@ class OperationalShellTest(unittest.TestCase):
         self.assertNotIn(b"data-operational-board-toggle", settings.data)
 
     def test_shared_mobile_shell_uses_safe_area_for_header_content_and_drawer(self):
-        css = Path(self.app.root_path, "static", "css", "base.css").read_text(
-            encoding="utf-8"
-        )
+        css = stylesheet_source()
 
         self.assertIn("--neo-safe-top: env(safe-area-inset-top, 0px)", css)
         self.assertIn("--operational-mobile-header-height:calc(var(--operational-mobile-controls-height) + var(--neo-safe-top))", css)

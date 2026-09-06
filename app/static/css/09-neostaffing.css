@@ -1,0 +1,626 @@
+
+.neostaffing-people-org-tree .neostaffing-people-org-tree { margin-top: 0; padding-left: 11px; }
+
+.neostaffing-people-toolbar-row { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+.neostaffing-people-console-toolbar { flex: 1 1 auto; }
+.neostaffing-people-add-control { position: relative; flex: 0 0 auto; z-index: 55; }
+.neostaffing-people-add-menu > summary { white-space: nowrap; }
+.neostaffing-people-add-menu-panel {
+    position: absolute;
+    z-index: 56;
+    top: calc(100% + 5px); right: 0;
+    display: grid;
+    min-width: 172px;
+    padding: 5px;
+    border: 1px solid rgba(var(--node-rgb), .3);
+    background: #0d171d;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+}
+.neostaffing-people-add-menu-panel button { padding: 7px 9px; border: 0; background: transparent; color: var(--neo-silver); text-align: left; white-space: nowrap; }
+.neostaffing-people-add-menu-panel button:hover { background: rgba(var(--node-rgb), .12); color: var(--node-primary); }
+.neostaffing-people-drawer { display: contents; }
+
+@media (max-width: 1280px) and (min-width: 981px) {
+    .neostaffing-people-console { grid-template-columns: 144px 210px minmax(0, 1fr); }
+    .neostaffing-people-roster-workspace { padding: 12px; }
+    .neostaffing-people-console-toolbar { flex-wrap: wrap; }
+    .neostaffing-people-console-toolbar input { flex-basis: 210px; }
+    .neostaffing-people-console-toolbar select { max-width: 140px; }
+    .neostaffing-people-drawer-panel,.neostaffing-people-detail-drawer { width: min(380px, calc(100vw - 20px)); }
+}
+
+@media (max-width: 980px) {
+    .neostaffing-people-console { width: 100%; margin: 0; grid-template-columns: 1fr; }
+}
+
+/* PEOPLE roster actions, grouped work areas, and bulk paste preview. */
+.neostaffing-people-roster-actions { display: flex; align-items: center; gap: 8px; min-height: 38px; }
+.neostaffing-people-roster-actions .neostaffing-people-selection-toolbar { flex: 0 1 auto; margin: 0; }
+.neostaffing-people-roster-actions .neostaffing-people-add-control { margin-left: 0; }
+.neostaffing-people-tree-group { margin-top: 3px; }
+.neostaffing-people-tree-group-label { display: flex; align-items: center; min-width: 0; min-height: 31px; color: var(--muted); font-size: .6rem; font-weight: 900; letter-spacing: .08em; }
+.neostaffing-people-tree-group > [data-people-tree-children] { padding-left: 7px; }
+.neostaffing-people-org-node[data-unit-type="work_area"] strong { white-space: normal; line-height: 1.18; }
+.neostaffing-people-bulk-guidance { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
+.neostaffing-people-bulk-errors { min-height: 1.2em; margin: 0; color: #ff9f9f; font-size: .7rem; line-height: 1.35; }
+.neostaffing-people-bulk-preview-wrap { max-height: 260px; overflow: auto; border: 1px solid rgba(var(--node-rgb), .18); }
+.neostaffing-people-bulk-preview { width: 100%; min-width: 720px; border-collapse: collapse; font-size: .68rem; }
+.neostaffing-people-bulk-preview th,.neostaffing-people-bulk-preview td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.07); text-align: left; white-space: nowrap; }
+.neostaffing-people-bulk-preview thead th { position: sticky; top: 0; background: #111d24; color: var(--muted); text-transform: uppercase; font-size: .58rem; }
+.neostaffing-people-bulk-preview tr.is-invalid { background: rgba(190, 58, 58, .12); }
+.neostaffing-people-bulk-preview td.is-invalid { color: #ffb1b1; outline: 1px solid rgba(255, 105, 105, .48); outline-offset: -1px; }
+@media (max-width: 980px) { .neostaffing-people-roster-actions { flex-wrap: wrap; }.neostaffing-people-roster-actions .neostaffing-people-add-control { order: -1; } }
+
+/* PEOPLE drawers stay operationally compact and do not obscure roster actions. */
+.neostaffing-people-roster-actions { position: relative; z-index: 60; }
+.neostaffing-people-drawer-panel,
+.neostaffing-people-detail-drawer {
+    top: 188px;
+    height: calc(100vh - 188px);
+    background: #0b151b;
+}
+.neostaffing-people-detail-drawer[hidden] { display: none; }
+.neostaffing-people-drawer-panel input,
+.neostaffing-people-drawer-panel select,
+.neostaffing-people-drawer-panel textarea,
+.neostaffing-people-detail-drawer input,
+.neostaffing-people-detail-drawer select,
+.neostaffing-people-detail-drawer textarea {
+    min-height: 32px;
+    border: 1px solid rgba(var(--node-rgb), .34);
+    border-radius: 3px;
+    background: #101c23;
+    color: #e8f1f5;
+    box-shadow: none;
+}
+.neostaffing-people-drawer-panel textarea,
+.neostaffing-people-detail-drawer textarea { min-height: 126px; padding: 8px; }
+.neostaffing-people-drawer-panel input:focus,
+.neostaffing-people-drawer-panel select:focus,
+.neostaffing-people-drawer-panel textarea:focus,
+.neostaffing-people-detail-drawer input:focus,
+.neostaffing-people-detail-drawer select:focus,
+.neostaffing-people-detail-drawer textarea:focus {
+    border-color: var(--node-primary);
+    outline: 1px solid rgba(var(--node-rgb), .35);
+}
+.neostaffing-people-drawer-panel button,
+.neostaffing-people-detail-drawer button {
+    min-height: 31px;
+    border: 1px solid rgba(var(--node-rgb), .42);
+    background: #13242c;
+    color: #dffcf6;
+    font-size: .7rem;
+}
+.neostaffing-people-drawer-panel button:hover,
+.neostaffing-people-detail-drawer button:hover { background: rgba(var(--node-rgb), .2); }
+.neostaffing-people-drawer-panel label,
+.neostaffing-people-detail-drawer label { position: relative; pointer-events: auto; }
+.neostaffing-people-drawer-panel label > input,
+.neostaffing-people-drawer-panel label > select,
+.neostaffing-people-detail-drawer label > input,
+.neostaffing-people-detail-drawer label > select {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    pointer-events: auto;
+}
+.neostaffing-people-drawer-panel label > span,
+.neostaffing-people-detail-drawer label > span { pointer-events: none; }
+.neostaffing-people-assignment-picker {
+    position: relative;
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 7px;
+}
+.neostaffing-people-management-form {
+    grid-template-areas:
+        "employee-id employee-status"
+        "first-name last-name"
+        "seniority-date classification"
+        "assignment phone"
+        "primary primary"
+        "save save";
+    align-items: start;
+}
+.neostaffing-people-management-form [data-person-field="employee-id"] { grid-area: employee-id; }
+.neostaffing-people-management-form [data-person-field="employee-status"] { grid-area: employee-status; }
+.neostaffing-people-management-form [data-person-field="first-name"] { grid-area: first-name; }
+.neostaffing-people-management-form [data-person-field="last-name"] { grid-area: last-name; }
+.neostaffing-people-management-form [data-person-field="seniority-date"] { grid-area: seniority-date; }
+.neostaffing-people-management-form [data-person-field="classification"] { grid-area: classification; }
+.neostaffing-people-management-form [data-person-field="phone"] { grid-area: phone; }
+.neostaffing-people-management-form [data-assignment-picker] { grid-area: assignment; }
+.neostaffing-people-management-form [data-twenty-c-primary] { grid-area: primary; }
+.neostaffing-people-management-form > button[type="submit"] { grid-area: save; }
+.neostaffing-people-management-form [data-person-field] > input,
+.neostaffing-people-management-form [data-person-field] > select { height: 32px; min-height: 32px; }
+.neostaffing-people-management-form [data-assignment-search],
+.neostaffing-people-management-form [data-twenty-c-primary] > select { height: 32px; min-height: 32px; }
+.neostaffing-people-employee-scope {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 3px;
+    padding: 7px 9px;
+    border: 1px solid rgba(var(--node-rgb), .24);
+    border-radius: 3px;
+    background: rgba(var(--node-rgb), .07);
+}
+.neostaffing-people-employee-scope span { color: var(--muted); font-size: .62rem; font-weight: 850; }
+.neostaffing-people-employee-scope strong { color: #e8f5f3; font-size: .74rem; }
+.neostaffing-people-employee-form .neostaffing-shift-flow-optional { grid-column: 1 / -1; }
+.neostaffing-people-assignment-results {
+    position: absolute;
+    z-index: 3;
+    top: 53px;
+    right: 0;
+    left: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid rgba(var(--node-rgb), .42);
+    border-radius: 5px;
+    background: #101d24;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, .38);
+}
+.neostaffing-people-assignment-results button {
+    display: grid;
+    width: 100%;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    text-align: left;
+}
+.neostaffing-people-assignment-results button:hover,
+.neostaffing-people-assignment-results button:focus-visible { background: rgba(var(--node-rgb), .16); }
+.neostaffing-people-assignment-results strong,
+.neostaffing-people-assignment-chip strong { color: #e8f5f3; font-size: .74rem; }
+.neostaffing-people-assignment-results p { margin: 6px; color: var(--muted); font-size: .7rem; }
+.neostaffing-people-assignment-selected { display: grid; gap: 5px; }
+.neostaffing-people-assignment-chip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid rgba(var(--node-rgb), .24);
+    border-radius: 4px;
+    background: rgba(var(--node-rgb), .07);
+}
+.neostaffing-people-assignment-chip > button { grid-column: auto; padding: 2px 7px; justify-self: auto; }
+@media (max-width: 560px) {
+    .neostaffing-people-management-form {
+        grid-template-areas:
+            "employee-id"
+            "employee-status"
+            "first-name"
+            "last-name"
+            "seniority-date"
+            "classification"
+            "assignment"
+            "phone"
+            "primary"
+            "save";
+        grid-template-columns: 1fr;
+    }
+}
+.neostaffing-people-drawer-panel table,
+.neostaffing-people-detail-drawer table { color: #dfeef1; background: #0d171d; }
+.neostaffing-people-destination-picker { position: relative; min-width: 180px; }
+.neostaffing-people-destination-picker > summary { min-height: 31px; padding: 7px 9px; border: 1px solid rgba(var(--node-rgb), .38); background: #101c23; color: #dffcf6; cursor: pointer; list-style: none; }
+.neostaffing-people-destination-picker > ul { position: absolute; z-index: 70; width: 320px; max-height: 52vh; overflow: auto; margin: 4px 0 0; padding: 8px; background: #0b151b; border: 1px solid rgba(var(--node-rgb), .4); list-style: none; }
+.neostaffing-people-destination-picker ul { padding-left: 12px; list-style: none; }.neostaffing-people-destination-picker summary,.neostaffing-people-destination-picker button { color: #dffcf6; font-size: .7rem; }.neostaffing-people-destination-picker button { width: 100%; padding: 5px; border: 0; background: transparent; text-align: left; }.neostaffing-people-destination-picker button:hover { color: var(--node-primary); background: rgba(var(--node-rgb), .12); }
+
+.neostaffing-people-card > div {
+    min-width: 0;
+}
+
+.neostaffing-people-card span,
+.neostaffing-people-card em {
+    color: var(--muted);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
+.neostaffing-people-card strong {
+    display: block;
+    overflow: hidden;
+    color: var(--neo-bright-silver);
+    font-size: 0.96rem;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.neostaffing-people-identity strong {
+    color: var(--node-primary);
+}
+
+.neostaffing-people-detail-head {
+    display: grid;
+    gap: 3px;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid rgba(var(--node-rgb), 0.24);
+    border-radius: 8px;
+    background: rgba(var(--node-rgb), 0.08);
+}
+
+.neostaffing-people-detail-head span,
+.neostaffing-people-detail-head em {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 950;
+}
+
+.neostaffing-people-detail-head strong {
+    color: var(--neo-bright-silver);
+    font-size: 1.1rem;
+    font-weight: 950;
+}
+
+.neostaffing-detail-section {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
+.neostaffing-detail-section h3 {
+    margin: 0;
+    color: var(--node-primary);
+    font-size: 0.72rem;
+    font-weight: 950;
+}
+
+.neostaffing-detail-section p {
+    margin: 0;
+}
+
+.neostaffing-tree-management-summary {
+    display: grid;
+    gap: 7px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(var(--node-rgb), 0.16);
+}
+
+.neostaffing-tree-management-summary h3 {
+    margin: 0;
+    color: var(--node-primary);
+    font-size: 0.72rem;
+    font-weight: 950;
+}
+
+.neostaffing-tree-management-summary .neostaffing-detail-list {
+    gap: 5px;
+}
+
+.neostaffing-tree-management-empty {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.neostaffing-detail-list {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.neostaffing-detail-list li {
+    display: grid;
+    gap: 3px;
+    padding: 8px;
+    border: 1px solid rgba(var(--node-rgb), 0.16);
+    border-radius: 7px;
+    background: rgba(2, 8, 12, 0.48);
+}
+
+.neostaffing-detail-list strong {
+    color: var(--neo-bright-silver);
+    font-size: 0.8rem;
+}
+
+.neostaffing-detail-list span {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+
+@media (max-width: 900px) {
+    .neostaffing-dashboard-page {
+        width: min(100%, 760px);
+    }
+
+    .neostaffing-dashboard-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-rail {
+        display: none;
+    }
+
+    .neostaffing-mobile-tabs {
+        display: grid;
+    }
+
+    .neostaffing-dashboard-topbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .neostaffing-dashboard-topbar .action-button,
+    .neostaffing-dashboard-topbar .neostaffing-status-card {
+        min-width: 0;
+    }
+
+    .neostaffing-dashboard-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-board-metrics,
+    .neostaffing-seniority-metrics,
+    .neostaffing-people-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-seniority-workspace,
+    .neostaffing-people-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-page {
+        width: min(100%, 760px);
+        margin-inline: auto;
+    }
+
+    .neostaffing-people-page .neostaffing-people-drilldown-panel,
+    .neostaffing-people-drawer-detail,
+    .neostaffing-people-action-details[open] {
+        position: static;
+        width: auto;
+        max-height: none;
+        box-shadow: none;
+    }
+
+    .neostaffing-people-refine-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-seniority-card {
+        grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .neostaffing-seniority-date {
+        grid-column: 2 / -1;
+    }
+
+    .neostaffing-people-card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-people-bulk-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-primary-menu,
+    .neostaffing-my-area-grid,
+    .neostaffing-unit-card-grid,
+    .neostaffing-org-grid,
+    .neostaffing-tree-editor,
+    .neostaffing-attendance-row,
+    .neostaffing-report-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-tree-panel,
+    .neostaffing-tree-detail {
+        position: static;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .neostaffing-tree-detail.is-empty {
+        display: none;
+    }
+
+    .neostaffing-tree-summary {
+        grid-template-columns: 22px minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .neostaffing-tree-row-actions {
+        grid-column: 2;
+        justify-content: flex-start;
+    }
+
+    .neostaffing-tree-row-actions a {
+        min-height: 24px;
+        padding: 0 7px;
+        font-size: 0.58rem;
+    }
+
+    .neostaffing-tree-node {
+        min-height: 38px;
+        padding: 7px 8px;
+    }
+
+    .neostaffing-tree-node strong {
+        font-size: 0.92rem;
+    }
+
+    .neostaffing-tree-list .neostaffing-tree-list {
+        padding-left: 12px;
+    }
+
+    .neostaffing-tree-add-sort {
+        justify-self: stretch;
+    }
+
+    .neostaffing-tree-add-sort-form {
+        position: static;
+        width: 100%;
+        margin-top: 8px;
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-home-header {
+        display: grid;
+    }
+
+    .neostaffing-rollup-grid,
+    .neostaffing-board-alerts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-management-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-management-rail {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-management-rail .neostaffing-rail-brand,
+    .neostaffing-management-rail .neostaffing-rail-return {
+        grid-column: 1 / -1;
+    }
+
+    .neostaffing-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-status-card {
+        min-width: 0;
+    }
+
+    .neostaffing-card-grid,
+    .neostaffing-management-grid,
+    .neostaffing-summary-strip,
+    .neostaffing-data-grid,
+    .neostaffing-record-grid,
+    .neostaffing-compact-form,
+    .neostaffing-filter-form,
+    .neostaffing-people-form,
+    .neostaffing-people-bulk-create-form,
+    .neostaffing-tree-add-form,
+    .neostaffing-tree-edit-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-inline-edit,
+    .neostaffing-person-edit {
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+    }
+}
+
+@media (max-width: 620px) {
+    .neostaffing-page {
+        gap: 14px;
+    }
+
+    .neostaffing-mobile-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neostaffing-dashboard-topbar {
+        grid-template-columns: 1fr;
+        padding: 12px;
+    }
+
+    .neostaffing-management-rail {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-dashboard-topbar h1 {
+        font-size: 1.7rem;
+    }
+
+    .neostaffing-search input {
+        min-height: 40px;
+    }
+
+    .neostaffing-dashboard-metrics article {
+        min-height: 78px;
+        padding: 12px;
+    }
+
+    .neostaffing-work-area-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .neostaffing-work-area-card {
+        min-height: 0;
+    }
+
+    .neostaffing-board-metrics,
+    .neostaffing-seniority-metrics,
+    .neostaffing-people-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-seniority-card {
+        grid-template-columns: 58px minmax(0, 1fr);
+    }
+
+    .neostaffing-seniority-scope,
+    .neostaffing-seniority-date {
+        grid-column: 2;
+    }
+
+    .neostaffing-people-card {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-refine-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-bulk-panel,
+    .neostaffing-people-selection-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-people-select-row {
+        justify-content: flex-start;
+    }
+
+    .neostaffing-rollup-grid,
+    .neostaffing-rollup-card dl,
+    .neostaffing-board-card-metrics,
+    .neostaffing-board-alerts,
+    .neostaffing-required-metrics,
+    .neostaffing-required-form {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-hero {
+        padding: 16px;
+    }
+
+    .neostaffing-card-grid,
+    .neostaffing-management-grid,
+    .neostaffing-summary-strip,
+    .neostaffing-data-grid,
+    .neostaffing-record-grid,
+    .neostaffing-compact-form,
+    .neostaffing-filter-form,
+    .neostaffing-people-form,
+    .neostaffing-card-form,
+    .neostaffing-inline-edit,
+    .neostaffing-person-edit {
+        grid-template-columns: 1fr;
+    }
+
+    .neostaffing-app-card,
+    .neostaffing-management-card {
+        min-height: 0;
+    }
+}

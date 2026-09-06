@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
@@ -317,7 +318,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         menu = (root / "templates" / "neonodes" / "neoscorpion" / "_menu.html").read_text(encoding="utf-8")
         overlay = (root / "static" / "js" / "neoscorpion_menu_overlay.js").read_text(encoding="utf-8")
         dispatch_js = (root / "static" / "js" / "neoscorpion_fuel_dispatch_live.js").read_text(encoding="utf-8")
-        css = (root / "static" / "css" / "base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn('data-neoscorpion-dispatch-details aria-expanded="false"', template)
         self.assertIn('data-neoscorpion-dispatch-detail-row hidden', template)

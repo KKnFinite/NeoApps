@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import re
 from pathlib import Path
 import unittest
@@ -90,7 +91,7 @@ class SecurityHeadersTest(unittest.TestCase):
         self.assertNotIn("style=", shift_flow)
         self.assertIn(
             "grid-auto-columns",
-            (root / "app/static/css/base.css").read_text(encoding="utf-8"),
+            stylesheet_source(),
         )
         self.assertNotIn("style=", fuel_dispatch)
         self.assertIn('<progress class="neoscorpion-truck-gauge', fuel_dispatch)

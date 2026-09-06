@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from pathlib import Path
 import unittest
 
@@ -19,7 +20,7 @@ class SharedUxHooksTest(unittest.TestCase):
     def test_mobile_share_uses_a_local_root_portal_qr(self):
         template = (ROOT / "app/templates/base.html").read_text(encoding="utf-8")
         routes = (ROOT / "app/auth/routes.py").read_text(encoding="utf-8")
-        css = (ROOT / "app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn("data-mobile-share-open", template)
         self.assertIn("Scan to request access or sign in", template)
@@ -34,7 +35,7 @@ class SharedUxHooksTest(unittest.TestCase):
         template = (ROOT / "app/templates/neonodes/neorain/inbound.html").read_text(
             encoding="utf-8"
         )
-        css = (ROOT / "app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn("neorain-settings-panel neorain-crew-admin", template)
         self.assertIn(".neorain-crew-admin :is(input", css)
@@ -44,7 +45,7 @@ class SharedUxHooksTest(unittest.TestCase):
         template = (ROOT / "app/templates/neostaffing/shift_flow.html").read_text(
             encoding="utf-8"
         )
-        css = (ROOT / "app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn("UNASSIGNED / NEEDS ATTENTION", template)
         self.assertIn(".neostaffing-shift-flow-needs-attention ul { max-height:", css)

@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from tests.html_contracts import document
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1792,7 +1793,7 @@ class AuthAccountFlowsTest(unittest.TestCase):
         self.assertNotIn('NeoBid', cards.text)
 
     def test_portal_desktop_branding_css_widens_cards_and_scopes_neofont_menu_text(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".portal-app-grid {\n        grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));", css)
         self.assertIn(".portal-header-management-link", css)

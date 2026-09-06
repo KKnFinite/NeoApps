@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date
 from pathlib import Path
 import unittest
@@ -115,7 +116,7 @@ class ShiftFlowTest(unittest.TestCase):
     def test_workspace_markup_keeps_navigation_and_board_as_separate_desktop_surfaces(self):
         root = Path(__file__).resolve().parents[1]
         template = (root / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
-        css = (root / "app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
         self.assertIn('<main class="neostaffing-shift-flow-workspace">', template)
         self.assertIn('neostaffing-shift-flow-board-scroll', template)
         self.assertNotIn('style=', template)
@@ -481,7 +482,7 @@ class ShiftFlowTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         template = (root / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
         javascript = (root / "app/static/js/neostaffing_shift_flow_drag.js").read_text(encoding="utf-8")
-        css = (root / "app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn("composite.display_bands", template)
         self.assertIn("data-shift-flow-display-row", template)

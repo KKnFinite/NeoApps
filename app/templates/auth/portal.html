@@ -34,7 +34,7 @@
             {{ card_content(key, 'PENDING REVIEW') }}
         </article>
         {% else %}
-        <form class="portal-request-form" method="post" action="{{ url_for('auth.request_portal_app_access') }}">
+        <form class="portal-request-form" method="post" action="{{ url_for('auth.request_portal_app_access') }}" data-interaction-form>
             {{ csrf_field() }}
             <input type="hidden" name="app_code" value="{{ app.code }}">
             <button class="portal-launch-card node-{{ key }}" data-portal-app="{{ code }}" type="submit">

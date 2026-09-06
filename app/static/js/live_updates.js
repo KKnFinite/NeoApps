@@ -631,6 +631,7 @@
             return;
         }
         form.dataset.liveSubmitting = "true";
+        const interaction = window.NeoInteraction?.begin(form);
         try {
             const response = await fetch(form.action, {
                 method: String(form.method || "POST").toUpperCase(),
@@ -644,10 +645,12 @@
             });
             const payload = await response.json().catch(() => ({}));
             if (response.status === 409) {
+                interaction?.failed();
                 showConflict(form, payload.conflict || payload, refresh);
                 return;
             }
             if (!response.ok || payload.ok === false) {
+                interaction?.failed();
                 showActionError(form, payload.error || payload.message);
                 return;
             }
@@ -657,6 +660,10 @@
             }
             clearConflict(row);
             await refresh();
+            interaction?.confirmed();
+        } catch (_error) {
+            interaction?.failed();
+            showActionError(form);
         } finally {
             form.dataset.liveSubmitting = "false";
         }
@@ -675,217 +682,12 @@
         });
     };
 
-    const updateAlertTrayCount = (tray) => {
-        const count = tray.querySelectorAll("[data-alert-unread='true']").length;
-        tray.dataset.alertCount = String(count);
-        const badge = tray.querySelector(".motherbrain-alert-count");
-        if (badge) {
-            badge.textContent = String(count);
-        }
-    };
-
-    const markAlertReadInDocument = (alertId) => {
-        document.querySelectorAll(`[data-alert-id="${CSS.escape(String(alertId))}"]`)
-            .forEach((item) => {
-                item.dataset.alertUnread = "false";
-                item.classList.remove("is-unread");
-                item.classList.add("is-read");
-            });
-        document.querySelectorAll("[data-my-alerts-tray]").forEach(updateAlertTrayCount);
-    };
-
-    const markAlertRead = async (item) => {
-        const endpoint = item.dataset.alertReadUrl;
-        const alertId = item.dataset.alertId;
-        if (!endpoint || !alertId || item.dataset.alertReadPending === "true") {
-            return;
-        }
-        item.dataset.alertReadPending = "true";
-        try {
-            const response = await fetch(endpoint, {
-                method: "POST",
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: {"Accept": "application/json"},
-            });
-            if (response.ok) {
-                markAlertReadInDocument(alertId);
-            }
-        } catch (_error) {
-            // Reading an alert is best-effort; the unread state remains visible.
-        } finally {
-            item.removeAttribute("data-alert-read-pending");
-        }
-    };
-
-    const bindAlertTray = (tray) => {
-        if (!tray || tray.dataset.alertReadBound === "true") {
-            return;
-        }
-        tray.dataset.alertReadBound = "true";
-        tray.addEventListener("toggle", () => {
-            if (!tray.open) {
-                return;
-            }
-            tray.querySelectorAll(
-                "[data-alert-unread='true'][data-alert-read-url]"
-            ).forEach((item) => markAlertRead(item));
-        });
-    };
-
-    const bindAlertTrays = (root = document) => {
-        root.querySelectorAll("[data-my-alerts-tray]").forEach(bindAlertTray);
-    };
-
-    const reconcileAlertTrays = (html) => {
-        if (typeof html !== "string") {
-            return;
-        }
-        const parsed = new DOMParser().parseFromString(html, "text/html");
-        const incoming = parsed.querySelector("[data-my-alerts-tray]");
-        if (!incoming) {
-            return;
-        }
-        document.querySelectorAll("[data-my-alerts-tray]").forEach((current) => {
-            const replacement = incoming.cloneNode(true);
-            replacement.open = current.open;
-            current.replaceWith(replacement);
-            bindAlertTray(replacement);
-        });
-    };
-
-    const bindPeopleDrawerClose = () => {
-        const console = document.querySelector(".neostaffing-people-console");
-        if (!console) {
-            return;
-        }
-        const closePeopleDrawers = () => {
-            document.querySelectorAll("[data-neostaffing-drawer]").forEach((drawer) => {
-                drawer.open = false;
-            });
-            document.querySelectorAll(".neostaffing-people-detail-drawer").forEach((drawer) => {
-                drawer.hidden = true;
-            });
-        };
-        document.addEventListener("click", (event) => {
-            if (event.target.closest("[data-neostaffing-close-drawer]")) {
-                closePeopleDrawers();
-            }
-        });
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") {
-                closePeopleDrawers();
-            }
-        });
-    };
-
-    const bindPeopleEntryEnhancements = () => {
-        const console = document.querySelector(".neostaffing-people-console");
-        if (!console) return;
-        const singleForm = document.querySelector('form[action="/neostaffing/app-management/people"]');
-        const employeeId = singleForm?.querySelector('[name="employee_id"]');
-        const seniority = singleForm?.querySelector('[name="seniority_date"]');
-        const phone = singleForm?.querySelector('[name="phone_number"]');
-        const classification = singleForm?.querySelector('[name="classification"]');
-        document.querySelectorAll('[data-people-open-add="single"]').forEach((button) => {
-            button.addEventListener("click", () => {
-                requestAnimationFrame(() => employeeId?.focus());
-            });
-        });
-        seniority?.addEventListener("change", () => {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(seniority.value)) phone?.focus();
-        });
-        phone?.addEventListener("input", () => {
-            if (phone.value.replace(/\D/g, "").length === 10) classification?.focus();
-        });
-        singleForm?.addEventListener("submit", () => {
-            try {
-                sessionStorage.setItem("neostaffing.people.single-add", JSON.stringify(
-                    Object.fromEntries(new FormData(singleForm).entries())
-                ));
-            } catch (_error) {}
-        });
-        const stored = (() => { try { return JSON.parse(sessionStorage.getItem("neostaffing.people.single-add")); } catch (_error) { return null; } })();
-        if (stored && singleForm) {
-            const succeeded = document.body.textContent.includes("Person added.");
-            if (!succeeded) {
-                Object.entries(stored).forEach(([name, value]) => {
-                    const field = singleForm.elements.namedItem(name);
-                    if (field && "value" in field) field.value = value;
-                });
-            }
-            const drawer = document.querySelector('[data-people-add-drawer="single"]');
-            if (drawer) drawer.open = true;
-            requestAnimationFrame(() => employeeId?.focus());
-            sessionStorage.removeItem("neostaffing.people.single-add");
-        }
-        const destination = document.querySelector('#people-selection-form select[name="work_area_unit_id"]');
-        if (destination && !destination.dataset.peopleHierarchyPicker) {
-            const root = Object.create(null);
-            Array.from(destination.options).filter((option) => option.value).forEach((option) => {
-                let branch = root;
-                option.textContent.split(" / ").forEach((part, index, parts) => {
-                    branch[part] ||= { children: Object.create(null), option: null };
-                    if (index === parts.length - 1) branch[part].option = option;
-                    branch = branch[part].children;
-                });
-            });
-            const picker = document.createElement("details");
-            picker.className = "neostaffing-people-destination-picker";
-            const label = document.createElement("summary");
-            label.dataset.peopleDestinationLabel = "";
-            label.textContent = "Select Work Area";
-            picker.append(label);
-            const render = (items) => {
-                const list = document.createElement("ul");
-                Object.entries(items).forEach(([name, item]) => {
-                    const row = document.createElement("li");
-                    if (item.option) {
-                        const button = document.createElement("button");
-                        button.type = "button"; button.textContent = name;
-                        button.addEventListener("click", () => {
-                            destination.value = item.option.value;
-                            picker.querySelector("[data-people-destination-label]").textContent = item.option.textContent;
-                            picker.open = false;
-                        });
-                        row.append(button);
-                    } else {
-                        const group = document.createElement("details");
-                        group.open = destination.selectedOptions[0]?.textContent.includes(name) || false;
-                        const summary = document.createElement("summary");
-                        summary.textContent = name;
-                        group.append(summary);
-                        group.append(render(item.children)); row.append(group);
-                    }
-                    list.append(row);
-                });
-                return list;
-            };
-            picker.append(render(root));
-            destination.hidden = true;
-            destination.after(picker);
-            destination.dataset.peopleHierarchyPicker = "true";
-        }
-    };
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => {
-            bindAlertTrays();
-            bindPeopleDrawerClose();
-            bindPeopleEntryEnhancements();
-        });
-    } else {
-        bindAlertTrays();
-        bindPeopleDrawerClose();
-        bindPeopleEntryEnhancements();
-    }
-
     window.NeoLiveUpdates = Object.freeze({
         create: (options) => new LiveUpdateController(options),
         inactivityTimeoutMs: INACTIVITY_TIMEOUT_MS,
         reconcileRows,
         bindConflictSafeForms,
-        bindAlertTrays,
-        reconcileAlertTrays,
+        bindAlertTrays: (...args) => window.NeoSharedAlerts.bindAlertTrays(...args),
+        reconcileAlertTrays: (...args) => window.NeoSharedAlerts.reconcileAlertTrays(...args),
     });
 })();

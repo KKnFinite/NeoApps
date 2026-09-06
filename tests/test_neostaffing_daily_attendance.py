@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date, datetime, timedelta
 from pathlib import Path
 import unittest
@@ -505,7 +506,7 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         self.assertNotIn("neostaffing-dashboard-shell", page)
         self.assertNotIn("neostaffing-data-card", page)
 
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         attendance_css = css.split(
             "/* NeoStaffing Attendance full-width operations console. */", 1
         )[1]

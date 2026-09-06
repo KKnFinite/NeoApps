@@ -411,7 +411,7 @@ class UnmatchedReviewAlertsTest(unittest.TestCase):
         self.assertEqual(db.session.get(FlightApiReviewItem, item.id).review_status, "ignored")
 
     def test_shared_client_reconciles_badge_without_page_reload(self):
-        source = (self.app.static_folder + "/js/live_updates.js")
+        source = (self.app.static_folder + "/js/shared_alerts.js")
         with open(source, encoding="utf-8") as handle:
             script = handle.read()
 

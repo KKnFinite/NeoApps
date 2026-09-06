@@ -6,6 +6,9 @@ between desktop and mobile shell markup.
 """
 
 
+from app.services.page_assets import page_stylesheets
+
+
 NODE_IDENTITIES = {
     "motherbrain": {
         "name": "NeoMotherBrain",
@@ -404,6 +407,12 @@ def resolve_shell_metadata(
     uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page
 
     return {
+        "page_stylesheets": page_stylesheets(blueprint),
+        # Inline operational page controllers consume this API while parsing.
+        # Alert/Staffing helpers have independent, smaller asset contracts.
+        "uses_live_update_controller": bool(is_authenticated_app and blueprint in (
+            "neomotherbrain", "neoermac", "neosektor", "neoscorpion", "neorain", "neosubzero"
+        ) and not is_rfd_hub_page),
         "is_authenticated_app": is_authenticated_app,
         "is_portal_page": is_portal_page,
         "is_portal_dashboard_page": is_portal_dashboard_page,

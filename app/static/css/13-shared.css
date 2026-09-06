@@ -1,0 +1,4115 @@
+
+
+/* NeoSektor standalone-layout alignment */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+.blueprint-neosektor .neosektor-standalone-page {
+    box-sizing: border-box;
+    display: grid;
+    gap: 8px;
+    width: min(100%, 1440px);
+    margin: 0 auto;
+    color: var(--neo-bright-silver);
+}
+
+.blueprint-neosektor .neosektor-standalone-header.app-header {
+    box-sizing: border-box;
+    position: relative;
+    z-index: 100;
+    overflow: visible;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: min(100%, 1440px);
+    min-height: 56px;
+    margin: 0 auto;
+    padding: 8px 10px 7px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.blueprint-neosektor .header-title {
+    min-width: 0;
+}
+
+.blueprint-neosektor .header-title p {
+    margin: 0 0 2px;
+    font-size: 0.72rem;
+    font-weight: 950;
+    line-height: 1;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .header-title .neo-node-name,
+body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-identity .neo-node-name {
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .header-title h1 {
+    margin: 0;
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.02rem, 2.6vw, 1.78rem);
+    font-weight: 950;
+    line-height: 1.05;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow: 0 0 16px rgba(var(--node-rgb), 0.25);
+}
+
+.blueprint-neosektor .header-link,
+.blueprint-neosektor .header-link-static {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 11px;
+    border: 1px solid rgba(244, 246, 248, 0.22);
+    border-radius: 6px;
+    background: linear-gradient(180deg, var(--node-primary), rgba(var(--node-secondary-rgb), 0.78));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.18),
+        0 8px 18px rgba(var(--node-rgb), 0.22);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .character-switcher-standalone {
+    position: relative;
+    z-index: 110;
+    margin-left: 0;
+}
+
+.blueprint-neosektor .neosektor-standalone-header .user-chip {
+    flex: 0 1 132px;
+    min-width: 104px;
+    min-height: 30px;
+    margin-left: auto;
+    padding: 5px 8px;
+}
+
+.blueprint-neosektor .neosektor-internal-menu {
+    position: relative;
+    z-index: 110;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-internal-menu-standalone {
+    margin-left: 0;
+}
+
+.blueprint-neosektor .neosektor-internal-menu-standalone + .character-switcher-standalone {
+    margin-left: 0;
+}
+
+.blueprint-neosektor .neosektor-internal-menu-trigger {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.44);
+    border-radius: 6px;
+    background:
+        linear-gradient(135deg, rgba(var(--node-rgb), 0.18), transparent 34%),
+        linear-gradient(180deg, rgba(26, 28, 34, 0.96), rgba(5, 5, 6, 0.9));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 18px rgba(var(--node-rgb), 0.14);
+    color: var(--neo-bright-silver);
+    cursor: pointer;
+    font-size: 0.62rem;
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .neosektor-internal-menu-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.blueprint-neosektor .neosektor-hamburger {
+    display: grid;
+    gap: 3px;
+    width: 16px;
+}
+
+.blueprint-neosektor .neosektor-hamburger span {
+    display: block;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.blueprint-neosektor .neosektor-internal-menu[open] .neosektor-internal-menu-trigger,
+.blueprint-neosektor .neosektor-internal-menu-trigger:hover,
+.blueprint-neosektor .neosektor-internal-menu-trigger:focus-visible {
+    border-color: rgba(var(--node-highlight-rgb), 0.82);
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 0 22px rgba(var(--node-rgb), 0.24);
+}
+
+.blueprint-neosektor .neosektor-internal-menu:not([open]) .neosektor-internal-menu-panel {
+    display: none;
+}
+
+.blueprint-neosektor .neosektor-internal-menu-panel {
+    position: absolute;
+    z-index: 121;
+    top: calc(100% + 8px);
+    right: 0;
+    display: grid;
+    gap: 6px;
+    width: min(230px, calc(100vw - 16px));
+    padding: 8px;
+    border: 1px solid rgba(var(--node-highlight-rgb), 0.46);
+    border-radius: 6px;
+    background:
+        linear-gradient(180deg, rgba(22, 25, 31, 0.98), rgba(5, 5, 6, 0.98)),
+        rgba(5, 5, 6, 0.98);
+    box-shadow:
+        0 18px 36px rgba(0, 0, 0, 0.56),
+        0 0 24px rgba(var(--node-rgb), 0.18);
+    backdrop-filter: blur(12px);
+}
+
+.blueprint-neosektor .neosektor-internal-menu-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid rgba(201, 208, 214, 0.14);
+    border-radius: 5px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.06), transparent 28%),
+        linear-gradient(180deg, rgba(18, 20, 25, 0.94), rgba(5, 5, 6, 0.88));
+    color: var(--neo-bright-silver);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-internal-menu-link:hover,
+.blueprint-neosektor .neosektor-internal-menu-link:focus-visible,
+.blueprint-neosektor .neosektor-internal-menu-link.is-active {
+    border-color: rgba(var(--node-highlight-rgb), 0.72);
+    color: var(--node-highlight);
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 16px rgba(var(--node-rgb), 0.2);
+}
+
+.blueprint-neosektor .character-switcher-standalone .character-switcher-trigger {
+    min-height: 30px;
+    padding: 0 11px;
+    border-radius: 6px;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .topbar {
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 12px;
+    padding: 8px 12px;
+    border-color: rgba(var(--node-rgb), 0.38);
+    background:
+        radial-gradient(circle at 4% 50%, rgba(var(--node-highlight-rgb), 0.2), transparent 18rem),
+        linear-gradient(110deg, rgba(238, 246, 255, 0.1), transparent 16%, rgba(var(--node-rgb), 0.16) 54%, transparent 80%),
+        linear-gradient(180deg, rgba(16, 19, 24, 0.97), rgba(4, 5, 8, 0.94));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        inset 0 -1px 0 rgba(var(--node-rgb), 0.3),
+        0 16px 38px rgba(0, 0, 0, 0.38),
+        0 0 28px rgba(var(--node-rgb), 0.12);
+}
+
+body.blueprint-neosektor.neosektor-driver-page .shell {
+    width: 100%;
+    min-height: 100svh;
+}
+
+body.blueprint-neosektor.neosektor-driver-page .content {
+    width: 100%;
+    max-width: none;
+    min-height: 100svh;
+    margin: 0;
+    padding: 0;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .topbar::after {
+    background: linear-gradient(90deg, transparent, rgba(var(--node-highlight-rgb), 0.86), rgba(238, 246, 255, 0.64), transparent);
+    box-shadow: 0 0 18px rgba(var(--node-highlight-rgb), 0.34);
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-logo {
+    width: 70px;
+    height: 70px;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .topbar-actions {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .topbar-user-row {
+    gap: 8px;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .user-chip {
+    min-width: 106px;
+    min-height: 36px;
+    padding: 6px 9px;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .character-switcher-trigger,
+body.blueprint-neosektor.neosektor-fixed-header .logout-link {
+    min-height: 36px;
+    padding-inline: 9px;
+    border-color: rgba(var(--node-rgb), 0.34);
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .nav {
+    grid-template-columns: repeat(8, minmax(80px, 1fr));
+    gap: 6px;
+}
+
+body.blueprint-neosektor.neosektor-fixed-header .nav a {
+    min-height: 36px;
+    padding: 7px 7px;
+    border-color: rgba(201, 208, 214, 0.14);
+    font-size: clamp(0.54rem, 0.68vw, 0.66rem);
+    letter-spacing: 0.02em;
+    line-height: 1.06;
+}
+
+.blueprint-neosektor .counts-wrap {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 6px 7px 7px;
+    overflow: visible;
+}
+
+.blueprint-neosektor .wave-strip,
+.blueprint-neosektor .ops-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    width: 100%;
+}
+
+.blueprint-neosektor .wave-card,
+.blueprint-neosektor .ops-column,
+.blueprint-neosektor .counter-card,
+.blueprint-neosektor .bay-card,
+.blueprint-neosektor .view-bay-card,
+.blueprint-neosektor .tunnel-panel,
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .tunnel-setting-card,
+.blueprint-neosektor .driver-priority-card {
+    min-width: 0;
+    border: 1px solid rgba(216, 220, 224, 0.22);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.06), transparent 24%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.94), rgba(8, 12, 18, 0.96));
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+}
+
+.blueprint-neosektor .mode-view .wave-metrics div,
+.blueprint-neosektor .mode-view .counter-card,
+.blueprint-neosektor .view-bay-card,
+.blueprint-neosektor .tunnel-metric:not(.tunnel-editable),
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .tunnel-setting-card {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.38);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.05), transparent 28%),
+        linear-gradient(180deg, rgba(64, 14, 20, 0.92), rgba(23, 7, 11, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.08),
+        0 14px 34px rgba(0, 0, 0, 0.28),
+        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.14);
+}
+
+.blueprint-neosektor .wave-card {
+    padding: 11px 10px;
+}
+
+.blueprint-neosektor .wave-card h2,
+.blueprint-neosektor .ops-column h2,
+.blueprint-neosektor .column-bay-title h3,
+.blueprint-neosektor .tunnel-panel h2,
+.blueprint-neosektor .tunnel-ballmat-column h3,
+.blueprint-neosektor .view-bay-dashboard h2 {
+    margin: 0;
+    color: var(--neo-silver);
+    font-size: 0.76rem;
+    font-weight: 950;
+    line-height: 1.1;
+    text-align: center;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .wave-metrics {
+    display: grid;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.blueprint-neosektor .wave-metrics div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.blueprint-neosektor .wave-metrics span,
+.blueprint-neosektor .counter-card > span,
+.blueprint-neosektor .bay-heading span,
+.blueprint-neosektor .tunnel-metric span,
+.blueprint-neosektor .tunnel-readonly-card span,
+.blueprint-neosektor .tunnel-bay-card span,
+.blueprint-neosektor .tunnel-setting-card span,
+.blueprint-neosektor .view-bay-card span {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1.2;
+    text-align: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .wave-metrics strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.05rem, 3vw, 1.42rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .ops-grid {
+    min-height: 0;
+    margin-top: 0;
+}
+
+.blueprint-neosektor .ops-column {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 0;
+    padding: 7px;
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.44);
+}
+
+.blueprint-neosektor .ops-column h2 {
+    margin-bottom: 1px;
+    font-size: 0.82rem;
+}
+
+.blueprint-neosektor .counter-card {
+    display: grid;
+    justify-items: stretch;
+    gap: 5px;
+    padding: 6px;
+    text-align: center;
+}
+
+.blueprint-neosektor .counter-card > span {
+    display: block;
+    min-height: 18px;
+}
+
+.blueprint-neosektor .counter-control {
+    display: grid;
+    grid-template-columns: 38px minmax(42px, 1fr) 38px;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.blueprint-neosektor .counter-control button,
+.blueprint-neosektor .counter-number,
+.blueprint-neosektor .neosektor-inline-status select,
+.blueprint-neosektor .neosektor-driver-offset-control button,
+.blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .tunnel-setting-card input,
+.blueprint-neosektor .neosektor-discharge-send-form input,
+.blueprint-neosektor .neosektor-discharge-count-card button {
+    min-width: 0;
+    min-height: 38px;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 950;
+    text-align: center;
+}
+
+.blueprint-neosektor .counter-control button,
+.blueprint-neosektor .neosektor-driver-offset-control button,
+.blueprint-neosektor .neosektor-discharge-count-card button {
+    border: 1px solid rgba(244, 246, 248, 0.22);
+    background: linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1;
+    box-shadow: 0 8px 20px rgba(var(--node-sektor-primary-rgb), 0.2);
+}
+
+.blueprint-neosektor .counter-number,
+.blueprint-neosektor .readonly-count,
+.blueprint-neosektor .neosektor-inline-status select,
+.blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .tunnel-setting-card input,
+.blueprint-neosektor .neosektor-discharge-send-form input {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    background: rgba(5, 7, 11, 0.54);
+    box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.32);
+    color: var(--neo-bright-silver);
+    font-size: 1.05rem;
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .readonly-count {
+    min-height: 42px;
+    margin-top: 0;
+    color: var(--neo-bright-silver);
+    font-size: 1.5rem;
+}
+
+.blueprint-neosektor .mode-view .readonly-count {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: clamp(1.55rem, 4vw, 2.5rem);
+}
+
+.blueprint-neosektor .neosektor-inline-status {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+}
+
+.blueprint-neosektor .neosektor-inline-status span {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .counter-number:focus,
+.blueprint-neosektor .neosektor-inline-status select:focus,
+.blueprint-neosektor .neosektor-driver-offset-control input:focus,
+.blueprint-neosektor .tunnel-setting-card input:focus,
+.blueprint-neosektor .neosektor-discharge-send-form input:focus {
+    border-color: var(--node-sektor-highlight);
+    outline: none;
+    box-shadow:
+        0 0 0 2px rgba(var(--node-sektor-primary-rgb), 0.22),
+        inset 0 0 16px rgba(0, 0, 0, 0.32);
+}
+
+.blueprint-neosektor .counter-control button:disabled,
+.blueprint-neosektor .counter-number:disabled,
+.blueprint-neosektor .neosektor-inline-status select:disabled,
+.blueprint-neosektor .neosektor-driver-offset-control button:disabled,
+.blueprint-neosektor .neosektor-driver-offset-control input:disabled,
+.blueprint-neosektor .tunnel-setting-card input:disabled,
+.blueprint-neosektor .neosektor-discharge-send-form input:disabled,
+.blueprint-neosektor .neosektor-discharge-count-card button:disabled {
+    cursor: not-allowed;
+    opacity: 0.54;
+}
+
+.blueprint-neosektor .column-bays {
+    display: grid;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.blueprint-neosektor .bay-card {
+    display: block;
+    min-height: 0;
+    padding: 6px;
+}
+
+.blueprint-neosektor .bay-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.blueprint-neosektor .bay-heading strong {
+    color: var(--neo-bright-silver);
+    font-size: 0.72rem;
+    font-weight: 950;
+    text-align: right;
+}
+
+.blueprint-neosektor .bay-card input[type="range"],
+.blueprint-neosektor .neosektor-open-bay-control input[type="range"] {
+    width: 100%;
+    min-height: 22px;
+    accent-color: var(--node-sektor-primary);
+}
+
+.blueprint-neosektor .neosektor-open-bay-control > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-open-bay-control .readonly-count {
+    min-height: 0;
+    font-size: 1.45rem;
+}
+
+.blueprint-neosektor .view-bay-dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+}
+
+.blueprint-neosektor .view-bay-dashboard section {
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .view-bay-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.blueprint-neosektor .view-bay-card {
+    display: grid;
+    place-items: center;
+    gap: 5px;
+    min-height: 56px;
+    padding: 8px;
+}
+
+.blueprint-neosektor .view-bay-card strong {
+    color: var(--neo-bright-silver);
+    font-size: clamp(1rem, 2vw, 1.35rem);
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 8px;
+    width: min(100%, 590px);
+    min-height: 100svh;
+    margin: 0 auto;
+    padding: 18px 8px;
+}
+
+.blueprint-neosektor .neosektor-live-shell {
+    --neosektor-live-board-width: 590px;
+    --neosektor-live-panel: rgba(18, 26, 36, 0.96);
+    --neosektor-live-panel-deep: rgba(6, 10, 15, 0.98);
+    --neosektor-live-red-panel: rgba(var(--node-sektor-primary-rgb), 0.26);
+    --neosektor-live-border: rgba(var(--node-sektor-primary-rgb), 0.42);
+    width: min(100%, var(--neosektor-live-board-width));
+    justify-items: center;
+}
+
+.blueprint-neosektor .neosektor-live-status-strip.app-header {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: min(100%, var(--neosektor-live-board-width));
+    min-height: 54px;
+    padding: 8px 0 9px;
+    border: 0;
+    border-radius: 0;
+    background:
+        radial-gradient(circle at 50% 0, rgba(var(--node-sektor-primary-rgb), 0.22), transparent 60%),
+        linear-gradient(180deg, rgba(4, 6, 10, 0.98), rgba(6, 9, 13, 0.96));
+    box-shadow: inset 0 -1px 0 rgba(var(--node-sektor-primary-rgb), 0.42);
+}
+
+.blueprint-neosektor .neosektor-live-status-strip .header-title {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-live-status-strip .header-title p {
+    color: var(--neo-silver);
+}
+
+.blueprint-neosektor .neosektor-live-status-strip .neosektor-internal-menu-standalone {
+    margin-left: 0;
+}
+
+.blueprint-neosektor .neosektor-live-counts-grid {
+    grid-template-rows: auto minmax(0, 1fr);
+    justify-items: stretch;
+    gap: 10px;
+    width: min(100%, var(--neosektor-live-board-width));
+    min-height: calc(100svh - 84px);
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row,
+.blueprint-neosektor .neosektor-live-ballmat-row {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: center;
+    justify-items: stretch;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-card,
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+    height: 100%;
+    min-width: 0;
+    border: 1px solid rgba(216, 220, 224, 0.2);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.07), transparent 28%),
+        linear-gradient(180deg, var(--neosektor-live-panel), var(--neosektor-live-panel-deep));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 12px 26px rgba(0, 0, 0, 0.32),
+        0 0 14px rgba(var(--node-sektor-primary-rgb), 0.1);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-card {
+    display: grid;
+    align-items: stretch;
+    gap: 7px;
+    min-height: 0;
+    padding: 9px 12px;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-card h2 {
+    font-size: clamp(0.9rem, 1.55vw, 1.12rem);
+    letter-spacing: 0.1em;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics {
+    display: grid;
+    gap: 7px;
+    height: 100%;
+    margin: 0;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics div,
+.blueprint-neosektor .neosektor-live-ballmat-row .counter-card,
+.blueprint-neosektor .neosektor-live-column-bays .bay-card {
+    border: 1px solid var(--neosektor-live-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.05), transparent 28%),
+        linear-gradient(180deg, var(--neosektor-live-red-panel), rgba(9, 7, 10, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+        0 0 14px rgba(var(--node-sektor-primary-rgb), 0.1);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 0;
+    padding: 5px 8px;
+    text-align: left;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+    display: grid;
+    grid-template-rows: auto repeat(3, minmax(56px, auto)) minmax(0, 1fr);
+    gap: 8px;
+    min-height: 0;
+    padding: 10px 10px 12px;
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.46);
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column h2,
+.blueprint-neosektor .neosektor-live-column-bays h3 {
+    font-size: clamp(0.86rem, 1.55vw, 1.05rem);
+    letter-spacing: 0.09em;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .counter-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 58px;
+    padding: 7px 8px;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .counter-card > span,
+.blueprint-neosektor .neosektor-live-column-bays .bay-card span,
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics span {
+    display: block;
+    color: var(--neo-silver);
+    letter-spacing: 0.08em;
+    text-align: inherit;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,
+.blueprint-neosektor .neosektor-live-column-bays .bay-card strong,
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
+    display: block;
+    color: var(--node-sektor-highlight);
+    text-align: right;
+    text-shadow: 0 0 12px rgba(var(--node-sektor-highlight-rgb), 0.34);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
+    font-size: clamp(1.3rem, 3.9vw, 1.9rem);
+    line-height: 0.98;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong.is-word {
+    font-size: clamp(0.96rem, 3vw, 1.32rem);
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
+    width: 100%;
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.9rem, 5.7vw, 2.95rem);
+    line-height: 0.9;
+    text-align: center;
+    text-shadow: 0 0 14px rgba(244, 247, 251, 0.2);
+}
+
+.blueprint-neosektor .neosektor-live-column-bays {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    min-width: 0;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-live-column-bays .bay-card {
+    box-sizing: border-box;
+    display: block;
+    min-height: 36px;
+    padding: 7px 8px;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-live-column-bays .bay-heading {
+    align-items: center;
+    min-height: 20px;
+}
+
+.blueprint-neosektor .neosektor-live-column-bays .bay-card strong {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    color: var(--neo-bright-silver);
+    font-size: clamp(0.72rem, 1.8vw, 0.96rem);
+    letter-spacing: 0.01em;
+    line-height: 1.05;
+    overflow-wrap: normal;
+    text-align: right;
+    text-transform: none;
+    white-space: nowrap;
+    word-break: normal;
+}
+
+.blueprint-neosektor .neosektor-status {
+    justify-self: center;
+}
+
+.blueprint-neosektor .tunnel-wrap {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    width: min(100%, 1320px);
+    margin: 0 auto;
+    padding: 6px 7px 7px;
+    overflow: visible;
+}
+
+.blueprint-neosektor .tunnel-wave-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor .tunnel-offset-panel {
+    grid-column: 1 / -1;
+}
+
+.blueprint-neosektor .tunnel-settings-panel {
+    grid-column: 1 / -1;
+}
+
+.blueprint-neosektor .tunnel-panel {
+    display: grid;
+    gap: 7px;
+    padding: 8px;
+}
+
+.blueprint-neosektor .tunnel-panel h2 {
+    margin-bottom: 0;
+}
+
+.blueprint-neosektor .tunnel-metric {
+    display: grid;
+    gap: 4px;
+    padding: 7px;
+    border: 1px solid rgba(216, 220, 224, 0.16);
+    border-radius: 6px;
+    background: rgba(5, 7, 11, 0.34);
+}
+
+.blueprint-neosektor .tunnel-metric strong,
+.blueprint-neosektor .tunnel-readonly-card strong,
+.blueprint-neosektor .tunnel-bay-card strong {
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.35rem, 3vw, 2.2rem);
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-ballmat-grid,
+.blueprint-neosektor .tunnel-bay-grid {
+    display: grid;
+    gap: 6px;
+}
+
+.blueprint-neosektor .tunnel-ballmat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .tunnel-ballmat-column {
+    display: grid;
+    gap: 6px;
+    min-height: 0;
+}
+
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card {
+    display: grid;
+    align-content: center;
+    gap: 5px;
+    min-height: 52px;
+    padding: 6px;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-count-control-card .counter-control {
+    margin-top: 0;
+}
+
+.blueprint-neosektor .tunnel-ballmat-card {
+    gap: 4px;
+    min-height: 48px;
+    padding: 5px;
+}
+
+.blueprint-neosektor .tunnel-ballmat-card strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.65rem, 4vw, 2.75rem);
+}
+
+.blueprint-neosektor .tunnel-ballmat-card .tunnel-count-control {
+    grid-template-columns: 34px minmax(44px, 1fr) 34px;
+    gap: 4px;
+    margin-top: 0;
+}
+
+.blueprint-neosektor .tunnel-ballmat-card .counter-number {
+    min-height: 36px;
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.15rem, 2.8vw, 1.65rem);
+}
+
+.blueprint-neosektor .tunnel-bay-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .tunnel-bay-panel {
+    gap: 8px;
+}
+
+.blueprint-neosektor .tunnel-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.blueprint-neosektor .tunnel-route-overrides {
+    display: grid;
+    gap: 7px;
+}
+
+.blueprint-neosektor .tunnel-route-override {
+    display: grid;
+    grid-template-columns: minmax(82px, auto) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 7px 9px;
+    border: 1px solid rgba(216, 220, 224, .18);
+    background: rgba(5, 7, 11, .34);
+}
+
+.blueprint-neosektor .tunnel-route-override h2 {
+    margin: 0;
+    color: var(--node-sektor-highlight);
+    font-size: .72rem;
+    font-weight: 950;
+    letter-spacing: .08em;
+    line-height: 1.1;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-route-slider-shell {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .tunnel-route-slider-labels {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+}
+
+.blueprint-neosektor .tunnel-route-slider-labels span {
+    min-width: 0;
+    color: rgba(238, 246, 255, .68);
+    font-size: .62rem;
+    font-weight: 900;
+    letter-spacing: .06em;
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-route-override[data-route-position="0"] .tunnel-route-slider-labels span:nth-child(1),
+.blueprint-neosektor .tunnel-route-override[data-route-position="1"] .tunnel-route-slider-labels span:nth-child(2),
+.blueprint-neosektor .tunnel-route-override[data-route-position="2"] .tunnel-route-slider-labels span:nth-child(3) {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(var(--node-sektor-highlight-rgb), .64);
+}
+
+.blueprint-neosektor .tunnel-route-slider-shell input[type="range"] {
+    box-sizing: border-box;
+    width: 100%;
+    height: 24px;
+    min-height: 24px;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    accent-color: var(--node-sektor-primary);
+}
+
+.blueprint-neosektor .tunnel-route-slider-shell input[type="range"]:disabled {
+    cursor: default;
+    opacity: .7;
+}
+
+.blueprint-neosektor .tunnel-route-slider-shell input[type="range"]:focus-visible {
+    outline: 2px solid var(--node-sektor-highlight);
+    outline-offset: 3px;
+}
+
+.blueprint-neosektor .driver-route-source {
+    justify-self: center;
+    color: var(--node-sektor-highlight);
+    font-size: .62rem;
+    font-weight: 950;
+    letter-spacing: .09em;
+}
+
+.blueprint-neosektor .driver-wave[data-manual-override] { grid-template-rows: auto auto minmax(0, 1fr); }
+
+.blueprint-neosektor .tunnel-setting-card {
+    display: grid;
+    align-content: center;
+    gap: 4px;
+    min-width: 0;
+    min-height: 58px;
+    padding: 6px;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-setting-card input {
+    min-height: 34px;
+    font-size: clamp(1rem, 2.4vw, 1.32rem);
+}
+
+.blueprint-neosektor .tunnel-setting-card em {
+    color: rgba(238, 246, 255, 0.58);
+    font-size: 0.56rem;
+    font-style: normal;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .tunnel-bay-card {
+    min-height: 48px;
+    padding: 5px 4px;
+    gap: 3px;
+}
+
+.blueprint-neosektor .tunnel-bay-card strong {
+    font-size: clamp(0.86rem, 2vw, 1.2rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .driver-body {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+    justify-items: stretch;
+    width: 100%;
+    max-width: none;
+    height: 100svh;
+    min-height: 0;
+    padding: 4px 8px 6px;
+    gap: 4px;
+    overflow: hidden;
+}
+
+.blueprint-neosektor .neosektor-driver-shell > .neosektor-standalone-header {
+    width: 100%;
+    min-height: 42px;
+    padding: 0 2px 4px;
+}
+
+.blueprint-neosektor .neosektor-driver-shell .header-title {
+    display: grid;
+    gap: 2px;
+}
+
+.blueprint-neosektor .neosektor-driver-back {
+    align-self: start;
+    min-height: 30px;
+    padding-inline: 12px;
+}
+
+.blueprint-neosektor .driver-routing {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    border-inline: 1px solid rgba(216, 220, 224, 0.16);
+    background: rgba(5, 7, 11, 0.3);
+}
+
+.blueprint-neosektor .driver-wave {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    padding: clamp(6px, 1.2svh, 14px) clamp(12px, 3vw, 28px) clamp(5px, 0.9svh, 10px);
+    overflow: hidden;
+    border-bottom: 1px solid rgba(216, 220, 224, 0.18);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.08), transparent 32%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.86), rgba(5, 7, 11, 0.92));
+}
+
+.blueprint-neosektor .driver-wave-second {
+    border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.32);
+}
+
+.blueprint-neosektor .driver-wave::before {
+    content: none;
+}
+
+.blueprint-neosektor .driver-wave[data-direction="west"]::before {
+    content: none;
+}
+
+.blueprint-neosektor .driver-wave-label,
+.blueprint-neosektor .driver-target {
+    position: relative;
+    z-index: 1;
+}
+
+.blueprint-neosektor .driver-wave-label {
+    margin: 0;
+    color: var(--node-sektor-primary);
+    font-size: clamp(3.6rem, min(12.6vw, 9.6svh), 7.05rem);
+    font-weight: 950;
+    line-height: 1;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .driver-target {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    place-items: center;
+    align-content: stretch;
+    gap: clamp(5px, 0.8svh, 10px);
+    margin-top: clamp(4px, 0.5svh, 8px);
+    min-height: 0;
+}
+
+.blueprint-neosektor .driver-target strong {
+    order: 2;
+    display: grid;
+    gap: 0.04em;
+    color: var(--neo-bright-silver);
+    font-size: clamp(1.55rem, min(5.5vw, 4.8svh), 3.5rem);
+    font-weight: 950;
+    line-height: 0.96;
+    text-align: center;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    text-shadow: 0 0 18px rgba(var(--node-sektor-primary-rgb), 0.36);
+    align-self: center;
+}
+
+.blueprint-neosektor .driver-instruction {
+    color: rgba(244, 247, 251, 0.9);
+    font-size: 2.16em;
+    letter-spacing: 0.04em;
+}
+
+.blueprint-neosektor .driver-arrow {
+    position: relative;
+    order: 1;
+    display: block;
+    width: min(90%, 640px);
+    height: clamp(115px, 18svh, 220px);
+    color: transparent;
+    font-size: 0;
+    line-height: 1;
+    filter:
+        drop-shadow(0 0 12px rgba(var(--node-sektor-highlight-rgb), 0.72))
+        drop-shadow(0 0 30px rgba(var(--node-sektor-primary-rgb), 0.58))
+        drop-shadow(0 16px 28px rgba(0, 0, 0, 0.7));
+}
+
+@media (min-width: 901px) {
+    body.operational-shell-page.blueprint-neosektor.neosektor-driver-page .content {
+        height:auto;
+        min-height:100vh;
+        overflow:visible;
+        padding:calc(var(--operational-topbar-height) + 20px) 24px 40px calc(var(--operational-sidebar-width) + 24px);
+    }
+}
+
+/* Portal/User Management: compact, wide access controls without affecting nodes. */
+.portal-email-warning {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 9px;
+    margin: 0 0 10px;
+    border: 1px solid rgba(191, 68, 119, .58);
+    border-left: 3px solid #c2477c;
+    background: rgba(25, 12, 20, .88);
+    color: #f4c8dd;
+    padding: 7px 10px;
+    font-size: .72rem;
+}
+
+.portal-email-unverified,
+.portal-override-action,
+.portal-edit-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border: 1px solid #cb5d96;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #76264f, #4e193d);
+    color: #ffe4f1;
+    padding: 5px 9px;
+    font-size: .68rem;
+    font-weight: 900;
+    letter-spacing: .05em;
+    text-decoration: none;
+}
+
+.portal-email-unverified { min-height: auto; padding: 3px 6px; }
+.portal-override-action { cursor: pointer; }
+.portal-unverified-copy { color: #e8b4cc; font-size: .62rem; }
+.all-users-table .action-cell { min-width: 96px; overflow-wrap: normal; }
+.all-users-table .portal-edit-action { min-width: 94px; white-space: nowrap; }
+
+.portal-user-edit-page,
+.portal-user-detail-page {
+    width: min(1180px, calc(100vw - 32px));
+    max-width: 1180px;
+}
+
+.portal-app-access-matrix {
+    overflow: hidden;
+    border: 1px solid rgba(171, 67, 112, .42);
+    border-radius: 6px;
+    background: #0e0e12;
+}
+
+.portal-app-access-header,
+.portal-app-access-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1.15fr) minmax(130px, .78fr) minmax(130px, .78fr) minmax(78px, .48fr) minmax(220px, 1.5fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.portal-app-access-header {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(171, 67, 112, .34);
+    background: #171319;
+    color: #c594aa;
+    font-size: .62rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+}
+
+.portal-app-access-row {
+    min-width: 0;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+    background: #101014;
+}
+
+.portal-app-access-row:last-child { border-bottom: 0; }
+.portal-app-identity { display: grid; gap: 3px; min-width: 0; }
+.portal-app-identity strong { color: #f6e8ee; }
+.portal-app-identity small,
+.portal-app-access-only { color: #bba6ae; font-size: .67rem; }
+.portal-app-access-row > label { display: grid; gap: 3px; min-width: 0; }
+.portal-app-access-row > label > span { color: #b998a8; font-size: .58rem; font-weight: 900; letter-spacing: .06em; }
+.portal-app-access-row select,
+.portal-app-access-row input {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    border: 1px solid #493441;
+    background: #08080b;
+    color: #f7eaf0;
+}
+.portal-app-access-row select:focus,
+.portal-app-access-row input:focus { border-color: #c44d82; outline: 2px solid rgba(196, 77, 130, .22); }
+.portal-app-active-field { display: inline-flex !important; align-items: center; gap: 7px !important; }
+.portal-app-active-field > span { color: #ead7df !important; font-size: .68rem !important; }
+.portal-app-active-field input { width: auto; min-height: 0; accent-color: #be477d; }
+.portal-bypass-checkbox { display: grid; gap: 4px; margin-top: 10px; color: #ffd5e8; }
+.portal-bypass-checkbox small { color: #d7aac0; }
+
+@media (min-width: 701px) {
+    .portal-app-access-row > label > span { display: none; }
+}
+
+@media (max-width: 700px) {
+    .portal-user-edit-page,
+    .portal-user-detail-page { width: min(100% - 18px, 1180px); }
+    .portal-app-access-header { display: none; }
+    .portal-app-access-row,
+    .portal-app-access-row.is-neogateway { grid-template-columns: 1fr; gap: 9px; }
+    .portal-app-access-row > label > span { display: block; }
+}
+
+/* Shared operational shell. NeoStaffing, NeoGateway, and NeoPortal retain
+   their dedicated shells; these rules activate only on operational nodes. */
+.operational-mobile-header,
+.operational-mobile-drawer,
+.operational-mobile-drawer-scrim,
+.operational-mobile-bottom-nav,
+.operational-board-exit { display: none; }
+
+@media (min-width: 901px) {
+    body.operational-shell-page {
+        --operational-topbar-height: 64px;
+        --operational-sidebar-width: 248px;
+        background: #07090d;
+    }
+
+    body.operational-shell-page .shell { width: 100%; max-width: none; }
+    body.operational-shell-page .operational-topbar {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: var(--operational-topbar-height);
+        margin: 0;
+        padding: 8px 16px;
+        border: 0;
+        border-bottom: 1px solid rgba(201, 208, 214, .15);
+        border-radius: 0;
+        background: linear-gradient(90deg, rgba(var(--node-rgb), .13), transparent 24%), #080a0e;
+        box-shadow: 0 5px 18px rgba(0,0,0,.38);
+        backdrop-filter: none;
+    }
+    body.operational-shell-page .operational-topbar::before,
+    body.operational-shell-page .operational-topbar::after { display: none; }
+    .operational-app-logo { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; }
+    .operational-app-logo img { width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,.14)); }
+    .operational-topbar-context {
+        display: grid;
+        min-width: 92px;
+        padding: 4px 10px;
+        border-left: 1px solid rgba(201,208,214,.14);
+        color: var(--text);
+        line-height: 1.05;
+        text-decoration: none;
+    }
+    .operational-topbar-context span { color: var(--muted); font-size: .55rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .operational-topbar-context strong { font-size: .73rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+    .operational-topbar-context:hover { color: var(--node-highlight); background: rgba(255,255,255,.035); }
+    .operational-topbar-spacer { flex: 1 1 auto; min-width: 12px; }
+    .operational-topbar .character-switcher-trigger,
+    .operational-account-menu > summary {
+        min-height: 34px;
+        padding: 7px 10px;
+        border: 1px solid rgba(201,208,214,.18);
+        border-radius: 4px;
+        background: #11151b;
+        color: var(--text);
+        font-size: .64rem;
+        font-weight: 850;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+    .operational-account-menu { position: relative; }
+    .operational-account-menu > summary { cursor: pointer; list-style: none; }
+    .operational-account-menu > summary::-webkit-details-marker { display: none; }
+    .operational-account-menu > div { position: absolute; top: calc(100% + 8px); right: 0; display: grid; min-width: 150px; padding: 7px; border: 1px solid rgba(var(--node-rgb), .38); background: #0b0e13; box-shadow: 0 14px 32px rgba(0,0,0,.48); }
+    .operational-account-menu a,.operational-account-menu button { width: 100%; padding: 8px; border: 0; color: var(--text); background: transparent; font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+
+    body.operational-shell-page .operational-desktop-sidebar {
+        position: fixed;
+        top: var(--operational-topbar-height);
+        bottom: 0;
+        left: 0;
+        z-index: 999;
+        display: grid;
+        grid-template-rows: auto auto auto minmax(0,1fr) auto;
+        gap: 10px;
+        width: var(--operational-sidebar-width);
+        padding: 10px;
+        overflow: hidden auto;
+        border: 0;
+        border-right: 1px solid rgba(201,208,214,.14);
+        border-radius: 0;
+        background: linear-gradient(180deg, rgba(var(--node-rgb),.15), transparent 24%), #0a0d12;
+        box-shadow: none;
+    }
+    .operational-sidebar-topline { display:flex; justify-content:flex-end; min-height:22px; }
+    .operational-sidebar-collapse { display:grid; place-items:center; width:26px; height:26px; border:1px solid rgba(201,208,214,.2); border-radius:4px; color:var(--text); background:#10151c; cursor:pointer; font-size:1.2rem; line-height:1; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-brand { grid-template-columns: 54px minmax(0,1fr); grid-template-rows: auto; min-height: 64px; padding: 0 4px 10px; gap: 8px; justify-items:start; text-align:left; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-brand img { width:54px; height:54px; min-width:54px; min-height:54px; max-width:54px; max-height:54px; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-sidebar-brand-title { justify-content:flex-start; width:100%; font-size:1rem; }
+    /* The long wordmark needs the full sidebar row, not the remainder beside the logo. */
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-sidebar-brand-title:where(.node-motherbrain) { grid-column:1 / -1; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-context { padding:8px; border-radius:4px; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-menu { gap:4px; overflow:auto; }
+    body.operational-shell-page .operational-desktop-sidebar .motherbrain-desktop-side-link { gap:8px; min-height:36px; padding:7px 9px; border-radius:4px; }
+    .operational-side-link-icon { display:grid; place-items:center; width:20px; height:20px; flex:0 0 20px; border:1px solid rgba(var(--node-rgb),.34); border-radius:3px; color:var(--node-highlight); font-size:.58rem; font-weight:950; }
+    .operational-side-link-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .operational-sidebar-utilities { display:grid; gap:4px; padding-top:10px; border-top:1px solid rgba(201,208,214,.16); }
+    .operational-sidebar-utility { display:flex; align-items:center; gap:8px; min-height:34px; padding:7px 8px; border:1px solid rgba(201,208,214,.13); border-radius:4px; color:var(--muted); background:transparent; font:800 .64rem/1 var(--font-sans); letter-spacing:.05em; text-align:left; text-decoration:none; text-transform:uppercase; cursor:pointer; }
+    .operational-sidebar-utility:hover,.operational-sidebar-utility:focus-visible { color:var(--text); border-color:rgba(var(--node-rgb),.5); outline:0; background:rgba(var(--node-rgb),.1); }
+    .operational-sidebar-utility span { display:grid; place-items:center; width:18px; color:var(--node-highlight); }
+    .operational-sidebar-utility strong { font:inherit; }
+    body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:calc(var(--operational-topbar-height) + 20px) 24px 40px calc(var(--operational-sidebar-width) + 24px); }
+    body.operational-shell-page.operational-sidebar-collapsed { --operational-sidebar-width: 68px; }
+    body.operational-shell-page.operational-sidebar-collapsed .operational-sidebar-collapse span { transform: rotate(180deg); }
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-brand { grid-template-columns:1fr; justify-items:center; }
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-sidebar-brand-title,
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-context,
+    body.operational-shell-page.operational-sidebar-collapsed .operational-side-link-label,
+    body.operational-shell-page.operational-sidebar-collapsed .operational-sidebar-utility strong { display:none; }
+    body.operational-shell-page.operational-sidebar-collapsed .motherbrain-desktop-side-link,
+    body.operational-shell-page.operational-sidebar-collapsed .operational-sidebar-utility { justify-content:center; padding-inline:4px; }
+    body.operational-shell-page.operational-board-view .operational-topbar,
+    body.operational-shell-page.operational-board-view .operational-desktop-sidebar { display:none; }
+    body.operational-shell-page.operational-board-view .content { padding:18px; }
+    .operational-board-exit { position:fixed; top:8px; left:8px; z-index:1100; width:28px; height:28px; padding:0; border:1px solid rgba(201,208,214,.3); border-radius:0 0 5px 0; color:var(--text); background:rgba(5,7,10,.78); cursor:pointer; }
+    body.operational-board-view .operational-board-exit { display:grid; place-items:center; }
+}
+
+@media (max-width: 900px) {
+    body.operational-shell-page { --operational-mobile-controls-height:58px; --operational-mobile-header-height:calc(var(--operational-mobile-controls-height) + var(--neo-safe-top)); background:#07090d; }
+    body.operational-shell-page > .shell { width:100%; max-width:none; }
+    body.operational-shell-page .operational-topbar,
+    body.operational-shell-page .operational-desktop-sidebar { display:none !important; }
+    .operational-mobile-header { position:fixed; inset:0 0 auto; z-index:1100; display:grid; grid-template-columns:42px minmax(0,1fr) auto; align-items:center; gap:6px; min-height:var(--operational-mobile-header-height); padding:calc(7px + var(--neo-safe-top)) max(10px, var(--neo-safe-right)) 7px max(10px, var(--neo-safe-left)); border-bottom:1px solid rgba(201,208,214,.16); background:#090c11; box-shadow:0 5px 16px rgba(0,0,0,.36); transform:translateY(0); transition:transform 180ms ease; }
+    body.operational-mobile-header-hidden .operational-mobile-header { transform:translateY(calc(-100% - 1px)); }
+    .operational-mobile-identity { display:flex; align-items:center; gap:7px; min-width:0; color:var(--text); text-decoration:none; }
+    .operational-mobile-identity img { width:32px; height:32px; object-fit:contain; }
+    .operational-mobile-identity span { display:grid; min-width:0; }
+    .operational-mobile-identity strong,.operational-mobile-identity small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .operational-mobile-identity strong { font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; }
+    .operational-mobile-identity small { color:var(--muted); font-size:.57rem; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+    .operational-mobile-actions { display:flex; align-items:center; gap:5px; min-width:0; }
+    .operational-mobile-header .motherbrain-alert-tray { flex:0 0 40px; width:40px; height:40px; }
+    .operational-mobile-header .motherbrain-alert-button { display:grid; place-items:center; width:40px; min-width:40px; height:40px; min-height:40px; padding:0; border-radius:50%; gap:0; }
+    .operational-mobile-header .motherbrain-alert-button-label { display:none; }
+    .operational-mobile-header .motherbrain-alert-button::before { content:"!"; color:var(--node-highlight); font-size:1rem; font-weight:950; line-height:1; }
+    .operational-mobile-header .motherbrain-alert-count { position:absolute; right:-3px; bottom:-3px; min-width:18px; height:18px; padding:0 5px; font-size:.58rem; }
+    .operational-mobile-header .motherbrain-alert-panel { right:0; width:min(330px, calc(100vw - var(--neo-safe-left) - var(--neo-safe-right) - 18px)); max-width:calc(100vw - var(--neo-safe-left) - var(--neo-safe-right) - 18px); }
+    body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:calc(var(--operational-mobile-header-height) + 14px) max(10px, var(--neo-safe-right)) var(--neo-dock-clearance) max(10px, var(--neo-safe-left)); }
+    .operational-mobile-bottom-nav { position:fixed; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right)); bottom:calc(10px + var(--neo-safe-bottom)); z-index:1080; display:flex; align-items:center; justify-content:space-around; gap:4px; min-height:58px; padding:8px; border:1px solid rgba(var(--node-rgb),.38); border-radius:999px; background:linear-gradient(135deg, rgba(238,246,255,.08), transparent 34%), linear-gradient(180deg, rgba(12,15,21,.9), rgba(3,4,7,.88)); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.5),0 0 24px rgba(var(--node-rgb),.2); backdrop-filter:blur(16px); }
+    .operational-mobile-bottom-nav a,.operational-mobile-bottom-nav button { display:grid; place-items:center; gap:2px; flex:1 1 0; min-width:0; min-height:40px; border:0; color:var(--text); background:transparent; font:800 .58rem/1 var(--font-sans); letter-spacing:.05em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
+    .operational-mobile-bottom-nav a > span:first-child,.operational-mobile-bottom-nav button > span:first-child { color:var(--node-highlight); font-size:1.05rem; line-height:1; }
+    body.operational-shell-page.operational-board-view .operational-mobile-header { display:none; }
+    body.operational-shell-page.operational-board-view .operational-mobile-bottom-nav { display:none; }
+    body.operational-shell-page.operational-board-view .content { padding-top:12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .operational-mobile-header,
+    .operational-mobile-drawer { transition:none; }
+}
+
+/* State messages are not routing instructions: remove their arrow entirely. */
+.blueprint-neosektor .driver-arrow[hidden] {
+    display: none !important;
+}
+
+.blueprint-neosektor .driver-arrow::before {
+    content: "";
+    position: absolute;
+    display: block;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: clamp(70px, 11.5svh, 140px);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.26), transparent 34%, rgba(0, 0, 0, 0.24) 100%),
+        linear-gradient(90deg, #720812 0%, var(--node-sektor-primary) 42%, var(--node-sektor-highlight) 100%);
+    clip-path: polygon(0 38%, 74% 38%, 74% 14%, 100% 50%, 74% 86%, 74% 62%, 0 62%);
+    transform: translateY(-50%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.42),
+        inset 0 -4px 10px rgba(0, 0, 0, 0.34),
+        0 0 18px rgba(var(--node-sektor-highlight-rgb), 0.5),
+        0 0 34px rgba(var(--node-sektor-primary-rgb), 0.45);
+}
+
+.blueprint-neosektor .driver-arrow::after {
+    content: none;
+}
+
+.blueprint-neosektor .driver-wave[data-direction="west"] .driver-arrow::before {
+    transform: translateY(-50%) scaleX(-1);
+}
+
+.blueprint-neosektor .neosektor-driver-offset-panel span,
+.blueprint-neosektor .driver-priority-rank {
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-driver-offset-panel strong,
+.blueprint-neosektor .driver-priority-card strong {
+    color: var(--neo-bright-silver);
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+/* Driver Routing is intentionally a three-bay decision display. */
+body.blueprint-neosektor.neosektor-driver-page .driver-bay-priority {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(78vw, 1080px);
+    max-width: calc(100% - 32px);
+    min-height: 0;
+    height: clamp(170px, 19svh, 210px);
+    margin-inline: auto;
+    justify-self: center;
+    justify-content: center;
+}
+
+body.blueprint-neosektor.neosektor-driver-page .driver-priority-card strong {
+    font-size: clamp(5.25rem, min(16vw, 14svh), 9.4rem);
+    align-self: stretch;
+    display: grid;
+    place-items: center;
+}
+
+.blueprint-neosektor .driver-wave-message {
+    color: var(--neo-bright-silver);
+    font-size: clamp(2.25rem, min(7vw, 6.4svh), 4.4rem);
+    font-weight: 950;
+    letter-spacing: .06em;
+    line-height: .95;
+    text-align: center;
+}
+
+.blueprint-neosektor .tunnel-bay-priority-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: rgba(238, 246, 255, .7);
+    font-size: .52rem;
+    font-weight: 900;
+    letter-spacing: .07em;
+    line-height: 1;
+}
+
+.blueprint-neosektor .tunnel-bay-priority-toggle input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #d8202a;
+}
+
+.blueprint-neosektor .driver-bay-priority {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: clamp(5px, 1vw, 9px);
+    min-height: 0;
+    min-height: clamp(144px, 21svh, 236px);
+    padding: 6px clamp(5px, 1vw, 10px);
+    border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.44);
+    border-bottom: 1px solid rgba(var(--node-sektor-primary-rgb), 0.36);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.08), transparent 32%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.98), rgba(5, 7, 11, 0.96));
+}
+
+.blueprint-neosektor .driver-priority-card {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    place-items: center;
+    overflow: hidden;
+}
+
+.blueprint-neosektor .driver-priority-rank {
+    width: 100%;
+    padding: 4px 2px;
+    background: rgba(244, 246, 248, 0.9);
+    color: var(--node-sektor-primary);
+    font-size: clamp(0.68rem, min(2.1vw, 1.7svh), 1.05rem);
+    line-height: 1;
+    text-align: center;
+}
+
+.blueprint-neosektor .driver-priority-card strong {
+    max-width: 100%;
+    overflow: hidden;
+    padding: 5px 3px;
+    font-size: clamp(2.85rem, min(8.4vw, 7.8svh), 4.95rem);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .neosektor-driver-offset-panel {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.52fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border-top: 1px solid rgba(var(--node-sektor-primary-rgb), 0.28);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.06), transparent 32%),
+        linear-gradient(180deg, rgba(18, 26, 36, 0.92), rgba(5, 7, 11, 0.96));
+}
+
+.blueprint-neosektor .neosektor-driver-offset-panel > div:first-child {
+    display: grid;
+    justify-items: center;
+    gap: 5px;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-driver-offset-control {
+    display: grid;
+    grid-template-columns: 44px minmax(72px, 1fr) 44px;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-discharge-wrap {
+    gap: 10px;
+}
+
+.blueprint-neosektor .neosektor-discharge-list {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-card,
+.blueprint-neosektor .neosektor-discharge-empty {
+    gap: 10px;
+}
+
+.blueprint-neosektor .neosektor-discharge-card.is-setup-needed {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.62);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 22px rgba(var(--node-sektor-highlight-rgb), 0.16);
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head div {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    border-radius: 7px;
+    background: rgba(5, 7, 11, 0.34);
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head span,
+.blueprint-neosektor .neosektor-discharge-card-head em,
+.blueprint-neosektor .neosektor-discharge-count-card span,
+.blueprint-neosektor .neosektor-discharge-send-form span,
+.blueprint-neosektor .neosektor-discharge-events h2,
+.blueprint-neosektor .neosektor-discharge-empty h2 {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.66);
+    font-size: 0.62rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(1.8rem, 6vw, 3.2rem);
+    font-weight: 950;
+    line-height: 0.95;
+}
+
+.blueprint-neosektor .neosektor-discharge-card-head em {
+    justify-self: end;
+    padding: 8px 10px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.34);
+    border-radius: 999px;
+    color: var(--node-sektor-highlight);
+    font-style: normal;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-card {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-card > strong {
+    color: var(--node-sektor-highlight);
+    font-size: clamp(2rem, 8vw, 3.6rem);
+    line-height: 0.95;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-form {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-form label {
+    display: grid;
+    gap: 5px;
+}
+
+.blueprint-neosektor .neosektor-discharge-events {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+}
+
+.blueprint-neosektor .neosektor-discharge-events ul {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.blueprint-neosektor .neosektor-discharge-events li,
+.blueprint-neosektor .neosektor-discharge-events p,
+.blueprint-neosektor .neosektor-discharge-empty p {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.82);
+    font-size: 0.86rem;
+    font-weight: 800;
+    line-height: 1.3;
+}
+
+.blueprint-neosektor .neosektor-menu {
+    align-self: start;
+    width: min(100%, 760px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .neosektor-dashboard-wrap {
+    justify-items: center;
+    width: min(100%, 900px);
+}
+
+.blueprint-neosektor .neosektor-dashboard-title-strip {
+    width: min(100%, 760px);
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard {
+    display: none;
+}
+
+.blueprint-neosektor .neosektor-dashboard-shell .neosektor-mobile-dashboard {
+    display: grid;
+    gap: 14px;
+    width: min(100%, 820px);
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-grid {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-dashboard-shell .neosektor-mobile-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-tile {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 92px;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.42);
+    border-radius: 8px;
+    background:
+        radial-gradient(circle at 8% 20%, rgba(var(--node-sektor-highlight-rgb), 0.2), transparent 9rem),
+        linear-gradient(135deg, rgba(244, 246, 248, 0.1), transparent 36%),
+        linear-gradient(180deg, rgba(31, 7, 11, 0.98), rgba(6, 8, 12, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 18px 28px rgba(0, 0, 0, 0.28),
+        0 0 20px rgba(var(--node-sektor-primary-rgb), 0.14);
+    color: var(--neo-bright-silver);
+    text-decoration: none;
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--node-sektor-highlight), var(--node-sektor-primary));
+    box-shadow: 0 0 16px rgba(var(--node-sektor-highlight-rgb), 0.38);
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-tile.is-active {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.7);
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-icon {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.36);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 40%),
+        rgba(var(--node-sektor-primary-rgb), 0.2);
+    color: var(--node-sektor-highlight);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-icon svg {
+    width: 29px;
+    height: 29px;
+    fill: currentColor;
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-copy {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-copy strong {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 950;
+    letter-spacing: 0;
+    line-height: 1.08;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-copy small {
+    color: rgba(238, 246, 255, 0.68);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.25;
+}
+
+.blueprint-neosektor .neosektor-mobile-dashboard-action {
+    position: relative;
+    z-index: 1;
+    align-self: end;
+    color: var(--node-sektor-highlight);
+    font-size: 0.66rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+@media (min-width: 900px) {
+    .blueprint-neosektor .counts-wrap {
+        padding: 8px 10px 10px;
+    }
+
+    .blueprint-neosektor .mode-view .wave-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .mode-view .wave-metrics div {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        min-height: 76px;
+        padding: 8px 12px;
+        border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.34);
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(244, 246, 248, 0.05), transparent 28%),
+            linear-gradient(180deg, rgba(64, 14, 20, 0.92), rgba(23, 7, 11, 0.96));
+        text-align: center;
+    }
+
+    .blueprint-neosektor .mode-view .ops-column {
+        gap: 6px;
+        padding: 10px;
+    }
+
+    .blueprint-neosektor .mode-view .view-bay-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-wrap {
+        grid-template-columns: minmax(330px, 0.72fr) minmax(500px, 1fr) minmax(240px, 0.42fr);
+        grid-template-rows: minmax(0, 1fr);
+        gap: 10px;
+    }
+
+    .blueprint-neosektor .tunnel-wave-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(2, auto);
+        align-content: start;
+    }
+
+    .blueprint-neosektor .tunnel-offset-panel {
+        grid-column: auto;
+    }
+
+    .blueprint-neosektor .tunnel-bay-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-rows: none;
+        align-content: start;
+    }
+}
+
+@media (max-width: 760px) {
+    .blueprint-neosektor .neosektor-standalone-page {
+        gap: 6px;
+    }
+
+    .blueprint-neosektor .neosektor-standalone-header.app-header {
+        gap: 4px;
+        min-height: 48px;
+        padding-inline: 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header.app-header,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header.app-header {
+        display: grid;
+        grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;
+        align-items: center;
+        width: 100%;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .header-title,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .header-title {
+        grid-column: 1;
+        min-width: 0;
+    }
+
+    .blueprint-neosektor .header-title p {
+        font-size: 0.54rem;
+    }
+
+    .blueprint-neosektor .header-title h1 {
+        font-size: 0.94rem;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .header-title h1,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .header-title h1 {
+        font-size: clamp(0.68rem, 3.1vw, 0.9rem);
+        letter-spacing: 0.035em;
+    }
+
+    .blueprint-neosektor .header-link,
+    .blueprint-neosektor .header-link-static {
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        padding-inline: 8px;
+        font-size: 0.58rem;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .user-chip,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .user-chip {
+        grid-column: 2;
+        min-width: 0;
+        max-width: 76px;
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        margin-left: 0;
+        padding: 4px 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .user-chip span,
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .user-chip strong,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .user-chip span,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .user-chip strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .user-chip span,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .user-chip span {
+        font-size: 0.38rem;
+        letter-spacing: 0.06em;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .user-chip strong,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .user-chip strong {
+        font-size: 0.54rem;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .character-switcher-standalone,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .character-switcher-standalone {
+        grid-column: 3;
+        width: 100%;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header > .header-link,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header > .header-link {
+        display: none;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .neosektor-internal-menu,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .neosektor-internal-menu {
+        grid-column: 4;
+    }
+
+    .blueprint-neosektor .neosektor-internal-menu-trigger {
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        padding-inline: 8px;
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-standalone-header .neosektor-internal-menu-trigger,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-standalone-header .neosektor-internal-menu-trigger {
+        min-width: 36px;
+        padding-inline: 5px;
+        font-size: 0.46rem;
+        gap: 4px;
+    }
+
+    .blueprint-neosektor .neosektor-internal-menu-panel {
+        position: fixed;
+        top: 58px;
+        right: 8px;
+        width: min(220px, calc(100vw - 16px));
+    }
+
+    .blueprint-neosektor .neosektor-internal-menu-link {
+        min-height: 32px;
+        font-size: 0.66rem;
+    }
+
+    .blueprint-neosektor .character-switcher-standalone .character-switcher-trigger {
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        padding-inline: 8px;
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .character-switcher-standalone .character-switcher-trigger,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .character-switcher-standalone .character-switcher-trigger {
+        width: 100%;
+        padding-inline: 5px;
+        font-size: 0.52rem;
+        letter-spacing: 0.035em;
+        line-height: 0.92;
+        text-wrap: balance;
+        white-space: normal;
+    }
+
+    body.blueprint-neosektor.neosektor-ballmat-operator-page .character-switcher-standalone .character-switcher-trigger::after,
+    body.blueprint-neosektor.neosektor-tunnel-operator-page .character-switcher-standalone .character-switcher-trigger::after {
+        display: none;
+    }
+
+    .blueprint-neosektor .character-switcher-standalone .character-switcher-panel {
+        width: min(245px, calc(100vw - 16px));
+    }
+
+    .blueprint-neosektor .counts-wrap,
+    .blueprint-neosektor .tunnel-wrap {
+        width: 100%;
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .wave-strip,
+    .blueprint-neosektor .ops-grid,
+    .blueprint-neosektor .tunnel-wave-grid {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .wave-card,
+    .blueprint-neosektor .ops-column,
+    .blueprint-neosektor .counter-card,
+    .blueprint-neosektor .bay-card,
+    .blueprint-neosektor .tunnel-panel,
+    .blueprint-neosektor .tunnel-readonly-card,
+    .blueprint-neosektor .tunnel-bay-card {
+        border-radius: 7px;
+    }
+
+    .blueprint-neosektor .wave-card {
+        padding: 8px 6px;
+    }
+
+    .blueprint-neosektor .wave-card h2,
+    .blueprint-neosektor .ops-column h2,
+    .blueprint-neosektor .column-bay-title h3,
+    .blueprint-neosektor .tunnel-panel h2,
+    .blueprint-neosektor .tunnel-ballmat-column h3,
+    .blueprint-neosektor .view-bay-dashboard h2 {
+        font-size: 0.62rem;
+        letter-spacing: 0.07em;
+    }
+
+    .blueprint-neosektor .wave-metrics {
+        gap: 5px;
+        margin-top: 6px;
+    }
+
+    .blueprint-neosektor .wave-metrics span,
+    .blueprint-neosektor .counter-card > span,
+    .blueprint-neosektor .bay-heading span,
+    .blueprint-neosektor .tunnel-metric span,
+    .blueprint-neosektor .tunnel-readonly-card span,
+    .blueprint-neosektor .tunnel-bay-card span,
+    .blueprint-neosektor .view-bay-card span {
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+    }
+
+    .blueprint-neosektor .wave-metrics strong {
+        font-size: 1rem;
+    }
+
+    .blueprint-neosektor .ops-column {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .counter-card {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .counter-control {
+        grid-template-columns: 32px minmax(38px, 1fr) 32px;
+        gap: 3px;
+    }
+
+    .blueprint-neosektor .counter-control button,
+    .blueprint-neosektor .counter-number,
+    .blueprint-neosektor .neosektor-inline-status select {
+        min-height: 34px;
+        font-size: 0.9rem;
+    }
+
+    .blueprint-neosektor .readonly-count {
+        min-height: 36px;
+        font-size: 1.18rem;
+    }
+
+    .blueprint-neosektor .mode-view .readonly-count {
+        font-size: 1.46rem;
+    }
+
+    .blueprint-neosektor .neosektor-inline-status {
+        grid-template-columns: 1fr;
+        gap: 3px;
+    }
+
+    .blueprint-neosektor .bay-card {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .bay-heading {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .bay-heading strong {
+        font-size: 0.62rem;
+    }
+
+    .blueprint-neosektor .view-bay-dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neosektor .view-bay-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-wave-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-offset-panel {
+        grid-column: 1 / -1;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-column {
+        gap: 4px;
+    }
+
+    .blueprint-neosektor .tunnel-bay-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 5px;
+        grid-auto-rows: auto;
+        align-content: start;
+    }
+
+    .blueprint-neosektor .tunnel-settings-grid {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .tunnel-setting-card {
+        min-height: 50px;
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .tunnel-setting-card input {
+        min-height: 30px;
+        font-size: 1rem;
+    }
+
+    .blueprint-neosektor .tunnel-metric,
+    .blueprint-neosektor .tunnel-readonly-card,
+    .blueprint-neosektor .tunnel-bay-card,
+    .blueprint-neosektor .tunnel-setting-card {
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-card {
+        gap: 3px;
+        min-height: 42px;
+        padding: 4px;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-card .tunnel-count-control {
+        grid-template-columns: 30px minmax(34px, 1fr) 30px;
+        gap: 3px;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-card .counter-number,
+    .blueprint-neosektor .tunnel-ballmat-card .tunnel-count-control button {
+        min-height: 30px;
+        font-size: 1rem;
+    }
+
+    .blueprint-neosektor .tunnel-metric strong,
+    .blueprint-neosektor .tunnel-readonly-card strong {
+        font-size: 1.14rem;
+    }
+
+    .blueprint-neosektor .tunnel-ballmat-card strong {
+        font-size: 1.55rem;
+    }
+
+    .blueprint-neosektor .tunnel-bay-card {
+        min-height: 44px;
+        padding: 5px 4px;
+        gap: 2px;
+    }
+
+    .blueprint-neosektor .tunnel-bay-card strong {
+        font-size: clamp(0.66rem, 2.35vw, 0.82rem);
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .blueprint-neosektor .driver-wave {
+        min-height: clamp(230px, 31svh, 330px);
+        padding-inline: 18px;
+    }
+
+    .blueprint-neosektor .driver-wave-label {
+        font-size: clamp(1.9rem, 10vw, 3.2rem);
+    }
+
+    .blueprint-neosektor .driver-target strong {
+        font-size: clamp(1.82rem, 9.4vw, 3.2rem);
+    }
+
+    .blueprint-neosektor .driver-arrow {
+        width: 98%;
+        height: clamp(86px, 13svh, 128px);
+    }
+
+    .blueprint-neosektor .driver-bay-priority {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 4px;
+        padding: 8px 6px;
+    }
+
+    .blueprint-neosektor .driver-priority-rank {
+        font-size: 0.92rem;
+    }
+
+    .blueprint-neosektor .driver-priority-card strong {
+        padding: 8px 2px;
+        font-size: clamp(1.08rem, 4.85vw, 1.48rem);
+    }
+
+    .blueprint-neosektor .neosektor-driver-offset-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neosektor .neosektor-driver-offset-control {
+        grid-template-columns: 40px minmax(0, 1fr) 40px;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-card-head,
+    .blueprint-neosektor .neosektor-discharge-count-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-card-head em {
+        justify-self: start;
+    }
+
+    body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid {
+        gap: 12px;
+        padding: 0 10px calc(94px + env(safe-area-inset-bottom, 0px));
+        overflow-x: hidden;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .neosektor-dashboard-shell .neosektor-mobile-dashboard {
+        display: grid;
+        gap: 12px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .blueprint-neosektor .neosektor-mobile-dashboard-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 2px;
+        color: rgba(238, 246, 255, 0.72);
+        font-size: 0.68rem;
+        font-weight: 950;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .blueprint-neosektor .neosektor-mobile-dashboard-head strong {
+        color: var(--node-sektor-highlight);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+    }
+
+    .blueprint-neosektor .neosektor-mobile-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .neosektor-dashboard-shell > .neosektor-standalone-header {
+        display: none;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .neosektor-dashboard-wrap {
+        padding: 0 10px calc(94px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .blueprint-neosektor .neosektor-mobile-dashboard-tile {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .blueprint-neosektor .neosektor-menu {
+        grid-template-columns: 1fr;
+        width: min(100%, 360px);
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .topbar {
+        grid-template-columns: minmax(92px, 1fr) minmax(58px, 76px) minmax(68px, 84px) 40px;
+        grid-template-rows: auto;
+        gap: 4px;
+        padding: 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-logo-link {
+        display: none;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-identity {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-identity span {
+        font-size: 0.52rem;
+        letter-spacing: 0.06em;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .motherbrain-header-identity strong {
+        font-size: 0.78rem;
+        letter-spacing: 0.01em;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .topbar-actions {
+        display: contents;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .topbar-user-row {
+        display: contents;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .user-chip {
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        max-width: 76px;
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        padding: 4px 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .character-switcher {
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: stretch;
+        width: auto;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .character-switcher-trigger,
+    body.blueprint-neosektor.neosektor-fixed-header .logout-link {
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        padding-inline: 5px;
+        font-size: 0.52rem;
+        letter-spacing: 0.04em;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .character-switcher-trigger {
+        width: 100%;
+        line-height: 0.92;
+        text-wrap: balance;
+        white-space: normal;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .logout-link {
+        display: none;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .motherbrain-menu-button {
+        grid-column: 4;
+        grid-row: 1;
+        min-width: 40px;
+        height: var(--mobile-node-banner-button-height);
+        min-height: var(--mobile-node-banner-button-height);
+        padding: 4px 5px;
+        font-size: 0.5rem;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .nav {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .nav a {
+        min-height: 36px;
+        padding: 8px 10px;
+        font-size: 0.74rem;
+    }
+
+    body.blueprint-neosektor.neosektor-fixed-header .content {
+        padding-top: 72px;
+    }
+
+    .blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell {
+        gap: 6px;
+        padding: 8px 7px 7px;
+    }
+
+    .blueprint-neosektor .neosektor-live-status-strip.app-header {
+        flex-wrap: nowrap;
+        width: 100%;
+        gap: 5px;
+        min-height: 50px;
+        padding: 5px 0 6px;
+    }
+
+    .blueprint-neosektor .neosektor-live-counts-grid {
+        grid-template-rows: auto minmax(0, 1fr);
+        height: auto;
+        min-height: calc(100svh - 70px);
+        gap: 6px;
+        width: 100%;
+        overflow-x: hidden;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-card,
+    .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+        min-height: 0;
+        padding: 6px;
+        border-radius: 8px;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {
+        min-height: 32px;
+        padding: 4px 6px;
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+        grid-template-rows: auto repeat(3, minmax(50px, auto)) minmax(0, 1fr);
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row .counter-card {
+        min-height: 50px;
+        padding: 5px;
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row .counter-card > span,
+    .blueprint-neosektor .neosektor-live-column-bays .bay-card span,
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics span {
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong {
+        font-size: clamp(1.22rem, 7.6vw, 2rem);
+        line-height: 0.9;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong.is-word {
+        font-size: clamp(0.7rem, 3.4vw, 1rem);
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
+        font-size: clamp(1.95rem, 11vw, 2.85rem);
+        line-height: 0.9;
+    }
+
+    .blueprint-neosektor .neosektor-live-column-bays {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor .neosektor-live-column-bays h3 {
+        font-size: 0.62rem;
+    }
+
+    .blueprint-neosektor .neosektor-live-column-bays .bay-card {
+        min-height: 34px;
+        padding: 6px;
+    }
+
+    .blueprint-neosektor .neosektor-live-column-bays .bay-card strong {
+        font-size: clamp(0.62rem, 3vw, 0.82rem);
+        overflow-wrap: normal;
+        white-space: nowrap;
+        word-break: normal;
+    }
+
+    .blueprint-neosektor .neosektor-count-screen-compact .counts-wrap {
+        gap: 6px;
+        padding-bottom: calc(94px + env(safe-area-inset-bottom, 0px));
+        overflow-x: hidden;
+    }
+
+    .blueprint-neosektor .neosektor-count-screen-compact .wave-strip,
+    .blueprint-neosektor .neosektor-count-screen-compact .ops-grid {
+        gap: 6px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .counter-card {
+        min-height: 78px;
+        padding: 7px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .counter-control {
+        min-height: 48px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .counter-control button,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .counter-number,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .readonly-count,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .neosektor-open-bay-control .readonly-count {
+        min-height: 48px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .column-bays {
+        gap: 5px;
+    }
+
+    .blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-count-screen-compact .bay-card {
+        min-height: 34px;
+        padding: 6px 7px;
+    }
+}
+
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .neosektor-standalone-header,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .tunnel-wrap {
+    width: min(100%, 590px);
+    max-width: 100%;
+}
+
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .neosektor-standalone-header,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .tunnel-wrap {
+    margin-inline: 0;
+}
+
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .tunnel-wrap {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row;
+}
+
+body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap > .tunnel-wave-grid,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap > .tunnel-offset-panel,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap > .tunnel-counts-panel,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap > .tunnel-bay-panel {
+    grid-column: 1 / -1;
+}
+
+body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell > .neosektor-standalone-header,
+body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell > .counts-wrap,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .neosektor-standalone-header,
+body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell > .tunnel-wrap,
+body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .neosektor-standalone-header,
+body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .counts-wrap {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-shell,
+.neosektor-discharge-shell {
+    width: min(100%, 430px);
+    max-width: 430px;
+    gap: 10px;
+    overflow-x: hidden;
+}
+
+.blueprint-neosektor .neosektor-discharge-wrap,
+.neosektor-discharge-wrap {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 8px 16px;
+    overflow-x: hidden;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue,
+.blueprint-neosektor .neosektor-discharge-detail,
+.neosektor-discharge-queue,
+.neosektor-discharge-detail {
+    display: grid;
+    gap: 9px;
+    width: 100%;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.45);
+    border-radius: 8px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.16), transparent 15rem),
+        linear-gradient(180deg, rgba(18, 22, 28, 0.98), rgba(4, 7, 11, 0.99));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 20px rgba(var(--node-sektor-primary-rgb), 0.1);
+}
+
+.blueprint-neosektor .neosektor-discharge-detail.is-setup-needed,
+.neosektor-discharge-detail.is-setup-needed {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.66);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 20px rgba(var(--node-sektor-highlight-rgb), 0.16);
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head,
+.neosektor-discharge-queue-head {
+    display: grid;
+    gap: 5px;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head div,
+.neosektor-discharge-queue-head div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head span,
+.blueprint-neosektor .neosektor-discharge-detail-head span,
+.blueprint-neosektor .neosektor-discharge-send-panel span,
+.blueprint-neosektor .neosektor-discharge-events h2,
+.neosektor-discharge-queue-head span,
+.neosektor-discharge-detail-head span,
+.neosektor-discharge-send-panel span,
+.neosektor-discharge-events h2 {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.68);
+    font-size: 0.58rem;
+    font-weight: 950;
+    letter-spacing: 0.1em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head strong,
+.neosektor-discharge-queue-head strong {
+    color: var(--node-sektor-highlight);
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-queue-head p,
+.blueprint-neosektor .neosektor-discharge-view-only,
+.neosektor-discharge-queue-head p,
+.neosektor-discharge-view-only {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.blueprint-neosektor .neosektor-discharge-list,
+.neosektor-discharge-list {
+    display: grid;
+    gap: 7px;
+    width: 100%;
+}
+
+.blueprint-neosektor .neosektor-discharge-row,
+.neosektor-discharge-row {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr) 44px;
+    grid-template-areas:
+        "door counts time"
+        "door counts flag";
+    align-items: center;
+    gap: 4px 7px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(244, 246, 248, 0.06), transparent 45%),
+        rgba(5, 8, 12, 0.76);
+    color: inherit;
+    text-decoration: none;
+}
+
+.blueprint-neosektor .neosektor-discharge-row.is-setup-needed,
+.neosektor-discharge-row.is-setup-needed {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.56);
+}
+
+.blueprint-neosektor .neosektor-discharge-row.is-selected,
+.neosektor-discharge-row.is-selected {
+    box-shadow: inset 0 0 0 1px rgba(var(--node-sektor-highlight-rgb), 0.42);
+}
+
+.blueprint-neosektor .neosektor-discharge-door,
+.neosektor-discharge-door {
+    grid-area: door;
+    color: var(--node-sektor-highlight);
+    font-size: 1.1rem;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-strip,
+.neosektor-discharge-count-strip {
+    grid-area: counts;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-discharge-detail > .neosektor-discharge-count-strip,
+.neosektor-discharge-detail > .neosektor-discharge-count-strip {
+    grid-area: auto;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-strip > span,
+.neosektor-discharge-count-strip > span {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 5px 3px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.24);
+    border-radius: 6px;
+    background: rgba(1, 4, 7, 0.72);
+    color: rgba(238, 246, 255, 0.7);
+    font-size: 0.52rem;
+    font-weight: 950;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-count-strip strong,
+.neosektor-discharge-count-strip strong {
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-uld-label,
+.neosektor-discharge-uld-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+}
+
+.blueprint-neosektor .neosektor-discharge-time,
+.blueprint-neosektor .neosektor-discharge-setup,
+.neosektor-discharge-time,
+.neosektor-discharge-setup {
+    justify-self: end;
+    min-width: 0;
+    color: rgba(238, 246, 255, 0.78);
+    font-size: 0.62rem;
+    font-weight: 950;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-time,
+.neosektor-discharge-time {
+    grid-area: time;
+}
+
+.blueprint-neosektor .neosektor-discharge-setup,
+.neosektor-discharge-setup {
+    grid-area: flag;
+    padding: 4px 5px;
+    border-radius: 999px;
+    background: rgba(var(--node-sektor-highlight-rgb), 0.18);
+    color: var(--node-sektor-highlight);
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head,
+.neosektor-discharge-detail-head {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    align-items: center;
+    gap: 7px;
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head div,
+.neosektor-discharge-detail-head div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.18);
+    border-radius: 7px;
+    background: rgba(5, 8, 12, 0.74);
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head strong,
+.neosektor-discharge-detail-head strong {
+    overflow: hidden;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 950;
+    line-height: 1.05;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blueprint-neosektor .neosektor-discharge-detail-head em,
+.neosektor-discharge-detail-head em {
+    justify-self: end;
+    padding: 6px 7px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.45);
+    border-radius: 999px;
+    color: var(--node-sektor-highlight);
+    font-size: 0.62rem;
+    font-style: normal;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.blueprint-neosektor .neosektor-discharge-back,
+.neosektor-discharge-back {
+    justify-self: start;
+    color: var(--node-sektor-highlight);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel,
+.neosektor-discharge-send-panel {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel label,
+.neosektor-discharge-send-panel label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel input,
+.neosektor-discharge-send-panel input {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.42);
+    border-radius: 6px;
+    background: rgba(2, 4, 7, 0.9);
+    color: #fff;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 950;
+    text-align: center;
+}
+
+.blueprint-neosektor .neosektor-discharge-send-panel button,
+.neosektor-discharge-send-panel button {
+    grid-column: 1 / -1;
+    min-height: 40px;
+    border: 1px solid rgba(244, 246, 248, 0.24);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 40%),
+        linear-gradient(180deg, var(--node-sektor-primary), #4e060c);
+    color: #fff;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blueprint-neosektor .neosektor-discharge-events,
+.neosektor-discharge-events,
+.blueprint-neosektor .neosektor-discharge-empty,
+.neosektor-discharge-empty {
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.16);
+    border-radius: 7px;
+    background: rgba(5, 8, 12, 0.58);
+}
+
+.blueprint-neosektor .neosektor-discharge-events ul,
+.neosektor-discharge-events ul {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.blueprint-neosektor .neosektor-discharge-events li,
+.blueprint-neosektor .neosektor-discharge-events p,
+.blueprint-neosektor .neosektor-discharge-empty p,
+.neosektor-discharge-events li,
+.neosektor-discharge-events p,
+.neosektor-discharge-empty p {
+    margin: 0;
+    color: rgba(238, 246, 255, 0.82);
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.blueprint-neosektor .neosektor-discharge-empty h2,
+.neosektor-discharge-empty h2 {
+    margin: 0;
+    color: var(--node-sektor-highlight);
+    font-size: 0.8rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* NeoSektor visual standardization: red readout cards, white live counts, orange unload metrics. */
+.blueprint-neosektor .wave-card,
+.blueprint-neosektor .ops-column,
+.blueprint-neosektor .mode-view .counter-card,
+.blueprint-neosektor .bay-card,
+.blueprint-neosektor .view-bay-card,
+.blueprint-neosektor .tunnel-panel:not(.tunnel-settings-panel),
+.blueprint-neosektor .tunnel-metric:not(.tunnel-editable),
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card,
+.blueprint-neosektor .driver-priority-card,
+.blueprint-neosektor .neosektor-discharge-queue,
+.blueprint-neosektor .neosektor-discharge-detail,
+.blueprint-neosektor .neosektor-discharge-events,
+.blueprint-neosektor .neosektor-discharge-empty {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.44);
+    background:
+        linear-gradient(135deg, rgba(244, 246, 248, 0.055), transparent 30%),
+        linear-gradient(180deg, rgba(64, 14, 20, 0.93), rgba(18, 5, 9, 0.97));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.08),
+        0 14px 34px rgba(0, 0, 0, 0.3),
+        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.14);
+}
+
+.blueprint-neosektor .counter-number,
+.blueprint-neosektor .readonly-count,
+.blueprint-neosektor .neosektor-open-bay-control .readonly-count,
+.blueprint-neosektor .tunnel-ballmat-card strong,
+.blueprint-neosektor .tunnel-ballmat-card .counter-number,
+.blueprint-neosektor .neosektor-live-ballmat-row .readonly-count,
+.blueprint-neosektor .neosektor-live-column-bays .bay-card strong,
+.blueprint-neosektor .neosektor-discharge-count-strip strong {
+    color: #fff;
+    text-shadow: 0 0 12px rgba(244, 247, 251, 0.2);
+}
+
+.blueprint-neosektor [data-metric="left_to_arrive"],
+.blueprint-neosektor [data-metric="left_to_unload"] {
+    color: var(--node-sektor-highlight);
+    text-shadow: 0 0 13px rgba(var(--node-sektor-highlight-rgb), 0.38);
+}
+
+.blueprint-neosektor .bay-heading strong,
+.blueprint-neosektor .tunnel-bay-card strong,
+.blueprint-neosektor .neosektor-status,
+.blueprint-neosektor .neosektor-status-empty,
+.blueprint-neosektor .neosektor-status-light,
+.blueprint-neosektor .neosektor-status-moderate,
+.blueprint-neosektor .neosektor-status-full,
+.blueprint-neosektor .neosektor-status-overflowing {
+    color: #fff;
+}
+
+.blueprint-neosektor .counter-control,
+.blueprint-neosektor .tunnel-editable,
+.blueprint-neosektor .tunnel-setting-card,
+.blueprint-neosektor .neosektor-discharge-send-panel label,
+.blueprint-neosektor .neosektor-discharge-count-strip > span {
+    border-color: rgba(216, 220, 224, 0.18);
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.045), transparent 30%),
+        linear-gradient(180deg, rgba(18, 22, 28, 0.92), rgba(4, 7, 11, 0.98));
+    box-shadow: inset 0 1px 0 rgba(244, 246, 248, 0.06);
+}
+
+.blueprint-neosektor .tunnel-settings-panel {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+}
+
+.blueprint-neosektor .tunnel-settings-panel h2 {
+    margin-bottom: 2px;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column,
+.blueprint-neosektor.neosektor-ballmat-operator-page .ops-column,
+.blueprint-neosektor .tunnel-counts-panel,
+.blueprint-neosektor .tunnel-bay-panel,
+.blueprint-neosektor .tunnel-offset-panel {
+    border-color: rgba(216, 220, 224, 0.16);
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.035), transparent 30%),
+        linear-gradient(180deg, rgba(12, 15, 20, 0.96), rgba(3, 5, 8, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(244, 246, 248, 0.055),
+        0 16px 34px rgba(0, 0, 0, 0.34);
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row {
+    align-items: stretch;
+    justify-items: center;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+    width: 100%;
+    max-width: 286px;
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .counter-card,
+.blueprint-neosektor.neosektor-ballmat-operator-page .counter-card,
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card,
+.blueprint-neosektor .tunnel-wave-panel,
+.blueprint-neosektor .tunnel-readonly-card,
+.blueprint-neosektor .tunnel-bay-card {
+    border-color: rgba(var(--node-sektor-primary-rgb), 0.5);
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.06), transparent 30%),
+        linear-gradient(180deg, rgba(68, 12, 18, 0.92), rgba(14, 4, 8, 0.97));
+}
+
+.blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
+    color: #fff;
+    font-size: 3.05rem;
+    font-weight: 950;
+    line-height: 0.9;
+}
+
+.blueprint-neosektor .neosektor-live-column-bays .bay-card strong,
+.blueprint-neosektor .bay-heading strong,
+.blueprint-neosektor .tunnel-bay-card strong,
+.blueprint-neosektor .neosektor-status,
+.blueprint-neosektor .neosektor-status-empty,
+.blueprint-neosektor .neosektor-status-light,
+.blueprint-neosektor .neosektor-status-moderate,
+.blueprint-neosektor .neosektor-status-full,
+.blueprint-neosektor .neosektor-status-overflowing {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(244, 247, 251, 0.18);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong,
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"],
+.blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_arrive"],
+.blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_unload"] {
+    color: var(--node-sektor-highlight);
+    font-weight: 950;
+    text-shadow:
+        0 0 12px rgba(var(--node-sektor-highlight-rgb), 0.42),
+        0 0 22px rgba(var(--node-sektor-primary-rgb), 0.22);
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong,
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+    font-size: 2rem;
+    line-height: 0.92;
+}
+
+.blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong.is-word {
+    font-size: 1.08rem;
+}
+
+.blueprint-neosektor .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"],
+.blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_unload"] {
+    font-size: 2.35rem;
+    line-height: 0.9;
+}
+
+/* Editable arrival inputs stay white; unload readouts retain the Sektor highlight. */
+.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-arrive-control input.counter-number[data-metric="left_to_arrive"] {
+    color: var(--neo-bright-silver);
+    text-shadow: 0 0 12px rgba(244, 247, 251, 0.2);
+}
+
+.blueprint-neosektor .tunnel-wave-panel .tunnel-metric {
+    min-height: 72px;
+    justify-content: center;
+}
+
+.blueprint-neosektor .counter-control,
+.blueprint-neosektor .counter-control input,
+.blueprint-neosektor .tunnel-editable,
+.blueprint-neosektor .tunnel-setting-card,
+.blueprint-neosektor .tunnel-setting-card input,
+.blueprint-neosektor .neosektor-driver-offset-control,
+.blueprint-neosektor .neosektor-driver-offset-control input,
+.blueprint-neosektor .neosektor-discharge-send-panel label,
+.blueprint-neosektor .neosektor-discharge-send-panel input {
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.04), transparent 32%),
+        linear-gradient(180deg, rgba(20, 23, 28, 0.94), rgba(5, 7, 11, 0.99));
+}
+
+.blueprint-neosektor .tunnel-settings-panel .tunnel-setting-card {
+    border-color: rgba(216, 220, 224, 0.18);
+    box-shadow: inset 0 1px 0 rgba(244, 246, 248, 0.055);
+}
+
+.blueprint-neosektor .tunnel-settings-panel .tunnel-setting-card input {
+    color: #fff;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-strip {
+    align-items: stretch;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card {
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+    padding: 10px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics div {
+    display: grid;
+    align-content: center;
+    gap: 5px;
+    min-height: 58px;
+    padding: 8px;
+    border: 1px solid rgba(216, 220, 224, 0.16);
+    border-radius: 7px;
+    background:
+        linear-gradient(135deg, rgba(244, 247, 251, 0.04), transparent 32%),
+        linear-gradient(180deg, rgba(10, 13, 17, 0.88), rgba(4, 6, 9, 0.98));
+    text-align: center;
+}
+
+.blueprint-neosektor.neosektor-ballmat-operator-page .wave-card .wave-metrics span {
+    color: var(--neo-silver);
+    font-size: 0.62rem;
+}
+
+@media (max-width: 760px) {
+    .blueprint-neosektor .neosektor-live-ballmat-row .ops-column {
+        max-width: none;
+    }
+
+    .blueprint-neosektor .neosektor-live-ballmat-row .readonly-count {
+        font-size: 2.55rem;
+    }
+
+    .blueprint-neosektor .neosektor-live-wave-row .wave-metrics strong,
+    .blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+    .blueprint-neosektor.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+        font-size: 1.72rem;
+    }
+
+    .blueprint-neosektor .tunnel-wave-panel .tunnel-arrive-control .counter-number[data-metric="left_to_arrive"],
+    .blueprint-neosektor .tunnel-wave-panel [data-metric="left_to_unload"] {
+        font-size: 2.05rem;
+    }
+}
+
+@media (max-width: 430px) {
+    .blueprint-neosektor .neosektor-discharge-wrap,
+    .neosektor-discharge-wrap {
+        padding-inline: 6px;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-row,
+    .neosektor-discharge-row {
+        grid-template-columns: 48px minmax(0, 1fr) 40px;
+        gap: 4px 5px;
+        padding: 7px;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-count-strip > span,
+    .neosektor-discharge-count-strip > span {
+        padding-inline: 2px;
+        font-size: 0.5rem;
+    }
+
+    .blueprint-neosektor .neosektor-discharge-count-strip strong,
+    .neosektor-discharge-count-strip strong {
+        font-size: 0.92rem;
+    }
+}
+
+.mobile-topbar,
+.mobile-bottom-nav {
+    display: none;
+}
+
+@media (max-width: 760px) {
+    body.mobile-app-chrome {
+        overflow-x: hidden;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+        font-size: max(16px, 1rem);
+    }
+
+    a,
+    button,
+    summary,
+    label,
+    input,
+    select,
+    textarea,
+    [role="button"] {
+        touch-action: manipulation;
+    }
+
+    body.mobile-app-chrome.has-mobile-topbar .shell > .topbar {
+        display: none;
+    }
+
+    body.mobile-app-chrome.has-mobile-topbar .content {
+        padding-top: calc(72px + env(safe-area-inset-top));
+    }
+
+    body.mobile-app-chrome.has-mobile-bottom-nav .content {
+        padding-bottom: calc(108px + env(safe-area-inset-bottom));
+    }
+
+    body.mobile-app-chrome.has-mobile-bottom-nav {
+        padding-bottom: calc(18px + env(safe-area-inset-bottom));
+    }
+
+    body.mobile-app-chrome.has-mobile-bottom-nav .mobile-bottom-nav {
+        position: fixed;
+    }
+
+    .mobile-topbar {
+        position: fixed;
+        top: calc(6px + env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+        left: max(8px, env(safe-area-inset-left));
+        z-index: 1700;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        max-width: 100%;
+        pointer-events: none;
+    }
+
+    .mobile-topbar-left,
+    .mobile-topbar-actions {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        pointer-events: auto;
+    }
+
+    .mobile-topbar-left {
+        gap: 8px;
+        flex: 1 1 auto;
+    }
+
+    .mobile-topbar-actions {
+        justify-content: flex-end;
+        gap: 7px;
+    }
+
+    .mobile-topbar-back,
+    .mobile-topbar-node-icon-link,
+    .mobile-account-trigger,
+    .mobile-topbar .motherbrain-alert-button {
+        display: inline-grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        padding: 0;
+        border: 1px solid rgba(var(--node-highlight-rgb), 0.46);
+        border-radius: 999px;
+        background:
+            radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.13), transparent 42%),
+            linear-gradient(180deg, rgba(18, 20, 25, 0.72), rgba(5, 6, 9, 0.62));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 10px 24px rgba(0, 0, 0, 0.36),
+            0 0 18px rgba(var(--node-rgb), 0.18);
+        color: var(--neo-bright-silver);
+        cursor: pointer;
+        list-style: none;
+        backdrop-filter: blur(10px);
+    }
+
+    .mobile-topbar-back svg,
+    .mobile-bottom-nav svg {
+        width: 19px;
+        height: 19px;
+        fill: currentColor;
+    }
+
+    .mobile-topbar-node-icon {
+        display: block;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.26));
+    }
+
+    .mobile-topbar-page-link {
+        display: flex;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 3px 0;
+        color: var(--neo-bright-silver);
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+    }
+
+    .mobile-topbar-page-name {
+        display: block;
+        max-width: none;
+        color: var(--neo-bright-silver);
+        font-size: clamp(0.76rem, 3.3vw, 0.98rem);
+        line-height: 1;
+        text-overflow: clip;
+        white-space: nowrap;
+    }
+
+    .mobile-topbar-gateway-brand-link {
+        display: grid;
+        gap: 1px;
+        align-items: center;
+    }
+
+    .mobile-topbar-page-brand,
+    .mobile-topbar-page-brand .neo-brand {
+        display: inline-flex;
+        min-width: 0;
+    }
+
+    .mobile-topbar-page-brand {
+        max-width: none;
+        font-size: 0.9rem;
+        line-height: 1;
+        text-overflow: clip;
+        white-space: nowrap;
+    }
+
+    .mobile-topbar-page-context {
+        color: var(--node-highlight);
+        font-size: 0.58rem;
+        font-weight: 950;
+        letter-spacing: 0.12em;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar {
+        gap: 6px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-left {
+        flex: 1 1 auto;
+        gap: 6px;
+        max-width: calc(100vw - 62px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon-link,
+    body.rfd-hub-page.mobile-app-chrome .mobile-account-trigger {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon {
+        width: 27px;
+        height: 27px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-gateway-brand-link {
+        flex: 1 1 auto;
+        max-width: none;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {
+        width: 100%;
+        max-width: none;
+        font-size: clamp(0.7rem, 3.6vw, 0.86rem);
+        text-overflow: clip;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand .neo-brand {
+        max-width: 100%;
+    }
+
+    .mobile-topbar-title {
+        display: grid;
+        gap: 1px;
+        min-width: 0;
+        padding: 3px 0;
+        color: var(--neo-bright-silver);
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.72);
+    }
+
+    .mobile-topbar-title > span,
+    .mobile-topbar-title strong {
+        display: block;
+        max-width: none;
+        text-overflow: clip;
+        white-space: nowrap;
+    }
+
+    .mobile-topbar-title > span {
+        color: var(--node-highlight);
+        font-size: 0.62rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    .mobile-topbar-title .neo-brand {
+        display: inline-flex;
+    }
+
+    .mobile-topbar-title strong {
+        color: var(--neo-bright-silver);
+        font-size: 0.9rem;
+        font-weight: 950;
+        letter-spacing: 0;
+        line-height: 1.1;
+        text-transform: uppercase;
+    }
+
+    body.blueprint-neostaffing.mobile-app-chrome .mobile-topbar-title > span,
+    body.blueprint-neostaffing.mobile-app-chrome .mobile-topbar-title strong {
+        max-width: min(62vw, 280px);
+    }
+
+    body.blueprint-neostaffing.mobile-app-chrome .mobile-topbar-title strong {
+        text-transform: none;
+    }
+
+    .mobile-account-menu {
+        position: relative;
+    }
+
+    .mobile-account-trigger::-webkit-details-marker,
+    .mobile-bottom-switcher > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .mobile-account-icon,
+    .mobile-account-fallback {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+    }
+
+    .mobile-account-icon {
+        display: block;
+        object-fit: cover;
+    }
+
+    .mobile-account-fallback {
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(238, 246, 255, 0.2);
+        background: rgba(var(--node-rgb), 0.22);
+        color: var(--neo-bright-silver);
+        font-size: 0.86rem;
+        font-weight: 950;
+    }
+
+    .mobile-account-panel,
+    .mobile-bottom-popover,
+    .mobile-bottom-switcher-panel {
+        border: 1px solid rgba(var(--node-highlight-rgb), 0.46);
+        border-radius: 10px;
+        background:
+            linear-gradient(180deg, rgba(22, 25, 31, 0.96), rgba(5, 5, 6, 0.96)),
+            rgba(5, 5, 6, 0.96);
+        box-shadow:
+            0 18px 36px rgba(0, 0, 0, 0.56),
+            0 0 24px rgba(var(--node-rgb), 0.18);
+        backdrop-filter: blur(14px);
+    }
+
+    @keyframes mobile-bottom-pop {
+        from {
+            opacity: 0;
+            transform: translateY(18px) scale(0.74);
+        }
+        70% {
+            opacity: 1;
+            transform: translateY(-3px) scale(1.025);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @keyframes mobile-bottom-pop-close {
+        from {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        to {
+            opacity: 0;
+            transform: translateY(12px) scale(0.84);
+        }
+    }
+
+    .mobile-account-panel {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        display: grid;
+        gap: 7px;
+        width: min(230px, calc(100vw - 18px));
+        padding: 9px;
+    }
+
+    .mobile-account-name {
+        display: block;
+        padding: 7px 8px 9px;
+        border-bottom: 1px solid rgba(201, 208, 214, 0.14);
+        color: var(--neo-bright-silver);
+        font-size: 0.78rem;
+        font-weight: 950;
+    }
+
+    .mobile-account-panel a,
+    .mobile-account-panel button,
+    .mobile-shell-menu-link,
+    .mobile-bottom-switcher-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 36px;
+        padding: 8px 10px;
+        border: 1px solid rgba(201, 208, 214, 0.14);
+        border-radius: 7px;
+        background:
+            linear-gradient(135deg, rgba(238, 246, 255, 0.06), transparent 30%),
+            linear-gradient(180deg, rgba(16, 18, 23, 0.92), rgba(5, 6, 9, 0.88));
+        color: var(--steel);
+        font-size: 0.72rem;
+        font-weight: 950;
+        text-transform: uppercase;
+    }
+
+    .mobile-account-panel .logout-form {
+        display: flex;
+    }
+
+    .mobile-account-panel .logout-form button {
+        width: 100%;
+    }
+
+    .mobile-shell-menu-link {
+        justify-content: center;
+        min-height: 40px;
+        padding: 9px 8px;
+        text-align: center;
+    }
+
+    .mobile-account-panel a:hover,
+    .mobile-account-panel a:focus-visible,
+    .mobile-account-panel button:hover,
+    .mobile-account-panel button:focus-visible,
+    .mobile-shell-menu-link:hover,
+    .mobile-shell-menu-link:focus-visible,
+    .mobile-shell-menu-link.is-active,
+    .mobile-bottom-switcher-link:hover,
+    .mobile-bottom-switcher-link:focus-visible,
+    .mobile-bottom-switcher-link.is-active {
+        border-color: rgba(var(--node-highlight-rgb), 0.78);
+        color: var(--neo-bright-silver);
+        outline: none;
+    }
+
+    .mobile-topbar .motherbrain-alert-tray {
+        position: relative;
+        width: 40px;
+        pointer-events: auto;
+    }
+
+    .mobile-topbar .motherbrain-alert-button-label {
+        display: none;
+    }
+
+    .mobile-topbar .motherbrain-alert-button {
+        gap: 0;
+    }
+
+    .mobile-topbar .motherbrain-alert-button::before {
+        content: "!";
+        color: var(--node-highlight);
+        font-size: 1rem;
+        font-weight: 950;
+        line-height: 1;
+    }
+
+    .mobile-topbar .motherbrain-alert-count {
+        position: absolute;
+        right: -3px;
+        bottom: -3px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        font-size: 0.58rem;
+    }
+
+    .mobile-topbar .motherbrain-alert-panel {
+        right: 0;
+        width: min(330px, calc(100vw - 18px));
+        max-width: calc(100vw - 18px);
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-tray {
+        flex: 0 0 40px;
+        display: inline-grid;
+        width: 40px;
+        height: 40px;
+        pointer-events: auto;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button {
+        display: inline-grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        padding: 0;
+        border-radius: 999px;
+        gap: 0;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button::before {
+        display: inline-grid;
+        place-items: center;
+        width: auto;
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-count {
+        right: -4px;
+        bottom: -4px;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        font-size: 0.56rem;
+    }
+
+    .mobile-bottom-nav {
+        position: fixed;
+        right: 50%;
+        bottom: calc(10px + env(safe-area-inset-bottom));
+        z-index: 1680;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        gap: 4px;
+        width: min(420px, calc(100vw - 22px));
+        min-height: 58px;
+        padding: 8px;
+        border: 1px solid rgba(var(--node-highlight-rgb), 0.38);
+        border-radius: 999px;
+        background:
+            linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 34%),
+            linear-gradient(180deg, rgba(12, 15, 21, 0.72), rgba(3, 4, 7, 0.68));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 16px 34px rgba(0, 0, 0, 0.5),
+            0 0 24px rgba(var(--node-rgb), 0.2);
+        transform: translateX(50%);
+        backdrop-filter: blur(16px);
+    }
+
+    .mobile-bottom-nav-item,
+    .mobile-bottom-nav-button,
+    .mobile-bottom-switcher > summary {
+        min-width: 0;
+    }
+
+    .mobile-bottom-nav-link,
+    .mobile-bottom-nav-button,
+    .mobile-bottom-nav-disabled,
+    .mobile-bottom-switcher > summary {
+        display: grid;
+        place-items: center;
+        gap: 2px;
+        width: 100%;
+        min-height: 42px;
+        padding: 4px 7px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: rgba(238, 246, 255, 0.84);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.56rem;
+        font-weight: 950;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        text-transform: uppercase;
+    }
+
+    .mobile-bottom-nav-link:hover,
+    .mobile-bottom-nav-link:focus-visible,
+    .mobile-bottom-nav-button:hover,
+    .mobile-bottom-nav-button:focus-visible,
+    .mobile-bottom-switcher[open] > summary {
+        background: rgba(var(--node-rgb), 0.2);
+        color: var(--neo-bright-silver);
+        outline: none;
+        box-shadow: 0 0 18px rgba(var(--node-rgb), 0.18);
+    }
+
+    .mobile-bottom-switcher.is-popover-open > summary {
+        background: rgba(var(--node-rgb), 0.24);
+        color: var(--neo-bright-silver);
+        box-shadow: 0 0 20px rgba(var(--node-rgb), 0.22);
+    }
+
+    .mobile-bottom-nav-disabled {
+        color: rgba(201, 208, 214, 0.42);
+        cursor: default;
+    }
+
+    .mobile-bottom-switcher {
+        position: relative;
+        flex: 1 1 0;
+    }
+
+    .mobile-bottom-menu {
+        position: relative;
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .mobile-bottom-nav > .mobile-bottom-nav-item {
+        flex: 1 1 0;
+    }
+
+    .mobile-bottom-popover {
+        position: absolute;
+        bottom: calc(100% + 12px);
+        display: grid;
+        opacity: 0;
+        visibility: hidden;
+        padding: 9px;
+        pointer-events: none;
+        transform: translateY(18px) scale(0.74);
+        transform-origin: var(--mobile-popover-origin-x, calc(100% - 24px)) 100%;
+        transition:
+            opacity 150ms ease,
+            transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+            visibility 0s linear 200ms;
+        will-change: opacity, transform;
+    }
+
+    .mobile-bottom-popover::after {
+        content: "";
+        position: absolute;
+        right: var(--mobile-popover-tail-right, 24px);
+        bottom: -6px;
+        width: 12px;
+        height: 12px;
+        border-right: 1px solid rgba(var(--node-highlight-rgb), 0.42);
+        border-bottom: 1px solid rgba(var(--node-highlight-rgb), 0.42);
+        background: linear-gradient(135deg, rgba(22, 25, 31, 0.94), rgba(5, 5, 6, 0.96));
+        box-shadow: 6px 6px 14px rgba(0, 0, 0, 0.18);
+        transform: rotate(45deg);
+    }
+
+    .mobile-bottom-popover.is-opening,
+    .mobile-bottom-popover.is-open {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+        transition-delay: 0s;
+    }
+
+    .mobile-bottom-popover.is-opening {
+        animation: mobile-bottom-pop 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .mobile-bottom-popover.is-closing {
+        opacity: 0;
+        visibility: visible;
+        pointer-events: none;
+        animation: mobile-bottom-pop-close 150ms ease-in both;
+        transition-delay: 0s;
+    }
+
+    .mobile-bottom-switcher-panel {
+        gap: 7px;
+        right: 0;
+        width: min(280px, calc(100vw - 22px));
+        --mobile-popover-origin-x: 50%;
+        --mobile-popover-tail-right: calc(50% - 6px);
+    }
+
+    .mobile-bottom-menu-panel {
+        right: 0;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+        width: min(286px, calc(100vw - 22px));
+        --mobile-popover-origin-x: calc(100% - 24px);
+        --mobile-popover-tail-right: 22px;
+    }
+
+    .mobile-bottom-menu-panel.is-open {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+    }
+
+    .mobile-bottom-switcher-link {
+        justify-content: flex-start;
+        text-transform: none;
+    }
+
+    .mobile-bottom-switcher-icon {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 10px rgba(var(--node-rgb), 0.22));
+    }
+
+    .mobile-bottom-switcher-label {
+        min-width: 0;
+        margin-right: auto;
+    }
+
+    .mobile-bottom-switcher-link > span:not(.mobile-bottom-switcher-label):last-child {
+        color: var(--muted);
+        font-size: 0.58rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    body.mobile-app-chrome .mobile-shell-duplicate-title {
+        display: none !important;
+    }
+
+    body.mobile-app-chrome .neosektor-standalone-header.app-header {
+        display: none;
+    }
+
+    body.mobile-app-chrome .neosektor-standalone-header .user-chip,
+    body.mobile-app-chrome .neosektor-standalone-header .character-switcher-standalone,
+    body.mobile-app-chrome .neosektor-standalone-header .mobile-banner-logout,
+    body.mobile-app-chrome .neosektor-standalone-header .neosektor-internal-menu-standalone {
+        display: none;
+    }
+}
+
+@media (max-width: 430px) {
+    .mobile-topbar-title > span,
+    .mobile-topbar-title strong {
+        max-width: min(50vw, 210px);
+    }
+
+    .mobile-topbar-back,
+    .mobile-topbar-node-icon-link,
+    .mobile-account-trigger,
+    .mobile-topbar .motherbrain-alert-button {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+    }
+
+    .mobile-account-icon,
+    .mobile-account-fallback {
+        width: 30px;
+        height: 30px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar {
+        left: max(6px, env(safe-area-inset-left));
+        right: max(6px, env(safe-area-inset-right));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-left {
+        max-width: calc(100vw - 58px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon-link,
+    body.rfd-hub-page.mobile-app-chrome .mobile-account-trigger {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-node-icon {
+        width: 27px;
+        height: 27px;
+    }
+
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-tray,
+    body.mobile-app-chrome .mobile-topbar .motherbrain-alert-button {
+        flex-basis: 38px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+    }
+
+    body.rfd-hub-page.mobile-app-chrome .mobile-topbar-page-brand {
+        font-size: clamp(0.66rem, 3.35vw, 0.8rem);
+    }
+
+    .mobile-bottom-nav {
+        width: min(410px, calc(100vw - 16px));
+        min-height: 56px;
+        padding: 7px;
+    }
+
+    .mobile-bottom-nav-link,
+    .mobile-bottom-nav-button,
+    .mobile-bottom-nav-disabled,
+    .mobile-bottom-switcher > summary {
+        min-height: 40px;
+        padding-inline: 5px;
+        font-size: 0.52rem;
+    }
+}

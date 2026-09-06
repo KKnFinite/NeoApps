@@ -123,10 +123,9 @@ test("dispatch assignment controls remain compact while silent dirty protection 
         path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
         "utf8"
     );
-    const css = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "static", "css", "base.css"),
-        "utf8"
-    );
+    const cssRoot = path.join(__dirname, "..", "..", "app", "static", "css");
+    const css = JSON.parse(fs.readFileSync(path.join(cssRoot, "sequence.json"), "utf8"))
+        .stylesheets.map(row => fs.readFileSync(path.join(cssRoot, row.file), "utf8")).join("");
 
     assert.match(script, /if \(!hasUnsavedControls\(\)\)/);
     assert.match(script, /window\.location\.reload\(\)/);

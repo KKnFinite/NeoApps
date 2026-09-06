@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import datetime
 from pathlib import Path
 import unittest
@@ -267,7 +268,7 @@ class GrandmasterUserManagementTest(unittest.TestCase):
         self._login(grandmaster.username)
 
         response = self.client.get("/portal/manage")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"data-portal-management-workspace", response.data)

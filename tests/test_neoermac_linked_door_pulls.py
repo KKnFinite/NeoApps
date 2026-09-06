@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import unittest
 from datetime import date, datetime, time
 from pathlib import Path
@@ -246,7 +247,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         self.assertIn("Browser storage is optional; THIS DOOR remains the safe fallback.", template)
 
     def test_scope_control_uses_visible_ermac_selected_and_unselected_states(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         scope_css = css.split(".neoermac-pull-scope {", 1)[1].split(
             ".neoermac-door-selector > label", 1
         )[0]
@@ -413,7 +414,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         self.assertEqual(saved[0].actual_pure_pull_time_local, time(22, 58))
 
     def test_tab_alert_css_blinks_green_and_red_only_on_inactive_tabs(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(
             ".neoermac-door-tab:not(.is-active).is-pull-due-now",

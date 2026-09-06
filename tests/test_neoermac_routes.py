@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import re
 import unittest
 from datetime import date, datetime, time, timedelta
@@ -124,7 +125,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         desktop_sidebar = response.data.split(b"data-node-desktop-side-nav", 1)[1].split(b"</aside>", 1)[0]
         self.assertIn(b'newlogo_ermac.png', desktop_sidebar)
         self.assertNotIn(b'neoermac-inapp-128.png', desktop_sidebar)
-        sidebar_css = Path("app/static/css/base.css").read_text()
+        sidebar_css = stylesheet_source()
         self.assertIn("grid-template-rows: 220px auto;", sidebar_css)
         self.assertIn("width: 220px;", sidebar_css)
         self.assertIn("border-radius: 0;", sidebar_css)
@@ -199,7 +200,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user()
 
         response = self.client.get("/neoermac")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"class=\"neoermac-shell neoermac-dashboard-shell neoermac-dashboard-home\"", response.data)
@@ -213,7 +214,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
 
     def test_neoermac_dashboard_cards_use_dark_red_with_small_green_accent(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".neoermac-dashboard-tile {", css)
         self.assertIn("rgba(var(--node-sektor-primary-rgb), 0.5)", css)
@@ -1092,7 +1093,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/door-view")
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"neoermac-door-launcher-grid", response.data)
@@ -1227,7 +1228,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'class="neoermac-label-desktop">NO Pure</span>', response.data)
         self.assertIn(b'class="neoermac-label-mobile">NO</span>', response.data)
 
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
         self.assertIn(".neoermac-door-destination-card {", css)
         self.assertIn("border: 1px solid rgba(var(--node-rgb), 0.58)", css)
         self.assertIn(".neoermac-door-card-head .neoermac-door-destination", css)
@@ -1629,7 +1630,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"BASE 01:20 +20 MIN", response.data)
         self.assertIn(b"02:15", response.data)
 
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         self.assertRegex(
             css,
             r"\.neoermac-door-window \{[^}]*font-size: 1rem;",
@@ -2777,7 +2778,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"CLEAR REQUEST", response.data)
         self.assertNotIn(b"SAVE PULLS", response.data)
         self.assertGreaterEqual(response.data.count(b"neoermac-ios-safe-input"), 6)
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
         self.assertIn(".neoermac-door-actual input.neoermac-ios-safe-input", css)
         self.assertIn(".neoermac-uld-grid input.neoermac-ios-safe-input", css)
         self.assertIn(".neoermac-uld-grid .neoermac-uld-type-label", css)
@@ -3676,7 +3677,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neoermac/building-lineup")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
         left_pair = html.split('name="lineup_green_runout_east_destination_1"', 1)[
             1
         ].split("</label>", 1)[0]
@@ -4008,7 +4009,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIsNone(saved)
 
     def test_building_lineup_styles_include_dark_pull_time_backgrounds(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".neoermac-belt-block--blue", css)
         self.assertIn(".neoermac-belt-block--red", css)
@@ -4407,7 +4408,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/view-outbound")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(

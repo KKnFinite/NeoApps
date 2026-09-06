@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from tests.html_contracts import document, assert_mobile_drawer
 from datetime import date, datetime, time, timedelta, timezone
 import json
@@ -232,7 +233,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         ):
             self.assertIn(nav_label, response.data)
 
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         self.assertIn(".motherbrain-dashboard-grid {\n    display: grid;", css)
         self.assertNotIn(".motherbrain-dashboard-grid {\n    display: none;", css)
         self.assertIn(
@@ -304,7 +305,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("FLIGHT API REVIEW</h1>", unmatched_queue)
         self.assertNotIn("MASTER FLIGHT SCHEDULE</h1>", master_schedule)
 
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         self.assertIn(
             "body.motherbrain-desktop-nav-page .motherbrain-body-duplicate-title {\n"
             "        display: none;",
@@ -330,7 +331,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(blocked.location, "/rfd")
 
     def test_sort_timeline_desktop_offset_grid_uses_wide_layout(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".sort-timeline-page .sort-timeline-form", css)
         self.assertIn("max-width: none;", css)
@@ -1570,7 +1571,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
             html.index('name="monday_twilight"'),
             html.index('name="monday_night"'),
         )
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         self.assertIn(
             "body.mobile-app-chrome.motherbrain-gateway-matrix-page .centered-command-page.manage-sort-sidebar-page {\n"
             "        padding: 0;\n"
@@ -5686,7 +5687,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn('name="alp_action" value="preview"', html)
 
     def test_alp_mobile_css_hides_import_links_and_controls_without_overflow(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".alp-mobile-only", css)
         self.assertIn(".alp-desktop-only", css)
@@ -6877,7 +6878,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn("<th>FLIGHT</th>", html)
         self.assertNotIn("UPS1234", html)
 
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         self.assertIn(
             "body.motherbrain-desktop-nav-page .manage-sort-operation-page .manage-sort-operation-title",
             css,
@@ -6892,7 +6893,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("motherbrain-mobile-manage-sort-shell", html)
@@ -6953,7 +6954,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/arrival")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         mobile_list = html.split('data-mobile-arrival-list', 1)[1].split("</section>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
@@ -7037,7 +7038,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/operations/{operation.id}/alp/departure")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         mobile_list = html.split('data-mobile-departure-list', 1)[1].split("</section>", 1)[0]
 
         self.assertEqual(response.status_code, 200)
@@ -7773,7 +7774,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn('name="building_lineup_belt_preference_pair"', section_html)
         self.assertNotIn("parking-belt-preference-save\" name=\"building_lineup_belt_preference_pair", section_html)
         self.assertEqual(section_html.count("SAVE BUILDING LINEUP PREFERENCES"), 1)
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
         preferences_row_rule = re.search(
             r"\.parking-belt-preferences-row\s*\{(?P<body>.*?)\n\}",
             css,
@@ -8173,7 +8174,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIn(b'name="new_arrival_parking_requirement_subject"', reload_response.data)
 
     def test_parking_rules_dropdowns_use_dark_theme_styles(self):
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn(".parking-rules-row select", css)
         self.assertIn("background-image:", css)
@@ -8261,7 +8262,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertIsNone(db.session.get(MotherBrainParkingRule, second_rule.id))
 
     def test_parking_rules_desktop_rows_use_compact_structure(self):
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn(
             "body.motherbrain-desktop-nav-page .parking-rules-card {",
@@ -8277,7 +8278,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         db.session.commit()
 
         response = self.client.get(f"/motherbrain/parking-rules?operation_id={operation.id}")
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"motherbrain-parking-rules-page", response.data)
@@ -12485,7 +12486,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         client_source = Path("app/static/js/parking_plan_live.js").read_text()
 
         self.assertIn("data-parking-lane", html)
@@ -12538,7 +12539,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
 
         response = self.client.get(f"/motherbrain/parking-plan/{operation.id}")
         html = response.data.decode()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         ramp_html = html.split('data-mobile-parking-ramp-cards', 1)[1]
         a01_html = html.split('id="PARKING-POSITION-A01"', 1)[1].split("</section>", 1)[0]
 
@@ -12742,7 +12743,7 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertEqual(html.count("SWAP TAIL"), 2)
 
     def test_parking_plan_desktop_visual_clarity_css_hooks_render(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(".parking-ramp-group", css)
         self.assertIn("border-width: 2px", css)

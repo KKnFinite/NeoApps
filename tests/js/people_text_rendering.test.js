@@ -60,7 +60,7 @@ function pickerFor(label) {
         if (selector === '#people-selection-form select[name="work_area_unit_id"]') return destination;
         return null;
     };
-    vm.runInNewContext(fs.readFileSync(path.join(root, "app/static/js/live_updates.js"), "utf8"), {
+    vm.runInNewContext(fs.readFileSync(path.join(root, "app/static/js/staffing_people.js"), "utf8"), {
         document, window: {}, sessionStorage: {getItem: () => null},
     });
     return destination;

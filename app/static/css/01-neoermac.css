@@ -1,0 +1,309 @@
+
+
+.neoermac-shell {
+    display: grid;
+    justify-items: center;
+    gap: 24px;
+    width: min(100%, 880px);
+    margin: 0 auto;
+    padding: clamp(22px, 4vw, 42px);
+    border: 1px solid rgba(201, 208, 214, 0.28);
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(var(--node-rgb), 0.18), transparent 22rem),
+        radial-gradient(circle at 80% 18%, rgba(50, 255, 126, 0.1), transparent 18rem),
+        linear-gradient(145deg, rgba(238, 246, 255, 0.07), transparent 30%),
+        linear-gradient(180deg, rgba(16, 18, 22, 0.96), rgba(4, 5, 7, 0.96));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -1px 0 rgba(var(--node-rgb), 0.26),
+        0 0 34px rgba(var(--node-rgb), 0.14),
+        0 20px 60px rgba(0, 0, 0, 0.42);
+    text-align: center;
+}
+
+.neoermac-hero {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+}
+
+.neoermac-kicker {
+    color: var(--node-ermac-secondary);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px rgba(54, 226, 123, 0.34);
+}
+
+.neoermac-hero h1 {
+    margin: 0;
+    color: #eef6ff;
+    font-size: clamp(2.4rem, 8vw, 5.5rem);
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 18px rgba(var(--node-rgb), 0.46),
+        0 2px 0 rgba(0, 0, 0, 0.8);
+}
+
+.neoermac-hero p,
+.neoermac-placeholder-panel p {
+    margin: 0;
+    color: var(--steel);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.neoermac-menu {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(190px, 1fr));
+    gap: 14px;
+    width: min(100%, 560px);
+}
+
+.neoermac-menu-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px 16px;
+    border: 1px solid rgba(238, 246, 255, 0.42);
+    border-radius: 5px;
+    color: #eef6ff;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.16), transparent 32%),
+        linear-gradient(180deg, rgba(var(--node-rgb), 0.78), rgba(88, 8, 16, 0.84)),
+        linear-gradient(180deg, rgba(32, 35, 41, 0.94), rgba(17, 19, 24, 0.94));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 0 22px rgba(var(--node-rgb), 0.22);
+    font-size: 0.86rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.neoermac-menu-link:hover,
+.neoermac-menu-link:focus-visible {
+    border-color: rgba(54, 226, 123, 0.72);
+    outline: none;
+    color: #ffffff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 0 26px rgba(var(--node-rgb), 0.3),
+        0 0 18px rgba(54, 226, 123, 0.18);
+}
+
+.neoermac-menu-link-secondary {
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.13), transparent 32%),
+        linear-gradient(180deg, rgba(33, 37, 43, 0.96), rgba(8, 9, 12, 0.92));
+}
+
+.neoermac-placeholder-panel {
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    width: min(100%, 560px);
+    padding: 22px;
+    border: 1px solid rgba(201, 208, 214, 0.22);
+    border-radius: 6px;
+    background:
+        linear-gradient(135deg, rgba(238, 246, 255, 0.08), transparent 32%),
+        rgba(5, 6, 9, 0.64);
+}
+
+.neoermac-lineup-shell {
+    width: min(100%, 980px);
+}
+
+.neoermac-dashboard-shell {
+    width: min(100%, 980px);
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.neoermac-dashboard-hero {
+    width: min(100%, 760px);
+}
+
+.neoermac-dashboard-logo {
+    display: block;
+    width: min(46vw, 256px);
+    max-height: 256px;
+    object-fit: contain;
+    filter:
+        drop-shadow(0 12px 24px rgba(0, 0, 0, 0.64))
+        drop-shadow(0 0 22px rgba(var(--node-rgb), 0.34));
+}
+
+.neoermac-dashboard-brand {
+    margin: -2px 0 0;
+    font-size: clamp(1.45rem, 4vw, 2.3rem);
+}
+
+.neoermac-dashboard-title,
+.neoermac-header-title {
+    letter-spacing: 0.08em;
+}
+
+.neoermac-dashboard-panel {
+    display: grid;
+    gap: 18px;
+    width: min(100%, 760px);
+    padding: 22px;
+    border: 1px solid rgba(201, 208, 214, 0.22);
+    border-radius: 6px;
+    background:
+        radial-gradient(circle at 18% 0%, rgba(var(--node-rgb), 0.14), transparent 18rem),
+        linear-gradient(135deg, rgba(54, 226, 123, 0.07), transparent 34%),
+        linear-gradient(180deg, rgba(16, 18, 22, 0.9), rgba(4, 5, 7, 0.92));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 28px rgba(var(--node-rgb), 0.1);
+    text-align: center;
+}
+
+.neoermac-dashboard-panel p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.neoermac-tile-dashboard {
+    gap: 16px;
+}
+
+.neoermac-dashboard-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(201, 208, 214, 0.16);
+}
+
+.neoermac-dashboard-head span,
+.neoermac-dashboard-head strong {
+    color: var(--steel);
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.neoermac-dashboard-head span {
+    color: var(--node-ermac-secondary);
+}
+
+.neoermac-dashboard-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.neoermac-dashboard-tile {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    min-height: 96px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid rgba(var(--node-sektor-primary-rgb), 0.5);
+    border-radius: 8px;
+    color: #eef6ff;
+    background:
+        radial-gradient(circle at 12% 0%, rgba(var(--node-sektor-primary-rgb), 0.32), transparent 8.5rem),
+        linear-gradient(135deg, rgba(var(--node-sektor-highlight-rgb), 0.12), transparent 40%),
+        linear-gradient(180deg, rgba(18, 10, 13, 0.98), rgba(6, 7, 10, 0.98));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 18px 28px rgba(0, 0, 0, 0.28),
+        0 0 20px rgba(var(--node-sektor-primary-rgb), 0.18);
+    text-align: left;
+    text-decoration: none;
+}
+
+.neoermac-dashboard-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, rgba(var(--node-ermac-secondary-rgb), 0.74), rgba(var(--node-ermac-secondary-rgb), 0.24));
+    box-shadow: 0 0 12px rgba(var(--node-ermac-secondary-rgb), 0.28);
+}
+
+.neoermac-dashboard-tile:hover,
+.neoermac-dashboard-tile:focus-visible {
+    border-color: rgba(var(--node-sektor-highlight-rgb), 0.78);
+    outline: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.14),
+        0 18px 30px rgba(0, 0, 0, 0.34),
+        0 0 26px rgba(var(--node-sektor-primary-rgb), 0.3);
+}
+
+.neoermac-dashboard-tile.is-placeholder {
+    border-style: dashed;
+}
+
+.neoermac-dashboard-tile-icon {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border: 1px solid rgba(var(--node-sektor-highlight-rgb), 0.38);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 40%),
+        rgba(var(--node-sektor-primary-rgb), 0.28);
+    color: #f8fbff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 14px rgba(var(--node-sektor-primary-rgb), 0.18);
+}
+
+.neoermac-dashboard-tile-icon svg {
+    width: 29px;
+    height: 29px;
+    fill: currentColor;
+}
+
+.neoermac-dashboard-tile-copy {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.neoermac-dashboard-tile-copy strong {
+    color: #ffffff;
+    font-size: 0.96rem;
+    font-weight: 950;
+    letter-spacing: 0;
+    line-height: 1.08;
+    text-transform: uppercase;
+}
+
+.neoermac-dashboard-tile-copy small {
+    color: rgba(238, 246, 255, 0.68);
+    font-size: 0.73rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.25;
+}

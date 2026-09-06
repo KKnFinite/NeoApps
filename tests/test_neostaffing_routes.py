@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date, datetime
 from pathlib import Path
 import re
@@ -2899,9 +2900,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIsNone(StaffingPerson.query.filter_by(employee_id="SPLIT-FORGED-HOURLY").first())
 
     def test_people_drawer_fields_use_full_control_hitboxes(self):
-        css = (
-            Path(__file__).resolve().parents[1] / "app" / "static" / "css" / "base.css"
-        ).read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn(
             ".neostaffing-people-detail-drawer label { position: relative; pointer-events: auto; }",

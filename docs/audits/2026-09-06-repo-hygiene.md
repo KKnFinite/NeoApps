@@ -880,3 +880,183 @@ No remaining NEEDS PRODUCT DECISION, UNKNOWN, unavailable-engine, security or
 environment failure remains in the executed suite. All classification records
 are resolved. No production deployment or physical-iPhone/PWA behavior is
 claimed verified by these local results.
+
+## Follow-up — 2026-09-06 CSS/asset delivery and interaction foundation
+
+Starting main: `6282c73203398905b371f15ed5b1ddf11441df80`.
+This is delivery decomposition, not a node redesign or CSS purge. The protected
+stash, ignored archive, and unrelated untracked Scorpion dashboard image remain
+untouched. Static version is `20260906-04`.
+
+### Cascade-preserving delivery
+
+`app/services/page_assets.py` resolves static stylesheet metadata through the
+existing shell context. `app/static/css/sequence.json` preserves **original
+interleaving**, rather than appending all node overrides after shared styles.
+Each original source block lives once. Whole media/print/state blocks with mixed
+ownership remain shared. No specificity escalation, new `!important`, global
+overflow hiding, asset regeneration, or dynamic CSS purge was introduced.
+
+The initial lossless split reconstructed all 983,978 original LF-normalized bytes
+(SHA-256 `d1c8f8e86b01b78e582445781cfa7322f9f92627e0067caec8358c38a24045cb`).
+It produced zero computed-style differences in 120 Chromium/WebKit samples.
+The only subsequent existing-style change is the documented long sidebar title
+repair below. Fragment byte counts/hashes in `sequence.json` describe current
+LF-normalized sources and are checked by `tests/test_page_assets.py`.
+
+| Scope | Original-order bundles | CSS bytes |
+| --- | --- | ---: |
+| Shared | `base.css`, `02/04/06/08/10/13/15/17/19/21/24/28-shared.css` | 562,284 |
+| Ermac | `01/03/05/11-neoermac.css` | 65,122 |
+| Staffing | `07/09/18/20-neostaffing.css` | 210,282 |
+| Sektor | `12/16-neosektor.css` | 55,808 |
+| Scorpion | `14/26-neoscorpion.css` | 36,306 |
+| Rain | `22-neorain.css` | 22,509 |
+| SubZero | `23/25/27-neosubzero.css` | 31,902 |
+
+The extracted bundles retain their existing node-specific dashboards, forms,
+boards, responsive variants, and state rules. Foundation typography, palettes,
+legacy mixed media blocks, MotherBrain/shared shells, and Portal/Gateway/Login
+rules remain in the ordered shared fragments. Drawer CSS is conditional on the
+existing shared-drawer shell; anonymous Login and Staffing no longer load it.
+
+`base.css`: **983,978 → 72,264 bytes**. This does **not** mean shared delivery
+fell to 72 KB: the interleaved shared fragments total 562,284 bytes.
+Total CSS source: **991,424 → 992,523 bytes** (+1,099 for the title fix and the
+small interaction stylesheet). Decomposition reduces page delivery, not total
+repository CSS. The Windows starting working copy was 1,014,937 bytes for
+`base.css`; measurements below normalize line endings to Git/Linux LF to avoid
+claiming CRLF conversion as optimization.
+
+### Measured page asset weights
+
+Uncompressed UTF-8 LF external CSS/JS bytes; not gzip transfer, image/font weight,
+Neon CU savings, or a measured latency improvement. The same asset lists apply
+at the sampled desktop/mobile widths. Authenticated fixtures are used except
+the explicit public Login row. Inline scripts were captured in the measurement
+artifact and kept in place where parser-time consumers/security require them.
+
+| Page | CSS before | CSS after | JS before | JS after |
+| --- | ---: | ---: | ---: | ---: |
+| Public Login | 991,424 | 563,140 | 35,318 | 2,981 |
+| Portal | 991,424 | 570,586 | 44,756 | 15,556 |
+| Gateway | 991,424 | 570,586 | 44,756 | 15,556 |
+| MotherBrain | 991,424 | 570,586 | 47,815 | 45,421 |
+| Staffing | 991,424 | 773,422 | 35,318 | 12,201 |
+| Ermac | 991,424 | 635,708 | 47,815 | 45,421 |
+| Sektor | 991,424 | 626,394 | 47,815 | 45,421 |
+| Scorpion Fuel Dispatch | 991,424 | 606,892 | 75,090 | 72,696 |
+| Rain | 991,424 | 593,095 | 47,815 | 45,421 |
+| SubZero | 991,424 | 602,488 | 47,815 | 45,421 |
+
+An authenticated user visiting Login retains authenticated shell assets (same
+570,586 CSS / 15,556 JS bytes as Portal); public Login does not load them.
+**Tradeoff:** stylesheet links increase from 2 to 14–19 per page. Preserving
+the existing interleaved cascade avoids duplicated shared blocks but adds cold
+request overhead. Existing versioned static caching remains in use. Do not infer
+that every network's cold load is faster from byte reductions alone.
+
+### JavaScript and interaction contract
+
+- `shared_alerts.js` owns the unchanged alert tray helpers; authenticated shells
+  retain them without loading the operational controller. It loads synchronously
+  because inline consumers can call its delegate during parsing.
+- `staffing_people.js` owns the unchanged People form/drawer and unsaved-field
+  session-storage helpers, deferred and limited to Staffing.
+- `live_updates.js` is omitted from Login, Portal, Gateway, and Staffing. Existing
+  operational inline consumers retain synchronous availability. No cadence,
+  heartbeat, Google/R2/DB behavior, or live controller initialization was changed.
+- Existing mobile drawer and operational shell files now use `defer` in their
+  existing order. CSRF token/setup/fetch/submit guards remain synchronous.
+- `interaction_states.js` exposes `NeoInteraction.begin(element, submitter)` and
+  explicit `confirmed()`, `failed()`, and `reset()` settlement. Pending sets
+  `aria-busy`, `aria-disabled`, and `data-interaction-state` immediately; it does
+  not invent success, retry a transaction, or optimistically mutate data.
+- Native Login and Portal request-access forms opt in. Duplicate submit/click
+  events are blocked while pending, but native `disabled` is **not** applied:
+  submitter names/values and CSRF remain successful form data. BFCache restoration
+  resets transient locks. Server navigation supplies authoritative validation.
+- Existing conflict-safe live forms now expose pending/confirmed/failed feedback
+  around their original request/refresh flow; 409 conflict choices and permission
+  restrictions remain intact. Network failures release pending and show the
+  existing safe generic action error, without automatic retries.
+- Current Portal/Gateway links reuse the existing press feedback animation and
+  reduced-motion rule. Drawer, details, node switching, and dock lifecycle remain
+  local/immediate; no speculative DB-backed navigation prefetch was added.
+
+### Desktop clipping
+
+At 1366px the unchanged MotherBrain wordmark measured 203.75px but the two-column
+sidebar left only 142px beside its 54px logo. The overflow clipped the final
+letters. The long title now spans the full 204px sidebar row; font, artwork,
+logo size, sidebar width, collapse behavior, and palette are unchanged. Browser
+geometry assertions verify every title child stays inside its row at 1366×768,
+1600×900 and 1920×1080 in both engines. The separately documented spread-out
+legacy operational top bar is retained, not redesigned in this pass.
+
+### Evidence and validation
+
+Ignored local evidence: `instance/asset-foundation-2026-09-06/`.
+`before.json`, `split.json`, `final/measurements.json`, and `metrics.json` retain
+asset lists, weights, and computed properties. `final/anonymous-login.json`
+separately records the unauthenticated page. Representative inspected images
+include `final/chromium-motherbrain-1366-768.png`,
+`final/webkit-login-anonymous-390-760.png`, `final/webkit-portal-390-760.png`,
+`final/chromium-rfd-390-844.png`, and `final/webkit-neostaffing-390-844.png`.
+
+The existing isolated SQLite/browser fixture is reused with synthetic local
+users, real login/CSRF, and external integrations disabled. No new dependencies
+or test infrastructure were added. The 10-page matrix covers Chromium and
+WebKit at 320×700, 390×760, 390×844, 1366×768, 1600×900, and 1920×1080.
+All 120 final samples match the starting computed properties except the explicit
+MotherBrain sidebar-title geometry. There are no page JavaScript errors or
+horizontal overflow in that matrix. Twelve additional anonymous Login samples
+fit both dimensions and omit authenticated assets. Existing browser tests retain
+drawer/dock geometry, focus, scroll restoration, Board View, access states,
+and final-card clearance checks.
+
+Browser results: **12 tests +157 subtests passed**, then the added anonymous
+Login test **1 test +12 subtests passed**. JS: **46 tests passed**; syntax checks
+passed for all 20 external application scripts. The new transport tests retain
+submitter values/CSRF, block duplicate native POSTs, and verify server-confirmed,
+validation-error, 409, and network-failure settlement without retries.
+
+The first post-change Python run found three source-contract assertions tied to
+the old form opening tag and the moved People helper. Those assertions now
+retain exact form/action semantics and check session storage in its new owner;
+they were not loosened to accept multiple behaviors. The final full Python run
+passed **2,679 tests +1,370 subtests**, with zero failures/errors (869.32 seconds).
+Existing warnings remain (661,429 reported); they are not hidden test failures.
+The aggregate browser coverage is **13 tests +169 subtests**, all passed.
+No further browser matrix was
+started after the user's request to limit unnecessary testing.
+
+Commands (existing venv Python and bundled Node, as above):
+
+```text
+python -m pytest -q tests --ignore=tests/browser --tb=short --disable-warnings --junitxml=instance/asset-foundation-2026-09-06/python-final.xml
+node --test --test-reporter=junit <all tracked tests/js/*.test.js>
+python -m pytest -q tests/browser --tb=short --disable-warnings --junitxml=instance/asset-foundation-2026-09-06/browser-after.xml
+python -m pytest -q tests/browser/test_asset_foundation.py -k anonymous --tb=short --disable-warnings
+python -m compileall -q app scripts tools init_db.py run.py
+python -m pip check
+git diff --check
+```
+
+The browser suite used `NEO_ASSET_BASELINE=instance/asset-foundation-2026-09-06/before.json`
+for strict computed-style comparison. Compileall and pip check pass. No physical
+iPhone/PWA or production-deployment verification is inferred from emulation.
+
+### Remaining CSS debt
+
+1. Reduce the 14–19 stylesheet cold-request fan-out through a deliberate build-time
+   delivery strategy while retaining original cascade order; do not append node
+   CSS after shared rules or duplicate all shared sources per node.
+2. Separate the remaining mixed MotherBrain/foundation, Portal/Login, and Gateway
+   historical blocks only after dependency/print/state evidence permits it. The
+   remaining shared weight is measured above; further safe savings are not yet
+   quantified.
+3. Revisit the pre-existing operational top-bar composition as a focused design
+   decision. This pass fixes the proven sidebar wordmark clipping only.
+4. Existing warning debt is unchanged; no broad ORM/security/workflow changes
+   were folded into asset delivery work.

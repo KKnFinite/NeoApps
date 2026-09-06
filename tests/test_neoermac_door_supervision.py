@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 import json
 import unittest
 from datetime import date, datetime, time, timedelta
@@ -415,7 +416,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertIn(b'data-door-tab="D13"', added.data)
 
     def test_mobile_tabs_scroll_inside_the_viewport(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.client.post(
             "/neoermac/door-view/supervision",

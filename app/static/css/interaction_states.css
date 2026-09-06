@@ -1,0 +1,14 @@
+/* No dimensions change between states. Native button data stays successful. */
+[data-interaction-state="pending"] { cursor: progress; }
+[data-interaction-state="pending"] :is(button[type="submit"], button:not([type]), input[type="submit"]) {
+    cursor: progress;
+    box-shadow: inset 0 0 0 1px var(--node-highlight, #b9d9ed);
+}
+[data-interaction-state="confirmed"] { outline: 1px solid #48ad86; outline-offset: 2px; }
+[data-interaction-state="failed"] { outline: 1px solid #d87777; outline-offset: 2px; }
+
+/* Reuse existing, non-geometric press feedback for current launcher links. */
+:where(a.portal-launch-card, a.gateway-node-card).is-press-feedback { animation: neo-press-feedback 220ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+    :where(a.portal-launch-card, a.gateway-node-card).is-press-feedback { animation-duration: 1ms; }
+}

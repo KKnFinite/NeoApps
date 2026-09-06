@@ -1,0 +1,1050 @@
+
+
+a.neoscorpion-spear-indicator:hover,
+a.neoscorpion-spear-indicator:focus-visible {
+    border-color: #e75c31;
+    color: #ffd2bd;
+    outline: 0;
+}
+
+.neoscorpion-spear-indicator.is-off {
+    border-color: #57636d;
+    background: #11171b;
+    color: #aeb8be;
+}
+
+.neoscorpion-spear-indicator.is-auto {
+    border-color: #d97932;
+    background: #25170d;
+    color: #ffc078;
+}
+
+.neoscorpion-spear-indicator.is-at-risk {
+    border-color: #dfaa42;
+    background: #241d0d;
+    color: #f3cb75;
+}
+
+.neoscorpion-spear-indicator.is-late {
+    border-color: #d6535d;
+    background: #291217;
+    color: #f2a0a5;
+}
+
+.neoscorpion-spear-indicator small {
+    color: currentColor;
+    font-size: .48rem;
+    opacity: .78;
+}
+
+.neoscorpion-spear-indicator-icon {
+    position: relative;
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    transform: rotate(-38deg);
+}
+
+.neoscorpion-spear-indicator-icon::before {
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    left: 5px;
+    width: 2px;
+    background: currentColor;
+    content: "";
+}
+
+.neoscorpion-spear-indicator-icon::after {
+    position: absolute;
+    top: 0;
+    left: 2px;
+    width: 0;
+    height: 0;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid currentColor;
+    border-left: 4px solid transparent;
+    content: "";
+}
+
+.neoscorpion-spear-splash[hidden] {
+    display: none;
+}
+
+.neoscorpion-spear-splash {
+    position: fixed;
+    z-index: 1200;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: clamp(16px, 4vw, 52px);
+    background: rgba(2, 4, 5, .93);
+    opacity: 0;
+    transition: opacity .3s ease;
+}
+
+.neoscorpion-spear-splash.is-visible {
+    opacity: 1;
+}
+
+.neoscorpion-spear-splash.is-dismissing {
+    opacity: 0;
+}
+
+.neoscorpion-spear-splash img {
+    display: block;
+    width: min(100%, 1320px);
+    max-height: 78svh;
+    object-fit: contain;
+    filter: drop-shadow(0 18px 44px rgba(0, 0, 0, .75));
+}
+
+.neoscorpion-spear-splash-close {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    z-index: 1;
+    min-height: 34px;
+    border: 1px solid #7b4030;
+    border-radius: 4px;
+    background: rgba(16, 12, 10, .9);
+    color: #f5d3c8;
+    padding: 6px 10px;
+    font-size: .62rem;
+    font-weight: 900;
+    letter-spacing: .1em;
+}
+
+@media (max-width: 700px) {
+    .neoscorpion-spear-splash {
+        padding: 12px;
+    }
+
+    .neoscorpion-spear-splash img {
+        max-height: 70svh;
+    }
+}
+
+.neoscorpion-truck-spear {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 7px;
+    align-items: center;
+    margin-top: 5px;
+    border-top: 1px solid #294b61;
+    padding-top: 5px;
+}
+
+.neoscorpion-truck-spear > strong {
+    grid-column: 1 / -1;
+    color: #67c5f2;
+    font-size: .55rem;
+    letter-spacing: .1em;
+}
+
+.neoscorpion-truck-spear > span {
+    color: #e3f0f7;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.neoscorpion-truck-spear > small {
+    grid-column: 1;
+    color: #91aabd;
+    font-size: .58rem;
+}
+
+.neoscorpion-truck-spear form {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+}
+
+.neoscorpion-truck-spear button {
+    min-height: 30px;
+    padding: 3px 8px;
+}
+
+.neoscorpion-spear-risk {
+    display: block;
+    margin-top: 2px;
+    color: #78d6a4;
+    font-size: .54rem;
+    letter-spacing: .05em;
+}
+
+.neoscorpion-spear-risk.is-at-risk,
+.neoscorpion-spear-risk.is-unplanned {
+    color: #e5b962;
+}
+
+.neoscorpion-spear-risk.is-waiting,
+.neoscorpion-spear-readiness-reasons {
+    color: #9ccce3;
+}
+
+.neoscorpion-spear-readiness-reasons {
+    display: block;
+    margin-top: 1px;
+    font-size: .48rem;
+    line-height: 1.25;
+}
+
+.neoscorpion-spear-why {
+    margin-top: 4px;
+    max-width: 280px;
+    color: #a8c4d2;
+    font-size: .54rem;
+    line-height: 1.35;
+}
+
+.neoscorpion-spear-why summary {
+    width: fit-content;
+    color: #7acaa1;
+    cursor: pointer;
+    font-weight: 900;
+    letter-spacing: .06em;
+}
+
+.neoscorpion-spear-why > div {
+    display: grid;
+    gap: 3px;
+    margin-top: 4px;
+    border-left: 2px solid #3b735c;
+    background: #0b1a22;
+    padding: 5px 6px;
+}
+
+.neoscorpion-spear-why strong {
+    color: #e0f1f7;
+}
+
+.neoscorpion-spear-why ol {
+    display: grid;
+    gap: 2px;
+    margin: 2px 0 0;
+    padding-left: 16px;
+}
+
+.neoscorpion-spear-hard-notes {
+    color: #e5b962;
+    font-size: .5rem;
+}
+
+.neoscorpion-spear-risk.is-late {
+    color: #e47b84;
+}
+
+@media (max-width: 700px) {
+    .neoscorpion-spear-setting-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Compact operational Crew Admin controls; scoped so other Rain forms retain their styling. */
+.neorain-crew-admin :is(input:not([type="hidden"]), select, button) {
+    min-height: 34px;
+    border: 1px solid #365a72;
+    border-radius: 3px;
+    background: #07151f;
+    color: #dbeaf3;
+    font: inherit;
+}
+
+.neorain-crew-admin :is(input:not([type="checkbox"]):not([type="hidden"]), select) {
+    width: 100%;
+    padding: 5px 7px;
+}
+
+.neorain-crew-admin input[type="checkbox"] {
+    min-height: auto;
+    accent-color: #4d9fd0;
+}
+
+.neorain-crew-admin button {
+    padding: 5px 9px;
+    color: #8bd1fa;
+    cursor: pointer;
+}
+
+.neorain-crew-admin :is(input, select, button):focus-visible {
+    border-color: #8bd1fa;
+    outline: 2px solid rgba(139, 209, 250, .25);
+    outline-offset: 1px;
+}
+
+.neorain-crew-admin label {
+    color: #a8bdca;
+    white-space: nowrap;
+}
+
+.mobile-share-dialog {
+    display: none;
+}
+
+@media (max-width: 760px) {
+    .mobile-share-neoapps-action {
+        width: 100%;
+        border: 0;
+        text-align: left;
+    }
+
+    .mobile-share-dialog[open] {
+        display: grid;
+        place-items: center;
+        width: min(calc(100% - 28px), 360px);
+        padding: 0;
+        border: 1px solid #456b83;
+        border-radius: 8px;
+        background: #071521;
+        color: #e5f2fa;
+    }
+
+    .mobile-share-dialog::backdrop {
+        background: rgba(1, 7, 13, .78);
+    }
+
+    .mobile-share-dialog-panel {
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 18px;
+        text-align: center;
+    }
+
+    .mobile-share-dialog h2,
+    .mobile-share-dialog p {
+        margin: 0;
+    }
+
+    .mobile-share-dialog h2 {
+        color: #83cfff;
+        font-size: .9rem;
+        letter-spacing: .11em;
+    }
+
+    .mobile-share-dialog p {
+        color: #a8bdca;
+        font-size: .78rem;
+    }
+
+    .mobile-share-dialog img {
+        display: block;
+        width: min(220px, 72vw);
+        height: auto;
+        padding: 8px;
+        border-radius: 5px;
+        background: #fff;
+    }
+
+    .mobile-share-dialog-actions {
+        display: flex;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .mobile-share-dialog-actions button {
+        flex: 1;
+        min-height: 44px;
+        border: 1px solid #456b83;
+        border-radius: 4px;
+        background: #102638;
+        color: #e8f5ff;
+        font-weight: 800;
+        letter-spacing: .06em;
+    }
+
+    .mobile-share-dialog [data-mobile-share-status] {
+        min-height: 1em;
+        color: #8bd1fa;
+        font-size: .7rem;
+        overflow-wrap: anywhere;
+    }
+}
+
+.neoscorpion-apu-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.neoscorpion-fuel-tank-grid {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row {
+    display: grid;
+    grid-template-columns:
+        minmax(68px, 0.8fr)
+        minmax(80px, 1fr)
+        minmax(64px, 0.85fr)
+        minmax(80px, 1fr);
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row > * {
+    min-width: 0;
+}
+
+.neoscorpion-fuel-tank-row strong,
+.neoscorpion-fuel-tank-head span {
+    color: #ffe79a;
+    font-size: 0.67rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+}
+
+.neoscorpion-fuel-tank-row input {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 9px 8px;
+    font-size: 1rem;
+    font-weight: 900;
+    text-align: center;
+}
+
+.neoscorpion-fuel-tank-row > span[role="cell"],
+.neoscorpion-planned-value {
+    color: #ffffff;
+    font-size: 0.86rem;
+    font-weight: 900;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.neoscorpion-planned-value {
+    color: #ffe79a !important;
+}
+
+.neoscorpion-fuel-tank-unconfigured {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.neoscorpion-fueler-form label,
+.neoscorpion-truck-form label,
+.neoscorpion-settings-form label {
+    display: grid;
+    gap: 5px;
+    color: #ffe79a;
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.neoscorpion-fueler-notes,
+.neoscorpion-helper,
+.neoscorpion-settings-form .action-button,
+.neoscorpion-new-truck-form,
+.neoscorpion-truck-actions {
+    grid-column: 1 / -1;
+}
+
+.neoscorpion-check {
+    display: inline-flex !important;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+}
+
+.neoscorpion-check input {
+    width: auto;
+}
+
+.neoscorpion-truck-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.neoscorpion-fueler-readout {
+    display: grid;
+    margin: 0;
+}
+
+.neoscorpion-fueler-readout div {
+    display: grid;
+    gap: 3px;
+    padding: 10px;
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.neoscorpion-fueler-readout dt {
+    color: var(--node-scorpion-primary);
+    font-size: 0.66rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
+
+.neoscorpion-fueler-readout dd {
+    margin: 0;
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.neoscorpion-history-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+@media (max-width: 760px) {
+    .neoscorpion-dashboard-grid,
+    .neoscorpion-fueler-form,
+    .neoscorpion-fueler-readout,
+    .neoscorpion-truck-form,
+    .neoscorpion-settings-form,
+    .neoscorpion-history-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neoscorpion-fuel-totals,
+    .neoscorpion-apu-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neoscorpion-fueler-card > .neoscorpion-fueler-mission-head {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .neoscorpion-assignment-update {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .neoscorpion-assets-grid,
+    .neoscorpion-assets-add-truck,
+    .neoscorpion-assets-truck-form {
+        grid-template-columns: 1fr;
+    }
+
+    .neoscorpion-assets-section + .neoscorpion-assets-section {
+        border-top: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.16);
+        border-left: 0;
+    }
+
+    .neoscorpion-assets-section--wide {
+        grid-column: auto;
+    }
+
+    .neoscorpion-assets-summary,
+    .neoscorpion-assets-inline-form,
+    .neoscorpion-assets-section > header {
+        align-items: stretch;
+    }
+
+    .neoscorpion-assets-inline-form {
+        grid-template-columns: 1fr;
+    }
+
+    .neoscorpion-dashboard-tile {
+        min-height: 82px;
+    }
+
+    .neoscorpion-panel {
+        padding: 14px;
+    }
+}
+
+@media (max-width: 520px) {
+    .neoscorpion-fuel-tank-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .neoscorpion-fuel-tank-row > strong,
+    .neoscorpion-fuel-tank-head > span:first-child {
+        grid-column: 1 / -1;
+    }
+}
+
+/* NeoFont locked opt-in branding/title utilities only.
+   Do not apply NeoFont globally to body, buttons, tables, forms, or normal UI text. */
+@font-face {
+  font-family: "NeoFont";
+  src:
+    url("/static/fonts/neofont/NeoFont.woff2") format("woff2"),
+    url("/static/fonts/neofont/NeoFont.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.neo-brand-title,
+.neo-page-title {
+  font-family: "NeoFont", Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.motherbrain-desktop-top-title-text.neo-page-title {
+  text-transform: none;
+}
+
+.neo-menu-text {
+  font-family: "NeoFont", Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.neo-brand-title__neo {
+  color: #DDEBFF;
+}
+
+.neo-brand-title__node--apps {
+  color: #D9362E;
+}
+
+.neo-brand-title__node--gateway {
+  color: #FF5A1F;
+}
+
+.neo-brand-title__node--staffing {
+  color: #21E6C8;
+}
+
+.neo-brand-title__node--bid {
+  color: #3DA7FF;
+}
+
+.neo-brand-title__node--motherbrain {
+  color: #FF7A7A;
+}
+
+.neo-brand-title__node--sektor {
+  color: #E51B23;
+}
+
+.neo-brand-title__node--ermac {
+  color: #D71F2A;
+}
+
+.neo-brand-title__node--scorpion {
+  color: #FFC928;
+}
+
+.neo-brand-title__node--reptile {
+  color: #39FF6A;
+}
+
+.neo-brand-title__node--subzero {
+  color: #5EDCFF;
+}
+
+.neo-brand-title__node--rain {
+  color: #A45CFF;
+}
+
+@media (min-width: 901px) {
+    /* Shared NeoGateway desktop shell: compact, single-line top-right utilities. */
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar,
+    body.node-desktop-nav-page.node-fixed-header .topbar,
+    body.rfd-hub-page .topbar {
+        min-height: 56px;
+        padding-block: 8px;
+    }
+
+    body.motherbrain-desktop-nav-page.motherbrain-fixed-header .topbar-actions,
+    body.node-desktop-nav-page.node-fixed-header .topbar-actions {
+        flex-wrap: nowrap;
+        gap: 8px;
+    }
+
+    body.motherbrain-desktop-nav-page .motherbrain-desktop-utility,
+    body.node-desktop-nav-page .motherbrain-desktop-utility {
+        flex-wrap: nowrap;
+        gap: 8px;
+    }
+
+    body.motherbrain-desktop-nav-page .node-desktop-portal-link,
+    body.node-desktop-nav-page .node-desktop-portal-link,
+    body.motherbrain-desktop-nav-page .character-switcher-trigger,
+    body.node-desktop-nav-page .character-switcher-trigger,
+    body.motherbrain-desktop-nav-page .motherbrain-alert-button,
+    body.node-desktop-nav-page .motherbrain-alert-button,
+    body.motherbrain-desktop-nav-page .logout-link,
+    body.node-desktop-nav-page .logout-link,
+    body.rfd-hub-page .logout-link {
+        height: 34px;
+        min-height: 34px;
+        padding: 0 10px;
+        border-radius: 4px;
+        font-family: "NeoFont", Arial, sans-serif;
+        font-size: 0.62rem;
+        letter-spacing: 0.08em;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip,
+    body.node-desktop-nav-page .desktop-shell-user-chip,
+    body.rfd-hub-page .desktop-shell-user-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: auto;
+        min-width: 0;
+        height: 34px;
+        min-height: 34px;
+        padding: 0 10px;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip span,
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip strong,
+    body.node-desktop-nav-page .desktop-shell-user-chip span,
+    body.node-desktop-nav-page .desktop-shell-user-chip strong,
+    body.rfd-hub-page .desktop-shell-user-chip span,
+    body.rfd-hub-page .desktop-shell-user-chip strong {
+        display: inline;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: nowrap;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip span,
+    body.node-desktop-nav-page .desktop-shell-user-chip span,
+    body.rfd-hub-page .desktop-shell-user-chip span {
+        color: var(--muted);
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+    }
+
+    body.motherbrain-desktop-nav-page .desktop-shell-user-chip strong,
+    body.node-desktop-nav-page .desktop-shell-user-chip strong,
+    body.rfd-hub-page .desktop-shell-user-chip strong {
+        color: var(--text);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .node-desktop-portal-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 32px;
+        padding: 7px 10px;
+        border: 1px solid rgba(var(--node-highlight-rgb), 0.46);
+        border-radius: 4px;
+        color: var(--text);
+        background:
+            linear-gradient(135deg, rgba(var(--node-highlight-rgb), 0.14), transparent 34%),
+            linear-gradient(180deg, rgba(26, 28, 34, 0.94), rgba(5, 5, 6, 0.9));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 0 18px rgba(var(--node-rgb), 0.12);
+        font-size: 0.58rem;
+        line-height: 1;
+        text-align: center;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .node-desktop-portal-link:hover,
+    .node-desktop-portal-link:focus-visible {
+        border-color: rgba(var(--node-highlight-rgb), 0.82);
+        color: var(--text);
+        outline: none;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            0 0 22px rgba(var(--node-rgb), 0.22);
+    }
+
+    /* Keep the shared desktop character picker compact without changing mobile controls. */
+    .character-switcher-panel {
+        top: calc(100% + 6px);
+        gap: 4px;
+        width: min(238px, calc(100vw - 32px));
+        padding: 6px;
+    }
+
+    .character-switcher-link {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 7px;
+        min-height: 30px;
+        padding: 5px 7px;
+        font-size: 0.54rem;
+    }
+
+    .character-switcher-icon {
+        align-self: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 5px;
+    }
+
+    .character-switcher-label {
+        min-width: 0;
+        color: inherit;
+        font-family: "NeoFont", Arial, sans-serif;
+        font-size: 0.54rem;
+        letter-spacing: 0.04em;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .character-switcher-label .neo-brand {
+        font-size: inherit;
+    }
+
+    .character-switcher-suffix {
+        font-size: 0.5rem;
+    }
+
+    body.node-desktop-nav-page {
+        --motherbrain-side-nav-width: 292px;
+    }
+
+    body.node-desktop-nav-page .shell {
+        width: 100%;
+        max-width: none;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .topbar {
+        position: fixed;
+        top: 14px;
+        right: 18px;
+        left: calc(var(--motherbrain-side-nav-width) + 34px);
+        z-index: 95;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        width: auto;
+        min-height: 62px;
+        margin: 0;
+        padding: 9px 12px 9px 16px;
+        border: 1px solid rgba(var(--node-rgb), 0.26);
+        border-radius: 10px;
+        background:
+            linear-gradient(135deg, rgba(var(--node-rgb), 0.12), transparent 42%),
+            rgba(3, 4, 7, 0.84);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 14px 30px rgba(0, 0, 0, 0.3),
+            0 0 22px rgba(var(--node-rgb), 0.12);
+        transform: none;
+        backdrop-filter: blur(14px);
+        overflow: visible;
+    }
+
+    body.node-desktop-nav-page .motherbrain-header-logo-link,
+    body.node-desktop-nav-page .motherbrain-header-identity,
+    body.node-desktop-nav-page .motherbrain-menu-button,
+    body.node-desktop-nav-page .motherbrain-header-nav {
+        display: none;
+    }
+
+    body.node-desktop-nav-page .motherbrain-desktop-top-title {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+    }
+
+    body.node-desktop-nav-page .motherbrain-desktop-top-title-text {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        color: var(--neo-bright-silver);
+        font-size: clamp(1.34rem, 2.6vw, 2.14rem);
+        line-height: 0.95;
+        text-overflow: ellipsis;
+        text-shadow:
+            0 0 18px rgba(var(--node-rgb), 0.32),
+            0 2px 0 rgba(0, 0, 0, 0.72);
+        white-space: nowrap;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .topbar-actions {
+        display: flex;
+        flex-wrap: wrap;
+        grid-template-columns: none;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        width: auto;
+        min-width: 0;
+        overflow: visible;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .character-switcher,
+    body.node-desktop-nav-page.node-fixed-header .topbar-user-row {
+        grid-column: auto;
+        grid-row: auto;
+    }
+
+    body.node-desktop-nav-page .motherbrain-desktop-utility {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        width: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        backdrop-filter: none;
+        overflow: visible;
+    }
+
+    body.node-desktop-nav-page.node-fixed-header .content {
+        width: 100%;
+        max-width: none;
+        min-height: 100vh;
+        padding: 92px 24px 48px calc(var(--motherbrain-side-nav-width) + 34px);
+    }
+
+    body.node-desktop-nav-page .mobile-shell-duplicate-title,
+    body.node-desktop-nav-page .neoscorpion-screen-menu,
+    body.node-desktop-nav-page .neosektor-standalone-header.app-header {
+        display: none;
+    }
+
+    body.node-desktop-nav-page .node-desktop-side-nav {
+        display: grid;
+    }
+
+    body.node-desktop-nav-page .node-desktop-side-context strong {
+        color: var(--neo-bright-silver);
+    }
+
+    body.node-desktop-nav-page .node-desktop-current-label {
+        color: rgba(221, 235, 255, 0.68);
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    body.node-desktop-nav-page .neoermac-shell,
+    body.node-desktop-nav-page .neoscorpion-shell,
+    body.node-desktop-nav-page .neosektor-standalone-page {
+        width: 100%;
+        max-width: none;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-shell,
+    body.node-desktop-nav-page .neoscorpion-dashboard-shell,
+    body.node-desktop-nav-page .neosektor-dashboard-shell {
+        display: grid;
+        justify-items: center;
+        align-content: start;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-panel,
+    body.node-desktop-nav-page .neoscorpion-dashboard-panel,
+    body.node-desktop-nav-page .neosektor-dashboard-wrap {
+        width: min(100%, 940px);
+        max-width: 940px;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-tiles,
+    body.node-desktop-nav-page .neoscorpion-dashboard-grid,
+    body.node-desktop-nav-page .neosektor-mobile-dashboard-grid {
+        grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+        gap: 14px;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-tile,
+    body.node-desktop-nav-page .neoscorpion-dashboard-tile,
+    body.node-desktop-nav-page .neosektor-mobile-dashboard-tile {
+        aspect-ratio: 1 / 1;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr);
+        align-content: center;
+        justify-items: center;
+        padding: 16px 12px;
+        text-align: center;
+    }
+
+    body.node-desktop-nav-page .neoermac-dashboard-tile-icon,
+    body.node-desktop-nav-page .neoscorpion-dashboard-icon,
+    body.node-desktop-nav-page .neosektor-mobile-dashboard-icon {
+        width: 48px;
+        height: 48px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .node-desktop-side-nav {
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-shell {
+        height: calc(100vh - 140px);
+        min-height: 0;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-wrap,
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-shell .neosektor-mobile-dashboard {
+        width: min(100%, 780px);
+        max-width: 780px;
+        min-height: 0;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-wrap {
+        height: 100%;
+        padding: 0;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-dashboard-shell .neosektor-mobile-dashboard {
+        height: 100%;
+        align-content: center;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-mobile-dashboard-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page .neosektor-mobile-dashboard-tile {
+        aspect-ratio: 1.18 / 1;
+        padding: 12px 10px;
+    }
+
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_arrive"],
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-ballmat-operator-page .wave-card [data-metric="left_to_unload"] {
+        font-size: clamp(1.32rem, 1.9vw, 1.7rem);
+    }
+}
+
+/* Tunnel Conductor keeps its mobile source order while the desktop shell lays it out as one board. */
+.blueprint-neosektor .tunnel-desktop-workspace,
+.blueprint-neosektor .tunnel-desktop-left {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.blueprint-neosektor .tunnel-operations-card {
+    display: contents;
+}
+
+.blueprint-neosektor .tunnel-desktop-label {
+    display: none;
+}
+
+.blueprint-neosektor .tunnel-desktop-wave-heading {
+    display: none;
+}
+
+.blueprint-neosektor .tunnel-ballmat-wave-workspace {
+    display: contents;
+}

@@ -1,0 +1,425 @@
+
+
+@media (max-width: 420px) {
+    .neoermac-door-shell {
+        padding-inline: 10px;
+    }
+
+    .neoermac-door-pull-row {
+        grid-template-columns: minmax(46px, 0.58fr) minmax(70px, 0.9fr) minmax(38px, 0.4fr);
+        gap: 3px;
+    }
+
+    .neoermac-door-card-head div,
+    .neoermac-door-planned,
+    .neoermac-door-actual,
+    .neoermac-door-toggle,
+    .neoermac-uld-grid label,
+    .neoermac-uld-status span {
+        padding: 6px;
+    }
+
+    .neoermac-door-toggle {
+        font-size: 0.5rem;
+    }
+
+}
+
+@media (max-width: 520px) {
+    body.blueprint-neoermac .content:has(.neoermac-door-shell) {
+        width: calc(100% - 8px);
+        padding-top: 10px;
+    }
+
+    .neoermac-door-shell {
+        width: 100%;
+        gap: 8px;
+        padding: 8px 5px;
+        min-width: 0;
+    }
+
+    .neoermac-door-top-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+    }
+
+    .neoermac-door-support-stack {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+    }
+
+    .neoermac-door-support-panel {
+        gap: 6px;
+        padding: 7px;
+    }
+
+    .neoermac-door-hero {
+        gap: 4px;
+        padding-block: 8px;
+    }
+
+    .neoermac-door-hero h1 {
+        font-size: clamp(1.48rem, 8.6vw, 2rem);
+        line-height: 1;
+    }
+
+    .neoermac-door-hero p {
+        font-size: 0.6rem;
+        letter-spacing: 0.08em;
+    }
+
+    .neoermac-door-selector,
+    .neoermac-door-pull-form,
+    .neoermac-uld-form {
+        gap: 6px;
+    }
+
+    .neoermac-door-selector-row {
+        gap: 6px;
+    }
+
+    .neoermac-door-selector-row .neoermac-menu-link {
+        min-height: 34px;
+        padding-inline: 9px;
+        font-size: 0.7rem;
+    }
+
+    .neoermac-door-supervision {
+        gap: 5px;
+    }
+
+    .neoermac-door-tabs {
+        gap: 4px;
+    }
+
+    .neoermac-door-tab {
+        min-width: 54px;
+        min-height: 36px;
+        padding: 7px 9px;
+        font-size: 0.7rem;
+    }
+
+    .neoermac-door-supervision-edit {
+        min-height: 36px;
+        padding-inline: 9px;
+        font-size: 0.62rem;
+    }
+
+    .neoermac-door-supervision-dialog form {
+        gap: 12px;
+        padding: 14px;
+    }
+
+    .neoermac-door-supervision-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .neoermac-door-supervision-grid label,
+    .neoermac-door-supervision-grid span {
+        min-height: 44px;
+    }
+
+    .neoermac-selected-door {
+        display: none;
+    }
+
+    .neoermac-door-panel {
+        gap: 7px;
+        padding: 7px;
+    }
+
+    .neoermac-door-panel h2 {
+        font-size: 0.62rem;
+    }
+
+    .neoermac-door-destination-list {
+        gap: 7px;
+    }
+
+    .neoermac-door-destination-card {
+        gap: 6px;
+        padding: 7px;
+        border-color: rgba(var(--node-rgb), 0.84);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            inset 0 0 0 1px rgba(var(--node-secondary-rgb), 0.14),
+            0 0 16px rgba(var(--node-rgb), 0.18);
+    }
+
+    .neoermac-door-card-head {
+        padding: 0 0 2px;
+        border: 0;
+        border-bottom: 1px solid rgba(var(--node-rgb), 0.18);
+        border-radius: 0;
+        background: transparent;
+        grid-template-columns:
+            minmax(58px, 0.82fr)
+            minmax(44px, 0.56fr)
+            minmax(66px, 0.78fr)
+            minmax(54px, 0.68fr);
+        gap: 4px;
+    }
+
+    .neoermac-door-destination,
+    .neoermac-door-status,
+    .neoermac-door-tail,
+    .neoermac-door-parking {
+        grid-column: auto;
+    }
+
+    .neoermac-door-card-head div {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: center;
+        align-content: center;
+        gap: 2px;
+        min-height: 26px;
+        padding: 1px 3px;
+        border: 0;
+        background: transparent;
+        text-align: center;
+    }
+
+    .neoermac-door-card-head .neoermac-door-destination {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .neoermac-door-destination::before {
+        display: none;
+    }
+
+    .neoermac-door-card-head span,
+    .neoermac-door-planned span,
+    .neoermac-door-actual span {
+        font-size: 0.47rem;
+        letter-spacing: 0.04em;
+        line-height: 1.08;
+    }
+
+    .neoermac-door-card-head strong {
+        font-size: 0.68rem;
+        line-height: 1.05;
+        text-align: center;
+    }
+
+    .neoermac-door-destination strong {
+        font-size: 0.78rem;
+    }
+
+    .neoermac-door-destination .neoermac-door-destination-title {
+        font-size: 1.08rem;
+        letter-spacing: 0.1em;
+    }
+
+    .neoermac-door-status strong {
+        font-size: 0.6rem;
+    }
+
+    .neoermac-door-pull-grid {
+        gap: 0;
+    }
+
+    .neoermac-door-pull-row {
+        grid-template-columns: minmax(47px, 0.58fr) minmax(72px, 0.92fr) minmax(40px, 0.42fr);
+        gap: 3px;
+        padding-block: 3px;
+    }
+
+    .neoermac-door-planned,
+    .neoermac-door-actual {
+        gap: 1px;
+        min-height: 32px;
+        padding: 3px;
+    }
+
+    .neoermac-door-planned {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .neoermac-door-planned strong,
+    .neoermac-door-static strong {
+        font-size: 0.84rem;
+        line-height: 1;
+    }
+
+    .neoermac-door-planned em {
+        font-size: 0.45rem;
+        line-height: 1;
+    }
+
+    .neoermac-door-window {
+        padding: 3px 7px;
+        font-size: 0.88rem;
+    }
+
+    .neoermac-door-actual input {
+        min-height: 28px;
+        padding: 3px 2px;
+        font-size: 0.68rem;
+    }
+
+    .neoermac-door-actual input.neoermac-ios-safe-input,
+    .neoermac-uld-grid input.neoermac-ios-safe-input {
+        min-height: 32px;
+        padding: 2px 3px;
+        font-size: 16px;
+        line-height: 1;
+        font-weight: 950;
+    }
+
+    .neoermac-door-toggle {
+        grid-template-columns: 18px minmax(0, 1fr);
+        gap: 3px;
+        min-height: 32px;
+        padding: 2px;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        font-size: 0.5rem;
+        letter-spacing: 0.025em;
+    }
+
+    .neoermac-door-toggle input {
+        width: 18px;
+        height: 18px;
+    }
+
+    .neoermac-large-checkbox-toggle input {
+        width: 20px;
+        height: 20px;
+    }
+
+    .neoermac-none-toggle {
+        grid-template-columns: 20px minmax(0, 1fr);
+    }
+
+    .neoermac-none-toggle span {
+        font-size: 0.56rem;
+    }
+
+    .neoermac-label-mobile {
+        display: inline;
+    }
+
+    .neoermac-label-desktop {
+        display: none;
+    }
+
+    .neoermac-uld-grid {
+        gap: 5px;
+    }
+
+    .neoermac-uld-door-selector {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+        text-align: center;
+    }
+
+    .neoermac-uld-grid label {
+        min-height: 42px;
+        padding: 5px;
+    }
+
+    .neoermac-uld-grid input {
+        min-height: 30px;
+        padding: 4px;
+        font-size: 0.76rem;
+    }
+
+    .neoermac-setup-toggle {
+        width: 100%;
+        min-height: 34px;
+    }
+
+    .neoermac-door-complete-summary {
+        grid-template-columns: minmax(0, 1fr) minmax(76px, 0.42fr);
+        gap: 5px;
+        padding: 6px;
+    }
+
+    .neoermac-door-complete-summary span {
+        font-size: 0.52rem;
+    }
+
+    .neoermac-door-complete-summary strong {
+        font-size: 0.66rem;
+    }
+
+    .neoermac-door-edit-pulls {
+        min-height: 32px;
+        padding: 5px 4px;
+        font-size: 0.5rem;
+    }
+
+    .neoermac-door-action-row {
+        gap: 6px;
+    }
+
+    .neoermac-door-action-row .neoermac-menu-link {
+        min-height: 34px;
+        padding: 7px 6px;
+        font-size: 0.62rem;
+    }
+
+    .neoermac-uld-request-list {
+        gap: 5px;
+    }
+
+    .neoermac-uld-request-rows {
+        gap: 5px;
+    }
+
+    .neoermac-uld-request-row {
+        grid-template-columns: minmax(38px, 0.54fr) repeat(3, minmax(0, 0.54fr)) minmax(38px, 0.5fr) minmax(32px, 0.38fr) minmax(34px, 0.4fr) 27px;
+        gap: 3px;
+        padding: 5px 4px;
+    }
+
+    .neoermac-uld-door-link {
+        font-size: 0.6rem;
+        letter-spacing: 0.03em;
+    }
+
+    .neoermac-uld-request-row span,
+    .neoermac-uld-request-row time {
+        font-size: 0.56rem;
+        letter-spacing: 0.02em;
+    }
+
+    .neoermac-uld-request-row strong {
+        font-size: 0.76rem;
+    }
+
+    .neoermac-uld-request-edit-button {
+        min-height: 26px;
+        padding: 4px 5px;
+        font-size: 0.5rem;
+    }
+
+    .neoermac-uld-request-cancel {
+        width: 26px;
+        min-width: 26px;
+        min-height: 26px;
+    }
+
+    .neoermac-uld-request-edit-form {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .neoermac-uld-request-save {
+        grid-column: 1 / -1;
+    }
+
+    .neoermac-door-simple-list {
+        gap: 5px;
+    }
+
+    .neoermac-door-simple-list li {
+        padding: 6px;
+        font-size: 0.72rem;
+    }
+}

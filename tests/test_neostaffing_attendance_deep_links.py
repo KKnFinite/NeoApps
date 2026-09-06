@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date, datetime
 from pathlib import Path
 import unittest
@@ -115,7 +116,7 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         sektor_template = Path("app/templates/neonodes/neosektor/live_counts.html").read_text()
         tunnel_template = Path("app/templates/neonodes/neosektor/tunnel_conductor.html").read_text()
         manage_template = Path("app/templates/neostaffing/operational_manage_employees.html").read_text()
-        base_css = Path("app/static/css/base.css").read_text()
+        base_css = stylesheet_source()
         ermac_route = Path("app/neonodes/neoermac/routes.py").read_text()
         sektor_route = Path("app/neonodes/neosektor/routes.py").read_text()
 

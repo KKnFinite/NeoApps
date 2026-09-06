@@ -14,6 +14,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright, expect
 from werkzeug.serving import make_server
@@ -24,6 +25,7 @@ from app.models import PortalAppAccess, User
 from app.services.access_control import ensure_default_gateway_and_nodes, backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.page_assets import CSS_SEQUENCE
 
 
 class MobileDrawerBrowserTest(unittest.TestCase):
@@ -327,10 +329,17 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     return {rect:e.getBoundingClientRect().toJSON(),transform:c.transform,display:c.display};
                 })"""
                 current_desktop = desktop_page.evaluate(measure)
-                desktop.route("**/static/css/base.css?*", lambda route: route.fulfill(body=baseline_css, content_type="text/css"))
+                fragment_paths = {'/static/css/' + row['file'] for row in CSS_SEQUENCE}
+                def original_cascade(route):
+                    path = urlsplit(route.request.url).path
+                    if path in fragment_paths:
+                        route.fulfill(body=baseline_css if path.endswith('/base.css') else '', content_type='text/css')
+                    else:
+                        route.continue_()
+                desktop.route("**/static/css/*?*", original_cascade)
                 self.ready(desktop_page, "/neoscorpion")
                 self.assertEqual(current_desktop, desktop_page.evaluate(measure), "Desktop geometry changed from baseline")
-                desktop.unroute("**/static/css/base.css?*")
+                desktop.unroute("**/static/css/*?*", original_cascade)
             self.ready(desktop_page, "/motherbrain")
             expect(desktop_page.locator("[data-operational-sidebar]")).to_be_visible()
             desktop_page.screenshot(path=str(self.evidence / f"{engine}-desktop-before-collapse.png"))

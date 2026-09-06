@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from tests.html_contracts import document, assert_mobile_drawer
 import re
 import unittest
@@ -155,7 +156,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neosektor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"node-desktop-side-context", response.data)
@@ -179,7 +180,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertTrue(sidebar.findall('a',href='/rfd'))
 
     def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         desktop_switcher_panel = css.rsplit(".character-switcher-panel {", 1)[1].split("}", 1)[0]
         desktop_switcher_link = css.rsplit(".character-switcher-link {", 1)[1].split("}", 1)[0]
         desktop_switcher_icon = css.rsplit(".character-switcher-icon {", 1)[1].split("}", 1)[0]
@@ -208,7 +209,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'class="tunnel-metric tunnel-unload-metric"', response.data)
@@ -228,7 +229,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-tunnel-wave-input="first"', response.data)
@@ -252,7 +253,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b">Tunnel Conductor<", response.data)
@@ -310,7 +311,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neosektor/live-counts")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"class=\"readonly-count\"", response.data)
@@ -323,7 +324,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"data-neosektor-mobile-dashboard", response.data)
@@ -633,7 +634,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         db.session.commit()
 
         response = self.client.get("/neosektor/discharge")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'class="neosektor-discharge-uld-label">A2</span>', response.data)
@@ -1049,7 +1050,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"targetNode.textContent = route.target;", response.data)
 
     def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         driver_body_block = css.split(
             ".blueprint-neosektor .driver-body {",
             1,
@@ -1592,7 +1593,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Bay Status", response.data)
@@ -1606,7 +1607,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"data-tunnel-desktop-workspace", response.data)
@@ -1650,7 +1651,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         desktop_start = css.index("@media (min-width: 901px) {", css.index("/* Tunnel Conductor keeps"))
         desktop_end = css.index("@media (max-width: 900px)", desktop_start)
         desktop_css = css[desktop_start:desktop_end]
@@ -1739,7 +1740,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         dashboard = self.client.get("/neosektor")
         live_counts = self.client.get("/neosektor/live-counts")
         tunnel = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(dashboard.status_code, 200)
         self.assertEqual(live_counts.status_code, 200)
@@ -1775,7 +1776,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 "/neosektor/discharge",
             )
         ]
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         for response in responses:
             self.assertEqual(response.status_code, 200)
@@ -1795,7 +1796,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         ebm = self.client.get("/neosektor/ebm")
         wbm = self.client.get("/neosektor/wbm")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(ebm.status_code, 200)
         self.assertEqual(wbm.status_code, 200)
@@ -1853,7 +1854,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.client.get(path)
             for path in ("/neosektor/ebm", "/neosektor/wbm")
         ]
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
         layout_end = css.index(
             "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
@@ -1893,7 +1894,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.client.get(path)
             for path in ("/neosektor/ebm", "/neosektor/wbm")
         ]
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
         layout_end = css.index(
             "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
@@ -1928,7 +1929,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.client.get(path)
             for path in ("/neosektor/ebm", "/neosektor/wbm")
         ]
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
         layout_end = css.index(
             "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
@@ -1965,7 +1966,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.client.get(path)
             for path in ("/neosektor/ebm", "/neosektor/wbm")
         ]
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
         layout_end = css.index(
             "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
@@ -2001,7 +2002,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.client.get(path)
             for path in ("/neosektor/ebm", "/neosektor/wbm")
         ]
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         for response in responses:
             self.assertEqual(response.status_code, 200)
@@ -2034,7 +2035,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             for path in ("/neosektor/ebm", "/neosektor/wbm")
         ]
         template = Path("app/templates/neonodes/neosektor/ballmat.html").read_text()
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         layout_start = css.index("/* NeoSektor EBM/WBM mobile normal-flow layout. */")
         layout_end = css.index(
             "body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap",
@@ -2062,7 +2063,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -2121,7 +2122,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
 
         response = self.client.get("/neosektor/tunnel-conductor")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'class="tunnel-mobile-label">West Offset', response.data)
@@ -2145,7 +2146,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         tunnel = self.client.get("/neosektor/tunnel-conductor")
         self.client.get("/neosektor/ebm")
         ballmat = self.client.get("/neosektor/ebm")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         self.assertIn(b"neosektor-numeric-input", tunnel.data)
         self.assertIn(b"neosektor-numeric-input", ballmat.data)
@@ -3678,7 +3679,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn(b"data-operation-refresh-banner", response.data)
                 self.assertIn(b"data-neosektor-refresh-paused", response.data)
 
-        stylesheet = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        stylesheet = stylesheet_source()
         self.assertIn(".operation-refresh-banner {", stylesheet)
         self.assertIn("border: 1px solid rgba(var(--node-rgb), 0.42);", stylesheet)
         self.assertNotIn(".blueprint-neosektor .neosektor-refresh-paused {", stylesheet)
@@ -3730,7 +3731,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.assertIn('operation_refresh_variant = "operation-refresh-banner--neosektor-tunnel-standard"', template)
             self.assertIn('include "neonodes/_operation_refresh_banner.html"', template)
 
-        stylesheet = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        stylesheet = stylesheet_source()
         self.assertIn(".operation-refresh-banner--neosektor-tunnel-standard {", stylesheet)
         self.assertIn("padding: 5px 8px;", stylesheet)
         self.assertIn("font-size: 0.58rem;", stylesheet)
@@ -3785,7 +3786,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="watcher")
 
         response = self.client.get("/neosektor/live-counts")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         layout_start = css.index(
             "body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid {\n"
             "        grid-template-rows: minmax(78px, 0.26fr) minmax(0, 1.74fr);"
@@ -3844,7 +3845,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"window.NeoLiveUpdates.create", response.data)
 
     def test_live_counts_css_keeps_bay_status_cards_readable(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         wave_metric_block = css.split(
             ".blueprint-neosektor .neosektor-live-wave-row .wave-metrics div {",
             1,
@@ -3920,7 +3921,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "wbm": self.client.get("/neosektor/wbm"),
             "tunnel": self.client.get("/neosektor/tunnel-conductor"),
         }
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
 
         for response in responses.values():
             self.assertEqual(response.status_code, 200)
@@ -3965,7 +3966,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role="simulator")
         tunnel = self.client.get("/neosektor/tunnel-conductor")
         live_counts = self.client.get("/neosektor/live-counts")
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         settings_panel_block = css.rsplit(
             ".blueprint-neosektor .tunnel-settings-panel {",
             1,
@@ -4022,7 +4023,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("font-size: 2.35rem;", css)
 
     def test_neosektor_mobile_header_css_uses_compact_text_controls(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         topbar_block = css.rsplit(
             "body.blueprint-neosektor.neosektor-fixed-header .topbar {",
             1,
@@ -4077,7 +4078,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("white-space: normal;", operator_switcher_block)
 
     def test_ballmat_operator_css_keeps_open_bays_equal_to_wave_rows(self):
-        css = Path("app/static/css/base.css").read_text()
+        css = stylesheet_source()
         variables_block = css.split(
             ".blueprint-neosektor.neosektor-ballmat-operator-page {",
             1,

@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -438,7 +439,7 @@ class PermissionRulesTest(unittest.TestCase):
         self._login(grandmaster.username)
 
         response = self.client.get("/motherbrain/permissions")
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"motherbrain-permission-rules-page", response.data)

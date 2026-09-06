@@ -1,0 +1,455 @@
+
+.neosubzero-shell { color:#dcecff; background:linear-gradient(180deg,#08121d,#0b1724); min-height:70vh; padding:14px; }
+.neosubzero-head { display:flex; justify-content:space-between; align-items:end; border-bottom:1px solid #2d668c; padding-bottom:8px; }
+.neosubzero-head p,.neosubzero-head h1 { margin:0; }.neosubzero-head p { color:#55bfff; font-size:.72rem; letter-spacing:.12em; }
+.neosubzero-nav { display:flex; gap:8px; padding:10px 0; }.neosubzero-nav a { color:#a9c8df; border:1px solid #31536d; padding:6px 12px; text-decoration:none; }.neosubzero-nav a.active { color:white; border-color:#56bdff; }
+.neosubzero-table { width:100%; border-collapse:collapse; font-size:.78rem; }.neosubzero-table th,.neosubzero-table td { border-bottom:1px solid #23394b; padding:6px; vertical-align:top; }.neosubzero-table th { color:#83cfff; text-align:left; }
+.neosubzero-editor form { display:flex; flex-wrap:wrap; gap:5px; }.neosubzero-editor button,.neosubzero-editor input,.neosubzero-editor select,.neosubzero-editor textarea { min-height:32px; }
+.neosubzero-pass { display:grid; grid-template-columns:repeat(3,minmax(85px,1fr)); gap:5px; margin:4px 0; padding:5px; }.neosubzero-pass label { display:grid; gap:2px; }.neosubzero-pass.type-i { border-color:#e98a32; }.neosubzero-pass.type-i legend { color:#ffab52; }.neosubzero-pass.type-iv { border-color:#3aae72; }.neosubzero-pass.type-iv legend { color:#68d99b; }
+.neosubzero-treatment-form textarea { max-width:320px; min-height:54px; resize:vertical; }.neosubzero-mobile { display:none; }.neosubzero-card { border:1px solid #31536d; margin:7px 0; padding:7px; }.neosubzero-card summary { min-height:38px; cursor:pointer; }.neosubzero-card dl { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.neosubzero-settings { max-width:720px; border-top:1px solid #31536d; padding-top:12px; }.neosubzero-settings form { display:flex; align-items:end; gap:8px; }.neosubzero-settings label { display:grid; gap:4px; }
+@media (max-width:700px) { .neosubzero-desktop { display:none; }.neosubzero-mobile { display:block; }.neosubzero-pass { grid-template-columns:1fr; }.neosubzero-editor form { display:grid; }.neosubzero-editor button,.neosubzero-editor input,.neosubzero-editor select,.neosubzero-editor textarea { width:100%; min-height:42px; }.neosubzero-head { align-items:start; } }
+
+.neosubzero-departure-list {
+    display: grid;
+    gap: 7px;
+}
+
+.neosubzero-departure-mission {
+    border: 1px solid #29465d;
+    border-left: 3px solid #4686ae;
+    background: #0b1621;
+}
+
+.neosubzero-departure-mission.is-terminal {
+    border-left-color: #557083;
+    background: #09121a;
+}
+
+.neosubzero-departure-compact {
+    display: grid;
+    grid-template-columns: minmax(70px, .7fr) minmax(70px, .7fr) minmax(130px, 1.5fr) minmax(150px, 1.7fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 5px 8px;
+    color: #c6d7e3;
+    font-size: .74rem;
+}
+
+.neosubzero-departure-compact.is-cleared,
+.neosubzero-departure-compact.is-pretreated {
+    border-color: #32865c;
+    color: #b8f0cf;
+}
+
+.neosubzero-departure-compact.is-negative {
+    border-color: #a54242;
+    color: #ffb1b1;
+}
+
+.neosubzero-mission-workspace {
+    padding: 9px;
+}
+
+.neosubzero-mission-facts {
+    display: grid;
+    grid-template-columns: repeat(11, minmax(70px, 1fr));
+    gap: 1px;
+    margin: 0 0 8px;
+    background: #22384a;
+}
+
+.neosubzero-mission-facts > div {
+    min-width: 0;
+    padding: 5px 6px;
+    background: #0c1a26;
+}
+
+.neosubzero-mission-facts dt {
+    color: #78bde8;
+    font-size: .58rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.neosubzero-mission-facts dd {
+    margin: 2px 0 0;
+    overflow-wrap: anywhere;
+    font-size: .76rem;
+}
+
+.neosubzero-action-row,
+.neosubzero-event-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin: 6px 0;
+}
+
+.neosubzero-action-row form,
+.neosubzero-departure-compact form {
+    margin: 0;
+}
+
+.neosubzero-departure-board button,
+.neosubzero-departure-board select,
+.neosubzero-departure-board input,
+.neosubzero-settings button,
+.neosubzero-settings select,
+.neosubzero-settings input {
+    min-height: 30px;
+    border: 1px solid #38627e;
+    border-radius: 3px;
+    background: #101f2c;
+    color: #e2f1fb;
+}
+
+.neosubzero-departure-board button,
+.neosubzero-settings button {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.neosubzero-departure-board button.is-negative,
+.neosubzero-terminal-label.is-negative {
+    border-color: #9b3f3f;
+    color: #ff9999;
+}
+
+.neosubzero-departure-board button.is-clear {
+    border-color: #3b9c6b;
+    color: #8ce2b2;
+}
+
+.neosubzero-deice-form {
+    display: grid;
+    grid-template-columns: minmax(140px, 210px) 1fr 1fr auto;
+    align-items: end;
+    gap: 7px;
+    margin-top: 8px;
+}
+
+.neosubzero-deice-form > label,
+.neosubzero-deice-pass label,
+.neosubzero-settings-grid label {
+    display: grid;
+    gap: 3px;
+    color: #9fc4dc;
+    font-size: .65rem;
+}
+
+.neosubzero-deice-pass {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 5px;
+}
+
+.neosubzero-deice-pass label span {
+    display: flex;
+}
+
+.neosubzero-deice-pass input {
+    width: 70px;
+}
+
+.neosubzero-deice-pass.type-i {
+    border-color: #db792c;
+}
+
+.neosubzero-deice-pass.type-i legend {
+    color: #ff9d4f;
+}
+
+.neosubzero-deice-pass.type-iv {
+    border-color: #329262;
+}
+
+.neosubzero-deice-pass.type-iv legend {
+    color: #70d7a0;
+}
+
+.neosubzero-pretreat-reference {
+    margin: 5px 0;
+    color: #78dba5;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.neosubzero-radio-script {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 6px 0 10px;
+    padding: 7px 10px;
+    border: 1px solid #3d779d;
+    background: #07111a;
+}
+
+.neosubzero-radio-script h2,
+.neosubzero-radio-script p {
+    margin: 0;
+}
+
+.neosubzero-radio-script h2 {
+    color: #63c2fa;
+    font-size: .68rem;
+}
+
+.neosubzero-radio-script p {
+    color: #eef8ff;
+    font-size: .8rem;
+}
+
+.neosubzero-script-toggle {
+    margin-bottom: 6px;
+}
+
+.neosubzero-ramp-selector {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    padding: 6px 0;
+    background: #08121d;
+}
+
+.neosubzero-ramp-selector a {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border: 1px solid #31536d;
+    color: #a9c8df;
+    text-decoration: none;
+    font-size: .68rem;
+}
+
+.neosubzero-ramp-selector a.active {
+    border-color: #58c0ff;
+    color: #fff;
+}
+
+.neosubzero-ramp-selector a.inactive {
+    opacity: .58;
+}
+
+.neosubzero-coordinator-layout {
+    display: grid;
+    grid-template-columns: minmax(190px, 250px) 1fr;
+    gap: 9px;
+}
+
+.neosubzero-coordinator-list {
+    padding: 7px;
+    border: 1px solid #29465d;
+    background: #09151f;
+}
+
+.neosubzero-coordinator-list h2,
+.neosubzero-coordinator-list h3 {
+    margin: 5px 0;
+    color: #77c8f6;
+    font-size: .72rem;
+}
+
+.neosubzero-coordinator-list a {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 6px;
+    margin: 3px 0;
+    padding: 6px;
+    border: 1px solid #243f53;
+    color: #d5e7f2;
+    text-decoration: none;
+    font-size: .7rem;
+}
+
+.neosubzero-coordinator-list a.selected {
+    border-color: #55bfff;
+}
+
+.neosubzero-coordinator-list em {
+    grid-column: 1 / -1;
+    color: #f0b66c;
+    font-size: .57rem;
+    font-style: normal;
+}
+
+.neosubzero-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
+    align-items: end;
+    gap: 8px;
+}
+
+.neosubzero-refresh-row {
+    display: grid;
+    grid-template-columns: 130px 150px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid #23394b;
+}
+
+@media (max-width: 900px) {
+    .neosubzero-mission-facts {
+        grid-template-columns: repeat(5, minmax(78px, 1fr));
+    }
+
+    .neosubzero-deice-form {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 700px) {
+    .neosubzero-departure-compact {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .neosubzero-mission-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neosubzero-coordinator-layout {
+        display: block;
+    }
+
+    .neosubzero-coordinator-list {
+        margin-bottom: 8px;
+    }
+
+    .neosubzero-deice-pass,
+    .neosubzero-settings-grid,
+    .neosubzero-refresh-row {
+        grid-template-columns: 1fr;
+    }
+
+    .neosubzero-deice-pass input,
+    .neosubzero-deice-pass select,
+    .neosubzero-deice-pass label span,
+    .neosubzero-deice-pass label span input {
+        width: 100%;
+    }
+
+    .neosubzero-departure-board button,
+    .neosubzero-departure-board select,
+    .neosubzero-departure-board input {
+        min-height: 42px;
+    }
+}
+
+.neosubzero-staffing-search {
+    display: grid;
+    grid-template-columns: minmax(210px, 1fr) minmax(240px, 2fr) auto;
+    align-items: end;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 8px;
+    border: 1px solid #29465d;
+    background: #09151f;
+}
+
+.neosubzero-staffing-search label,
+.neosubzero-staffing-section header span {
+    color: #78bde8;
+    font-size: .64rem;
+    letter-spacing: .05em;
+}
+
+.neosubzero-staffing-search input,
+.neosubzero-staffing-search button,
+.neosubzero-staffing-table button {
+    min-height: 34px;
+    border: 1px solid #38627e;
+    border-radius: 3px;
+    background: #101f2c;
+    color: #e2f1fb;
+}
+
+.neosubzero-staffing-search button,
+.neosubzero-staffing-table button {
+    padding: 5px 9px;
+    cursor: pointer;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.neosubzero-staffing-section {
+    margin: 9px 0;
+}
+
+.neosubzero-staffing-section > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.neosubzero-staffing-section h2 {
+    margin: 4px 0;
+    color: #d8ebf7;
+    font-size: .82rem;
+}
+
+.neosubzero-staffing-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #29465d;
+}
+
+.neosubzero-staffing-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #0b1621;
+    color: #d3e4ef;
+    font-size: .75rem;
+}
+
+.neosubzero-staffing-table th,
+.neosubzero-staffing-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #22394b;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.neosubzero-staffing-table th {
+    color: #78bde8;
+    font-size: .61rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.neosubzero-staffing-table td strong,
+.neosubzero-staffing-table td span {
+    display: block;
+}
+
+.neosubzero-staffing-table form {
+    margin: 0;
+}
+
+.neosubzero-staffing-table .is-qualified {
+    color: #79daa4;
+}
+
+.neosubzero-staffing-table .is-unqualified {
+    color: #e58b8b;
+}
+
+.neosubzero-weather { margin:4px 0 12px; border:1px solid #31536d; background:linear-gradient(135deg,#07131f,#0b1c2a); padding:10px; }
+.neosubzero-weather > header,.neosubzero-weather-forecast-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+.neosubzero-weather > header { border-bottom:1px solid #29495f; padding-bottom:7px; }.neosubzero-weather > header p,.neosubzero-weather > header h2 { margin:0; }.neosubzero-weather > header p { color:#76c7f4; font-size:.62rem; letter-spacing:.14em; }.neosubzero-weather > header h2 { color:#e5f2fa; font-size:.95rem; letter-spacing:.06em; }.neosubzero-weather > header > span,.neosubzero-weather-forecast-head span { color:#819dad; font-size:.61rem; text-align:right; }
+.neosubzero-weather-current { display:grid; grid-template-columns:minmax(180px,.7fr) minmax(0,2.3fr); gap:12px; align-items:center; padding:10px 0; }.neosubzero-weather-primary { display:grid; border-right:1px solid #29495f; }.neosubzero-weather-primary > strong { color:#f1f8fc; font-size:2rem; line-height:1; }.neosubzero-weather-primary > span { color:#8dd2f5; font-size:.78rem; font-weight:700; }.neosubzero-weather-primary > small { color:#8ba5b6; font-size:.62rem; }.neosubzero-weather-current dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; margin:0; }.neosubzero-weather-current dl div { min-width:0; border-left:2px solid #2f5872; padding-left:7px; }.neosubzero-weather-current dt { color:#7895a8; font-size:.57rem; letter-spacing:.08em; }.neosubzero-weather-current dd { overflow-wrap:anywhere; margin:2px 0 0; color:#dbeaf3; font-size:.74rem; }.neosubzero-weather-current .is-human-precip { border-color:#d29a3f; }.neosubzero-weather-current .is-human-precip dd { color:#f0c475; }
+.neosubzero-weather-note { margin:0 0 7px; color:#d3a96f; font-size:.65rem; }.neosubzero-weather-forecast-head { border-top:1px solid #29495f; padding-top:7px; }.neosubzero-weather-forecast-head strong { color:#8dd2f5; font-size:.65rem; letter-spacing:.1em; }
+.neosubzero-weather-forecast { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:6px; margin-top:7px; }
+.neosubzero-weather { position:relative; isolation:isolate; overflow:hidden; transition:border-color .2s ease,background-color .2s ease; }.neosubzero-weather > :not(.neosubzero-weather-ambient) { position:relative; z-index:1; }.neosubzero-weather-source { display:grid; justify-items:end; gap:4px; }.neosubzero-weather-source span { color:#819dad; font-size:.61rem; text-align:right; }.neosubzero-weather-source button { min-height:27px; border:1px solid #365a72; background:#0b1c29; color:#91bbd2; padding:0 7px; font-size:.55rem; letter-spacing:.06em; }.neosubzero-weather[data-weather-motion="off"] .neosubzero-weather-source button { color:#718795; }
+.neosubzero-weather[data-weather-motion-error="true"] .neosubzero-weather-source button { border-color:#a85656; color:#e4a3a3; }
+.neosubzero-weather.theme-clear-cold { border-color:#4e85a9; background:linear-gradient(135deg,#071827,#10283a); }.neosubzero-weather.theme-snow { border-color:#7ea6bb; background:linear-gradient(135deg,#0c1a25,#203241); }.neosubzero-weather.theme-fog,.neosubzero-weather.theme-freezing-fog { border-color:#7d929d; background:linear-gradient(135deg,#151f26,#29353a); }.neosubzero-weather.theme-rain,.neosubzero-weather.theme-freezing-rain { border-color:#597ca3; background:linear-gradient(135deg,#07131f,#16283d); }.neosubzero-weather.theme-overcast { border-color:#566d7d; background:linear-gradient(135deg,#0b151d,#202b32); }.neosubzero-weather.theme-windy { border-color:#568ca5; background:linear-gradient(135deg,#071722,#153343); }
+.neosubzero-weather-ambient { position:absolute; z-index:0; inset:0; overflow:hidden; pointer-events:none; opacity:.22; }.neosubzero-weather-ambient i { display:none; position:absolute; inset:-30%; }

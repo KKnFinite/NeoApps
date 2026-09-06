@@ -1,3 +1,4 @@
+from tests.css_contracts import stylesheet_source
 from datetime import date, datetime, time
 from pathlib import Path
 import unittest
@@ -229,7 +230,7 @@ class LiveScreenRefreshTest(unittest.TestCase):
 
     def test_shared_client_has_foreground_inactivity_and_monitor_mode(self):
         source = Path("app/static/js/live_updates.js").read_text(encoding="utf-8")
-        css = Path("app/static/css/base.css").read_text(encoding="utf-8")
+        css = stylesheet_source()
 
         self.assertIn("INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000", source)
         for event_name in (
@@ -251,8 +252,10 @@ class LiveScreenRefreshTest(unittest.TestCase):
         # server-resolved live-screen refresh cadence.  The People form keeps
         # its own unsaved add-person fields in session storage, which is not a
         # live-refresh concern and is intentionally permitted.
-        self.assertEqual(source.count("sessionStorage."), 3)
-        self.assertIn('sessionStorage.setItem("neostaffing.people.single-add"', source)
+        self.assertNotIn("sessionStorage.", source)
+        people_source = Path("app/static/js/staffing_people.js").read_text(encoding="utf-8")
+        self.assertEqual(people_source.count("sessionStorage."), 3)
+        self.assertIn('sessionStorage.setItem("neostaffing.people.single-add"', people_source)
         self.assertIn('[data-live-update-state="inactive"]', css)
         self.assertIn(".live-update-monitor-toggle", css)
 
