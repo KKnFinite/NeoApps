@@ -22,7 +22,7 @@ from app.services.google_motherbrain_live_missions import (
 from app.services.google_motherbrain_live_poll_lease import (
     acquire_google_motherbrain_live_poll_lease,
     complete_google_motherbrain_live_poll_failure,
-    complete_google_motherbrain_live_poll_success,
+    stage_google_motherbrain_live_poll_success,
     peek_google_motherbrain_live_poll_state,
 )
 from app.services.google_motherbrain_live_polling import (
@@ -93,39 +93,58 @@ def execute_google_motherbrain_live_poll(
     if operation is None:
         return {"status": "outside_window"}
 
+    operation_id = operation.id
     acquired = acquire_google_motherbrain_live_poll_lease(operation, now=now)
     if not acquired.acquired:
-        return {"status": acquired.status, "operation_id": operation.id}
+        return {"status": acquired.status, "operation_id": operation_id}
 
     reader = reader or read_google_motherbrain_live_rows
     applier = applier or apply_google_motherbrain_live_rows
     try:
         live_rows = reader()
+        # SQLite legacy transaction mode doesn't BEGIN on SELECT. Ensure the
+        # applier's row savepoints belong to a real outer transaction there too.
+        connection = db.session.connection()
+        if (
+            connection.dialect.name == "sqlite"
+            and not connection.connection.driver_connection.in_transaction
+        ):
+            connection.exec_driver_sql("BEGIN")
         application = applier(
             operation,
             inbound_rows=live_rows.get("inbound_rows", ()),
             outbound_rows=live_rows.get("outbound_rows", ()),
             now=now,
         )
+        db.session.flush()
+        if not stage_google_motherbrain_live_poll_success(acquired.lease, now=now):
+            _rollback_poll_safely(operation_id)
+            current_app.logger.warning(
+                "Google MotherBrain live poll lost lease before commit: operation_id=%s", operation_id,
+            )
+            return {"status": "lease_lost", "operation_id": operation_id}
         db.session.commit()
     except Exception as error:
-        db.session.rollback()
+        rolled_back = _rollback_poll_safely(operation_id)
         current_app.logger.warning(
             "Google MotherBrain live poll failed safely: operation_id=%s error=%s",
-            operation.id,
+            operation_id,
             type(error).__name__,
         )
-        complete_google_motherbrain_live_poll_failure(acquired.lease, error, now=now)
-        return {"status": "failed", "operation_id": operation.id}
-
-    if not complete_google_motherbrain_live_poll_success(acquired.lease, now=now):
-        current_app.logger.warning(
-            "Google MotherBrain live poll completed after its lease expired: operation_id=%s",
-            operation.id,
-        )
-        return {"status": "lease_lost", "operation_id": operation.id}
+        try:
+            # Never let a bookkeeping commit include unrolled-back mission work.
+            if rolled_back:
+                complete_google_motherbrain_live_poll_failure(acquired.lease, error, now=now)
+        except Exception as bookkeeping_error:
+            _rollback_poll_safely(operation_id)
+            current_app.logger.warning(
+                "Google poll failure bookkeeping failed: operation_id=%s error=%s",
+                operation_id, type(bookkeeping_error).__name__,
+            )
+        return {"status": "failed", "operation_id": operation_id}
     rain_result = _run_google_rain_best_effort(
         operation,
+        operation_id=operation_id,
         gateway=gateway,
         now=now,
         reader=rain_reader,
@@ -133,7 +152,7 @@ def execute_google_motherbrain_live_poll(
     )
     return {
         "status": "success",
-        "operation_id": operation.id,
+        "operation_id": operation_id,
         "applied_count": application.get("applied_count", 0),
         "skipped_count": application.get("skipped_count", 0),
         "rain_status": rain_result["status"],
@@ -192,39 +211,53 @@ def google_motherbrain_live_poll_preflight(gateway, now=None):
     return {"status": "outside_window", "sort_date": None}
 
 
+def _rollback_poll_safely(operation_id):
+    """Cleanup must not mask the original failure or load expired ORM state."""
+    try:
+        db.session.rollback()
+        return True
+    except Exception as rollback_error:
+        current_app.logger.warning(
+            "Google poll rollback failed: operation_id=%s error=%s",
+            operation_id, type(rollback_error).__name__,
+        )
+        return False
+
+
 def _run_google_rain_best_effort(
     operation,
     *,
+    operation_id,
     gateway=None,
     now=None,
     reader=None,
     applier=None,
 ):
     """Run Rain after the primary poll is durable; never undo that success."""
-    mode = rain_integration_mode(
-        gateway or operation.gateway,
-        operation.sort_name,
-    )
-    from app.services.neorain_fuel_authority import (
-        RAIN_FUEL_SOURCE_GOOGLE,
-        rain_fuel_data_source,
-    )
-    fuel_google = rain_fuel_data_source(
-        gateway or operation.gateway, operation.sort_name
-    ) == RAIN_FUEL_SOURCE_GOOGLE
-    if mode != GOOGLE_PRIMARY and not fuel_google:
-        return {
-            "status": "skipped_neo_authoritative",
-            "mode": mode,
-            "applied_count": 0,
-            "skipped_count": 0,
-        }
-    if current_app.config.get("TESTING") and reader is None and applier is None:
-        return {"status": "not_run", "mode": mode}
-
-    reader = reader or read_google_rain_outbound_milestones
-    applier = applier or apply_google_rain_departure_milestones
     try:
+        mode = rain_integration_mode(
+            gateway or operation.gateway,
+            operation.sort_name,
+        )
+        from app.services.neorain_fuel_authority import (
+            RAIN_FUEL_SOURCE_GOOGLE,
+            rain_fuel_data_source,
+        )
+        fuel_google = rain_fuel_data_source(
+            gateway or operation.gateway, operation.sort_name
+        ) == RAIN_FUEL_SOURCE_GOOGLE
+        if mode != GOOGLE_PRIMARY and not fuel_google:
+            return {
+                "status": "skipped_neo_authoritative",
+                "mode": mode,
+                "applied_count": 0,
+                "skipped_count": 0,
+            }
+        if current_app.config.get("TESTING") and reader is None and applier is None:
+            return {"status": "not_run", "mode": mode}
+
+        reader = reader or read_google_rain_outbound_milestones
+        applier = applier or apply_google_rain_departure_milestones
         rows = reader()
         rollover = gate_google_rain_rollover_rows(operation, rows=rows, now=now)
         application = applier(
@@ -234,24 +267,23 @@ def _run_google_rain_best_effort(
             apply_milestones=(mode == GOOGLE_PRIMARY),
         )
         db.session.commit()
+        return {
+            "status": "success",
+            "mode": mode,
+            "applied_count": application.get("applied_count", 0),
+            "skipped_count": application.get("skipped_count", 0),
+            "rollover_status": rollover["status"],
+            "rollover_baseline_count": rollover["baseline_count"],
+            "rollover_released_count": rollover["released_count"],
+        }
     except Exception as error:
-        db.session.rollback()
+        _rollback_poll_safely(operation_id)
         current_app.logger.warning(
             "Google Rain milestone poll failed safely: operation_id=%s error=%s",
-            operation.id,
+            operation_id,
             type(error).__name__,
         )
         return {"status": "failed"}
-
-    return {
-        "status": "success",
-        "mode": mode,
-        "applied_count": application.get("applied_count", 0),
-        "skipped_count": application.get("skipped_count", 0),
-        "rollover_status": rollover["status"],
-        "rollover_baseline_count": rollover["baseline_count"],
-        "rollover_released_count": rollover["released_count"],
-    }
 
 
 def _polling_window_operation(

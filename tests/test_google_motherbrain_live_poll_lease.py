@@ -16,6 +16,7 @@ from app.services.google_motherbrain_live_poll_lease import (
     complete_google_motherbrain_live_poll_failure,
     complete_google_motherbrain_live_poll_success,
     peek_google_motherbrain_live_poll_state,
+    stage_google_motherbrain_live_poll_success,
 )
 from app.services.google_motherbrain_live_polling import (
     set_google_motherbrain_live_polling_enabled,
@@ -55,6 +56,23 @@ class GoogleMotherBrainLivePollLeaseTest(unittest.TestCase):
         self.assertEqual(result.status, "disabled")
         self.assertIsNone(result.lease)
         self.assertEqual(MotherBrainGoogleLivePollState.query.count(), 0)
+
+    def test_staged_success_never_commits_and_rolls_back_with_caller(self):
+        self._enable(self.gateway, 'night')
+        acquired = acquire_google_motherbrain_live_poll_lease(self.operation, self.now)
+        commits = []
+        def committed(_session):
+            commits.append(True)
+        event.listen(Session, 'after_commit', committed)
+        try:
+            self.assertTrue(stage_google_motherbrain_live_poll_success(acquired.lease, self.now))
+            self.assertEqual(commits, [])
+            db.session.rollback()
+        finally:
+            event.remove(Session, 'after_commit', committed)
+        state = db.session.get(MotherBrainGoogleLivePollState, acquired.lease.state_id)
+        self.assertEqual(state.lease_token, acquired.lease.token)
+        self.assertIsNone(state.last_success_at_utc)
 
     def test_read_only_peek_reports_no_state_without_creating_or_committing(self):
         statements = []

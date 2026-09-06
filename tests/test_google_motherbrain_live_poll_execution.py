@@ -1,10 +1,14 @@
 from datetime import date, datetime, time, timedelta
+from contextlib import nullcontext
 import re
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import event
+from sqlalchemy import event, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app import create_app
@@ -31,6 +35,7 @@ from app.services.google_motherbrain_live_poll_execution import (
 from app.services.google_motherbrain_live_poll_lease import (
     acquire_google_motherbrain_live_poll_lease,
     complete_google_motherbrain_live_poll_success,
+    stage_google_motherbrain_live_poll_success,
 )
 from app.services.google_motherbrain_live_polling import (
     set_google_motherbrain_live_polling_enabled,
@@ -49,14 +54,15 @@ from app.services.permission_rules import ensure_default_permission_rules
 class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
     NOW = datetime(2026, 6, 18, 22, 30)
 
-    def setUp(self):
+    def setUp(self, file_database=False):
+        self.temp = tempfile.TemporaryDirectory(prefix="neo-google-poll-") if file_database else None
         TestConfig = type(
             "TestConfig",
             (),
             {
                 "SECRET_KEY": "google-live-poll-execution-test-secret",
                 "TESTING": True,
-                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+                "SQLALCHEMY_DATABASE_URI": ("sqlite:///" + str(Path(self.temp.name, "poll.db"))) if self.temp else "sqlite:///:memory:",
                 "SQLALCHEMY_TRACK_MODIFICATIONS": False,
                 "DEFAULT_GATEWAY_TIMEZONE": "America/Chicago",
             },
@@ -103,7 +109,198 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
     def tearDown(self):
         db.session.remove()
         db.drop_all()
+        db.engine.dispose()
         self.context.pop()
+        if self.temp:
+            self.temp.cleanup()
+
+    def test_staged_mission_and_lease_completion_have_one_atomic_commit(self):
+        self._enable()
+        operation = self._ensure_operation()
+        commits = []
+
+        def staged(lease, now):
+            self.assertEqual(SortDateMission.query.count(), 1)
+            commits.clear()  # Acquisition/lifecycle precede the mutation transaction.
+            return stage_google_motherbrain_live_poll_success(lease, now)
+
+        def committed(_session):
+            commits.append(True)
+
+        event.listen(Session, 'after_commit', committed)
+        try:
+            with patch('app.services.google_motherbrain_live_poll_execution.stage_google_motherbrain_live_poll_success', side_effect=staged):
+                result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+                    reader=lambda: {'inbound_rows': [self._inbound(4, '947', 'N947UP', origin='SDF')]})
+        finally:
+            event.remove(Session, 'after_commit', committed)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(len(commits), 1)
+        self.assertEqual(SortDateMission.query.count(), 1)
+        self.assertEqual(self._state(operation).lease_token, '')
+        self.assertEqual(self._state(operation).last_success_at_utc, self.NOW)
+
+    def test_durable_new_owner_rejects_staged_old_poll_and_preserves_new_lease(self):
+        # Only this interleaving needs truly independent physical connections.
+        self.tearDown()
+        self.setUp(file_database=True)
+        self._enable()
+        operation = self._ensure_operation()
+        operation_id, sort_date = operation.id, operation.sort_date
+
+        def interleaved_applier(_operation, **_kwargs):
+            # A's ORM mutation is pending (unflushed); B commits via a separate
+            # DB connection, not an in-process ownership flag or A's session.
+            db.session.add(SortDateMission(sort_date_operation_id=operation_id,
+                sort_date=sort_date, gateway_code='RFD', sort_name='night',
+                mission_type='arrival', flight_number='STALE-A', mission_source='google_motherbrain',
+                origin='SDF', destination='RFD', timezone='America/Chicago'))
+            with db.engine.begin() as other:
+                changed = other.execute(update(MotherBrainGoogleLivePollState).values(
+                    lease_token='new-owner-B', last_attempt_at_utc=self.NOW + timedelta(minutes=1),
+                    lease_expires_at_utc=self.NOW + timedelta(seconds=90)))
+                self.assertEqual(changed.rowcount, 1)
+            return {'applied_count': 1}
+
+        rain = Mock()
+        result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+            reader=lambda: {}, applier=interleaved_applier, rain_reader=rain)
+        self.assertEqual(result, {'status': 'lease_lost', 'operation_id': operation_id})
+        self.assertEqual(SortDateMission.query.count(), 0)
+        state = self._state(operation)
+        self.assertEqual(state.lease_token, 'new-owner-B')
+        self.assertIsNone(state.last_success_at_utc)
+        self.assertEqual(state.lease_expires_at_utc, self.NOW + timedelta(seconds=90))
+        rain.assert_not_called()
+
+    def test_commit_failure_rolls_back_real_applier_savepoints_and_lease_success(self):
+        self._enable()
+        operation = self._ensure_operation()
+        operation_id = operation.id
+        original_commit = db.session.commit
+
+        def stage_then_fail(lease, now):
+            staged = stage_google_motherbrain_live_poll_success(lease, now)
+            # Fail only the atomic primary commit; failure bookkeeping may commit.
+            commit_failure.start()
+            return staged
+
+        commit_calls = 0
+        def fail_primary_commit():
+            nonlocal commit_calls
+            commit_calls += 1
+            if commit_calls == 1:
+                raise OperationalError('COMMIT', {}, Exception('offline'))
+            return original_commit()
+        commit_failure = patch.object(db.session, 'commit', side_effect=fail_primary_commit)
+        try:
+            with patch('app.services.google_motherbrain_live_poll_execution.stage_google_motherbrain_live_poll_success', side_effect=stage_then_fail):
+                result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+                    reader=lambda: {'inbound_rows': [self._inbound(4, '947', 'N947UP', origin='SDF')]})
+        finally:
+            commit_failure.stop()
+        self.assertEqual(result, {'status': 'failed', 'operation_id': operation_id})
+        self.assertEqual(SortDateMission.query.count(), 0)
+        self.assertIsNone(self._state(operation).last_success_at_utc)
+
+    def test_primary_errors_survive_expired_orm_and_unavailable_failure_bookkeeping(self):
+        for failure_at in ('reader', 'applier'):
+            with self.subTest(failure_at=failure_at):
+                self._enable()
+                operation = self._ensure_operation()
+                operation_id = operation.id
+                down = False
+                outage_sql = []
+
+                def fail(*_args, **_kwargs):
+                    nonlocal down
+                    db.session.expire_all()
+                    down = True
+                    raise TimeoutError('original failure')
+
+                def offline(_conn, _cursor, statement, *_args):
+                    if down:
+                        outage_sql.append(statement.lstrip().split()[0].upper())
+                        raise OperationalError('synthetic DB unavailable', {}, Exception('offline'))
+
+                event.listen(db.engine, 'before_cursor_execute', offline)
+                try:
+                    result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+                        reader=fail if failure_at == 'reader' else lambda: {},
+                        applier=fail if failure_at == 'applier' else Mock())
+                finally:
+                    event.remove(db.engine, 'before_cursor_execute', offline)
+                self.assertEqual(result, {'status': 'failed', 'operation_id': operation_id})
+                self.assertTrue(outage_sql)
+                self.assertNotIn('SELECT', outage_sql)
+                MotherBrainGoogleLivePollState.query.delete()
+                db.session.commit()
+
+    def test_rollback_failure_cannot_trigger_a_bookkeeping_commit(self):
+        self._enable()
+        operation_id = self._ensure_operation().id
+        def reader():
+            rollback_failure.start()
+            raise TimeoutError('original failure')
+        rollback_failure = patch.object(db.session, 'rollback', side_effect=RuntimeError('rollback unavailable'))
+        try:
+            with patch('app.services.google_motherbrain_live_poll_execution.complete_google_motherbrain_live_poll_failure') as bookkeeping:
+                result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW, reader=reader)
+            bookkeeping.assert_not_called()
+        finally:
+            rollback_failure.stop()
+            db.session.rollback()
+        self.assertEqual(result, {'status': 'failed', 'operation_id': operation_id})
+
+    def test_all_rain_failures_leave_primary_success_durable(self):
+        for failure_at in ('mode', 'fuel', 'reader', 'applier', 'commit'):
+            with self.subTest(failure_at=failure_at):
+                self._enable()
+                operation = self._ensure_operation()
+                operation_id = operation.id
+                rain_reader = Mock(return_value=[])
+
+                def fail(*_args, **_kwargs):
+                    db.session.expire_all()
+                    raise OperationalError('synthetic Rain failure', {}, Exception('offline'))
+
+                target = {
+                    'mode': 'app.services.google_motherbrain_live_poll_execution.rain_integration_mode',
+                    'fuel': 'app.services.neorain_fuel_authority.rain_fuel_data_source',
+                }.get(failure_at)
+                rain_apply = Mock(return_value={})
+                if failure_at == 'reader':
+                    rain_reader.side_effect = TimeoutError('Google timeout')
+                if failure_at == 'applier':
+                    def apply_fail(op, **_kwargs):
+                        mission = SortDateMission.query.one()
+                        mission.flight_number = 'RAIN-ROLLBACK'
+                        db.session.flush()
+                        fail()
+                    rain_apply.side_effect = apply_fail
+                if failure_at == 'commit':
+                    def patch_commit(*_args, **_kwargs):
+                        commit_failure.start()
+                        return {}
+                    rain_apply.side_effect = patch_commit
+                commit_failure = patch.object(db.session, 'commit', side_effect=fail)
+                try:
+                    with patch(target, side_effect=fail) if target else nullcontext():
+                        result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+                            reader=lambda: {'inbound_rows': [self._inbound(4, '947', 'N947UP', origin='SDF')]},
+                            rain_reader=rain_reader, rain_applier=rain_apply)
+                finally:
+                    commit_failure.stop()
+                self.assertEqual(result['status'], 'success')
+                self.assertEqual(result['operation_id'], operation_id)
+                self.assertEqual(result['rain_status'], 'failed')
+                self.assertEqual(SortDateMission.query.one().flight_number, 'UPS0947')
+                self.assertEqual(self._state(operation).last_success_at_utc, self.NOW)
+                self.assertEqual(self._state(operation).lease_token, '')
+                if target:
+                    rain_reader.assert_not_called()
+                MotherBrainGoogleLivePollState.query.delete()
+                db.session.commit()
 
     def test_before_sort_window_does_not_read_or_lease(self):
         self._enable()

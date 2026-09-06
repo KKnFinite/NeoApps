@@ -67,7 +67,7 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
     """Read only Rain fields needed to update existing departure milestones."""
     config = config or current_app.config
     credentials, _motherbrain_spreadsheet_id = _configured_reader_inputs(config)
-    client = (client_factory or _create_gspread_client)(credentials)
+    client = client_factory(credentials) if client_factory else _create_gspread_client(credentials, config)
     spreadsheet = _google_call(
         "open_rain_spreadsheet",
         lambda: client.open_by_key(GOOGLE_RAIN_LOCKED_SPREADSHEET_ID),
@@ -222,7 +222,7 @@ def write_google_rain_departure_milestone(
 
     try:
         credentials, _motherbrain_spreadsheet_id = _configured_reader_inputs(config)
-        client = (client_factory or _create_gspread_writer)(credentials)
+        client = client_factory(credentials) if client_factory else _create_gspread_writer(credentials, config)
         spreadsheet = _google_call(
             "open_rain_spreadsheet",
             lambda: client.open_by_key(GOOGLE_RAIN_LOCKED_SPREADSHEET_ID),

@@ -134,6 +134,17 @@ def complete_google_motherbrain_live_poll_success(lease, now=None):
     )
 
 
+def stage_google_motherbrain_live_poll_success(lease, now=None):
+    """Guard success in the caller's transaction; caller must rollback on False.
+
+    The conditional UPDATE locks the owned row until the caller commits both
+    mission mutations and lease completion. A newer token is never modified.
+    """
+    return _complete_lease(
+        lease, now=now, last_success_at_utc=_utc_naive(now), commit=False,
+    )
+
+
 def complete_google_motherbrain_live_poll_failure(lease, error, now=None):
     """Record a minimal failure reason and leave the normal interval intact."""
     return _complete_lease(
@@ -144,7 +155,7 @@ def complete_google_motherbrain_live_poll_failure(lease, error, now=None):
     )
 
 
-def _complete_lease(lease, now=None, last_success_at_utc=None, last_error=None):
+def _complete_lease(lease, now=None, last_success_at_utc=None, last_error=None, *, commit=True):
     if not isinstance(lease, GoogleLivePollLease):
         raise TypeError("A GoogleLivePollLease is required to complete a poll.")
 
@@ -168,8 +179,9 @@ def _complete_lease(lease, now=None, last_success_at_utc=None, last_error=None):
         )
         .values(**values)
     )
-    db.session.commit()
-    db.session.expire_all()
+    if commit:
+        db.session.commit()
+        db.session.expire_all()
     return bool(result.rowcount)
 
 

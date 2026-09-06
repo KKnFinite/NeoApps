@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 import json
+import math
 import os
 import re
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 try:
     import gspread
@@ -107,7 +108,7 @@ def read_google_motherbrain_envelope(config=None, client_factory=None, now=None)
     """Read the locked workbook and build the existing schema-version-1 envelope."""
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
-    client = (client_factory or _create_gspread_client)(credentials)
+    client = client_factory(credentials) if client_factory else _create_gspread_client(credentials, config)
     spreadsheet = _google_call(
         "open_spreadsheet",
         lambda: client.open_by_key(spreadsheet_id),
@@ -234,7 +235,7 @@ def read_google_motherbrain_live_rows(config=None, client_factory=None):
     """Read only the live mission ranges required by the server poll executor."""
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
-    client = (client_factory or _create_gspread_client)(credentials)
+    client = client_factory(credentials) if client_factory else _create_gspread_client(credentials, config)
     spreadsheet = _google_call(
         "open_spreadsheet",
         lambda: client.open_by_key(spreadsheet_id),
@@ -271,7 +272,7 @@ def read_google_motherbrain_reset_parking_formulas(config=None, client_factory=N
     """Read only the helper formulas used to build a future reset plan."""
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
-    client = (client_factory or _create_gspread_client)(credentials)
+    client = client_factory(credentials) if client_factory else _create_gspread_client(credentials, config)
     spreadsheet = _google_call(
         "open_spreadsheet",
         lambda: client.open_by_key(spreadsheet_id),
@@ -319,7 +320,7 @@ def _clear_google_motherbrain_reset_ranges(
 
     config = config or current_app.config
     credentials, spreadsheet_id = _configured_reader_inputs(config)
-    client = (client_factory or _create_gspread_writer)(credentials)
+    client = client_factory(credentials) if client_factory else _create_gspread_writer(credentials, config)
     spreadsheet = _google_call(
         "open_spreadsheet",
         lambda: client.open_by_key(spreadsheet_id),
@@ -338,35 +339,39 @@ def _clear_google_motherbrain_reset_ranges(
     return normalized_ranges
 
 
-def _create_gspread_client(credentials):
-    if gspread is None:
-        raise GoogleMotherBrainReaderError(
-            "reader_unavailable",
-            "The Google Sheets reader is unavailable.",
-        )
-    try:
-        return gspread.service_account_from_dict(
-            credentials,
-            scopes=GOOGLE_MOTHERBRAIN_READONLY_SCOPES,
-        )
-    except Exception as exc:
-        raise GoogleMotherBrainReaderError(
-            "invalid_credentials",
-            "Google service-account credentials are invalid.",
-        ) from exc
+def _create_gspread_client(credentials, config=None):
+    return _create_gspread(credentials, GOOGLE_MOTHERBRAIN_READONLY_SCOPES, config)
 
 
-def _create_gspread_writer(credentials):
+def _create_gspread_writer(credentials, config=None):
+    return _create_gspread(credentials, GOOGLE_MOTHERBRAIN_WRITE_SCOPES, config)
+
+
+def _sheets_request_timeout(config=None):
+    config = config if config is not None else (current_app.config if has_app_context() else {})
+    try:
+        value = float(config.get("GOOGLE_SHEETS_REQUEST_TIMEOUT_SECONDS", 5))
+    except (TypeError, ValueError):
+        return 5.0
+    return value if math.isfinite(value) and value > 0 else 5.0
+
+
+def _create_gspread(credentials, scopes, config):
     if gspread is None:
+        kind = "writer" if scopes == GOOGLE_MOTHERBRAIN_WRITE_SCOPES else "reader"
         raise GoogleMotherBrainReaderError(
-            "writer_unavailable",
-            "The Google Sheets writer is unavailable.",
+            f"{kind}_unavailable",
+            f"The Google Sheets {kind} is unavailable.",
         )
     try:
-        return gspread.service_account_from_dict(
+        client = gspread.service_account_from_dict(
             credentials,
-            scopes=GOOGLE_MOTHERBRAIN_WRITE_SCOPES,
+            scopes=scopes,
         )
+        # gspread's standard HTTPClient forwards this to session.request for
+        # every API call (including open_by_key metadata). No retry client.
+        client.set_timeout(_sheets_request_timeout(config))
+        return client
     except Exception as exc:
         raise GoogleMotherBrainReaderError(
             "invalid_credentials",

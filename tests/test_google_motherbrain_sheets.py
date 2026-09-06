@@ -383,7 +383,7 @@ class GoogleMotherBrainSheetsReaderTest(unittest.TestCase):
             service_account_from_dict=lambda credentials, scopes: captured.update(
                 {"credentials": credentials, "scopes": scopes}
             )
-            or object()
+            or SimpleNamespace(set_timeout=lambda value: captured.update(timeout=value))
         )
         from app.services import google_motherbrain_sheets as service
 
