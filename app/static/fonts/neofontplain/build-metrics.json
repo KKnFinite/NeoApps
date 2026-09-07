@@ -1,6 +1,7 @@
 {
   "family": "NeoFontPlain",
   "source_sha256": "24ead6e566395780129116364ff00e133dc3e8589873f20a8b1cf1ccbc8eb2ac",
+  "western_sha256": "4ee976bcb3ad0c898da37abea40c781b02936ec1a0d008c7f621754d92da82ce",
   "weights": {
     "Regular": {
       "weight": 400,
@@ -1173,6 +1174,1756 @@
             50,
             603,
             665
+          ],
+          "contours": 1
+        },
+        "uni00C0": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            861
+          ],
+          "contours": 3
+        },
+        "uni00C1": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            861
+          ],
+          "contours": 3
+        },
+        "uni00C2": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            856
+          ],
+          "contours": 3
+        },
+        "uni00C3": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            826
+          ],
+          "contours": 3
+        },
+        "uni00C4": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            804
+          ],
+          "contours": 4
+        },
+        "uni00C5": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            858
+          ],
+          "contours": 4
+        },
+        "uni00C6": {
+          "advance": 975,
+          "bounds": [
+            35,
+            0,
+            905,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00C7": {
+          "advance": 590,
+          "bounds": [
+            58,
+            -166,
+            520,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00C8": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00C9": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00CA": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            856
+          ],
+          "contours": 2
+        },
+        "uni00CB": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            804
+          ],
+          "contours": 3
+        },
+        "uni00CC": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00CD": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00CE": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            856
+          ],
+          "contours": 2
+        },
+        "uni00CF": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            804
+          ],
+          "contours": 3
+        },
+        "uni00D0": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            572,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00D1": {
+          "advance": 680,
+          "bounds": [
+            78,
+            0,
+            602,
+            826
+          ],
+          "contours": 2
+        },
+        "uni00D2": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            861
+          ],
+          "contours": 3
+        },
+        "uni00D3": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            861
+          ],
+          "contours": 3
+        },
+        "uni00D4": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            856
+          ],
+          "contours": 3
+        },
+        "uni00D5": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            826
+          ],
+          "contours": 3
+        },
+        "uni00D6": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            804
+          ],
+          "contours": 4
+        },
+        "uni00D8": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            720
+          ],
+          "contours": 3
+        },
+        "uni00D9": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00DA": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00DB": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            856
+          ],
+          "contours": 2
+        },
+        "uni00DC": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            804
+          ],
+          "contours": 3
+        },
+        "uni00DD": {
+          "advance": 610,
+          "bounds": [
+            33,
+            0,
+            577,
+            861
+          ],
+          "contours": 2
+        },
+        "uni00DE": {
+          "advance": 600,
+          "bounds": [
+            73,
+            0,
+            542,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00DF": {
+          "advance": 610,
+          "bounds": [
+            73,
+            0,
+            542,
+            767
+          ],
+          "contours": 1
+        },
+        "uni00E0": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            661
+          ],
+          "contours": 3
+        },
+        "uni00E1": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            661
+          ],
+          "contours": 3
+        },
+        "uni00E2": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            656
+          ],
+          "contours": 3
+        },
+        "uni00E3": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            626
+          ],
+          "contours": 3
+        },
+        "uni00E4": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            604
+          ],
+          "contours": 4
+        },
+        "uni00E5": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            658
+          ],
+          "contours": 4
+        },
+        "uni00E6": {
+          "advance": 900,
+          "bounds": [
+            58,
+            0,
+            842,
+            520
+          ],
+          "contours": 3
+        },
+        "uni00E7": {
+          "advance": 520,
+          "bounds": [
+            58,
+            -166,
+            475,
+            520
+          ],
+          "contours": 2
+        },
+        "uni00E8": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            661
+          ],
+          "contours": 3
+        },
+        "uni00E9": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            661
+          ],
+          "contours": 3
+        },
+        "uni00EA": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            656
+          ],
+          "contours": 3
+        },
+        "uni00EB": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            604
+          ],
+          "contours": 4
+        },
+        "uni00EC": {
+          "advance": 260,
+          "bounds": [
+            72,
+            0,
+            208,
+            661
+          ],
+          "contours": 2
+        },
+        "uni00ED": {
+          "advance": 260,
+          "bounds": [
+            52,
+            0,
+            188,
+            661
+          ],
+          "contours": 2
+        },
+        "uni00EE": {
+          "advance": 260,
+          "bounds": [
+            26,
+            0,
+            234,
+            656
+          ],
+          "contours": 2
+        },
+        "uni00EF": {
+          "advance": 260,
+          "bounds": [
+            44,
+            0,
+            216,
+            604
+          ],
+          "contours": 3
+        },
+        "uni00F0": {
+          "advance": 580,
+          "bounds": [
+            58,
+            0,
+            522,
+            760
+          ],
+          "contours": 2
+        },
+        "uni00F1": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            626
+          ],
+          "contours": 2
+        },
+        "uni00F2": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            661
+          ],
+          "contours": 3
+        },
+        "uni00F3": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            661
+          ],
+          "contours": 3
+        },
+        "uni00F4": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            656
+          ],
+          "contours": 3
+        },
+        "uni00F5": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            626
+          ],
+          "contours": 3
+        },
+        "uni00F6": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            604
+          ],
+          "contours": 4
+        },
+        "uni00F8": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            520
+          ],
+          "contours": 3
+        },
+        "uni00F9": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            661
+          ],
+          "contours": 2
+        },
+        "uni00FA": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            661
+          ],
+          "contours": 2
+        },
+        "uni00FB": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            656
+          ],
+          "contours": 2
+        },
+        "uni00FC": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            604
+          ],
+          "contours": 3
+        },
+        "uni00FD": {
+          "advance": 540,
+          "bounds": [
+            30,
+            -212,
+            510,
+            673
+          ],
+          "contours": 2
+        },
+        "uni00FE": {
+          "advance": 580,
+          "bounds": [
+            73,
+            -200,
+            507,
+            760
+          ],
+          "contours": 2
+        },
+        "uni00FF": {
+          "advance": 540,
+          "bounds": [
+            30,
+            -212,
+            510,
+            616
+          ],
+          "contours": 3
+        },
+        "uni0100": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            786
+          ],
+          "contours": 3
+        },
+        "uni0101": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            586
+          ],
+          "contours": 3
+        },
+        "uni0102": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            605,
+            851
+          ],
+          "contours": 3
+        },
+        "uni0103": {
+          "advance": 570,
+          "bounds": [
+            58,
+            0,
+            487,
+            651
+          ],
+          "contours": 3
+        },
+        "uni0104": {
+          "advance": 640,
+          "bounds": [
+            35,
+            -174,
+            605,
+            720
+          ],
+          "contours": 3
+        },
+        "uni0105": {
+          "advance": 570,
+          "bounds": [
+            58,
+            -174,
+            487,
+            520
+          ],
+          "contours": 3
+        },
+        "uni0106": {
+          "advance": 590,
+          "bounds": [
+            58,
+            0,
+            520,
+            861
+          ],
+          "contours": 2
+        },
+        "uni0107": {
+          "advance": 520,
+          "bounds": [
+            58,
+            0,
+            475,
+            661
+          ],
+          "contours": 2
+        },
+        "uni0108": {
+          "advance": 590,
+          "bounds": [
+            58,
+            0,
+            520,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0109": {
+          "advance": 520,
+          "bounds": [
+            58,
+            0,
+            475,
+            656
+          ],
+          "contours": 2
+        },
+        "uni010A": {
+          "advance": 590,
+          "bounds": [
+            58,
+            0,
+            520,
+            804
+          ],
+          "contours": 2
+        },
+        "uni010B": {
+          "advance": 520,
+          "bounds": [
+            58,
+            0,
+            475,
+            604
+          ],
+          "contours": 2
+        },
+        "uni010C": {
+          "advance": 590,
+          "bounds": [
+            58,
+            0,
+            520,
+            856
+          ],
+          "contours": 2
+        },
+        "uni010D": {
+          "advance": 520,
+          "bounds": [
+            58,
+            0,
+            475,
+            656
+          ],
+          "contours": 2
+        },
+        "uni010E": {
+          "advance": 640,
+          "bounds": [
+            73,
+            0,
+            572,
+            856
+          ],
+          "contours": 3
+        },
+        "uni010F": {
+          "advance": 580,
+          "bounds": [
+            58,
+            0,
+            507,
+            896
+          ],
+          "contours": 3
+        },
+        "uni0112": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            786
+          ],
+          "contours": 2
+        },
+        "uni0113": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            586
+          ],
+          "contours": 3
+        },
+        "uni0114": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            851
+          ],
+          "contours": 2
+        },
+        "uni0115": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            651
+          ],
+          "contours": 3
+        },
+        "uni0116": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            804
+          ],
+          "contours": 2
+        },
+        "uni0117": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            604
+          ],
+          "contours": 3
+        },
+        "uni0118": {
+          "advance": 560,
+          "bounds": [
+            73,
+            -174,
+            490,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0119": {
+          "advance": 550,
+          "bounds": [
+            58,
+            -174,
+            492,
+            520
+          ],
+          "contours": 3
+        },
+        "uni011A": {
+          "advance": 560,
+          "bounds": [
+            73,
+            0,
+            490,
+            856
+          ],
+          "contours": 2
+        },
+        "uni011B": {
+          "advance": 550,
+          "bounds": [
+            58,
+            0,
+            492,
+            656
+          ],
+          "contours": 3
+        },
+        "uni011C": {
+          "advance": 630,
+          "bounds": [
+            58,
+            0,
+            552,
+            856
+          ],
+          "contours": 2
+        },
+        "uni011D": {
+          "advance": 580,
+          "bounds": [
+            58,
+            -212,
+            497,
+            656
+          ],
+          "contours": 3
+        },
+        "uni011E": {
+          "advance": 630,
+          "bounds": [
+            58,
+            0,
+            552,
+            851
+          ],
+          "contours": 2
+        },
+        "uni011F": {
+          "advance": 580,
+          "bounds": [
+            58,
+            -212,
+            497,
+            651
+          ],
+          "contours": 3
+        },
+        "uni0120": {
+          "advance": 630,
+          "bounds": [
+            58,
+            0,
+            552,
+            804
+          ],
+          "contours": 2
+        },
+        "uni0121": {
+          "advance": 580,
+          "bounds": [
+            58,
+            -212,
+            497,
+            604
+          ],
+          "contours": 3
+        },
+        "uni0122": {
+          "advance": 630,
+          "bounds": [
+            58,
+            -166,
+            552,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0123": {
+          "advance": 580,
+          "bounds": [
+            58,
+            -212,
+            497,
+            520
+          ],
+          "contours": 3
+        },
+        "uni0124": {
+          "advance": 660,
+          "bounds": [
+            78,
+            0,
+            582,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0125": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            896
+          ],
+          "contours": 2
+        },
+        "uni0128": {
+          "advance": 340,
+          "bounds": [
+            57,
+            0,
+            283,
+            826
+          ],
+          "contours": 2
+        },
+        "uni0129": {
+          "advance": 260,
+          "bounds": [
+            17,
+            0,
+            243,
+            626
+          ],
+          "contours": 2
+        },
+        "uni012A": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            786
+          ],
+          "contours": 2
+        },
+        "uni012B": {
+          "advance": 260,
+          "bounds": [
+            35,
+            0,
+            225,
+            586
+          ],
+          "contours": 2
+        },
+        "uni012C": {
+          "advance": 340,
+          "bounds": [
+            55,
+            0,
+            285,
+            851
+          ],
+          "contours": 2
+        },
+        "uni012D": {
+          "advance": 260,
+          "bounds": [
+            15,
+            0,
+            245,
+            651
+          ],
+          "contours": 2
+        },
+        "uni012E": {
+          "advance": 340,
+          "bounds": [
+            65,
+            -174,
+            275,
+            720
+          ],
+          "contours": 2
+        },
+        "uni012F": {
+          "advance": 260,
+          "bounds": [
+            74,
+            -174,
+            212,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0130": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            804
+          ],
+          "contours": 2
+        },
+        "uni0134": {
+          "advance": 490,
+          "bounds": [
+            38,
+            0,
+            422,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0135": {
+          "advance": 290,
+          "bounds": [
+            20,
+            -212,
+            249,
+            871
+          ],
+          "contours": 3
+        },
+        "uni0136": {
+          "advance": 620,
+          "bounds": [
+            73,
+            -166,
+            578,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0137": {
+          "advance": 550,
+          "bounds": [
+            73,
+            -166,
+            512,
+            760
+          ],
+          "contours": 2
+        },
+        "uni0139": {
+          "advance": 540,
+          "bounds": [
+            73,
+            0,
+            480,
+            861
+          ],
+          "contours": 2
+        },
+        "uni013A": {
+          "advance": 290,
+          "bounds": [
+            68,
+            0,
+            240,
+            900
+          ],
+          "contours": 2
+        },
+        "uni013B": {
+          "advance": 540,
+          "bounds": [
+            73,
+            -166,
+            480,
+            720
+          ],
+          "contours": 2
+        },
+        "uni013C": {
+          "advance": 290,
+          "bounds": [
+            78,
+            -166,
+            240,
+            760
+          ],
+          "contours": 2
+        },
+        "uni013D": {
+          "advance": 540,
+          "bounds": [
+            73,
+            0,
+            480,
+            856
+          ],
+          "contours": 2
+        },
+        "uni013E": {
+          "advance": 290,
+          "bounds": [
+            41,
+            0,
+            249,
+            896
+          ],
+          "contours": 2
+        },
+        "uni0141": {
+          "advance": 540,
+          "bounds": [
+            24,
+            0,
+            480,
+            720
+          ],
+          "contours": 1
+        },
+        "uni0142": {
+          "advance": 290,
+          "bounds": [
+            29,
+            0,
+            261,
+            760
+          ],
+          "contours": 1
+        },
+        "uni0143": {
+          "advance": 680,
+          "bounds": [
+            78,
+            0,
+            602,
+            861
+          ],
+          "contours": 2
+        },
+        "uni0144": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            661
+          ],
+          "contours": 2
+        },
+        "uni0145": {
+          "advance": 680,
+          "bounds": [
+            78,
+            -166,
+            602,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0146": {
+          "advance": 590,
+          "bounds": [
+            73,
+            -166,
+            517,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0147": {
+          "advance": 680,
+          "bounds": [
+            78,
+            0,
+            602,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0148": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            656
+          ],
+          "contours": 2
+        },
+        "uni014C": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            786
+          ],
+          "contours": 3
+        },
+        "uni014D": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            586
+          ],
+          "contours": 3
+        },
+        "uni014E": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            851
+          ],
+          "contours": 3
+        },
+        "uni014F": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            651
+          ],
+          "contours": 3
+        },
+        "uni0150": {
+          "advance": 620,
+          "bounds": [
+            58,
+            0,
+            562,
+            857
+          ],
+          "contours": 4
+        },
+        "uni0151": {
+          "advance": 565,
+          "bounds": [
+            58,
+            0,
+            507,
+            657
+          ],
+          "contours": 4
+        },
+        "uni0152": {
+          "advance": 965,
+          "bounds": [
+            58,
+            0,
+            895,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0153": {
+          "advance": 900,
+          "bounds": [
+            58,
+            0,
+            842,
+            520
+          ],
+          "contours": 3
+        },
+        "uni0154": {
+          "advance": 620,
+          "bounds": [
+            73,
+            0,
+            582,
+            861
+          ],
+          "contours": 3
+        },
+        "uni0155": {
+          "advance": 400,
+          "bounds": [
+            73,
+            0,
+            360,
+            661
+          ],
+          "contours": 2
+        },
+        "uni0156": {
+          "advance": 620,
+          "bounds": [
+            73,
+            -166,
+            582,
+            720
+          ],
+          "contours": 3
+        },
+        "uni0157": {
+          "advance": 400,
+          "bounds": [
+            73,
+            -166,
+            360,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0158": {
+          "advance": 620,
+          "bounds": [
+            73,
+            0,
+            582,
+            856
+          ],
+          "contours": 3
+        },
+        "uni0159": {
+          "advance": 400,
+          "bounds": [
+            73,
+            0,
+            360,
+            656
+          ],
+          "contours": 2
+        },
+        "uni015A": {
+          "advance": 600,
+          "bounds": [
+            54,
+            0,
+            542,
+            861
+          ],
+          "contours": 2
+        },
+        "uni015B": {
+          "advance": 500,
+          "bounds": [
+            51,
+            0,
+            457,
+            661
+          ],
+          "contours": 2
+        },
+        "uni015C": {
+          "advance": 600,
+          "bounds": [
+            54,
+            0,
+            542,
+            856
+          ],
+          "contours": 2
+        },
+        "uni015D": {
+          "advance": 500,
+          "bounds": [
+            51,
+            0,
+            457,
+            656
+          ],
+          "contours": 2
+        },
+        "uni015E": {
+          "advance": 600,
+          "bounds": [
+            54,
+            -166,
+            542,
+            720
+          ],
+          "contours": 2
+        },
+        "uni015F": {
+          "advance": 500,
+          "bounds": [
+            51,
+            -166,
+            457,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0160": {
+          "advance": 600,
+          "bounds": [
+            54,
+            0,
+            542,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0161": {
+          "advance": 500,
+          "bounds": [
+            51,
+            0,
+            457,
+            656
+          ],
+          "contours": 2
+        },
+        "uni0162": {
+          "advance": 600,
+          "bounds": [
+            45,
+            -166,
+            555,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0163": {
+          "advance": 390,
+          "bounds": [
+            45,
+            -166,
+            340,
+            680
+          ],
+          "contours": 2
+        },
+        "uni0164": {
+          "advance": 600,
+          "bounds": [
+            45,
+            0,
+            555,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0165": {
+          "advance": 390,
+          "bounds": [
+            45,
+            0,
+            340,
+            816
+          ],
+          "contours": 2
+        },
+        "uni0168": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            826
+          ],
+          "contours": 2
+        },
+        "uni0169": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            626
+          ],
+          "contours": 2
+        },
+        "uni016A": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            786
+          ],
+          "contours": 2
+        },
+        "uni016B": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            586
+          ],
+          "contours": 2
+        },
+        "uni016C": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            851
+          ],
+          "contours": 2
+        },
+        "uni016D": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            651
+          ],
+          "contours": 2
+        },
+        "uni016E": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            858
+          ],
+          "contours": 3
+        },
+        "uni016F": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            658
+          ],
+          "contours": 3
+        },
+        "uni0170": {
+          "advance": 650,
+          "bounds": [
+            73,
+            0,
+            577,
+            857
+          ],
+          "contours": 3
+        },
+        "uni0171": {
+          "advance": 590,
+          "bounds": [
+            73,
+            0,
+            517,
+            657
+          ],
+          "contours": 3
+        },
+        "uni0172": {
+          "advance": 650,
+          "bounds": [
+            73,
+            -174,
+            577,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0173": {
+          "advance": 590,
+          "bounds": [
+            73,
+            -174,
+            517,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0174": {
+          "advance": 880,
+          "bounds": [
+            34,
+            0,
+            846,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0175": {
+          "advance": 780,
+          "bounds": [
+            29,
+            0,
+            751,
+            656
+          ],
+          "contours": 2
+        },
+        "uni0176": {
+          "advance": 610,
+          "bounds": [
+            33,
+            0,
+            577,
+            856
+          ],
+          "contours": 2
+        },
+        "uni0177": {
+          "advance": 540,
+          "bounds": [
+            30,
+            -212,
+            510,
+            668
+          ],
+          "contours": 2
+        },
+        "uni0178": {
+          "advance": 610,
+          "bounds": [
+            33,
+            0,
+            577,
+            804
+          ],
+          "contours": 3
+        },
+        "uni0179": {
+          "advance": 590,
+          "bounds": [
+            48,
+            0,
+            542,
+            861
+          ],
+          "contours": 2
+        },
+        "uni017A": {
+          "advance": 500,
+          "bounds": [
+            48,
+            0,
+            452,
+            661
+          ],
+          "contours": 2
+        },
+        "uni017B": {
+          "advance": 590,
+          "bounds": [
+            48,
+            0,
+            542,
+            804
+          ],
+          "contours": 2
+        },
+        "uni017C": {
+          "advance": 500,
+          "bounds": [
+            48,
+            0,
+            452,
+            604
+          ],
+          "contours": 2
+        },
+        "uni017D": {
+          "advance": 590,
+          "bounds": [
+            48,
+            0,
+            542,
+            856
+          ],
+          "contours": 2
+        },
+        "uni017E": {
+          "advance": 500,
+          "bounds": [
+            48,
+            0,
+            452,
+            656
+          ],
+          "contours": 2
+        },
+        "uni1E9E": {
+          "advance": 670,
+          "bounds": [
+            73,
+            0,
+            589,
+            752
           ],
           "contours": 1
         }
@@ -2349,6 +4100,1756 @@
             43,
             614,
             671
+          ],
+          "contours": 1
+        },
+        "uni00C0": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            875
+          ],
+          "contours": 3
+        },
+        "uni00C1": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            875
+          ],
+          "contours": 3
+        },
+        "uni00C2": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            866
+          ],
+          "contours": 3
+        },
+        "uni00C3": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            842
+          ],
+          "contours": 3
+        },
+        "uni00C4": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            804
+          ],
+          "contours": 4
+        },
+        "uni00C5": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            870
+          ],
+          "contours": 4
+        },
+        "uni00C6": {
+          "advance": 975,
+          "bounds": [
+            23,
+            0,
+            905,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00C7": {
+          "advance": 590,
+          "bounds": [
+            46,
+            -174,
+            531,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00C8": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00C9": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00CA": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            866
+          ],
+          "contours": 2
+        },
+        "uni00CB": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            804
+          ],
+          "contours": 3
+        },
+        "uni00CC": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00CD": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00CE": {
+          "advance": 340,
+          "bounds": [
+            61,
+            0,
+            279,
+            866
+          ],
+          "contours": 2
+        },
+        "uni00CF": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            804
+          ],
+          "contours": 3
+        },
+        "uni00D0": {
+          "advance": 640,
+          "bounds": [
+            35,
+            0,
+            584,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00D1": {
+          "advance": 680,
+          "bounds": [
+            66,
+            0,
+            614,
+            842
+          ],
+          "contours": 2
+        },
+        "uni00D2": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            875
+          ],
+          "contours": 3
+        },
+        "uni00D3": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            875
+          ],
+          "contours": 3
+        },
+        "uni00D4": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            866
+          ],
+          "contours": 3
+        },
+        "uni00D5": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            842
+          ],
+          "contours": 3
+        },
+        "uni00D6": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            804
+          ],
+          "contours": 4
+        },
+        "uni00D8": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            720
+          ],
+          "contours": 3
+        },
+        "uni00D9": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00DA": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00DB": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            866
+          ],
+          "contours": 2
+        },
+        "uni00DC": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            804
+          ],
+          "contours": 3
+        },
+        "uni00DD": {
+          "advance": 610,
+          "bounds": [
+            23,
+            0,
+            587,
+            875
+          ],
+          "contours": 2
+        },
+        "uni00DE": {
+          "advance": 600,
+          "bounds": [
+            61,
+            0,
+            554,
+            720
+          ],
+          "contours": 2
+        },
+        "uni00DF": {
+          "advance": 610,
+          "bounds": [
+            61,
+            -12,
+            554,
+            779
+          ],
+          "contours": 1
+        },
+        "uni00E0": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            675
+          ],
+          "contours": 3
+        },
+        "uni00E1": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            675
+          ],
+          "contours": 3
+        },
+        "uni00E2": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            666
+          ],
+          "contours": 3
+        },
+        "uni00E3": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            642
+          ],
+          "contours": 3
+        },
+        "uni00E4": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            604
+          ],
+          "contours": 4
+        },
+        "uni00E5": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            670
+          ],
+          "contours": 4
+        },
+        "uni00E6": {
+          "advance": 900,
+          "bounds": [
+            46,
+            0,
+            854,
+            520
+          ],
+          "contours": 3
+        },
+        "uni00E7": {
+          "advance": 520,
+          "bounds": [
+            46,
+            -174,
+            486,
+            520
+          ],
+          "contours": 2
+        },
+        "uni00E8": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            675
+          ],
+          "contours": 3
+        },
+        "uni00E9": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            675
+          ],
+          "contours": 3
+        },
+        "uni00EA": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            666
+          ],
+          "contours": 3
+        },
+        "uni00EB": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            604
+          ],
+          "contours": 4
+        },
+        "uni00EC": {
+          "advance": 260,
+          "bounds": [
+            68,
+            0,
+            212,
+            675
+          ],
+          "contours": 2
+        },
+        "uni00ED": {
+          "advance": 260,
+          "bounds": [
+            48,
+            0,
+            192,
+            675
+          ],
+          "contours": 2
+        },
+        "uni00EE": {
+          "advance": 260,
+          "bounds": [
+            21,
+            0,
+            239,
+            666
+          ],
+          "contours": 2
+        },
+        "uni00EF": {
+          "advance": 260,
+          "bounds": [
+            36,
+            0,
+            224,
+            604
+          ],
+          "contours": 3
+        },
+        "uni00F0": {
+          "advance": 580,
+          "bounds": [
+            46,
+            -12,
+            534,
+            771
+          ],
+          "contours": 2
+        },
+        "uni00F1": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            642
+          ],
+          "contours": 2
+        },
+        "uni00F2": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            675
+          ],
+          "contours": 3
+        },
+        "uni00F3": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            675
+          ],
+          "contours": 3
+        },
+        "uni00F4": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            666
+          ],
+          "contours": 3
+        },
+        "uni00F5": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            642
+          ],
+          "contours": 3
+        },
+        "uni00F6": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            604
+          ],
+          "contours": 4
+        },
+        "uni00F8": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            520
+          ],
+          "contours": 3
+        },
+        "uni00F9": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            675
+          ],
+          "contours": 2
+        },
+        "uni00FA": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            675
+          ],
+          "contours": 2
+        },
+        "uni00FB": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            666
+          ],
+          "contours": 2
+        },
+        "uni00FC": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            604
+          ],
+          "contours": 3
+        },
+        "uni00FD": {
+          "advance": 540,
+          "bounds": [
+            19,
+            -224,
+            521,
+            692
+          ],
+          "contours": 2
+        },
+        "uni00FE": {
+          "advance": 580,
+          "bounds": [
+            61,
+            -200,
+            519,
+            760
+          ],
+          "contours": 2
+        },
+        "uni00FF": {
+          "advance": 540,
+          "bounds": [
+            19,
+            -224,
+            521,
+            621
+          ],
+          "contours": 3
+        },
+        "uni0100": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            802
+          ],
+          "contours": 3
+        },
+        "uni0101": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            602
+          ],
+          "contours": 3
+        },
+        "uni0102": {
+          "advance": 640,
+          "bounds": [
+            23,
+            0,
+            617,
+            861
+          ],
+          "contours": 3
+        },
+        "uni0103": {
+          "advance": 570,
+          "bounds": [
+            46,
+            0,
+            499,
+            661
+          ],
+          "contours": 3
+        },
+        "uni0104": {
+          "advance": 640,
+          "bounds": [
+            23,
+            -181,
+            617,
+            720
+          ],
+          "contours": 3
+        },
+        "uni0105": {
+          "advance": 570,
+          "bounds": [
+            46,
+            -181,
+            499,
+            520
+          ],
+          "contours": 3
+        },
+        "uni0106": {
+          "advance": 590,
+          "bounds": [
+            46,
+            0,
+            531,
+            875
+          ],
+          "contours": 2
+        },
+        "uni0107": {
+          "advance": 520,
+          "bounds": [
+            46,
+            0,
+            486,
+            675
+          ],
+          "contours": 2
+        },
+        "uni0108": {
+          "advance": 590,
+          "bounds": [
+            46,
+            0,
+            531,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0109": {
+          "advance": 520,
+          "bounds": [
+            46,
+            0,
+            486,
+            666
+          ],
+          "contours": 2
+        },
+        "uni010A": {
+          "advance": 590,
+          "bounds": [
+            46,
+            0,
+            531,
+            804
+          ],
+          "contours": 2
+        },
+        "uni010B": {
+          "advance": 520,
+          "bounds": [
+            46,
+            0,
+            486,
+            604
+          ],
+          "contours": 2
+        },
+        "uni010C": {
+          "advance": 590,
+          "bounds": [
+            46,
+            0,
+            531,
+            866
+          ],
+          "contours": 2
+        },
+        "uni010D": {
+          "advance": 520,
+          "bounds": [
+            46,
+            0,
+            486,
+            666
+          ],
+          "contours": 2
+        },
+        "uni010E": {
+          "advance": 640,
+          "bounds": [
+            61,
+            0,
+            584,
+            866
+          ],
+          "contours": 3
+        },
+        "uni010F": {
+          "advance": 580,
+          "bounds": [
+            46,
+            0,
+            519,
+            900
+          ],
+          "contours": 3
+        },
+        "uni0112": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            802
+          ],
+          "contours": 2
+        },
+        "uni0113": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            602
+          ],
+          "contours": 3
+        },
+        "uni0114": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            861
+          ],
+          "contours": 2
+        },
+        "uni0115": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            661
+          ],
+          "contours": 3
+        },
+        "uni0116": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            804
+          ],
+          "contours": 2
+        },
+        "uni0117": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            604
+          ],
+          "contours": 3
+        },
+        "uni0118": {
+          "advance": 560,
+          "bounds": [
+            61,
+            -181,
+            490,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0119": {
+          "advance": 550,
+          "bounds": [
+            46,
+            -181,
+            504,
+            520
+          ],
+          "contours": 3
+        },
+        "uni011A": {
+          "advance": 560,
+          "bounds": [
+            61,
+            0,
+            490,
+            866
+          ],
+          "contours": 2
+        },
+        "uni011B": {
+          "advance": 550,
+          "bounds": [
+            46,
+            0,
+            504,
+            666
+          ],
+          "contours": 3
+        },
+        "uni011C": {
+          "advance": 630,
+          "bounds": [
+            46,
+            0,
+            564,
+            866
+          ],
+          "contours": 2
+        },
+        "uni011D": {
+          "advance": 580,
+          "bounds": [
+            46,
+            -203,
+            509,
+            666
+          ],
+          "contours": 3
+        },
+        "uni011E": {
+          "advance": 630,
+          "bounds": [
+            46,
+            0,
+            564,
+            861
+          ],
+          "contours": 2
+        },
+        "uni011F": {
+          "advance": 580,
+          "bounds": [
+            46,
+            -203,
+            509,
+            661
+          ],
+          "contours": 3
+        },
+        "uni0120": {
+          "advance": 630,
+          "bounds": [
+            46,
+            0,
+            564,
+            804
+          ],
+          "contours": 2
+        },
+        "uni0121": {
+          "advance": 580,
+          "bounds": [
+            46,
+            -203,
+            509,
+            604
+          ],
+          "contours": 3
+        },
+        "uni0122": {
+          "advance": 630,
+          "bounds": [
+            46,
+            -174,
+            564,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0123": {
+          "advance": 580,
+          "bounds": [
+            46,
+            -203,
+            509,
+            520
+          ],
+          "contours": 3
+        },
+        "uni0124": {
+          "advance": 660,
+          "bounds": [
+            66,
+            0,
+            594,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0125": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            900
+          ],
+          "contours": 2
+        },
+        "uni0128": {
+          "advance": 340,
+          "bounds": [
+            50,
+            0,
+            290,
+            842
+          ],
+          "contours": 2
+        },
+        "uni0129": {
+          "advance": 260,
+          "bounds": [
+            10,
+            0,
+            250,
+            642
+          ],
+          "contours": 2
+        },
+        "uni012A": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            802
+          ],
+          "contours": 2
+        },
+        "uni012B": {
+          "advance": 260,
+          "bounds": [
+            35,
+            0,
+            225,
+            602
+          ],
+          "contours": 2
+        },
+        "uni012C": {
+          "advance": 340,
+          "bounds": [
+            47,
+            0,
+            293,
+            861
+          ],
+          "contours": 2
+        },
+        "uni012D": {
+          "advance": 260,
+          "bounds": [
+            7,
+            0,
+            253,
+            661
+          ],
+          "contours": 2
+        },
+        "uni012E": {
+          "advance": 340,
+          "bounds": [
+            65,
+            -181,
+            275,
+            720
+          ],
+          "contours": 2
+        },
+        "uni012F": {
+          "advance": 260,
+          "bounds": [
+            66,
+            -181,
+            216,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0130": {
+          "advance": 340,
+          "bounds": [
+            65,
+            0,
+            275,
+            804
+          ],
+          "contours": 2
+        },
+        "uni0134": {
+          "advance": 490,
+          "bounds": [
+            26,
+            0,
+            434,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0135": {
+          "advance": 290,
+          "bounds": [
+            20,
+            -224,
+            254,
+            881
+          ],
+          "contours": 3
+        },
+        "uni0136": {
+          "advance": 620,
+          "bounds": [
+            61,
+            -174,
+            588,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0137": {
+          "advance": 550,
+          "bounds": [
+            61,
+            -174,
+            522,
+            760
+          ],
+          "contours": 2
+        },
+        "uni0139": {
+          "advance": 540,
+          "bounds": [
+            61,
+            0,
+            480,
+            875
+          ],
+          "contours": 2
+        },
+        "uni013A": {
+          "advance": 290,
+          "bounds": [
+            66,
+            0,
+            240,
+            900
+          ],
+          "contours": 2
+        },
+        "uni013B": {
+          "advance": 540,
+          "bounds": [
+            61,
+            -174,
+            480,
+            720
+          ],
+          "contours": 2
+        },
+        "uni013C": {
+          "advance": 290,
+          "bounds": [
+            66,
+            -174,
+            240,
+            760
+          ],
+          "contours": 2
+        },
+        "uni013D": {
+          "advance": 540,
+          "bounds": [
+            61,
+            0,
+            480,
+            866
+          ],
+          "contours": 2
+        },
+        "uni013E": {
+          "advance": 290,
+          "bounds": [
+            41,
+            0,
+            249,
+            900
+          ],
+          "contours": 2
+        },
+        "uni0141": {
+          "advance": 540,
+          "bounds": [
+            19,
+            0,
+            480,
+            720
+          ],
+          "contours": 1
+        },
+        "uni0142": {
+          "advance": 290,
+          "bounds": [
+            23,
+            0,
+            267,
+            760
+          ],
+          "contours": 1
+        },
+        "uni0143": {
+          "advance": 680,
+          "bounds": [
+            66,
+            0,
+            614,
+            875
+          ],
+          "contours": 2
+        },
+        "uni0144": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            675
+          ],
+          "contours": 2
+        },
+        "uni0145": {
+          "advance": 680,
+          "bounds": [
+            66,
+            -174,
+            614,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0146": {
+          "advance": 590,
+          "bounds": [
+            61,
+            -174,
+            529,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0147": {
+          "advance": 680,
+          "bounds": [
+            66,
+            0,
+            614,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0148": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            666
+          ],
+          "contours": 2
+        },
+        "uni014C": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            802
+          ],
+          "contours": 3
+        },
+        "uni014D": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            602
+          ],
+          "contours": 3
+        },
+        "uni014E": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            861
+          ],
+          "contours": 3
+        },
+        "uni014F": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            661
+          ],
+          "contours": 3
+        },
+        "uni0150": {
+          "advance": 620,
+          "bounds": [
+            46,
+            0,
+            574,
+            867
+          ],
+          "contours": 4
+        },
+        "uni0151": {
+          "advance": 565,
+          "bounds": [
+            46,
+            0,
+            519,
+            667
+          ],
+          "contours": 4
+        },
+        "uni0152": {
+          "advance": 965,
+          "bounds": [
+            46,
+            0,
+            895,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0153": {
+          "advance": 900,
+          "bounds": [
+            46,
+            0,
+            854,
+            520
+          ],
+          "contours": 3
+        },
+        "uni0154": {
+          "advance": 620,
+          "bounds": [
+            61,
+            0,
+            592,
+            875
+          ],
+          "contours": 3
+        },
+        "uni0155": {
+          "advance": 400,
+          "bounds": [
+            61,
+            0,
+            360,
+            675
+          ],
+          "contours": 2
+        },
+        "uni0156": {
+          "advance": 620,
+          "bounds": [
+            61,
+            -174,
+            592,
+            720
+          ],
+          "contours": 3
+        },
+        "uni0157": {
+          "advance": 400,
+          "bounds": [
+            61,
+            -174,
+            360,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0158": {
+          "advance": 620,
+          "bounds": [
+            61,
+            0,
+            592,
+            866
+          ],
+          "contours": 3
+        },
+        "uni0159": {
+          "advance": 400,
+          "bounds": [
+            61,
+            0,
+            360,
+            666
+          ],
+          "contours": 2
+        },
+        "uni015A": {
+          "advance": 600,
+          "bounds": [
+            42,
+            0,
+            554,
+            875
+          ],
+          "contours": 2
+        },
+        "uni015B": {
+          "advance": 500,
+          "bounds": [
+            40,
+            0,
+            469,
+            675
+          ],
+          "contours": 2
+        },
+        "uni015C": {
+          "advance": 600,
+          "bounds": [
+            42,
+            0,
+            554,
+            866
+          ],
+          "contours": 2
+        },
+        "uni015D": {
+          "advance": 500,
+          "bounds": [
+            40,
+            0,
+            469,
+            666
+          ],
+          "contours": 2
+        },
+        "uni015E": {
+          "advance": 600,
+          "bounds": [
+            42,
+            -174,
+            554,
+            720
+          ],
+          "contours": 2
+        },
+        "uni015F": {
+          "advance": 500,
+          "bounds": [
+            40,
+            -174,
+            469,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0160": {
+          "advance": 600,
+          "bounds": [
+            42,
+            0,
+            554,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0161": {
+          "advance": 500,
+          "bounds": [
+            40,
+            0,
+            469,
+            666
+          ],
+          "contours": 2
+        },
+        "uni0162": {
+          "advance": 600,
+          "bounds": [
+            45,
+            -174,
+            555,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0163": {
+          "advance": 390,
+          "bounds": [
+            45,
+            -174,
+            340,
+            680
+          ],
+          "contours": 2
+        },
+        "uni0164": {
+          "advance": 600,
+          "bounds": [
+            45,
+            0,
+            555,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0165": {
+          "advance": 390,
+          "bounds": [
+            45,
+            0,
+            340,
+            826
+          ],
+          "contours": 2
+        },
+        "uni0168": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            842
+          ],
+          "contours": 2
+        },
+        "uni0169": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            642
+          ],
+          "contours": 2
+        },
+        "uni016A": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            802
+          ],
+          "contours": 2
+        },
+        "uni016B": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            602
+          ],
+          "contours": 2
+        },
+        "uni016C": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            861
+          ],
+          "contours": 2
+        },
+        "uni016D": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            661
+          ],
+          "contours": 2
+        },
+        "uni016E": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            870
+          ],
+          "contours": 3
+        },
+        "uni016F": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            670
+          ],
+          "contours": 3
+        },
+        "uni0170": {
+          "advance": 650,
+          "bounds": [
+            61,
+            0,
+            589,
+            867
+          ],
+          "contours": 3
+        },
+        "uni0171": {
+          "advance": 590,
+          "bounds": [
+            61,
+            0,
+            529,
+            667
+          ],
+          "contours": 3
+        },
+        "uni0172": {
+          "advance": 650,
+          "bounds": [
+            61,
+            -181,
+            589,
+            720
+          ],
+          "contours": 2
+        },
+        "uni0173": {
+          "advance": 590,
+          "bounds": [
+            61,
+            -181,
+            529,
+            520
+          ],
+          "contours": 2
+        },
+        "uni0174": {
+          "advance": 880,
+          "bounds": [
+            22,
+            0,
+            858,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0175": {
+          "advance": 780,
+          "bounds": [
+            17,
+            0,
+            763,
+            666
+          ],
+          "contours": 2
+        },
+        "uni0176": {
+          "advance": 610,
+          "bounds": [
+            23,
+            0,
+            587,
+            866
+          ],
+          "contours": 2
+        },
+        "uni0177": {
+          "advance": 540,
+          "bounds": [
+            19,
+            -224,
+            521,
+            683
+          ],
+          "contours": 2
+        },
+        "uni0178": {
+          "advance": 610,
+          "bounds": [
+            23,
+            0,
+            587,
+            804
+          ],
+          "contours": 3
+        },
+        "uni0179": {
+          "advance": 590,
+          "bounds": [
+            37,
+            0,
+            553,
+            875
+          ],
+          "contours": 2
+        },
+        "uni017A": {
+          "advance": 500,
+          "bounds": [
+            38,
+            0,
+            462,
+            675
+          ],
+          "contours": 2
+        },
+        "uni017B": {
+          "advance": 590,
+          "bounds": [
+            37,
+            0,
+            553,
+            804
+          ],
+          "contours": 2
+        },
+        "uni017C": {
+          "advance": 500,
+          "bounds": [
+            38,
+            0,
+            462,
+            604
+          ],
+          "contours": 2
+        },
+        "uni017D": {
+          "advance": 590,
+          "bounds": [
+            37,
+            0,
+            553,
+            866
+          ],
+          "contours": 2
+        },
+        "uni017E": {
+          "advance": 500,
+          "bounds": [
+            38,
+            0,
+            462,
+            666
+          ],
+          "contours": 2
+        },
+        "uni1E9E": {
+          "advance": 670,
+          "bounds": [
+            61,
+            -12,
+            601,
+            764
           ],
           "contours": 1
         }

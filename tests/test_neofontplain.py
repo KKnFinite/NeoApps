@@ -89,7 +89,7 @@ class NeoFontPlainTest(unittest.TestCase):
         extra = '£€°×÷−–—·•…‘’“”←↑→↓✓\u00a0'
         for style, font in self.fonts.items():
             cmap = font.cmap()
-            self.assertEqual(len(cmap), 116)
+            self.assertEqual(len(cmap), 291)
             for char in ''.join(chr(c) for c in range(32, 127))+extra:
                 with self.subTest(style=style, char=char):
                     self.assertGreater(cmap[ord(char)], 0)
@@ -111,9 +111,37 @@ class NeoFontPlainTest(unittest.TestCase):
         regular, bold = self.fonts.values()
         self.assertNotEqual(regular.glyph(regular.cmap()[ord('H')]), bold.glyph(bold.cmap()[ord('H')]))
 
+    def test_approved_base_geometry_and_advances_unchanged(self):
+        # Captured from ea74bdb's committed fonts, before Western extension.
+        expected = {'Regular': '7f939168c3b96abc06b5dacd599283e327f79723675e33f3088736f4be2119de',
+                    'SemiBold': 'c52f805dd127b09461605b792c8fd08a14bb47a542c306ebf7ebe211ebc5b80b'}
+        codes = sorted(set(range(32, 127)) | set(map(ord, '\u00a0£°·×÷–—‘’“”•…€←↑→↓−✓')))
+        for style, font in self.fonts.items():
+            cmap = font.cmap()
+            data = b''.join(code.to_bytes(4, 'big')+font.advance(cmap[code]).to_bytes(2, 'big')+font.glyph(cmap[code]) for code in codes)
+            self.assertEqual(hashlib.sha256(data+font.glyph(0)).hexdigest(), expected[style])
+
+    def test_western_coverage_and_accent_composition(self):
+        import unicodedata
+        latin1 = ''.join(chr(c) for c in range(0xC0, 0x100) if chr(c).isalpha())
+        for style, font in self.fonts.items():
+            cmap = font.cmap()
+            for char in latin1+'ŒœŠšŽžŸẞJoséFrançoisMuñozMüllerGarcíaSørenZoëŒuvre':
+                self.assertIn(ord(char), cmap, (style, char))
+            for char in 'ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿŠšŽžŸ':
+                letter = unicodedata.normalize('NFD', char)[0]
+                self.assertEqual(font.advance(cmap[ord(char)]), font.advance(cmap[ord(letter)]))
+                # SVG output carries identical finalized base contour data first.
+                if letter != 'i':
+                    def path(c):
+                        root = ElementTree.parse(FONT/f'glyphs/{style.lower()}/uni{ord(c):04X}.svg').getroot()
+                        return root[0].get('d')
+                    self.assertTrue(path(char).startswith(path(letter)+' '), char)
+
     def test_safe_bounds_current_vectors_and_visible_counters(self):
         report = json.loads((FONT/'build-metrics.json').read_text())
         self.assertEqual(report['source_sha256'], hashlib.sha256((FONT/'source/geometry.py').read_text(encoding='utf-8').encode('utf-8')).hexdigest())
+        self.assertEqual(report['western_sha256'], hashlib.sha256((FONT/'source/western.py').read_text(encoding='utf-8').encode('utf-8')).hexdigest())
         for style, font in self.fonts.items():
             for code, index in font.cmap().items():
                 glyph = font.glyph(index)

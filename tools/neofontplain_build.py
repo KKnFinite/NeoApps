@@ -7,12 +7,13 @@ import hashlib
 import importlib.util
 import json
 import re
+import runpy
 from pathlib import Path
 
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +86,59 @@ def contours(paths, stroke):
     return result
 
 
+def joined(rings):
+    """Union derived letter parts, retaining each part's TrueType hole winding."""
+    parts = []
+    for group in rings:
+        shape = Polygon()
+        for points in group:
+            shape = shape.symmetric_difference(Polygon(points))
+        parts.append(shape)
+    shape = unary_union(parts)
+    polygons = [shape] if shape.geom_type == 'Polygon' else list(shape.geoms)
+    result = []
+    for polygon in sorted(polygons, key=lambda p: p.bounds):
+        for hole, ring in [(False, polygon.exterior)]+[(True, r) for r in polygon.interiors]:
+            points = [(round(x), round(y)) for x, y in list(ring.coords)[:-1]]
+            area = sum(a[0]*b[1]-b[0]*a[1] for a, b in zip(points, points[1:]+points[:1]))
+            if (not hole and area > 0) or (hole and area < 0):
+                points.reverse()
+            result.append(points)
+    return result
+
+
+def western_glyph(char, recipes, originals, glyphs, stroke):
+    def base(c):
+        return originals[c], glyphs[c][0]
+    if char in recipes['COMPOSED']:
+        letter, accent = recipes['COMPOSED'][char]
+        rings, advance = base(letter)
+        # Accented i replaces its dot; the approved standalone i stays untouched.
+        if letter == 'i':
+            rings = [p for p in rings if min(y for _, y in p) < 600]
+        mark = contours(recipes['ACCENTS'][accent], stroke * (.48 if accent == '\u030A' else .65))
+        if accent in ('\u0327', '\u0328'):
+            mark = [[(round(x+advance/2), y) for x, y in p] for p in mark]
+        else:
+            top = max(y for p in rings for _, y in p)
+            low = min(y for p in mark for _, y in p)
+            high = max(y for p in mark for _, y in p)
+            scale = min(1, (900-top-24)/(high-low))
+            mark = [[(round(x*scale+advance/2), round((y-low)*scale+top+24)) for x, y in p] for p in mark]
+        return rings+mark, advance
+    if char in recipes['LIGATURES']:
+        left, right, offset = recipes['LIGATURES'][char]
+        a, _ = base(left)
+        b, advance = base(right)
+        return joined([a, [[(x+offset, y) for x, y in p] for p in b]]), advance+offset
+    if char in recipes['BARRED']:
+        letter, path = recipes['BARRED'][char]
+        rings, advance = base(letter)
+        return joined([rings, contours([path], stroke*.75)]), advance
+    advance, paths = recipes['NEW'][char]
+    return contours(paths, stroke), advance
+
+
 def build(output=OUTPUT):
     output = Path(output)
     for protected in ('neofont', 'neofontlite'):
@@ -92,15 +146,21 @@ def build(output=OUTPUT):
             raise ValueError('Existing font families are read-only')
     output.mkdir(parents=True, exist_ok=True)
     glyphs = source_glyphs()
+    western_source = OUTPUT/'source/western.py'
+    western = runpy.run_path(str(western_source))
+    additions = sorted(set().union(*(western[key] for key in ('COMPOSED', 'LIGATURES', 'BARRED', 'NEW'))), key=ord)
     # Git may check text out as CRLF on Windows; hash canonical UTF-8/LF source.
     source_hash = hashlib.sha256(SOURCE.read_text(encoding='utf-8').encode('utf-8')).hexdigest()
-    report = {'family': 'NeoFontPlain', 'source_sha256': source_hash, 'weights': {}}
+    report = {'family': 'NeoFontPlain', 'source_sha256': source_hash,
+              'western_sha256': hashlib.sha256(western_source.read_text(encoding='utf-8').encode('utf-8')).hexdigest(), 'weights': {}}
     for style, (weight, stroke) in WEIGHTS.items():
         glyph_dir = output/'glyphs'/style.lower()
         glyph_dir.mkdir(parents=True, exist_ok=True)
         outlines, metrics, cmap, records = {}, {}, {}, {}
+        originals = {}
         entries = [('.notdef', 600, ['M 90 0 L 90 720 L 510 720 L 510 0 Z', 'M 90 0 L 510 720'])]
         entries += [(f'uni{ord(c):04X}', *glyphs[c]) for c in sorted(glyphs, key=ord)]
+        entries += [(f'uni{ord(c):04X}', 0, []) for c in additions]
         for name, advance, paths in entries:
             rings = contours(paths, stroke)
             # Optical vertical alignment after stroke expansion: horizontal
@@ -122,6 +182,10 @@ def build(output=OUTPUT):
                 bottom = min(y for p in reference for _, y in p)
                 top = max(y for p in reference for _, y in p)
                 rings = [[(x, round((y-bottom)*height/(top-bottom))) for x, y in p] for p in rings]
+            if char in additions:
+                rings, advance = western_glyph(char, western, originals, glyphs, stroke)
+            else:
+                originals[char] = rings
             pen = TTGlyphPen(None)
             for points in rings:
                 pen.moveTo(points[0])
@@ -152,9 +216,9 @@ def build(output=OUTPUT):
                     usWeightClass=weight, fsSelection=128 | (64 if weight == 400 else 0))
         fb.setupNameTable(dict(familyName='NeoFontPlain', styleName=style,
                               typographicFamily='NeoFontPlain', typographicSubfamily=style,
-                              uniqueFontIdentifier=f'NeoFontPlain {style} 1.000',
+                              uniqueFontIdentifier=f'NeoFontPlain {style} 1.100',
                               fullName=f'NeoFontPlain {style}', psName=f'NeoFontPlain-{style}',
-                              version='Version 1.000', copyright='Original NeoApps vector geometry.'))
+                              version='Version 1.100', copyright='Original NeoApps vector geometry.'))
         fb.setupPost()
         fb.setupMaxp()
         fb.font.recalcTimestamp = False
@@ -166,7 +230,7 @@ def build(output=OUTPUT):
         font.save(ttf.with_suffix('.woff2'))
         report['weights'][style] = {'weight': weight, 'stroke': stroke, 'glyphs': records}
     (output/'build-metrics.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8', newline='\n')
-    print(f'Built {len(glyphs)} characters in Regular 400 and SemiBold 600 from original vectors.')
+    print(f'Built {len(glyphs)+len(additions)} characters ({len(additions)} Western additions) in both weights.')
 
 
 if __name__ == '__main__':

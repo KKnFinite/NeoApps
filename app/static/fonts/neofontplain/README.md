@@ -1,7 +1,7 @@
 # NeoFontPlain v1
 
-Original NeoApps workhorse sans, provided for review only. **Not wired into any
-application page or shared stylesheet.** NeoFont and NeoFontLite are unchanged.
+Original NeoApps workhorse sans. The existing Live Counts pilot remains the
+only application use. NeoFont and NeoFontLite are unchanged.
 
 ## Design and source
 
@@ -27,9 +27,22 @@ includes 12–20px samples for visual review, not a claim of device certificatio
 
 ## Repertoire and outputs
 
-116 mapped characters: printable ASCII, NBSP, £ € ° × ÷, minus, en/em dashes,
+291 mapped characters: the original 116 (printable ASCII, NBSP, £ € ° × ÷, minus, en/em dashes,
 middle dot/bullet, ellipsis, four arrows, checkmark, and typographic quote code
-points (v1 quotes intentionally share the straight-quote outlines).
+points; v1 quotes intentionally share straight-quote outlines), plus 175 Western
+Latin additions. This includes every Latin-1 alphabetic letter from U+00C0–00FF,
+Œ/œ, Š/š, Ž/ž, Ÿ, ẞ and the decomposable Latin Extended-A letters whose accents
+are supported, plus Ł/ł. It is not a claim of complete Latin Extended-A coverage.
+
+`source/western.py` composes finalized approved base contours with reusable grave,
+acute, circumflex, tilde, diaeresis, ring, cedilla, macron, breve, dot, double acute,
+caron and ogonek marks. Accented i replaces the dot only in derived characters.
+Marks fit the existing 900/-250 line metrics; tall ascenders use compact marks.
+Æ/æ and Œ/œ join existing letter outlines; Ø/ø, Ð and Ł/ł add bars; thorn, eth,
+sharp s and capital sharp s have explicit new skeletons. Base outlines, advances,
+weights and line metrics are unchanged, verified against the committed v1 fonts.
+Coverage is precomposed Unicode (NFC); arbitrary combining-mark positioning is
+not implemented. Application text handling and typography rules are unchanged.
 
 - `NeoFontPlain-Regular.ttf` / `.woff2` — weight 400
 - `NeoFontPlain-SemiBold.ttf` / `.woff2` — weight 600
@@ -39,7 +52,7 @@ points (v1 quotes intentionally share the straight-quote outlines).
 - `preview.html` — standalone local browser specimen, both actual weights
 
 Spaces have no contours; each weight also includes a visible `.notdef` glyph.
-Only the specimen declares `@font-face`; it does not import app CSS.
+The specimen is standalone and does not import app CSS.
 
 ## Deterministic build
 
