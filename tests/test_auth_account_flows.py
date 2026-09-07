@@ -44,6 +44,33 @@ from app.services.user_tokens import (
 
 
 class AuthAccountFlowsTest(unittest.TestCase):
+    def test_account_identifier_password_autocomplete_semantics(self):
+        for path, password_hint in (('/login', 'current-password'), ('/create-account', 'new-password')):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                form = document(response)
+                email = form.one('input', name='email')
+                self.assertEqual(email.attrs['type'], 'email')
+                self.assertEqual(email.attrs['autocomplete'], 'username')
+                self.assertEqual(email.attrs['autocapitalize'], 'none')
+                self.assertEqual(email.attrs['spellcheck'], 'false')
+                self.assertEqual(form.one('input', name='password').attrs['autocomplete'], password_hint)
+                if path == '/login':
+                    self.assertIn('autofocus', email.attrs)
+                else:
+                    self.assertEqual(form.one('input', name='confirm_password').attrs['autocomplete'], 'new-password')
+
+    def test_password_templates_keep_current_and_new_password_hints(self):
+        for template in ('reset_password.html', 'change_password.html', 'emergency_reset.html'):
+            with self.subTest(template=template):
+                markup = Path(self.app.root_path, 'templates', 'auth', template).read_text()
+                form = document(self.app.response_class(markup))
+                for name in ('password', 'confirm_password'):
+                    self.assertEqual(form.one('input', name=name).attrs['autocomplete'], 'new-password')
+                if template == 'change_password.html':
+                    self.assertEqual(form.one('input', name='current_password').attrs['autocomplete'], 'current-password')
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",

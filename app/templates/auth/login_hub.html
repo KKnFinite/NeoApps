@@ -22,7 +22,7 @@
         <form class="command-login-form" method="post" action="{{ url_for('auth.login') }}" data-interaction-form>
             <div class="command-login-fields">
                 <label for="dashboard-email">Email</label>
-                <input id="dashboard-email" name="email" type="email" autocomplete="email" required autofocus>
+                <input id="dashboard-email" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
 
                 <label for="dashboard-password">Password</label>
                 <input id="dashboard-password" name="password" type="password" autocomplete="current-password" required>
