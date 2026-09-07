@@ -107,8 +107,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             response.data,
         )
         self.assertIn(b"neo-mobile-product-name", response.data)
-        self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
-        self.assertIn(b"neo-brand-title__node--sektor", response.data)
+        self.assertIn(b"sektor-dashboard-identity", response.data)
+        self.assertIn(b"neo-brand--sektor", response.data)
         self.assertNotIn(b'src="/static/images/neosektor_logo1.png"', response.data)
         self.assertNotIn(b"<h1>NeoSektor</h1>", response.data)
         self.assertIn(b"Live Counts", response.data)
@@ -120,7 +120,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard-tile="discharge"', response.data)
         self.assertIn(b'data-node-dashboard-tile="driver-routing"', response.data)
         self.assertNotIn(b"data-live-counts", response.data)
-        self.assertIn(b"sektor-command-heading", response.data)
+        self.assertNotIn(b"sektor-command-heading", response.data)
         self.assertIn(b"sektor-command-art", response.data)
         self.assertNotIn(b"class=\"readonly-count\"", response.data)
         self.assertIn(b'href="/neosektor/live-counts"', response.data)
@@ -4131,7 +4131,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         live_counts = self.client.get("/neosektor/live-counts", follow_redirects=False)
 
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn(b"sektor-command-heading", dashboard.data)
+        self.assertNotIn(b"sektor-command-heading", dashboard.data)
         self.assertIn(b"data-neosektor-mobile-dashboard", dashboard.data)
         self.assertIn(b'href="/neosektor/live-counts"', dashboard.data)
         self.assertNotIn(b"data-live-counts", dashboard.data)

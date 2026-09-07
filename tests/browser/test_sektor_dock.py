@@ -10,7 +10,7 @@ class SektorDockBrowserTest(unittest.TestCase):
         kind=existing.MobileDrawerBrowserTest
         kind.setUpClass()
         fixture=kind()
-        evidence=Path('instance/browser-evidence/sektor-shared-geometry-v2')
+        evidence=Path('instance/browser-evidence/sektor-hero-menu-v3')
         evidence.mkdir(parents=True,exist_ok=True)
         results=[]
         try:
@@ -47,13 +47,16 @@ class SektorDockBrowserTest(unittest.TestCase):
                             self.assertEqual(measured['ermac']['paddingBottom'],measured['sektor']['paddingBottom'])
                             self.assertEqual(measured['ermac']['controls'],measured['sektor']['controls'])
                             self.assertEqual(measured['ermac']['shell'],measured['sektor']['shell'])
-                            self.assertIn('sektor=20260907-shared-geometry-v2',page.locator('link[href*="neosektor_dashboard.css"]').get_attribute('href'))
+                            self.assertIn('sektor=20260907-hero-menu-v3',page.locator('link[href*="neosektor_dashboard.css"]').get_attribute('href'))
                             self.assertIn('sektor=20260907-shared-geometry-v2',page.locator('link[href*="17-shared.css"]').get_attribute('href'))
                             self.assertEqual(measured['sektor']['position'],'fixed')
                             self.assertEqual(measured['sektor']['transform'],'none')
                             self.assertEqual(measured['sektor']['translate'],'none')
                             self.assertEqual(measured['sektor']['bottom'],height)
-                            self.assertEqual(page.locator('.sektor-command').evaluate('e=>getComputedStyle(e).minHeight'),'0px')
+                            self.assertEqual(page.locator('.sektor-command h1, .sektor-command-heading').count(),0)
+                            gap=page.locator('.sektor-command-tile--live-counts').evaluate('e=>document.querySelector(".neo-mobile-bottom").getBoundingClientRect().top-e.getBoundingClientRect().bottom')
+                            self.assertGreaterEqual(gap,20)
+                            self.assertLessEqual(gap,40)
                             page.evaluate('window.scrollTo(0,document.documentElement.scrollHeight)')
                             self.assertTrue(page.locator('.sektor-command-tile--live-counts').evaluate('e=>e.getBoundingClientRect().bottom <= document.querySelector(".neo-mobile-bottom").getBoundingClientRect().top'))
                         page.close()
