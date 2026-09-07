@@ -190,7 +190,7 @@ body.operational-shell-page .neosubzero-nav { display:none !important; }
     .gateway-mobile-context > a,.gateway-mobile-context .gateway-sort-control { min-width:0; }
     .gateway-mobile-context .gateway-context-control,.gateway-mobile-context .gateway-sort-control label { min-height:48px; padding:8px; border:1px solid rgba(var(--node-gateway-primary-rgb),.28); background:#10151c; }
     .gateway-mobile-context .gateway-sort-control select { min-width:0; max-width:100%; font-size:.64rem; }
-    .gateway-mobile-bottom-nav { position:fixed; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right)); bottom:calc(10px + var(--neo-safe-bottom)); z-index:1080; display:flex; align-items:center; justify-content:space-around; gap:4px; width:auto; max-width:none; min-height:58px; padding:8px; border:1px solid rgba(var(--node-gateway-highlight-rgb),.38); border-radius:999px; background:linear-gradient(135deg, rgba(238,246,255,.08), transparent 34%), linear-gradient(180deg, rgba(12,15,21,.9), rgba(3,4,7,.88)); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.5),0 0 24px rgba(var(--node-gateway-primary-rgb),.2); transform:none; backdrop-filter:blur(16px); }
+    /* Gateway uses the same viewport dock contract as nodes: mobile_drawer.css. */
     .gateway-mobile-bottom-nav .mobile-bottom-nav-item { flex:1 1 0; }
     .gateway-mobile-bottom-nav .mobile-bottom-nav-link,.gateway-mobile-bottom-nav .mobile-bottom-nav-button { font-family:var(--font-sans); }
     .gateway-shell-page .content { min-height:100vh; padding:calc(var(--gateway-shell-height) + 20px) max(12px, var(--neo-safe-right)) var(--neo-dock-clearance) max(12px, var(--neo-safe-left)); }

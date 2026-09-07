@@ -299,6 +299,12 @@
 }
 
 @media (max-width: 900px) {
+    .neosubzero-settings-grid > *,
+    .neosubzero-settings-grid input {
+        min-width: 0;
+        max-width: 100%;
+    }
+    .neosubzero-settings-grid input { width: 100%; }
     .neosubzero-mission-facts {
         grid-template-columns: repeat(5, minmax(78px, 1fr));
     }

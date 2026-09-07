@@ -1523,7 +1523,7 @@ body.blueprint-neosektor.neosektor-fixed-header .nav a {
     .operational-mobile-header .motherbrain-alert-count { position:absolute; right:-3px; bottom:-3px; min-width:18px; height:18px; padding:0 5px; font-size:.58rem; }
     .operational-mobile-header .motherbrain-alert-panel { right:0; width:min(330px, calc(100vw - var(--neo-safe-left) - var(--neo-safe-right) - 18px)); max-width:calc(100vw - var(--neo-safe-left) - var(--neo-safe-right) - 18px); }
     body.operational-shell-page .content { width:100%; max-width:none; min-height:100vh; padding:calc(var(--operational-mobile-header-height) + 14px) max(10px, var(--neo-safe-right)) var(--neo-dock-clearance) max(10px, var(--neo-safe-left)); }
-    .operational-mobile-bottom-nav { position:fixed; left:calc(10px + var(--neo-safe-left)); right:calc(10px + var(--neo-safe-right)); bottom:calc(10px + var(--neo-safe-bottom)); z-index:1080; display:flex; align-items:center; justify-content:space-around; gap:4px; min-height:58px; padding:8px; border:1px solid rgba(var(--node-rgb),.38); border-radius:999px; background:linear-gradient(135deg, rgba(238,246,255,.08), transparent 34%), linear-gradient(180deg, rgba(12,15,21,.9), rgba(3,4,7,.88)); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.5),0 0 24px rgba(var(--node-rgb),.2); backdrop-filter:blur(16px); }
+    /* Mobile dock geometry belongs to mobile_drawer.css, not this former pill. */
     .operational-mobile-bottom-nav a,.operational-mobile-bottom-nav button { display:grid; place-items:center; gap:2px; flex:1 1 0; min-width:0; min-height:40px; border:0; color:var(--text); background:transparent; font:800 .58rem/1 var(--font-sans); letter-spacing:.05em; text-decoration:none; text-transform:uppercase; cursor:pointer; }
     .operational-mobile-bottom-nav a > span:first-child,.operational-mobile-bottom-nav button > span:first-child { color:var(--node-highlight); font-size:1.05rem; line-height:1; }
     body.operational-shell-page.operational-board-view .operational-mobile-header { display:none; }
@@ -3831,7 +3831,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         font-size: 0.56rem;
     }
 
-    .mobile-bottom-nav {
+    :where(body:not(:has(> .shell[data-gateway-dock]))) .mobile-bottom-nav {
         position: fixed;
         right: 50%;
         bottom: calc(10px + env(safe-area-inset-bottom));
@@ -4098,7 +4098,7 @@ body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell > .cou
         font-size: clamp(0.66rem, 3.35vw, 0.8rem);
     }
 
-    .mobile-bottom-nav {
+    :where(body:not(:has(> .shell[data-gateway-dock]))) .mobile-bottom-nav {
         width: min(410px, calc(100vw - 16px));
         min-height: 56px;
         padding: 7px;
