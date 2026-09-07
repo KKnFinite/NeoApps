@@ -47,7 +47,7 @@ body:has(.sektor-command) .shell > .content {
     transition: background .15s, border-color .15s, transform .15s;
 }
 .sektor-command-copy { min-width: 0; }
-.sektor-command-copy strong { font: 300 clamp(15px, 1.3vw, 21px)/1.4 NeoFontLite, sans-serif; text-transform: uppercase; }
+.sektor-command-copy strong { font: 300 clamp(15px, 1.3vw, 21px)/1.4 NeoFontLite, sans-serif; text-transform: uppercase; letter-spacing: .02em; }
 .sektor-command-icon { flex: 0 0 34px; color: #ec5360; }
 .sektor-command-icon svg { display: block; width: 34px; height: 34px; fill: currentColor; }
 .sektor-command-tile--live-counts { grid-column: 1 / -1; justify-content: center; }
@@ -60,7 +60,7 @@ body:has(.sektor-command) .shell > .content {
 @media (max-width: 900px) {
     .sektor-dashboard-topbar { display: none; }
     body:has(.sektor-command) .operational-mobile-identity small {
-        font: 300 12px/1.5 NeoFontLite, sans-serif; text-transform: uppercase;
+        font: 300 12px/1.5 NeoFontLite, sans-serif; text-transform: uppercase; letter-spacing: .02em;
     }
     .sektor-command {
         /* Size only the artwork/menu surface to the shared shell's available

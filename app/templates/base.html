@@ -25,10 +25,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION) }}">
     {% endif %}
     {% if is_rfd_hub_page or is_sektor_dashboard %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION, tracking='20260907-02em') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260907-hero-menu-v3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260907-tracking-v4') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>

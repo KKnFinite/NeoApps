@@ -47,7 +47,7 @@ class SektorDockBrowserTest(unittest.TestCase):
                             self.assertEqual(measured['ermac']['paddingBottom'],measured['sektor']['paddingBottom'])
                             self.assertEqual(measured['ermac']['controls'],measured['sektor']['controls'])
                             self.assertEqual(measured['ermac']['shell'],measured['sektor']['shell'])
-                            self.assertIn('sektor=20260907-hero-menu-v3',page.locator('link[href*="neosektor_dashboard.css"]').get_attribute('href'))
+                            self.assertIn('sektor=20260907-tracking-v4',page.locator('link[href*="neosektor_dashboard.css"]').get_attribute('href'))
                             self.assertIn('sektor=20260907-shared-geometry-v2',page.locator('link[href*="17-shared.css"]').get_attribute('href'))
                             self.assertEqual(measured['sektor']['position'],'fixed')
                             self.assertEqual(measured['sektor']['transform'],'none')
