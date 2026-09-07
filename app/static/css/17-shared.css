@@ -19,25 +19,8 @@
 }
 
 @media (max-width: 760px) {
-    /* NeoSektor mobile is an operations console: keep its page shell inside the viewport. */
-    html:has(body.blueprint-neosektor):not(:has(.sektor-command)),
-    body.blueprint-neosektor:not(:has(.sektor-command)) {
-        height: 100svh;
-        min-height: 100svh;
-        max-width: 100vw;
-        background-color: #050506;
-        overflow: hidden;
-        overscroll-behavior: none;
-    }
-
-    body.blueprint-neosektor:not(:has(.sektor-command)) .shell,
-    body.blueprint-neosektor:not(:has(.sektor-command)) .content,
-    body.blueprint-neosektor .content > .neosektor-standalone-page {
-        height: 100%;
-        min-height: 0;
-        max-height: 100%;
-        overflow: hidden;
-    }
+    /* The shared operational shell owns the viewport and dock. Never clamp
+       html/body/shell/content to svh: iOS standalone can be taller than svh. */
 
     body.blueprint-neosektor.neosektor-fixed-header .content {
         box-sizing: border-box;
@@ -90,26 +73,22 @@
     body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-shell,
     body.blueprint-neosektor.neosektor-ballmat-operator-page .neosektor-ballmat-shell,
     body.blueprint-neosektor.neosektor-tunnel-operator-page .neosektor-tunnel-shell {
-        height: 100%;
+        height: auto;
         min-height: 0;
         grid-template-rows: minmax(0, 1fr);
         gap: 0;
         padding: 0 5px;
-        overflow: hidden;
+        overflow: visible;
     }
 
-    /* The Ballmat grid can use the space between its content and the fixed nav. */
-    body.blueprint-neosektor.neosektor-ballmat-operator-page.mobile-app-chrome.has-mobile-bottom-nav .content {
-        padding-bottom: calc(76px + env(safe-area-inset-bottom));
-    }
 
     body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid,
     body.blueprint-neosektor.neosektor-ballmat-operator-page .counts-wrap,
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap {
-        height: 100%;
+        height: auto;
         min-height: 0;
         padding: 0;
-        overflow: hidden;
+        overflow: visible;
     }
 
     body.blueprint-neosektor.neosektor-live-counts-page .neosektor-live-counts-grid {
@@ -344,19 +323,11 @@
         font-size: 0.76rem;
     }
 
-    body.blueprint-neosektor.neosektor-driver-page,
-    body.blueprint-neosektor.neosektor-driver-page .shell,
-    body.blueprint-neosektor.neosektor-driver-page .content {
-        height: 100svh;
-        min-height: 0;
-        overflow: hidden;
-    }
-
     body.blueprint-neosektor.neosektor-driver-page .driver-body,
     body.blueprint-neosektor.neosektor-driver-page .driver-routing {
-        height: 100%;
+        height: auto;
         min-height: 0;
-        overflow: hidden;
+        overflow: visible;
     }
 
     body.blueprint-neosektor.neosektor-driver-page .driver-routing {
@@ -376,8 +347,8 @@
     body.blueprint-neosektor.neosektor-fixed-header .neosektor-discharge-wrap,
     body.blueprint-neosektor.neosektor-fixed-header .neosektor-discharge-queue {
         min-height: 0;
-        height: 100%;
-        overflow: hidden;
+        height: auto;
+        overflow: visible;
     }
 
     body.blueprint-neosektor.neosektor-fixed-header .neosektor-discharge-wrap,
@@ -396,7 +367,7 @@
         overscroll-behavior: contain;
     }
 
-    /* NeoSektor mobile viewport balance: preserve the locked console shell. */
+    /* Compact operational content; viewport ownership remains shared. */
     body.blueprint-neosektor.neosektor-fixed-header .neosektor-mobile-dashboard-grid {
         gap: 8px;
     }
@@ -931,9 +902,6 @@
      * panel to an explicit, normal-flow row so no panel competes for an
      * anonymous grid track when the refresh notice is visible.
      */
-    body.blueprint-neosektor.neosektor-tunnel-operator-page.mobile-app-chrome.has-mobile-bottom-nav .content {
-        padding-bottom: calc(76px + env(safe-area-inset-bottom));
-    }
 
     body.blueprint-neosektor.neosektor-tunnel-operator-page .tunnel-wrap {
         grid-template-areas:

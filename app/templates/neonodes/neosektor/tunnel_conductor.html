@@ -4,6 +4,7 @@
 
 {% block content %}
 <section
+    id="neosektor-tunnel-panel"
     class="neosektor-standalone-page neosektor-tunnel-shell tunnel-body mode-view"
     aria-labelledby="neosektor-tunnel-title"
     data-tunnel-conductor
@@ -169,9 +170,11 @@
                     <button type="button" data-tunnel-offset-step="1" {% if not can_edit %}disabled{% endif %}>+</button>
                 </div>
             </div>
+            <p class="tunnel-offset-help tunnel-polish-mobile-only">Adjusts west pressure in auto routing calculation</p>
         </section>
 
         <section class="tunnel-panel tunnel-operations-card" aria-label="Operations" data-tunnel-operations-card>
+        <h2 class="tunnel-polish-mobile-only">Unload Modifiers</h2>
         <section class="tunnel-route-overrides" aria-label="Driver routing overrides">
             {% for wave_key in ["first", "second"] %}
             {% set route = state.routing.routes[wave_key] %}
@@ -203,7 +206,7 @@
             <h2 class="tunnel-mobile-section-title">Unload Settings</h2>
             <div class="tunnel-settings-grid">
                 <label class="tunnel-setting-card">
-                    <span>MOD 1</span>
+                    <span>1ST WAVE BAYS</span>
                     <input
                         type="number"
                         inputmode="numeric"
@@ -218,7 +221,7 @@
                     >
                 </label>
                 <label class="tunnel-setting-card">
-                    <span>MOD 2</span>
+                    <span>2ND WAVE BAYS</span>
                     <input
                         type="number"
                         inputmode="numeric"

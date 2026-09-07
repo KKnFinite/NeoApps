@@ -256,6 +256,7 @@ body.blueprint-neosektor.neosektor-fixed-header .topbar {
         0 0 28px rgba(var(--node-rgb), 0.12);
 }
 
+@media (min-width: 901px) {
 body.blueprint-neosektor.neosektor-driver-page .shell {
     width: 100%;
     min-height: 100svh;
@@ -267,6 +268,7 @@ body.blueprint-neosektor.neosektor-driver-page .content {
     min-height: 100svh;
     margin: 0;
     padding: 0;
+}
 }
 
 body.blueprint-neosektor.neosektor-fixed-header .topbar::after {

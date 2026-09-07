@@ -19,7 +19,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('favicon_16') }}">
     {% for stylesheet in page_stylesheets %}
-    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none) }}">
     {% endfor %}
     {% if is_gateway_typography_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontplain.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
@@ -29,7 +29,7 @@
     {% if is_gateway_dock_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
-    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page %}
+    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page or is_neosektor_tunnel_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION, tracking='20260907-05em') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
@@ -37,6 +37,12 @@
     {% endif %}
     {% if is_neosektor_live_counts_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
+    {% endif %}
+    {% if is_neosektor_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_mobile.css', v=config.STATIC_ASSET_VERSION, viewport='20260907-shared-v1') }}">
+    {% endif %}
+    {% if is_neosektor_tunnel_operator_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260907-flat-v1') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>

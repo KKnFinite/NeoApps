@@ -1738,7 +1738,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("height: 74px;", desktop_css)
         self.assertIn("color: var(--neo-bright-silver);", css)
 
-    def test_neosektor_mobile_console_css_locks_viewport_and_compacts_operator_views(self):
+    def test_neosektor_mobile_console_leaves_viewport_ownership_to_shared_shell(self):
         self._login_approved_user(role="simulator")
 
         dashboard = self.client.get("/neosektor")
@@ -1752,9 +1752,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-neosektor-mobile-dashboard", dashboard.data)
         self.assertIn(b"data-live-counts", live_counts.data)
         self.assertIn(b"data-tunnel-conductor", tunnel.data)
-        self.assertIn("html:has(body.blueprint-neosektor)", css)
-        self.assertIn("max-width: 100vw;", css)
-        self.assertIn("overscroll-behavior: none;", css)
+        self.assertNotIn("html:has(body.blueprint-neosektor)", css)
+        mobile = Path('app/static/css/neosektor_mobile.css').read_text()
+        self.assertIn('height:auto; min-height:0; max-height:none; overflow:visible;', mobile)
+        self.assertNotIn('.neo-mobile-bottom', mobile)
+        for response in (dashboard, live_counts, tunnel):
+            self.assertIn(b'css/neosektor_mobile.css', response.data)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
         self.assertIn("grid-template-rows: repeat(3, minmax(0, 1fr));", css)
         self.assertIn("min-height: clamp(40px, 6.7svh, 56px);", css)
@@ -1786,14 +1789,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn(b"blueprint-neosektor", response.data)
 
-        self.assertIn(
-            "html:has(body.blueprint-neosektor),\n"
-            "    body.blueprint-neosektor {\n"
-            "        height: 100svh;",
-            css,
-        )
-        self.assertIn("background-color: #050506;", css)
-        self.assertIn("overscroll-behavior: none;", css)
+        self.assertNotIn("html:has(body.blueprint-neosektor)", css)
+        dock = Path('app/static/css/mobile_drawer.css').read_text()
+        self.assertIn('background:#0c111a', dock)
+        self.assertIn('calc(4px + var(--neo-safe-bottom))', dock)
 
     def test_mobile_ebm_and_wbm_use_normal_flow_visible_bay_tracks(self):
         self._login_approved_user(role="simulator")
@@ -2103,7 +2102,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("grid-area: waves;", mobile_layout)
         self.assertIn("grid-area: counts;", mobile_layout)
         self.assertIn("grid-area: bays;", mobile_layout)
-        self.assertIn("padding-bottom: calc(76px + env(safe-area-inset-bottom));", mobile_layout)
+        self.assertNotIn("padding-bottom: calc(76px + env(safe-area-inset-bottom));", mobile_layout)
         self.assertNotIn("position: absolute", mobile_layout)
         self.assertNotIn("transform:", mobile_layout)
         self.assertNotIn("margin-top: -", mobile_layout)
@@ -3940,7 +3939,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-tunnel-wave-key=\"second\"", responses["tunnel"].data)
         self.assertIn(b"data-tunnel-setting=\"down_timer_minutes\"", responses["tunnel"].data)
 
-        self.assertIn("/* NeoSektor mobile viewport balance: preserve the locked console shell. */", css)
+        self.assertIn("/* Compact operational content; viewport ownership remains shared. */", css)
+        self.assertNotIn("html:has(body.blueprint-neosektor):not(:has(.sektor-command))", css)
         self.assertIn("overflow: hidden;", css)
         self.assertIn("grid-template-columns: 42px minmax(0, 1fr);", css)
         self.assertIn("width: 38px;", css)

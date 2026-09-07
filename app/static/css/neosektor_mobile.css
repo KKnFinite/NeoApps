@@ -1,0 +1,11 @@
+/* Shared Sektor content sizing. The shared shell/dock own the viewport. */
+@media (max-width:900px) {
+    body.blueprint-neosektor.operational-shell-page .neosektor-standalone-page,
+    body.blueprint-neosektor.operational-shell-page .driver-body {
+        height:auto; min-height:0; max-height:none; overflow:visible;
+    }
+    body.blueprint-neosektor.operational-shell-page .driver-body {
+        /* Constrain only the operational surface, never html/body or the dock. */
+        min-height:calc(100dvh - var(--operational-mobile-header-height) - var(--neo-dock-clearance));
+    }
+}
