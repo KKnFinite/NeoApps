@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeoFontPlain v1 — local specimen</title>
+<style>
+@font-face { font-family: NeoFontPlain; src: url('NeoFontPlain-Regular.woff2') format('woff2'); font-weight: 400; font-display: block; }
+@font-face { font-family: NeoFontPlain; src: url('NeoFontPlain-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: block; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #10151b; color: #e5eaf0; font: 16px/1.5 NeoFontPlain, sans-serif; }
+main { max-width: 1260px; margin: auto; padding: 32px; }
+header { border-bottom: 1px solid #3a4653; padding-bottom: 18px; margin-bottom: 22px; }
+h1 { font-size: 32px; font-weight: 600; margin: 0; }
+header p { color: #a3b4c7; margin: 6px 0 0; }
+.weights { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+section { min-width: 0; padding: 22px; background: #19222c; border: 1px solid #394858; border-radius: 10px; }
+h2 { color: #8cdce2; font-size: 17px; margin: 0 0 16px; font-weight: inherit; }
+.semibold { font-weight: 600; }
+.alphabet { font-size: 26px; line-height: 1.7; letter-spacing: .02em; }
+.symbols { font-size: 23px; overflow-wrap: anywhere; margin-top: 12px; }
+.samples { border-top: 1px solid #394858; margin-top: 18px; padding-top: 12px; }
+.samples p { margin: 10px 0; }
+.size { color: #a3b4c7; font: 11px sans-serif; display: block; margin-bottom: 3px; }
+.compare { font-size: 24px; letter-spacing: .025em; margin-top: 14px; }
+.light { color: #17232c; background: #e8edf1; border-radius: 6px; padding: 12px; margin-top: 14px; font-size: 14px; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; font-variant-numeric: tabular-nums; }
+.metrics div { background: #111922; padding: 10px; border-radius: 5px; }
+.metrics span { display: block; }
+footer { color: #a3b4c7; font-size: 12px; margin-top: 18px; }
+@media (max-width: 800px) { .weights { grid-template-columns: 1fr; } main { padding: 16px; } .alphabet { font-size: 23px; } }
+</style>
+<main>
+<header><h1>NeoFontPlain / v1</h1><p>Original vectors · Regular 400 + SemiBold 600 · 1000 UPM · tabular numerals</p></header>
+<div class="weights">
+<section class="regular">
+<h2>REGULAR / 400</h2>
+<div class="alphabet">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm<br>nopqrstuvwxyz<br>0123456789</div>
+<div class="symbols">! &quot; # $ % &amp; ' ( ) * + , - . /<br>: ; &lt; = &gt; ? @ [ \ ] ^ _ ` { | } ~<br>£ € ° × ÷ − – — · • … ‘ ’ “ ”<br>← ↑ → ↓ ✓</div>
+<div class="compare">I l 1 | O 0 o · A R G a g</div>
+<div class="samples">
+<p style="font-size:12px"><span class="size">12 PX</span>Inbound operations · Flight 0129 · Gate A17<br>Request pending — updated 09:41 / 123,456.78</p>
+<p style="font-size:14px"><span class="size">14 PX</span>Dashboard Settings · Arrival 18:05<br>Quick brown fox jumps over the lazy dog.</p>
+<p style="font-size:16px"><span class="size">16 PX</span>NeoGateway · MotherBrain · Live Counts<br>Fuel 1,234.50 / 08:30 → 12:45</p>
+<p style="font-size:20px"><span class="size">20 PX</span>HOME / NODES / MENU<br>TUNNEL CONDUCTOR · Driver Routing</p>
+</div>
+<div class="light">Small operational UI on a light surface.<br>Email: operations@example.com — 07:05</div>
+<div class="metrics"><div><span>08:05</span><span>11:11</span></div><div><span>001.25</span><span>888.88</span></div><div><span>123456</span><span>987654</span></div></div>
+</section>
+<section class="semibold">
+<h2>SEMIBOLD / 600</h2>
+<div class="alphabet">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklm<br>nopqrstuvwxyz<br>0123456789</div>
+<div class="symbols">! &quot; # $ % &amp; ' ( ) * + , - . /<br>: ; &lt; = &gt; ? @ [ \ ] ^ _ ` { | } ~<br>£ € ° × ÷ − – — · • … ‘ ’ “ ”<br>← ↑ → ↓ ✓</div>
+<div class="compare">I l 1 | O 0 o · A R G a g</div>
+<div class="samples">
+<p style="font-size:12px"><span class="size">12 PX</span>Inbound operations · Flight 0129 · Gate A17<br>Request pending — updated 09:41 / 123,456.78</p>
+<p style="font-size:14px"><span class="size">14 PX</span>Dashboard Settings · Arrival 18:05<br>Quick brown fox jumps over the lazy dog.</p>
+<p style="font-size:16px"><span class="size">16 PX</span>NeoGateway · MotherBrain · Live Counts<br>Fuel 1,234.50 / 08:30 → 12:45</p>
+<p style="font-size:20px"><span class="size">20 PX</span>HOME / NODES / MENU<br>TUNNEL CONDUCTOR · Driver Routing</p>
+</div>
+<div class="light">Small operational UI on a light surface.<br>Email: operations@example.com — 07:05</div>
+<div class="metrics"><div><span>08:05</span><span>11:11</span></div><div><span>001.25</span><span>888.88</span></div><div><span>123456</span><span>987654</span></div></div>
+</section>
+</div>
+<footer>Standalone review specimen only. No NeoApps page uses this family yet. Native browser antialiasing; no synthetic weight.</footer>
+</main>
+</html>
