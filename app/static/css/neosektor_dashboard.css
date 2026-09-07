@@ -60,11 +60,27 @@ body:has(.sektor-command) .shell > .content {
 }
 @media (max-width: 900px) {
     .sektor-dashboard-topbar { display: none; }
+    /* The shared shell owns the viewport and reserves the dock exactly once.
+       Stretch the artwork into that content area, not a second svh canvas. */
+    body:has(.sektor-command) .shell > .content {
+        display: flex;
+        flex-direction: column;
+    }
+    body:has(.sektor-command) > .neo-mobile-navigation .neo-mobile-bottom {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        inset-block-end: 0;
+        transform: none;
+        translate: none;
+        margin-block: 0;
+    }
     body:has(.sektor-command) .operational-mobile-identity small {
         font: 300 12px/1.5 NeoFontLite, sans-serif; text-transform: uppercase;
     }
     .sektor-command {
-        min-height: calc(100svh - 64px - var(--neo-safe-top, 0px));
+        min-height: 0;
+        flex: 1 0 auto;
         padding: 20px max(12px, env(safe-area-inset-right)) 20px max(12px, env(safe-area-inset-left));
     }
     .sektor-command-heading h1 { font-size: 18px; }
