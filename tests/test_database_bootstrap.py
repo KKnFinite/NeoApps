@@ -76,6 +76,9 @@ class DatabaseBootstrapTest(unittest.TestCase):
 
         db.create_all()
         missing_columns = {
+            "neosektor_ballmat_counts": [
+                "spotter_mode", "right_first", "right_second", "right_open",
+            ],
             "neoermac_door_pulls": ["sort_date_mission_id"],
             "neoscorpion_settings": list(SPEAR_SETTINGS_COLUMNS),
             "neoscorpion_fuel_assignments": list(SPEAR_ASSIGNMENT_COLUMNS),
@@ -113,6 +116,37 @@ class DatabaseBootstrapTest(unittest.TestCase):
         for table, columns in missing_columns.items():
             self.assertTrue(set(columns) <= POSTGRES_OPTIONAL_COLUMNS[table].keys())
             self.assertTrue(set(columns) <= LOCAL_SQLITE_OPTIONAL_COLUMNS[table].keys())
+
+    def test_bootstrap_repairs_legacy_ballmat_columns_preserving_counts_twice(self):
+        from datetime import date
+        from app.models import NeoSektorBallmatCount, NeoSektorSortState
+
+        bootstrap_database(self.app)
+        gateway = Gateway.query.first()
+        sort = NeoSektorSortState(gateway_id=gateway.id, gateway_code=gateway.code,
+                                 sort_date=date.today(), sort_name="night")
+        db.session.add(sort)
+        db.session.flush()
+        row = NeoSektorBallmatCount(sort_state_id=sort.id, side="EAST", count=17, status="Full")
+        db.session.add(row)
+        db.session.commit()
+        row_id = row.id
+        columns = ("spotter_mode", "right_first", "right_second", "right_open")
+        for column in columns:
+            db.session.execute(text(f"ALTER TABLE neosektor_ballmat_counts DROP COLUMN {column}"))
+        db.session.commit()
+        db.session.remove()
+
+        for _ in range(2):
+            bootstrap_database(self.app)
+            actual = {c["name"] for c in inspect(db.engine).get_columns("neosektor_ballmat_counts")}
+            self.assertTrue(set(columns) <= actual)
+            repaired = db.session.get(NeoSektorBallmatCount, row_id)
+            self.assertEqual((repaired.count, repaired.status), (17, "Full"))
+            self.assertEqual(tuple(getattr(repaired, c) for c in columns), (1, 0, 0, 0))
+        for column in columns:
+            expected = "INTEGER NOT NULL DEFAULT " + ("1" if column == "spotter_mode" else "0")
+            self.assertEqual(POSTGRES_OPTIONAL_COLUMNS["neosektor_ballmat_counts"][column], expected)
 
     def test_schema_sync_creates_missing_rain_and_calibration_tables_only_once(self):
         from app.models import NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue, NeoScorpionSpearCalibrationReset

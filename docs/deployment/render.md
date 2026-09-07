@@ -8,6 +8,13 @@ web process. No schema repair runs on first request or during polling.
 
 ## Render Commands
 
+This repository does not declare a Render Blueprint or repository-managed
+pre-deploy hook. `Procfile` defines only the web start command. Editing that file
+or this document does **not** configure a release step in Render.
+On the existing NeoApps service, set **Settings → Build & Deploy → Pre-Deploy
+Command** to `python scripts/bootstrap_database.py`. Keep the start command
+unchanged. Confirm the setting is saved before shipping schema-dependent code.
+
 For a paid Render web service with Pre-Deploy Commands, configure:
 
 ```text
@@ -30,9 +37,13 @@ Pre-Deploy Command: (leave blank)
 Start Command: gunicorn run:app --bind 0.0.0.0:$PORT
 ```
 
-After a Free-plan deployment that changes schema, run the one-time manual
-bootstrap from a trusted machine or CI runner configured with the production
-`DATABASE_URL` and bootstrap credentials:
+For Free-plan services, run the bootstrap from the target release checkout
+**before deploying** code that requires new columns, using a trusted machine or
+CI runner configured with production `DATABASE_URL` and bootstrap credentials.
+Do not push schema-dependent code to an automatically deployed branch until
+this release prerequisite succeeds. Free-plan manual ordering is not an
+automatic pre-deploy safety gate; use a supported paid service's Pre-Deploy
+Command when that guarantee is required. Do not put bootstrap in Gunicorn startup.
 
 ```powershell
 $env:DATABASE_URL = "<production Neon DATABASE_URL>"
@@ -56,6 +67,43 @@ includes mission-aware Door Pull columns and legacy boolean defaults, SPEAR
 settings/assignment columns and audit/calibration-reset tables, and Rain
 integration authority columns and fuel-authority tables. It does not depend on
 a running web process. `init_db.py` is local SQLite tooling, not deployment tooling.
+
+## Repairing the Ballmat missing-column incident
+
+Commit `31152a8` requires four additive columns on `neosektor_ballmat_counts`:
+`spotter_mode` (integer, default 1), `right_first`, `right_second`, and
+`right_open` (integers, default 0). Both schema-sync dialect maps already contain
+them. No replacement ALTER script is required.
+
+In the production service's authorized Render Shell, from the application root
+at `31152a8` or later, run:
+
+```sh
+python scripts/bootstrap_database.py
+```
+
+Use the existing production environment and bootstrap credentials; do not paste
+credentials into logs or documentation. Require exit status zero and the
+`schema and seed data ready` completion message. Running it again is safe.
+Then verify using the authorized database connection (read-only query):
+
+```sql
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = current_schema()
+  AND table_name = 'neosektor_ballmat_counts'
+  AND column_name IN ('spotter_mode', 'right_first', 'right_second', 'right_open')
+ORDER BY column_name;
+```
+
+Require all four rows, then check authenticated EBM, WBM, Live Counts and Tunnel
+Conductor and confirm no new `UndefinedColumn` errors in their request logs.
+`/healthz` alone cannot verify this repair: it intentionally never queries the DB.
+Saving Pre-Deploy Command prevents subsequent omissions; it does not repair an
+already-running service by itself. Do not claim recovery from local tests.
+
+Render documents pre-deploy ordering and paid-service availability at
+[Deploying on Render](https://render.com/docs/deploys#pre-deploy-command).
 
 ## Process Liveness
 
