@@ -1,9 +1,11 @@
 /* Dashboard only; other Sektor screens retain their existing shell/layout. */
+@media (min-width: 901px) {
 body:has(.sektor-command) > .shell {
     width: 100%; max-width: none; min-height: 0; margin: 0; padding: 0;
 }
 body:has(.sektor-command) .shell > .content {
     margin: 0; padding: 0; width: 100%; max-width: none;
+}
 }
 .sektor-dashboard-topbar {
     display: flex; align-items: center; gap: 20px; padding: 10px 28px;
@@ -60,27 +62,14 @@ body:has(.sektor-command) .shell > .content {
 }
 @media (max-width: 900px) {
     .sektor-dashboard-topbar { display: none; }
-    /* The shared shell owns the viewport and reserves the dock exactly once.
-       Stretch the artwork into that content area, not a second svh canvas. */
-    body:has(.sektor-command) .shell > .content {
-        display: flex;
-        flex-direction: column;
-    }
-    body:has(.sektor-command) > .neo-mobile-navigation .neo-mobile-bottom {
-        position: fixed;
-        top: auto;
-        bottom: 0;
-        inset-block-end: 0;
-        transform: none;
-        translate: none;
-        margin-block: 0;
-    }
     body:has(.sektor-command) .operational-mobile-identity small {
         font: 300 12px/1.5 NeoFontLite, sans-serif; text-transform: uppercase;
     }
     .sektor-command {
         min-height: 0;
-        flex: 1 0 auto;
+        /* Bleed only this artwork surface through the shared content gutters.
+           Header spacing, viewport sizing and dock clearance remain shared. */
+        margin: -14px calc(-1 * max(10px, var(--neo-safe-right))) 0 calc(-1 * max(10px, var(--neo-safe-left)));
         padding: 20px max(12px, env(safe-area-inset-right)) 20px max(12px, env(safe-area-inset-left));
     }
     .sektor-command-heading h1 { font-size: 18px; }

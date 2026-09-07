@@ -108,8 +108,8 @@
     {
       "file": "17-shared.css",
       "scope": "shared",
-      "bytes": 41691,
-      "sha256": "535868ac4660449431cba95034590e514145a3aef9f29b1ac185b3927282e9b4"
+      "bytes": 41800,
+      "sha256": "b826e0dc79b61e6cddf001c3a0e956df180c84f0943fd18ebb9550a9ba84b592"
     },
     {
       "file": "18-neostaffing.css",
