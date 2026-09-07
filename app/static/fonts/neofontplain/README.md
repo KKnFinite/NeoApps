@@ -1,7 +1,27 @@
 # NeoFontPlain v1
 
-Original NeoApps workhorse sans. The existing Live Counts pilot remains the
-only application use. NeoFont and NeoFontLite are unchanged.
+Original NeoApps workhorse sans. Gateway and its operational nodes inherit it
+through `css/neofontplain.css`; NeoFont and NeoFontLite are unchanged.
+
+## Application typography contract
+
+`base.html` loads the shared stylesheet only for Gateway, operational node
+blueprints, the generic node scaffold and auth-owned MotherBrain utilities.
+The explicit `data-gateway-typography` shell marker scopes body inheritance and
+`--font-sans`, including drawers mounted outside the shell. Portal, public auth,
+Staffing, NeoBid and global account/admin pages are excluded.
+
+Only Regular 400 and SemiBold 600 are registered. Ordinary inherited text is
+400; semantic emphasis uses 600. Existing heavier component declarations match
+the real 600 face through CSS font matching, with font synthesis disabled; no
+extra weights are generated. Explicit NeoFont/NeoFontLite declarations retain
+their family, size, weight and tracking. Numeric/tabular declarations remain.
+
+Low-specificity native-control inheritance and a Gateway-scoped desktop account
+chip rule remove the browser-default/hardcoded Inter blockers. Live Counts keeps
+its page-local identity, numeric emphasis and approved 6px mobile row layout,
+but no longer duplicates font-face definitions. No font assets are rebuilt for
+the rollout. Stylesheet URLs use `typography=20260907-gateway-v1`.
 
 ## Design and source
 

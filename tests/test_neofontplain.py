@@ -160,7 +160,7 @@ class NeoFontPlainTest(unittest.TestCase):
                 if chr(code) in 'ABDOPQRabdgopq04689':
                     self.assertGreaterEqual(count, 2, chr(code))
 
-    def test_specimen_and_live_counts_only_pilot(self):
+    def test_specimen_and_gateway_scoped_workhorse(self):
         preview = (FONT/'preview.html').read_text(encoding='utf-8')
         for style in self.fonts:
             self.assertIn(f'NeoFontPlain-{style}.woff2', preview)
@@ -169,9 +169,16 @@ class NeoFontPlainTest(unittest.TestCase):
         for directory in (ROOT/'app/templates', ROOT/'app/static/css', ROOT/'app/static/js'):
             for path in directory.rglob('*'):
                 if path.is_file() and path.suffix in ('.html', '.css', '.js'):
-                    if path.name != 'neosektor_live_counts.css':
+                    if path.name != 'neofontplain.css':
                         self.assertNotIn('NeoFontPlain', path.read_text(encoding='utf-8'), str(path))
         base = (ROOT/'app/templates/base.html').read_text(encoding='utf-8')
+        self.assertIn("{% if is_gateway_typography_page %}", base)
+        self.assertIn("filename='css/neofontplain.css'", base)
+        css = (ROOT/'app/static/css/neofontplain.css').read_text()
+        self.assertEqual(css.count('@font-face'), 2)
+        self.assertIn('--font-sans: NeoFontPlain, sans-serif', css)
+        self.assertIn('font-synthesis: none', css)
+        self.assertNotIn('@font-face', (ROOT/'app/static/css/neosektor_live_counts.css').read_text())
         self.assertIn("{% if is_neosektor_live_counts_page %}\n    <link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/neosektor_live_counts.css'", base)
 
 

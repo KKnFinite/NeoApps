@@ -1,21 +1,6 @@
-/* NeoFontPlain pilot: this bundle is loaded on Live Counts only. */
-@font-face {
-    font-family: NeoFontPlain;
-    src: url('../fonts/neofontplain/NeoFontPlain-Regular.woff2') format('woff2');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face {
-    font-family: NeoFontPlain;
-    src: url('../fonts/neofontplain/NeoFontPlain-SemiBold.woff2') format('woff2');
-    font-weight: 600;
-    font-style: normal;
-    font-display: swap;
-}
-
+/* Live Counts layout/identity; workhorse faces belong to neofontplain.css. */
 #neosektor-live-counts-panel {
-    font-family: NeoFontPlain, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 400;
     font-synthesis: none;
     font-variant-numeric: tabular-nums;

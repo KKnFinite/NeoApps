@@ -315,7 +315,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-live-counts", response.data)
         self.assertIn(b"neosektor-count-screen-compact", response.data)
         self.assertIn(b"css/neosektor_live_counts.css", response.data)
-        self.assertIn(b"pilot=20260907-plain-v1", response.data)
+        self.assertIn(b"typography=20260907-gateway-v1", response.data)
         self.assertNotIn(b"css/neosektor_live_counts.css", self.client.get('/neosektor').data)
         self.assertIn("font-size: clamp(1.3rem, 3.9vw, 1.9rem);", css)
         self.assertIn("font-size: clamp(1.9rem, 5.7vw, 2.95rem);", css)

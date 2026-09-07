@@ -1,0 +1,34 @@
+/* Gateway workhorse only. No font geometry or display-font overrides. */
+@font-face {
+    font-family: NeoFontPlain;
+    src: url('../fonts/neofontplain/NeoFontPlain-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: NeoFontPlain;
+    src: url('../fonts/neofontplain/NeoFontPlain-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+body:has(> .shell[data-gateway-typography]) {
+    --font-sans: NeoFontPlain, sans-serif;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    /* Existing heavier emphasis matches the real 600 face, never faux bold. */
+    font-synthesis: none;
+}
+/* Low specificity replaces UA control fonts without winning over deliberate
+   NeoFont/NeoFontLite declarations or changing sizes/spacing/line heights. */
+:where(body:has(> .shell[data-gateway-typography]) :is(input, select, textarea, button)) {
+    font-family: var(--font-sans);
+}
+:where(body:has(> .shell[data-gateway-typography]) :is(h1,h2,h3,h4,h5,h6,strong,b,th,button)) {
+    font-weight: 600;
+}
+/* The desktop account chip is the only descendant hardcoded Inter blocker. */
+body:has(> .shell[data-gateway-typography]) .desktop-shell-user-chip {
+    font-family: var(--font-sans);
+}

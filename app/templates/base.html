@@ -2,6 +2,7 @@
 <html lang="en">
 {% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 {% set is_sektor_dashboard = request.endpoint == 'neosektor.index' %}
+{% set is_gateway_typography_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (request.blueprint == 'auth' and request.path.startswith('/motherbrain/')) %}
 {% set is_gateway_dock_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (uses_motherbrain_header and not is_portal_page) or (request.blueprint == 'auth' and request.path.startswith('/admin/')) %}
 <head>
     <meta charset="utf-8">
@@ -20,6 +21,9 @@
     {% for stylesheet in page_stylesheets %}
     <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none) }}">
     {% endfor %}
+    {% if is_gateway_typography_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontplain.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
+    {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
     <script defer src="{{ url_for('static', filename='js/interaction_states.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% if is_gateway_dock_page or is_portal_page %}
@@ -32,7 +36,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260907-tracking-v5') }}">
     {% endif %}
     {% if is_neosektor_live_counts_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, pilot='20260907-plain-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
@@ -112,7 +116,7 @@
 </head>
 {% set uses_shared_mobile_drawer = uses_operational_shell or is_rfd_hub_page or is_portal_page %}
 <body class="blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>
-    <div class="shell"{% if is_gateway_dock_page %} data-gateway-dock{% endif %}>
+    <div class="shell"{% if is_gateway_dock_page %} data-gateway-dock{% endif %}{% if is_gateway_typography_page %} data-gateway-typography{% endif %}>
         {% if uses_operational_shell %}
         <header class="{% if is_sektor_dashboard %}sektor-dashboard-topbar{% else %}topbar operational-topbar{% endif %}" data-operational-topbar>
             {% if is_sektor_dashboard %}
