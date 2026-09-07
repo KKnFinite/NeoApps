@@ -132,7 +132,7 @@ class NeoFontPlainTest(unittest.TestCase):
                 if chr(code) in 'ABDOPQRabdgopq04689':
                     self.assertGreaterEqual(count, 2, chr(code))
 
-    def test_specimen_only_no_application_rollout(self):
+    def test_specimen_and_live_counts_only_pilot(self):
         preview = (FONT/'preview.html').read_text(encoding='utf-8')
         for style in self.fonts:
             self.assertIn(f'NeoFontPlain-{style}.woff2', preview)
@@ -141,7 +141,10 @@ class NeoFontPlainTest(unittest.TestCase):
         for directory in (ROOT/'app/templates', ROOT/'app/static/css', ROOT/'app/static/js'):
             for path in directory.rglob('*'):
                 if path.is_file() and path.suffix in ('.html', '.css', '.js'):
-                    self.assertNotIn('NeoFontPlain', path.read_text(encoding='utf-8'), str(path))
+                    if path.name != 'neosektor_live_counts.css':
+                        self.assertNotIn('NeoFontPlain', path.read_text(encoding='utf-8'), str(path))
+        base = (ROOT/'app/templates/base.html').read_text(encoding='utf-8')
+        self.assertIn("{% if is_neosektor_live_counts_page %}\n    <link rel=\"stylesheet\" href=\"{{ url_for('static', filename='css/neosektor_live_counts.css'", base)
 
 
 if __name__ == '__main__':

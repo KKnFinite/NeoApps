@@ -1,0 +1,51 @@
+/* NeoFontPlain pilot: this bundle is loaded on Live Counts only. */
+@font-face {
+    font-family: NeoFontPlain;
+    src: url('../fonts/neofontplain/NeoFontPlain-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: NeoFontPlain;
+    src: url('../fonts/neofontplain/NeoFontPlain-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+#neosektor-live-counts-panel {
+    font-family: NeoFontPlain, sans-serif;
+    font-weight: 400;
+    font-synthesis: none;
+    font-variant-numeric: tabular-nums;
+}
+#neosektor-live-counts-panel :is(h2, h3, strong, button, a, .wave-metric-label, .counter-card > span, .bay-heading > span) {
+    font-family: inherit;
+    font-weight: 600;
+}
+#neosektor-live-counts-panel :is(.live-update-status, .operation-refresh-banner, .operation-refresh-banner > span) {
+    font-weight: 400;
+}
+/* Product branding stays NeoFont; only the page identity is NeoFontLite. */
+.neosektor-live-counts-page .operational-mobile-identity small,
+.neosektor-live-counts-page #neosektor-live-title {
+    font-family: NeoFontLite, sans-serif;
+    font-weight: 300;
+}
+
+@media (max-width: 900px) {
+    /* Status/banner visibility must not change which row receives spare height.
+       Content owns its intrinsic rows; shared shell/dock keep viewport ownership. */
+    #neosektor-live-counts-panel {
+        height: auto;
+        grid-template-rows: none;
+        grid-auto-rows: max-content;
+        align-content: start;
+        align-self: start;
+        gap: 6px;
+    }
+    #neosektor-live-counts-panel :is(.neosektor-live-wave-row, .neosektor-live-ballmat-row) {
+        height: auto;
+    }
+}

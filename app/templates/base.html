@@ -24,11 +24,14 @@
     {% if uses_operational_shell or is_rfd_hub_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION) }}">
     {% endif %}
-    {% if is_rfd_hub_page or is_sektor_dashboard %}
+    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION, tracking='20260907-05em') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260907-tracking-v5') }}">
+    {% endif %}
+    {% if is_neosektor_live_counts_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, pilot='20260907-plain-v1') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
