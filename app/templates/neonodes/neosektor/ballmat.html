@@ -4,14 +4,15 @@
 
 {% block content %}
 <section
+    id="ballmat-operator"
     class="neosektor-standalone-page neosektor-ballmat-shell neosektor-count-screen-compact mode-{{ selected_side }}"
     aria-labelledby="neosektor-ballmat-title"
     data-ballmat-operations
     data-selected-side="{{ selected_side }}"
     data-can-edit="{{ 'true' if can_edit else 'false' }}"
-    data-state-url="{{ url_for('neosektor.ballmat_state') }}"
+    data-state-url="{{ url_for('neosektor.ballmat_state', side=selected_side) }}"
     data-neosektor-revision="{{ live_revision }}"
-    data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side) }}"
+    data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side, operator=1) }}"
     data-refresh-active="{{ 'true' if state.refresh.auto_refresh_enabled else 'false' }}"
 >
     <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
@@ -41,6 +42,7 @@
         {% set operation_refresh_class = "neosektor-refresh-paused" %}
         {% set operation_refresh_hook = "neosektor-refresh-paused" %}
         {% include "neonodes/_operation_refresh_banner.html" %}
+        {% include "neonodes/neosektor/_ballmat_mobile.html" %}
         <section class="wave-strip" aria-label="Wave summary">
             {% for wave_key, wave in [("first", state.waves[0]), ("second", state.waves[1])] %}
             <article class="wave-card">
@@ -149,6 +151,7 @@
     </main>
 </section>
 
+<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260907-spotters-v1') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-ballmat-operations]");
@@ -174,6 +177,7 @@
     let mutationEpoch = 0;
     let mutationRequestSequence = 0;
     let latestMutationRequest = 0;
+    let mobile = null;
 
     const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
 
@@ -300,6 +304,7 @@
     };
 
     const applyState = (state) => {
+        mobile?.apply(state);
         (state.waves || []).forEach((wave) => {
             const key = waveKey(wave.name);
             setText(`[data-wave="${key}"][data-metric="left_to_arrive"]`, wave.left_to_arrive ?? wave.planned ?? 0);
@@ -534,6 +539,33 @@
         }
     });
 
+    mobile = window.NeoBallmatMobile.create(root, {
+        state: {{ state|tojson }}, canEdit, statusLabels,
+        send: async (changes) => {
+            const requestSequence = ++mutationRequestSequence;
+            latestMutationRequest = requestSequence;
+            try {
+                const response = await fetch(updateUrl, {
+                    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({side: selectedSide, ...changes}),
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Ballmat update failed.');
+                applyMutationState(payload, requestSequence);
+            } catch (error) {
+                showEditError(error.message);
+                // Reconcile even outside the auto-refresh window. Never retry a write.
+                try {
+                    const response = await fetch(stateUrl, {cache: 'no-store', credentials: 'same-origin'});
+                    if (response.ok) {
+                        const payload = await response.json();
+                        if (payload.state) applyState(payload.state);
+                    }
+                } catch (_) { /* Keep the safe error visible until connectivity returns. */ }
+            }
+        },
+    });
     setRefreshStatus(initialRefreshStatus);
 })();
 </script>

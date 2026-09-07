@@ -23,6 +23,12 @@ class NeoSektorBallmatCount(db.Model):
     side = db.Column(db.String(16), nullable=False, index=True)
     count = db.Column(db.Integer, nullable=False, default=0)
     status = db.Column(db.String(32), nullable=False, default="Empty")
+    # The existing wave/open-bay rows remain the published totals. Left is
+    # derived as total - right, never stored as a second aggregate truth.
+    spotter_mode = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    right_first = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    right_second = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    right_open = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

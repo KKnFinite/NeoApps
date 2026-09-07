@@ -18,6 +18,8 @@ from app.services.neosektor_live_counts import (
     TUNNEL_CONDUCTOR_VIEW_PERMISSION,
     adjust_tunnel_wave_arrivals,
     ballmat_operations_context,
+    ballmat_operator_state_payload,
+    BallmatModeConflict,
     ballmat_state_payload,
     driver_routing_context,
     driver_routing_refresh_status,
@@ -451,7 +453,7 @@ def _render_ballmat_operations(selected_side):
         return redirect(url_for("neosektor.index"))
     context["live_revision"] = neosektor_state_revision(
         gateway,
-        COUNT_STATE_SCOPE,
+        ROUTING_STATE_SCOPE,
     )
     _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
@@ -466,15 +468,17 @@ def _render_ballmat_operations(selected_side):
 @bp.route("/ballmat/state")
 @gateway_node_required("sektor")
 def ballmat_state():
-    if not _can_view_any_ballmat():
+    selected_side = _selected_ballmat_side()
+    if not _ballmat_access(selected_side)["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     gateway = get_current_gateway()
     try:
         return _neosektor_live_state_response(
             gateway,
-            COUNT_STATE_SCOPE,
-            ballmat_state_payload,
+            ROUTING_STATE_SCOPE,
+            lambda gateway, **kwargs: ballmat_operator_state_payload(
+                gateway, selected_side=selected_side, **kwargs),
             screen_key=(
                 NEOSEKTOR_WBM_REFRESH_KEY
                 if _selected_ballmat_side() == "west"
@@ -503,10 +507,16 @@ def ballmat_update():
             payload,
             bundle=bundle,
         )
+        if "spotter" in payload or request.args.get("operator") == "1":
+            state = ballmat_operator_state_payload(gateway, selected_side=selected_side, bundle=bundle)
+    except BallmatModeConflict as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 409
     except NeoSektorGoogleError as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 502
     except ValueError as exc:
+        db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 403
 
     session["neosektor_ballmat_side"] = selected_side
@@ -1055,6 +1065,7 @@ def _neosektor_write_bundle(gateway, *, include_routing=False):
     bundle = NeoSektorOperationalStateBundle.load(
         gateway,
         include_routing=include_routing,
+        for_update=True,
     )
     if bundle.integration_mode != NEO_PRIMARY_GOOGLE_MIRROR:
         return bundle, None, False

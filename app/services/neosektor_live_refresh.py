@@ -11,6 +11,7 @@ from sqlalchemy import func, literal, or_, select, union_all
 
 from app.extensions import db
 from app.models import (
+    NeoSektorBallmatCount,
     NeoErmacUldRequest,
     NeoSektorBallmatWaveCount,
     NeoSektorBayStatus,
@@ -94,6 +95,10 @@ def neosektor_state_revision(
             )
     else:
         aggregate_queries = [
+            _aggregate_query(
+                "ballmats", NeoSektorBallmatCount,
+                NeoSektorBallmatCount.sort_state_id.in_(sort_state_ids),
+            ),
             _aggregate_query(
                 "sort_state",
                 NeoSektorSortState,

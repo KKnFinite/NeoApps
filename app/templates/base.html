@@ -29,7 +29,7 @@
     {% if is_gateway_dock_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
-    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page or is_neosektor_tunnel_operator_page %}
+    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page or is_neosektor_tunnel_operator_page or is_neosektor_ballmat_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION, tracking='20260907-05em') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
@@ -43,6 +43,9 @@
     {% endif %}
     {% if is_neosektor_tunnel_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260907-flat-v1') }}">
+    {% endif %}
+    {% if is_neosektor_ballmat_operator_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260907-spotters-v1') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>

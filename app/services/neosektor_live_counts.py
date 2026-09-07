@@ -2,9 +2,11 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
+from sqlalchemy import select, text
 
 from app.extensions import db
 from app.models import (
+    Gateway,
     NeoSektorBallmatCount,
     NeoSektorBallmatWaveCount,
     NeoSektorBayStatus,
@@ -109,7 +111,16 @@ class NeoSektorOperationalStateBundle:
         initialize=True,
         refresh_status=None,
         include_routing=False,
+        for_update=False,
     ):
+        if for_update:
+            # Serialize before loading any counts (including first-sort creation).
+            # PostgreSQL row lock; SQLite's equivalent write reservation in tests
+            # and local development. No process lock, stale snapshots or retries.
+            if db.engine.dialect.name == "sqlite":
+                db.session.execute(text("UPDATE gateways SET id=id WHERE id=:id"), {"id": gateway.id})
+            else:
+                db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
         sort_date = sort_date or date.today()
         sort_name = normalize_sort_name(sort_name)
         change_tracker = _PersistentStateChangeTracker()
@@ -513,11 +524,12 @@ def ballmat_operations_context(
     bundle=None,
 ):
     selected_side = normalize_ballmat_side(selected_side) or "east"
-    state = ballmat_state_payload(
+    state = ballmat_operator_state_payload(
         gateway,
         sort_date,
         sort_name,
         bundle=bundle,
+        selected_side=selected_side,
     )
 
     return {
@@ -546,6 +558,83 @@ def ballmat_state_payload(
         refresh_status=refresh_status,
     )
     return bundle.ballmat_state_payload()
+
+
+class BallmatModeConflict(ValueError):
+    """An operator acted on a mode that another device has since changed."""
+
+
+def ballmat_operator_state_payload(gateway, sort_date=None, sort_name=None, *,
+                                   selected_side="east", bundle=None, **kwargs):
+    """Operator detail is not added to the shared count/routing consumers."""
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
+        gateway, sort_date, sort_name, **kwargs)
+    state = bundle.driver_routing_state_payload()
+    row = next((r for r in bundle.ballmats if r.side == side_display_label(selected_side)), None)
+    side = state["sides"][selected_side]
+    mode = getattr(row, "spotter_mode", 1) or 1
+    totals = {w["key"]: w["count"] for w in side["waves"]}
+    totals["open"] = side["open_bays"]
+    state["spotters"] = {
+        "side": selected_side, "mode": mode,
+        "available": bundle.integration_mode != "google_primary",
+        "counts": {},
+    }
+    for key, total in totals.items():
+        right = min(max(getattr(row, "right_" + key, 0) or 0, 0), total) if mode == 2 else 0
+        state["spotters"]["counts"][key] = {"left": total - right, "right": right, "total": total}
+    state["ballmat_routing"] = {
+        key: ("-" if route["display_state"] == "all_in" else
+              "NOT ARRIVED" if route["display_state"] == "not_arrived" else
+              "ROUTING " + route["direction"].upper())
+        for key, route in state["routing"]["routes"].items()
+    }
+    return state
+
+
+def _apply_spotter_command(bundle, selected_side, command):
+    """Apply a delta to freshly locked state; the caller owns the commit.
+
+    Aggregate edits from existing screens adjust the derived left allocation.
+    If an aggregate is reduced below right, right is clamped to that total.
+    The established aggregate limit (99) applies to the sum, not each side.
+    """
+    if not isinstance(command, dict):
+        raise ValueError("Invalid spotter update.")
+    if bundle.integration_mode == "google_primary":
+        raise ValueError("Spotter controls require Neo-primary counts.")
+    side = side_display_label(selected_side)
+    row = next(r for r in bundle.ballmats if r.side == side)
+    mode = row.spotter_mode or 1
+    if type(command.get("expected_mode")) is not int or command["expected_mode"] != mode:
+        raise BallmatModeConflict("Spotter mode changed. Refresh and try again.")
+    if "mode" in command:
+        if type(command["mode"]) is not int or command["mode"] not in (1, 2):
+            raise ValueError("Invalid spotter mode.")
+        if command["mode"] != mode:
+            row.spotter_mode = command["mode"]
+            row.right_first = row.right_second = row.right_open = 0
+        return
+    key, position, delta = command.get("metric"), command.get("position"), command.get("delta")
+    if key not in ("first", "second", "open") or type(delta) is not int or delta not in (-1, 1):
+        raise ValueError("Invalid spotter count update.")
+    if position not in (("left", "right") if mode == 2 else ("total",)):
+        raise BallmatModeConflict("Spotter mode changed. Refresh and try again.")
+    if key == "open":
+        count_row = next(r for r in bundle.open_bays if r.side == side)
+        field_name = "open_count"
+    else:
+        count_row = next(r for r in bundle.ballmat_wave_counts
+                         if r.side == side and r.wave_name == dict(DEFAULT_WAVES)[key])
+        field_name = "count"
+    total = getattr(count_row, field_name)
+    right = min(max(getattr(row, "right_" + key) or 0, 0), total) if mode == 2 else 0
+    value = right if position == "right" else total - right
+    change = min(max(value + delta, 0), MAIN_BALLMAT_COUNT_MAX - (total - value)) - value
+    setattr(count_row, field_name, total + change)
+    setattr(row, "right_" + key, right + change if position == "right" else right)
+    # Mode/allocation changes must invalidate the existing read-only revision.
+    row.updated_at = datetime.utcnow()
 
 
 def _google_ballmat_updates(selected_side, payload):
@@ -684,7 +773,11 @@ def update_ballmat_side(
         gateway,
         sort_date,
         sort_name,
+        for_update=True,
     )
+    if "spotter" in (payload or {}):
+        _apply_spotter_command(bundle, selected_side, payload["spotter"])
+        return bundle.driver_routing_state_payload() if include_routing_state else bundle.ballmat_state_payload()
     if bundle.integration_mode == "google_primary":
         updates = _google_ballmat_updates(selected_side, payload)
         if updates:
@@ -726,6 +819,15 @@ def update_ballmat_side(
         default=open_bay_row.open_count,
         maximum=MAIN_BALLMAT_COUNT_MAX,
     )
+    allocation = next(row for row in bundle.ballmats if row.side == side_label)
+    # Legacy aggregate editors (including Tunnel/desktop) retain their contract.
+    # An absolute aggregate reduction consumes left first, then right; don't
+    # resurrect a previously removed right allocation on a later increase.
+    for key, total in (("first", rows_by_wave["1ST WAVE"].count),
+                       ("second", rows_by_wave["2ND WAVE"].count),
+                       ("open", open_bay_row.open_count)):
+        attr = "right_" + key
+        setattr(allocation, attr, min(getattr(allocation, attr) or 0, total))
 
     bay_payload = (payload or {}).get("bay_statuses") or {}
     for bay in bundle.bay_statuses:
@@ -1240,6 +1342,8 @@ def _read_only_ballmats(sort_state_id):
             side=side_label,
             count=getattr(existing.get(side_label), "count", 0),
             status=getattr(existing.get(side_label), "status", "Empty"),
+            **{key: getattr(existing.get(side_label), key, default) for key, default in
+               (("spotter_mode", 1), ("right_first", 0), ("right_second", 0), ("right_open", 0))},
         )
         for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES
     ]

@@ -3491,7 +3491,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             (
                 "/neosektor/ebm",
                 "/neosektor/ballmat/state?side=east",
-                "app.neonodes.neosektor.routes.ballmat_state_payload",
+                "app.neonodes.neosektor.routes.ballmat_operator_state_payload",
             ),
             (
                 "/neosektor/tunnel-conductor",

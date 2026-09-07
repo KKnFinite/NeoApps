@@ -1,0 +1,52 @@
+{% set local = state.sides[selected_side] %}
+{% set other = state.sides['west' if selected_side == 'east' else 'east'] %}
+<div class="ballmat-mobile" data-ballmat-mobile data-mode="{{ state.spotters.mode }}">
+    <section class="bm-waves" aria-label="Wave status">
+        {% for key, wave in [('first', state.waves[0]), ('second', state.waves[1])] %}
+        <div><h2>{{ wave.name }}</h2><div class="bm-wave-values">
+            <div><span>LEFT TO ARRIVE</span><strong data-bm-arrive="{{ key }}">{{ wave.left_to_arrive }}</strong></div>
+            <div><span>LEFT TO UNLOAD</span><strong data-bm-unload="{{ key }}">{{ wave.left }}</strong></div>
+        </div></div>
+        {% endfor %}
+    </section>
+    <div class="bm-modes" aria-label="Spotter mode">
+        {% for mode, label in [(1,'1 SPOTTER'),(2,'2 SPOTTERS')] %}
+        <button type="button" data-bm-mode="{{ mode }}" aria-pressed="{{ 'true' if state.spotters.mode == mode else 'false' }}" {% if not can_edit or not state.spotters.available %}disabled{% endif %}>{{ label }}</button>
+        {% endfor %}
+    </div>
+    <section class="bm-counts" aria-label="Ballmat counts">
+        <div class="bm-local"><h2>{{ local.label }} BALLMAT</h2>
+            <div class="bm-split-head" aria-hidden="true"><span></span><span>LEFT SPOTTER</span><span>TOTAL</span><span>RIGHT SPOTTER</span></div>
+            {% for key, label in [('first','1ST WAVE'),('second','2ND WAVE'),('open','OPEN BAYS')] %}
+            <div class="bm-count-row"><span>{{ label }}</span>
+                {% for position in ['total', 'left', 'right'] %}
+                <div class="bm-step bm-{{ position }}">
+                    <button type="button" data-bm-step="-1" data-metric="{{ key }}" data-position="{{ position }}" aria-label="Decrease {{ position }} {{ label }}" {% if not can_edit %}disabled{% endif %}>−</button>
+                    <output data-bm-value="{{ key }}:{{ position }}">{{ state.spotters.counts[key][position] }}</output>
+                    <button type="button" data-bm-step="1" data-metric="{{ key }}" data-position="{{ position }}" aria-label="Increase {{ position }} {{ label }}" {% if not can_edit %}disabled{% endif %}>+</button>
+                </div>
+                {% endfor %}
+                <output class="bm-published" data-bm-value="{{ key }}:total" aria-label="{{ label }} total">{{ state.spotters.counts[key].total }}</output>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="bm-other"><h2>{{ other.label }} BALLMAT<br>COUNTS</h2>
+            {% for key, label, value in [('first','1ST WAVE',other.waves[0].count),('second','2ND WAVE',other.waves[1].count),('open','OPEN BAYS',other.open_bays)] %}
+            <div><span>{{ label }}</span><output data-bm-other="{{ key }}">{{ value }}</output></div>
+            {% endfor %}
+        </div>
+    </section>
+    <section class="bm-bays" aria-label="{{ local.label }} Bays"><h2>{{ local.label }} BAYS</h2>
+        {% for bay in local.bays %}
+        <label><span>{{ bay.bay_name.upper() }}</span>
+            <input type="range" min="0" max="4" step="1" value="{{ status_labels.index(bay.status) }}" data-bm-bay="{{ bay.bay_name }}" aria-label="{{ bay.bay_name }} status" {% if not can_edit %}disabled{% endif %}>
+            <output data-bm-bay-value="{{ bay.bay_name }}">{{ bay.status }}</output>
+        </label>
+        {% endfor %}
+    </section>
+    <section class="bm-routing" aria-label="Driver routing"><h2>DRIVER ROUTING</h2><div>
+        {% for key, label in [('first','1ST WAVE'),('second','2ND WAVE')] %}
+        <div><span>{{ label }}</span><output data-bm-route="{{ key }}">{{ state.ballmat_routing[key] }}</output></div>
+        {% endfor %}
+    </div></section>
+</div>
