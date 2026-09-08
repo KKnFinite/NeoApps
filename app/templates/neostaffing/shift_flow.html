@@ -88,6 +88,7 @@
       {% if can_edit_shift_flow %}
         <form method="post" action="{{ url_for('neostaffing.save_shift_flow', person_id=selected.person.id) }}">
           <input type="hidden" name="phase" value="{{ shift_flow.phase }}">
+          <input type="hidden" name="expected_version" value="{{ selected.plan.updated_at.isoformat(timespec='microseconds') if selected.plan else '' }}">
           <label>Setup Assignment<select name="shift_flow_setup_work_area_id"><option value=""></option>{% for area in shift_flow_areas %}{% if shift_work_area_type(area) in ['Door','Ballmat'] %}<option value="{{ area.id }}" {% if selected.plan and selected.plan.setup_work_area_id==area.id %}selected{% endif %}>{{ area.name }}</option>{% endif %}{% endfor %}</select></label>
           <label>Sort Start Work Area<select name="shift_flow_sort_start_work_area_id"><option value=""></option>{% for area in shift_flow_areas %}{% if shift_work_area_type(area) in ['Door','Ballmat','Discharge'] %}<option value="{{ area.id }}" data-flow-start-type="{{ shift_work_area_type(area) }}" {% if selected.plan and selected.plan.sort_start_work_area_id==area.id %}selected{% endif %}>{{ area.name }}</option>{% endif %}{% endfor %}</select></label>
           <label data-flow-transition>Ballmat Transition<select name="shift_flow_ballmat_transition"><option value=""></option>{% for n in [1,2,3] %}<option value="{{ n }}" {% if selected.plan and selected.plan.ballmat_transition==n %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></label>

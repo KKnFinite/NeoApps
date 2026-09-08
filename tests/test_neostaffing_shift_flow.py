@@ -1,9 +1,10 @@
 from tests.css_contracts import stylesheet_source
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import unittest
 
 from sqlalchemy import event
+from sqlalchemy.dialects import postgresql
 
 from app import create_app
 from app.extensions import db
@@ -110,8 +111,71 @@ class ShiftFlowTest(unittest.TestCase):
         plan = staffing_service.create_shift_flow_plan(person, self._values(self.discharge, "", final=self.door), self.door)
         for phase in ("after_w1", "after_w2", "after_cleanup"):
             self.assertEqual(staffing_service._shift_flow_phase_area(plan, phase).id, self.discharge.id)
-        updated = staffing_service.save_shift_flow_plan(person, self._values(self.door, "", final=self.door), self.door)
+        db.session.commit()
+        original_version = staffing_service.entity_version(plan)
+        values = self._values(self.door, "", final=self.door)
+        values["expected_version"] = original_version
+        updated = staffing_service.save_shift_flow_plan(person, values, self.door)
+        db.session.commit()
         self.assertEqual(updated.sort_start_work_area.id, self.door.id)
+        self.assertNotEqual(staffing_service.entity_version(updated), original_version)
+        template = (Path(__file__).resolve().parents[1] / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
+        self.assertIn('name="expected_version" value="{{ selected.plan.updated_at.isoformat', template)
+
+    def test_stale_drawer_save_preserves_newer_shift_flow(self):
+        person = self._person()
+        plan = staffing_service.create_shift_flow_plan(person, self._values(), self.door)
+        db.session.commit()
+        values = self._values(setup=self.door)
+        values["expected_version"] = staffing_service.entity_version(plan)
+        result = staffing_service.move_shift_flow_final_door(
+            person, self.empty_door.id, self.door, values["expected_version"]
+        )
+        self.assertTrue(result["changed"])
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "changed while you were editing"):
+            staffing_service.save_shift_flow_plan(person, values, self.door)
+        db.session.rollback()
+        self.assertEqual(plan.final_door_work_area_id, self.empty_door.id)
+        self.assertIsNone(plan.setup_work_area_id)
+
+    def test_stale_cached_drag_plan_is_reloaded_under_transaction_locks(self):
+        person = self._person()
+        plan = staffing_service.create_shift_flow_plan(person, self._values(), self.door)
+        db.session.commit()
+        version = staffing_service.entity_version(plan)
+        self.assertIs(person.shift_flow_plan, plan)
+        # A different connection commits while this session retains its old ORM
+        # relation. Each drag endpoint must lock/reload, not trust that relation.
+        with db.engine.begin() as connection:
+            connection.execute(StaffingShiftFlowPlan.__table__.update().where(
+                StaffingShiftFlowPlan.id == plan.id
+            ).values(final_door_work_area_id=self.empty_door.id,
+                     updated_at=plan.updated_at + timedelta(seconds=1)))
+        statements = []
+
+        def record_sql(_conn, clause, *_args):
+            statements.append(str(clause.compile(dialect=postgresql.dialect())))
+
+        event.listen(db.engine, "before_execute", record_sql)
+        try:
+            for move in (
+                lambda: staffing_service.move_shift_flow_final_door(person, self.door.id, self.door, version),
+                lambda: staffing_service.move_shift_flow_phase_lane(person, "setup", self.door.id, self.door, version),
+                lambda: staffing_service.move_shift_flow_final_composite(person, self.door.id, "door", self.door, version),
+            ):
+                with self.subTest(move=move):
+                    statements.clear()
+                    result = move()
+                    self.assertEqual(result["conflict"]["type"], "stale_version")
+                    locks = [sql for sql in statements if "FOR UPDATE" in sql]
+                    self.assertEqual(len(locks), 2)
+                    self.assertIn("staffing_people", locks[0])
+                    self.assertIn("staffing_shift_flow_plans", locks[1])
+                    db.session.rollback()
+                    self.assertEqual(plan.final_door_work_area_id, self.empty_door.id)
+        finally:
+            event.remove(db.engine, "before_execute", record_sql)
 
     def test_workspace_markup_keeps_navigation_and_board_as_separate_desktop_surfaces(self):
         root = Path(__file__).resolve().parents[1]

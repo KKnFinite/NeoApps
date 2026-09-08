@@ -236,11 +236,26 @@ def create_shift_flow_plan(person, values, selected_work_area):
     return plan
 
 
+def _locked_shift_flow_plan(person, expected_version):
+    """Read the current revision under transaction locks, never a cached relation.
+
+    The person lock also covers FLOW NOT SET -> created races. Every interactive
+    writer takes these locks in the same order and holds them through commit.
+    """
+    db.session.query(StaffingPerson.id).filter_by(id=person.id).with_for_update().one()
+    plan = StaffingShiftFlowPlan.query.filter_by(
+        staffing_person_id=person.id
+    ).populate_existing().with_for_update().first()
+    if plan and not str(expected_version or "").strip():
+        raise ValueError("Shift Flow changed. Reload and try again.")
+    return plan, version_conflict(plan, expected_version)
+
+
 def save_shift_flow_plan(person, values, selected_work_area):
     """Create or update the one complete plan for a Shift employee."""
-    existing = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
-        staffing_person_id=person.id
-    ).first()
+    existing, conflict = _locked_shift_flow_plan(person, values.get("expected_version"))
+    if conflict:
+        raise ValueError(conflict["message"])
     if existing is None:
         return create_shift_flow_plan(person, values, selected_work_area)
     options = shift_flow_area_options(selected_work_area)
@@ -271,16 +286,11 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
     board.  The rendered plan version prevents a drag from overwriting a newer
     drawer edit.
     """
-    plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
-        staffing_person_id=person.id
-    ).first()
-    if not plan:
-        raise ValueError("FLOW NOT SET employees cannot be moved to a Final Door.")
-    if not str(expected_version or "").strip():
-        raise ValueError("Shift Flow changed. Reload and try again.")
-    conflict = version_conflict(plan, expected_version)
+    plan, conflict = _locked_shift_flow_plan(person, expected_version)
     if conflict:
         return {"conflict": conflict}
+    if not plan:
+        raise ValueError("FLOW NOT SET employees cannot be moved to a Final Door.")
 
     allowed = {area.id: area for area in shift_flow_area_options(selected_work_area)}
     destination = _shift_flow_area(final_door_id, allowed, "Final Door")
@@ -313,16 +323,11 @@ def move_shift_flow_phase_lane(
     if phase not in {"setup", "sort_start", "after_w1", "after_w2"}:
         raise ValueError("This Shift Flow phase cannot be changed by drag and drop.")
 
-    plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(
-        staffing_person_id=person.id
-    ).first()
-    if not plan:
-        raise ValueError("FLOW NOT SET employees cannot be moved by drag and drop.")
-    if not str(expected_version or "").strip():
-        raise ValueError("Shift Flow changed. Reload and try again.")
-    conflict = version_conflict(plan, expected_version)
+    plan, conflict = _locked_shift_flow_plan(person, expected_version)
     if conflict:
         return {"conflict": conflict}
+    if not plan:
+        raise ValueError("FLOW NOT SET employees cannot be moved by drag and drop.")
 
     allowed = {area.id: area for area in shift_flow_area_options(selected_work_area)}
     if phase in {"after_w1", "after_w2"}:
@@ -694,14 +699,10 @@ def move_shift_flow_final_composite(
     person, final_door_id, band, selected_work_area, expected_version
 ):
     """Create, repair, or move a plan through one atomic composite-cell drop."""
-    plan = person.shift_flow_plan or StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).first()
+    plan, conflict = _locked_shift_flow_plan(person, expected_version)
+    if conflict:
+        return {"conflict": conflict}
     created = plan is None
-    if plan:
-        if not str(expected_version or "").strip():
-            raise ValueError("Shift Flow changed. Reload and try again.")
-        conflict = version_conflict(plan, expected_version)
-        if conflict:
-            return {"conflict": conflict}
     if band not in {key for key, _label in SHIFT_FLOW_COMPOSITE_BANDS}:
         raise ValueError("Choose a valid Final Door flow band.")
 
