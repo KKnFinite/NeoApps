@@ -151,7 +151,7 @@
     </main>
 </section>
 
-<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260907-spotters-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260907-optimistic-v2') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-ballmat-operations]");
@@ -560,9 +560,13 @@
                     const response = await fetch(stateUrl, {cache: 'no-store', credentials: 'same-origin'});
                     if (response.ok) {
                         const payload = await response.json();
-                        if (payload.state) applyState(payload.state);
+                        if (payload.state) {
+                            mutationEpoch += 1;
+                            applyState(payload.state);
+                        }
                     }
                 } catch (_) { /* Keep the safe error visible until connectivity returns. */ }
+                return false;
             }
         },
     });

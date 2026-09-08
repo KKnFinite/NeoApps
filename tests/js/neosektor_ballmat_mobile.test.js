@@ -1,0 +1,158 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
+function harness({available = true, mode = 1, canEdit = true} = {}) {
+    const elements = [], listeners = {};
+    const element = dataset => {
+        const e = {dataset, disabled: !canEdit, value: '0', textContent: '', attrs: {},
+            setAttribute(k, v) { this.attrs[k] = v; },
+            matches(s) { return this.closest(s) === this; },
+            closest(s) {
+                const key = s.slice(6, -1).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+                return key in this.dataset ? this : null;
+            }};
+        elements.push(e); return e;
+    };
+    [1, 2].forEach(n => element({bmMode: String(n)}));
+    for (const key of ['first', 'second', 'open']) {
+        for (const position of ['total', 'left', 'right']) {
+            element({bmValue: `${key}:${position}`});
+            [-1, 1].forEach(delta => element({bmStep: String(delta), metric: key, position}));
+        }
+        element({bmOther: key});
+        for (const field of ['bmArrive', 'bmUnload', 'bmRoute']) element({[field]: key});
+    }
+    ['Bay 1', 'Bay 2'].forEach(name => { element({bmBay: name}); element({bmBayValue: name}); });
+    const select = s => {
+        if (s === 'button,input') return elements.filter(e => e.dataset.bmStep || e.dataset.bmMode || e.dataset.bmBay);
+        const [, attr, value] = s.match(/^\[data-([\w-]+)(?:="([^"]+)")?\]$/);
+        const key = attr.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        return elements.filter(e => key in e.dataset && (value === undefined || e.dataset[key] === value));
+    };
+    const panel = {dataset: {}, attrs: {}, setAttribute(k,v) { this.attrs[k]=v; },
+        removeAttribute(k) { delete this.attrs[k]; }, querySelectorAll: select,
+        querySelector: s => select(s)[0], addEventListener: (name, fn) => { listeners[name] = fn; }};
+    let server = {spotters: {available, mode, side: 'east', counts: Object.fromEntries(['first','second','open'].map(k => [k,{left:0,right:0,total:0}]))},
+        sides: Object.fromEntries(['east','west'].map(k => [k,{waves:[{count:0},{count:0}],open_bays:0,bays:['Bay 1','Bay 2'].map(bay_name=>({bay_name,status:'Empty'}))}])),
+        waves:[{left:0,left_to_arrive:0},{left:0,left_to_arrive:0}], ballmat_routing:{first:'-',second:'-'}};
+    const calls = [], pending = [];
+    const context = {window: {}, document: {activeElement:null}};
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../app/static/js/neosektor_ballmat_mobile.js'),'utf8'),context);
+    const api = context.window.NeoBallmatMobile.create({querySelector:()=>panel}, {
+        state: structuredClone(server), canEdit, statusLabels:['Empty','Light','Moderate','Full','Overflowing'],
+        send: payload => new Promise(resolve => { calls.push(payload); pending.push({payload,resolve}); }),
+    });
+    const click = (key='first',position=mode === 1 ? 'total' : 'left',delta=1) => listeners.click({target:elements.find(e=>e.dataset.metric===key && e.dataset.position===position && e.dataset.bmStep===String(delta))});
+    const bay = (value, event='input', name='Bay 1') => {
+        const target = select(`[data-bm-bay="${name}"]`)[0]; target.value=String(value); listeners[event]({target});
+    };
+    const finish = async (ok=true) => {
+        const {payload:p,resolve} = pending.shift();
+        if (ok) {
+            if (p.spotter) {
+                if (p.spotter.mode) server.spotters.mode=p.spotter.mode;
+                else {
+                    const v=server.spotters.counts[p.spotter.metric], pos=p.spotter.position;
+                    const change=Math.min(Math.max(v[pos]+p.spotter.delta,0),99-(v.total-v[pos]))-v[pos];
+                    v[pos]+=change; if(pos==='total') v.left=v.total; else v.total=v.left+v.right;
+                }
+            }
+            if (p.waves) for(const [key,v] of Object.entries(p.waves)) server.spotters.counts[key].left=server.spotters.counts[key].total=v.count;
+            if (p.open_bays !== undefined) server.spotters.counts.open.left=server.spotters.counts.open.total=p.open_bays;
+            if (p.bay_statuses) for (const [name,status] of Object.entries(p.bay_statuses)) server.sides.east.bays.find(b=>b.bay_name===name).status=status;
+        }
+        api.apply(structuredClone(server)); resolve(ok); await settle();
+    };
+    const text = selector => select(selector)[0].textContent;
+    const unlocked = () => {
+        assert.equal(panel.attrs['aria-busy'],undefined);
+        assert.ok(elements.filter(e=>e.dataset.bmStep || e.dataset.bmBay).every(e=>!e.disabled));
+    };
+    return {api,server,panel,calls,pending,click,bay,finish,text,unlocked,select,listeners};
+}
+
+test('rapid deltas preserve every tap, optimistic values survive polls and intermediate replies', async () => {
+    const h=harness({mode:2});
+    for(let i=0;i<8;i++) h.click('first','right');
+    assert.equal(h.calls.length,1);
+    assert.equal(h.text('[data-bm-value="first:right"]'),8);
+    h.api.apply(structuredClone(h.server)); h.unlocked();
+    for(let i=0;i<8;i++) {
+        await h.finish(); h.unlocked();
+        assert.equal(h.text('[data-bm-value="first:right"]'),8);
+    }
+    assert.equal(h.server.spotters.counts.first.total,8);
+    assert.equal(h.calls.length,8);
+    assert.ok(h.calls.every(p=>p.spotter.delta===1 && !p.waves));
+});
+
+test('ordered plus/minus and boundary taps retain API semantics', async () => {
+    const h=harness();
+    [-1,1,1,-1,1].forEach(delta=>h.click('first','total',delta));
+    assert.equal(h.text('[data-bm-value="first:total"]'),2);
+    while(h.pending.length) await h.finish();
+    assert.equal(h.server.spotters.counts.first.total,2);
+    assert.deepEqual(h.calls.map(p=>p.spotter.delta),[-1,1,1,-1,1]);
+});
+
+test('bay input previews without saving, latest release survives older reply and polling', async () => {
+    const h=harness(); h.bay(1); h.bay(2);
+    assert.equal(h.calls.length,0);
+    assert.equal(h.text('[data-bm-bay-value="Bay 1"]'),'Moderate');
+    h.bay(2,'change'); h.bay(3,'change'); h.bay(4,'input');
+    h.api.apply(structuredClone(h.server)); h.unlocked();
+    await h.finish();
+    assert.equal(h.text('[data-bm-bay-value="Bay 1"]'),'Overflowing');
+    h.bay(4,'change'); await h.finish();
+    assert.equal(h.text('[data-bm-bay-value="Bay 1"]'),'Overflowing');
+    await h.finish(); h.unlocked();
+    assert.equal(h.server.sides.east.bays[0].status,'Overflowing');
+});
+
+test('Google aggregate writes coalesce queued absolute values without blocking taps', async () => {
+    const h=harness({available:false});
+    for(let i=0;i<7;i++) h.click();
+    assert.equal(h.text('[data-bm-value="first:total"]'),7);
+    await h.finish();
+    assert.equal(h.text('[data-bm-value="first:total"]'),7);
+    await h.finish(); h.unlocked();
+    assert.deepEqual(h.calls.map(p=>p.waves.first.count),[1,7]);
+    assert.equal(h.server.spotters.counts.first.total,7);
+});
+
+test('failed write is not retried; later taps rebase and unrelated bay remains editable', async () => {
+    const h=harness(); h.click(); h.click(); h.bay(4,'change');
+    await h.finish(false); h.unlocked();
+    assert.equal(h.text('[data-bm-value="first:total"]'),1);
+    await h.finish(); await h.finish();
+    assert.equal(h.server.spotters.counts.first.total,1);
+    assert.equal(h.calls.length,3);
+    assert.equal(h.server.sides.east.bays[0].status,'Overflowing');
+});
+
+test('mode barrier is confined to mode/count semantics, never bays or panel', async () => {
+    const h=harness();
+    h.listeners.click({target:h.select('[data-bm-mode="2"]')[0]});
+    assert.equal(h.panel.attrs['aria-busy'],undefined);
+    assert.equal(h.select('[data-bm-bay="Bay 1"]')[0].disabled,false);
+    h.click(); h.bay(1,'change');
+    await h.finish(); await h.finish(); h.unlocked();
+    assert.equal(h.server.spotters.mode,2);
+    assert.equal(h.calls.length,2);
+});
+
+test('failed bay save restores both the slider and readout without retry', async () => {
+    const h=harness(); h.bay(4,'change'); await h.finish(false); h.unlocked();
+    assert.equal(Number(h.select('[data-bm-bay="Bay 1"]')[0].value),0);
+    assert.equal(h.text('[data-bm-bay-value="Bay 1"]'),'Empty');
+    assert.equal(h.calls.length,1);
+});
+
+test('read-only permissions still prevent every mobile write', () => {
+    const h=harness({canEdit:false}); h.click(); h.bay(3,'change');
+    assert.equal(h.calls.length,0);
+});

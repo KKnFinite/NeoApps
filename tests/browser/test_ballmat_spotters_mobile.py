@@ -11,6 +11,94 @@ from tests.test_neosektor_integration_modes import _complete_sheet_values
 
 
 class BallmatMobileTest(unittest.TestCase):
+    def test_uninterrupted_mobile_input(self):
+        """Hold real local POST responses, not mock state, to expose RTT locks."""
+        kind = existing.MobileDrawerBrowserTest
+        kind.setUpClass()
+        evidence = Path('instance/browser-evidence/ballmat-interaction').resolve()
+        evidence.mkdir(parents=True, exist_ok=True)
+        try:
+            with kind.app.app_context():
+                gateway = ensure_default_gateway_and_nodes()
+                db.session.add(NeoSektorOperationalSetting(gateway_id=gateway.id,
+                    gateway_code=gateway.code, integration_mode='neo_only'))
+                apply_standalone_compat_values(gateway, _complete_sheet_values())
+                db.session.commit()
+            browser = kind.pw.chromium.launch()
+            page = browser.new_page(viewport={'width': 390, 'height': 844})
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            kind().login(page)
+            kind().ready(page, '/neosektor/ebm')
+            with page.expect_response(lambda r: '/ballmat/update' in r.url and r.request.method == 'POST'):
+                page.locator('[data-bm-mode="2"]').click()
+            page.wait_for_function('document.querySelector("[data-ballmat-mobile]").dataset.mode === "2"')
+            page.evaluate('''() => {
+                const original = window.fetch;
+                window.bmResponseGates = [];
+                window.bmPayloads = [];
+                window.bmSettled = 0;
+                window.fetch = async (...args) => {
+                    if (String(args[0]).includes('/ballmat/update') && args[1]?.method === 'POST') {
+                        window.bmPayloads.push(JSON.parse(args[1].body));
+                        const gate = new Promise(resolve => window.bmResponseGates.push(resolve));
+                        const response = await original(...args);
+                        await gate;
+                        window.bmSettled++;
+                        return response;
+                    }
+                    return original(...args);
+                };
+            }''')
+            plus = page.locator('[data-metric="first"][data-position="right"][data-bm-step="1"]')
+            value = page.locator('.bm-right [data-bm-value="first:right"]')
+            initial = int(value.inner_text())
+            for _ in range(5):
+                plus.click()
+            self.assertEqual(int(value.inner_text()), initial + 5)
+            self.assertEqual(page.evaluate('bmPayloads.length'), 1)
+            slider = page.locator('[data-bm-bay="Bay 1"]')
+            slider.focus()
+            slider.press('Home')
+            self.assertEqual(page.locator('[data-bm-bay-value="Bay 1"]').inner_text(), 'Empty')
+            slider.press('End')
+            self.assertEqual(page.locator('[data-bm-bay-value="Bay 1"]').inner_text(), 'Overflowing')
+            before = page.locator('[data-ballmat-mobile]').evaluate('''panel => ({
+                busy: panel.getAttribute('aria-busy'),
+                disabled: panel.querySelectorAll('[data-bm-step]:disabled,[data-bm-bay]:disabled').length,
+                opacity: getComputedStyle(panel).opacity,
+                dockBottom: document.querySelector('.neo-mobile-bottom').getBoundingClientRect().bottom,
+                overflow: document.documentElement.scrollWidth > innerWidth + 1
+            })''')
+            self.assertEqual(before['busy'], None)
+            self.assertEqual(before['disabled'], 0)
+            self.assertEqual(before['opacity'], '1')
+            self.assertFalse(before['overflow'])
+            self.assertAlmostEqual(before['dockBottom'], 844, delta=1)
+            page.screenshot(path=str(evidence / 'ebm-pending-390x844.png'))
+            # Five distinct delta requests, then the latest committed bay status.
+            for i in range(6):
+                page.wait_for_function('bmResponseGates.length > 0')
+                page.evaluate('bmResponseGates.shift()()')
+                page.wait_for_function('(n) => bmSettled >= n', arg=i + 1)
+            page.wait_for_function('!document.querySelector("[data-bm-mode]").disabled')
+            self.assertEqual(int(value.inner_text()), initial + 5)
+            self.assertEqual(page.locator('[data-bm-bay-value="Bay 1"]').inner_text(), 'Overflowing')
+            payloads = page.evaluate('bmPayloads')
+            self.assertEqual([p['spotter']['delta'] for p in payloads[:5]], [1] * 5)
+            self.assertEqual(payloads[-1]['bay_statuses'], {'Bay 1': 'Overflowing'})
+            # A real reload proves reconciliation is durable, not just optimistic DOM.
+            kind().ready(page, '/neosektor/ebm')
+            self.assertEqual(int(value.inner_text()), initial + 5)
+            self.assertEqual(page.locator('[data-bm-bay-value="Bay 1"]').inner_text(), 'Overflowing')
+            page.screenshot(path=str(evidence / 'ebm-confirmed-390x844.png'))
+            (evidence / 'interaction.json').write_text(json.dumps({'pending': before,
+                'delta_requests': 5, 'coalesced_bay_requests': 1, 'durable': True}, indent=2))
+            self.assertEqual(errors, [])
+            browser.close()
+        finally:
+            kind.tearDownClass()
+
     def test_four_modes(self):
         kind = existing.MobileDrawerBrowserTest
         kind.setUpClass()
