@@ -37,7 +37,7 @@
 }
 #neosektor-live-counts-panel .counter-card { display:grid; grid-template-columns:1fr 55px; align-items:center; padding:3px 0; height:38px; }
 #neosektor-live-counts-panel .counter-card > span { font-size:12px; letter-spacing:0; }
-#neosektor-live-counts-panel .readonly-count { font:600 23px/1.2 var(--font-sans); color:#f0f4f7; text-align:center; }
+#neosektor-live-counts-panel .readonly-count { font:600 23px/1.2 var(--font-sans); color:#ef3547; text-align:center; }
 #neosektor-live-counts-panel .column-bay-title { padding:0; margin:0; }
 #neosektor-live-counts-panel .bay-card { height:30px; padding:3px 0; }
 #neosektor-live-counts-panel .bay-heading { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:6px; }

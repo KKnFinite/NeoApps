@@ -36,7 +36,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260907-tracking-v5') }}">
     {% endif %}
     {% if is_neosektor_live_counts_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, ui='20260907-flat-v2') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, ui='20260907-count-red-v3') }}">
     {% endif %}
     {% if is_neosektor_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_mobile.css', v=config.STATIC_ASSET_VERSION, viewport='20260907-shared-v1') }}">
@@ -48,7 +48,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260907-tracks-v2') }}">
     {% endif %}
     {% if request.endpoint in ['neosektor.discharge', 'neosektor.driver_routing'] %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_display.css', v=config.STATIC_ASSET_VERSION, ui='20260907-flat-tv-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_display.css', v=config.STATIC_ASSET_VERSION, ui='20260907-driver-fit-v2') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>

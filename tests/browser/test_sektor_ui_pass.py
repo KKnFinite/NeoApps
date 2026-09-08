@@ -12,6 +12,64 @@ from tests.test_neosektor_integration_modes import _complete_sheet_values
 
 
 class SektorUIPassTest(unittest.TestCase):
+    def test_driver_text_and_priority_visibility(self):
+        """Check painted text bounds, not merely a scroll-free document."""
+        Fixture.setUpClass()
+        evidence = Path('instance/browser-evidence/sektor-driver-correction').resolve()
+        evidence.mkdir(parents=True, exist_ok=True)
+        try:
+            with Fixture.app.app_context():
+                gateway = ensure_default_gateway_and_nodes()
+                db.session.add(NeoSektorOperationalSetting(gateway_id=gateway.id,
+                    gateway_code=gateway.code, integration_mode='neo_only'))
+                apply_standalone_compat_values(gateway, _complete_sheet_values())
+                db.session.commit()
+            browser = Fixture.pw.chromium.launch()
+            page = browser.new_page(viewport={'width':390, 'height':844})
+            Fixture().login(page)
+            for width, height, tv in [(390,844,False),(1920,1080,True),(390,844,True)]:
+                with self.subTest(width=width, tv=tv):
+                    page.set_viewport_size({'width':width, 'height':height})
+                    Fixture().ready(page, '/neosektor/driver-routing' + ('?tv=1' if tv else ''))
+                    name = f'driver-{"tv" if tv else "normal"}-{width}x{height}'
+                    page.screenshot(path=str(evidence / f'{name}.png'), full_page=True)
+                    self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), width+1)
+                    if tv:
+                        self.assertLessEqual(page.evaluate('document.documentElement.scrollHeight'), height+1)
+                        self.assertEqual(page.locator('.app-header:visible,.operational-mobile-header:visible,.topbar:visible,.live-update-controls:visible,.neo-mobile-bottom:visible').count(),0)
+                        self.assertTrue(page.locator('.sektor-tv-exit').is_visible())
+                    else:
+                        self.assertFalse(page.locator('[data-driver-routing] .header-title').is_visible())
+                        self.assertTrue(page.locator('.neosektor-driver-back').is_visible())
+                    cards = page.locator('[data-driver-priority-index]:visible')
+                    self.assertEqual(cards.count(), 3)
+                    for index in range(cards.count()):
+                        card = cards.nth(index)
+                        self.assertEqual(card.locator('[data-driver-rank]').inner_text(), ['1ST','2ND','3RD'][index])
+                        number = card.locator('[data-driver-bay-name]')
+                        self.assertRegex(number.inner_text(), r'^[1-5]$')
+                        self.assertEqual(number.evaluate('e=>getComputedStyle(e).color'), 'rgb(240, 246, 250)')
+                        self.assertEqual(number.evaluate('e=>getComputedStyle(e).webkitTextFillColor'), 'rgb(240, 246, 250)')
+                    # Range rectangles detect text overflowing even when an ancestor clips it.
+                    bounds = page.locator('[data-driver-bay-name],.driver-priority-rank,.driver-target-node,.driver-instruction,.driver-wave-message').evaluate_all('''es => es.filter(e=>e.getClientRects().length).map(e=>{
+                        const range=document.createRange(); range.selectNodeContents(e);
+                        const r=range.getBoundingClientRect();
+                        const p=e.closest('[data-driver-wave],[data-driver-priority-index]').getBoundingClientRect();
+                        const s=getComputedStyle(e);
+                        return {text:e.textContent.trim(), visible:s.visibility==='visible' && +s.opacity>0,
+                            fits:r.width>0 && r.height>0 && r.left>=p.left && r.right<=p.right && r.top>=p.top && r.bottom<=p.bottom};
+                    })''')
+                    self.assertTrue(bounds)
+                    for result in bounds:
+                        self.assertTrue(result['visible'] and result['fits'], result)
+            page.set_viewport_size({'width':390, 'height':844})
+            Fixture().ready(page, '/neosektor/live-counts')
+            colors = page.locator('#neosektor-live-counts-panel .readonly-count').evaluate_all('es=>es.map(e=>getComputedStyle(e).color)')
+            self.assertEqual(colors, ['rgb(239, 53, 71)'] * 6)
+            browser.close()
+        finally:
+            Fixture.tearDownClass()
+
     def test_focused_screens(self):
         Fixture.setUpClass()
         evidence = Path('instance/browser-evidence/sektor-ui-pass').resolve()
