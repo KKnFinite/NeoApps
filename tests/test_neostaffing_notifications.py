@@ -164,6 +164,111 @@ class NeoStaffingNotificationsTest(unittest.TestCase):
         self.assertEqual(self._navigation(self.division_user)["actionable_requests"], 0)
         self.assertEqual(self._navigation(self.watcher_user)["actionable_requests"], 0)
 
+        for index in range(60):
+            db.session.add(StaffingChangeRequest(
+                person_id=self.target.id,
+                submitted_by_user_id=self.submitter_user.id,
+                source_work_area_unit_id=self.source_area.id,
+                routed_approver_person_ids_json=json.dumps([self.source_approver.id]),
+                status="pending" if index < 59 else "completed",
+            ))
+        # Historical string IDs must continue to count identically.
+        db.session.add(StaffingChangeRequest(
+            person_id=self.target.id,
+            submitted_by_user_id=self.submitter_user.id,
+            routed_approver_person_ids_json=json.dumps([str(self.source_approver.id)]),
+        ))
+        db.session.commit()
+        with patch.object(notification_service, "_decode_person_ids",
+                          wraps=notification_service._decode_person_ids) as decode:
+            state = self._navigation(self.source_user)
+        self.assertEqual(state, {"unread_notifications": 1, "actionable_requests": 61})
+        self.assertLessEqual(decode.call_count, 3)
+        self.assertEqual(self._navigation(self.manager_user)["actionable_requests"], 60)
+        self.assertEqual(self._navigation(self.watcher_user)["actionable_requests"], 0)
+
+    def test_expired_cleanup_deletes_only_one_scoped_batch(self):
+        now = datetime.utcnow()
+        change_request = self._submit(requested_first_name="Cleanup")
+        StaffingNotification.query.delete()
+        batch = notification_service.NOTIFICATION_CLEANUP_BATCH_SIZE
+        for index in range(batch + 3):
+            db.session.add(StaffingNotification(
+                recipient_user_id=self.source_user.id,
+                change_request_id=change_request.id,
+                notification_type="new_request", message="Expired",
+                dedupe_key=f"expired:{index}", created_at=now - timedelta(days=15),
+            ))
+        db.session.add(StaffingNotification(
+            recipient_user_id=self.manager_user.id,
+            change_request_id=change_request.id,
+            notification_type="new_request", message="Other user",
+            dedupe_key="other-expired", created_at=now - timedelta(days=16),
+        ))
+        db.session.commit()
+        result = notification_service.maintain_notifications(now, user=self.source_user)
+        db.session.commit()
+        self.assertEqual(result["purged"], batch)
+        self.assertEqual(StaffingNotification.query.filter_by(
+            recipient_user_id=self.source_user.id).count(), 3)
+        self.assertEqual(StaffingNotification.query.filter_by(
+            recipient_user_id=self.manager_user.id).count(), 1)
+
+    def test_notification_feed_is_paginated_with_same_order_and_total(self):
+        now = datetime.utcnow()
+        change_request = self._submit(requested_first_name="Feed")
+        StaffingNotification.query.delete()
+        size = notification_service.NOTIFICATION_PAGE_SIZE
+        for index in range(size + 3):
+            db.session.add(StaffingNotification(
+                recipient_user_id=self.source_user.id,
+                change_request_id=change_request.id,
+                notification_type="new_request", message=f"Row {index}",
+                dedupe_key=f"feed:{index}", created_at=now - timedelta(minutes=index),
+                read_at=now if index % 2 else None,
+            ))
+        for key, recipient, received in (
+            ("expired-feed", self.source_user.id, now - timedelta(days=15)),
+            ("private-feed", self.manager_user.id, now),
+        ):
+            db.session.add(StaffingNotification(
+                recipient_user_id=recipient, notification_type="new_request",
+                change_request_id=change_request.id,
+                message=key, dedupe_key=key, created_at=received,
+            ))
+        db.session.commit()
+        expected = [row.id for row in StaffingNotification.query.filter(
+            StaffingNotification.recipient_user_id == self.source_user.id,
+            StaffingNotification.created_at >= now - timedelta(days=14),
+        ).order_by(StaffingNotification.read_at.is_(None).desc(),
+                   StaffingNotification.created_at.desc(), StaffingNotification.id.desc())]
+        sql = []
+        def capture(_conn, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                sql.append(statement)
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            with self.app.test_request_context("/neostaffing/notifications"):
+                first = notification_service.notification_context(self.source_user, now)
+                second = notification_service.notification_context(self.source_user, now, page=2)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+        self.assertEqual(len(first["notifications"]), size)
+        self.assertEqual(len(second["notifications"]), 3)
+        self.assertEqual(first["total"], size + 3)
+        self.assertEqual([row.id for row in first["notifications"] + second["notifications"]], expected)
+        feeds = [statement for statement in sql if "LEFT OUTER JOIN staffing_change_requests" in statement]
+        self.assertEqual(len(feeds), 2)
+        self.assertTrue(all("LIMIT" in statement.upper() for statement in feeds))
+        self._login(self.source_user)
+        first_page = self.client.get("/neostaffing/notifications")
+        second_page = self.client.get("/neostaffing/notifications?page=2")
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(second_page.status_code, 200)
+        self.assertIn(b"NEXT", first_page.data)
+        self.assertIn(b"PREVIOUS", second_page.data)
+        self.assertIn(f"{size + 3} IN LAST 14 DAYS".encode(), second_page.data)
+
     def test_submitter_gets_one_completion_summary_not_each_field_decision(self):
         change_request = self._submit(
             requested_first_name="First",

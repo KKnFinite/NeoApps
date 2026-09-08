@@ -12,7 +12,7 @@
     {% include "neostaffing/_section_nav.html" %}
     <main class="neostaffing-notifications-workspace">
         <header class="neostaffing-notifications-header">
-            <div><h1 id="neostaffing-notifications-title">NOTIFICATIONS</h1><span>{{ context.notifications|length }} IN LAST 14 DAYS</span></div>
+            <div><h1 id="neostaffing-notifications-title">NOTIFICATIONS</h1><span>{{ context.total }} IN LAST 14 DAYS</span></div>
             <div class="neostaffing-notifications-summary" aria-label="Notification summary">
                 <strong class="neostaffing-status-pill {% if context.unread_count %}is-yellow{% else %}is-muted{% endif %}">{{ context.unread_count }} UNREAD</strong>
                 {% if neostaffing_nav.actionable_requests %}<a class="neostaffing-status-pill is-red" href="{{ url_for('neostaffing.change_requests', view='active', queue='routed') }}">{{ neostaffing_nav.actionable_requests }} ACTIONABLE</a>{% endif %}
@@ -36,6 +36,13 @@
                     </tr>
                 {% else %}<tr class="neostaffing-notifications-empty"><td colspan="5">NO NOTIFICATIONS IN THE LAST 14 DAYS.</td></tr>{% endfor %}</tbody>
             </table></div>
+            {% if context.pagination.pages > 1 %}
+            <nav class="neostaffing-notifications-toolbar" aria-label="Notification pages">
+                {% if context.pagination.has_prev %}<a href="{{ url_for('neostaffing.staffing_notifications', page=context.pagination.prev_num) }}">PREVIOUS</a>{% endif %}
+                <span>{{ context.pagination.page }} / {{ context.pagination.pages }}</span>
+                {% if context.pagination.has_next %}<a href="{{ url_for('neostaffing.staffing_notifications', page=context.pagination.next_num) }}">NEXT</a>{% endif %}
+            </nav>
+            {% endif %}
         </section>
     </main>
 </section>

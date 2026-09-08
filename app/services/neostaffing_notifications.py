@@ -24,6 +24,8 @@ from app.services.request_cache import request_cached
 CHANGE_REQUEST_VIEW_PERMISSION = "neostaffing.change_requests.view"
 CHANGE_REQUEST_APPROVE_PERMISSION = "neostaffing.change_requests.approve"
 NOTIFICATION_RETENTION_DAYS = 14
+NOTIFICATION_CLEANUP_BATCH_SIZE = 250
+NOTIFICATION_PAGE_SIZE = 50
 REQUEST_OVERDUE_HOURS = 48
 
 NOTIFICATION_TYPE_LABELS = {
@@ -215,7 +217,9 @@ def maintain_notifications(now=None, *, user=None):
         expired_query = expired_query.filter(StaffingNotification.recipient_user_id == user.id)
     expired_ids = [
         notification_id
-        for (notification_id,) in expired_query.all()
+        for (notification_id,) in expired_query.order_by(
+            StaffingNotification.created_at, StaffingNotification.id
+        ).limit(NOTIFICATION_CLEANUP_BATCH_SIZE).all()
     ]
     purged = 0
     if expired_ids:
@@ -233,10 +237,14 @@ def maintain_notifications(now=None, *, user=None):
     }
 
 
-def notification_context(user, now=None):
+def notification_context(user, now=None, *, page=1):
     now = now or datetime.utcnow()
+    try:
+        page = max(1, int(page))
+    except (TypeError, ValueError):
+        page = 1
     navigation = notification_navigation_state(user)
-    notifications = (
+    pagination = (
         StaffingNotification.query.options(
             joinedload(StaffingNotification.change_request).joinedload(
                 StaffingChangeRequest.person
@@ -252,10 +260,12 @@ def notification_context(user, now=None):
             StaffingNotification.created_at.desc(),
             StaffingNotification.id.desc(),
         )
-        .all()
+        .paginate(page=page, per_page=NOTIFICATION_PAGE_SIZE, error_out=False)
     )
     return {
-        "notifications": notifications,
+        "notifications": pagination.items,
+        "pagination": pagination,
+        "total": pagination.total,
         "unread_count": navigation["unread_notifications"],
         "type_labels": NOTIFICATION_TYPE_LABELS,
     }
@@ -310,10 +320,16 @@ def _resolve_notification_navigation_state(user):
         "full_time_supervisor",
         "twenty_c_full_time_supervisor",
     }:
-        pending = db.session.query(StaffingChangeRequest.routed_approver_person_ids_json).filter(
-            StaffingChangeRequest.status == "pending").yield_per(200)
+        # Decode each distinct routing list once, not every pending request.
+        # Keep the historical JSON decoder rather than assume native JSON types.
+        pending = db.session.query(
+            StaffingChangeRequest.routed_approver_person_ids_json,
+            func.count(StaffingChangeRequest.id).label("request_count"),
+        ).filter(StaffingChangeRequest.status == "pending").group_by(
+            StaffingChangeRequest.routed_approver_person_ids_json
+        ).yield_per(200)
         actionable = sum(
-            1
+            row.request_count
             for row in pending
             if person.id in _decode_person_ids(row.routed_approver_person_ids_json)
         )
@@ -328,7 +344,9 @@ def notification_person(user):
     employee_id = str(getattr(user, "employee_id", "") or "").strip().lower()
     if not employee_id:
         return None
-    return request_cached("staffing.notification_person", user.id, lambda: StaffingPerson.query.filter(
+    return request_cached("staffing.notification_person", user.id, lambda: db.session.query(
+        StaffingPerson.id, StaffingPerson.classification,
+    ).filter(
         StaffingPerson.active.is_(True), func.lower(StaffingPerson.employee_id) == employee_id,
     ).first())
 

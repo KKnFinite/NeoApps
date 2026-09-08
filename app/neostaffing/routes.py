@@ -446,7 +446,7 @@ def staffing_notifications():
         "neostaffing/notifications.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         notifications_context=notification_service.notification_context(
-            current_user
+            current_user, page=request.args.get("page", 1)
         ),
     )
 
