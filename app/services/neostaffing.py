@@ -206,6 +206,8 @@ def shift_flow_area_options(selected_work_area):
 
 
 def create_shift_flow_plan(person, values, selected_work_area):
+    if person.active is False:
+        raise ValueError("Inactive employees cannot be edited in Shift Flow.")
     submitted = any(str(values.get(key, "")).strip() for key in (
         "shift_flow_setup_work_area_id", "shift_flow_sort_start_work_area_id",
         "shift_flow_ballmat_transition", "shift_flow_final_door_work_area_id",
@@ -242,7 +244,11 @@ def _locked_shift_flow_plan(person, expected_version):
     The person lock also covers FLOW NOT SET -> created races. Every interactive
     writer takes these locks in the same order and holds them through commit.
     """
-    db.session.query(StaffingPerson.id).filter_by(id=person.id).with_for_update().one()
+    active = db.session.query(StaffingPerson.active).filter_by(
+        id=person.id
+    ).with_for_update().scalar()
+    if not active:
+        raise ValueError("Inactive employees cannot be edited in Shift Flow.")
     plan = StaffingShiftFlowPlan.query.filter_by(
         staffing_person_id=person.id
     ).populate_existing().with_for_update().first()
@@ -863,6 +869,7 @@ def shift_flow_context(phase="final_door", side="east"):
         .filter(
             StaffingWorkAssignment.active.is_(True),
             StaffingWorkAssignment.work_area_unit_id.in_(shift_area_ids or {-1}),
+            StaffingWorkAssignment.person.has(StaffingPerson.active.is_(True)),
         )
         .all()
     )

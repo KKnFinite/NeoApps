@@ -216,6 +216,54 @@ class ShiftFlowTest(unittest.TestCase):
             self.assertEqual([lane["area"].name for lane in lanes], names)
         self.assertNotIn("Other", expected["sort_start"])
 
+    def test_inactive_employee_hidden_and_guarded_then_reactivated_intact(self):
+        areas = self._configure_final_composite()
+        person = self._person()
+        assignment = staffing_service.assign_work_area(person, self.door)
+        plan = staffing_service.create_shift_flow_plan(person, self._values(), self.door)
+        db.session.commit()
+        assignment_id, plan_id = assignment.id, plan.id
+        version = staffing_service.entity_version(plan)
+
+        def assert_views(expected):
+            for phase, _label in staffing_service.SHIFT_FLOW_PHASES:
+                with self.subTest(phase=phase, expected=expected):
+                    context = staffing_service.shift_flow_context(phase)
+                    self.assertEqual([row["person"].id for row in context["rows"]],
+                                     [person.id] if expected else [])
+                    self.assertEqual(context["planned_count"], expected)
+                    if context["final_composite"]:
+                        self.assertEqual(context["final_composite"]["active_shift_count"], expected)
+
+        assert_views(1)
+        # Retain the cached active ORM person to prove mutations read durable
+        # eligibility under the existing person lock, not the stale object.
+        with db.engine.begin() as connection:
+            connection.execute(StaffingPerson.__table__.update().where(
+                StaffingPerson.id == person.id
+            ).values(active=False))
+        assert_views(0)
+        values = dict(self._values(), expected_version=version)
+        for name, mutate in (
+            ("drawer", lambda: staffing_service.save_shift_flow_plan(person, values, self.door)),
+            ("final-door", lambda: staffing_service.move_shift_flow_final_door(person, self.empty_door.id, self.door, version)),
+            ("lane", lambda: staffing_service.move_shift_flow_phase_lane(person, "setup", self.door.id, self.door, version)),
+            ("composite", lambda: staffing_service.move_shift_flow_final_composite(person, areas["Door 34"].id, "bm1", self.door, version)),
+        ):
+            with self.subTest(mutation=name):
+                with self.assertRaisesRegex(ValueError, "Inactive employees"):
+                    mutate()
+                db.session.rollback()
+        self.assertTrue(db.session.get(StaffingWorkAssignment, assignment_id).active)
+        self.assertEqual(staffing_service.entity_version(plan), version)
+        self.assertEqual(StaffingShiftFlowPlan.query.count(), 1)
+        self.assertEqual(plan.final_door_work_area_id, self.door.id)
+        person.active = True
+        db.session.commit()
+        assert_views(1)
+        self.assertEqual(person.shift_flow_plan.id, plan_id)
+        self.assertTrue(db.session.get(StaffingWorkAssignment, assignment_id).active)
+
     def test_context_projects_people_into_existing_lanes_without_creating_new_ones(self):
         person = self._person()
         plan = staffing_service.create_shift_flow_plan(
