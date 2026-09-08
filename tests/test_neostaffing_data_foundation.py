@@ -1,5 +1,6 @@
 from datetime import date, datetime
 import unittest
+from sqlalchemy import event
 
 from app import create_app
 from app.extensions import db
@@ -18,6 +19,56 @@ from app.services.password_policy import set_user_password
 
 
 class NeoStaffingDataFoundationTest(unittest.TestCase):
+    def test_bulk_assignment_batches_lookup_and_flush_for_assign_move_clear(self):
+        _sort, _operation, department, first = self._hierarchy()
+        second = staffing_service.create_unit({
+            "unit_type": "work_area", "name": "Second", "parent_id": department.id,
+        })
+        supervisor = self._person("BATCH-SUP", "part_time_supervisor")
+        for size in (1, 8):
+            people = [self._person(f"BATCH-{size}-{index}", "part_time") for index in range(size)]
+            # Include an existing assignment and loaded relationship collections.
+            staffing_service.assign_work_area(people[0], first)
+            db.session.commit()
+            ids = [person.id for person in people] + [supervisor.id, 999999]
+            for action, target, expected in (
+                ("assign", first, size-1), ("assign", first, 0),
+                ("move", second, size), ("move", second, 0),
+                ("clear", None, size), ("clear", None, 0),
+                ("assign", first, size),
+            ):
+                with self.subTest(size=size, action=action, expected=expected):
+                    list(first.work_assignments)
+                    list(second.work_assignments)
+                    for person in people:
+                        person.work_assignment
+                    counts = {"selects": 0, "flushes": 0}
+
+                    def sql(_conn, _cursor, statement, *_args):
+                        if statement.lstrip().upper().startswith("SELECT") and "staffing_work_assignments" in statement:
+                            counts["selects"] += 1
+
+                    def flushed(*_args):
+                        counts["flushes"] += 1
+
+                    session = db.session()
+                    event.listen(db.engine, "before_cursor_execute", sql)
+                    event.listen(session, "after_flush", flushed)
+                    try:
+                        result = staffing_service.bulk_update_work_area_assignments(ids, action, target)
+                    finally:
+                        event.remove(db.engine, "before_cursor_execute", sql)
+                        event.remove(session, "after_flush", flushed)
+                    self.assertEqual(counts, {"selects": 1, "flushes": int(expected > 0)})
+                    self.assertEqual(result, {"updated": expected,
+                        "skipped": [supervisor.full_name], "missing": ["999999"]})
+                    for person in people:
+                        assignment = person.work_assignment
+                        self.assertEqual(assignment.active, action != "clear")
+                        self.assertEqual(assignment.work_area_unit_id, (second if action == "clear" else target).id)
+                    self.assertIsNone(supervisor.work_assignment)
+                    db.session.commit()
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",

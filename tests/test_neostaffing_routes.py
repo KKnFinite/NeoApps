@@ -67,7 +67,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
-        response = self.client.get("/neostaffing")
+        # Keep a trap for the removed summary helper without restoring its work.
+        with patch.object(staffing_service, "landing_context", create=True,
+                          side_effect=AssertionError("Unused landing counts ran")) as summary:
+            response = self.client.get("/neostaffing")
+            summary.assert_not_called()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"neostaffing-primary-menu", response.data)

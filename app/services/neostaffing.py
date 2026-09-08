@@ -1428,30 +1428,6 @@ def leadership_level_choices():
     return [(value, LEADERSHIP_LEVEL_LABELS[value]) for value in STAFFING_LEADERSHIP_LEVELS]
 
 
-def landing_context():
-    active_people = StaffingPerson.query.filter_by(active=True)
-    active_people_count = active_people.count()
-    active_work_assignments = StaffingWorkAssignment.query.filter_by(active=True).count()
-    active_work_area_count = StaffingUnit.query.filter_by(unit_type="work_area", active=True).count()
-    today = date.today()
-    today_attendance = StaffingDailyAttendance.query.filter_by(attendance_date=today).count()
-    active_non_management = active_people.filter(
-        StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS)
-    ).count()
-    unassigned = max(active_non_management - active_work_assignments, 0)
-    return {
-        "summary": {
-            "total_people": StaffingPerson.query.count(),
-            "active_roster": active_people_count,
-            "assigned": active_work_assignments,
-            "unassigned": unassigned,
-            "work_areas": active_work_area_count,
-            "today_attendance": today_attendance,
-        },
-        "today": today,
-    }
-
-
 def create_person(values):
     person_values = _person_values(values)
     person = StaffingPerson()
@@ -1746,7 +1722,7 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
     )
     people_by_id = {person.id: person for person in people}
     result = {"updated": 0, "skipped": [], "missing": []}
-
+    eligible = []
     for person_id in ids:
         person = people_by_id.get(person_id)
         if not person:
@@ -1757,13 +1733,52 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
             result["skipped"].append(person.full_name or person.employee_id)
             continue
 
+        if normalized_action != "clear":
+            _validate_work_assignment(person, work_area)
+        eligible.append(person)
+
+    # Validate the complete selection before staging any changes. Preload only
+    # selected eligible employees; no per-person lookups or flushes.
+    assignments = {row.person_id: row for row in StaffingWorkAssignment.query.filter(
+        StaffingWorkAssignment.person_id.in_([person.id for person in eligible])
+    ).all()} if eligible else {}
+    changed = []
+    touched_area_ids = set()
+    for person in eligible:
+        assignment = assignments.get(person.id)
         if normalized_action == "clear":
-            clear_work_assignment(person)
+            if not assignment or not assignment.active:
+                continue
+            touched_area_ids.add(assignment.work_area_unit_id)
+            assignment.active = False
         else:
-            assign_work_area(person, work_area)
+            if (assignment and assignment.active
+                    and assignment.work_area_unit_id == work_area.id
+                    and assignment.effective_date is None):
+                continue
+            if assignment:
+                touched_area_ids.add(assignment.work_area_unit_id)
+                assignment.work_area_unit_id = work_area.id
+                assignment.active = True
+                assignment.effective_date = None
+            else:
+                assignment = StaffingWorkAssignment(
+                    person_id=person.id, work_area_unit_id=work_area.id, active=True
+                )
+                db.session.add(assignment)
+            touched_area_ids.add(work_area.id)
+        changed.append((person, assignment))
         result["updated"] += 1
 
     db.session.flush()
+    # FK batching must not leave already-loaded relationship collections stale.
+    for person, assignment in changed:
+        db.session.expire(person, ["work_assignment"])
+        db.session.expire(assignment, ["work_area"])
+    for area_id in touched_area_ids:
+        area = db.session.identity_map.get(db.session.identity_key(StaffingUnit, area_id))
+        if area is not None:
+            db.session.expire(area, ["work_assignments"])
     return result
 
 

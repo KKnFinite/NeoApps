@@ -112,7 +112,6 @@ def index():
         app_role=role,
         can_manage_app=can_manage,
         attendance_shortcut=staffing_service.management_attendance_context_for_user(current_user),
-        landing=staffing_service.landing_context(),
     )
 
 
