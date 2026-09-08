@@ -24,64 +24,6 @@
     font-size: clamp(0.72rem, 1.6vw, 0.92rem);
 }
 
-.neosektor-shell {
-    display: grid;
-    justify-items: center;
-    gap: clamp(18px, 4vw, 32px);
-    width: min(100%, 980px);
-    margin: 0 auto;
-    color: var(--neo-bright-silver);
-}
-
-.neosektor-hero {
-    display: grid;
-    justify-items: center;
-    gap: 12px;
-    width: 100%;
-    text-align: center;
-}
-
-.neosektor-kicker {
-    color: var(--node-sektor-highlight);
-    font-size: 0.76rem;
-    font-weight: 950;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    text-shadow: 0 0 14px rgba(var(--node-sektor-highlight-rgb), 0.28);
-}
-
-.neosektor-hero h1 {
-    margin: 0;
-    color: var(--neo-bright-silver);
-    font-size: clamp(2.25rem, 8vw, 5.5rem);
-    font-weight: 950;
-    letter-spacing: 0.04em;
-    line-height: 0.95;
-    text-transform: uppercase;
-    text-shadow:
-        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.3),
-        0 2px 0 rgba(0, 0, 0, 0.72);
-}
-
-.neosektor-hero p {
-    max-width: 680px;
-    margin: 0;
-    color: rgba(238, 246, 255, 0.74);
-    font-size: clamp(0.86rem, 2vw, 1rem);
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    line-height: 1.55;
-    text-align: center;
-    text-transform: uppercase;
-}
-
-.neosektor-menu {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-    width: min(100%, 860px);
-}
-
 .neosektor-menu-link {
     display: inline-flex;
     align-items: center;
@@ -117,79 +59,6 @@
         0 0 22px rgba(var(--node-sektor-highlight-rgb), 0.36);
 }
 
-.neosektor-menu-link-secondary {
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 38%),
-        linear-gradient(180deg, var(--node-sektor-secondary), #090b0e);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 0 16px rgba(var(--node-sektor-primary-rgb), 0.16);
-}
-
-.neosektor-overview-panel {
-    display: grid;
-    justify-items: center;
-    gap: 18px;
-    width: min(100%, 860px);
-    padding: clamp(18px, 4vw, 30px);
-    border: 1px solid rgba(244, 246, 248, 0.2);
-    border-radius: 8px;
-    background:
-        radial-gradient(circle at 50% 0%, rgba(var(--node-sektor-primary-rgb), 0.14), transparent 18rem),
-        linear-gradient(135deg, rgba(244, 246, 248, 0.07), transparent 38%),
-        linear-gradient(180deg, rgba(16, 18, 22, 0.94), rgba(5, 7, 11, 0.98));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 0 24px rgba(var(--node-sektor-primary-rgb), 0.14);
-}
-
-.neosektor-overview-panel h2 {
-    margin: 0;
-    color: var(--node-sektor-highlight);
-    font-size: clamp(1rem, 2.4vw, 1.28rem);
-    font-weight: 950;
-    letter-spacing: 0.14em;
-    text-align: center;
-    text-transform: uppercase;
-}
-
-.neosektor-overview-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    width: 100%;
-}
-
-.neosektor-overview-grid div {
-    display: grid;
-    justify-items: center;
-    gap: 8px;
-    min-height: 92px;
-    padding: 16px;
-    border: 1px solid rgba(244, 246, 248, 0.18);
-    border-radius: 7px;
-    background: linear-gradient(180deg, rgba(32, 35, 41, 0.9), rgba(7, 8, 11, 0.94));
-    text-align: center;
-}
-
-.neosektor-overview-grid span,
-.neosektor-mode-pill {
-    color: rgba(238, 246, 255, 0.62);
-    font-size: 0.66rem;
-    font-weight: 900;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-}
-
-.neosektor-overview-grid strong,
-.neosektor-mode-pill {
-    color: #fff;
-    font-size: 1rem;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
 .neosektor-live-shell {
     width: min(100%, 980px);
     gap: clamp(14px, 3vw, 22px);
@@ -197,47 +66,6 @@
 
 .neosektor-live-hero h1 {
     font-size: clamp(2.2rem, 7vw, 4.8rem);
-}
-
-.neosektor-operator-title {
-    display: grid;
-    justify-items: center;
-    gap: 8px;
-    width: 100%;
-    text-align: center;
-}
-
-.neosektor-operator-title span {
-    color: var(--node-sektor-highlight);
-    font-size: 0.72rem;
-    font-weight: 950;
-    letter-spacing: 0.2em;
-    line-height: 1.15;
-    text-transform: uppercase;
-    text-shadow: 0 0 14px rgba(var(--node-sektor-highlight-rgb), 0.28);
-}
-
-.neosektor-operator-title h1 {
-    margin: 0;
-    color: var(--neo-bright-silver);
-    font-size: clamp(2rem, 7vw, 4.4rem);
-    font-weight: 950;
-    letter-spacing: 0.04em;
-    line-height: 0.95;
-    text-transform: uppercase;
-    text-shadow:
-        0 0 18px rgba(var(--node-sektor-primary-rgb), 0.3),
-        0 2px 0 rgba(0, 0, 0, 0.72);
-}
-
-.neosektor-operator-title p {
-    margin: 0;
-    color: rgba(238, 246, 255, 0.74);
-    font-size: 0.78rem;
-    font-weight: 900;
-    letter-spacing: 0.1em;
-    line-height: 1.25;
-    text-transform: uppercase;
 }
 
 .neosektor-live-wave-strip,
@@ -1357,8 +1185,6 @@
 }
 
 @media (max-width: 760px) {
-    .neosektor-menu,
-    .neosektor-overview-grid,
     .neosektor-live-summary-head,
     .neosektor-live-totals,
     .neosektor-wave-grid,
@@ -1377,7 +1203,6 @@
         justify-self: center;
     }
 
-    .neosektor-overview-panel,
     .neosektor-live-panel {
         width: 100%;
     }
