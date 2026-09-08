@@ -251,6 +251,11 @@ class NeoSektorOperationalStateBundle:
                 self.sort_state,
                 change_tracker=self._change_tracker,
             )
+        elif self.integration_mode != "google_primary":
+            # Neo-backed reads already loaded this sort, including a missing-sort
+            # snapshot. Google-primary reads still need the persisted route state.
+            self.routing_sort_state = self.sort_state
+            self.driver_routes = _read_only_driver_routes(self.sort_state.id)
         else:
             self.routing_sort_state, self.driver_routes = (
                 _read_only_sort_and_driver_routes(

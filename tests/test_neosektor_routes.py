@@ -3370,6 +3370,55 @@ class NeoSektorRoutesTest(unittest.TestCase):
         from app.services.neosektor_live_counts import DEFAULT_DRIVER_ROUTES
         self.assertEqual(NeoSektorDriverRouteSetting.query.count(), len(DEFAULT_DRIVER_ROUTES))
 
+    def test_changed_routing_state_reuses_loaded_sort_without_changing_payload(self):
+        from app.services import neosektor_live_counts as service
+
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
+            date.today(), time(23)
+        )
+        self.assertEqual(self.client.get("/neosektor/live-counts").status_code, 200)
+
+        def legacy_read(bundle):
+            if bundle.driver_routes is None:
+                bundle.routing_sort_state, bundle.driver_routes = (
+                    service._read_only_sort_and_driver_routes(
+                        bundle.gateway, bundle.sort_date, bundle.sort_name
+                    )
+                )
+            return bundle.driver_routes
+
+        paths = (
+            ("/neosektor/live-counts/state", 19),
+            ("/neosektor/driver-routing/state", 19),
+            ("/neosektor/tunnel-conductor/state", 20),
+            ("/neosektor/ballmat/state?side=east", 20),
+            ("/neosektor/ballmat/state?side=west", 20),
+        )
+        for path, select_budget in paths:
+            with self.subTest(path=path):
+                url = path + ("&" if "?" in path else "?") + "revision=stale"
+                with patch.object(service.NeoSektorOperationalStateBundle,
+                                  "ensure_driver_routes", legacy_read):
+                    legacy, legacy_sql, _, _ = self._capture_get_metrics(url)
+                response, sql, commits, _ = self._capture_get_metrics(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.get_json()["changed"])
+                self.assertEqual(response.get_json(), legacy.get_json())
+                self.assertIn("ballmat_routing", response.get_json()["state"])
+                reads = [s for s in sql if s.startswith("select")]
+                self.assertEqual(len(reads), select_budget)
+                self.assertEqual(len(reads) + 1, sum(
+                    s.startswith("select") for s in legacy_sql
+                ))
+                self.assertEqual(sum(s.startswith(
+                    "select neosektor_sort_states.id as"
+                ) for s in reads), 1)
+                self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+                self.assertEqual(commits, 0)
+
     def test_established_neosektor_gets_do_not_commit_or_repeat_access_queries(self):
         self._login_approved_user(role="simulator")
         paths = (
