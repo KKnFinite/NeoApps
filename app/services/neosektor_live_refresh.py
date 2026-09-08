@@ -21,7 +21,9 @@ from app.models import (
     NeoSektorSortState,
     NeoSektorUldOnTheWayEvent,
     NeoSektorWaveState,
+    SortDateMission,
 )
+from app.services.operation_scope import current_operational_sort_operation
 from app.services.neosektor_sheets_compat import (
     DEFAULT_NEOSEKTOR_INTEGRATION_MODE,
     GOOGLE_PRIMARY,
@@ -141,6 +143,19 @@ def neosektor_state_revision(
                 NeoSektorWaveState.all_up_started_at,
             ).where(NeoSektorWaveState.sort_state_id.in_(sort_state_ids))
         ).all()
+
+    if scope == ROUTING_STATE_SCOPE:
+        # Match the canonical Wave 2 arrival gate used by Driver Routing.
+        # Fold it into the existing UNION so Block-In invalidation needs no
+        # separate mission read (the operation resolver is request-cached).
+        operation = current_operational_sort_operation(gateway)
+        aggregate_queries.append(_aggregate_query(
+            "second_wave_arrivals", SortDateMission,
+            SortDateMission.sort_date_operation_id == (operation.id if operation else -1),
+            SortDateMission.mission_type == "arrival",
+            SortDateMission.wave.in_(("2", "2nd Wave")),
+            SortDateMission.actual_block_in_datetime_utc.isnot(None),
+        ))
 
     aggregate_rows = (
         sorted(

@@ -1533,6 +1533,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
     def test_second_wave_driver_routing_waits_for_canonical_block_in_then_all_in(self):
         self._login_approved_user(role="simulator")
         operation = self._add_sort_operation(date.today())
+        operation.generated_by_user_id = User.query.first().id
+        self.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = datetime.combine(date.today(), time(23))
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
         mission = SortDateMission(
             sort_date_operation=operation,
             sort_date=operation.sort_date,
@@ -1548,14 +1551,31 @@ class NeoSektorRoutesTest(unittest.TestCase):
         db.session.add(mission)
         db.session.commit()
 
-        with patch(
-            "app.services.neosektor_live_counts.current_operational_sort_operation",
-            return_value=operation,
-        ):
-            before = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
-            mission.actual_block_in_datetime_utc = datetime.utcnow()
-            db.session.commit()
-            after = self.client.get("/neosektor/driver-routing/state").get_json()["state"]
+        self.client.get('/neosektor/driver-routing')
+        endpoints = ('/neosektor/driver-routing/state',
+                     '/neosektor/ballmat/state?side=east',
+                     '/neosektor/ballmat/state?side=west')
+        before_payloads = {url: self.client.get(url).get_json() for url in endpoints}
+        for url, payload in before_payloads.items():
+            separator = '&' if '?' in url else '?'
+            unchanged = self.client.get(f'{url}{separator}revision={payload["revision"]}').get_json()
+            self.assertFalse(unchanged['changed'])
+            self.assertEqual(payload['state']['ballmat_routing']['second'], 'NOT ARRIVED')
+        # No Sektor count, settings or routing rows change: only canonical Block-In.
+        mission.actual_block_in_datetime_utc = datetime.utcnow()
+        db.session.commit()
+        after_payloads = {}
+        for url, payload in before_payloads.items():
+            separator = '&' if '?' in url else '?'
+            changed = self.client.get(f'{url}{separator}revision={payload["revision"]}').get_json()
+            self.assertTrue(changed['changed'], url)
+            self.assertNotEqual(changed['revision'], payload['revision'])
+            self.assertEqual(changed['state']['ballmat_routing']['second'], '-')
+            self.assertEqual(changed['state']['ballmat_routing']['first'],
+                             payload['state']['ballmat_routing']['first'])
+            after_payloads[url] = changed
+        before = before_payloads[endpoints[0]]['state']
+        after = after_payloads[endpoints[0]]['state']
 
         self.assertEqual(before["routing"]["routes"]["second"]["display_state"], "not_arrived")
         self.assertEqual(after["routing"]["routes"]["second"]["display_state"], "all_in")
@@ -3511,7 +3531,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             (
                 "/neosektor/live-counts",
                 "/neosektor/live-counts/state",
-                "app.neonodes.neosektor.routes.ballmat_state_payload",
+                "app.neonodes.neosektor.routes.driver_routing_state_payload",
             ),
             (
                 "/neosektor/ebm",
