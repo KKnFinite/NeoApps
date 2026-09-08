@@ -21,6 +21,9 @@ from app.services.gateway_matrix import (
 
 ATTENDANCE_SUMMARY_RETENTION_DAYS = 365
 ATTENDANCE_SUMMARY_CLEANUP_BATCH_SIZE = 250
+# Catch up one operation per request, within the retained-summary horizon.
+# Older summary absence cannot distinguish missed work from expired history.
+ATTENDANCE_ROLLOVER_LOOKBACK_DAYS = ATTENDANCE_SUMMARY_RETENTION_DAYS
 
 
 @dataclass(frozen=True)
@@ -114,8 +117,20 @@ def finalize_attendance_summaries(operation, user=None, finalized_at=None):
     )
 
 
+def _attendance_detail_scope(operation, staffing_sort_id):
+    """Identical date/sort/identity contract for detection and deletion."""
+    return (
+        StaffingDailyAttendance.attendance_date == operation.sort_date,
+        StaffingDailyAttendance.sort_unit_id == staffing_sort_id,
+        or_(
+            StaffingDailyAttendance.sort_date_operation_id == operation.id,
+            StaffingDailyAttendance.sort_date_operation_id.is_(None),
+        ),
+    )
+
+
 def process_attendance_rollover(current_operation, user=None, *, now_local=None):
-    """Finalize then purge one prior Night detail set in one caller transaction."""
+    """Finalize then purge at most one outstanding Night in a bounded date window."""
     if not current_operation:
         return AttendanceRolloverResult(None, None)
     gateway = current_operation.gateway or _gateway_for_operation(current_operation)
@@ -127,34 +142,47 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
             status="current_operation_not_active",
         )
 
+    staffing_sort = staffing_service._staffing_sort_for_operation(
+        current_operation, staffing_service._daily_attendance_hierarchy()
+    )
+    prior_candidates = SortDateOperation.query.filter(
+        SortDateOperation.gateway_code == current_operation.gateway_code,
+        SortDateOperation.sort_name == current_operation.sort_name,
+        SortDateOperation.sort_date < current_operation.sort_date,
+        SortDateOperation.sort_date >= (
+            local_now.date() - timedelta(days=ATTENDANCE_ROLLOVER_LOOKBACK_DAYS)
+        ),
+    )
+    outstanding_details = db.session.query(StaffingDailyAttendance.id).filter(
+        *_attendance_detail_scope(SortDateOperation, staffing_sort.id)
+    ).exists()
+    has_summary = db.session.query(StaffingAttendanceSummary.id).filter(
+        StaffingAttendanceSummary.sort_date_operation_id == SortDateOperation.id
+    ).exists()
     prior_operation = (
-        SortDateOperation.query.filter(
-            SortDateOperation.gateway_code == current_operation.gateway_code,
-            SortDateOperation.sort_name == current_operation.sort_name,
-            SortDateOperation.sort_date < current_operation.sort_date,
-        )
-        .order_by(SortDateOperation.sort_date.desc(), SortDateOperation.id.desc())
+        prior_candidates.filter(or_(outstanding_details, ~has_summary))
+        .order_by(SortDateOperation.sort_date, SortDateOperation.id)
         .with_for_update()
         .first()
     )
     if not prior_operation:
+        # Preserve the existing already-processed result without walking history.
+        latest = prior_candidates.order_by(
+            SortDateOperation.sort_date.desc(), SortDateOperation.id.desc()
+        ).first()
         return AttendanceRolloverResult(
             current_operation.id,
-            None,
-            status="no_prior_operation",
+            latest.id if latest else None,
+            status="already_processed" if latest else "no_prior_operation",
         )
 
-    linked_detail_count = StaffingDailyAttendance.query.filter_by(
-        sort_date_operation_id=prior_operation.id
-    ).count()
-    legacy_detail_count = StaffingDailyAttendance.query.filter(
-        StaffingDailyAttendance.attendance_date == prior_operation.sort_date,
-        StaffingDailyAttendance.sort_date_operation_id.is_(None),
+    detail_count = StaffingDailyAttendance.query.filter(
+        *_attendance_detail_scope(prior_operation, staffing_sort.id)
     ).count()
     existing_summary_count = StaffingAttendanceSummary.query.filter_by(
         sort_date_operation_id=prior_operation.id
     ).count()
-    if existing_summary_count and not linked_detail_count and not legacy_detail_count:
+    if existing_summary_count and not detail_count:
         return AttendanceRolloverResult(
             current_operation.id,
             prior_operation.id,
@@ -166,12 +194,7 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
         user,
     )
     legacy_or_linked = StaffingDailyAttendance.query.filter(
-        StaffingDailyAttendance.attendance_date == prior_operation.sort_date,
-        StaffingDailyAttendance.sort_unit_id == finalization.staffing_sort_unit_id,
-        or_(
-            StaffingDailyAttendance.sort_date_operation_id == prior_operation.id,
-            StaffingDailyAttendance.sort_date_operation_id.is_(None),
-        ),
+        *_attendance_detail_scope(prior_operation, finalization.staffing_sort_unit_id)
     )
     purged_detail_count = legacy_or_linked.delete(synchronize_session=False)
     db.session.flush()

@@ -270,6 +270,75 @@ class NeoStaffingAttendanceHistoryTest(unittest.TestCase):
         self.assertEqual(StaffingDailyAttendance.query.count(), 3)
         self.assertEqual(StaffingAttendanceSummary.query.count(), 0)
 
+    def test_unrelated_legacy_sort_does_not_reprocess_finalized_operation(self):
+        with patch.object(history_service, "operation_is_active_at", return_value=True):
+            history_service.process_attendance_rollover(self.current)
+        db.session.commit()
+        before = [(row.id, row.worked_count, row.finalized_at)
+                  for row in StaffingAttendanceSummary.query.order_by(StaffingAttendanceSummary.id)]
+        other_sort = StaffingUnit(unit_type="sort", name="Day", active=True)
+        db.session.add(other_sort)
+        db.session.flush()
+        legacy = StaffingDailyAttendance(
+            person_id=self.hub_here.id,
+            attendance_date=self.PRIOR_DATE,
+            sort_unit_id=other_sort.id,
+            sort_date_operation_id=None,
+            status="here",
+        )
+        db.session.add(legacy)
+        db.session.commit()
+        with (
+            patch.object(history_service, "operation_is_active_at", return_value=True),
+            patch.object(history_service, "finalize_attendance_summaries") as finalize,
+        ):
+            result = history_service.process_attendance_rollover(self.current)
+        db.session.commit()
+        self.assertEqual(result.status, "already_processed")
+        finalize.assert_not_called()
+        self.assertFalse(result.changed)
+        self.assertEqual(StaffingDailyAttendance.query.one().id, legacy.id)
+        self.assertEqual(before, [(row.id, row.worked_count, row.finalized_at)
+                                 for row in StaffingAttendanceSummary.query.order_by(StaffingAttendanceSummary.id)])
+
+    def test_missed_operation_is_processed_oldest_first_one_per_request(self):
+        older = self._operation(date(2026, 8, 21))
+        # Expired summary absence must not restart processing of retired history.
+        expired = self._operation(date(2024, 8, 21))
+        db.session.add(StaffingDailyAttendance(
+            person_id=self.hub_here.id,
+            attendance_date=older.sort_date,
+            sort_unit_id=self.staffing_sort.id,
+            sort_date_operation_id=older.id,
+            work_area_unit_id=self.hub_area.id,
+            operation_unit_id=self.hub.id,
+            department_unit_id=self.outbound.id,
+            status="here",
+        ))
+        db.session.commit()
+        with patch.object(history_service, "operation_is_active_at", return_value=True):
+            first = history_service.process_attendance_rollover(
+                self.current, now_local=datetime(2026, 8, 24, 21)
+            )
+            db.session.commit()
+            self.assertEqual(first.prior_sort_date_operation_id, older.id)
+            self.assertEqual(first.purged_detail_count, 1)
+            self.assertEqual(StaffingDailyAttendance.query.filter_by(
+                sort_date_operation_id=self.prior.id).count(), 3)
+            self.assertEqual(StaffingAttendanceSummary.query.filter_by(
+                sort_date_operation_id=self.prior.id).count(), 0)
+            self.assertEqual(StaffingAttendanceSummary.query.filter_by(
+                sort_date_operation_id=older.id, scope_unit_id=self.hub.id).one().worked_count, 1)
+            second = history_service.process_attendance_rollover(
+                self.current, now_local=datetime(2026, 8, 24, 21)
+            )
+            db.session.commit()
+        self.assertEqual(second.prior_sort_date_operation_id, self.prior.id)
+        self.assertEqual(second.purged_detail_count, 3)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+        self.assertEqual(StaffingAttendanceSummary.query.filter_by(
+            sort_date_operation_id=expired.id).count(), 0)
+
     def test_summary_failure_prevents_any_detail_purge(self):
         with (
             patch.object(history_service, "operation_is_active_at", return_value=True),
