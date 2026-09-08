@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from sqlalchemy import func, literal, or_, select, union_all
@@ -24,6 +24,7 @@ from app.models import (
     SortDateMission,
 )
 from app.services.operation_scope import current_operational_sort_operation
+from app.services.neosektor_live_counts import current_neosektor_sort_date
 from app.services.neosektor_sheets_compat import (
     DEFAULT_NEOSEKTOR_INTEGRATION_MODE,
     GOOGLE_PRIMARY,
@@ -56,8 +57,8 @@ def neosektor_state_revision(
     if scope not in {COUNT_STATE_SCOPE, ROUTING_STATE_SCOPE}:
         raise ValueError("Invalid NeoSektor live-state scope.")
 
-    sort_date = sort_date or date.today()
     sort_name = str(sort_name or "night").strip().lower() or "night"
+    sort_date = sort_date or current_neosektor_sort_date(gateway, sort_name)
     now_utc = _naive_utc(now_utc)
     settings = NeoSektorOperationalSetting.query.filter_by(
         gateway_id=gateway.id

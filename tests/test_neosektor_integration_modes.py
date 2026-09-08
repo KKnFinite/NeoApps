@@ -1614,8 +1614,10 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 g.pop("_login_user", None)
                 response, metrics = self._capture_post_metrics(url, payload)
                 self.assertEqual(response.status_code, 200)
-                # 7 auth/gateway + 8 bundle + 6 current-sort/live-refresh reads.
-                self.assertEqual(metrics["selects"], 21)
+                # 7 auth/gateway + 8 bundle + 7 current-sort/live-refresh reads:
+                # the bundle now resolves its operational date instead of using
+                # the server calendar. Child reads and the commit remain single.
+                self.assertEqual(metrics["selects"], 22)
                 self.assertEqual(metrics["commits"], 1)
                 self.assertTrue(
                     all(count == 1 for count in metrics["table_selects"].values())

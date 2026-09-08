@@ -18,6 +18,7 @@ from app.models import (
     SortDateMission,
 )
 from app.services.operation_scope import current_operational_sort_operation
+from app.services.gateway_matrix import current_gateway_local_datetime, current_operations_for_gateway
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.live_screen_refresh import live_screen_refresh_value
 
@@ -121,8 +122,8 @@ class NeoSektorOperationalStateBundle:
                 db.session.execute(text("UPDATE gateways SET id=id WHERE id=:id"), {"id": gateway.id})
             else:
                 db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
-        sort_date = sort_date or date.today()
         sort_name = normalize_sort_name(sort_name)
+        sort_date = sort_date or current_neosektor_sort_date(gateway, sort_name)
         change_tracker = _PersistentStateChangeTracker()
         settings = _operational_settings_for_state(
             gateway,
@@ -1005,8 +1006,8 @@ def apply_standalone_compat_values(
     sort_name=None,
 ):
     """Apply only the established standalone Sheet cells to NeoSektor state."""
-    sort_date = sort_date or date.today()
     sort_name = normalize_sort_name(sort_name)
+    sort_date = sort_date or current_neosektor_sort_date(gateway, sort_name)
     sort_state = get_or_create_sort_state(gateway, sort_date, sort_name)
     ballmat_wave_counts = _get_or_create_ballmat_wave_counts(sort_state)
     waves = _get_or_create_waves(sort_state)
@@ -1066,8 +1067,8 @@ def canonical_neosektor_compat_values(
     compare Google with the actual Neon rows, not with a GOOGLE PRIMARY display
     bundle that would read those same Google values back.
     """
-    sort_date = sort_date or date.today()
     sort_name = normalize_sort_name(sort_name)
+    sort_date = sort_date or current_neosektor_sort_date(gateway, sort_name)
     (
         _sort_state,
         wave_counts,
@@ -1438,6 +1439,21 @@ def _rows_for_sort_state(model, sort_state_id):
     if sort_state_id is None:
         return []
     return model.query.filter_by(sort_state_id=sort_state_id).all()
+
+
+def current_neosektor_sort_date(gateway, sort_name=None):
+    """Use canonical current-sort identity, not the web server's calendar date.
+
+    The existing resolver keeps an active prior-date night operation current
+    across midnight. Match the requested sort; never borrow another sort's date.
+    Explicit caller dates bypass this default entirely.
+    """
+    local_now = current_gateway_local_datetime(gateway)
+    name = normalize_sort_name(sort_name)
+    for operation in current_operations_for_gateway(gateway, now=local_now):
+        if normalize_sort_name(operation.sort_name) == name:
+            return operation.sort_date
+    return local_now.date()
 
 
 def normalize_sort_name(sort_name):

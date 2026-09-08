@@ -2,7 +2,7 @@ from tests.css_contracts import stylesheet_source
 from tests.html_contracts import document, assert_mobile_drawer
 import re
 import unittest
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -4082,6 +4082,79 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(dashboard_response.status_code, 200)
         self.assertNotIn(b"data-state-url=", dashboard_response.data)
         self.assertNotIn(b"window.NeoLiveUpdates.create", dashboard_response.data)
+
+    def test_operational_state_and_revision_keep_chicago_night_across_utc_midnight(self):
+        from app.services import neosektor_live_counts as counts
+        from app.services import neosektor_live_refresh as revision
+
+        self._login_approved_user(role="simulator")
+        prior = date(2026, 9, 8)
+        host_date = date(2026, 9, 9)
+        self._add_sort_operation(prior, "night")
+        self._set_sort_window("night", time(22), time(4))
+        for sort_date, count in ((prior, 7), (host_date, 99)):
+            counts.apply_standalone_compat_values(self.gateway, {"B2": count}, sort_date=sort_date)
+        db.session.commit()
+        # UTC/server is September 9 at both instants: Chicago is first September
+        # 8 at 22:00, then September 9 at 02:00 with September 8's night active.
+        with patch.object(counts, "date", wraps=date) as server_date, patch.object(
+            revision, "date", wraps=date, create=True
+        ) as revision_server_date:
+            server_date.today.return_value = host_date
+            revision_server_date.today.return_value = host_date
+            for hour in (3, 7):
+                self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+                    2026, 9, 9, hour, tzinfo=timezone.utc
+                )
+                expected = revision.neosektor_state_revision(
+                    self.gateway, revision.ROUTING_STATE_SCOPE, sort_date=prior
+                )
+                for path in ("/neosektor/live-counts/state", "/neosektor/driver-routing/state",
+                             "/neosektor/tunnel-conductor/state", "/neosektor/ballmat/state?side=east",
+                             "/neosektor/ballmat/state?side=west"):
+                    with self.subTest(utc_hour=hour, path=path):
+                        response, sql, commits, _ = self._capture_get_metrics(path)
+                        self.assertEqual(response.status_code, 200)
+                        payload = response.get_json()
+                        self.assertEqual(payload["state"]["summary"]["sort_date"], prior.isoformat())
+                        self.assertEqual(payload["state"]["sides"]["east"]["waves"][0]["count"], 7)
+                        self.assertEqual(payload["revision"], expected)
+                        poll = path + ("&" if "?" in path else "?") + "revision=" + expected
+                        self.assertFalse(self.client.get(poll).get_json()["changed"])
+                        self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+                        self.assertEqual(commits, 0)
+                self.assertEqual(counts.canonical_neosektor_compat_values(self.gateway)["B2"], 7)
+            saved = self.client.post("/neosektor/tunnel-conductor/wave", json={"wave": "first", "delta": 1})
+            self.assertEqual(saved.status_code, 200)
+            self.assertEqual(saved.get_json()["state"]["summary"]["sort_date"], prior.isoformat())
+            self.assertEqual(counts.canonical_neosektor_compat_values(self.gateway, sort_date=prior)["D2"], 1)
+            self.assertEqual(counts.canonical_neosektor_compat_values(self.gateway, sort_date=host_date)["D2"], 0)
+
+    def test_operational_date_fallback_explicit_dates_and_compat_writes(self):
+        from app.services import neosektor_live_counts as counts
+
+        prior = date(2026, 9, 8)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 9, 9, 3, tzinfo=timezone.utc
+        )
+        self.assertEqual(counts.current_neosektor_sort_date(self.gateway), prior)
+        self._add_sort_operation(prior, "night")
+        self._set_sort_window("night", time(22), time(4))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 9, 9, 7, tzinfo=timezone.utc
+        )
+        self.assertEqual(counts.current_neosektor_sort_date(self.gateway), prior)
+        self.assertEqual(counts.current_neosektor_sort_date(self.gateway, "twilight"), prior + timedelta(days=1))
+        counts.apply_standalone_compat_values(self.gateway, {"B2": 8})
+        counts.apply_standalone_compat_values(self.gateway, {"B2": 91}, sort_date=prior + timedelta(days=1))
+        db.session.commit()
+        self.assertEqual(counts.canonical_neosektor_compat_values(self.gateway)["B2"], 8)
+        self.assertEqual(counts.canonical_neosektor_compat_values(
+            self.gateway, sort_date=prior + timedelta(days=1))["B2"], 91)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
+            2026, 9, 9, 10, tzinfo=timezone.utc
+        )
+        self.assertEqual(counts.current_neosektor_sort_date(self.gateway), prior + timedelta(days=1))
 
     def test_neosektor_refresh_active_for_midnight_crossing_operation_window(self):
         self._login_approved_user(role="watcher")
