@@ -137,6 +137,7 @@
         </section>
     </main>
 </section>
+<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-neosektor-discharge]");
@@ -239,20 +240,7 @@
 
     const setRefreshStatus = (refresh) => {
         const status = refresh || {};
-        const isActive = status.auto_refresh_enabled !== false;
-        root.dataset.refreshActive = isActive ? "true" : "false";
-
-        if (refreshPaused) {
-            refreshPaused.hidden = isActive;
-            refreshPaused.replaceChildren(
-                document.createTextNode(status.message || "Live updates off - outside Ops window")
-            );
-            if (status.operation_label && status.window_label) {
-                const detail = document.createElement("span");
-                detail.textContent = `${status.operation_label} - ${status.window_label}`;
-                refreshPaused.appendChild(detail);
-            }
-        }
+        window.NeoSektorLive.renderStatus(root, status, refreshPaused, " - ");
 
         if (!refreshController) {
             refreshController = window.NeoLiveUpdates.create({
@@ -265,31 +253,17 @@
     };
 
     const refreshState = async () => {
-        try {
-            const pollUrl = new URL(stateUrl, window.location.href);
-            pollUrl.searchParams.set("revision", currentRevision);
-            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
-            if (!response.ok) {
-                throw new Error("Discharge refresh failed.");
-            }
-            const payload = await response.json();
-            if (!payload.ok) {
-                throw new Error("Discharge refresh failed.");
-            }
-            currentRevision = payload.revision || currentRevision;
-            const refresh = payload.refresh || payload.state?.refresh || {};
-            setRefreshStatus(refresh);
-            if (refresh.auto_refresh_enabled === false || payload.changed === false) {
-                return;
-            }
-            if (!payload.state) {
-                throw new Error("Discharge refresh failed.");
-            }
-            renderQueue(payload.state.requests || []);
-            renderSelected(payload.state.requests || []);
-        } catch (error) {
-            throw error;
-        }
+        return window.NeoSektorLive.poll({
+            stateUrl, revision: currentRevision,
+            errorMessage: "Discharge refresh failed.",
+            requestOptions: { cache: "no-store", credentials: "same-origin" },
+            onRevision: revision => { currentRevision = revision || currentRevision; },
+            onStatus: setRefreshStatus,
+            onState: state => {
+                renderQueue(state.requests || []);
+                renderSelected(state.requests || []);
+            },
+        });
     };
 
     setRefreshStatus(initialRefreshStatus);

@@ -152,6 +152,7 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260907-optimistic-v2') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-ballmat-operations]");
@@ -363,20 +364,8 @@
     const setRefreshStatus = (refresh) => {
         const status = refresh || {};
         const isActive = status.auto_refresh_enabled !== false;
-        root.dataset.refreshActive = isActive ? "true" : "false";
+        window.NeoSektorLive.renderStatus(root, status, refreshPaused);
         countsWrap?.classList.toggle("has-refresh-notice", !isActive);
-
-        if (refreshPaused) {
-            refreshPaused.hidden = isActive;
-            refreshPaused.replaceChildren(
-                document.createTextNode(status.message || "Live updates off - outside Ops window"),
-            );
-            if (status.operation_label && status.window_label) {
-                const detail = document.createElement("span");
-                detail.textContent = `${status.operation_label} · ${status.window_label}`;
-                refreshPaused.appendChild(detail);
-            }
-        }
 
         if (!refreshController) {
             refreshController = window.NeoLiveUpdates.create({
@@ -389,40 +378,21 @@
     };
 
     const refreshState = async () => {
-        // A poll can have started before a successful local mutation commits.
-        // Never let that older snapshot replace the mutation response in the DOM.
+        // Keep mutation/revision snapshots local to this page's write lifecycle.
         const revisionAtRequest = currentRevision;
         const mutationEpochAtRequest = mutationEpoch;
-        try {
-            const pollUrl = new URL(stateUrl, window.location.href);
-            pollUrl.searchParams.set("revision", revisionAtRequest);
-            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
-            if (!response.ok) {
-                throw new Error("Ballmat refresh failed.");
-            }
-            const payload = await response.json();
-            if (!payload.ok) {
-                throw new Error("Ballmat refresh failed.");
-            }
-            if (
+        return window.NeoSektorLive.poll({
+            stateUrl, revision: revisionAtRequest,
+            errorMessage: "Ballmat refresh failed.",
+            requestOptions: { cache: "no-store", credentials: "same-origin" },
+            accept: () => !(
                 revisionAtRequest !== currentRevision
                 || mutationEpochAtRequest !== mutationEpoch
-            ) {
-                return;
-            }
-            currentRevision = payload.revision || currentRevision;
-            const refresh = payload.refresh || payload.state?.refresh || {};
-            setRefreshStatus(refresh);
-            if (refresh.auto_refresh_enabled === false || payload.changed === false) {
-                return;
-            }
-            if (!payload.state) {
-                throw new Error("Ballmat refresh failed.");
-            }
-            applyState(payload.state);
-        } catch (error) {
-            throw error;
-        }
+            ),
+            onRevision: revision => { currentRevision = revision || currentRevision; },
+            onStatus: setRefreshStatus,
+            onState: applyState,
+        });
     };
 
     const saveSelectedSide = async () => {

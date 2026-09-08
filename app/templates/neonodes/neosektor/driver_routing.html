@@ -89,6 +89,7 @@
     </main>
 </section>
 
+<script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-driver-routing]");
@@ -192,8 +193,7 @@
 
     const setRefreshStatus = (refresh) => {
         const status = refresh || {};
-        const isActive = status.auto_refresh_enabled !== false;
-        root.dataset.refreshActive = isActive ? "true" : "false";
+        window.NeoSektorLive.renderStatus(root, status);
 
         if (!refreshController) {
             refreshController = window.NeoLiveUpdates.create({
@@ -208,30 +208,14 @@
     };
 
     const refreshState = async () => {
-        try {
-            const pollUrl = new URL(stateUrl, window.location.href);
-            pollUrl.searchParams.set("revision", currentRevision);
-            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
-            if (!response.ok) {
-                throw new Error("Driver Routing refresh failed.");
-            }
-            const payload = await response.json();
-            if (!payload.ok) {
-                throw new Error("Driver Routing refresh failed.");
-            }
-            currentRevision = payload.revision || currentRevision;
-            const refresh = payload.refresh || payload.state?.refresh || {};
-            setRefreshStatus(refresh);
-            if (refresh.auto_refresh_enabled === false || payload.changed === false) {
-                return;
-            }
-            if (!payload.state) {
-                throw new Error("Driver Routing refresh failed.");
-            }
-            applyState(payload.state);
-        } catch (error) {
-            throw error;
-        }
+        return window.NeoSektorLive.poll({
+            stateUrl, revision: currentRevision,
+            errorMessage: "Driver Routing refresh failed.",
+            requestOptions: { cache: "no-store", credentials: "same-origin" },
+            onRevision: revision => { currentRevision = revision || currentRevision; },
+            onStatus: setRefreshStatus,
+            onState: applyState,
+        });
     };
 
     setRefreshStatus(initialRefreshStatus);

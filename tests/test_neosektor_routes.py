@@ -50,6 +50,31 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_live_helper_loads_once_before_each_screen_controller(self):
+        self._login_approved_user(role="simulator")
+        for page, endpoint in (
+            ("live-counts", "/neosektor/live-counts/state"),
+            ("tunnel-conductor", "/neosektor/tunnel-conductor/state"),
+            ("ebm", "/neosektor/ballmat/state?side=east"),
+            ("wbm", "/neosektor/ballmat/state?side=west"),
+            ("driver-routing", "/neosektor/driver-routing/state"),
+            ("driver-routing?tv=1", "/neosektor/driver-routing/state"),
+            ("discharge", "/neosektor/discharge/state"),
+        ):
+            with self.subTest(page=page):
+                response = self.client.get("/neosektor/" + page)
+                self.assertEqual(response.status_code, 200)
+                html = response.get_data(as_text=True)
+                self.assertIn(f'data-state-url="{endpoint}"', html)
+                self.assertEqual(html.count("js/neosektor_live.js"), 1)
+                self.assertLess(html.index("js/neosektor_live.js"), html.index("window.NeoSektorLive.poll"))
+                self.assertEqual(html.count("window.NeoLiveUpdates.create"), 1)
+                self.assertIn("window.NeoSektorLive.renderStatus(root, status", html)
+        for page in ("/neosektor", "/neosektor/settings"):
+            response = self.client.get(page)
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn(b"js/neosektor_live.js", response.data)
+
     def test_display_stylesheets_are_page_scoped_and_keep_cascade_position(self):
         self._login_approved_user(role="operator")
         bundles = {"neosektor_driver_routing.css", "neosektor_discharge.css"}
@@ -3895,7 +3920,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 else b"currentRevision"
             )
             self.assertIn(
-                b'pollUrl.searchParams.set("revision", ' + revision_source + b")",
+                b"stateUrl, revision: " + revision_source + b",",
                 page.data,
             )
             revisions[page_url] = match.group(1).decode()
