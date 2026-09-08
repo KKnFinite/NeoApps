@@ -50,6 +50,24 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_live_counts_resolves_attendance_area_only_when_permitted(self):
+        self._login_approved_user(role="operator")
+        for allowed in (False, True):
+            with self.subTest(can_manage_employees=allowed), patch(
+                'app.neonodes.neosektor.routes._can_manage_employees', return_value=allowed,
+            ), patch(
+                'app.neonodes.neosektor.routes.staffing_service.neosektor_manage_default_area',
+                return_value='east',
+            ) as resolve:
+                response = self.client.get('/neosektor/live-counts')
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(resolve.call_count, int(allowed))
+                if allowed:
+                    self.assertIn(b'MANAGE EMPLOYEES</a>', response.data)
+                    self.assertIn(b'area=east', response.data)
+                else:
+                    self.assertNotIn(b'MANAGE EMPLOYEES</a>', response.data)
+
     def test_live_counts_routing_uses_existing_state_request_and_revision(self):
         from app.neonodes.neosektor import routes
         self._login_approved_user(role="operator")
@@ -112,7 +130,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
     def test_operator_can_open_neosektor_dashboard(self):
         self._login_approved_user(role="operator")
 
-        response = self.client.get("/neosektor")
+        with patch('app.neonodes.neosektor.routes._visible_neosektor_page_items',
+                   side_effect=AssertionError('Unused dashboard menu lookup')):
+            response = self.client.get("/neosektor")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"NeoSektor", response.data)

@@ -49,7 +49,7 @@
 @media (max-width:900px) {
     body.neosektor-live-counts-page { --operational-mobile-header-height:calc(88px + var(--neo-safe-top)); background:#060d11; }
     body.neosektor-live-counts-page .operational-mobile-header {
-        background:linear-gradient(90deg,#03070b88,#03070b22),url('../images/neosektor/dashboard_mobile.png') center 42% / cover;
+        background:linear-gradient(90deg,#03070b88,#03070b22),url('../images/neosektor/dashboard_mobile.webp') center 42% / cover;
         border-bottom:1px solid #354047;
     }
     body.neosektor-live-counts-page .operational-mobile-identity small { font:300 11px/1.5 NeoFontLite,sans-serif; letter-spacing:.05em; }

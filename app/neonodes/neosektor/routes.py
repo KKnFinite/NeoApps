@@ -196,7 +196,6 @@ def index():
         "neonodes/neosektor/index.html",
         gateway=gateway,
         can_view=True,
-        menu_items=_visible_neosektor_page_items(),
         mobile_dashboard_items=_visible_neosektor_mobile_dashboard_items(),
     )
 
@@ -669,6 +668,7 @@ def live_counts():
     context["can_manage_employees"] = _can_manage_employees()
     context["manage_employees_default_area"] = (
         staffing_service.neosektor_manage_default_area(current_user)
+        if context["can_manage_employees"] else None
     )
     _commit_neosektor_initialization_if_changed(bundle)
     return render_template(

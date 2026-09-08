@@ -6,7 +6,7 @@
         background:#060d11;
     }
     body.neosektor-tunnel-operator-page .operational-mobile-header {
-        background:linear-gradient(90deg,#03070b88,#03070b22),url('../images/neosektor/dashboard_mobile.png') center 42% / cover;
+        background:linear-gradient(90deg,#03070b88,#03070b22),url('../images/neosektor/dashboard_mobile.webp') center 42% / cover;
         border-bottom:1px solid #354047;
     }
     body.neosektor-tunnel-operator-page .operational-mobile-identity small {
