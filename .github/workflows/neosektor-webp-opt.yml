@@ -1,0 +1,148 @@
+name: NeoSektor WebP optimization
+
+on:
+  push:
+    branches:
+      - neosektor-webp-opt-20260908
+
+permissions:
+  contents: read
+
+jobs:
+  optimize-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pillow
+
+      - name: Convert exact production PNGs and build validation artifact
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageChops, ImageStat
+          import json, math, shutil
+
+          image_dir = Path('app/static/images/neosektor')
+          out_dir = Path('artifact-out')
+          out_dir.mkdir(parents=True, exist_ok=True)
+
+          cases = [
+              ('desktop', image_dir / 'dashboard_desktop.png'),
+              ('mobile', image_dir / 'dashboard_mobile.png'),
+          ]
+          metrics = {}
+
+          for label, src_path in cases:
+              dst_path = src_path.with_suffix('.webp')
+              with Image.open(src_path) as source:
+                  source.load()
+                  original_mode = source.mode
+                  has_alpha = 'A' in source.getbands()
+                  working = source.convert('RGBA' if has_alpha else 'RGB')
+                  source_rgb = working.convert('RGB')
+                  save_kwargs = {
+                      'format': 'WEBP',
+                      'quality': 94,
+                      'method': 6,
+                      'exact': True,
+                  }
+                  if source.info.get('icc_profile'):
+                      save_kwargs['icc_profile'] = source.info['icc_profile']
+                  if source.info.get('exif'):
+                      save_kwargs['exif'] = source.info['exif']
+                  working.save(dst_path, **save_kwargs)
+                  source_size = source.size
+
+              with Image.open(dst_path) as encoded:
+                  encoded.load()
+                  assert encoded.size == source_size, (label, encoded.size, source_size)
+                  encoded_rgb = encoded.convert('RGB')
+
+              diff = ImageChops.difference(source_rgb, encoded_rgb)
+              stats = ImageStat.Stat(diff)
+              mse = sum(value * value for value in stats.rms[:3]) / 3.0
+              psnr = float('inf') if mse == 0 else 10.0 * math.log10((255.0 * 255.0) / mse)
+              mae = sum(stats.mean[:3]) / 3.0
+              png_bytes = src_path.stat().st_size
+              webp_bytes = dst_path.stat().st_size
+              reduction = (1.0 - (webp_bytes / png_bytes)) * 100.0
+
+              # Side-by-side visual preview: exact PNG decode on left, WebP decode on right.
+              left = source_rgb.copy()
+              right = encoded_rgb.copy()
+              left.thumbnail((420, 520), Image.Resampling.LANCZOS)
+              right.thumbnail((420, 520), Image.Resampling.LANCZOS)
+              canvas = Image.new('RGB', (left.width + right.width, max(left.height, right.height)), 'black')
+              canvas.paste(left, (0, 0))
+              canvas.paste(right, (left.width, 0))
+              preview_path = out_dir / f'{label}_comparison.jpg'
+              canvas.save(preview_path, 'JPEG', quality=88, optimize=True)
+
+              metrics[label] = {
+                  'png_path': str(src_path),
+                  'webp_path': str(dst_path),
+                  'mode': original_mode,
+                  'dimensions': [source_size[0], source_size[1]],
+                  'png_bytes': png_bytes,
+                  'webp_bytes': webp_bytes,
+                  'reduction_percent': round(reduction, 3),
+                  'psnr_db': None if math.isinf(psnr) else round(psnr, 3),
+                  'mae': round(mae, 4),
+              }
+
+              target_dir = out_dir / image_dir
+              target_dir.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(dst_path, target_dir / dst_path.name)
+
+          template = Path('app/templates/neonodes/neosektor/index.html')
+          text = template.read_text(encoding='utf-8')
+          expected_mobile = "images/neosektor/dashboard_mobile.png"
+          expected_desktop = "images/neosektor/dashboard_desktop.png"
+          assert text.count(expected_mobile) == 1, text.count(expected_mobile)
+          assert text.count(expected_desktop) == 1, text.count(expected_desktop)
+          text = text.replace(expected_mobile, 'images/neosektor/dashboard_mobile.webp')
+          text = text.replace(expected_desktop, 'images/neosektor/dashboard_desktop.webp')
+          template.write_text(text, encoding='utf-8')
+          template_out = out_dir / template
+          template_out.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copy2(template, template_out)
+
+          (out_dir / 'metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
+          print(json.dumps(metrics, indent=2))
+          PY
+
+      - name: Run relevant NeoSektor tests
+        run: |
+          mapfile -t TESTS < <(grep -RIl -E 'NeoSektor|neosektor' tests --include='test_*.py' || true)
+          printf 'NeoSektor-related tests:\n%s\n' "${TESTS[*]}"
+          if [ "${#TESTS[@]}" -eq 0 ]; then
+            echo 'No NeoSektor-named Python tests found.'
+            exit 1
+          fi
+          python -m pytest -q "${TESTS[@]}"
+
+      - name: Required checks
+        run: |
+          python -m compileall -q app
+          git add -N app/static/images/neosektor/dashboard_desktop.webp app/static/images/neosektor/dashboard_mobile.webp
+          git diff --check
+          echo '--- focused diff ---'
+          git diff -- app/templates/neonodes/neosektor/index.html app/static/images/neosektor/dashboard_desktop.webp app/static/images/neosektor/dashboard_mobile.webp
+          echo '--- working status ---'
+          git status --short
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: neosektor-webp-output
+          path: artifact-out
+          if-no-files-found: error
+          retention-days: 1
