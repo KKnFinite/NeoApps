@@ -1,0 +1,1 @@
+NeoSektor WebP validation trigger for isolated helper branch.
