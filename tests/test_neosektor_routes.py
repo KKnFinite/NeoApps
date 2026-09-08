@@ -178,8 +178,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"data-operational-sidebar", response.data)
-        self.assertIn(b"images/neosektor/dashboard_desktop.png", response.data)
-        self.assertIn(b"images/neosektor/dashboard_mobile.png", response.data)
+        self.assertIn(b"images/neosektor/dashboard_desktop.webp", response.data)
+        self.assertIn(b"images/neosektor/dashboard_mobile.webp", response.data)
+        self.assertNotIn(b"images/neosektor/dashboard_desktop.png", response.data)
+        self.assertNotIn(b"images/neosektor/dashboard_mobile.png", response.data)
         tiles = document(response).findall(**{'data-node-dashboard-tile':None})
         self.assertEqual([t.attrs['data-node-dashboard-tile'] for t in tiles],
                          ['ebm','wbm','tunnel','driver-routing','discharge','settings','live-counts'])
