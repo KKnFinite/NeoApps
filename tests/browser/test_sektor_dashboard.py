@@ -29,7 +29,7 @@ class SektorDashboardBrowserTest(unittest.TestCase):
                         self.assertTrue(page.locator('.sektor-command-copy strong').evaluate_all('es=>es.every(e=>{const r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=e.closest("a").getBoundingClientRect();return t.left>=b.left && t.right<=b.right && t.top>=b.top && t.bottom<=b.bottom;})'))
                         self.assertIn('NeoFontLite',page.locator('.sektor-command-copy strong').first.evaluate('e=>getComputedStyle(e).fontFamily'))
                         art = page.locator('.sektor-command-art img').evaluate('e=>e.currentSrc')
-                        self.assertIn('dashboard_mobile.png' if width<901 else 'dashboard_desktop.png',art)
+                        self.assertIn('dashboard_mobile.webp' if width<901 else 'dashboard_desktop.webp',art)
                         self.assertTrue(page.locator('.sektor-command-tile--live-counts').evaluate("e=>Math.abs(e.getBoundingClientRect().width-e.parentElement.getBoundingClientRect().width)<2"))
                         page.screenshot(path=str(evidence/f'{engine}-{width}-{height}.png'),full_page=True)
                         if width<901:
