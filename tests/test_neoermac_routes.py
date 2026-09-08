@@ -136,6 +136,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("white-space: normal;", sidebar_css)
         self.assertIn(b'data-operational-topbar', response.data)
         self.assertIn(b'class="ermac-command"', response.data)
+        self.assertIn(b'<span>SHIFT OPERATIONS</span>', response.data)
         self.assertIn(b'neoermac_dashboard_desktop.webp', response.data)
         self.assertIn(b"NeoErmac Dashboard</h1>", response.data)
         self.assertNotIn(b"neoermac-dashboard-panel", response.data)

@@ -174,22 +174,31 @@
         min-height: calc(100svh - var(--operational-mobile-header-height) - var(--neo-dock-clearance));
         padding: clamp(220px, 33svh, 350px) max(20px, var(--neo-safe-right)) 16px max(20px, var(--neo-safe-left));
     }
-    .ermac-command-art img { object-position: center top; }
+    .ermac-command-art { overflow: hidden; }
+    .ermac-command-art img {
+        object-position: center top;
+        transform: translateY(calc(-1 * clamp(60px, 10svh, 96px)));
+    }
+    .ermac-command::before {
+        background: linear-gradient(180deg,
+            transparent calc(clamp(220px, 33svh, 350px) - 70px),
+            #05090bb8 clamp(220px, 33svh, 350px), #05090bee 100%);
+    }
     .ermac-command-head { margin-bottom: 6px; font-size: 12px; }
     .ermac-command-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
     .ermac-command-tile {
-        min-height: 58px; padding: 8px 14px; gap: 16px;
-        border: 0; border-bottom: 1px solid #87929930; border-radius: 0;
-        background: linear-gradient(90deg, #27090c80, #05090b44 65%);
+        min-height: 54px; padding: 7px 14px; gap: 14px;
+        border: 0; border-bottom: 1px solid #8792991c; border-radius: 0;
+        background: linear-gradient(90deg, #27090c50, #05090b22 65%);
     }
     .ermac-command-tile::before { inset-block: 9px; width: 2px; }
-    .ermac-command-tile::after { content: "›"; margin-left: auto; color: var(--node-ermac-primary); font-size: 26px; }
+    .ermac-command-tile::after { content: "›"; margin-left: auto; color: var(--node-ermac-primary); font-size: 20px; opacity: .65; }
     .ermac-command-tile-icon {
-        flex-basis: 40px; height: 40px; padding: 0;
-        border: 1px solid rgba(var(--node-ermac-primary-rgb), .5); border-radius: 6px;
-        background: rgba(var(--node-ermac-primary-rgb), .2);
+        flex-basis: 36px; height: 36px; padding: 0;
+        border: 1px solid rgba(var(--node-ermac-primary-rgb), .3); border-radius: 6px;
+        background: rgba(var(--node-ermac-primary-rgb), .12);
     }
-    .ermac-command-tile-icon svg { width: 25px; height: 25px; }
+    .ermac-command-tile-icon svg { width: 23px; height: 23px; }
     .ermac-command-tile-copy strong { font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
