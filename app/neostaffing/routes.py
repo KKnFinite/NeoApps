@@ -1819,10 +1819,7 @@ def _render_org_chart():
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
         can_edit_structure=user_can(ORG_CHART_EDIT_STRUCTURE_PERMISSION),
-        can_assign_management=bool(
-            user_can(MANAGEMENT_ASSIGN_PERMISSION)
-            and _can_directly_change_management_relationships()
-        ),
+        can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
         org_chart=context,
         hierarchy=context["tree"],
         units=context["units"],
@@ -2030,10 +2027,7 @@ def create_person():
         ):
             raise ValueError("Add Employee requires one active Work Area.")
         if units and person.classification not in staffing_service.NON_MANAGEMENT_CLASSIFICATIONS:
-            if not (
-                user_can(MANAGEMENT_ASSIGN_PERMISSION)
-                and _can_directly_change_management_relationships()
-            ):
+            if not user_can(MANAGEMENT_ASSIGN_PERMISSION):
                 raise ValueError("You do not have permission to assign management.")
         staffing_service.create_initial_person_assignments(person, units)
 
@@ -2194,13 +2188,6 @@ def management_assignments():
 @neostaffing_app_required(permission_key=MANAGEMENT_ASSIGN_PERMISSION)
 def create_management_assignment():
     redirect_endpoint, redirect_values = _management_assignment_return_target()
-    if not _can_directly_change_management_relationships():
-        flash(
-            "Direct management assignment changes require an eligible FT Supervisor, Manager, "
-            "Division Manager, or Grandmaster.",
-            "error",
-        )
-        return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
     try:
         mutation = management_review_service.assignment_add_mutation(
             request.form.get("person_id"),
@@ -2229,13 +2216,6 @@ def delete_management_assignment(assignment_id):
         flash("Management assignment was not found.", "error")
         return redirect(url_for("neostaffing.management_assignments"))
     redirect_endpoint, redirect_values = _management_assignment_return_target()
-    if not _can_directly_change_management_relationships():
-        flash(
-            "Direct management assignment changes require an eligible FT Supervisor, Manager, "
-            "Division Manager, or Grandmaster.",
-            "error",
-        )
-        return redirect(url_for(redirect_endpoint, **(redirect_values or {})))
     try:
         staffing_service.delete_leadership_assignment(assignment)
         db.session.commit()

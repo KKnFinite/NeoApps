@@ -1793,6 +1793,49 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Current Work Area", unassigned_response.data)
         self.assertIn(b'<li class="is-unassigned">Unassigned</li>', unassigned_response.data)
 
+    def test_simulator_without_staffing_person_can_assign_and_remove_pt_supervisor(self):
+        actor = self._user("staffing_unlinked_assignment_simulator")
+        self._grant_app_access(actor, "neostaffing", "simulator")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        supervisor = staffing_service.create_person({
+            "employee_id": "UNLINKED-PT",
+            "first_name": "Unlinked",
+            "last_name": "Supervisor",
+            "seniority_date": "2018-01-01",
+            "classification": "part_time_supervisor",
+        })
+        db.session.commit()
+        self.assertEqual(StaffingPerson.query.count(), 1)
+        self.assertIsNone(staffing_service.linked_user_for_person(supervisor))
+        self.assertEqual(PermissionRule.query.filter_by(
+            permission_key="neostaffing.management.assign"
+        ).one().minimum_role, "simulator")
+        client = self._logged_in_client(actor.username)
+        url = f"/neostaffing/org-chart?unit_id={work_area.id}"
+        page = client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b">ASSIGN</button>", page.data)
+        assigned = client.post("/neostaffing/app-management/management-assignments", data={
+            "person_id": supervisor.id,
+            "unit_id": work_area.id,
+            "leadership_level": "work_area",
+            "return_unit_id": work_area.id,
+        })
+        self.assertEqual(assigned.status_code, 302)
+        self.assertEqual(assigned.location, url)
+        assignment = StaffingLeadershipAssignment.query.filter_by(
+            person_id=supervisor.id, unit_id=work_area.id,
+            leadership_level="work_area", active=True,
+        ).one()
+        self.assertIn(b">REMOVE</button>", client.get(url).data)
+        removed = client.post(
+            f"/neostaffing/app-management/management-assignments/{assignment.id}/delete",
+            data={"return_unit_id": work_area.id},
+        )
+        self.assertEqual(removed.status_code, 302)
+        self.assertEqual(removed.location, url)
+        self.assertFalse(db.session.get(StaffingLeadershipAssignment, assignment.id).active)
+
     def test_pt_supervisor_candidates_do_not_require_a_linked_user_account(self):
         editor_user = self._user("staffing_pt_candidate_editor")
         self._grant_app_access(editor_user, "neostaffing", "simulator")
