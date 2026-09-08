@@ -50,6 +50,28 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_display_stylesheets_are_page_scoped_and_keep_cascade_position(self):
+        self._login_approved_user(role="operator")
+        bundles = {"neosektor_driver_routing.css", "neosektor_discharge.css"}
+        for path, expected in (
+            ("/neosektor/driver-routing", "neosektor_driver_routing.css"),
+            ("/neosektor/driver-routing?tv=1", "neosektor_driver_routing.css"),
+            ("/neosektor/discharge", "neosektor_discharge.css"),
+            ("/neosektor/live-counts", None),
+            ("/neosektor", None),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                html = response.get_data(as_text=True)
+                links = re.findall(r'<link rel="stylesheet" href="([^"]+)"', html)
+                loaded = {name for name in bundles if any(name in link for link in links)}
+                self.assertEqual(loaded, {expected} if expected else set())
+                self.assertNotIn("neosektor_display.css", html)
+                if expected:
+                    self.assertIn(expected, links[-1])
+                    self.assertLess(html.index("css/neosektor_mobile.css"), html.index(expected))
+
     def test_live_counts_resolves_attendance_area_only_when_permitted(self):
         self._login_approved_user(role="operator")
         for allowed in (False, True):

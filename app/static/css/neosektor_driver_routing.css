@@ -24,27 +24,6 @@
 .sektor-tv-exit { position:fixed; top:6px; right:10px; z-index:1100; color:#aab8c1; padding:6px 10px; font:400 12px/1.3 var(--font-sans); }
 .sektor-tv-exit:focus-visible { outline:2px solid white; }
 
-/* Discharge: retain the existing queue/detail DOM and all workflow hooks. */
-#sektor-discharge { background:#060d11; }
-#sektor-discharge :is(.tunnel-panel,.neosektor-discharge-row,.neosektor-discharge-events,.neosektor-discharge-send-panel) {
-    border:0; border-radius:0; background:transparent; box-shadow:none;
-}
-#sektor-discharge .neosektor-discharge-wrap { gap:16px; }
-#sektor-discharge :is(.neosektor-discharge-queue,.neosektor-discharge-detail,.neosektor-discharge-events) { border-top:1px solid #354047; padding:12px 0; }
-#sektor-discharge .neosektor-discharge-list { gap:0; }
-#sektor-discharge .neosektor-discharge-row { grid-template-columns:64px minmax(0,1fr) 65px 95px; grid-template-areas:'door counts time flag'; gap:8px; min-height:60px; padding:8px; border-bottom:1px solid #354047; }
-#sektor-discharge .neosektor-discharge-row:is(.is-selected,:hover) { background:#141d23; }
-#sektor-discharge .neosektor-discharge-row:focus-visible { outline:2px solid #d9e7ed; outline-offset:-2px; }
-#sektor-discharge .neosektor-discharge-count-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
-#sektor-discharge .neosektor-discharge-count-strip > span { display:flex; flex-direction:column; align-items:center; padding:2px; border:0; border-radius:0; background:none; box-shadow:none; }
-#sektor-discharge :is(.neosektor-discharge-door,.neosektor-discharge-count-strip strong) { font:600 24px/1.2 var(--font-sans); }
-#sektor-discharge :is(.neosektor-discharge-time,.neosektor-discharge-setup,.neosektor-discharge-uld-label) { font:400 12px/1.3 var(--font-sans); letter-spacing:0; }
-#sektor-discharge .neosektor-discharge-setup { color:#ef3547; }
-#sektor-discharge .neosektor-discharge-send-panel { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding:12px 0; border-block:1px solid #354047; }
-#sektor-discharge .neosektor-discharge-send-panel button { grid-column:1 / -1; min-height:44px; background:#43131c; border:1px solid #8c2c39; box-shadow:none; }
-#sektor-discharge .neosektor-discharge-send-panel input { width:100%; min-width:0; min-height:44px; background:#0b151b; border:1px solid #354047; font:600 18px/1.3 var(--font-sans); }
-#sektor-discharge .neosektor-discharge-send-panel label { background:none; border:0; box-shadow:none; }
-#sektor-discharge .neosektor-discharge-detail-head > div { background:none; border:0; border-radius:0; padding:4px 0; }
 @media (max-width:900px) {
     html:not(#sektor-tv) [data-driver-routing] > .app-header .header-title { display:none; }
     html:not(#sektor-tv) [data-driver-routing] > .app-header { display:flex; min-height:0; padding:0; margin:0; border:0; background:none; box-shadow:none; justify-content:flex-start; }
@@ -65,15 +44,4 @@
     #sektor-tv .driver-priority-rank { font-size:18px; }
     #sektor-tv .driver-arrow { height:48px; }
     .sektor-tv-entry { bottom:calc(var(--neo-dock-clearance) + 8px); }
-    body:has(#sektor-discharge) { --operational-mobile-header-height:calc(88px + var(--neo-safe-top)); background:#060d11; }
-    body:has(#sektor-discharge) .operational-mobile-header { background:linear-gradient(90deg,#03070b88,#03070b22),url('../images/neosektor/dashboard_mobile.webp') center 42% / cover; border-bottom:1px solid #354047; }
-    body:has(#sektor-discharge) .operational-mobile-identity small { font:300 11px/1.5 NeoFontLite,sans-serif; letter-spacing:.05em; }
-    body #sektor-discharge { margin:16px -5px 0; padding:0 8px; border:0; box-shadow:none; }
-    body #sektor-discharge .neosektor-discharge-wrap { width:100%; margin:0; padding:0; display:flex; flex-direction:column; gap:12px; }
-    body #sektor-discharge .operation-refresh-banner { display:none; }
-    body #sektor-discharge .live-update-controls { order:-1; margin:0; padding:3px 0; min-height:38px; gap:6px; border-bottom:1px solid #354047; }
-    body #sektor-discharge :is(.live-update-status,.live-update-monitor-toggle) { display:block; min-width:0; font:400 9px/1.3 var(--font-sans); padding:2px; background:none; border:0; box-shadow:none; white-space:normal; }
-    body #sektor-discharge .neosektor-discharge-row { grid-template-columns:44px minmax(0,1fr) 48px 54px; gap:5px; padding:8px 0; }
-    body #sektor-discharge :is(.neosektor-discharge-time,.neosektor-discharge-setup) { font-size:10px; overflow-wrap:anywhere; }
-    body #sektor-discharge :is(.neosektor-discharge-door,.neosektor-discharge-count-strip strong) { font-size:20px; }
 }

@@ -7,6 +7,22 @@ import unittest
 
 
 class NeoSektorCssCleanupTest(unittest.TestCase):
+    def test_display_bundles_keep_page_rules_and_mobile_overrides_separate(self):
+        css_root = Path(__file__).resolve().parents[1] / "app/static/css"
+        driver = (css_root / "neosektor_driver_routing.css").read_text()
+        discharge = (css_root / "neosektor_discharge.css").read_text()
+        self.assertFalse((css_root / "neosektor_display.css").exists())
+        self.assertNotIn("#sektor-discharge", driver)
+        self.assertNotIn("#sektor-tv", discharge)
+        self.assertNotIn("data-driver-routing", discharge)
+        for css in (driver, discharge):
+            self.assertEqual(css.count("@media"), 1)
+            self.assertIn("@media (max-width:900px) {", css)
+        self.assertLess(driver.index("#sektor-tv [data-driver-bay-name]"), driver.index("@media"))
+        self.assertGreater(driver.index("html:not(#sektor-tv)"), driver.index("@media"))
+        self.assertLess(discharge.index("#sektor-discharge .neosektor-discharge-row"), discharge.index("@media"))
+        self.assertGreater(discharge.index("body:has(#sektor-discharge)"), discharge.index("@media"))
+
     def test_retired_dashboard_classes_are_absent_and_live_menu_is_preserved(self):
         root = Path(__file__).resolve().parents[1]
         retired = (

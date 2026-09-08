@@ -47,8 +47,10 @@
     {% if is_neosektor_ballmat_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260907-tracks-v2') }}">
     {% endif %}
-    {% if request.endpoint in ['neosektor.discharge', 'neosektor.driver_routing'] %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_display.css', v=config.STATIC_ASSET_VERSION, ui='20260907-driver-fit-v2') }}">
+    {% if request.endpoint == 'neosektor.driver_routing' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260908-split-v1') }}">
+    {% elif request.endpoint == 'neosektor.discharge' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge.css', v=config.STATIC_ASSET_VERSION, ui='20260908-split-v1') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
