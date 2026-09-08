@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
-from sqlalchemy import select, text
+from sqlalchemy import literal, select, text, union_all
 
 from app.extensions import db
 from app.models import (
@@ -1258,11 +1258,12 @@ def _read_only_ballmat_components(gateway, sort_date, sort_name):
     sort_state = _copy_sort_state(persisted, gateway, sort_date, sort_name)
     sort_state_id = getattr(persisted, "id", None)
 
-    wave_counts = _read_only_wave_counts(sort_state_id)
+    count_rows = _read_only_count_rows(sort_state_id)
+    wave_counts = _read_only_wave_counts(count_rows["wave"])
     waves = _read_only_waves(sort_state_id)
     ballmats = _read_only_ballmats(sort_state_id)
-    open_bays = _read_only_open_bays(sort_state_id)
-    bay_statuses = _read_only_bay_statuses(sort_state_id)
+    open_bays = _read_only_open_bays(count_rows["open"])
+    bay_statuses = _read_only_bay_statuses(count_rows["bay"])
     return sort_state, wave_counts, waves, ballmats, open_bays, bay_statuses
 
 
@@ -1316,10 +1317,38 @@ def _read_only_waves(sort_state_id):
     ]
 
 
-def _read_only_wave_counts(sort_state_id):
+def _read_only_count_rows(sort_state_id):
+    """Read three small child collections together, without a multiplying join.
+
+    Only the read-only Neo path uses this projection. Each branch keeps its
+    own sort predicate; missing rows still flow through the existing defaults.
+    """
+    rows = {"wave": [], "open": [], "bay": []}
+    if sort_state_id is None:
+        return rows
+    wave = NeoSektorBallmatWaveCount
+    opened = NeoSektorOpenBayState
+    bay = NeoSektorBayStatus
+    query = union_all(
+        select(literal("wave"), wave.side, wave.wave_name, wave.count, wave.status)
+        .where(wave.sort_state_id == sort_state_id),
+        select(literal("open"), opened.side, literal(""), opened.open_count, literal("Empty"))
+        .where(opened.sort_state_id == sort_state_id),
+        select(literal("bay"), bay.side, bay.bay_name, literal(0), bay.status)
+        .where(bay.sort_state_id == sort_state_id),
+    )
+    for kind, side, name, count, status in db.session.execute(query):
+        rows[kind].append(SimpleNamespace(
+            side=side, wave_name=name, bay_name=name,
+            count=count, open_count=count, status=status,
+        ))
+    return rows
+
+
+def _read_only_wave_counts(rows):
     existing = {
         (row.side, row.wave_name): row
-        for row in _rows_for_sort_state(NeoSektorBallmatWaveCount, sort_state_id)
+        for row in rows
     }
     rows = []
     display_order = 0
@@ -1356,10 +1385,10 @@ def _read_only_ballmats(sort_state_id):
     ]
 
 
-def _read_only_open_bays(sort_state_id):
+def _read_only_open_bays(rows):
     existing = {
         row.side: row
-        for row in _rows_for_sort_state(NeoSektorOpenBayState, sort_state_id)
+        for row in rows
     }
     return [
         SimpleNamespace(
@@ -1370,10 +1399,10 @@ def _read_only_open_bays(sort_state_id):
     ]
 
 
-def _read_only_bay_statuses(sort_state_id):
+def _read_only_bay_statuses(rows):
     existing = {
         row.bay_name: row
-        for row in _rows_for_sort_state(NeoSektorBayStatus, sort_state_id)
+        for row in rows
     }
     return [
         SimpleNamespace(

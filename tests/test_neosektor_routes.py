@@ -3381,6 +3381,26 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.assertEqual(self.client.get("/neosektor/live-counts").status_code, 200)
 
+        for index, row in enumerate(NeoSektorBallmatWaveCount.query.all(), start=1):
+            row.count = index + 2
+            row.status = "Moderate"
+        for index, row in enumerate(NeoSektorOpenBayState.query.all(), start=1):
+            row.open_count = index
+        for row in NeoSektorBayStatus.query.all():
+            row.status = "Full"
+        db.session.commit()
+        self.assertEqual(self.client.get("/neosektor/live-counts/state").status_code, 200)
+
+        def legacy_count_reads(sort_state_id):
+            return {
+                kind: service._rows_for_sort_state(model, sort_state_id)
+                for kind, model in (
+                    ("wave", NeoSektorBallmatWaveCount),
+                    ("open", NeoSektorOpenBayState),
+                    ("bay", NeoSektorBayStatus),
+                )
+            }
+
         def legacy_read(bundle):
             if bundle.driver_routes is None:
                 bundle.routing_sort_state, bundle.driver_routes = (
@@ -3391,11 +3411,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             return bundle.driver_routes
 
         paths = (
-            ("/neosektor/live-counts/state", 19),
-            ("/neosektor/driver-routing/state", 19),
-            ("/neosektor/tunnel-conductor/state", 20),
-            ("/neosektor/ballmat/state?side=east", 20),
-            ("/neosektor/ballmat/state?side=west", 20),
+            ("/neosektor/live-counts/state", 17),
+            ("/neosektor/driver-routing/state", 17),
+            ("/neosektor/tunnel-conductor/state", 18),
+            ("/neosektor/ballmat/state?side=east", 18),
+            ("/neosektor/ballmat/state?side=west", 18),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
@@ -3403,13 +3423,19 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 with patch.object(service.NeoSektorOperationalStateBundle,
                                   "ensure_driver_routes", legacy_read):
                     legacy, legacy_sql, _, _ = self._capture_get_metrics(url)
+                with patch.object(service, "_read_only_count_rows", legacy_count_reads):
+                    separate, separate_sql, _, _ = self._capture_get_metrics(url)
                 response, sql, commits, _ = self._capture_get_metrics(url)
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(response.get_json()["changed"])
                 self.assertEqual(response.get_json(), legacy.get_json())
+                self.assertEqual(response.get_json(), separate.get_json())
                 self.assertIn("ballmat_routing", response.get_json()["state"])
                 reads = [s for s in sql if s.startswith("select")]
                 self.assertEqual(len(reads), select_budget)
+                self.assertEqual(len(reads) + 2, sum(
+                    s.startswith("select") for s in separate_sql
+                ))
                 self.assertEqual(len(reads) + 1, sum(
                     s.startswith("select") for s in legacy_sql
                 ))
@@ -3418,6 +3444,35 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 ) for s in reads), 1)
                 self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
                 self.assertEqual(commits, 0)
+
+    def test_batched_child_reads_preserve_sparse_defaults_and_sort_scope(self):
+        from app.services import neosektor_live_counts as service
+
+        states = [service.get_or_create_sort_state(
+            self.gateway, date.today() + timedelta(days=offset), "night"
+        ) for offset in (0, 1)]
+        for state, value in zip(states, (3, 99)):
+            db.session.add_all([
+                NeoSektorBallmatWaveCount(sort_state_id=state.id, side="EAST",
+                                         wave_name="1ST WAVE", count=value, status="Light"),
+                NeoSektorOpenBayState(sort_state_id=state.id, side="WEST", open_count=value),
+                NeoSektorBayStatus(sort_state_id=state.id, side="EAST", bay_name="Bay 1",
+                                  status="Full"),
+            ])
+        db.session.commit()
+        for state_id in (states[0].id, states[1].id, None):
+            with self.subTest(sort_state_id=state_id):
+                batch = service._read_only_count_rows(state_id)
+                for key, model, convert in (
+                    ("wave", NeoSektorBallmatWaveCount, service._read_only_wave_counts),
+                    ("open", NeoSektorOpenBayState, service._read_only_open_bays),
+                    ("bay", NeoSektorBayStatus, service._read_only_bay_statuses),
+                ):
+                    separate = service._rows_for_sort_state(model, state_id)
+                    self.assertEqual(convert(batch[key]), convert(separate))
+                    self.assertEqual(len(batch[key]), int(state_id is not None))
+        self.assertFalse(db.session.new)
+        self.assertFalse(db.session.dirty)
 
     def test_established_neosektor_gets_do_not_commit_or_repeat_access_queries(self):
         self._login_approved_user(role="simulator")
