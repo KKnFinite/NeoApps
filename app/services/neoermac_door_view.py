@@ -29,12 +29,12 @@ from app.services.neoermac_building_lineup import (
 )
 from app.services.gateway_matrix import (
     current_gateway_local_datetime,
+    current_operations_for_gateway,
     gateway_timezone,
     operation_is_active_at,
     sort_lookup_window_for_operation,
 )
 from app.services.neoermac_live_refresh import neoermac_live_refresh_status
-from app.services.operation_scope import current_operational_sort_operation
 from app.services.neoermac_tail_presence import (
     arrival_presence_by_tail,
     departure_tail_presence,
@@ -1190,7 +1190,10 @@ def _parking_for_mission(mission, parking_by_tail):
 
 
 def _current_operation(gateway):
-    return current_operational_sort_operation(gateway)
+    # Door supervision/pulls share the canonical current-sort identity used by
+    # ULD requests. Lifecycle eligibility only governs refresh, not persistence.
+    operations = current_operations_for_gateway(gateway)
+    return operations[0] if operations else None
 
 
 _PULL_COMPLETE_DEPARTURE_STATUSES = {
