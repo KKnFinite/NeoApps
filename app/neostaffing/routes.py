@@ -713,7 +713,7 @@ def _handle_attendance():
             flash("You do not currently have Take Attendance permission.", "error")
             return redirect(url_for("neostaffing.attendance", **request.args))
         try:
-            saved = staffing_service.save_attendance(request.form, current_user)
+            saved = staffing_service.save_attendance(request.form, current_user, form_submission=True)
             db.session.commit()
         except (ValueError, IntegrityError) as error:
             db.session.rollback()

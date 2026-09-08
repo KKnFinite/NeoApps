@@ -2,6 +2,7 @@ from tests.css_contracts import stylesheet_source
 from datetime import date, datetime
 from pathlib import Path
 import re
+from html import unescape
 import unittest
 from unittest.mock import patch
 
@@ -2286,6 +2287,83 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertFalse(db.session.get(StaffingPerson, part_time.id).work_assignment.active)
         self.assertFalse(db.session.get(StaffingPerson, combo.id).work_assignment.active)
 
+    def _attendance_form_values(self, page):
+        return {name: unescape(value) for name, value in re.findall(
+            r'name="(original_\d+)" value="([^"]*)"', page.get_data(as_text=True)
+        )}
+
+    def _stale_attendance_forms(self):
+        sort, _operation, _department, area = self._staffing_hierarchy()
+        operation = self._current_night_operation()
+        people = []
+        for index in range(2):
+            person = staffing_service.create_person({
+                "employee_id": f"STALE-{index}", "first_name": "Roster",
+                "last_name": str(index), "seniority_date": "2020-01-01",
+                "classification": "part_time",
+            })
+            staffing_service.assign_work_area(person, area)
+            people.append(person)
+        users = [self._user(f"attendance_supervisor_{index}") for index in range(2)]
+        for user in users:
+            self._grant_app_access(user, "neostaffing", "operator")
+        db.session.commit()
+        clients = [self._logged_in_client(user.username) for user in users]
+        forms = []
+        for client in clients:
+            page = client.get(f"/neostaffing/attendance?work_area_id={area.id}")
+            self.assertEqual(page.status_code, 200)
+            form = self._attendance_form_values(page)
+            self.assertEqual(len(form), 2)
+            form.update(sort_date_operation_id=str(operation.id), sort_id=str(sort.id),
+                        work_area_id=str(area.id))
+            form.update({f"status_{person.id}": "" for person in people})
+            forms.append(form)
+        return clients, forms, people
+
+    def test_stale_attendance_forms_preserve_different_employee_edits(self):
+        clients, forms, people = self._stale_attendance_forms()
+        for index, status in enumerate(["here", "call_in"]):
+            forms[index][f"status_{people[index].id}"] = status
+            response = clients[index].post("/neostaffing/attendance", data=forms[index], follow_redirects=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"Attendance saved for 1 people.", response.data)
+        self.assertEqual({row.person_id: row.status for row in StaffingDailyAttendance.query.all()},
+                         {people[0].id: "here", people[1].id: "call_in"})
+
+    def test_stale_attendance_forms_conflict_on_same_employee(self):
+        clients, forms, people = self._stale_attendance_forms()
+        forms[0][f"status_{people[0].id}"] = "here"
+        forms[1][f"status_{people[0].id}"] = "call_in"
+        clients[0].post("/neostaffing/attendance", data=forms[0])
+        response = clients[1].post("/neostaffing/attendance", data=forms[1], follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Attendance changed while you were editing", response.data)
+        self.assertEqual(StaffingDailyAttendance.query.one().status, "here")
+
+    def test_stale_blank_attendance_cannot_delete_newer_record(self):
+        clients, forms, people = self._stale_attendance_forms()
+        forms[0][f"status_{people[0].id}"] = "here"
+        clients[0].post("/neostaffing/attendance", data=forms[0])
+        record = StaffingDailyAttendance.query.one()
+        version = record.updated_at
+        response = clients[1].post("/neostaffing/attendance", data=forms[1], follow_redirects=True)
+        self.assertIn(b"Attendance saved for 0 people.", response.data)
+        self.assertEqual(StaffingDailyAttendance.query.one().updated_at, version)
+        # Explicit clear of an originally marked row must also check its revision.
+        page = clients[1].get(f"/neostaffing/attendance?work_area_id={forms[1]['work_area_id']}")
+        forms[1].update(self._attendance_form_values(page))
+        record.status = "call_in"
+        db.session.commit()
+        response = clients[1].post("/neostaffing/attendance", data=forms[1], follow_redirects=True)
+        self.assertIn(b"Attendance changed while you were editing", response.data)
+        self.assertEqual(StaffingDailyAttendance.query.one().status, "call_in")
+        # A fresh, explicit clear remains supported.
+        page = clients[1].get(f"/neostaffing/attendance?work_area_id={forms[1]['work_area_id']}")
+        forms[1].update(self._attendance_form_values(page))
+        clients[1].post("/neostaffing/attendance", data=forms[1])
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+
     def test_attendance_route_preselects_scope_and_updates_existing_daily_record(self):
         user = self._user("staffing_attendance_master")
         self._grant_app_access(user, "neostaffing", "master")
@@ -2316,6 +2394,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         first = self.client.post(
             "/neostaffing/attendance",
             data={
+                **self._attendance_form_values(page),
                 "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
@@ -2326,6 +2405,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         second = self.client.post(
             "/neostaffing/attendance",
             data={
+                **self._attendance_form_values(first),
                 "sort_date_operation_id": str(night_operation.id),
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),

@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 import re
 
 from flask import current_app
+from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import joinedload
 
@@ -3736,6 +3737,13 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
     else:
         rows = loaded_rows
 
+    for row in rows:
+        row["original_snapshot"] = _attendance_snapshot_serializer().dumps({
+            "person_id": row["person"].id,
+            "operation_id": operation.id,
+            "original": _attendance_original(row["attendance"]),
+        })
+
     staffing_groups = []
     if include_staffing_groups:
         group_definitions = _staffing_group_definitions(
@@ -3848,7 +3856,25 @@ def people_creation_context(selected_unit=None):
     }
 
 
-def save_attendance(values, user):
+def _attendance_snapshot_serializer():
+    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt="staffing-attendance-form-v1")
+
+
+def _attendance_original(record):
+    return {
+        "record_id": record.id if record else None,
+        "version": entity_version(record),
+        "status": record.status if record else "",
+        "note": (record.note or "") if record else "",
+    }
+
+
+def save_attendance(values, user, *, form_submission=False):
+    """Apply explicit commands; browser forms must supply signed original rows.
+
+    Internal service callers already supply deliberate mutations, not a displayed
+    roster. Both public attendance POST routes require the form safety contract.
+    """
     gateway = _attendance_gateway()
     current_operation = current_night_attendance_operation(gateway)
     operation = _submitted_attendance_operation(values.get("sort_date_operation_id"))
@@ -3881,8 +3907,37 @@ def save_attendance(values, user):
     if bulk_status and bulk_status != "here":
         raise ValueError("The attendance bulk action is invalid.")
 
+    originals = {}
+    if form_submission:
+        # ALL HERE applies only to the roster actually seen, not newly assigned
+        # employees. Comparing to the original also works without JavaScript.
+        person_ids = set()
+        for person_id in submitted_person_ids:
+            try:
+                snapshot = _attendance_snapshot_serializer().loads(values.get(f"original_{person_id}", ""))
+            except BadSignature:
+                raise ValueError("Attendance form is outdated. Reload Attendance before saving.") from None
+            if snapshot["person_id"] != person_id or snapshot["operation_id"] != operation.id:
+                raise ValueError("Attendance form does not match the selected Night Sort.")
+            original = snapshot["original"]
+            status = "here" if bulk_status else str(values.get(f"status_{person_id}") or "").strip()
+            note = _optional_text(values.get(f"note_{person_id}", original["note"])) or ""
+            if status == original["status"] and note == original["note"]:
+                continue
+            # A blank status is a deletion only when changed from a marked row.
+            if not status and not original["status"]:
+                continue
+            person_ids.add(person_id)
+            originals[person_id] = original
+
     existing = {}
     if person_ids:
+        # Lock stable parent rows too: an unmarked employee has no attendance row
+        # to lock yet. Ordered locks serialize competing inserts without locking
+        # the whole sort; different employees remain independent.
+        db.session.query(StaffingPerson.id).filter(
+            StaffingPerson.id.in_(person_ids)
+        ).order_by(StaffingPerson.id).with_for_update().all()
         records = StaffingDailyAttendance.query.filter(
             StaffingDailyAttendance.person_id.in_(person_ids),
             StaffingDailyAttendance.attendance_date == operation.sort_date,
@@ -3891,8 +3946,13 @@ def save_attendance(values, user):
                 StaffingDailyAttendance.sort_date_operation_id == operation.id,
                 StaffingDailyAttendance.sort_date_operation_id.is_(None),
             ),
-        ).all()
+        ).order_by(StaffingDailyAttendance.person_id).populate_existing().with_for_update().all()
         existing = {record.person_id: record for record in records}
+
+    # Validate every changed row before staging any write (all-or-nothing form).
+    for person_id, original in originals.items():
+        if _attendance_original(existing.get(person_id)) != original:
+            raise ValueError("Attendance changed while you were editing. Reload Attendance and review before saving.")
 
     saved = 0
     user_id = getattr(user, "id", None)
@@ -3914,7 +3974,9 @@ def save_attendance(values, user):
             STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES,
             "attendance status",
         )
-        note = _optional_text(values.get(f"note_{person_id}"))
+        note = _optional_text(values.get(
+            f"note_{person_id}", originals.get(person_id, {}).get("note")
+        ))
         work_area = hierarchy["by_id"].get(assignment.work_area_unit_id)
         department, operation_unit, _row_sort = _daily_attendance_placement(
             work_area,
