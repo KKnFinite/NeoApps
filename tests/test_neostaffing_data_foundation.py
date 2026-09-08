@@ -710,6 +710,24 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         )
         self.assertEqual(selected_context["selected_person"]["person"], east_employee)
 
+        for scope_key, scope in [("sort_id", sort), ("operation_id", operation),
+                                 ("department_id", department), ("work_area_id", work_area)]:
+            with self.subTest(scope=scope_key):
+                page = staffing_service.people_context({scope_key: str(scope.id), "per_page": "1", "page": "2"})
+                self.assertEqual(page["rows"][0]["person"], east_employee)
+                self.assertEqual(page["pagination"]["total"], 3 if scope == sort else 2)
+                self.assertEqual(page["counts"]["shown"], 1)
+        east_employee.employee_status = "fmla"
+        context = staffing_service.people_context({"employee_status": "fmla", "search": "avery east"})
+        self.assertEqual([row["person"] for row in context["rows"]], [east_employee])
+        # Search is literal, not a LIKE wildcard expression.
+        self.assertEqual(staffing_service.people_context({"search": "%"})["counts"]["total"], 0)
+        staffing_service.clear_work_assignment(east_employee)
+        context = staffing_service.people_context({"assignment_status": "unassigned"})
+        self.assertEqual([row["person"] for row in context["rows"]], [east_employee])
+        context = staffing_service.people_context({"assignment_status": "assigned", "active": "all"})
+        self.assertEqual(context["counts"]["total"], 3)
+
     def test_people_context_searches_by_employee_id_and_name(self):
         _sort, operation, _department, work_area = self._hierarchy()
         avery = self._person_with_name("E710", "part_time", "Avery", "Spotter", "2020-01-01")
@@ -749,6 +767,61 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         self.assertEqual(context["selected_person"]["leadership_labels"][0]["label"], "Work Area Supervisor")
         self.assertEqual(context["selected_person"]["leadership_labels"][0]["unit"], work_area)
         self.assertEqual(context["selected_person"]["seniority_operation"], operation)
+
+        outside_page = staffing_service.people_context({
+            "sort_id": str(sort.id), "leadership_only": "1", "per_page": "1",
+            "person_id": str(supervisor.id),
+        })
+        self.assertEqual([row["person"] for row in outside_page["rows"]], [manager])
+        self.assertEqual(outside_page["selected_person"]["person"], supervisor)
+        self.assertEqual(outside_page["counts"]["total"], 2)
+        self.assertEqual(outside_page["selected_person"]["assignment_display"]["items"][0]["label"], "Work Area Supervisor")
+        excluded = staffing_service.people_context({"leadership_only": "1", "person_id": str(employee.id)})
+        self.assertIsNone(excluded["selected_person"])
+
+    def test_people_small_page_materializes_only_displayed_roster(self):
+        _sort, _operation, _department, area = self._hierarchy()
+        area_id = area.id
+        measurements = []
+        previous = 0
+        for size in (50, 250):
+            people = [StaffingPerson(employee_id=f"PAGE-{index:04}", first_name="Page",
+                last_name=f"Person {index:04}", classification="part_time",
+                seniority_date=date(2020, 1, 1)) for index in range(previous, size)]
+            db.session.add_all(people)
+            db.session.flush()
+            db.session.add_all([StaffingWorkAssignment(person_id=p.id, work_area_unit_id=area_id)
+                                for p in people])
+            db.session.commit()
+            db.session.expunge_all()
+            loads = {StaffingPerson: 0, StaffingWorkAssignment: 0, StaffingLeadershipAssignment: 0}
+            selects = []
+
+            def loaded(obj, _context):
+                loads[type(obj)] += 1
+
+            def queried(_conn, _cursor, statement, *_args):
+                if statement.lstrip().upper().startswith(("SELECT", "WITH")):
+                    selects.append(statement)
+
+            for model in loads:
+                event.listen(model, "load", loaded)
+            event.listen(db.engine, "before_cursor_execute", queried)
+            try:
+                context = staffing_service.people_context({"per_page": "25", "work_area_id": str(area_id)})
+                self.assertEqual(context["pagination"]["total"], size)
+                self.assertEqual(context["counts"]["assigned"], size)
+                self.assertEqual(len(context["rows"]), 25)
+                self.assertEqual(loads, {StaffingPerson: 25, StaffingWorkAssignment: 25, StaffingLeadershipAssignment: 0})
+                self.assertTrue(any("LIMIT" in statement and "staffing_people" in statement for statement in selects))
+                measurements.append(len(selects))
+            finally:
+                for model in loads:
+                    event.remove(model, "load", loaded)
+                event.remove(db.engine, "before_cursor_execute", queried)
+            previous = size
+        self.assertEqual(measurements[0], measurements[1])
+        self.assertLessEqual(measurements[1], 20)
 
     def test_daily_attendance_is_separate_from_employee_status_and_unique(self):
         sort, _operation, _department, work_area = self._hierarchy()

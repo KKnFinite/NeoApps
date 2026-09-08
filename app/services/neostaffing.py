@@ -2890,60 +2890,49 @@ def people_context(filters=None, user=None):
             if operation.parent_id == selected_sort.id
         ]
 
-    rows = _people_rows()
-    rows = _filter_people_rows(
-        rows,
-        {
-            **filters,
-            "selected_sort": selected_sort,
-            "selected_operation": selected_operation,
-            "selected_department": selected_department,
-            "selected_work_area": selected_work_area,
-        },
-    )
-    total_matches = len(rows)
-    rows.sort(
-        key=lambda row: (
-            row["person"].last_name.lower(),
-            row["person"].first_name.lower(),
-            str(row["person"].employee_id or ""),
-            row["person"].id,
-        )
-    )
-
+    selected_unit = selected_work_area or selected_department or selected_operation or selected_sort
+    query = _filtered_people_query(filters, selected_unit)
+    has_work = StaffingPerson.work_assignment.has(StaffingWorkAssignment.active.is_(True))
+    count_fields = {
+        "active": StaffingPerson.active.is_(True),
+        "inactive": StaffingPerson.active.is_(False),
+        "supervisors": StaffingPerson.classification.in_(SUPERVISOR_CLASSIFICATIONS),
+        "managers": StaffingPerson.classification.in_(MANAGER_CLASSIFICATIONS),
+        "assigned": has_work,
+        "unassigned": db.and_(~has_work, StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS)),
+    }
+    totals = query.with_entities(
+        func.count(StaffingPerson.id),
+        *(func.sum(case((condition, 1), else_=0)) for condition in count_fields.values()),
+    ).one()
+    total_matches = totals[0]
+    counts = dict(zip(count_fields, (int(value or 0) for value in totals[1:])))
+    ordered = query.order_by(func.lower(StaffingPerson.last_name),
+        func.lower(StaffingPerson.first_name), func.coalesce(StaffingPerson.employee_id, ""), StaffingPerson.id)
     page, per_page = _pagination_from_filters(filters)
     if per_page:
         total_pages = max((total_matches + per_page - 1) // per_page, 1)
         page = min(page, total_pages)
         start = (page - 1) * per_page
-        paginated_rows = rows[start : start + per_page]
+        displayed_people = ordered.offset(start).limit(per_page).all()
     else:
         total_pages = 1
-        paginated_rows = rows
+        displayed_people = ordered.all()
 
+    # An off-page drawer still obeys the exact same filters/scope as the roster.
+    selected_id = _parse_positive_int(filters.get("person_id"), default=0)
+    detail_person = None
+    if selected_id and selected_id not in {person.id for person in displayed_people}:
+        detail_person = query.filter(StaffingPerson.id == selected_id).first()
+    rows = _people_rows(displayed_people + ([detail_person] if detail_person else []))
+    paginated_rows = rows[:len(displayed_people)]
     selected_person = _resolve_people_detail(filters.get("person_id"), rows)
     if selected_person:
         selected_person["assignment_display"] = _people_detail_assignment_display(
             selected_person
         )
 
-    counts = {
-        "total": total_matches,
-        "shown": len(paginated_rows),
-        "active": sum(1 for row in rows if row["person"].active),
-        "inactive": sum(1 for row in rows if not row["person"].active),
-        "supervisors": sum(1 for row in rows if row["person"].classification in SUPERVISOR_CLASSIFICATIONS),
-        "managers": sum(1 for row in rows if row["person"].classification in MANAGER_CLASSIFICATIONS),
-        "assigned": sum(1 for row in rows if row["work_assignment"] and row["work_assignment"].active),
-        "unassigned": sum(
-            1
-            for row in rows
-            if row["person"].classification in NON_MANAGEMENT_CLASSIFICATIONS
-            and not (row["work_assignment"] and row["work_assignment"].active)
-        ),
-    }
-
-    selected_unit = selected_work_area or selected_department or selected_operation or selected_sort
+    counts.update(total=total_matches, shown=len(paginated_rows))
 
     return {
         "sorts": sorts,
@@ -2959,7 +2948,9 @@ def people_context(filters=None, user=None):
         "selected_unit": selected_unit,
         "selected_unit_leadership": _leadership_assignments_for_unit(selected_unit),
         "rows": paginated_rows,
-        "all_rows": rows,
+        # Reports explicitly request per_page=all; paginated People never keeps
+        # an additional full-roster collection behind the visible page.
+        "all_rows": paginated_rows,
         "counts": counts,
         "selected_person": selected_person,
         "leadership_only": _parse_bool(filters.get("leadership_only"), default=False),
@@ -4880,11 +4871,15 @@ def people_query(search=None, classification=None, active=None, employee_status=
     return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
 
 
-def _people_rows():
+def _people_rows(people):
+    person_ids = [person.id for person in people]
+    if not person_ids:
+        return []
     active_work_assignments = {
         assignment.person_id: assignment
         for assignment in (
             StaffingWorkAssignment.query.filter_by(active=True)
+            .filter(StaffingWorkAssignment.person_id.in_(person_ids))
             .options(
                 joinedload(StaffingWorkAssignment.work_area)
                 .joinedload(StaffingUnit.parent)
@@ -4897,6 +4892,7 @@ def _people_rows():
     active_leadership = {}
     for assignment in (
         StaffingLeadershipAssignment.query.filter_by(active=True)
+        .filter(StaffingLeadershipAssignment.person_id.in_(person_ids))
         .options(
             joinedload(StaffingLeadershipAssignment.unit)
             .joinedload(StaffingUnit.parent)
@@ -4908,7 +4904,7 @@ def _people_rows():
         active_leadership.setdefault(assignment.person_id, []).append(assignment)
 
     rows = []
-    for person in StaffingPerson.query.order_by(StaffingPerson.last_name, StaffingPerson.first_name).all():
+    for person in people:
         work_assignment = active_work_assignments.get(person.id)
         work_area = work_assignment.work_area if work_assignment else None
         department, operation, sort = parent_chain_for_work_area(work_area)
@@ -4932,63 +4928,53 @@ def _people_rows():
     return rows
 
 
-def _filter_people_rows(rows, filters):
+def _filtered_people_query(filters, selected_scope):
     active = filters.get("active", "active")
     classification = str(filters.get("classification") or "").strip()
     employee_status = str(filters.get("employee_status") or "").strip()
     search = str(filters.get("search") or "").strip().lower()
     leadership_only = _parse_bool(filters.get("leadership_only"), default=False)
     assignment_status = str(filters.get("assignment_status") or "").strip()
-    selected_scope = (
-        filters.get("selected_work_area")
-        or filters.get("selected_department")
-        or filters.get("selected_operation")
-        or filters.get("selected_sort")
-    )
-    allowed_unit_ids = unit_ids_under(selected_scope) if selected_scope else None
-
-    filtered = []
-    for row in rows:
-        person = row["person"]
-        if active in {"active", "inactive"} and person.active != (active == "active"):
-            continue
-        if classification in STAFFING_CLASSIFICATIONS and person.classification != classification:
-            continue
-        if employee_status in STAFFING_EMPLOYEE_STATUSES and person.employee_status != employee_status:
-            continue
-        if leadership_only and not row["leadership_assignments"]:
-            continue
-        has_work_assignment = bool(row["work_assignment"] and row["work_assignment"].active)
-        if assignment_status == "assigned" and not has_work_assignment:
-            continue
-        if assignment_status == "unassigned" and (
-            has_work_assignment or person.classification not in NON_MANAGEMENT_CLASSIFICATIONS
-        ):
-            continue
-        if search:
-            searchable = " ".join(
-                [
-                    person.employee_id or "",
-                    person.first_name or "",
-                    person.last_name or "",
-                    person.full_name or "",
-                ]
-            ).lower()
-            if search not in searchable:
-                continue
-        if allowed_unit_ids is not None and not _people_row_matches_scope(row, allowed_unit_ids):
-            continue
-        filtered.append(row)
-    return filtered
-
-
-def _people_row_matches_scope(row, allowed_unit_ids):
-    scoped_ids = set()
-    for unit in (row.get("work_area"), row.get("department"), row.get("operation"), row.get("sort")):
-        if unit:
-            scoped_ids.add(unit.id)
-    scoped_ids.update(assignment.unit_id for assignment in row.get("leadership_assignments", []))
-    return bool(scoped_ids & allowed_unit_ids)
+    query = StaffingPerson.query
+    if active in {"active", "inactive"}:
+        query = query.filter(StaffingPerson.active.is_(active == "active"))
+    if classification in STAFFING_CLASSIFICATIONS:
+        query = query.filter(StaffingPerson.classification == classification)
+    if employee_status in STAFFING_EMPLOYEE_STATUSES:
+        query = query.filter(StaffingPerson.employee_status == employee_status)
+    has_work = StaffingPerson.work_assignment.has(StaffingWorkAssignment.active.is_(True))
+    if leadership_only:
+        query = query.filter(StaffingPerson.leadership_assignments.any(StaffingLeadershipAssignment.active.is_(True)))
+    if assignment_status == "assigned":
+        query = query.filter(has_work)
+    elif assignment_status == "unassigned":
+        query = query.filter(~has_work, StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS))
+    if search:
+        first = func.coalesce(StaffingPerson.first_name, "")
+        last = func.coalesce(StaffingPerson.last_name, "")
+        searchable = (func.coalesce(StaffingPerson.employee_id, "") + " " + first + " " + last
+                      + " " + func.trim(first + " " + last))
+        # Match literal substring behavior, including user-entered % and _.
+        query = query.filter(func.lower(searchable).contains(search, autoescape=True))
+    if selected_scope:
+        descendants = db.select(StaffingUnit.id).where(
+            StaffingUnit.id == selected_scope.id
+        ).cte("people_scope", recursive=True)
+        descendants = descendants.union_all(db.select(StaffingUnit.id).join(
+            descendants, StaffingUnit.parent_id == descendants.c.id
+        ))
+        scope_ids = db.select(descendants.c.id)
+        query = query.filter(or_(
+            StaffingPerson.work_assignment.has(db.and_(
+                StaffingWorkAssignment.active.is_(True),
+                StaffingWorkAssignment.work_area_unit_id.in_(scope_ids),
+            )),
+            StaffingPerson.leadership_assignments.any(db.and_(
+                StaffingLeadershipAssignment.active.is_(True),
+                StaffingLeadershipAssignment.unit_id.in_(scope_ids),
+            )),
+        ))
+    return query
 
 
 def _leadership_labels(person, assignments):
@@ -5309,6 +5295,7 @@ def _leadership_assignments_for_unit(unit):
     return (
         StaffingLeadershipAssignment.query.filter_by(unit_id=unit.id, active=True)
         .join(StaffingPerson)
+        .options(joinedload(StaffingLeadershipAssignment.person))
         .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.employee_id)
         .all()
     )
