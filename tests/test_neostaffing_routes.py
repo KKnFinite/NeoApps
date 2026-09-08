@@ -1837,6 +1837,40 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(removed.location, url)
         self.assertFalse(db.session.get(StaffingLeadershipAssignment, assignment.id).active)
 
+    def test_existing_unit_type_change_post_preserves_relationships(self):
+        actor = self._user("staffing_unit_type_editor")
+        self._grant_app_access(actor, "neostaffing", "grandmaster")
+        _sort, operation, department, work_area = self._staffing_hierarchy()
+        people = []
+        for employee_id, classification in [("TYPE-EMP", "part_time"), ("TYPE-SUP", "part_time_supervisor")]:
+            people.append(staffing_service.create_person({
+                "employee_id": employee_id, "first_name": "Unit", "last_name": employee_id,
+                "seniority_date": "2020-01-01", "classification": classification,
+            }))
+        assignment = staffing_service.assign_work_area(people[0], work_area)
+        leadership = staffing_service.create_leadership_assignment(people[1], work_area)
+        db.session.commit()
+        client = self._logged_in_client(actor.username)
+        for unit, forged_type in [(department, "work_area"), (work_area, "department")]:
+            with self.subTest(unit_type=unit.unit_type):
+                original = (unit.id, unit.unit_type, unit.name, unit.parent_id)
+                response = client.post(
+                    f"/neostaffing/app-management/hierarchy/units/{unit.id}/update",
+                    data={"unit_type": forged_type, "name": "Forged rename",
+                          "parent_id": operation.id, "return_unit_id": unit.id},
+                    follow_redirects=True,
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("type cannot be changed", response.get_data(as_text=True))
+                db.session.refresh(unit)
+                self.assertEqual((unit.id, unit.unit_type, unit.name, unit.parent_id), original)
+                self.assertEqual([child.id for child in department.children], [work_area.id])
+                self.assertEqual(db.session.get(StaffingWorkAssignment, assignment.id).work_area_unit_id, work_area.id)
+                self.assertEqual(db.session.get(StaffingLeadershipAssignment, leadership.id).unit_id, work_area.id)
+                self.assertTrue(assignment.active)
+                self.assertTrue(leadership.active)
+        self.assertEqual(StaffingUnit.query.count(), 4)
+
     def test_pt_supervisor_candidates_do_not_require_a_linked_user_account(self):
         editor_user = self._user("staffing_pt_candidate_editor")
         self._grant_app_access(editor_user, "neostaffing", "simulator")

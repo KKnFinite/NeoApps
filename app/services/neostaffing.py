@@ -1650,7 +1650,12 @@ def update_unit(unit, values, is_new=False):
 
 
 def validated_unit_update_values(unit, values, is_new=False):
-    unit_type = _normalize_choice(values.get("unit_type"), STAFFING_UNIT_TYPES, "unit type")
+    if is_new:
+        unit_type = _normalize_choice(values.get("unit_type"), STAFFING_UNIT_TYPES, "unit type")
+    else:
+        unit_type = unit.unit_type
+        if "unit_type" in values and values.get("unit_type") != unit_type:
+            raise ValueError("An existing unit's type cannot be changed.")
     name = _required_text(values.get("name"), "Unit name")
     parent = _resolve_parent(values.get("parent_id"), unit_type)
     display_order = _parse_int(values.get("display_order"), default=0)
