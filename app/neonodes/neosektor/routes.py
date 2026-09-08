@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
@@ -68,112 +70,85 @@ NEOSEKTOR_DASHBOARD_VIEW_PERMISSION = "neosektor.dashboard.view"
 NEOSEKTOR_SETTINGS_VIEW_PERMISSION = "neosektor.settings.view"
 NEOSEKTOR_SETTINGS_EDIT_PERMISSION = "neosektor.settings.edit"
 
-NEOSEKTOR_PAGES = (
-    (
-        "TUNNEL CONDUCTOR",
-        "neosektor.tunnel_conductor",
-        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
-        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
-        "Tunnel Conductor live count controls.",
+
+@dataclass(frozen=True)
+class _NeoSektorPage:
+    label: str
+    endpoint: str
+    view_permission: str
+    edit_permission: str | None
+    dashboard_key: str
+    dashboard_description: str
+    menu_order: int
+    # None excludes Live Counts from the historical titled-page lookup.
+    page_description: str | None = None
+    menu_label: str | None = None
+
+
+# Canonical dashboard order; titled pages keep this order minus Live Counts.
+# Internal navigation deliberately has its own order and Ballmat labels.
+NEOSEKTOR_PAGE_DEFINITIONS = (
+    _NeoSektorPage(
+        label="Live Counts", endpoint="neosektor.live_counts",
+        view_permission=LIVE_COUNTS_VIEW_PERMISSION, edit_permission=None,
+        dashboard_key="live-counts", dashboard_description="Live flow and bay status.",
+        menu_order=0,
     ),
-    (
-        "SETTINGS",
-        "neosektor.settings",
-        NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
-        NEOSEKTOR_SETTINGS_EDIT_PERMISSION,
-        "NeoSektor application settings.",
+    _NeoSektorPage(
+        label="Tunnel Conductor", endpoint="neosektor.tunnel_conductor",
+        view_permission=TUNNEL_CONDUCTOR_VIEW_PERMISSION,
+        edit_permission=TUNNEL_CONDUCTOR_EDIT_PERMISSION,
+        dashboard_key="tunnel", dashboard_description="Tunnel counts and down timer.",
+        menu_order=2, page_description="Tunnel Conductor live count controls.",
     ),
-    (
-        "EBM",
-        "neosektor.ebm",
-        EBM_VIEW_PERMISSION,
-        EBM_EDIT_PERMISSION,
-        "East Ballmat Operations count entry.",
+    _NeoSektorPage(
+        label="Settings", endpoint="neosektor.settings",
+        view_permission=NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
+        edit_permission=NEOSEKTOR_SETTINGS_EDIT_PERMISSION,
+        dashboard_key="settings", dashboard_description="NeoSektor application settings.",
+        menu_order=1, page_description="NeoSektor application settings.",
     ),
-    (
-        "WBM",
-        "neosektor.wbm",
-        WBM_VIEW_PERMISSION,
-        WBM_EDIT_PERMISSION,
-        "West Ballmat Operations count entry.",
+    _NeoSektorPage(
+        label="EBM", endpoint="neosektor.ebm",
+        view_permission=EBM_VIEW_PERMISSION, edit_permission=EBM_EDIT_PERMISSION,
+        dashboard_key="ebm", dashboard_description="East ballmat count entry.",
+        menu_order=3, page_description="East Ballmat Operations count entry.",
+        menu_label="East Ballmat",
     ),
-    (
-        "DISCHARGE",
-        "neosektor.discharge",
-        "neosektor.discharge.view",
-        "neosektor.discharge.edit",
-        "NeoSektor ULD request discharge queue.",
+    _NeoSektorPage(
+        label="WBM", endpoint="neosektor.wbm",
+        view_permission=WBM_VIEW_PERMISSION, edit_permission=WBM_EDIT_PERMISSION,
+        dashboard_key="wbm", dashboard_description="West ballmat count entry.",
+        menu_order=4, page_description="West Ballmat Operations count entry.",
+        menu_label="West Ballmat",
     ),
-    (
-        "DRIVER ROUTING",
-        "neosektor.driver_routing",
-        "neosektor.driver_routing.view",
-        None,
-        "Driver routing foundation.",
+    _NeoSektorPage(
+        label="Discharge", endpoint="neosektor.discharge",
+        view_permission="neosektor.discharge.view", edit_permission="neosektor.discharge.edit",
+        dashboard_key="discharge", dashboard_description="ULD request queue.",
+        menu_order=6, page_description="NeoSektor ULD request discharge queue.",
+    ),
+    _NeoSektorPage(
+        label="Driver Routing", endpoint="neosektor.driver_routing",
+        view_permission="neosektor.driver_routing.view", edit_permission=None,
+        dashboard_key="driver-routing", dashboard_description="Driver need and route board.",
+        menu_order=5, page_description="Driver routing foundation.",
     ),
 )
 
-NEOSEKTOR_INTERNAL_MENU = (
-    ("Live Counts", "neosektor.live_counts", LIVE_COUNTS_VIEW_PERMISSION),
-    ("Settings", "neosektor.settings", NEOSEKTOR_SETTINGS_VIEW_PERMISSION),
-    ("Tunnel Conductor", "neosektor.tunnel_conductor", TUNNEL_CONDUCTOR_VIEW_PERMISSION),
-    ("East Ballmat", "neosektor.ebm", EBM_VIEW_PERMISSION),
-    ("West Ballmat", "neosektor.wbm", WBM_VIEW_PERMISSION),
-    ("Driver Routing", "neosektor.driver_routing", "neosektor.driver_routing.view"),
-    ("Discharge", "neosektor.discharge", "neosektor.discharge.view"),
+# Retain the existing presentation contracts and permission-preload consumers.
+NEOSEKTOR_PAGES = tuple(
+    (page.label.upper(), page.endpoint, page.view_permission, page.edit_permission, page.page_description)
+    for page in NEOSEKTOR_PAGE_DEFINITIONS
+    if page.page_description is not None
 )
-
-
-NEOSEKTOR_MOBILE_DASHBOARD = (
-    (
-        "Live Counts",
-        "neosektor.live_counts",
-        LIVE_COUNTS_VIEW_PERMISSION,
-        "live-counts",
-        "Live flow and bay status.",
-    ),
-    (
-        "Tunnel Conductor",
-        "neosektor.tunnel_conductor",
-        TUNNEL_CONDUCTOR_VIEW_PERMISSION,
-        "tunnel",
-        "Tunnel counts and down timer.",
-    ),
-    (
-        "Settings",
-        "neosektor.settings",
-        NEOSEKTOR_SETTINGS_VIEW_PERMISSION,
-        "settings",
-        "NeoSektor application settings.",
-    ),
-    (
-        "EBM",
-        "neosektor.ebm",
-        EBM_VIEW_PERMISSION,
-        "ebm",
-        "East ballmat count entry.",
-    ),
-    (
-        "WBM",
-        "neosektor.wbm",
-        WBM_VIEW_PERMISSION,
-        "wbm",
-        "West ballmat count entry.",
-    ),
-    (
-        "Discharge",
-        "neosektor.discharge",
-        "neosektor.discharge.view",
-        "discharge",
-        "ULD request queue.",
-    ),
-    (
-        "Driver Routing",
-        "neosektor.driver_routing",
-        "neosektor.driver_routing.view",
-        "driver-routing",
-        "Driver need and route board.",
-    ),
+NEOSEKTOR_INTERNAL_MENU = tuple(
+    (page.menu_label or page.label, page.endpoint, page.view_permission)
+    for page in sorted(NEOSEKTOR_PAGE_DEFINITIONS, key=lambda page: page.menu_order)
+)
+NEOSEKTOR_MOBILE_DASHBOARD = tuple(
+    (page.label, page.endpoint, page.view_permission, page.dashboard_key, page.dashboard_description)
+    for page in NEOSEKTOR_PAGE_DEFINITIONS
 )
 
 
