@@ -3413,9 +3413,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         paths = (
             ("/neosektor/live-counts/state", 15),
             ("/neosektor/driver-routing/state", 15),
-            ("/neosektor/tunnel-conductor/state", 16),
-            ("/neosektor/ballmat/state?side=east", 16),
-            ("/neosektor/ballmat/state?side=west", 16),
+            ("/neosektor/tunnel-conductor/state", 15),
+            ("/neosektor/ballmat/state?side=east", 15),
+            ("/neosektor/ballmat/state?side=west", 15),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
@@ -3647,6 +3647,41 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(PortalAppAccess.query.count(), 0)
         self.assertEqual(GatewayNodeRole.query.count(), 0)
 
+    def test_read_only_polls_skip_unused_edit_permission_and_preserve_view_gate(self):
+        from app.neonodes.neosektor import routes
+
+        self._login_approved_user(role="operator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(date.today(), time(23))
+        self.client.get("/neosektor/live-counts")
+        original_access = routes._neosektor_access
+        for path, view, edit in (
+            ("/neosektor/tunnel-conductor/state", routes.TUNNEL_CONDUCTOR_VIEW_PERMISSION, routes.TUNNEL_CONDUCTOR_EDIT_PERMISSION),
+            ("/neosektor/ballmat/state?side=east", routes.EBM_VIEW_PERMISSION, routes.EBM_EDIT_PERMISSION),
+            ("/neosektor/ballmat/state?side=west", routes.WBM_VIEW_PERMISSION, routes.WBM_EDIT_PERMISSION),
+        ):
+            with self.subTest(path=path):
+                revision = self.client.get(path).get_json()["revision"]
+                for suffix in ("", ("&" if "?" in path else "?") + "revision=" + revision):
+                    url = path + suffix
+                    with patch.object(routes, "_neosektor_access", side_effect=lambda permission, edit_permission=None: original_access(permission, edit)):
+                        before, old_sql, _, _ = self._capture_get_metrics(url)
+                    with patch.object(routes, "user_can", wraps=routes.user_can) as permissions:
+                        after, sql, commits, _ = self._capture_get_metrics(url)
+                    self.assertEqual(after.status_code, 200)
+                    self.assertEqual(after.get_json(), before.get_json())
+                    permissions.assert_any_call(view)
+                    self.assertNotIn(edit, [call.args[0] for call in permissions.call_args_list])
+                    self.assertEqual(sum(s.startswith("select") for s in old_sql),
+                                     sum(s.startswith("select") for s in sql) + 1)
+                    self.assertEqual(commits, 0)
+                    self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+                with patch.object(routes, "user_can", return_value=False):
+                    denied = self.client.get(path)
+                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(denied.get_json(), {"ok": False, "error": "Access denied."})
+
     def test_unchanged_polls_reuse_operation_candidates_without_changing_revision(self):
         from app.services.request_cache import MISSING
 
@@ -3660,9 +3695,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         for path, budget in (
             ("/neosektor/live-counts/state", 9),
             ("/neosektor/driver-routing/state", 9),
-            ("/neosektor/tunnel-conductor/state", 10),
-            ("/neosektor/ballmat/state?side=east", 10),
-            ("/neosektor/ballmat/state?side=west", 10),
+            ("/neosektor/tunnel-conductor/state", 9),
+            ("/neosektor/ballmat/state?side=east", 9),
+            ("/neosektor/ballmat/state?side=west", 9),
         ):
             with self.subTest(path=path):
                 initial = self.client.get(path).get_json()

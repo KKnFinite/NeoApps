@@ -252,7 +252,6 @@ def tunnel_conductor():
 def tunnel_conductor_state():
     access = _neosektor_access(
         TUNNEL_CONDUCTOR_VIEW_PERMISSION,
-        TUNNEL_CONDUCTOR_EDIT_PERMISSION,
     )
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
@@ -466,7 +465,8 @@ def _render_ballmat_operations(selected_side):
 @gateway_node_required("sektor")
 def ballmat_state():
     selected_side = _selected_ballmat_side()
-    if not _ballmat_access(selected_side)["can_view"]:
+    view_permission, _edit_permission = _ballmat_permission_keys(selected_side)
+    if not _neosektor_access(view_permission)["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
     gateway = get_current_gateway()
