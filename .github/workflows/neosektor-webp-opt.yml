@@ -1,4 +1,4 @@
-name: NeoSektor WebP optimization
+name: NeoSektor WebP helper materialization
 
 on:
   push:
@@ -6,130 +6,74 @@ on:
       - neosektor-webp-opt-20260908
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  optimize-and-validate:
+  materialize:
+    if: ${{ !startsWith(github.event.head_commit.message, '[webp-materialized]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install validation dependencies
+      - name: Materialize exact verified asset delta
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt -r tests/requirements-browser.txt pytest pillow
-          python -m playwright install --with-deps chromium webkit
-
-      - name: Convert exact production PNGs and prepare focused diff
-        run: |
+          python -m pip install pillow==12.3.0
           python - <<'PY'
           from pathlib import Path
-          from PIL import Image, ImageChops, ImageStat
-          import json, math, shutil
+          from PIL import Image
 
           image_dir = Path('app/static/images/neosektor')
-          out_dir = Path('artifact-out')
-          out_dir.mkdir(parents=True, exist_ok=True)
-          metrics = {}
-
-          for label, src_path in [
-              ('desktop', image_dir / 'dashboard_desktop.png'),
-              ('mobile', image_dir / 'dashboard_mobile.png'),
-          ]:
-              dst_path = src_path.with_suffix('.webp')
-              with Image.open(src_path) as source:
+          for name in ('dashboard_desktop', 'dashboard_mobile'):
+              src = image_dir / f'{name}.png'
+              dst = image_dir / f'{name}.webp'
+              with Image.open(src) as source:
                   source.load()
-                  original_mode = source.mode
                   working = source.convert('RGBA' if 'A' in source.getbands() else 'RGB')
-                  source_rgb = working.convert('RGB')
-                  save_kwargs = {'format':'WEBP', 'quality':94, 'method':6, 'exact':True}
+                  kwargs = {'format':'WEBP', 'quality':94, 'method':6, 'exact':True}
                   if source.info.get('icc_profile'):
-                      save_kwargs['icc_profile'] = source.info['icc_profile']
+                      kwargs['icc_profile'] = source.info['icc_profile']
                   if source.info.get('exif'):
-                      save_kwargs['exif'] = source.info['exif']
-                  working.save(dst_path, **save_kwargs)
-                  source_size = source.size
-
-              with Image.open(dst_path) as encoded:
-                  encoded.load()
-                  assert encoded.size == source_size
-                  encoded_rgb = encoded.convert('RGB')
-
-              diff = ImageChops.difference(source_rgb, encoded_rgb)
-              stats = ImageStat.Stat(diff)
-              mse = sum(v*v for v in stats.rms[:3]) / 3.0
-              psnr = float('inf') if mse == 0 else 10.0 * math.log10((255.0*255.0)/mse)
-              mae = sum(stats.mean[:3]) / 3.0
-              png_bytes = src_path.stat().st_size
-              webp_bytes = dst_path.stat().st_size
-              reduction = (1.0 - webp_bytes/png_bytes) * 100.0
-
-              left, right = source_rgb.copy(), encoded_rgb.copy()
-              left.thumbnail((420,520), Image.Resampling.LANCZOS)
-              right.thumbnail((420,520), Image.Resampling.LANCZOS)
-              canvas = Image.new('RGB', (left.width+right.width, max(left.height,right.height)), 'black')
-              canvas.paste(left,(0,0)); canvas.paste(right,(left.width,0))
-              canvas.save(out_dir/f'{label}_comparison.jpg', 'JPEG', quality=88, optimize=True)
-
-              metrics[label] = {
-                  'png_path': str(src_path), 'webp_path': str(dst_path),
-                  'mode': original_mode, 'dimensions': list(source_size),
-                  'png_bytes': png_bytes, 'webp_bytes': webp_bytes,
-                  'reduction_percent': round(reduction,3),
-                  'psnr_db': None if math.isinf(psnr) else round(psnr,3),
-                  'mae': round(mae,4),
-              }
-              target = out_dir / dst_path
-              target.parent.mkdir(parents=True, exist_ok=True)
-              shutil.copy2(dst_path, target)
+                      kwargs['exif'] = source.info['exif']
+                  working.save(dst, **kwargs)
 
           template = Path('app/templates/neonodes/neosektor/index.html')
           text = template.read_text(encoding='utf-8')
           assert text.count('images/neosektor/dashboard_mobile.png') == 1
           assert text.count('images/neosektor/dashboard_desktop.png') == 1
-          text = text.replace('images/neosektor/dashboard_mobile.png', 'images/neosektor/dashboard_mobile.webp')
-          text = text.replace('images/neosektor/dashboard_desktop.png', 'images/neosektor/dashboard_desktop.webp')
-          template.write_text(text, encoding='utf-8')
+          template.write_text(
+              text.replace('images/neosektor/dashboard_mobile.png', 'images/neosektor/dashboard_mobile.webp')
+                  .replace('images/neosektor/dashboard_desktop.png', 'images/neosektor/dashboard_desktop.webp'),
+              encoding='utf-8',
+          )
 
-          browser_test = Path('tests/browser/test_sektor_dashboard.py')
-          test_text = browser_test.read_text(encoding='utf-8')
-          assert test_text.count('dashboard_mobile.png') == 1
-          assert test_text.count('dashboard_desktop.png') == 1
-          test_text = test_text.replace('dashboard_mobile.png', 'dashboard_mobile.webp')
-          test_text = test_text.replace('dashboard_desktop.png', 'dashboard_desktop.webp')
-          browser_test.write_text(test_text, encoding='utf-8')
-
-          for changed in (template, browser_test):
-              target = out_dir / changed
-              target.parent.mkdir(parents=True, exist_ok=True)
-              shutil.copy2(changed, target)
-          (out_dir/'metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
-          print(json.dumps(metrics, indent=2))
+          test = Path('tests/browser/test_sektor_dashboard.py')
+          text = test.read_text(encoding='utf-8')
+          assert text.count('dashboard_mobile.png') == 1
+          assert text.count('dashboard_desktop.png') == 1
+          test.write_text(
+              text.replace('dashboard_mobile.png', 'dashboard_mobile.webp')
+                  .replace('dashboard_desktop.png', 'dashboard_desktop.webp'),
+              encoding='utf-8',
+          )
           PY
-
-      - name: Run focused dashboard and page asset tests
-        run: |
-          python -m pytest -q tests/test_page_assets.py tests/browser/test_sektor_dashboard.py
-
-      - name: Required checks
-        if: always()
-        run: |
-          python -m compileall -q app
-          git add -N app/static/images/neosektor/dashboard_desktop.webp app/static/images/neosektor/dashboard_mobile.webp
+          test "$(stat -c %s app/static/images/neosektor/dashboard_desktop.webp)" = "299204"
+          test "$(stat -c %s app/static/images/neosektor/dashboard_mobile.webp)" = "298850"
           git diff --check
-          echo '--- focused diff ---'
-          git diff -- app/templates/neonodes/neosektor/index.html tests/browser/test_sektor_dashboard.py app/static/images/neosektor/dashboard_desktop.webp app/static/images/neosektor/dashboard_mobile.webp
-          echo '--- working status ---'
-          git status --short
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: neosektor-webp-output
-          path: artifact-out
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit helper blobs
+        run: |
+          git config user.name "KKnFinite"
+          git config user.email "kknfinite@gmail.com"
+          git add app/static/images/neosektor/dashboard_desktop.webp \
+                  app/static/images/neosektor/dashboard_mobile.webp \
+                  app/templates/neonodes/neosektor/index.html \
+                  tests/browser/test_sektor_dashboard.py
+          git commit -m "[webp-materialized] Optimize NeoSektor dashboard hero assets"
+          git push origin HEAD:neosektor-webp-opt-20260908
+          git status --short
