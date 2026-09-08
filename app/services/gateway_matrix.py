@@ -198,7 +198,10 @@ def current_operations_for_gateway(gateway, now=None):
                 ),
             )
             .filter(
-                SortDateOperation.gateway_code == gateway.code,
+                db.or_(
+                    SortDateOperation.gateway_id == gateway.id,
+                    SortDateOperation.gateway_code == gateway.code,
+                ),
                 SortDateOperation.archived_at_utc.is_(None),
                 SortDateOperation.sort_date.in_((current_date, previous_date)),
             )
@@ -210,7 +213,14 @@ def current_operations_for_gateway(gateway, now=None):
                 (gateway.id, operation.sort_name.strip().lower()),
                 setting,
             )
-        return [operation for operation, _setting in rows]
+        # Lifecycle selection also needs ID-matched legacy operations. Share the
+        # unfiltered candidates, not this resolver's visible/current selection.
+        set_request_cached(
+            "gateway.existing_operation_candidates",
+            (gateway.id, gateway.code, current_date),
+            [operation for operation, _setting in rows],
+        )
+        return [operation for operation, _setting in rows if operation.gateway_code == gateway.code]
 
     if current_request_is_lightweight_live_state():
         operations = request_cached(

@@ -3411,11 +3411,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             return bundle.driver_routes
 
         paths = (
-            ("/neosektor/live-counts/state", 17),
-            ("/neosektor/driver-routing/state", 17),
-            ("/neosektor/tunnel-conductor/state", 18),
-            ("/neosektor/ballmat/state?side=east", 18),
-            ("/neosektor/ballmat/state?side=west", 18),
+            ("/neosektor/live-counts/state", 16),
+            ("/neosektor/driver-routing/state", 16),
+            ("/neosektor/tunnel-conductor/state", 17),
+            ("/neosektor/ballmat/state?side=east", 17),
+            ("/neosektor/ballmat/state?side=west", 17),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
@@ -3646,6 +3646,93 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(statements["commits"], 0)
         self.assertEqual(PortalAppAccess.query.count(), 0)
         self.assertEqual(GatewayNodeRole.query.count(), 0)
+
+    def test_unchanged_polls_reuse_operation_candidates_without_changing_revision(self):
+        from app.services.request_cache import MISSING
+
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(
+            date.today(), time(23)
+        )
+        self.client.get("/neosektor/live-counts")
+        for path, budget in (
+            ("/neosektor/live-counts/state", 10),
+            ("/neosektor/driver-routing/state", 10),
+            ("/neosektor/tunnel-conductor/state", 11),
+            ("/neosektor/ballmat/state?side=east", 11),
+            ("/neosektor/ballmat/state?side=west", 11),
+        ):
+            with self.subTest(path=path):
+                initial = self.client.get(path).get_json()
+                url = path + ("&" if "?" in path else "?") + "revision=" + initial["revision"]
+                with patch("app.services.operation_lifecycle.get_request_cached", return_value=MISSING):
+                    separate, separate_sql, _, _ = self._capture_get_metrics(url)
+                response, sql, commits, _ = self._capture_get_metrics(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json(), separate.get_json())
+                self.assertFalse(response.get_json()["changed"])
+                self.assertTrue(response.get_json()["refresh"]["auto_refresh_enabled"])
+                self.assertNotIn("state", response.get_json())
+                self.assertEqual(sum(s.startswith("select") for s in sql), budget)
+                self.assertEqual(sum(s.startswith("select") for s in separate_sql), budget + 1)
+                self.assertEqual(sum(s.startswith("select sort_date_operations.id as") for s in sql), 1)
+                self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+                self.assertEqual(commits, 0)
+
+    def test_unchanged_poll_becomes_changed_when_all_up_timer_expires(self):
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(date.today(), time(23))
+        self.client.get("/neosektor/live-counts")
+        started = datetime(2026, 9, 8, 12)
+        NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().all_up_started_at = started
+        NeoSektorOperationalSetting.query.one().all_up_to_down_minutes = 20
+        db.session.commit()
+        with patch("app.services.neosektor_live_refresh._naive_utc") as revision_clock, patch(
+            "app.services.neosektor_live_counts.datetime", wraps=datetime
+        ) as state_clock:
+            revision_clock.return_value = started + timedelta(minutes=19)
+            state_clock.utcnow.return_value = revision_clock.return_value
+            initial = self.client.get("/neosektor/live-counts/state").get_json()
+            self.assertEqual(initial["state"]["waves"][0]["left"], "ALL UP")
+            url = "/neosektor/live-counts/state?revision=" + initial["revision"]
+            self.assertFalse(self.client.get(url).get_json()["changed"])
+            revision_clock.return_value = started + timedelta(minutes=21)
+            state_clock.utcnow.return_value = revision_clock.return_value
+            response, sql, commits, _ = self._capture_get_metrics(url)
+            self.assertTrue(response.get_json()["changed"])
+            self.assertNotEqual(response.get_json()["revision"], initial["revision"])
+            self.assertEqual(response.get_json()["state"]["waves"][0]["left"], "DOWN")
+            self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+            self.assertEqual(commits, 0)
+
+    def test_reused_operation_candidates_keep_legacy_id_and_refresh_code_scopes(self):
+        from app.services import gateway_matrix, operation_lifecycle
+        from app.services.request_cache import MISSING
+
+        self._login_approved_user(role="simulator")
+        operation = self._add_sort_operation(date.today(), "night")
+        operation.gateway_code = "LEGACY"
+        operation.gateway_id = self.gateway.id
+        operation.generated_by_user_id = User.query.first().id
+        db.session.commit()
+        now = datetime.combine(date.today(), time(23))
+        with self.app.test_request_context("/neosektor/live-counts/state"), patch.object(
+            gateway_matrix, "current_request_is_lightweight_live_state", return_value=True
+        ):
+            # Refresh remains code-scoped; lifecycle must still see ID-matched
+            # legacy operations even when refresh's selected list is empty.
+            self.assertEqual(gateway_matrix.current_operations_for_gateway(self.gateway, now=now), [])
+            cached = operation_lifecycle.current_existing_operational_sort_operations(self.gateway, now=now)
+            with patch.object(operation_lifecycle, "get_request_cached", return_value=MISSING), patch.object(
+                operation_lifecycle, "request_cached", side_effect=lambda _ns, _key, resolve: resolve()
+            ):
+                separate = operation_lifecycle.current_existing_operational_sort_operations(self.gateway, now=now)
+            self.assertEqual([row.id for row in cached], [operation.id])
+            self.assertEqual([row.id for row in cached], [row.id for row in separate])
 
     def test_live_state_revisions_short_circuit_all_neosektor_screens(self):
         self._login_approved_user(role="simulator")

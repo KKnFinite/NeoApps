@@ -10,7 +10,7 @@ from app.services.gateway_matrix import (
     active_sorts_for_gateway_date,
     current_gateway_local_datetime,
 )
-from app.services.request_cache import request_cached
+from app.services.request_cache import MISSING, get_request_cached, request_cached
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -124,17 +124,22 @@ def current_existing_operational_sort_operations(
             for window in windows
         }
         candidate_dates = {local_now.date() - timedelta(days=1), local_now.date()}
-        operations = (
-            SortDateOperation.query.filter(
-                SortDateOperation.archived_at_utc.is_(None),
-                db.or_(
-                    SortDateOperation.gateway_id == gateway.id,
-                    SortDateOperation.gateway_code == gateway.code,
-                ),
-                SortDateOperation.sort_date.in_(candidate_dates),
-            )
-            .all()
+        operations = get_request_cached(
+            "gateway.existing_operation_candidates",
+            (gateway.id, gateway.code, local_now.date()),
         )
+        if operations is MISSING:
+            operations = (
+                SortDateOperation.query.filter(
+                    SortDateOperation.archived_at_utc.is_(None),
+                    db.or_(
+                        SortDateOperation.gateway_id == gateway.id,
+                        SortDateOperation.gateway_code == gateway.code,
+                    ),
+                    SortDateOperation.sort_date.in_(candidate_dates),
+                )
+                .all()
+            )
         by_key = {
             (operation.sort_date, str(operation.sort_name).strip().lower()): operation
             for operation in operations
