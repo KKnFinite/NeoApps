@@ -3728,9 +3728,9 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
             hierarchy=hierarchy,
         )
 
-    assignment_scope = staffing_sort if include_staffing_groups else selected_scope
+    group_area_ids = selected_work_area_ids
     loaded_assignments = _daily_attendance_assignments(
-        assignment_scope,
+        selected_scope,
         staffing_sort,
         hierarchy,
         work_area_ids=selected_work_area_ids,
@@ -3740,21 +3740,12 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
         operation,
         staffing_sort,
     )
-    loaded_rows = _daily_attendance_rows(loaded_assignments, existing, hierarchy)
-    if selected_work_area_ids is not None:
-        rows = loaded_rows
-    elif include_staffing_groups and selected_scope.id != staffing_sort.id:
+    rows = _daily_attendance_rows(loaded_assignments, existing, hierarchy)
+    if selected_work_area_ids is None and include_staffing_groups and selected_scope.id != staffing_sort.id:
         selected_work_area_ids = _daily_attendance_work_area_ids(
             selected_scope,
             hierarchy,
         )
-        rows = [
-            row
-            for row in loaded_rows
-            if row["work_area"] and row["work_area"].id in selected_work_area_ids
-        ]
-    else:
-        rows = loaded_rows
 
     for row in rows:
         row["original_snapshot"] = _attendance_snapshot_serializer().dumps({
@@ -3769,10 +3760,12 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
             hierarchy,
             active_only=True,
         )
-        staffing_groups = _daily_staffing_group_rollups(
+        staffing_groups = _attendance_group_aggregate_rollups(
             group_definitions,
-            loaded_rows,
+            operation,
+            staffing_sort,
             hierarchy,
+            work_area_ids=group_area_ids,
         )
 
     summary = _daily_attendance_summary(rows)
@@ -4204,6 +4197,58 @@ def _staffing_group_definitions(hierarchy, active_only):
     return list(definitions_by_id.values())
 
 
+def _attendance_group_aggregate_rollups(definitions, operation, staffing_sort, hierarchy, *, work_area_ids=None):
+    """Group totals from bounded area/status counts, not sort-wide ORM rows.
+
+    A Work Assignment is unique per person. Unioning each group's member areas
+    therefore preserves person deduplication for overlapping memberships.
+    Explicit multi-area deep links retain their existing group-total scope.
+    """
+    allowed_ids = (_daily_attendance_work_area_ids(staffing_sort, hierarchy)
+                   if work_area_ids is None else work_area_ids)
+    areas_by_group = []
+    for definition in definitions:
+        area_ids = set()
+        for unit_id in definition["member_unit_ids"]:
+            unit = hierarchy["by_id"].get(unit_id)
+            if unit and unit.unit_type in {"department", "operation"}:
+                area_ids.update(_daily_attendance_work_area_ids(unit, hierarchy))
+        areas_by_group.append(area_ids & allowed_ids)
+    needed_ids = set().union(*areas_by_group) if areas_by_group else set()
+    by_area = {}
+    if needed_ids:
+        counts = db.session.query(
+            StaffingWorkAssignment.work_area_unit_id,
+            StaffingDailyAttendance.status,
+            func.count(StaffingWorkAssignment.person_id),
+        ).join(StaffingPerson, StaffingPerson.id == StaffingWorkAssignment.person_id).outerjoin(
+            StaffingDailyAttendance, db.and_(
+                StaffingDailyAttendance.person_id == StaffingPerson.id,
+                StaffingDailyAttendance.attendance_date == operation.sort_date,
+                StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+                or_(StaffingDailyAttendance.sort_date_operation_id == operation.id,
+                    StaffingDailyAttendance.sort_date_operation_id.is_(None)),
+            ),
+        ).filter(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(needed_ids),
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        ).group_by(StaffingWorkAssignment.work_area_unit_id, StaffingDailyAttendance.status).all()
+        for area_id, status, count in counts:
+            by_area.setdefault(area_id, {})[status] = count
+    rollups = []
+    for definition, area_ids in zip(definitions, areas_by_group):
+        totals = {}
+        for area_id in area_ids:
+            for status, count in by_area.get(area_id, {}).items():
+                totals[status] = totals.get(status, 0) + count
+        total_roster = sum(totals.values())
+        totals.pop(None, None)
+        rollups.append({**definition, **_attendance_status_summary(total_roster, totals)})
+    return rollups
+
+
 def _daily_staffing_group_rollups(definitions, roster_rows, hierarchy):
     rows_by_work_area_id = {}
     for row in roster_rows:
@@ -4509,13 +4554,17 @@ def _daily_attendance_summary(rows):
     for row in rows:
         if row["status"]:
             status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
+    return _attendance_status_summary(len(rows), status_counts)
+
+
+def _attendance_status_summary(total_roster, status_counts):
     here = status_counts.get("here", 0)
     absent = sum(
         count for status, count in status_counts.items() if status != "here"
     )
-    unmarked = len(rows) - here - absent
+    unmarked = total_roster - here - absent
     return {
-        "total_roster": len(rows),
+        "total_roster": total_roster,
         "here": here,
         "absent": absent,
         "unmarked": unmarked,

@@ -168,6 +168,77 @@ class NeoStaffingStaffingGroupsTest(unittest.TestCase):
         self.assertEqual(group["unmarked"], 1)
         self.assertEqual(direct_unmarked.work_assignment.work_area_unit_id, direct_area.id)
 
+    def test_selected_door_roster_is_unchanged_with_group_totals(self):
+        _sort, operation, _department, selected, other = self._hierarchy()
+        self._night_operation()
+        local = self._person("DOOR-LOCAL", selected)
+        remote = self._person("DOOR-OTHER", other)
+        staffing_service.create_staffing_group({"name": "Both Doors", "staffing_unit_ids": [operation.id]})
+        db.session.commit()
+        filters = {"work_area_id": str(selected.id)}
+        plain = staffing_service.attendance_context(filters)
+        grouped = staffing_service.attendance_context(filters, include_staffing_groups=True)
+        self.assertEqual([row["person"].id for row in grouped["rows"]], [local.id])
+        self.assertEqual(grouped["summary"], plain["summary"])
+        self.assertEqual(grouped["rows"][0]["original_snapshot"], plain["rows"][0]["original_snapshot"])
+        self.assertEqual(grouped["staffing_groups"][0]["total_roster"], 2)
+        self.assertEqual(grouped["selected_work_area_ids"], [selected.id])
+        self.assertNotIn(remote.id, [row["person"].id for row in grouped["rows"]])
+        # Existing explicit multi-area links calculate group totals within their
+        # area selection; ordinary single-Door navigation uses sort-wide totals.
+        linked = staffing_service.attendance_context(
+            {"work_area_ids": [str(selected.id)]}, include_staffing_groups=True,
+        )
+        self.assertEqual(linked["staffing_groups"][0]["total_roster"], 1)
+
+    def test_door_group_totals_do_not_materialize_other_roster_rows(self):
+        staffing_sort, operation, department, selected, other = self._hierarchy()
+        current = self._night_operation()
+        selected_id = selected.id
+        people = [StaffingPerson(employee_id=f"DOOR-SCALE-{i:04}", first_name="Scale",
+            last_name=f"Person {i:04}", classification="part_time",
+            seniority_date=date(2020, 1, 1)) for i in range(500)]
+        db.session.add_all(people)
+        db.session.flush()
+        db.session.add_all([StaffingWorkAssignment(person_id=person.id,
+            work_area_unit_id=selected.id if i < 5 else other.id) for i, person in enumerate(people)])
+        db.session.add_all([StaffingDailyAttendance(person_id=person.id,
+            attendance_date=current.sort_date, sort_unit_id=staffing_sort.id,
+            sort_date_operation_id=current.id, status="here") for person in people])
+        for i in range(20):
+            staffing_service.create_staffing_group({"name": f"Door Scale {i}",
+                "staffing_unit_ids": [operation.id, department.id]})
+        db.session.commit()
+        db.session.expunge_all()
+        loads = {StaffingPerson: 0, StaffingWorkAssignment: 0, StaffingDailyAttendance: 0}
+        selects = []
+
+        def loaded(obj, _context):
+            loads[type(obj)] += 1
+
+        def queried(_conn, _cursor, statement, *_args):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects.append(statement)
+
+        for model in loads:
+            event.listen(model, "load", loaded)
+        event.listen(db.engine, "before_cursor_execute", queried)
+        try:
+            context = staffing_service.attendance_context(
+                {"work_area_id": str(selected_id)}, include_staffing_groups=True,
+            )
+            self.assertEqual(len(context["rows"]), 5)
+            self.assertEqual(loads, {StaffingPerson: 5, StaffingWorkAssignment: 5, StaffingDailyAttendance: 5})
+            self.assertEqual(len(context["staffing_groups"]), 20)
+            self.assertTrue(all(group["total_roster"] == 500 and group["here"] == 500
+                                for group in context["staffing_groups"]))
+            self.assertEqual(sum("GROUP BY" in sql and "staffing_daily_attendance" in sql for sql in selects), 1)
+            self.assertLessEqual(len(selects), 12)
+        finally:
+            for model in loads:
+                event.remove(model, "load", loaded)
+            event.remove(db.engine, "before_cursor_execute", queried)
+
     def test_current_night_operation_is_authoritative_and_inactive_groups_are_hidden(self):
         staffing_sort, operation, _department, _nested, direct_area = self._hierarchy()
         current_operation = self._night_operation()
