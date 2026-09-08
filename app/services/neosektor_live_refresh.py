@@ -36,6 +36,7 @@ from app.services.neosektor_sheets_compat import (
 COUNT_STATE_SCOPE = "counts"
 ROUTING_STATE_SCOPE = "routing"
 DISCHARGE_STATE_SCOPE = "discharge"
+_WAVE_TIMER_SOURCE_PREFIX = "wave_timer:"
 NEOSEKTOR_LIVE_STATE_SCOPES = {
     COUNT_STATE_SCOPE,
     ROUTING_STATE_SCOPE,
@@ -137,12 +138,19 @@ def neosektor_state_revision(
                     NeoSektorDriverRouteSetting.sort_state_id.in_(sort_state_ids),
                 )
             )
-        timer_rows = db.session.execute(
+        # Carry timer starts in the same round trip as the aggregate inputs.
+        # These tagged rows are unpacked below, not added to the fingerprint's
+        # aggregate list, so the revision and timer-phase semantics stay exact.
+        aggregate_queries.append(
             select(
-                NeoSektorWaveState.wave_name,
-                NeoSektorWaveState.all_up_started_at,
+                (literal(_WAVE_TIMER_SOURCE_PREFIX) + NeoSektorWaveState.wave_name).label("source"),
+                literal(0).label("row_count"),
+                literal(0).label("max_id"),
+                literal(0).label("id_sum"),
+                literal(0).label("state_value"),
+                NeoSektorWaveState.all_up_started_at.label("latest_updated_at"),
             ).where(NeoSektorWaveState.sort_state_id.in_(sort_state_ids))
-        ).all()
+        )
 
     if scope == ROUTING_STATE_SCOPE:
         # Match the canonical Wave 2 arrival gate used by Driver Routing.
@@ -169,6 +177,20 @@ def neosektor_state_revision(
         if aggregate_queries
         else []
     )
+
+    if mode != GOOGLE_PRIMARY:
+        timer_rows = [
+            SimpleNamespace(
+                wave_name=row.source.removeprefix(_WAVE_TIMER_SOURCE_PREFIX),
+                all_up_started_at=row.latest_updated_at,
+            )
+            for row in aggregate_rows
+            if row.source.startswith(_WAVE_TIMER_SOURCE_PREFIX)
+        ]
+        aggregate_rows = [
+            row for row in aggregate_rows
+            if not row.source.startswith(_WAVE_TIMER_SOURCE_PREFIX)
+        ]
 
     return _digest(
         {

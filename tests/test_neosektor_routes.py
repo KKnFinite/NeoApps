@@ -3411,11 +3411,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             return bundle.driver_routes
 
         paths = (
-            ("/neosektor/live-counts/state", 16),
-            ("/neosektor/driver-routing/state", 16),
-            ("/neosektor/tunnel-conductor/state", 17),
-            ("/neosektor/ballmat/state?side=east", 17),
-            ("/neosektor/ballmat/state?side=west", 17),
+            ("/neosektor/live-counts/state", 15),
+            ("/neosektor/driver-routing/state", 15),
+            ("/neosektor/tunnel-conductor/state", 16),
+            ("/neosektor/ballmat/state?side=east", 16),
+            ("/neosektor/ballmat/state?side=west", 16),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
@@ -3658,11 +3658,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.client.get("/neosektor/live-counts")
         for path, budget in (
-            ("/neosektor/live-counts/state", 10),
-            ("/neosektor/driver-routing/state", 10),
-            ("/neosektor/tunnel-conductor/state", 11),
-            ("/neosektor/ballmat/state?side=east", 11),
-            ("/neosektor/ballmat/state?side=west", 11),
+            ("/neosektor/live-counts/state", 9),
+            ("/neosektor/driver-routing/state", 9),
+            ("/neosektor/tunnel-conductor/state", 10),
+            ("/neosektor/ballmat/state?side=east", 10),
+            ("/neosektor/ballmat/state?side=west", 10),
         ):
             with self.subTest(path=path):
                 initial = self.client.get(path).get_json()
@@ -3678,8 +3678,66 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(sum(s.startswith("select") for s in sql), budget)
                 self.assertEqual(sum(s.startswith("select") for s in separate_sql), budget + 1)
                 self.assertEqual(sum(s.startswith("select sort_date_operations.id as") for s in sql), 1)
+                self.assertFalse(any(s.startswith("select neosektor_wave_states.wave_name") for s in sql))
                 self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
                 self.assertEqual(commits, 0)
+
+    def test_combined_timer_query_keeps_legacy_revision_for_sparse_rows_and_expiry(self):
+        from sqlalchemy import select
+        from app.services import neosektor_live_refresh as revision
+        from app.services.neosektor_live_counts import NeoSektorOperationalStateBundle
+
+        bundle = NeoSektorOperationalStateBundle.load(self.gateway, include_routing=True)
+        settings = bundle.operational_settings
+        settings.all_up_to_down_minutes = 20
+        started = datetime(2026, 9, 8, 12)
+        bundle.waves[0].all_up_started_at = started
+        bundle.waves[1].all_up_started_at = None
+        db.session.commit()
+        # Compare the full hash against the original aggregate + separate timer
+        # query contract, not just against a new-format revision from this code.
+        for sparse in (False, True):
+            if sparse:
+                NeoSektorWaveState.query.filter_by(sort_state_id=bundle.sort_state.id).delete()
+                db.session.commit()
+            for scope in (revision.COUNT_STATE_SCOPE, revision.ROUTING_STATE_SCOPE):
+                sources = [
+                    ("ballmats", NeoSektorBallmatCount),
+                    ("waves", NeoSektorWaveState),
+                    ("wave_counts", NeoSektorBallmatWaveCount),
+                    ("open_bays", NeoSektorOpenBayState),
+                    ("bay_statuses", NeoSektorBayStatus),
+                ]
+                if scope == revision.ROUTING_STATE_SCOPE:
+                    sources.append(("driver_routes", NeoSektorDriverRouteSetting))
+                queries = [revision._aggregate_query(name, model,
+                    model.sort_state_id == bundle.sort_state.id) for name, model in sources]
+                queries.append(revision._aggregate_query("sort_state", NeoSektorSortState,
+                    NeoSektorSortState.id == bundle.sort_state.id))
+                if scope == revision.ROUTING_STATE_SCOPE:
+                    queries.append(revision._aggregate_query("second_wave_arrivals", SortDateMission,
+                        SortDateMission.sort_date_operation_id == -1,
+                        SortDateMission.mission_type == "arrival",
+                        SortDateMission.wave.in_(("2", "2nd Wave")),
+                        SortDateMission.actual_block_in_datetime_utc.isnot(None)))
+                aggregates = sorted([db.session.execute(q).one() for q in queries], key=lambda row: row.source)
+                timers = db.session.execute(select(NeoSektorWaveState.wave_name,
+                    NeoSektorWaveState.all_up_started_at).where(
+                    NeoSektorWaveState.sort_state_id == bundle.sort_state.id)).all()
+                for elapsed in (timedelta(minutes=20) - timedelta(microseconds=1),
+                                timedelta(minutes=20), timedelta(minutes=21)):
+                    with self.subTest(sparse=sparse, scope=scope, elapsed=elapsed):
+                        now = started + elapsed
+                        expected = revision._digest({
+                            "gateway_id": self.gateway.id, "scope": scope,
+                            "sort_date": date.today().isoformat(), "sort_name": "night",
+                            "mode": "neo_only", "google_values": None,
+                            "settings": revision._settings_revision_values(settings),
+                            "timer_phases": revision._timer_phase_tokens(timers, settings, now),
+                            "inputs": [revision._aggregate_values(row) for row in aggregates],
+                        })
+                        self.assertEqual(revision.neosektor_state_revision(
+                            self.gateway, scope, now_utc=now), expected)
 
     def test_unchanged_poll_becomes_changed_when_all_up_timer_expires(self):
         self._login_approved_user(role="simulator")
