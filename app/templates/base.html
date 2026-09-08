@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"{% if request.endpoint == 'neosektor.driver_routing' and request.args.get('tv') == '1' %} id="sektor-tv"{% endif %}>
 {% from "_neo_brand.html" import neo_brand, neo_brand_name %}
 {% set is_sektor_dashboard = request.endpoint == 'neosektor.index' %}
 {% set is_gateway_typography_page = uses_operational_shell or is_rfd_hub_page or request.blueprint == 'neonodes' or (request.blueprint == 'auth' and request.path.startswith('/motherbrain/')) %}
@@ -29,14 +29,14 @@
     {% if is_gateway_dock_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
-    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page or is_neosektor_tunnel_operator_page or is_neosektor_ballmat_operator_page %}
+    {% if is_rfd_hub_page or is_sektor_dashboard or is_neosektor_live_counts_page or is_neosektor_tunnel_operator_page or is_neosektor_ballmat_operator_page or request.endpoint in ['neosektor.discharge', 'neosektor.driver_routing'] %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontlite.css', v=config.STATIC_ASSET_VERSION, tracking='20260907-05em') }}">
     {% endif %}
     {% if is_sektor_dashboard %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_dashboard.css', v=config.STATIC_ASSET_VERSION, sektor='20260907-tracking-v5') }}">
     {% endif %}
     {% if is_neosektor_live_counts_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_live_counts.css', v=config.STATIC_ASSET_VERSION, ui='20260907-flat-v2') }}">
     {% endif %}
     {% if is_neosektor_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_mobile.css', v=config.STATIC_ASSET_VERSION, viewport='20260907-shared-v1') }}">
@@ -45,7 +45,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260907-flat-v1') }}">
     {% endif %}
     {% if is_neosektor_ballmat_operator_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260907-spotters-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260907-tracks-v2') }}">
+    {% endif %}
+    {% if request.endpoint in ['neosektor.discharge', 'neosektor.driver_routing'] %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_display.css', v=config.STATIC_ASSET_VERSION, ui='20260907-flat-tv-v1') }}">
     {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>

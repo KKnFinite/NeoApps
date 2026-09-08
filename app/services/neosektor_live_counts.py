@@ -403,6 +403,13 @@ class NeoSektorOperationalStateBundle:
         if self.initialize:
             db.session.flush()
         state["routing"] = routing
+        # Compact consumers share the canonical board's already-resolved states.
+        state["ballmat_routing"] = {
+            key: ("-" if route["display_state"] == "all_in" else
+                  "NOT ARRIVED" if route["display_state"] == "not_arrived" else
+                  "ROUTING " + route["direction"].upper())
+            for key, route in routing["routes"].items()
+        }
         state["driver_routes"] = [
             _driver_route_view(row) for row in driver_routes
         ]
@@ -498,7 +505,7 @@ class NeoSektorOperationalStateBundle:
 
 
 def live_counts_context(gateway, sort_date=None, sort_name=None, *, bundle=None):
-    state = ballmat_state_payload(
+    state = driver_routing_state_payload(
         gateway,
         sort_date,
         sort_name,
@@ -512,6 +519,7 @@ def live_counts_context(gateway, sort_date=None, sort_name=None, *, bundle=None)
         "operational_settings": state["operational_settings"],
         "integration": state["integration"],
         "refresh_status": state["refresh"],
+        "ballmat_routing": state["ballmat_routing"],
     }
 
 
@@ -583,12 +591,6 @@ def ballmat_operator_state_payload(gateway, sort_date=None, sort_name=None, *,
     for key, total in totals.items():
         right = min(max(getattr(row, "right_" + key, 0) or 0, 0), total) if mode == 2 else 0
         state["spotters"]["counts"][key] = {"left": total - right, "right": right, "total": total}
-    state["ballmat_routing"] = {
-        key: ("-" if route["display_state"] == "all_in" else
-              "NOT ARRIVED" if route["display_state"] == "not_arrived" else
-              "ROUTING " + route["direction"].upper())
-        for key, route in state["routing"]["routes"].items()
-    }
     return state
 
 

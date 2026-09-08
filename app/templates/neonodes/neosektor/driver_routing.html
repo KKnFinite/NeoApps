@@ -3,6 +3,11 @@
 {% block title %}DRIVER ROUTING | NeoSektor{% endblock %}
 
 {% block content %}
+{% if request.args.get('tv') == '1' %}
+<a class="sektor-tv-exit" href="{{ url_for('neosektor.driver_routing') }}">EXIT TV MODE</a>
+{% else %}
+<a class="sektor-tv-entry header-link" href="{{ url_for('neosektor.driver_routing', tv='1') }}">TV MODE</a>
+{% endif %}
 <section
     class="neosektor-standalone-page neosektor-driver-shell driver-body"
     aria-labelledby="neosektor-driver-title"

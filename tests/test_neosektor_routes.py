@@ -50,6 +50,27 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_live_counts_routing_uses_existing_state_request_and_revision(self):
+        from app.neonodes.neosektor import routes
+        self._login_approved_user(role="operator")
+        with patch.object(routes, 'neosektor_state_revision', wraps=routes.neosektor_state_revision) as revision:
+            page = self.client.get('/neosektor/live-counts')
+            self.assertEqual(page.status_code, 200)
+            self.assertEqual(revision.call_args.args[1], routes.ROUTING_STATE_SCOPE)
+            revision.reset_mock()
+            response = self.client.get('/neosektor/live-counts/state')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(revision.call_args.args[1], routes.ROUTING_STATE_SCOPE)
+        state = response.get_json()['state']
+        canonical = self.client.get('/neosektor/driver-routing/state').get_json()['state']
+        self.assertEqual(state['routing'], canonical['routing'])
+        self.assertEqual(state['ballmat_routing'], canonical['ballmat_routing'])
+        self.assertNotIn('spotters', state)
+        for key, value in state['ballmat_routing'].items():
+            self.assertIn(value, ('-', 'NOT ARRIVED', 'ROUTING EAST', 'ROUTING WEST'))
+            self.assertIn(f'data-live-route="{key}"'.encode(), page.data)
+        self.assertEqual(page.data.count(b'data-state-url="/neosektor/live-counts/state"'), 1)
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",
@@ -3303,7 +3324,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
         self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
         self.assertEqual(NeoSektorBayStatus.query.count(), 5)
-        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), 0)
+        # Live Counts now consumes the same routing bundle as the board.
+        from app.services.neosektor_live_counts import DEFAULT_DRIVER_ROUTES
+        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), len(DEFAULT_DRIVER_ROUTES))
 
     def test_established_neosektor_gets_do_not_commit_or_repeat_access_queries(self):
         self._login_approved_user(role="simulator")

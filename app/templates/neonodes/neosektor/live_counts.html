@@ -4,6 +4,7 @@
 
 {% block content %}
 <section
+    id="sektor-live-display"
     class="neosektor-standalone-page neosektor-live-shell neosektor-count-screen-compact mode-view"
     aria-labelledby="neosektor-live-title"
     data-live-counts
@@ -55,6 +56,7 @@
             {% endfor %}
         </section>
 
+        <h2 class="sektor-section-title">BALLMAT COUNTS</h2>
         <section class="ops-grid mode-view neosektor-live-ballmat-row" aria-label="Live ballmat counts">
             {% for side_key in ["east", "west"] %}
             {% set side = sides[side_key] %}
@@ -73,6 +75,13 @@
                     <strong class="readonly-count" data-open-bays-value>{{ side.open_bays }}</strong>
                 </article>
 
+            </section>
+            {% endfor %}
+        </section>
+        <h2 class="sektor-section-title">BAY STATUS</h2>
+        <section class="sektor-live-bays" aria-label="Bay status">
+            {% for side_key in ["east", "west"] %}
+            {% set side = sides[side_key] %}
                 <section class="column-bays neosektor-live-column-bays" aria-label="{{ side.label }} bays">
                     <div class="column-bay-title">
                         <h3>{{ side.label.title() }} Bays</h3>
@@ -86,8 +95,13 @@
                     </article>
                     {% endfor %}
                 </section>
-            </section>
             {% endfor %}
+        </section>
+        <section class="sektor-live-routing" aria-label="Driver routing">
+            <h2 class="sektor-section-title">DRIVER ROUTING</h2>
+            <div>{% for key, label in [('first', '1ST WAVE'), ('second', '2ND WAVE')] %}
+                <div><span>{{ label }}</span><strong data-live-route="{{ key }}">{{ ballmat_routing[key] }}</strong></div>
+            {% endfor %}</div>
         </section>
         {% if can_manage_employees %}<nav class="neosektor-live-attendance-links"><a class="neosektor-menu-link" href="{{ url_for('neosektor.manage_employees', area=manage_employees_default_area, source='live') }}">MANAGE EMPLOYEES</a></nav>{% endif %}
     </main>
@@ -133,6 +147,9 @@
     const waveKey = (name) => String(name || "").startsWith("1ST") ? "first" : "second";
 
     const applyState = (state) => {
+        Object.entries(state.ballmat_routing || {}).forEach(([key, value]) => {
+            setText(`[data-live-route="${key}"]`, value);
+        });
         (state.waves || []).forEach((wave) => {
             const key = waveKey(wave.name);
             ["left_to_arrive", "left_to_unload"].forEach((metric) => {

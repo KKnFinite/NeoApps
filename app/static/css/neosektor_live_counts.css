@@ -19,18 +19,52 @@
     font-weight: 300;
 }
 
-@media (max-width: 900px) {
-    /* Status/banner visibility must not change which row receives spare height.
-       Content owns its intrinsic rows; shared shell/dock keep viewport ownership. */
-    #neosektor-live-counts-panel {
-        height: auto;
-        grid-template-rows: none;
-        grid-auto-rows: max-content;
-        align-content: start;
-        align-self: start;
-        gap: 6px;
+#neosektor-live-counts-panel { display:flex; flex-direction:column; gap:0; height:auto; }
+#neosektor-live-counts-panel :is(.wave-card,.ops-column,.counter-card,.column-bays,.bay-card) {
+    background:transparent; border:0; border-radius:0; box-shadow:none; min-width:0; min-height:0;
+}
+#neosektor-live-counts-panel .sektor-section-title {
+    width:100%; margin:0; padding:10px 0; text-align:center; border-top:1px solid #354047;
+    font:600 16px/1.3 var(--font-sans); letter-spacing:0; color:#dce4e9;
+}
+#neosektor-live-counts-panel :is(.neosektor-live-ballmat-row,.sektor-live-bays,.sektor-live-routing > div) {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; height:auto;
+}
+#neosektor-live-counts-panel :is(.ops-column,.column-bays) { display:block; padding:0 12px 10px; }
+#neosektor-live-counts-panel :is(.ops-column,.column-bays,.sektor-live-routing > div > div) + * { border-left:1px solid #354047; }
+#neosektor-live-counts-panel :is(.ops-column h2,.column-bay-title h3) {
+    margin:0; padding:4px 0 8px; text-align:center; font:600 14px/1.3 var(--font-sans); letter-spacing:0;
+}
+#neosektor-live-counts-panel .counter-card { display:grid; grid-template-columns:1fr 55px; align-items:center; padding:3px 0; height:38px; }
+#neosektor-live-counts-panel .counter-card > span { font-size:12px; letter-spacing:0; }
+#neosektor-live-counts-panel .readonly-count { font:600 23px/1.2 var(--font-sans); color:#f0f4f7; text-align:center; }
+#neosektor-live-counts-panel .column-bay-title { padding:0; margin:0; }
+#neosektor-live-counts-panel .bay-card { height:30px; padding:3px 0; }
+#neosektor-live-counts-panel .bay-heading { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:6px; }
+#neosektor-live-counts-panel .bay-heading :is(span,strong) { font:400 12px/1.3 var(--font-sans); letter-spacing:0; }
+#neosektor-live-counts-panel .sektor-live-routing > div > div { text-align:center; padding:4px 8px 12px; }
+#neosektor-live-counts-panel .sektor-live-routing strong { display:block; margin-top:6px; color:#ef3547; font:600 18px/1.3 var(--font-sans); }
+#neosektor-live-counts-panel .neosektor-live-attendance-links { margin:0; padding:4px 8px; text-align:center; }
+#neosektor-live-counts-panel .neosektor-live-attendance-links a { min-height:44px; font-size:12px; background:transparent; border:1px solid #354047; box-shadow:none; }
+@media (max-width:900px) {
+    body.neosektor-live-counts-page { --operational-mobile-header-height:calc(88px + var(--neo-safe-top)); background:#060d11; }
+    body.neosektor-live-counts-page .operational-mobile-header {
+        background:linear-gradient(90deg,#03070b88,#03070b22),url('../images/neosektor/dashboard_mobile.png') center 42% / cover;
+        border-bottom:1px solid #354047;
     }
-    #neosektor-live-counts-panel :is(.neosektor-live-wave-row, .neosektor-live-ballmat-row) {
-        height: auto;
-    }
+    body.neosektor-live-counts-page .operational-mobile-identity small { font:300 11px/1.5 NeoFontLite,sans-serif; letter-spacing:.05em; }
+    #sektor-live-display { display:block; margin:16px -5px 0; padding:0; background:#060d11; border:0; box-shadow:none; }
+    #neosektor-live-counts-panel { width:100%; min-height:0; max-height:none; margin:0; padding:0 8px; overflow:visible; align-self:start; }
+    #neosektor-live-counts-panel .operation-refresh-banner { display:none; }
+    #neosektor-live-counts-panel .live-update-controls { order:-1; display:flex; flex-wrap:nowrap; gap:6px; min-height:38px; margin:0; padding:2px 0; border-bottom:1px solid #354047; }
+    #neosektor-live-counts-panel .live-update-status { display:block; min-width:0; font:400 9px/1.25 var(--font-sans); background:none; border:0; padding:0; }
+    #neosektor-live-counts-panel .live-update-monitor-toggle { min-width:0; min-height:36px; padding:2px; border:0; background:none; box-shadow:none; font:400 9px/1.25 var(--font-sans); white-space:normal; }
+    #neosektor-live-counts-panel .neosektor-live-wave-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; height:auto; padding:12px 0; }
+    #neosektor-live-counts-panel .wave-card { margin:0; padding:0 6px; }
+    #neosektor-live-counts-panel .wave-card + .wave-card { border-left:1px solid #354047; }
+    #neosektor-live-counts-panel .wave-card h2 { margin:0 0 8px; font:600 16px/1.3 var(--font-sans); letter-spacing:0; }
+    #neosektor-live-counts-panel .wave-metrics { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+    #neosektor-live-counts-panel .wave-metrics > div { padding:0; background:none; border:0; border-radius:0; box-shadow:none; }
+    #neosektor-live-counts-panel .wave-metric-label { font:400 9px/1.25 var(--font-sans); letter-spacing:0; }
+    #neosektor-live-counts-panel .wave-metrics strong { font:600 19px/1.3 var(--font-sans); color:#ef3547; }
 }

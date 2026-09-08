@@ -20,7 +20,6 @@ from app.services.neosektor_live_counts import (
     ballmat_operations_context,
     ballmat_operator_state_payload,
     BallmatModeConflict,
-    ballmat_state_payload,
     driver_routing_context,
     driver_routing_refresh_status,
     driver_routing_state_payload,
@@ -39,7 +38,6 @@ from app.services.neosektor_live_counts import (
     update_ballmat_side,
 )
 from app.services.neosektor_live_refresh import (
-    COUNT_STATE_SCOPE,
     ROUTING_STATE_SCOPE,
     neosektor_discharge_revision,
     neosektor_state_revision,
@@ -654,6 +652,7 @@ def live_counts():
     try:
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
+            include_routing=True,
             refresh_status=neosektor_refresh_status(
                 gateway,
                 screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
@@ -665,7 +664,7 @@ def live_counts():
         return redirect(url_for("neosektor.index"))
     context["live_revision"] = neosektor_state_revision(
         gateway,
-        COUNT_STATE_SCOPE,
+        ROUTING_STATE_SCOPE,
     )
     context["can_manage_employees"] = _can_manage_employees()
     context["manage_employees_default_area"] = (
@@ -697,8 +696,8 @@ def live_counts_state():
     try:
         return _neosektor_live_state_response(
             gateway,
-            COUNT_STATE_SCOPE,
-            ballmat_state_payload,
+            ROUTING_STATE_SCOPE,
+            driver_routing_state_payload,
             screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
         )
     except NeoSektorGoogleError as exc:
