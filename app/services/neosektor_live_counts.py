@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 from flask import has_request_context, request
-from sqlalchemy import literal, select, text, union_all
+from sqlalchemy import cast, literal, null, select, text, union_all
 
 from app.extensions import db
 from app.models import (
@@ -187,6 +187,7 @@ class NeoSektorOperationalStateBundle:
                 google_cells=dict(cells),
             )
         else:
+            driver_routes = None
             if initialize:
                 sort_state = get_or_create_sort_state(
                     gateway,
@@ -222,7 +223,10 @@ class NeoSektorOperationalStateBundle:
                     ballmats,
                     open_bays,
                     bay_statuses,
-                ) = _read_only_ballmat_components(gateway, sort_date, sort_name)
+                    driver_routes,
+                ) = _read_only_ballmat_components(
+                    gateway, sort_date, sort_name, include_routing=include_routing,
+                )
             bundle = cls(
                 gateway=gateway,
                 sort_date=sort_date,
@@ -239,6 +243,8 @@ class NeoSektorOperationalStateBundle:
                 bay_statuses=bay_statuses,
                 timer_rows=waves,
                 _change_tracker=change_tracker,
+                driver_routes=driver_routes,
+                routing_sort_state=sort_state if driver_routes is not None else None,
             )
 
         if include_routing:
@@ -583,6 +589,11 @@ class BallmatModeConflict(ValueError):
 def ballmat_operator_state_payload(gateway, sort_date=None, sort_name=None, *,
                                    selected_side="east", bundle=None, **kwargs):
     """Operator detail is not added to the shared count/routing consumers."""
+    if kwargs.get("initialize") is False:
+        # Read-only operator pages always render canonical routing as well.
+        # Advertise that dependency before loading Neo child rows; writes keep
+        # their existing lazy route initialization through the supplied bundle.
+        kwargs.setdefault("include_routing", True)
     bundle = bundle or NeoSektorOperationalStateBundle.load(
         gateway, sort_date, sort_name, **kwargs)
     state = bundle.driver_routing_state_payload()
@@ -1078,6 +1089,7 @@ def canonical_neosektor_compat_values(
         ballmats,
         open_bays,
         bay_statuses,
+        _driver_routes,
     ) = _read_only_ballmat_components(gateway, sort_date, sort_name)
     wave_count_rows = {
         (row.side, row.wave_name): max(row.count or 0, 0)
@@ -1268,18 +1280,19 @@ def _operational_settings_for_state(
     )
 
 
-def _read_only_ballmat_components(gateway, sort_date, sort_name):
+def _read_only_ballmat_components(gateway, sort_date, sort_name, *, include_routing=False):
     persisted = _existing_sort_state(gateway, sort_date, sort_name)
     sort_state = _copy_sort_state(persisted, gateway, sort_date, sort_name)
     sort_state_id = getattr(persisted, "id", None)
 
-    count_rows = _read_only_count_rows(sort_state_id)
+    count_rows = _read_only_count_rows(sort_state_id, include_routing=include_routing)
     wave_counts = _read_only_wave_counts(count_rows["wave"])
-    waves = _read_only_waves(sort_state_id)
-    ballmats = _read_only_ballmats(sort_state_id)
+    waves = _read_only_waves(count_rows["timer"])
+    ballmats = _read_only_ballmats(count_rows["ballmat"])
     open_bays = _read_only_open_bays(count_rows["open"])
     bay_statuses = _read_only_bay_statuses(count_rows["bay"])
-    return sort_state, wave_counts, waves, ballmats, open_bays, bay_statuses
+    driver_routes = _driver_routes_from_rows(count_rows["route"]) if include_routing else None
+    return sort_state, wave_counts, waves, ballmats, open_bays, bay_statuses, driver_routes
 
 
 def _read_only_sort_and_driver_routes(gateway, sort_date, sort_name):
@@ -1312,10 +1325,10 @@ def _copy_sort_state(row, gateway, sort_date, sort_name):
     )
 
 
-def _read_only_waves(sort_state_id):
+def _read_only_waves(rows):
     existing = {
         row.wave_name: row
-        for row in _rows_for_sort_state(NeoSektorWaveState, sort_state_id)
+        for row in rows
     }
     return [
         SimpleNamespace(
@@ -1332,31 +1345,38 @@ def _read_only_waves(sort_state_id):
     ]
 
 
-def _read_only_count_rows(sort_state_id):
-    """Read three small child collections together, without a multiplying join.
+def _read_only_count_rows(sort_state_id, *, include_routing=False):
+    """Read small Neo child collections together, without a multiplying join.
 
     Only the read-only Neo path uses this projection. Each branch keeps its
     own sort predicate; missing rows still flow through the existing defaults.
     """
-    rows = {"wave": [], "open": [], "bay": []}
+    rows = {"wave": [], "open": [], "bay": [], "timer": [], "ballmat": [], "route": []}
     if sort_state_id is None:
         return rows
-    wave = NeoSektorBallmatWaveCount
-    opened = NeoSektorOpenBayState
-    bay = NeoSektorBayStatus
-    query = union_all(
-        select(literal("wave"), wave.side, wave.wave_name, wave.count, wave.status)
-        .where(wave.sort_state_id == sort_state_id),
-        select(literal("open"), opened.side, literal(""), opened.open_count, literal("Empty"))
-        .where(opened.sort_state_id == sort_state_id),
-        select(literal("bay"), bay.side, bay.bay_name, literal(0), bay.status)
-        .where(bay.sort_state_id == sort_state_id),
-    )
-    for kind, side, name, count, status in db.session.execute(query):
-        rows[kind].append(SimpleNamespace(
-            side=side, wave_name=name, bay_name=name,
-            count=count, open_count=count, status=status,
-        ))
+    sources = [
+        ("wave", NeoSektorBallmatWaveCount, ("side", "wave_name", "count", "status")),
+        ("open", NeoSektorOpenBayState, ("side", "open_count")),
+        ("bay", NeoSektorBayStatus, ("side", "bay_name", "status")),
+        ("timer", NeoSektorWaveState, ("wave_name", "planned_count", "unloaded_count", "all_up_started_at", "status")),
+        ("ballmat", NeoSektorBallmatCount, ("side", "count", "status", "spotter_mode", "right_first", "right_second", "right_open")),
+    ]
+    if include_routing:
+        sources.append(("route", NeoSektorDriverRouteSetting, ("route_name", "route_value")))
+    # Align named fields using their actual model types. Explicitly typed NULLs
+    # avoid PostgreSQL resolving empty leading UNION columns as text (especially
+    # timestamps and integers). No coercion or defaulting of persisted values.
+    columns = {name: getattr(model, name) for _kind, model, fields in sources for name in fields}
+    query = union_all(*(
+        select(
+            literal(kind).label("kind"),
+            *((getattr(model, name) if name in fields else cast(null(), column.type)).label(name)
+              for name, column in columns.items()),
+        ).where(model.sort_state_id == sort_state_id)
+        for kind, model, fields in sources
+    ))
+    for row in db.session.execute(query).mappings():
+        rows[row["kind"]].append(SimpleNamespace(**{name: row[name] for name in columns}))
     return rows
 
 
@@ -1383,10 +1403,10 @@ def _read_only_wave_counts(rows):
     return rows
 
 
-def _read_only_ballmats(sort_state_id):
+def _read_only_ballmats(rows):
     existing = {
         row.side: row
-        for row in _rows_for_sort_state(NeoSektorBallmatCount, sort_state_id)
+        for row in rows
     }
     return [
         SimpleNamespace(
@@ -1431,9 +1451,13 @@ def _read_only_bay_statuses(rows):
 
 
 def _read_only_driver_routes(sort_state_id):
+    return _driver_routes_from_rows(_rows_for_sort_state(NeoSektorDriverRouteSetting, sort_state_id))
+
+
+def _driver_routes_from_rows(rows):
     existing = {
         row.route_name: row
-        for row in _rows_for_sort_state(NeoSektorDriverRouteSetting, sort_state_id)
+        for row in rows
     }
     return [
         SimpleNamespace(
