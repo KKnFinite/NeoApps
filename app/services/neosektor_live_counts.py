@@ -216,14 +216,17 @@ class NeoSektorOperationalStateBundle:
                     sort_state,
                     change_tracker=change_tracker,
                 )
-                ballmats = _get_or_create_ballmats(
-                    sort_state,
-                    change_tracker=change_tracker,
-                )
-                open_bays = _get_or_create_open_bays(
-                    sort_state,
-                    change_tracker=change_tracker,
-                )
+                if for_update:
+                    ballmats, open_bays = _get_or_create_ballmat_side_states(
+                        sort_state, change_tracker=change_tracker,
+                    )
+                else:
+                    ballmats = _get_or_create_ballmats(
+                        sort_state, change_tracker=change_tracker,
+                    )
+                    open_bays = _get_or_create_open_bays(
+                        sort_state, change_tracker=change_tracker,
+                    )
                 bay_statuses = _get_or_create_bay_statuses(
                     sort_state,
                     change_tracker=change_tracker,
@@ -1665,10 +1668,41 @@ def _get_or_create_waves(sort_state, *, change_tracker=None):
     return sorted(rows, key=lambda row: row.display_order)
 
 
-def _get_or_create_ballmats(sort_state, *, change_tracker=None):
+def _get_or_create_ballmat_side_states(sort_state, *, change_tracker=None):
+    """Load two unique-key side collections AFTER the caller's Gateway lock.
+
+    Anchor on the canonical sides so either collection can be missing without
+    hiding the other. Select mapped entities, not read-only snapshots: ORM
+    identity, defaults, dirty tracking and existing initialization stay intact.
+    Each (sort_state_id, side) is unique, so this yields exactly two rows.
+    """
+    sides = union_all(*(
+        select(literal(side).label("side")) for _, side, _ in DEFAULT_BALLMAT_SIDES
+    )).subquery()
+    rows = db.session.execute(
+        select(NeoSektorBallmatCount, NeoSektorOpenBayState)
+        .select_from(sides)
+        .outerjoin(NeoSektorBallmatCount,
+            (NeoSektorBallmatCount.sort_state_id == sort_state.id)
+            & (NeoSektorBallmatCount.side == sides.c.side))
+        .outerjoin(NeoSektorOpenBayState,
+            (NeoSektorOpenBayState.sort_state_id == sort_state.id)
+            & (NeoSektorOpenBayState.side == sides.c.side))
+    ).all()
+    return (
+        _get_or_create_ballmats(sort_state, change_tracker=change_tracker,
+            loaded_rows=[ballmat for ballmat, _ in rows if ballmat is not None]),
+        _get_or_create_open_bays(sort_state, change_tracker=change_tracker,
+            loaded_rows=[open_bay for _, open_bay in rows if open_bay is not None]),
+    )
+
+
+def _get_or_create_ballmats(sort_state, *, change_tracker=None, loaded_rows=None):
+    if loaded_rows is None:
+        loaded_rows = NeoSektorBallmatCount.query.filter_by(sort_state_id=sort_state.id).all()
     existing = {
         row.side: row
-        for row in NeoSektorBallmatCount.query.filter_by(sort_state_id=sort_state.id).all()
+        for row in loaded_rows
     }
     rows = []
     for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
@@ -1707,10 +1741,12 @@ def _get_or_create_ballmat_wave_counts(sort_state, *, change_tracker=None):
     return sorted(rows, key=lambda row: row.display_order)
 
 
-def _get_or_create_open_bays(sort_state, *, change_tracker=None):
+def _get_or_create_open_bays(sort_state, *, change_tracker=None, loaded_rows=None):
+    if loaded_rows is None:
+        loaded_rows = NeoSektorOpenBayState.query.filter_by(sort_state_id=sort_state.id).all()
     existing = {
         row.side: row
-        for row in NeoSektorOpenBayState.query.filter_by(sort_state_id=sort_state.id).all()
+        for row in loaded_rows
     }
     rows = []
     for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES:
