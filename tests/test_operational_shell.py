@@ -1,16 +1,19 @@
 from tests.css_contracts import stylesheet_source
+from tests.html_contracts import document
+from flask import request, url_for
 import unittest
 from pathlib import Path
 
 from app import create_app
 from app.extensions import db
-from app.models import PortalAppAccess, User
+from app.models import NeoSektorOperationalSetting, PortalAppAccess, User
 from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
 )
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
+from app.services.shell_metadata import NODE_IDENTITIES, resolve_shell_metadata
 
 
 class OperationalShellTest(unittest.TestCase):
@@ -29,7 +32,10 @@ class OperationalShellTest(unittest.TestCase):
         self.context = self.app.app_context()
         self.context.push()
         db.create_all()
-        ensure_default_gateway_and_nodes()
+        gateway = ensure_default_gateway_and_nodes()
+        db.session.add(NeoSektorOperationalSetting(
+            gateway_id=gateway.id, gateway_code=gateway.code, integration_mode='neo_only',
+        ))
         ensure_default_permission_rules()
         self.user = User(username="operational-shell", role="grandmaster")
         set_user_password(self.user, "TestPassword123!")
@@ -75,15 +81,70 @@ class OperationalShellTest(unittest.TestCase):
                     self.assertNotIn(b"data-operational-sidebar", response.data)
                 else:
                     self.assertIn(b"data-operational-sidebar", response.data)
-                    self.assertNotIn(b"css/neosektor_shell.css", response.data)
-                    self.assertIn(b"topbar operational-topbar", response.data)
-                    if path != '/motherbrain':
-                        self.assertIn(b"motherbrain-desktop-side-brand node-desktop-side-brand", response.data)
+                    self.assertIn(b"operational-sidebar-logo", response.data)
+                self.assertIn(b"css/operational_node_shell.css", response.data)
+                self.assertIn(b"operational-node-topbar", response.data)
                 self.assertIn(b"data-operational-mobile-header", response.data)
                 self.assertIn(b"operational-mobile-bottom-nav", response.data)
                 self.assertIn(b"NeoGateway", response.data)
                 self.assertIn(b"NeoPortal", response.data)
                 self.assertIn(node, response.data)
+
+    def test_desktop_identity_and_logo_contract_across_nodes(self):
+        for path, key in (
+            ('/motherbrain', 'motherbrain'),
+            ('/motherbrain/manage-sort', 'motherbrain'),
+            ('/neosektor/live-counts', 'sektor'),
+            ('/neoermac/settings', 'ermac'),
+            ('/neoscorpion/settings', 'scorpion'),
+            ('/neorain/inbound', 'rain'),
+            ('/neosubzero/pretreat', 'subzero'),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                root = document(response)
+                expected = NODE_IDENTITIES[key]
+                with self.app.test_request_context(path):
+                    metadata = resolve_shell_metadata(request, is_authenticated=True)
+                    home = url_for(expected['home_endpoint'])
+                bar = root.one('header', 'operational-node-topbar')
+                identity = bar.one('a', 'operational-node-identity')
+                self.assertEqual(identity.attrs['href'], home)
+                self.assertFalse(identity.findall('img'))
+                self.assertEqual(identity.one('span', 'neo-brand').attrs['aria-label'], expected['name'])
+                self.assertEqual(identity.one('small').text, metadata['node_current_label'])
+                self.assertEqual(len(bar.findall(**{'data-character-switcher': None})), 1)
+                self.assertEqual(bar.one('form', action='/logout').attrs['method'], 'post')
+                sidebar = root.one(**{'data-operational-sidebar': None})
+                logo = sidebar.one('a', 'operational-sidebar-logo')
+                self.assertEqual(logo.attrs['href'], home)
+                self.assertEqual(logo.text.strip(), '')
+                self.assertEqual(logo.one('img').attrs['src'], '/static/' + expected['desktop_icon'])
+                self.assertFalse(sidebar.findall(cls='motherbrain-sidebar-brand-title'))
+                self.assertTrue(sidebar.findall(cls='motherbrain-desktop-side-context'))
+                self.assertTrue(sidebar.findall('nav', 'motherbrain-desktop-side-menu'))
+                self.assertTrue(sidebar.findall('a', href='/rfd'))
+                self.assertTrue(sidebar.findall('a', href='/portal'))
+                mobile = root.one('header', **{'data-operational-mobile-header': None})
+                self.assertEqual(mobile.one('img').attrs['width'], '34')
+                self.assertEqual(mobile.one('img').attrs['src'], '/static/' + expected['locked_icon'])
+                lite = [link for link in root.findall('link', rel='stylesheet')
+                        if '/css/neofontlite.css?' in link.attrs['href']]
+                self.assertEqual(len(lite), 1)
+                if key != 'sektor':
+                    self.assertEqual(lite[0].attrs['media'], '(min-width: 901px)')
+
+    def test_desktop_logo_size_and_collapsed_state_are_shared_and_mobile_is_untouched(self):
+        css = Path(self.app.root_path, 'static/css/operational_node_shell.css').read_text(encoding='utf-8')
+        desktop = css.split('@media (min-width: 901px) {', 1)[1].split('@media (max-width: 900px)', 1)[0]
+        self.assertIn('width: 144px; height: 144px;', desktop)
+        self.assertIn('object-fit: contain;', desktop)
+        self.assertIn('.operational-sidebar-collapsed .operational-sidebar-logo img { width: 40px; height: 40px; }', desktop)
+        self.assertIn('body.operational-board-view .operational-node-topbar { display: none; }', desktop)
+        self.assertIn('@media (max-width: 900px) {\n    .operational-node-topbar { display: none; }', css)
+        self.assertIn('#sektor-tv .operational-node-topbar { display: none; }', css)
+        self.assertNotIn('!important', css)
 
     def test_operational_shell_uses_locked_logos_and_board_opt_in(self):
         response = self.client.get("/neoscorpion/fuel-dispatch")
@@ -124,6 +185,7 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn(b"data-operational-shell", response.data)
                 self.assertNotIn(b"data-operational-mobile-header", response.data)
+                self.assertNotIn(b"css/operational_node_shell.css", response.data)
 
     def test_sidebar_reuses_permission_filtered_node_menu(self):
         watcher = User(username="operational-watcher", role="watcher")

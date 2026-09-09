@@ -108,8 +108,8 @@ class GatewayTypographyTest(unittest.TestCase):
             page.set_viewport_size({'width':1920,'height':1080})
             kind().ready(page,'/neosektor')
             self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
-            self.assertEqual(page.locator('.sektor-dashboard-identity small').evaluate('e=>getComputedStyle(e).letterSpacing'),'1.6px')
-            self.assertTrue(page.locator('.sektor-command-copy strong, .sektor-dashboard-identity .neo-brand').evaluate_all('''es=>es.every(e=>{
+            self.assertEqual(page.locator('.operational-node-identity small').evaluate('e=>getComputedStyle(e).letterSpacing'),'1.6px')
+            self.assertTrue(page.locator('.sektor-command-copy strong, .operational-node-identity .neo-brand').evaluate_all('''es=>es.every(e=>{
                 const r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=(e.closest('header')||e.closest('a')).getBoundingClientRect();
                 // Nested brand spans yield box/text rectangles with 1px font
                 // overhang; compare line positions and actual link clearance,

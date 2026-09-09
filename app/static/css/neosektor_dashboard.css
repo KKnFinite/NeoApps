@@ -1,4 +1,4 @@
-/* Dashboard artwork/menu only; the reusable topbar lives in neosektor_shell.css. */
+/* Dashboard artwork/menu only; the reusable topbar lives in operational_node_shell.css. */
 @media (min-width: 901px) {
 body:has(.sektor-command) > .shell {
     width: 100%; max-width: none; min-height: 0; margin: 0; padding: 0;

@@ -88,10 +88,10 @@ class AssetFoundationBrowserTest(unittest.TestCase):
                                                  path not in ('/login','/portal','/rfd','/neostaffing'))
                                 self.assertEqual('/static/js/staffing_people.js' in data['js'], path=='/neostaffing')
                                 if path=='/motherbrain' and width>900:
-                                    self.assertTrue(page.locator('.motherbrain-sidebar-brand-title').evaluate('''e=>{
-                                        const b=e.getBoundingClientRect();return [...e.children].every(s=>{
-                                            const r=s.getBoundingClientRect();return r.left>=b.left && r.right<=b.right+1;
-                                        });}'''))
+                                    self.assertTrue(page.locator('.operational-sidebar-logo').evaluate('''e=>{
+                                        const b=e.getBoundingClientRect(), r=e.querySelector('img').getBoundingClientRect();
+                                        return !e.textContent.trim() && r.width>=100 && r.left>=b.left && r.right<=b.right+1;
+                                    }'''))
                                 before=baseline.get((engine,path,width,height))
                                 if before:
                                     for selector, styles in data['styles'].items():

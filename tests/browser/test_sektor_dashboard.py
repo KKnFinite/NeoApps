@@ -24,7 +24,7 @@ class SektorDashboardBrowserTest(unittest.TestCase):
                                          ['ebm','wbm','tunnel','driver-routing','discharge','settings','live-counts'])
                         self.assertEqual(page.locator('[data-operational-sidebar]').count(),0)
                         if width>900:
-                            self.assertTrue(page.locator('.sektor-dashboard-topbar').evaluate('e=>{const b=e.getBoundingClientRect();return b.left===0 && b.top===0 && b.width===innerWidth && [...e.children].every(c=>{const r=c.getBoundingClientRect();return r.top>=b.top && r.bottom<=b.bottom+1;});}'))
+                            self.assertTrue(page.locator('.operational-node-topbar').evaluate('e=>{const b=e.getBoundingClientRect();return b.left===0 && b.top===0 && b.width===innerWidth && [...e.children].every(c=>{const r=c.getBoundingClientRect();return r.top>=b.top && r.bottom<=b.bottom+1;});}'))
                         self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth + 1'))
                         self.assertTrue(page.locator('.sektor-command-copy strong').evaluate_all('es=>es.every(e=>{const r=document.createRange();r.selectNodeContents(e);const t=r.getBoundingClientRect(),b=e.closest("a").getBoundingClientRect();return t.left>=b.left && t.right<=b.right && t.top>=b.top && t.bottom<=b.bottom;})'))
                         self.assertIn('NeoFontLite',page.locator('.sektor-command-copy strong').first.evaluate('e=>getComputedStyle(e).fontFamily'))

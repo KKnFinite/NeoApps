@@ -1,0 +1,44 @@
+/* Sektor's compact desktop topbar, shared by Gateway operational nodes. */
+.operational-node-topbar {
+    display: flex; align-items: center; gap: 20px; padding: 10px 28px;
+    height: 84px; min-height: 84px; grid-template-columns: none;
+    position: fixed; inset: 0 0 auto; z-index: 1100; box-sizing: border-box;
+    background: #06090d; border-bottom: 1px solid #34343b;
+}
+.operational-node-topbar > * { position: static; flex-shrink: 0; }
+.operational-node-topbar .character-switcher-header { margin: 0; }
+.operational-node-identity {
+    display: flex; align-items: center; gap: 16px; min-width: 0;
+    margin-right: auto; text-decoration: none;
+}
+.operational-node-identity > span { min-width: 0; font: 400 24px/1.3 NeoFont, sans-serif; }
+.operational-node-identity small {
+    display: block; color: #c3cad4; font: 300 16px/1.5 NeoFontLite, sans-serif;
+    text-transform: uppercase; letter-spacing: .1em;
+}
+@media (min-width: 901px) {
+    /* Keep the shared shell's gutters and content layout below the taller bar. */
+    body.operational-shell-page { --operational-topbar-height: 84px; }
+    body.operational-shell-page .operational-desktop-sidebar {
+        /* Collapse control, logo, current page, navigation, global utilities. */
+        grid-template-rows: auto auto auto minmax(0,1fr) auto;
+    }
+    body.operational-shell-page.operational-sidebar-collapsed .operational-desktop-sidebar {
+        /* The shared collapsed state also hides the current-page panel. */
+        grid-template-rows: auto auto minmax(0,1fr) auto;
+    }
+    .operational-sidebar-logo {
+        display: grid; place-items: center; padding: 0 0 10px;
+        text-decoration: none; border-bottom: 1px solid rgba(201,208,214,.16);
+    }
+    .operational-sidebar-logo img {
+        display: block; width: 144px; height: 144px; max-width: 100%; object-fit: contain;
+    }
+    .operational-sidebar-collapsed .operational-sidebar-logo img { width: 40px; height: 40px; }
+    body.operational-board-view .operational-node-topbar { display: none; }
+}
+@media (max-width: 900px) {
+    .operational-node-topbar { display: none; }
+}
+/* TV mode retains only the routing board and Exit TV Mode, at every width. */
+#sektor-tv .operational-node-topbar { display: none; }
