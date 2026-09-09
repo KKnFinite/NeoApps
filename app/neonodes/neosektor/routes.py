@@ -487,6 +487,9 @@ def ballmat_update():
     try:
         gateway = get_current_gateway()
         bundle, before_values, warning_pending = _neosektor_write_bundle(gateway)
+        # Snapshot only after locking, before count/rollup changes. Other write
+        # paths retain their existing explicit fast-signal advancement.
+        previous_signal_timestamp = bundle.sort_state.updated_at if "spotter" in payload else None
         if "mode_guard" in payload or (request.args.get("operator") == "1" and "spotter" not in payload
                                         and ("waves" in payload or "open_bays" in payload)):
             validate_ballmat_mode(bundle, selected_side, payload.get("mode_guard"))
@@ -514,6 +517,7 @@ def ballmat_update():
         bundle,
         before_values,
         warning_pending,
+        previous_signal_timestamp=previous_signal_timestamp,
     )
     return jsonify({"ok": True, "state": state})
 
@@ -1133,6 +1137,8 @@ def _commit_neosektor_update_and_mirror(
     bundle,
     before_values,
     warning_pending,
+    *,
+    previous_signal_timestamp=None,
 ):
     """Commit Neo first, then mirror only Mode 2's changed cell values."""
     after_values = (
@@ -1142,7 +1148,7 @@ def _commit_neosektor_update_and_mirror(
     )
     # Under the same Gateway lock and transaction as all operational mutations.
     # This also covers child-only changes (bays, overrides, offset and modes).
-    advance_routing_signal(bundle)
+    advance_routing_signal(bundle, previous_updated_at=previous_signal_timestamp)
     db.session.commit()
     if before_values is not None:
         mirror_neosektor_operational_values(

@@ -23,9 +23,16 @@ def routing_signal_scope(args):
     return sort_date, sort_name
 
 
-def advance_routing_signal(bundle):
+def advance_routing_signal(bundle, *, previous_updated_at=None):
     row = bundle.sort_state
-    row.updated_at = max(datetime.utcnow(), (row.updated_at or datetime.min) + timedelta(microseconds=1))
+    # A locked spotter mutation may already have flushed its sort rollup and
+    # onupdate timestamp. That committed epoch will invalidate the same signal;
+    # do not issue a second timestamp-only UPDATE in the same transaction.
+    if (previous_updated_at is not None and row.updated_at is not None
+            and row.updated_at > previous_updated_at):
+        return
+    baseline = max(row.updated_at or datetime.min, previous_updated_at or datetime.min)
+    row.updated_at = max(datetime.utcnow(), baseline + timedelta(microseconds=1))
 
 
 def _signal(sort_date, sort_name, sort_updated, settings_updated):
