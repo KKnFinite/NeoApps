@@ -54,6 +54,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         from flask import request, template_rendered
         from app.neonodes.neosektor import routes
         from app.services import neosektor_live_counts as service
+        from app.services import gateway_matrix
 
         self._login_approved_user(role="simulator")
         # The UTC/server date is later than the active Chicago night sort.
@@ -80,6 +81,12 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         original_load = service.NeoSektorOperationalStateBundle.load
         original_revision = routes.neosektor_state_revision
+        original_cached = gateway_matrix.request_cached
+
+        def prior_candidates(namespace, key, resolve):
+            if namespace == "gateway.initial_page_operation_candidates":
+                return resolve()
+            return original_cached(namespace, key, resolve)
 
         def prior_load(*args, **kwargs):
             # Starting-main initial-render loader choices, not the live endpoint.
@@ -109,19 +116,32 @@ class NeoSektorRoutesTest(unittest.TestCase):
             return rendered, sum(s.startswith(("select", "with")) for s in sql), sql
 
         for slug, before_budget, after_budget in (
-            ("", 9, 9), ("live-counts", 29, 21), ("tunnel-conductor", 23, 22),
-            ("ebm", 24, 22), ("wbm", 24, 22), ("driver-routing", 22, 21),
+            ("", 9, 9), ("live-counts", 29, 21), ("tunnel-conductor", 23, 21),
+            ("ebm", 24, 21), ("wbm", 24, 21), ("driver-routing", 22, 20),
             ("discharge", 17, 17), ("settings", 11, 11),
         ):
             path = "/neosektor" + ("/" + slug if slug else "")
             with self.subTest(page=slug or "dashboard"):
                 self.client.get(path)  # Warm access/template state, identical both sides.
                 with patch.object(service.NeoSektorOperationalStateBundle, "load", side_effect=prior_load), \
-                     patch.object(routes, "neosektor_state_revision", side_effect=prior_revision):
+                     patch.object(routes, "neosektor_state_revision", side_effect=prior_revision), \
+                     patch.object(gateway_matrix, "request_cached", side_effect=prior_candidates):
                     before, before_count, _ = measured(path)
+                # Pass 2 isolates just candidate reuse from the earlier loader work.
+                with patch.object(gateway_matrix, "request_cached", side_effect=prior_candidates):
+                    uncached, uncached_count, uncached_sql = measured(path)
                 with patch.object(routes, "neosektor_state_revision", wraps=original_revision) as revision:
                     after, after_count, sql = measured(path)
                 self.assertEqual(after, before)
+                self.assertEqual(after, uncached)
+                reused = slug in {"tunnel-conductor", "ebm", "wbm", "driver-routing"}
+                self.assertEqual(uncached_count - after_count, int(reused))
+                if reused:
+                    candidates = lambda rows: [s for s in rows if
+                        "from sort_date_operations where sort_date_operations.gateway_code =" in s]
+                    self.assertEqual(len(candidates(uncached_sql)), 2)
+                    self.assertEqual(candidates(uncached_sql)[0], candidates(uncached_sql)[1])
+                    self.assertEqual(len(candidates(sql)), 1)
                 self.assertEqual((before_count, after_count), (before_budget, after_budget))
                 if revision.called:
                     self.assertEqual(revision.call_args.kwargs["sort_date"], sort_date)
@@ -129,6 +149,49 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual(sum("from neosektor_operational_settings" in s for s in sql), 1)
                 if slug in {"ebm", "wbm"}:
                     self.assertEqual(after["state"]["spotters"], before["state"]["spotters"])
+
+    def test_initial_operation_candidate_reuse_keeps_time_scope_and_request_boundaries(self):
+        from types import SimpleNamespace
+        from app.services.gateway_matrix import current_operations_for_gateway
+
+        operation = self._add_sort_operation(date(2026, 9, 8), "night")
+        self._set_sort_window("night", time(22), time(2))
+        operation_id = operation.id
+        gateway_id = self.gateway.id
+        sql = []
+        def capture(_conn, _cursor, statement, _params, _context, _many):
+            normalized = " ".join(statement.lower().split())
+            if "from sort_date_operations where sort_date_operations.gateway_code =" in normalized:
+                sql.append(normalized)
+        def current(at, gateway=None):
+            return [row.id for row in current_operations_for_gateway(gateway or self.gateway, now=at)]
+
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            with self.app.test_request_context("/neosektor/ebm"):
+                self.assertEqual(current(datetime(2026, 9, 9, 1, 59)), [operation_id])
+                self.assertEqual(current(datetime(2026, 9, 9, 2)), [])
+                self.assertEqual(len(sql), 1)  # Window selection is NOT cached.
+                self.assertEqual(current(datetime(2026, 9, 10, 1)), [])
+                self.assertEqual(len(sql), 2)  # A different local date needs new candidates.
+                other = SimpleNamespace(id=gateway_id, code="OTHER")
+                self.assertEqual(current(datetime(2026, 9, 9, 1), other), [])
+                self.assertEqual(len(sql), 3)
+                db.session.rollback()
+                self.assertEqual(current(datetime(2026, 9, 9, 1)), [operation_id])
+                self.assertEqual(len(sql), 4)
+            with self.app.test_request_context("/neosektor/ebm"):
+                self.assertEqual(current(datetime(2026, 9, 9, 1)), [operation_id])
+                self.assertEqual(len(sql), 5)  # Even a shared app context cannot leak a snapshot.
+            # Non-target page/mutation behavior is deliberately unchanged.
+            for path, method in (("/neosektor/live-counts", "GET"), ("/neosektor/ebm", "POST")):
+                with self.app.test_request_context(path, method=method):
+                    before = len(sql)
+                    current(datetime(2026, 9, 9, 1))
+                    current(datetime(2026, 9, 9, 1))
+                    self.assertEqual(len(sql) - before, 2)
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
 
     def test_live_counts_initial_render_uses_read_only_missing_sort_defaults(self):
         from app.services.neosektor_live_counts import NeoSektorOperationalStateBundle

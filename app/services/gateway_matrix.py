@@ -1,7 +1,7 @@
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from flask import current_app
+from flask import current_app, has_request_context, request
 from sqlalchemy import and_
 
 from app.extensions import db
@@ -225,6 +225,23 @@ def current_operations_for_gateway(gateway, now=None):
     if current_request_is_lightweight_live_state():
         operations = request_cached(
             "gateway.current_operations",
+            (gateway.id, gateway.code, current_date),
+            resolve_operations,
+        )
+    elif (
+        has_request_context()
+        and request.method == "GET"
+        and request.endpoint in {
+            "neosektor.tunnel_conductor", "neosektor.ebm", "neosektor.wbm",
+            "neosektor.driver_routing",
+        }
+    ):
+        # Initial refresh eligibility and state loading read identical candidates.
+        # Share only these code-scoped rows, not the time-dependent selection or
+        # the lifecycle resolver's broader ID-or-code candidates. Commit/rollback
+        # invalidates the existing request cache; nothing survives the request.
+        operations = request_cached(
+            "gateway.initial_page_operation_candidates",
             (gateway.id, gateway.code, current_date),
             resolve_operations,
         )
