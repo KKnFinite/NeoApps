@@ -78,12 +78,15 @@ def lightweight_live_state_scope_spec(endpoint, view_args=None):
         if endpoint in OPERATION_ID_LIVE_STATE_ENDPOINTS
         else None
     )
-    return {
+    spec = {
         "node_code": node_code,
         "operation_id": operation_id,
         "include_current_ermac_operation": endpoint
         in CURRENT_ERMAC_OPERATION_ENDPOINTS,
     }
+    if endpoint == "neosektor.driver_routing_version":
+        spec["include_sektor_routing_signal"] = True
+    return spec
 
 
 def current_request_is_lightweight_live_state():

@@ -50,7 +50,7 @@ from app.services.neosektor_live_refresh import (
     neosektor_state_revision,
 )
 from app.services.neosektor_routing_signal import (
-    advance_routing_signal, read_routing_signal, routing_signal_for_bundle,
+    advance_routing_signal, read_routing_signal, routing_signal_for_bundle, routing_signal_scope,
     driver_routing_watch_state_payload,
 )
 from app.services.neosektor_sheets_compat import (
@@ -883,10 +883,7 @@ def driver_routing_version():
     if not user_can(page["view_permission"]):
         return _live_state_json({"ok": False, "error": "Access denied."}), 403
     try:
-        sort_date = date.fromisoformat(request.args.get("sort_date", ""))
-        sort_name = request.args.get("sort_name", "").strip().lower()
-        if not sort_name or len(sort_name) > 32:
-            raise ValueError("Invalid sort")
+        sort_date, sort_name = routing_signal_scope(request.args)
     except ValueError:
         return _live_state_json({"ok": False, "error": "Invalid routing scope."}), 400
     return _live_state_json({"ok": True, **read_routing_signal(get_current_gateway(), sort_date, sort_name)})

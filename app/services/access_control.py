@@ -199,6 +199,7 @@ def prime_lightweight_live_request_scope(
     *,
     operation_id=None,
     include_current_ermac_operation=False,
+    include_sektor_routing_signal=False,
 ):
     """Resolve and seed shared live-request access facts in one projection."""
     if not _is_authenticated_user(user):
@@ -271,6 +272,19 @@ def prime_lightweight_live_request_scope(
             )
         )
 
+    signal_scope = None
+    if include_sektor_routing_signal and node_code == "sektor" and has_request_context():
+        from app.services.neosektor_routing_signal import (
+            ROUTING_SIGNAL_NAMESPACE, routing_signal_columns, routing_signal_scope,
+        )
+        try:
+            signal_scope = routing_signal_scope(request.args)
+        except ValueError:
+            pass  # Route retains its existing validation/error response, after auth.
+        if signal_scope is not None:
+            # Correlate to the same authorized Gateway; no extra entity hydration.
+            query = query.add_columns(*routing_signal_columns(Gateway.id, *signal_scope))
+
     row = query.filter(Gateway.code == gateway_code).first()
     if row is None:
         set_request_cached("access.default_gateway", gateway_code, None)
@@ -285,6 +299,8 @@ def prime_lightweight_live_request_scope(
         )
 
     gateway, membership, app_access, node, node_role = row[:5]
+    if signal_scope is not None:
+        set_request_cached(ROUTING_SIGNAL_NAMESPACE, (gateway.id, *signal_scope), tuple(row[-2:]))
     operation = row[5] if include_operation else None
     sort_setting = row[6] if include_operation else None
 

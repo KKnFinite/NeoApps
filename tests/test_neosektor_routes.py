@@ -50,6 +50,65 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_fresh_driver_signal_projection_budget_and_canonical_poll_equivalence(self):
+        from app.services import access_control
+
+        self._login_approved_user(role="simulator")
+        day = date(2026, 9, 8)
+        self._add_sort_operation(day, "night")
+        self._set_sort_window("night", time(22), time(2))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 9, 9, 0, 30)
+        self.assertEqual(self.client.post('/neosektor/tunnel-conductor/wave', json={"wave":"first", "value":8}).status_code, 200)
+
+        def fresh(url, budget):
+            # Discard the outer fixture's Flask-Login user/identity map. Include
+            # the real per-request user/session-validation SELECT in every budget.
+            db.session.remove()
+            self.context.pop()
+            try:
+                with self.app.app_context():
+                    response, sql, commits, _ = self._capture_get_metrics(url)
+            finally:
+                self.context.push()
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(sum(s.startswith(("select", "with")) for s in sql), budget)
+            self.assertEqual(commits, 0)
+            self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+            return response.json, sql
+
+        prime = access_control.prime_lightweight_live_request_scope
+        def prior_prime(*args, **kwargs):
+            kwargs.pop("include_sektor_routing_signal", None)
+            return prime(*args, **kwargs)
+
+        signal_url = f'/neosektor/driver-routing/version?sort_date={day}&sort_name=night'
+        canonical_url = '/neosektor/driver-routing/state'
+        initial, _ = fresh(canonical_url, 11)
+        self.assertEqual(initial["state"]["routing_watch"]["sort_date"], str(day))
+        revision = initial["revision"]
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                if changed:
+                    with self.app.app_context():
+                        self.assertEqual(self.client.post('/neosektor/tunnel-conductor/wave', json={"wave":"first", "value":12}).status_code, 200)
+                with patch.object(access_control, "prime_lightweight_live_request_scope", side_effect=prior_prime):
+                    before, _ = fresh(signal_url, 3)
+                after, sql = fresh(signal_url, 2)
+                self.assertEqual(after, before)
+                self.assertEqual(sum("from users" in s for s in sql), 1)
+                self.assertEqual(sum("neosektor_sort_states.updated_at" in s and "gateway_memberships" in s for s in sql), 1)
+                state, _ = fresh(canonical_url+'?revision='+revision, 11 if changed else 10)
+                self.assertEqual(state["changed"], changed)
+                if changed:
+                    self.assertNotEqual(after["version"], initial["state"]["routing_watch"]["version"])
+                    self.assertEqual(state["state"]["routing_watch"]["version"], after["version"])
+                repeat, _ = fresh(signal_url, 2)
+                self.assertEqual(repeat, after)
+        # A date with no sort cannot inherit the previous Night's signal.
+        missing_url = signal_url.replace(str(day), str(day+timedelta(days=1)))
+        missing, _ = fresh(missing_url, 2)
+        self.assertTrue(missing["version"].startswith("-|"))
+
     def test_driver_priority_excludes_empty_before_ranking_and_limiting(self):
         from types import SimpleNamespace
         from app.services.neosektor_live_counts import _driver_bay_priority
@@ -284,7 +343,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
             self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
             self.assertEqual(commits, 0)
             return response.get_json()
-        self.assertEqual(measured(signal_url, 2)["version"], scope["version"])
+        self.assertEqual(measured(signal_url, 1)["version"], scope["version"])
         self.assertFalse(measured(state_url + "?revision=" + initial["revision"], 9)["changed"])
         # Each existing write endpoint commits a signal with the routing inputs.
         changes = [
@@ -306,13 +365,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.post("/neosektor/" + path, json=payload)
                 self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
                 # The fixture's user ORM row expires after commit: include its
-                # reload, as a fresh production request would (3 vs warm 2).
-                signal = measured(signal_url, 3)
+                # reload, as a fresh production request would (2 vs warm 1).
+                signal = measured(signal_url, 2)
                 self.assertNotEqual(signal["version"], previous)
                 current = measured(state_url + "?revision=" + revision, 10)
                 self.assertTrue(current["changed"])
                 self.assertEqual(current["state"]["routing_watch"], {key: signal[key] for key in scope})
-                self.assertEqual(measured(signal_url, 2), signal)
+                self.assertEqual(measured(signal_url, 1), signal)
                 revision, previous = current["revision"], signal["version"]
 
     def test_driver_routing_signal_is_scoped_read_only_and_transactional(self):
