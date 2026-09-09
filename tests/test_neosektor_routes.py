@@ -50,6 +50,56 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_settings_snapshot_is_get_request_and_gateway_scoped(self):
+        from types import SimpleNamespace
+        from app.services.neosektor_live_counts import read_neosektor_operational_settings as read
+
+        gateway_id = self.gateway.id
+        other = SimpleNamespace(id=gateway_id + 1)
+        selects = []
+        def capture(_conn, _cursor, statement, _params, _context, _many):
+            if "from neosektor_operational_settings " in " ".join(statement.lower().split()):
+                selects.append(statement)
+        engine = db.engine
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with self.app.test_request_context("/neosektor/live-counts/state"):
+                self.assertIs(read(self.gateway), read(self.gateway))
+                self.assertEqual(len(selects), 1)
+                self.assertIsNone(read(other))
+                self.assertIsNone(read(other))
+                self.assertEqual(len(selects), 2)
+                db.session.commit()
+                read(SimpleNamespace(id=gateway_id))
+                self.assertEqual(len(selects), 3)
+                db.session.rollback()
+                read(SimpleNamespace(id=gateway_id))
+                self.assertEqual(len(selects), 4)
+            with self.app.test_request_context("/neosektor/live-counts/state"):
+                read(SimpleNamespace(id=gateway_id))
+                self.assertEqual(len(selects), 5)
+            with self.app.test_request_context("/neosektor/tunnel-conductor/settings", method="POST"):
+                read(SimpleNamespace(id=gateway_id))
+                read(SimpleNamespace(id=gateway_id))
+                self.assertEqual(len(selects), 7)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+
+    def test_missing_settings_snapshot_does_not_bypass_initialization(self):
+        from app.services import neosektor_live_counts as service
+
+        NeoSektorOperationalSetting.query.filter_by(gateway_id=self.gateway.id).delete()
+        db.session.commit()
+        with self.app.test_request_context("/neosektor/tunnel-conductor"):
+            self.assertIsNone(service.read_neosektor_operational_settings(self.gateway))
+            defaults = service._operational_settings_for_state(self.gateway, initialize=False)
+            self.assertEqual(defaults.all_up_to_down_minutes, 15)
+            self.assertEqual(defaults.integration_mode, "google_primary")
+            settings = service._operational_settings_for_state(self.gateway, initialize=True)
+            self.assertIsInstance(settings, NeoSektorOperationalSetting)
+            self.assertIsNotNone(settings.id)
+            self.assertIs(service.read_neosektor_operational_settings(self.gateway), settings)
+
     def test_discharge_poll_query_budget_and_payload_match_prior_edit_lookup(self):
         from app.neonodes.neosektor import routes
 
@@ -3507,11 +3557,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             return bundle.driver_routes
 
         paths = (
-            ("/neosektor/live-counts/state", 15),
-            ("/neosektor/driver-routing/state", 15),
-            ("/neosektor/tunnel-conductor/state", 15),
-            ("/neosektor/ballmat/state?side=east", 15),
-            ("/neosektor/ballmat/state?side=west", 15),
+            ("/neosektor/live-counts/state", 14),
+            ("/neosektor/driver-routing/state", 14),
+            ("/neosektor/tunnel-conductor/state", 14),
+            ("/neosektor/ballmat/state?side=east", 14),
+            ("/neosektor/ballmat/state?side=west", 14),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
@@ -3521,14 +3571,21 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     legacy, legacy_sql, _, _ = self._capture_get_metrics(url)
                 with patch.object(service, "_read_only_count_rows", legacy_count_reads):
                     separate, separate_sql, _, _ = self._capture_get_metrics(url)
+                # Reproduce the prior independent revision/bundle settings reads.
+                with patch.object(service, "request_cached", side_effect=lambda namespace, key, resolve: resolve()):
+                    old_settings, old_settings_sql, _, _ = self._capture_get_metrics(url)
                 response, sql, commits, _ = self._capture_get_metrics(url)
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(response.get_json()["changed"])
                 self.assertEqual(response.get_json(), legacy.get_json())
                 self.assertEqual(response.get_json(), separate.get_json())
+                self.assertEqual(response.get_json(), old_settings.get_json())
                 self.assertIn("ballmat_routing", response.get_json()["state"])
                 reads = [s for s in sql if s.startswith("select")]
                 self.assertEqual(len(reads), select_budget)
+                self.assertEqual(sum(s.startswith("select") for s in old_settings_sql), select_budget + 1)
+                self.assertEqual(sum("from neosektor_operational_settings " in s for s in old_settings_sql), 2)
+                self.assertEqual(sum("from neosektor_operational_settings " in s for s in reads), 1)
                 self.assertEqual(len(reads) + 2, sum(
                     s.startswith("select") for s in separate_sql
                 ))

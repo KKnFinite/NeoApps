@@ -17,14 +17,13 @@ from app.models import (
     NeoSektorBayStatus,
     NeoSektorDriverRouteSetting,
     NeoSektorOpenBayState,
-    NeoSektorOperationalSetting,
     NeoSektorSortState,
     NeoSektorUldOnTheWayEvent,
     NeoSektorWaveState,
     SortDateMission,
 )
 from app.services.operation_scope import current_operational_sort_operation
-from app.services.neosektor_live_counts import current_neosektor_sort_date
+from app.services.neosektor_live_counts import current_neosektor_sort_date, read_neosektor_operational_settings
 from app.services.neosektor_sheets_compat import (
     DEFAULT_NEOSEKTOR_INTEGRATION_MODE,
     GOOGLE_PRIMARY,
@@ -60,9 +59,7 @@ def neosektor_state_revision(
     sort_name = str(sort_name or "night").strip().lower() or "night"
     sort_date = sort_date or current_neosektor_sort_date(gateway, sort_name)
     now_utc = _naive_utc(now_utc)
-    settings = NeoSektorOperationalSetting.query.filter_by(
-        gateway_id=gateway.id
-    ).first()
+    settings = read_neosektor_operational_settings(gateway)
     mode = _mode_from_settings(settings)
     google_values = (
         google_primary_operational_values(gateway)

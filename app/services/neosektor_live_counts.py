@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
+from flask import has_request_context, request
 from sqlalchemy import literal, select, text, union_all
 
 from app.extensions import db
@@ -21,6 +22,7 @@ from app.services.operation_scope import current_operational_sort_operation
 from app.services.gateway_matrix import current_gateway_local_datetime, current_operations_for_gateway
 from app.services.node_refresh import node_auto_refresh_status
 from app.services.live_screen_refresh import live_screen_refresh_value
+from app.services.request_cache import MISSING, request_cached, set_request_cached
 
 
 STATUS_LABELS = ("Empty", "Light", "Moderate", "Full", "Overflowing")
@@ -1203,7 +1205,21 @@ def get_or_create_sort_state(
     return sort_state
 
 
+def read_neosektor_operational_settings(gateway):
+    """Share one gateway settings snapshot between GET revision and state reads."""
+    def resolve():
+        return NeoSektorOperationalSetting.query.filter_by(gateway_id=gateway.id).first()
+
+    if has_request_context() and request.method == "GET":
+        # None is a valid cached result; callers retain their own missing defaults.
+        # The shared request cache clears at commit/rollback and never spans requests.
+        return request_cached("neosektor.operational_settings", gateway.id, resolve)
+    return resolve()
+
+
 def get_or_create_operational_settings(gateway, *, change_tracker=None):
+    # Initialization must query durable state even after a read-only missing result.
+    set_request_cached("neosektor.operational_settings", gateway.id, MISSING)
     settings = NeoSektorOperationalSetting.query.filter_by(
         gateway_id=gateway.id,
     ).first()
@@ -1234,9 +1250,7 @@ def _operational_settings_for_state(
             gateway,
             change_tracker=change_tracker,
         )
-    settings = NeoSektorOperationalSetting.query.filter_by(
-        gateway_id=gateway.id
-    ).first()
+    settings = read_neosektor_operational_settings(gateway)
     if settings:
         return settings
     return SimpleNamespace(
