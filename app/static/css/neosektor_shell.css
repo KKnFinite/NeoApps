@@ -1,0 +1,36 @@
+/* Existing dashboard topbar, shared by normal Sektor desktop screens. */
+.sektor-dashboard-topbar {
+    display: flex; align-items: center; gap: 20px; padding: 10px 28px;
+    height: 84px; min-height: 84px; grid-template-columns: none;
+    position: fixed; inset: 0 0 auto; z-index: 1100; box-sizing: border-box;
+    background: #06090d; border-bottom: 1px solid #34343b;
+}
+.sektor-dashboard-topbar > * { position: static; flex-shrink: 0; }
+.sektor-dashboard-topbar .character-switcher-header { margin: 0; }
+.sektor-dashboard-identity {
+    display: flex; align-items: center; gap: 16px; min-width: 0;
+    margin-right: auto; text-decoration: none;
+}
+.sektor-dashboard-identity > span { min-width: 0; font: 400 24px/1.3 NeoFont, sans-serif; }
+.sektor-dashboard-identity small {
+    display: block; color: #c3cad4; font: 300 16px/1.5 NeoFontLite, sans-serif;
+    text-transform: uppercase; letter-spacing: .1em;
+}
+@media (min-width: 901px) {
+    /* Keep the shared shell's gutters and content layout below the taller bar. */
+    body.operational-shell-page.blueprint-neosektor { --operational-topbar-height: 84px; }
+    body.operational-shell-page.blueprint-neosektor .operational-desktop-sidebar {
+        /* Collapse control, current page, navigation, global utilities; no logo row. */
+        grid-template-rows: auto auto minmax(0,1fr) auto;
+    }
+    body.operational-shell-page.blueprint-neosektor.operational-sidebar-collapsed .operational-desktop-sidebar {
+        /* The shared collapsed state also hides the current-page panel. */
+        grid-template-rows: auto minmax(0,1fr) auto;
+    }
+    body.operational-board-view .sektor-dashboard-topbar { display: none; }
+}
+@media (max-width: 900px) {
+    .sektor-dashboard-topbar { display: none; }
+}
+/* TV mode retains only the routing board and Exit TV Mode, at every width. */
+#sektor-tv .sektor-dashboard-topbar { display: none; }

@@ -3,10 +3,12 @@
     <div class="operational-sidebar-topline">
         <button class="operational-sidebar-collapse" type="button" data-operational-sidebar-toggle aria-expanded="true" aria-label="Collapse {{ node_header_name }} menu"><span aria-hidden="true">‹</span></button>
     </div>
+    {% if not is_neosektor_page %}
     <a class="motherbrain-desktop-side-brand node-desktop-side-brand" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
         <img src="{{ url_for('static', filename=node_desktop_sidebar_logo) }}" alt="{{ node_header_alt }}" width="256" height="256" decoding="async">
         <span class="motherbrain-sidebar-brand-title neo-brand-title neo-brand neo-brand--{{ node_header_key }} neo-node-name brand-inline-name node-{{ node_header_key }}" aria-label="{{ node_header_name }}">{{ neo_brand(node_header_word, node_header_key) }}</span>
     </a>
+    {% endif %}
     <div class="motherbrain-desktop-side-context node-desktop-side-context">
         <span class="eyebrow">Current page</span>
         <strong>{{ node_current_label }}</strong>

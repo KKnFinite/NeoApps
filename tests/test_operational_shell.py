@@ -75,6 +75,10 @@ class OperationalShellTest(unittest.TestCase):
                     self.assertNotIn(b"data-operational-sidebar", response.data)
                 else:
                     self.assertIn(b"data-operational-sidebar", response.data)
+                    self.assertNotIn(b"css/neosektor_shell.css", response.data)
+                    self.assertIn(b"topbar operational-topbar", response.data)
+                    if path != '/motherbrain':
+                        self.assertIn(b"motherbrain-desktop-side-brand node-desktop-side-brand", response.data)
                 self.assertIn(b"data-operational-mobile-header", response.data)
                 self.assertIn(b"operational-mobile-bottom-nav", response.data)
                 self.assertIn(b"NeoGateway", response.data)

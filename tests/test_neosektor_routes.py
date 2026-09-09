@@ -402,18 +402,90 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual([t.attrs['data-node-dashboard-tile'] for t in tiles],
                          ['ebm','wbm','tunnel','driver-routing','discharge','settings','live-counts'])
 
-    def test_node_desktop_shell_portal_return_precedes_character_switcher(self):
+    def test_sektor_desktop_shell_keeps_portal_return_and_character_switcher(self):
         self._login_approved_user(role='operator')
         response=self.client.get('/neosektor/live-counts')
         self.assertEqual(response.status_code,200)
         root=document(response)
         bar=root.one('header', **{'data-operational-topbar':None})
-        self.assertEqual(bar.one('a', 'operational-app-logo').attrs['href'], '/portal')
+        self.assertEqual(bar.one('a', 'sektor-dashboard-identity').attrs['href'], '/neosektor')
+        self.assertEqual(bar.one('details', 'operational-account-menu').one('a', role='menuitem').attrs['href'], '/portal')
         self.assertEqual(len(bar.findall(**{'data-character-switcher':None})),1)
         self.assertEqual(bar.one('form', action='/logout').attrs['method'],'post')
         sidebar=root.one(**{'data-operational-sidebar':None})
         self.assertTrue(sidebar.findall('a',href='/portal'))
         self.assertTrue(sidebar.findall('a',href='/rfd'))
+
+    def test_all_sektor_desktop_pages_share_dashboard_identity_and_keep_shell_controls(self):
+        self._login_approved_user(role='grandmaster')
+        pages = (
+            ('/neosektor', 'DASHBOARD'),
+            ('/neosektor/tunnel-conductor', 'TUNNEL CONDUCTOR'),
+            ('/neosektor/live-counts', 'LIVE COUNTS'),
+            ('/neosektor/ebm', 'EBM'),
+            ('/neosektor/wbm', 'WBM'),
+            ('/neosektor/settings', 'SETTINGS'),
+            ('/neosektor/discharge', 'DISCHARGE'),
+            ('/neosektor/driver-routing', 'DRIVER ROUTING'),
+            ('/neosektor/driver-routing?tv=1', 'DRIVER ROUTING'),
+        )
+        for path, title in pages:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                root, _, _ = assert_mobile_drawer(self, response)
+                bar = root.one('header', 'sektor-dashboard-topbar')
+                self.assertIn('data-operational-topbar', bar.attrs)
+                identity = bar.one('a', 'sektor-dashboard-identity')
+                self.assertEqual(identity.attrs['href'], '/neosektor')
+                self.assertEqual(identity.one('small').text, title)
+                self.assertEqual(identity.one('img').attrs['width'], '56')
+                self.assertFalse(bar.findall(cls='operational-app-logo'))
+                self.assertEqual(len(bar.findall(**{'data-character-switcher': None})), 1)
+                self.assertEqual(len(bar.findall(**{'data-my-alerts-tray': None})), 1)
+                self.assertEqual(bar.one('form', action='/logout').attrs['method'], 'post')
+                self.assertTrue(bar.one(cls='operational-account-menu').findall('a', href='/portal'))
+                mobile = root.one('header', **{'data-operational-mobile-header': None})
+                self.assertEqual(mobile.one('small').text, title)
+                self.assertEqual(mobile.one('img').attrs['width'], '34')
+                self.assertEqual(len(mobile.findall(**{'data-my-alerts-tray': None})), 1)
+                links = [link.attrs['href'] for link in root.findall('link', rel='stylesheet')]
+                self.assertEqual(sum('/css/neosektor_shell.css?' in link for link in links), 1)
+                self.assertTrue(any('/css/neofontlite.css?' in link for link in links))
+                self.assertEqual(any('/css/neosektor_dashboard.css?' in link for link in links), path == '/neosektor')
+                if path != '/neosektor':
+                    sidebar = root.one(**{'data-operational-sidebar': None})
+                    self.assertFalse(sidebar.findall(cls='node-desktop-side-brand'))
+                    context = sidebar.one(cls='node-desktop-side-context')
+                    self.assertEqual(context.one('strong').text, title)
+                    self.assertEqual(context.one('span').text, 'Current page')
+                    menu = sidebar.one('nav', 'node-desktop-side-menu')
+                    self.assertEqual([link.attrs['href'] for link in menu.findall('a')],
+                                     ['/neosektor', '/neosektor/live-counts', '/neosektor/settings', '/neosektor/tunnel-conductor',
+                                      '/neosektor/ebm', '/neosektor/wbm', '/neosektor/driver-routing',
+                                      '/neosektor/discharge'])
+                    self.assertTrue(sidebar.findall(**{'data-operational-sidebar-toggle': None}))
+                if '?tv=1' in path:
+                    self.assertEqual(root.one('html').attrs['id'], 'sektor-tv')
+
+    def test_shared_sektor_topbar_styles_preserve_dashboard_design_and_hidden_modes(self):
+        css_dir = Path(self.app.root_path, 'static', 'css')
+        shell = (css_dir / 'neosektor_shell.css').read_text(encoding='utf-8')
+        dashboard = (css_dir / 'neosektor_dashboard.css').read_text(encoding='utf-8')
+        self.assertNotIn('.sektor-dashboard-topbar', dashboard)
+        self.assertNotIn('.sektor-dashboard-identity', dashboard)
+        self.assertIn('height: 84px; min-height: 84px;', shell)
+        self.assertIn('gap: 20px; padding: 10px 28px;', shell)
+        self.assertIn('background: #06090d; border-bottom: 1px solid #34343b;', shell)
+        self.assertIn('font: 300 16px/1.5 NeoFontLite, sans-serif;', shell)
+        self.assertIn('letter-spacing: .1em;', shell)
+        desktop = shell.split('@media (min-width: 901px) {', 1)[1].split('@media (max-width: 900px)', 1)[0]
+        self.assertIn('body.operational-shell-page.blueprint-neosektor { --operational-topbar-height: 84px; }', desktop)
+        self.assertIn('grid-template-rows: auto auto minmax(0,1fr) auto;', desktop)
+        self.assertIn('body.operational-shell-page.blueprint-neosektor.operational-sidebar-collapsed .operational-desktop-sidebar', desktop)
+        self.assertIn('grid-template-rows: auto minmax(0,1fr) auto;', desktop)
+        self.assertIn('body.operational-board-view .sektor-dashboard-topbar { display: none; }', desktop)
+        self.assertIn('@media (max-width: 900px) {\n    .sektor-dashboard-topbar { display: none; }', shell)
+        self.assertIn('#sektor-tv .sektor-dashboard-topbar { display: none; }', shell)
 
     def test_desktop_ballmat_and_character_switcher_compaction_rules_are_present(self):
         css = stylesheet_source()
@@ -539,9 +611,15 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 response = self.client.get(path)
 
                 self.assertEqual(response.status_code, 200)
-                self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
-                self.assertIn(b"neo-brand-title__neo", response.data)
-                self.assertIn(b"neo-brand-title__node--sektor", response.data)
+                brand = document(response).one('header', 'sektor-dashboard-topbar').one('span', 'neo-brand--sektor')
+                self.assertEqual(brand.attrs['aria-label'], 'NeoSektor')
+                self.assertEqual(brand.one('span', 'neo-brand__neo').text, 'Neo')
+                self.assertEqual(brand.one('span', 'neo-brand__node').text, 'Sektor')
+                # Dashboard has no duplicate body title; subpage content is unchanged.
+                if path != '/neosektor':
+                    self.assertIn(b"neosektor-page-brand neo-brand-title", response.data)
+                    self.assertIn(b"neo-brand-title__neo", response.data)
+                    self.assertIn(b"neo-brand-title__node--sektor", response.data)
 
     def test_live_counts_uses_balanced_count_number_sizing(self):
         self._login_approved_user(role="operator")

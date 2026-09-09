@@ -1,4 +1,4 @@
-/* Dashboard only; other Sektor screens retain their existing shell/layout. */
+/* Dashboard artwork/menu only; the reusable topbar lives in neosektor_shell.css. */
 @media (min-width: 901px) {
 body:has(.sektor-command) > .shell {
     width: 100%; max-width: none; min-height: 0; margin: 0; padding: 0;
@@ -6,23 +6,6 @@ body:has(.sektor-command) > .shell {
 body:has(.sektor-command) .shell > .content {
     margin: 0; padding: 0; width: 100%; max-width: none;
 }
-}
-.sektor-dashboard-topbar {
-    display: flex; align-items: center; gap: 20px; padding: 10px 28px;
-    height: 84px; min-height: 84px; grid-template-columns: none;
-    position: fixed; inset: 0 0 auto; z-index: 1100; box-sizing: border-box;
-    background: #06090d; border-bottom: 1px solid #34343b;
-}
-.sektor-dashboard-topbar > * { position: static; flex-shrink: 0; }
-.sektor-dashboard-topbar .character-switcher-header { margin: 0; }
-.sektor-dashboard-identity {
-    display: flex; align-items: center; gap: 16px; min-width: 0;
-    margin-right: auto; text-decoration: none;
-}
-.sektor-dashboard-identity > span { min-width: 0; font: 400 24px/1.3 NeoFont, sans-serif; }
-.sektor-dashboard-identity small {
-    display: block; color: #c3cad4; font: 300 16px/1.5 NeoFontLite, sans-serif;
-    text-transform: uppercase; letter-spacing: .1em;
 }
 .sektor-command {
     position: relative; isolation: isolate; min-height: calc(100svh - 84px);
@@ -58,7 +41,6 @@ body:has(.sektor-command) .shell > .content {
     body:has(.sektor-command) { padding-top: 84px; }
 }
 @media (max-width: 900px) {
-    .sektor-dashboard-topbar { display: none; }
     body:has(.sektor-command) .operational-mobile-identity small {
         font: 300 12px/1.5 NeoFontLite, sans-serif; text-transform: uppercase; letter-spacing: .05em;
     }
