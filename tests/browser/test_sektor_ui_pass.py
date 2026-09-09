@@ -27,7 +27,9 @@ class SektorUIPassTest(unittest.TestCase):
             browser = Fixture.pw.chromium.launch()
             page = browser.new_page(viewport={'width':390, 'height':844})
             Fixture().login(page)
-            for width, height, tv in [(390,844,False),(1920,1080,True),(390,844,True)]:
+            for width, height, tv in [(390,844,False),(1920,1080,True),
+                                      (1080,1920,True),(720,1280,True),
+                                      (1366,768,True),(390,844,True)]:
                 with self.subTest(width=width, tv=tv):
                     page.set_viewport_size({'width':width, 'height':height})
                     Fixture().ready(page, '/neosektor/driver-routing' + ('?tv=1' if tv else ''))
@@ -43,6 +45,17 @@ class SektorUIPassTest(unittest.TestCase):
                         self.assertTrue(page.locator('.neosektor-driver-back').is_visible())
                     cards = page.locator('[data-driver-priority-index]:visible')
                     self.assertEqual(cards.count(), 3)
+                    if tv:
+                        # Three priority cards stay on one horizontal track.
+                        boxes = [cards.nth(i).bounding_box() for i in range(3)]
+                        self.assertLessEqual(max(b['y'] for b in boxes)-min(b['y'] for b in boxes), 1)
+                        self.assertTrue(all(boxes[i]['x']+boxes[i]['width'] <= boxes[i+1]['x']+1 for i in range(2)))
+                        size = page.locator('.driver-wave-label').first.evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
+                        old_size = max(24, min(height*.03, 44))
+                        self.assertAlmostEqual(size / old_size, 1 if width == 390 else 1.2, delta=.02)
+                        if width == 1080:
+                            node = page.locator('.driver-target-node').first
+                            self.assertAlmostEqual(node.evaluate('e=>parseFloat(getComputedStyle(e).fontSize)'), 51.84, delta=.1)
                     for index in range(cards.count()):
                         card = cards.nth(index)
                         self.assertEqual(card.locator('[data-driver-rank]').inner_text(), ['1ST','2ND','3RD'][index])
