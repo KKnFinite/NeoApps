@@ -1,4 +1,6 @@
 /* Driver TV is opt-in URL state; normal desktop routing remains untouched. */
+/* Author display:grid rules must not expose unused priority slots. */
+.blueprint-neosektor .neosektor-driver-priority-card[hidden] { display:none; }
 .sektor-tv-entry { position:fixed; right:16px; bottom:16px; z-index:80; display:inline-flex; min-height:44px; align-items:center; background:#0b151b; }
 #sektor-tv body { margin:0; padding:0; height:100dvh; min-height:0; overflow:hidden; background:#05090d; }
 #sektor-tv :is(.topbar,.operational-mobile-header,.operational-desktop-sidebar,.neo-mobile-bottom,.mobile-bottom-nav,[data-mobile-drawer],.live-update-controls,.operation-refresh-banner,.app-header,.flash-stack) { display:none; }

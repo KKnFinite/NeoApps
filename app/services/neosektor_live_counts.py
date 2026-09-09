@@ -2222,7 +2222,8 @@ def _driver_bay_priority(sides, driver_routes):
         }
         for side in sides.values()
         for bay in side["bays"]
-        if _driver_route_bay_priority_enabled(driver_routes, bay["bay_name"])
+        if _status(bay["status"]) != "Empty"
+        and _driver_route_bay_priority_enabled(driver_routes, bay["bay_name"])
     ]
     priority.sort(
         key=lambda bay: (bay["status_rank"], _bay_number(bay["bay_name"])),

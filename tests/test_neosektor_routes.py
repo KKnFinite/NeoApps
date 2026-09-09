@@ -50,6 +50,65 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_driver_priority_excludes_empty_before_ranking_and_limiting(self):
+        from types import SimpleNamespace
+        from app.services.neosektor_live_counts import _driver_bay_priority
+
+        for statuses, disabled, expected in (
+            (["Empty"] * 5, (), []),
+            (["Empty", "Light", "Empty", "Empty", "Empty"], (), [2]),
+            (["Empty", "Full", "Empty", "Empty", "Light"], (), [2, 5]),
+            (["Light", "Moderate", "Full", "Overflowing", "Light"], (), [4, 3, 2]),
+            (["Full"] * 5, (), [5, 4, 3]),  # Preserve descending bay-number ties.
+            (["Empty", "Full", "Empty", "Empty", "Light"], (2,), [5]),
+        ):
+            with self.subTest(statuses=statuses, disabled=disabled):
+                sides = {"east": {"label":"EAST", "bays":[]}, "west": {"label":"WEST", "bays":[]}}
+                routes = []
+                for number, status in enumerate(statuses, 1):
+                    sides["east" if number <= 3 else "west"]["bays"].append({"bay_name":f"Bay {number}", "status":status})
+                    routes.append(SimpleNamespace(route_name=f"BAY {number} PRIORITY ENABLED",
+                                                  route_value="false" if number in disabled else "true"))
+                priority = _driver_bay_priority(sides, routes)
+                self.assertEqual([b["bay_name"] for b in priority], [f"Bay {n}" for n in expected])
+                self.assertEqual([b["rank_label"] for b in priority], ["1st", "2nd", "3rd"][:len(expected)])
+                self.assertTrue(all(b["status"] != "Empty" for b in priority))
+
+    def test_driver_priority_live_refresh_adds_removes_and_reranks_without_get_writes(self):
+        css = Path("app/static/css/neosektor_driver_routing.css").read_text(encoding="utf-8")
+        self.assertIn(".blueprint-neosektor .neosektor-driver-priority-card[hidden] { display:none; }", css)
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(date.today(), time(23))
+        url = "/neosektor/driver-routing/state"
+        initial = self.client.get(url).json
+        self.assertEqual(initial["state"]["routing"]["bay_priority"], [])
+        revision = initial["revision"]
+        for side, bay, status, expected in (
+            ("east", "Bay 2", "Full", [2]),
+            ("west", "Bay 5", "Light", [2, 5]),
+            ("east", "Bay 2", "Empty", [5]),
+            ("west", "Bay 5", "Empty", []),
+        ):
+            with self.subTest(bay=bay, status=status):
+                result = self.client.post('/neosektor/ballmat/update?side='+side,
+                    json={"side":side, "bay_statuses":{bay:status}})
+                self.assertEqual(result.status_code, 200)
+                response, sql, commits, _ = self._capture_get_metrics(url+'?revision='+revision)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.json["changed"])
+                revision = response.json["revision"]
+                priority = response.json["state"]["routing"]["bay_priority"]
+                self.assertEqual([b["bay_name"] for b in priority], [f"Bay {n}" for n in expected])
+                self.assertEqual([b["rank_label"] for b in priority], ["1st", "2nd"][:len(expected)])
+                self.assertEqual(commits, 0)
+                self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+                for suffix in ("", "?tv=1"):
+                    dom = document(self.client.get('/neosektor/driver-routing'+suffix))
+                    visible = [c for c in dom.findall(**{"data-driver-priority-index":None}) if "hidden" not in c.attrs]
+                    self.assertEqual([c.one(**{"data-driver-bay-name":None}).text for c in visible], [str(n) for n in expected])
+
     def test_warm_initial_render_query_budgets_and_state_equivalence(self):
         from flask import request, template_rendered
         from app.neonodes.neosektor import routes
@@ -2063,6 +2122,10 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_tunnel_conductor_bay_priority_toggle_persists_and_limits_driver_display(self):
         self._login_approved_user(role="simulator")
+        # Eligible non-empty bays exercise the independent enabled/disabled switch.
+        for side, numbers in (("east", (1, 2, 3)), ("west", (4, 5))):
+            self.client.post('/neosektor/ballmat/update?side='+side,
+                json={"side":side, "bay_statuses":{f"Bay {n}":"Full" for n in numbers}})
 
         disabled = self.client.post(
             "/neosektor/tunnel-conductor/settings",
