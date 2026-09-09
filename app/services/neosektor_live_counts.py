@@ -1281,11 +1281,10 @@ def _operational_settings_for_state(
 
 
 def _read_only_ballmat_components(gateway, sort_date, sort_name, *, include_routing=False):
-    persisted = _existing_sort_state(gateway, sort_date, sort_name)
+    count_rows = _read_only_state_rows(gateway, sort_date, sort_name, include_routing=include_routing)
+    persisted = next(iter(count_rows["sort"]), None)
     sort_state = _copy_sort_state(persisted, gateway, sort_date, sort_name)
-    sort_state_id = getattr(persisted, "id", None)
 
-    count_rows = _read_only_count_rows(sort_state_id, include_routing=include_routing)
     wave_counts = _read_only_wave_counts(count_rows["wave"])
     waves = _read_only_waves(count_rows["timer"])
     ballmats = _read_only_ballmats(count_rows["ballmat"])
@@ -1345,13 +1344,31 @@ def _read_only_waves(rows):
     ]
 
 
-def _read_only_count_rows(sort_state_id, *, include_routing=False):
+def _read_only_state_rows(gateway, sort_date, sort_name, *, include_routing=False):
+    # Resolve the unique gateway/date/sort once inside the SQL statement. Every
+    # child branch uses that same ID, and the sort fields travel as another row.
+    # An absent sort yields no rows; existing default adapters remain authoritative.
+    model = NeoSektorSortState
+    sort_row = select(
+        model.id, model.active_wave, model.planned_total, model.unloaded_total, model.updated_at,
+    ).where(
+        model.gateway_id == gateway.id,
+        model.sort_date == sort_date,
+        model.sort_name == sort_name,
+    ).cte("sektor_read_sort")
+    return _read_only_count_rows(
+        select(sort_row.c.id).scalar_subquery(),
+        include_routing=include_routing, sort_row=sort_row,
+    )
+
+
+def _read_only_count_rows(sort_state_id, *, include_routing=False, sort_row=None):
     """Read small Neo child collections together, without a multiplying join.
 
     Only the read-only Neo path uses this projection. Each branch keeps its
     own sort predicate; missing rows still flow through the existing defaults.
     """
-    rows = {"wave": [], "open": [], "bay": [], "timer": [], "ballmat": [], "route": []}
+    rows = {"wave": [], "open": [], "bay": [], "timer": [], "ballmat": [], "route": [], "sort": []}
     if sort_state_id is None:
         return rows
     sources = [
@@ -1363,6 +1380,8 @@ def _read_only_count_rows(sort_state_id, *, include_routing=False):
     ]
     if include_routing:
         sources.append(("route", NeoSektorDriverRouteSetting, ("route_name", "route_value")))
+    if sort_row is not None:
+        sources.append(("sort", sort_row.c, tuple(sort_row.c.keys())))
     # Align named fields using their actual model types. Explicitly typed NULLs
     # avoid PostgreSQL resolving empty leading UNION columns as text (especially
     # timestamps and integers). No coercion or defaulting of persisted values.
@@ -1372,7 +1391,7 @@ def _read_only_count_rows(sort_state_id, *, include_routing=False):
             literal(kind).label("kind"),
             *((getattr(model, name) if name in fields else cast(null(), column.type)).label(name)
               for name, column in columns.items()),
-        ).where(model.sort_state_id == sort_state_id)
+        ).where(*([] if kind == "sort" else [model.sort_state_id == sort_state_id]))
         for kind, model, fields in sources
     ))
     for row in db.session.execute(query).mappings():

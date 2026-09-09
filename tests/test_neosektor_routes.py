@@ -50,6 +50,56 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_combined_sort_read_preserves_fields_missing_defaults_and_scope(self):
+        from types import SimpleNamespace
+        from sqlalchemy.dialects import postgresql
+        from app.services import neosektor_live_counts as service
+
+        today = date.today()
+        scopes = ((today, "night"), (today + timedelta(days=1), "night"), (today, "day"))
+        for index, (day, name) in enumerate(scopes, start=1):
+            row = service.get_or_create_sort_state(self.gateway, day, name)
+            row.active_wave = "2ND WAVE" if index == 1 else "1ST WAVE"
+            row.planned_total, row.unloaded_total = index * 20, index * 3
+            row.updated_at = datetime(2026, 9, 1, 12, 34, 56, 123456)
+            if index < 3:  # The third scope has a sort but no child rows.
+                db.session.add(NeoSektorBallmatWaveCount(
+                    sort_state_id=row.id, side="EAST", wave_name="1ST WAVE", count=index * 7,
+                ))
+        db.session.commit()
+
+        def previous(gateway, day, name, *, include_routing=False):
+            persisted = service._existing_sort_state(gateway, day, name)
+            rows = service._read_only_count_rows(getattr(persisted, "id", None), include_routing=include_routing)
+            rows["sort"] = [persisted] if persisted is not None else []
+            return rows
+
+        cases = [(self.gateway, day, name) for day, name in scopes]
+        cases.extend([
+            (self.gateway, today + timedelta(days=2), "night"),
+            (SimpleNamespace(id=self.gateway.id + 100, code="OTHER"), today, "night"),
+        ])
+        for gateway, day, name in cases:
+            for routing in (False, True):
+                with self.subTest(gateway=gateway.id, day=day, sort=name, routing=routing):
+                    with patch.object(service, "_read_only_state_rows", previous):
+                        expected = service._read_only_ballmat_components(gateway, day, name, include_routing=routing)
+                    with patch.object(db.session, "execute", wraps=db.session.execute) as execute:
+                        actual = service._read_only_ballmat_components(gateway, day, name, include_routing=routing)
+                    self.assertEqual(actual, expected)
+                    self.assertEqual(execute.call_count, 1)
+                    sql = str(execute.call_args.args[0].compile(dialect=postgresql.dialect()))
+                    self.assertIn("WITH sektor_read_sort AS", sql)
+                    self.assertEqual(sql.count("FROM neosektor_sort_states"), 1)
+                    self.assertIn("neosektor_sort_states.gateway_id =", sql)
+                    self.assertIn("neosektor_sort_states.sort_date =", sql)
+                    self.assertIn("neosektor_sort_states.sort_name =", sql)
+                    self.assertIn("CAST(NULL AS TIMESTAMP WITHOUT TIME ZONE)", sql)
+                    if expected[0].id is None:
+                        self.assertEqual((actual[0].active_wave, actual[0].planned_total, actual[0].unloaded_total), ("1ST WAVE", 0, 0))
+        self.assertFalse(db.session.new)
+        self.assertFalse(db.session.dirty)
+
     def test_settings_snapshot_is_get_request_and_gateway_scoped(self):
         from types import SimpleNamespace
         from app.services.neosektor_live_counts import read_neosektor_operational_settings as read
@@ -3587,20 +3637,30 @@ class NeoSektorRoutesTest(unittest.TestCase):
             rows["route"] = service._rows_for_sort_state(NeoSektorDriverRouteSetting, sort_state_id) if include_routing else []
             return rows
 
+        def separate_sort_read(loader):
+            def load(gateway, sort_date, sort_name, *, include_routing=False):
+                persisted = service._existing_sort_state(gateway, sort_date, sort_name)
+                rows = loader(getattr(persisted, "id", None), include_routing=include_routing)
+                rows["sort"] = [persisted] if persisted is not None else []
+                return rows
+            return load
+
         paths = (
-            ("/neosektor/live-counts/state", 11),
-            ("/neosektor/driver-routing/state", 11),
-            ("/neosektor/tunnel-conductor/state", 11),
-            ("/neosektor/ballmat/state?side=east", 11),
-            ("/neosektor/ballmat/state?side=west", 11),
+            ("/neosektor/live-counts/state", 10),
+            ("/neosektor/driver-routing/state", 10),
+            ("/neosektor/tunnel-conductor/state", 10),
+            ("/neosektor/ballmat/state?side=east", 10),
+            ("/neosektor/ballmat/state?side=west", 10),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
                 url = path + ("&" if "?" in path else "?") + "revision=stale"
-                with patch.object(service, "_read_only_count_rows", prior_child_reads):
+                with patch.object(service, "_read_only_state_rows", separate_sort_read(prior_child_reads)):
                     legacy, legacy_sql, _, _ = self._capture_get_metrics(url)
-                with patch.object(service, "_read_only_count_rows", separate_child_reads):
+                with patch.object(service, "_read_only_state_rows", separate_sort_read(separate_child_reads)):
                     separate, separate_sql, _, _ = self._capture_get_metrics(url)
+                with patch.object(service, "_read_only_state_rows", separate_sort_read(service._read_only_count_rows)):
+                    old_sort, old_sort_sql, _, _ = self._capture_get_metrics(url)
                 # Reproduce the prior independent revision/bundle settings reads.
                 with patch.object(service, "request_cached", side_effect=lambda namespace, key, resolve: resolve()):
                     old_settings, old_settings_sql, _, _ = self._capture_get_metrics(url)
@@ -3610,21 +3670,25 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertEqual(response.get_json(), legacy.get_json())
                 self.assertEqual(response.get_json(), separate.get_json())
                 self.assertEqual(response.get_json(), old_settings.get_json())
+                self.assertEqual(response.get_json(), old_sort.get_json())
                 self.assertIn("ballmat_routing", response.get_json()["state"])
-                reads = [s for s in sql if s.startswith("select")]
+                # WITH introduces a read-only CTE, still one SELECT round trip.
+                reads = [s for s in sql if s.startswith(("select", "with"))]
                 self.assertEqual(len(reads), select_budget)
-                self.assertEqual(sum(s.startswith("select") for s in old_settings_sql), select_budget + 1)
+                self.assertEqual(sum(s.startswith(("select", "with")) for s in old_settings_sql), select_budget + 1)
+                self.assertEqual(sum(s.startswith(("select", "with")) for s in old_sort_sql), select_budget + 1)
+                self.assertEqual(sum(s.startswith("with sektor_read_sort as") for s in reads), 1)
                 self.assertEqual(sum("from neosektor_operational_settings " in s for s in old_settings_sql), 2)
                 self.assertEqual(sum("from neosektor_operational_settings " in s for s in reads), 1)
-                self.assertEqual(len(reads) + 5, sum(
+                self.assertEqual(len(reads) + 6, sum(
                     s.startswith("select") for s in separate_sql
                 ))
-                self.assertEqual(len(reads) + 3, sum(
+                self.assertEqual(len(reads) + 4, sum(
                     s.startswith("select") for s in legacy_sql
                 ))
                 self.assertEqual(sum(s.startswith(
                     "select neosektor_sort_states.id as"
-                ) for s in reads), 1)
+                ) for s in reads), 0)
                 self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
                 self.assertEqual(commits, 0)
 
@@ -3878,8 +3942,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual(after.get_json(), before.get_json())
                     permissions.assert_any_call(view)
                     self.assertNotIn(edit, [call.args[0] for call in permissions.call_args_list])
-                    self.assertEqual(sum(s.startswith("select") for s in old_sql),
-                                     sum(s.startswith("select") for s in sql) + 1)
+                    self.assertEqual(sum(s.startswith(("select", "with")) for s in old_sql),
+                                     sum(s.startswith(("select", "with")) for s in sql) + 1)
                     self.assertEqual(commits, 0)
                     self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
                 with patch.object(routes, "user_can", return_value=False):
@@ -4087,7 +4151,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
         def track_statement(_conn, _cursor, statement, _params, _context, _many):
             kind = statement.lstrip().split(None, 1)[0].upper()
-            if kind == "SELECT":
+            if kind in {"SELECT", "WITH"}:
                 statements["selects"] += 1
             elif kind in {"INSERT", "UPDATE", "DELETE"}:
                 statements["writes"] += 1
