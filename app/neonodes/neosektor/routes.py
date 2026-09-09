@@ -220,6 +220,8 @@ def tunnel_conductor():
     context["live_revision"] = neosektor_state_revision(
         gateway,
         ROUTING_STATE_SCOPE,
+        sort_date=bundle.sort_date,
+        sort_name=bundle.sort_name,
     )
     return render_template(
         "neonodes/neosektor/tunnel_conductor.html",
@@ -422,6 +424,7 @@ def _render_ballmat_operations(selected_side):
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
             initialize=False,
+            include_routing=True,
             refresh_status=neosektor_refresh_status(gateway, screen_key=screen_key),
         )
         context = ballmat_operations_context(
@@ -435,6 +438,8 @@ def _render_ballmat_operations(selected_side):
     context["live_revision"] = neosektor_state_revision(
         gateway,
         ROUTING_STATE_SCOPE,
+        sort_date=bundle.sort_date,
+        sort_name=bundle.sort_name,
     )
     return render_template(
         "neonodes/neosektor/ballmat.html",
@@ -685,6 +690,7 @@ def live_counts():
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
             include_routing=True,
+            initialize=False,
             refresh_status=neosektor_refresh_status(
                 gateway,
                 screen_key=NEOSEKTOR_LIVE_COUNTS_REFRESH_KEY,
@@ -697,13 +703,18 @@ def live_counts():
     context["live_revision"] = neosektor_state_revision(
         gateway,
         ROUTING_STATE_SCOPE,
+        sort_date=bundle.sort_date,
+        sort_name=bundle.sort_name,
     )
     context["can_manage_employees"] = _can_manage_employees()
     context["manage_employees_default_area"] = (
         staffing_service.neosektor_manage_default_area(current_user)
         if context["can_manage_employees"] else None
     )
-    _commit_neosektor_initialization_if_changed(bundle)
+    # Read-only routing updates detached display values, not persistent state.
+    # Retain only the existing access-bootstrap transaction contract.
+    if access_initialization_changed_this_request():
+        db.session.commit()
     return render_template(
         "neonodes/neosektor/live_counts.html",
         gateway=gateway,
@@ -778,6 +789,8 @@ def driver_routing():
     context["live_revision"] = neosektor_state_revision(
         gateway,
         ROUTING_STATE_SCOPE,
+        sort_date=bundle.sort_date,
+        sort_name=bundle.sort_name,
     )
     return render_template(
         "neonodes/neosektor/driver_routing.html",
@@ -1100,14 +1113,6 @@ def _settings_response(gateway, access, status_code=200):
         integration_status=neosektor_integration_status(gateway),
     )
     return response, status_code
-
-
-def _commit_neosektor_initialization_if_changed(bundle):
-    if (
-        bundle.persistent_state_changed
-        or access_initialization_changed_this_request()
-    ):
-        db.session.commit()
 
 
 def _neosektor_write_bundle(gateway, *, include_routing=False):

@@ -50,6 +50,102 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_warm_initial_render_query_budgets_and_state_equivalence(self):
+        from flask import request, template_rendered
+        from app.neonodes.neosektor import routes
+        from app.services import neosektor_live_counts as service
+
+        self._login_approved_user(role="simulator")
+        # The UTC/server date is later than the active Chicago night sort.
+        sort_date = date(2026, 9, 8)
+        self._add_sort_operation(sort_date, "night")
+        self._set_sort_window("night", time(22), time(2))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 9, 9, 0, 30)
+        bundle = service.NeoSektorOperationalStateBundle.load(
+            self.gateway, sort_date=sort_date, include_routing=True,
+        )
+        bundle.sort_state.active_wave = "2ND WAVE"
+        for index, row in enumerate(bundle.ballmat_wave_counts, 1):
+            row.count = index + 7
+        for row in bundle.ballmats:
+            row.spotter_mode = 2
+            row.mode_version = 3
+            row.right_first, row.right_second, row.right_open = 2, 3, 1
+        for row in bundle.open_bays:
+            row.open_count = 4
+        for row in bundle.bay_statuses:
+            row.status = "Full"
+        bundle.driver_routing_state_payload()  # Establish durable, already-current state.
+        db.session.commit()
+
+        original_load = service.NeoSektorOperationalStateBundle.load
+        original_revision = routes.neosektor_state_revision
+
+        def prior_load(*args, **kwargs):
+            # Starting-main initial-render loader choices, not the live endpoint.
+            if request.endpoint == "neosektor.live_counts":
+                kwargs["initialize"] = True
+            elif request.endpoint in {"neosektor.ebm", "neosektor.wbm"}:
+                kwargs["include_routing"] = False
+            return original_load(*args, **kwargs)
+
+        def prior_revision(*args, **kwargs):
+            kwargs.pop("sort_date", None)
+            kwargs.pop("sort_name", None)
+            return original_revision(*args, **kwargs)
+
+        def measured(path):
+            rendered = {}
+            def capture(_sender, template, context, **extra):
+                for key in ("state", "summary", "waves", "sides", "operational_settings",
+                            "integration", "refresh_status", "ballmat_routing", "live_revision"):
+                    if key in context:
+                        rendered[key] = context[key]
+            with template_rendered.connected_to(capture, self.app):
+                response, sql, commits, _ = self._capture_get_metrics(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(commits, 0)
+            self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+            return rendered, sum(s.startswith(("select", "with")) for s in sql), sql
+
+        for slug, before_budget, after_budget in (
+            ("", 9, 9), ("live-counts", 29, 21), ("tunnel-conductor", 23, 22),
+            ("ebm", 24, 22), ("wbm", 24, 22), ("driver-routing", 22, 21),
+            ("discharge", 17, 17), ("settings", 11, 11),
+        ):
+            path = "/neosektor" + ("/" + slug if slug else "")
+            with self.subTest(page=slug or "dashboard"):
+                self.client.get(path)  # Warm access/template state, identical both sides.
+                with patch.object(service.NeoSektorOperationalStateBundle, "load", side_effect=prior_load), \
+                     patch.object(routes, "neosektor_state_revision", side_effect=prior_revision):
+                    before, before_count, _ = measured(path)
+                with patch.object(routes, "neosektor_state_revision", wraps=original_revision) as revision:
+                    after, after_count, sql = measured(path)
+                self.assertEqual(after, before)
+                self.assertEqual((before_count, after_count), (before_budget, after_budget))
+                if revision.called:
+                    self.assertEqual(revision.call_args.kwargs["sort_date"], sort_date)
+                    self.assertEqual(revision.call_args.kwargs["sort_name"], "night")
+                    self.assertEqual(sum("from neosektor_operational_settings" in s for s in sql), 1)
+                if slug in {"ebm", "wbm"}:
+                    self.assertEqual(after["state"]["spotters"], before["state"]["spotters"])
+
+    def test_live_counts_initial_render_uses_read_only_missing_sort_defaults(self):
+        from app.services.neosektor_live_counts import NeoSektorOperationalStateBundle
+
+        self._login_approved_user(role="simulator")
+        self.client.get("/neosektor")  # Establish existing access separately.
+        db.session.commit()
+        with patch.object(NeoSektorOperationalStateBundle, "load", wraps=NeoSektorOperationalStateBundle.load) as load:
+            response, sql, commits, _ = self._capture_get_metrics("/neosektor/live-counts")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(load.call_args.kwargs["initialize"])
+        self.assertEqual(commits, 0)
+        self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+        self.assertEqual(NeoSektorSortState.query.count(), 0)
+        self.assertEqual(NeoSektorBallmatCount.query.count(), 0)
+        self.assertIn(b"data-live-route", response.data)
+
     def test_driver_routing_signal_cost_and_routing_mutations(self):
         self._login_approved_user(role="simulator")
         self._add_sort_operation(date.today(), "night")
@@ -3753,15 +3849,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"view-bay-dashboard", response.data)
         self.assertNotIn(b"header-link-static", response.data)
         self.assertNotIn(b"SCREEN LOGIC WILL BE COPIED", response.data)
-        self.assertEqual(NeoSektorSortState.query.count(), 1)
-        self.assertEqual(NeoSektorWaveState.query.count(), 2)
-        self.assertEqual(NeoSektorBallmatCount.query.count(), 2)
-        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
-        self.assertEqual(NeoSektorOpenBayState.query.count(), 2)
-        self.assertEqual(NeoSektorBayStatus.query.count(), 5)
-        # Live Counts now consumes the same routing bundle as the board.
-        from app.services.neosektor_live_counts import DEFAULT_DRIVER_ROUTES
-        self.assertEqual(NeoSektorDriverRouteSetting.query.count(), len(DEFAULT_DRIVER_ROUTES))
+        # Initial display uses the same sparse defaults as read-only live state.
+        for model in (NeoSektorSortState, NeoSektorWaveState, NeoSektorBallmatCount,
+                      NeoSektorBallmatWaveCount, NeoSektorOpenBayState,
+                      NeoSektorBayStatus, NeoSektorDriverRouteSetting):
+            self.assertEqual(model.query.count(), 0)
 
     def test_changed_routing_state_reuses_loaded_sort_without_changing_payload(self):
         from app.services import neosektor_live_counts as service
@@ -3773,6 +3865,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
             date.today(), time(23)
         )
         self.assertEqual(self.client.get("/neosektor/live-counts").status_code, 200)
+
+        # Establish mutation-owned state explicitly; the page GET no longer seeds it.
+        service.NeoSektorOperationalStateBundle.load(self.gateway, include_routing=True)
 
         for index, row in enumerate(NeoSektorBallmatWaveCount.query.all(), start=1):
             row.count = index + 2
@@ -4241,11 +4336,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
                             self.gateway, scope, now_utc=now), expected)
 
     def test_unchanged_poll_becomes_changed_when_all_up_timer_expires(self):
+        from app.services.neosektor_live_counts import NeoSektorOperationalStateBundle
+
         self._login_approved_user(role="simulator")
         self._add_sort_operation(date.today(), "night")
         self._set_sort_window("night", time(0), time(23, 59, 59))
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(date.today(), time(23))
         self.client.get("/neosektor/live-counts")
+        NeoSektorOperationalStateBundle.load(self.gateway, include_routing=True)
         started = datetime(2026, 9, 8, 12)
         NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one().all_up_started_at = started
         NeoSektorOperationalSetting.query.one().all_up_to_down_minutes = 20
