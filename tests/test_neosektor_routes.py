@@ -1590,6 +1590,52 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(restored["routes"]["first"]["target"], "East Ballmat Stay Right")
         self.assertEqual(restored["routes"]["second"]["override"], "auto")
 
+    def test_tunnel_override_auto_ack_persistence_and_refresh_are_equivalent(self):
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0, 0), time(23, 59, 59))
+        settings_url = "/neosektor/tunnel-conductor/settings"
+        state_url = "/neosektor/tunnel-conductor/state"
+        for wave, row_name in (("first", "1ST WAVE OVERRIDE"), ("second", "2ND WAVE OVERRIDE")):
+            other = "second" if wave == "first" else "first"
+            for manual in ("west", "east"):
+                with self.subTest(wave=wave, manual=manual):
+                    forced = self.client.post(settings_url, json={f"{wave}_override": manual,
+                                                                 f"{other}_override": "east"})
+                    self.assertEqual(forced.status_code, 200)
+                    before = self.client.get(state_url).get_json()
+                    response = self.client.post(settings_url, json={f"{wave}_override": "auto"})
+                    self.assertEqual(response.status_code, 200)
+                    ack = response.get_json()["state"]["routing"]["routes"]
+                    self.assertEqual(ack[wave]["override"], "auto")
+                    self.assertEqual(ack[wave]["route_source"], "AUTO")
+                    self.assertEqual(ack[other]["override"], "east")
+                    db.session.expire_all()
+                    self.assertEqual(NeoSektorDriverRouteSetting.query.filter_by(
+                        route_name=row_name).one().route_value, "auto")
+
+                    writes = []
+                    def capture(_conn, _cursor, statement, _params, _context, _many):
+                        if statement.lstrip().split(None, 1)[0].upper() in {"INSERT", "UPDATE", "DELETE"}:
+                            writes.append(statement)
+                    engine = db.engine
+                    event.listen(engine, "before_cursor_execute", capture)
+                    try:
+                        refreshed = self.client.get(state_url, query_string={"revision": before["revision"]}).get_json()
+                        driver = self.client.get("/neosektor/driver-routing/state").get_json()
+                        unchanged = self.client.get(state_url, query_string={"revision": refreshed["revision"]}).get_json()
+                        page = self.client.get("/neosektor/tunnel-conductor")
+                    finally:
+                        event.remove(engine, "before_cursor_execute", capture)
+                    self.assertTrue(refreshed["changed"])
+                    self.assertFalse(unchanged["changed"])
+                    self.assertEqual(refreshed["state"]["routing"]["routes"], ack)
+                    self.assertEqual(driver["state"]["routing"]["routes"], ack)
+                    self.assertEqual(page.status_code, 200)
+                    self.assertRegex(page.get_data(as_text=True),
+                                     rf'value="1"\s+data-tunnel-route-override-input="{wave}"')
+                    self.assertEqual(writes, [], "Refresh and reload must not mutate canonical overrides")
+
     def test_new_neosektor_sort_defaults_driver_route_overrides_to_auto(self):
         state = driver_routing_state_payload(
             self.gateway,
@@ -2586,10 +2632,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn("revisionAtRequest !== currentRevision", source)
                 self.assertIn("mutationEpochAtRequest !== mutationEpoch", source)
                 self.assertIn("mutationEpoch += 1;", source)
-                if template_path.endswith("ballmat.html"):
-                    self.assertIn("applyMutationState(payload, requestSequence);", source)
-                else:
-                    self.assertIn("applyMutationState(payload);", source)
+                self.assertIn("applyMutationState(payload, requestSequence);", source)
 
     def test_bay_slider_ignores_older_mutation_responses(self):
         """An earlier full-side save cannot replace a later bay-state selection."""

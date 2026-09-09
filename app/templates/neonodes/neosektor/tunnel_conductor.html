@@ -327,9 +327,12 @@
     let pendingSequence = 0;
     let offsetSaveTimer = null;
     let settingsSaveTimer = null;
-    let settingsSaveSequence = 0;
+    let settingsSaving = false;
+    let settingsSaveQueued = false;
     let refreshController = null;
     let mutationEpoch = 0;
+    let mutationRequestSequence = 0;
+    let latestMutationResponse = 0;
     let spotterModes = null;
 
     const setText = (selector, value) => {
@@ -428,8 +431,14 @@
 
     const waveInputFor = (waveKey) => root.querySelector(`[data-tunnel-wave-input="${waveKey}"]`);
 
-    const applyMutationState = (payload) => {
+    const applyMutationState = (payload, requestSequence) => {
         mutationEpoch += 1;
+        // Every mutation returns a full snapshot, including route overrides.
+        // A delayed offset/wave/count response must not undo a newer settings ACK.
+        if (requestSequence < latestMutationResponse) {
+            return;
+        }
+        latestMutationResponse = requestSequence;
         applyState(payload.state);
     };
 
@@ -562,6 +571,7 @@
         }
         const controls = Array.from(panel.querySelectorAll("[data-wave-count], [data-open-bays]"));
         const tokens = captureTokens(controls);
+        const requestSequence = ++mutationRequestSequence;
 
         try {
             const response = await fetch(ballmatUrl, {
@@ -578,7 +588,7 @@
             }
             if (payload.ok) {
                 clearPendingTokens(tokens);
-                applyMutationState(payload);
+                applyMutationState(payload, requestSequence);
             }
         } catch (_error) {
             restoreAfterFailure(tokens, "Ballmat update failed. Restored the latest server value.");
@@ -623,8 +633,19 @@
         if (!canEdit || !settingsUrl) {
             return;
         }
-        const saveSequence = ++settingsSaveSequence;
+        window.clearTimeout(settingsSaveTimer);
+        if (settingsSaving) {
+            settingsSaveQueued = true;
+            return;
+        }
         const tokens = captureTokens([...settingInputs, ...routeOverrideInputs, ...bayPriorityInputs]);
+        if (!tokens.length) {
+            return;
+        }
+        // Keep rapid absolute settings writes in issue order. New user changes
+        // remain pending and are collected after this request, never retried.
+        settingsSaving = true;
+        const requestSequence = ++mutationRequestSequence;
 
         try {
             const response = await fetch(settingsUrl, {
@@ -639,12 +660,18 @@
                 restoreAfterFailure(tokens, payload.error || "Settings update failed. Restored the latest server value.");
                 return;
             }
-            if (payload.ok && saveSequence === settingsSaveSequence) {
+            if (payload.ok) {
                 clearPendingTokens(tokens);
-                applyMutationState(payload);
+                applyMutationState(payload, requestSequence);
             }
         } catch (_error) {
             restoreAfterFailure(tokens, "Settings update failed. Restored the latest server value.");
+        } finally {
+            settingsSaving = false;
+            if (settingsSaveQueued) {
+                settingsSaveQueued = false;
+                void saveSettings();
+            }
         }
     };
 
@@ -659,6 +686,7 @@
         }
         const key = editKeyFor(input);
         const tokens = key ? [[key, pendingToken(key)]] : [];
+        const requestSequence = ++mutationRequestSequence;
 
         try {
             const response = await fetch(waveUrl, {
@@ -675,7 +703,7 @@
             }
             if (payload.ok) {
                 clearPendingTokens(tokens);
-                applyMutationState(payload);
+                applyMutationState(payload, requestSequence);
             }
         } catch (_error) {
             restoreAfterFailure(tokens, "Left to arrive update failed. Restored the latest server value.");
@@ -714,6 +742,7 @@
             return;
         }
         const tokens = [[editKeyFor(offsetInput), pendingToken(editKeyFor(offsetInput))]];
+        const requestSequence = ++mutationRequestSequence;
 
         try {
             const response = await fetch(offsetUrl, {
@@ -730,7 +759,7 @@
             }
             if (payload.ok) {
                 clearPendingTokens(tokens);
-                applyMutationState(payload);
+                applyMutationState(payload, requestSequence);
             }
         } catch (_error) {
             restoreAfterFailure(tokens, "Driver route offset update failed. Restored the latest server value.");
@@ -836,6 +865,14 @@
     });
 
     root.addEventListener("input", (event) => {
+        if (event.target.matches("[data-tunnel-route-override-input]") && !event.target.disabled) {
+            // Protect a drag from full-state responses before its change/release.
+            markInputPending(event.target);
+            event.target.closest("[data-tunnel-route-override]")?.setAttribute(
+                "data-route-position", event.target.value,
+            );
+            return;
+        }
         if (event.target.matches("[data-tunnel-wave-input]") && !event.target.disabled) {
             markInputPending(event.target);
             queueWaveSave(event.target.dataset.tunnelWaveInput, event.target);
@@ -892,12 +929,13 @@
     spotterModes = window.NeoSektorSpotterModes.create(root, {
         state: {{ state|tojson }}, canEdit, onError: showEditError,
         send: async command => {
+            const requestSequence = ++mutationRequestSequence;
             const response = await fetch(root.dataset.modeUrl, {
                 method: 'POST', credentials: 'same-origin', cache: 'no-store',
                 headers: {'Content-Type': 'application/json'}, body: JSON.stringify(command),
             });
             const payload = await response.json();
-            if (payload.state) applyMutationState(payload);
+            if (payload.state) applyMutationState(payload, requestSequence);
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Spotter mode update failed.');
         },
     });
