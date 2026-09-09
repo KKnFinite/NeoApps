@@ -50,6 +50,75 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_driver_routing_signal_cost_and_routing_mutations(self):
+        self._login_approved_user(role="simulator")
+        self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(date.today(), time(23))
+        state_url = "/neosektor/driver-routing/state"
+        initial = self.client.get(state_url).get_json()
+        scope = initial["state"]["routing_watch"]
+        signal_url = f'/neosektor/driver-routing/version?sort_date={scope["sort_date"]}&sort_name={scope["sort_name"]}'
+        def measured(url, expected):
+            response, sql, commits, _ = self._capture_get_metrics(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(sum(s.startswith(("select", "with")) for s in sql), expected)
+            self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+            self.assertEqual(commits, 0)
+            return response.get_json()
+        self.assertEqual(measured(signal_url, 2)["version"], scope["version"])
+        self.assertFalse(measured(state_url + "?revision=" + initial["revision"], 9)["changed"])
+        # Each existing write endpoint commits a signal with the routing inputs.
+        changes = [
+            ("ballmat/update?side=east", {"side": "east", "waves": {"first": {"count": 3}}}),
+            ("ballmat/update?side=west", {"side": "west", "waves": {"second": {"count": 4}}}),
+            ("ballmat/update?side=east", {"side": "east", "open_bays": 2}),
+            ("ballmat/update?side=west", {"side": "west", "bay_statuses": {"Bay 4": "Full"}}),
+            ("tunnel-conductor/wave", {"wave": "first", "value": 8}),
+            ("tunnel-conductor/wave", {"wave": "second", "value": 9}),
+            ("tunnel-conductor/offset", {"west_offset": 3}),
+            ("tunnel-conductor/settings", {"first_override": "west", "second_override": "east"}),
+            ("tunnel-conductor/settings", {"first_override": "auto", "bay_priority_enabled": {"Bay 4": False}}),
+            ("tunnel-conductor/settings", {"down_timer_minutes": 7, "first_modifier": 30}),
+        ]
+        previous = scope["version"]
+        revision = initial["revision"]
+        for path, payload in changes:
+            with self.subTest(path=path, payload=payload):
+                response = self.client.post("/neosektor/" + path, json=payload)
+                self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+                # The fixture's user ORM row expires after commit: include its
+                # reload, as a fresh production request would (3 vs warm 2).
+                signal = measured(signal_url, 3)
+                self.assertNotEqual(signal["version"], previous)
+                current = measured(state_url + "?revision=" + revision, 10)
+                self.assertTrue(current["changed"])
+                self.assertEqual(current["state"]["routing_watch"], {key: signal[key] for key in scope})
+                self.assertEqual(measured(signal_url, 2), signal)
+                revision, previous = current["revision"], signal["version"]
+
+    def test_driver_routing_signal_is_scoped_read_only_and_transactional(self):
+        from app.services.neosektor_live_counts import NeoSektorOperationalStateBundle
+        from app.services.neosektor_routing_signal import advance_routing_signal, read_routing_signal
+        from types import SimpleNamespace
+        self._login_approved_user(role="simulator")
+        bundle = NeoSektorOperationalStateBundle.load(self.gateway, for_update=True)
+        db.session.commit()
+        day, name = bundle.sort_date, bundle.sort_name
+        old = read_routing_signal(self.gateway, day, name)
+        advance_routing_signal(bundle)
+        db.session.flush()
+        self.assertNotEqual(read_routing_signal(self.gateway, day, name), old)
+        db.session.rollback()
+        self.assertEqual(read_routing_signal(self.gateway, day, name), old)
+        self.assertEqual(read_routing_signal(SimpleNamespace(id=self.gateway.id+100), day, name)["version"], "-|-")
+        self.assertTrue(read_routing_signal(self.gateway, day+timedelta(days=1), name)["version"].startswith("-|"))
+        path = f'/neosektor/driver-routing/version?sort_date={day}&sort_name={name}'
+        with patch('app.neonodes.neosektor.routes.user_can', return_value=False):
+            self.assertEqual(self.client.get(path).status_code, 403)
+        self.assertEqual(self.client.get('/neosektor/driver-routing/version?sort_date=invalid').status_code, 400)
+        self.assertEqual(self.client.get(path).headers['Cache-Control'], 'no-store')
+
     def test_combined_sort_read_preserves_fields_missing_defaults_and_scope(self):
         from types import SimpleNamespace
         from sqlalchemy.dialects import postgresql
@@ -219,6 +288,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertLess(html.index("js/neosektor_live.js"), html.index("window.NeoSektorLive.poll"))
                 self.assertEqual(html.count("window.NeoLiveUpdates.create"), 1)
                 self.assertIn("window.NeoSektorLive.renderStatus(root, status", html)
+                self.assertEqual(html.count('js/neosektor_routing_watch.js'), int(page.startswith('driver-routing')))
         for page in ("/neosektor", "/neosektor/settings"):
             response = self.client.get(page)
             self.assertEqual(response.status_code, 200)
@@ -1919,6 +1989,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
             after_payloads[url] = changed
         before = before_payloads[endpoints[0]]['state']
         after = after_payloads[endpoints[0]]['state']
+        # The cheap Sektor signal deliberately excludes MotherBrain mission
+        # reads; the unchanged safety-net revision still catches Block-In.
+        self.assertEqual(before['routing_watch'], after['routing_watch'])
 
         self.assertEqual(before["routing"]["routes"]["second"]["display_state"], "not_arrived")
         self.assertEqual(after["routing"]["routes"]["second"]["display_state"], "all_in")

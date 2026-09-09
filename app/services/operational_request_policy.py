@@ -17,6 +17,7 @@ LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
         "neosektor.ballmat_state",
         "neosektor.discharge_state",
         "neosektor.driver_routing_state",
+        "neosektor.driver_routing_version",
         "neosektor.live_counts_state",
         "neosektor.tunnel_conductor_state",
     }
@@ -33,6 +34,7 @@ LIGHTWEIGHT_LIVE_STATE_NODE_CODES = {
     "neosektor.ballmat_state": "sektor",
     "neosektor.discharge_state": "sektor",
     "neosektor.driver_routing_state": "sektor",
+    "neosektor.driver_routing_version": "sektor",
     "neosektor.live_counts_state": "sektor",
     "neosektor.tunnel_conductor_state": "sektor",
 }

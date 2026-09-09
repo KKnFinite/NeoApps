@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date
 
 from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
@@ -47,6 +48,10 @@ from app.services.neosektor_live_refresh import (
     ROUTING_STATE_SCOPE,
     neosektor_discharge_revision,
     neosektor_state_revision,
+)
+from app.services.neosektor_routing_signal import (
+    advance_routing_signal, read_routing_signal, routing_signal_for_bundle,
+    driver_routing_watch_state_payload,
 )
 from app.services.neosektor_sheets_compat import (
     NEO_PRIMARY_GOOGLE_MIRROR,
@@ -762,9 +767,11 @@ def driver_routing():
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
             include_routing=True,
+            initialize=False,
             refresh_status=refresh_status,
         )
         context = driver_routing_context(gateway, bundle=bundle)
+        context["state"]["routing_watch"] = routing_signal_for_bundle(bundle)
     except NeoSektorGoogleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("neosektor.index"))
@@ -772,7 +779,6 @@ def driver_routing():
         gateway,
         ROUTING_STATE_SCOPE,
     )
-    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/driver_routing.html",
         gateway=gateway,
@@ -849,12 +855,28 @@ def driver_routing_state():
         return _neosektor_live_state_response(
             gateway,
             ROUTING_STATE_SCOPE,
-            driver_routing_state_payload,
+            driver_routing_watch_state_payload,
             screen_key=NEOSEKTOR_DRIVER_ROUTING_REFRESH_KEY,
             refresh_status_resolver=driver_routing_refresh_status,
         )
     except NeoSektorGoogleError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 503
+
+
+@bp.route("/driver-routing/version")
+@gateway_node_required("sektor")
+def driver_routing_version():
+    page = _page_by_title("DRIVER ROUTING")
+    if not user_can(page["view_permission"]):
+        return _live_state_json({"ok": False, "error": "Access denied."}), 403
+    try:
+        sort_date = date.fromisoformat(request.args.get("sort_date", ""))
+        sort_name = request.args.get("sort_name", "").strip().lower()
+        if not sort_name or len(sort_name) > 32:
+            raise ValueError("Invalid sort")
+    except ValueError:
+        return _live_state_json({"ok": False, "error": "Invalid routing scope."}), 400
+    return _live_state_json({"ok": True, **read_routing_signal(get_current_gateway(), sort_date, sort_name)})
 
 
 @memory_diagnostics("neosektor_live_state_response")
@@ -1116,6 +1138,9 @@ def _commit_neosektor_update_and_mirror(
         if before_values is not None
         else None
     )
+    # Under the same Gateway lock and transaction as all operational mutations.
+    # This also covers child-only changes (bays, overrides, offset and modes).
+    advance_routing_signal(bundle)
     db.session.commit()
     if before_values is not None:
         mirror_neosektor_operational_values(

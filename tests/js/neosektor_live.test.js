@@ -26,8 +26,9 @@ function harness(name) {
     };
     vm.createContext(context);
     vm.runInContext(helper, context);
-    const poll = source(name).match(/    const refreshState = async \(\) => \{[\s\S]*?\n    \};/)[0];
-    vm.runInContext(`${poll}\nthis.poll = refreshState;`, context);
+    const pollName = name === 'driver_routing' ? 'fetchRoutingState' : 'refreshState';
+    const poll = source(name).match(new RegExp(`    const ${pollName} = async \\(\\) => \\{[\\s\\S]*?\\n    \\};`))[0];
+    vm.runInContext(`${poll}\nthis.poll = ${pollName};`, context);
     return {context, calls, events, poll: context.poll,
         finish(payload, ok = true, jsonError = false) {
             finish({ok, json: async () => {
@@ -144,7 +145,7 @@ test('Driver keeps controller options and next-window/visibility lifecycle', asy
         clearTimeout(id) { timers.delete(id); },
         addEventListener: (name, fn) => { callbacks[name] = fn; },
         NeoLiveUpdates: {create(options) { controllerOptions = options; return {setServerStatus(s) { status = s; }}; }},
-    }, refreshState: async () => { polls.push('poll'); }};
+    }, routingWatch: null, refreshState: async () => { polls.push('poll'); }};
     vm.createContext(context); vm.runInContext(helper, context);
     const wake = src.slice(src.indexOf('    let nextWindowWakeTimer'), src.indexOf('    const applyRoute'));
     const setter = src.match(/    const setRefreshStatus = \(refresh\) => \{[\s\S]*?\n    \};/)[0].replace(/{{.*?}}/g, '5000');
