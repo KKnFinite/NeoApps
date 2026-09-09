@@ -11,6 +11,9 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neosektor_ballmat_counts": {
+        "mode_version": "INTEGER NOT NULL DEFAULT 0",
+        "pending_mode": "INTEGER",
+        "mode_request_version": "INTEGER NOT NULL DEFAULT 0",
         "spotter_mode": "INTEGER NOT NULL DEFAULT 1",
         "right_first": "INTEGER NOT NULL DEFAULT 0",
         "right_second": "INTEGER NOT NULL DEFAULT 0",
@@ -253,6 +256,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 
 POSTGRES_OPTIONAL_COLUMNS = {
     "neosektor_ballmat_counts": {
+        "mode_version": "INTEGER NOT NULL DEFAULT 0",
+        "pending_mode": "INTEGER",
+        "mode_request_version": "INTEGER NOT NULL DEFAULT 0",
         "spotter_mode": "INTEGER NOT NULL DEFAULT 1",
         "right_first": "INTEGER NOT NULL DEFAULT 0",
         "right_second": "INTEGER NOT NULL DEFAULT 0",

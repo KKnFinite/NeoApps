@@ -70,6 +70,18 @@ a running web process. `init_db.py` is local SQLite tooling, not deployment tool
 
 ## Repairing the Ballmat missing-column incident
 
+### Conductor-owned spotter modes (2026-09-09)
+
+The conductor mode-authority release adds three nullable/defaulted columns to
+the existing `neosektor_ballmat_counts` table: `mode_version` (integer, default
+0), `pending_mode` (nullable integer), and `mode_request_version` (integer,
+default 0). The canonical bootstrap above adds them idempotently before the
+new code serves traffic. Existing modes, RIGHT allocations and totals remain
+unchanged; no data backfill or separate LEFT totals are needed. Normal web
+startup and polling must not run schema synchronization.
+
+### Original dual-spotter columns
+
 Commit `31152a8` requires four additive columns on `neosektor_ballmat_counts`:
 `spotter_mode` (integer, default 1), `right_first`, `right_second`, and
 `right_open` (integers, default 0). Both schema-sync dialect maps already contain

@@ -13,6 +13,7 @@
     data-neosektor-revision="{{ live_revision }}"
     data-wave-url="{{ url_for('neosektor.tunnel_conductor_wave') }}"
     data-ballmat-url="{{ url_for('neosektor.tunnel_conductor_ballmat') }}"
+    data-mode-url="{{ url_for('neosektor.tunnel_conductor_spotter_mode') }}"
     data-offset-url="{{ url_for('neosektor.tunnel_conductor_offset') }}"
     data-settings-url="{{ url_for('neosektor.tunnel_conductor_settings') }}"
     data-refresh-active="{{ 'true' if state.refresh.auto_refresh_enabled else 'false' }}"
@@ -44,6 +45,17 @@
         {% set operation_refresh_class = "neosektor-refresh-paused" %}
         {% set operation_refresh_hook = "neosektor-refresh-paused" %}
         {% include "neonodes/_operation_refresh_banner.html" %}
+        <section class="tunnel-spotter-authority" aria-label="Spotter modes">
+            {% for side_key in ['east', 'west'] %}
+            {% set mode = state.ballmat_modes[side_key] %}
+            <div class="tunnel-mode-controls" data-conductor-mode="{{ side_key }}" aria-label="{{ side_key|upper }} spotter mode">
+                <strong>{{ side_key|upper }} · <span data-mode-current>{{ mode.mode }} SPOTTER{{ 'S' if mode.mode == 2 else '' }}</span></strong>
+                <span data-mode-pending aria-live="polite">{% if mode.pending_mode %}REQUEST {{ mode.pending_mode }} PENDING{% endif %}</span>
+                {% for target in [1, 2] %}<button type="button" data-mode-action="set" data-mode-target="{{ target }}" {% if not can_edit or not mode.available or target == mode.mode %}disabled{% endif %}>{{ target }} SPOTTER{{ 'S' if target == 2 else '' }}</button>{% endfor %}
+                {% for action in ['approve', 'deny'] %}<button type="button" data-mode-action="{{ action }}" {% if not mode.pending_mode %}hidden{% endif %} {% if not can_edit or not mode.available %}disabled{% endif %}>{{ action|upper }}</button>{% endfor %}
+            </div>
+            {% endfor %}
+        </section>
         <div class="tunnel-desktop-workspace" data-tunnel-desktop-workspace>
             <div class="tunnel-desktop-left" data-tunnel-desktop-left>
         <section class="tunnel-wave-grid" aria-label="Wave summary">
@@ -285,6 +297,7 @@
 </section>
 
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_spotter_modes.js', mode='20260909-v1') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-tunnel-conductor]");
@@ -317,6 +330,7 @@
     let settingsSaveSequence = 0;
     let refreshController = null;
     let mutationEpoch = 0;
+    let spotterModes = null;
 
     const setText = (selector, value) => {
         const element = root.querySelector(selector);
@@ -420,6 +434,7 @@
     };
 
     const applyState = (state) => {
+        spotterModes?.apply(state);
         (state.waves || []).forEach((wave) => {
             const waveKey = wave.name === "1ST WAVE" ? "first" : "second";
             const arriveControl = root.querySelector(`[data-wave-summary="${waveKey}"][data-metric="left_to_arrive"]`);
@@ -874,6 +889,18 @@
         }
     });
 
+    spotterModes = window.NeoSektorSpotterModes.create(root, {
+        state: {{ state|tojson }}, canEdit, onError: showEditError,
+        send: async command => {
+            const response = await fetch(root.dataset.modeUrl, {
+                method: 'POST', credentials: 'same-origin', cache: 'no-store',
+                headers: {'Content-Type': 'application/json'}, body: JSON.stringify(command),
+            });
+            const payload = await response.json();
+            if (payload.state) applyMutationState(payload);
+            if (!response.ok || !payload.ok) throw new Error(payload.error || 'Spotter mode update failed.');
+        },
+    });
     setRefreshStatus(initialRefreshStatus);
 })();
 </script>

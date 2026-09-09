@@ -55,7 +55,7 @@
     #ballmat-operator .bm-wave-values strong { font:600 18px/1.2 var(--font-sans); color:#f02c42; }
     #ballmat-operator .bm-modes { display:grid; grid-template-columns:1fr 1fr; margin:0 0 12px; }
     #ballmat-operator .bm-modes button { min-height:44px; padding:4px; border:1px solid #354047; border-radius:3px; background:#07131a; color:#ecf1f5; font-size:14px; font-weight:400; }
-    #ballmat-operator .bm-modes button[aria-pressed=true] { border-color:#bd2838; background:linear-gradient(#bc1024,#650d18); }
+    #ballmat-operator .bm-mode-status { grid-column:1 / -1; text-align:center; font-size:11px; }
     #ballmat-operator .bm-counts { display:grid; grid-template-columns:minmax(0,1fr) 100px; gap:10px; border-top:1px solid #354047; padding:12px 0; }
     /* Both columns share the heading, split legend, and three count tracks. */
     #ballmat-operator .bm-counts { grid-template-rows:minmax(40px,auto) 0 repeat(3,46px); row-gap:0; }

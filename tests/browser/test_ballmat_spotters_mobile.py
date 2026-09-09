@@ -11,6 +11,19 @@ from tests.test_neosektor_integration_modes import _complete_sheet_values
 
 
 class BallmatMobileTest(unittest.TestCase):
+    def request_and_approve_two_spotters(self, page, side):
+        path = '/neosektor/ebm' if side == 'east' else '/neosektor/wbm'
+        with page.expect_response(lambda r: '/ballmat/mode-request' in r.url and r.request.method == 'POST') as requested:
+            page.locator('[data-bm-mode="2"]').click()
+        self.assertEqual(requested.value.status, 200)
+        self.assertEqual(requested.value.json()['state']['spotters']['mode'], 1)
+        existing.MobileDrawerBrowserTest().ready(page, '/neosektor/tunnel-conductor')
+        with page.expect_response(lambda r: '/spotter-mode' in r.url and r.request.method == 'POST') as approved:
+            page.locator(f'[data-conductor-mode="{side}"] [data-mode-action="approve"]').click()
+        self.assertEqual(approved.value.status, 200)
+        existing.MobileDrawerBrowserTest().ready(page, path)
+        page.wait_for_function('document.querySelector("[data-ballmat-mobile]").dataset.mode === "2"')
+
     def test_uninterrupted_mobile_input(self):
         """Hold real local POST responses, not mock state, to expose RTT locks."""
         kind = existing.MobileDrawerBrowserTest
@@ -30,9 +43,7 @@ class BallmatMobileTest(unittest.TestCase):
             page.on('pageerror', lambda error: errors.append(str(error)))
             kind().login(page)
             kind().ready(page, '/neosektor/ebm')
-            with page.expect_response(lambda r: '/ballmat/update' in r.url and r.request.method == 'POST'):
-                page.locator('[data-bm-mode="2"]').click()
-            page.wait_for_function('document.querySelector("[data-ballmat-mobile]").dataset.mode === "2"')
+            self.request_and_approve_two_spotters(page, 'east')
             page.evaluate('''() => {
                 const original = window.fetch;
                 window.bmResponseGates = [];
@@ -122,10 +133,7 @@ class BallmatMobileTest(unittest.TestCase):
                     page.locator('[data-live-update-status]').evaluate_all('es=>es.map(e=>({html:e.outerHTML,parent:e.parentElement.outerHTML.slice(0,400),display:getComputedStyle(e).display}))'))
                 for mode in (1,2):
                     if mode==2:
-                        with page.expect_response(lambda r:'/ballmat/update' in r.url and r.request.method=='POST') as mutation:
-                            page.locator('[data-bm-mode="2"]').click()
-                        self.assertEqual(mutation.value.status,200)
-                        page.wait_for_function('document.querySelector("[data-ballmat-mobile]").dataset.mode==="2"')
+                        self.request_and_approve_two_spotters(page, side)
                     page.screenshot(path=str(evidence/f'{side}-{mode}-390x844.png'))
                     result=page.evaluate('''() => {
                         const dock=document.querySelector('.neo-mobile-bottom').getBoundingClientRect();

@@ -1,0 +1,12 @@
+/* Only the new authority toolbar; shell geometry and the count grid stay intact. */
+.tunnel-spotter-authority { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; order:0; border-bottom:1px solid #354047; }
+.tunnel-mode-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px; margin:4px 0 8px; }
+.tunnel-mode-controls strong, .tunnel-mode-controls > span { flex-basis:100%; text-align:center; font-size:12px; }
+.tunnel-mode-controls > span:empty { display:none; }
+.tunnel-mode-controls button { min-height:32px; padding:4px 8px; font:600 11px/1.2 var(--font-sans); }
+@media (min-width:901px) {
+    /* Reserve a row for authority controls outside the positioned count grid. */
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap {
+        grid-template-rows:auto auto minmax(0,1fr);
+    }
+}

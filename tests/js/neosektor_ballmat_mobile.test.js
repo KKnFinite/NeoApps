@@ -18,6 +18,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
         elements.push(e); return e;
     };
     [1, 2].forEach(n => element({bmMode: String(n)}));
+    element({bmModeStatus: ''}); element({bmNotice: ''});
     for (const key of ['first', 'second', 'open']) {
         for (const position of ['total', 'left', 'right']) {
             element({bmValue: `${key}:${position}`});
@@ -36,11 +37,12 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
     const panel = {dataset: {}, attrs: {}, setAttribute(k,v) { this.attrs[k]=v; },
         removeAttribute(k) { delete this.attrs[k]; }, querySelectorAll: select,
         querySelector: s => select(s)[0], addEventListener: (name, fn) => { listeners[name] = fn; }};
-    let server = {spotters: {available, mode, side: 'east', counts: Object.fromEntries(['first','second','open'].map(k => [k,{left:0,right:0,total:0}]))},
+    let server = {spotters: {available, mode, mode_version:0, pending_mode:null, request_version:0, side: 'east', counts: Object.fromEntries(['first','second','open'].map(k => [k,{left:0,right:0,total:0}]))},
         sides: Object.fromEntries(['east','west'].map(k => [k,{waves:[{count:0},{count:0}],open_bays:0,bays:['Bay 1','Bay 2'].map(bay_name=>({bay_name,status:'Empty'}))}])),
         waves:[{left:0,left_to_arrive:0},{left:0,left_to_arrive:0}], ballmat_routing:{first:'-',second:'-'}};
     const calls = [], pending = [];
-    const context = {window: {}, document: {activeElement:null}};
+    const timers = [];
+    const context = {window: {setTimeout:fn=>timers.push(fn), clearTimeout:()=>{}}, document: {activeElement:null}};
     vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../app/static/js/neosektor_ballmat_mobile.js'),'utf8'),context);
     const api = context.window.NeoBallmatMobile.create({querySelector:()=>panel}, {
         state: structuredClone(server), canEdit, statusLabels:['Empty','Light','Moderate','Full','Overflowing'],
@@ -53,6 +55,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
     const finish = async (ok=true) => {
         const {payload:p,resolve} = pending.shift();
         if (ok) {
+            if (p.mode_request) server.spotters.pending_mode = p.mode_request.mode;
             if (p.spotter) {
                 if (p.spotter.mode) server.spotters.mode=p.spotter.mode;
                 else {
@@ -72,7 +75,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
         assert.equal(panel.attrs['aria-busy'],undefined);
         assert.ok(elements.filter(e=>e.dataset.bmStep || e.dataset.bmBay).every(e=>!e.disabled));
     };
-    return {api,server,panel,calls,pending,click,bay,finish,text,unlocked,select,listeners};
+    return {api,server,panel,calls,pending,click,bay,finish,text,unlocked,select,listeners,timers};
 }
 
 test('rapid deltas preserve every tap, optimistic values survive polls and intermediate replies', async () => {
@@ -134,15 +137,19 @@ test('failed write is not retried; later taps rebase and unrelated bay remains e
     assert.equal(h.server.sides.east.bays[0].status,'Overflowing');
 });
 
-test('mode barrier is confined to mode/count semantics, never bays or panel', async () => {
+test('mode buttons request only, keep counts/bays interactive and show canonical pending mode', async () => {
     const h=harness();
     h.listeners.click({target:h.select('[data-bm-mode="2"]')[0]});
     assert.equal(h.panel.attrs['aria-busy'],undefined);
     assert.equal(h.select('[data-bm-bay="Bay 1"]')[0].disabled,false);
     h.click(); h.bay(1,'change');
-    await h.finish(); await h.finish(); h.unlocked();
-    assert.equal(h.server.spotters.mode,2);
-    assert.equal(h.calls.length,2);
+    await h.finish(); await h.finish(); await h.finish(); h.unlocked();
+    assert.equal(h.server.spotters.mode,1);
+    assert.equal(h.server.spotters.pending_mode,2);
+    assert.equal(h.calls[0].mode_request.expected_mode_version,0);
+    assert.equal(h.calls[0].spotter,undefined);
+    assert.equal(h.text('[data-bm-mode-status]'),'1 SPOTTER · REQUEST 2 PENDING');
+    assert.equal(h.calls.length,3);
 });
 
 test('failed bay save restores both the slider and readout without retry', async () => {
@@ -155,4 +162,44 @@ test('failed bay save restores both the slider and readout without retry', async
 test('read-only permissions still prevent every mobile write', () => {
     const h=harness({canEdit:false}); h.click(); h.bay(3,'change');
     assert.equal(h.calls.length,0);
+});
+
+test('two devices converge on conductor mode change and discard old-generation queued taps', async () => {
+    const devices = [harness(), harness()];
+    for (const h of devices) {
+        h.server.spotters.counts.first = {left:10,right:0,total:10};
+        h.api.apply(structuredClone(h.server));
+        h.click(); h.click(); h.click();
+        const stale = structuredClone(h.server);
+        h.server.spotters.mode=2; h.server.spotters.mode_version=1;
+        h.api.apply(structuredClone(h.server));
+        assert.equal(h.panel.dataset.mode,2);
+        assert.equal(h.text('[data-bm-value="first:left"]'),10);
+        assert.equal(h.text('[data-bm-value="first:right"]'),0);
+        assert.equal(h.text('[data-bm-notice]'),'MODE CHANGED');
+        h.api.apply(stale); // In-flight pre-change response cannot regress the mode.
+        assert.equal(h.panel.dataset.mode,2);
+        await h.finish(false); // 409 canonical response; no stale retry.
+        assert.equal(h.calls.length,1);
+        h.click('first','right'); h.click('first','right');
+        await h.finish(); await h.finish();
+        for (let n=0;n<3;n++) h.api.apply(structuredClone(h.server));
+        assert.deepEqual(h.server.spotters.counts.first,{left:10,right:2,total:12});
+        assert.equal(h.text('[data-bm-value="first:left"]'),10);
+        assert.equal(h.text('[data-bm-value="first:right"]'),2);
+        assert.equal(h.text('[data-bm-value="first:total"]'),12);
+        assert.ok(h.calls.slice(1).every(p=>p.spotter.expected_mode===2 && p.spotter.expected_mode_version===1));
+        h.timers.at(-1)(); assert.equal(h.select('[data-bm-notice]')[0].hidden,true);
+        h.unlocked();
+    }
+});
+
+test('generation change reconciles even when mode cycles back to the same value', async () => {
+    const h=harness(); h.click(); h.click();
+    h.server.spotters.mode_version=2;
+    h.api.apply(structuredClone(h.server));
+    await h.finish(false);
+    assert.equal(h.calls.length,1);
+    assert.equal(h.text('[data-bm-value="first:total"]'),0);
+    h.click(); assert.equal(h.calls.at(-1).spotter.expected_mode_version,2);
 });

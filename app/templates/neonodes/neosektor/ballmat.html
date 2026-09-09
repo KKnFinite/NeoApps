@@ -13,6 +13,7 @@
     data-state-url="{{ url_for('neosektor.ballmat_state', side=selected_side) }}"
     data-neosektor-revision="{{ live_revision }}"
     data-update-url="{{ url_for('neosektor.ballmat_update', side=selected_side, operator=1) }}"
+    data-mode-request-url="{{ url_for('neosektor.ballmat_mode_request', side=selected_side) }}"
     data-refresh-active="{{ 'true' if state.refresh.auto_refresh_enabled else 'false' }}"
 >
     <header class="app-header neosektor-standalone-header mobile-shell-duplicate-title">
@@ -151,7 +152,7 @@
     </main>
 </section>
 
-<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260907-optimistic-v2') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260909-conductor-mode-v3') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
 <script>
 (() => {
@@ -179,6 +180,9 @@
     let mutationRequestSequence = 0;
     let latestMutationRequest = 0;
     let mobile = null;
+    let modeSnapshot = {{ state.spotters|tojson }};
+    let modeSort = {{ state.summary|tojson }};
+    const modeGuard = () => ({expected_mode: modeSnapshot.mode, expected_mode_version: modeSnapshot.mode_version});
 
     const editKeyFor = (input) => input?.dataset?.neosektorEditKey || "";
 
@@ -187,7 +191,7 @@
             return null;
         }
         const sequence = ++pendingSequence;
-        pendingEdits.set(key, { sequence, value: String(value ?? "") });
+        pendingEdits.set(key, { sequence, value: String(value ?? ""), modeGuard: modeGuard() });
         return sequence;
     };
 
@@ -273,6 +277,7 @@
 
         return {
             side: selectedSide,
+            mode_guard: pendingEdits.values().next().value?.modeGuard || modeGuard(),
             waves,
             open_bays: readNumber(selectedPanel.querySelector("[data-open-bays]")),
             bay_statuses: bayStatuses,
@@ -305,7 +310,19 @@
     };
 
     const applyState = (state) => {
+        const sameSort = state.summary.sort_date === modeSort.sort_date && state.summary.sort_name === modeSort.sort_name;
+        if (sameSort && state.spotters && state.spotters.mode_version < modeSnapshot.mode_version) return;
         mobile?.apply(state);
+        const modeChanged = state.spotters && (!sameSort || state.spotters.mode_version !== modeSnapshot.mode_version
+            || state.spotters.mode !== modeSnapshot.mode);
+        if (state.spotters) modeSnapshot = state.spotters;
+        modeSort = state.summary;
+        if (modeChanged) {
+            selectedPanel?.querySelectorAll('[data-wave-count], [data-open-bays]').forEach(input => {
+                pendingEdits.delete(editKeyFor(input));
+            });
+            pendingEdits.forEach(edit => { edit.modeGuard = modeGuard(); }); // Bay edits are mode-independent.
+        }
         (state.waves || []).forEach((wave) => {
             const key = waveKey(wave.name);
             setText(`[data-wave="${key}"][data-metric="left_to_arrive"]`, wave.left_to_arrive ?? wave.planned ?? 0);
@@ -321,9 +338,10 @@
             side.waves.forEach((wave) => {
                 const countInput = panel.querySelector(`[data-wave-count="${wave.key}"]`);
                 const statusControl = panel.querySelector(`[data-wave-status="${wave.key}"]`);
-                if (countInput && document.activeElement !== countInput) {
+                if (countInput && (modeChanged || document.activeElement !== countInput)) {
                     if (countInput.tagName === "INPUT") {
-                        setEditableValue(countInput, wave.count);
+                        if (modeChanged) countInput.value = wave.count;
+                        else setEditableValue(countInput, wave.count);
                     } else {
                         countInput.textContent = wave.count;
                     }
@@ -339,7 +357,8 @@
 
             const openBays = panel.querySelector("[data-open-bays]");
             const openBaysValue = panel.querySelector("[data-open-bays-value]");
-            setEditableValue(openBays, side.open_bays);
+            if (modeChanged && openBays) openBays.value = side.open_bays;
+            else setEditableValue(openBays, side.open_bays);
             if (openBaysValue) {
                 openBaysValue.textContent = side.open_bays;
             }
@@ -401,6 +420,7 @@
         }
         const controls = Array.from(selectedPanel.querySelectorAll("[data-wave-count], [data-open-bays], [data-bay-status]"));
         const tokens = captureTokens(controls);
+        if (!tokens.length) return;
         const requestSequence = ++mutationRequestSequence;
         latestMutationRequest = requestSequence;
 
@@ -413,6 +433,12 @@
                 body: JSON.stringify(collectPayload()),
             });
             const payload = await response.json().catch(() => ({}));
+            if (response.status === 409 && payload.state) {
+                clearPendingTokens(tokens);
+                applyMutationState(payload, requestSequence);
+                showEditError(payload.error);
+                return;
+            }
             if (!response.ok || !payload.ok) {
                 restoreAfterFailure(tokens, payload.error || "Ballmat update failed. Restored the latest server value.");
                 return;
@@ -515,12 +541,17 @@
             const requestSequence = ++mutationRequestSequence;
             latestMutationRequest = requestSequence;
             try {
-                const response = await fetch(updateUrl, {
+                const response = await fetch(changes.mode_request ? root.dataset.modeRequestUrl : updateUrl, {
                     method: 'POST', credentials: 'same-origin', cache: 'no-store',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({side: selectedSide, ...changes}),
+                    body: JSON.stringify({side: selectedSide, ...(changes.mode_request || changes)}),
                 });
                 const payload = await response.json();
+                if (response.status === 409 && payload.state) {
+                    applyMutationState(payload, requestSequence);
+                    showEditError(payload.error);
+                    return false; // Canonical conflict response; never replay the stale write.
+                }
                 if (!response.ok || !payload.ok) throw new Error(payload.error || 'Ballmat update failed.');
                 applyMutationState(payload, requestSequence);
             } catch (error) {

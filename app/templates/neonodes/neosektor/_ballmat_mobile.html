@@ -10,9 +10,11 @@
         {% endfor %}
     </section>
     <div class="bm-modes" aria-label="Spotter mode">
+        <span class="bm-mode-status" data-bm-mode-status aria-live="polite">{{ state.spotters.mode }} SPOTTER{{ 'S' if state.spotters.mode == 2 else '' }}{% if state.spotters.pending_mode %} · REQUEST {{ state.spotters.pending_mode }} PENDING{% endif %}</span>
         {% for mode, label in [(1,'1 SPOTTER'),(2,'2 SPOTTERS')] %}
-        <button type="button" data-bm-mode="{{ mode }}" aria-pressed="{{ 'true' if state.spotters.mode == mode else 'false' }}" {% if not can_edit or not state.spotters.available %}disabled{% endif %}>{{ label }}</button>
+        <button type="button" data-bm-mode="{{ mode }}" {% if not can_edit or not state.spotters.available or state.spotters.mode == mode or state.spotters.pending_mode %}disabled{% endif %}>REQUEST {{ label }}</button>
         {% endfor %}
+        <span class="bm-mode-status" data-bm-notice aria-live="polite" hidden></span>
     </div>
     <section class="bm-counts" aria-label="Ballmat counts">
         <div class="bm-local"><h2>{{ local.label }} BALLMAT</h2>

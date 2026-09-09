@@ -22,6 +22,10 @@ from app.services.neosektor_live_counts import (
     ballmat_operations_context,
     ballmat_operator_state_payload,
     BallmatModeConflict,
+    BallmatModeConfirmationRequired,
+    update_ballmat_mode,
+    validate_ballmat_mode,
+    tunnel_conductor_state_payload,
     driver_routing_context,
     driver_routing_refresh_status,
     driver_routing_state_payload,
@@ -201,6 +205,7 @@ def tunnel_conductor():
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
             include_routing=True,
+            initialize=False,
             refresh_status=refresh_status,
         )
         context = tunnel_conductor_context(gateway, bundle=bundle)
@@ -211,7 +216,6 @@ def tunnel_conductor():
         gateway,
         ROUTING_STATE_SCOPE,
     )
-    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/tunnel_conductor.html",
         gateway=gateway,
@@ -236,7 +240,7 @@ def tunnel_conductor_state():
         return _neosektor_live_state_response(
             gateway,
             ROUTING_STATE_SCOPE,
-            driver_routing_state_payload,
+            tunnel_conductor_state_payload,
             screen_key=NEOSEKTOR_TUNNEL_CONDUCTOR_REFRESH_KEY,
         )
     except NeoSektorGoogleError as exc:
@@ -412,6 +416,7 @@ def _render_ballmat_operations(selected_side):
         )
         bundle = NeoSektorOperationalStateBundle.load(
             gateway,
+            initialize=False,
             refresh_status=neosektor_refresh_status(gateway, screen_key=screen_key),
         )
         context = ballmat_operations_context(
@@ -426,7 +431,6 @@ def _render_ballmat_operations(selected_side):
         gateway,
         ROUTING_STATE_SCOPE,
     )
-    _commit_neosektor_initialization_if_changed(bundle)
     return render_template(
         "neonodes/neosektor/ballmat.html",
         gateway=gateway,
@@ -473,6 +477,9 @@ def ballmat_update():
     try:
         gateway = get_current_gateway()
         bundle, before_values, warning_pending = _neosektor_write_bundle(gateway)
+        if "mode_guard" in payload or (request.args.get("operator") == "1" and "spotter" not in payload
+                                        and ("waves" in payload or "open_bays" in payload)):
+            validate_ballmat_mode(bundle, selected_side, payload.get("mode_guard"))
         state = update_ballmat_side(
             gateway,
             selected_side,
@@ -483,7 +490,8 @@ def ballmat_update():
             state = ballmat_operator_state_payload(gateway, selected_side=selected_side, bundle=bundle)
     except BallmatModeConflict as exc:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(exc)}), 409
+        return jsonify({"ok": False, "error": str(exc), "state": ballmat_operator_state_payload(
+            gateway, selected_side=selected_side, initialize=False)}), 409
     except NeoSektorGoogleError as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 502
@@ -498,6 +506,51 @@ def ballmat_update():
         warning_pending,
     )
     return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/ballmat/mode-request", methods=["POST"])
+@gateway_node_required("sektor")
+def ballmat_mode_request():
+    side = _selected_ballmat_side()
+    if not _ballmat_access(side)["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+    return _ballmat_mode_response(side, conductor=False)
+
+
+@bp.route("/tunnel-conductor/spotter-mode", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_spotter_mode():
+    if not _neosektor_access(TUNNEL_CONDUCTOR_VIEW_PERMISSION, TUNNEL_CONDUCTOR_EDIT_PERMISSION)["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+    payload = request.get_json(silent=True)
+    side = normalize_ballmat_side(payload.get("side")) if isinstance(payload, dict) else None
+    if not side:
+        return jsonify({"ok": False, "error": "Invalid side."}), 400
+    return _ballmat_mode_response(side, conductor=True)
+
+
+def _ballmat_mode_response(side, *, conductor):
+    gateway = get_current_gateway()
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict) or normalize_ballmat_side(payload.get("side")) != side:
+        return jsonify({"ok": False, "error": "Selected side does not match update side."}), 400
+    def state_for(**kwargs):
+        if conductor:
+            return tunnel_conductor_state_payload(gateway, **kwargs)
+        return ballmat_operator_state_payload(gateway, selected_side=side, **kwargs)
+    try:
+        bundle, before_values, warning_pending = _neosektor_write_bundle(gateway, include_routing=True)
+        update_ballmat_mode(bundle, side, payload, conductor=conductor)
+        state = state_for(bundle=bundle)
+        _commit_neosektor_update_and_mirror(bundle, before_values, warning_pending)
+        return jsonify({"ok": True, "state": state})
+    except BallmatModeConflict as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc), "state": state_for(initialize=False),
+                        "confirmation_required": isinstance(exc, BallmatModeConfirmationRequired)}), 409
+    except (ValueError, NeoSektorGoogleError) as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 @bp.route("/discharge")

@@ -46,9 +46,10 @@
     {% endif %}
     {% if is_neosektor_tunnel_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260907-flat-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_spotter_modes.css', mode='20260909-v1') }}">
     {% endif %}
     {% if is_neosektor_ballmat_operator_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260907-tracks-v2') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260909-conductor-mode-v3') }}">
     {% endif %}
     {% if request.endpoint == 'neosektor.driver_routing' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260908-split-v1') }}">

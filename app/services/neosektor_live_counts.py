@@ -71,6 +71,10 @@ LEFT_TO_ARRIVE_MAX = 999
 DRIVER_OFFSET_MAX = 20
 TUNNEL_CONDUCTOR_VIEW_PERMISSION = "neosektor.conductor.view"
 TUNNEL_CONDUCTOR_EDIT_PERMISSION = "neosektor.tunnel_conductor.edit"
+BALLMAT_DETAIL_DEFAULTS = {
+    "spotter_mode": 1, "mode_version": 0, "pending_mode": None, "mode_request_version": 0,
+    "right_first": 0, "right_second": 0, "right_open": 0,
+}
 
 
 @dataclass
@@ -586,6 +590,75 @@ class BallmatModeConflict(ValueError):
     """An operator acted on a mode that another device has since changed."""
 
 
+class BallmatModeConfirmationRequired(BallmatModeConflict):
+    """Collapsing a nonempty RIGHT allocation requires explicit confirmation."""
+
+
+def _ballmat_mode_detail(bundle, selected_side):
+    row = next((r for r in bundle.ballmats if r.side == side_display_label(selected_side)), None)
+    return {
+        "mode": getattr(row, "spotter_mode", 1) or 1,
+        "mode_version": getattr(row, "mode_version", 0) or 0,
+        "pending_mode": getattr(row, "pending_mode", None),
+        "request_version": getattr(row, "mode_request_version", 0) or 0,
+        "right_nonzero": any(getattr(row, "right_" + key, 0) for key in ("first", "second", "open")),
+        "available": bundle.integration_mode != "google_primary",
+    }
+
+
+def validate_ballmat_mode(bundle, selected_side, command):
+    detail = _ballmat_mode_detail(bundle, selected_side)
+    if not isinstance(command, dict) or any(
+        type(command.get(expected)) is not int or command[expected] != detail[actual]
+        for expected, actual in (("expected_mode", "mode"), ("expected_mode_version", "mode_version"))
+    ):
+        raise BallmatModeConflict("Spotter mode changed. The latest mode has been restored; review before editing.")
+
+
+def update_ballmat_mode(bundle, selected_side, command, *, conductor=False):
+    """Caller holds the existing Gateway write lock and owns the transaction."""
+    validate_ballmat_mode(bundle, selected_side, command)
+    if bundle.integration_mode == "google_primary":
+        raise ValueError("Spotter modes require Neo-primary counts.")
+    row = next(r for r in bundle.ballmats if r.side == side_display_label(selected_side))
+    action = command.get("action", "request")
+    if not conductor:
+        if action != "request":
+            raise ValueError("Only Tunnel Conductor can change spotter mode.")
+        target = command.get("mode")
+        if type(target) is not int or target not in (1, 2) or target == (row.spotter_mode or 1):
+            raise ValueError("Request the other spotter mode.")
+        if row.pending_mode == target:
+            return  # Idempotent duplicate: no timestamp/version churn.
+        if row.pending_mode is not None:
+            raise BallmatModeConflict("A spotter mode request is already pending.")
+        row.pending_mode = target
+        row.mode_request_version = (row.mode_request_version or 0) + 1
+    else:
+        if action not in ("approve", "deny", "set"):
+            raise ValueError("Invalid mode action.")
+        if action in ("approve", "deny"):
+            if (row.pending_mode is None or type(command.get("request_version")) is not int
+                    or command["request_version"] != row.mode_request_version):
+                raise BallmatModeConflict("The pending mode request changed. Review the latest request.")
+        if action == "deny":
+            row.pending_mode = None
+        else:
+            target = row.pending_mode if action == "approve" else command.get("mode")
+            if type(target) is not int or target not in (1, 2):
+                raise ValueError("Invalid spotter mode.")
+            if target == (row.spotter_mode or 1):
+                return
+            if target == 1 and any(getattr(row, "right_" + key) for key in ("first", "second", "open")):
+                if command.get("confirm_clear_right") is not True:
+                    raise BallmatModeConfirmationRequired("Confirm moving the RIGHT allocation into the total for 1 Spotter.")
+            row.spotter_mode = target
+            row.mode_version = (row.mode_version or 0) + 1
+            row.right_first = row.right_second = row.right_open = 0
+            row.pending_mode = None
+    row.updated_at = datetime.utcnow()
+
+
 def ballmat_operator_state_payload(gateway, sort_date=None, sort_name=None, *,
                                    selected_side="east", bundle=None, **kwargs):
     """Operator detail is not added to the shared count/routing consumers."""
@@ -603,8 +676,7 @@ def ballmat_operator_state_payload(gateway, sort_date=None, sort_name=None, *,
     totals = {w["key"]: w["count"] for w in side["waves"]}
     totals["open"] = side["open_bays"]
     state["spotters"] = {
-        "side": selected_side, "mode": mode,
-        "available": bundle.integration_mode != "google_primary",
+        "side": selected_side, **_ballmat_mode_detail(bundle, selected_side),
         "counts": {},
     }
     for key, total in totals.items():
@@ -627,15 +699,9 @@ def _apply_spotter_command(bundle, selected_side, command):
     side = side_display_label(selected_side)
     row = next(r for r in bundle.ballmats if r.side == side)
     mode = row.spotter_mode or 1
-    if type(command.get("expected_mode")) is not int or command["expected_mode"] != mode:
-        raise BallmatModeConflict("Spotter mode changed. Refresh and try again.")
+    validate_ballmat_mode(bundle, selected_side, command)
     if "mode" in command:
-        if type(command["mode"]) is not int or command["mode"] not in (1, 2):
-            raise ValueError("Invalid spotter mode.")
-        if command["mode"] != mode:
-            row.spotter_mode = command["mode"]
-            row.right_first = row.right_second = row.right_open = 0
-        return
+        raise ValueError("Only Tunnel Conductor can change spotter mode. Request a mode change instead.")
     key, position, delta = command.get("metric"), command.get("position"), command.get("delta")
     if key not in ("first", "second", "open") or type(delta) is not int or delta not in (-1, 1):
         raise ValueError("Invalid spotter count update.")
@@ -868,7 +934,7 @@ def tunnel_conductor_context(
     bundle=None,
 ):
     return {
-        "state": driver_routing_state_payload(
+        "state": tunnel_conductor_state_payload(
             gateway,
             sort_date,
             sort_name,
@@ -876,6 +942,14 @@ def tunnel_conductor_context(
         ),
         "status_labels": STATUS_LABELS,
     }
+
+
+def tunnel_conductor_state_payload(gateway, sort_date=None, sort_name=None, *, bundle=None, **kwargs):
+    bundle = bundle or NeoSektorOperationalStateBundle.load(
+        gateway, sort_date, sort_name, include_routing=True, **kwargs)
+    state = bundle.driver_routing_state_payload()
+    state["ballmat_modes"] = {side: _ballmat_mode_detail(bundle, side) for side in ("east", "west")}
+    return state
 
 
 def driver_routing_context(
@@ -1376,7 +1450,7 @@ def _read_only_count_rows(sort_state_id, *, include_routing=False, sort_row=None
         ("open", NeoSektorOpenBayState, ("side", "open_count")),
         ("bay", NeoSektorBayStatus, ("side", "bay_name", "status")),
         ("timer", NeoSektorWaveState, ("wave_name", "planned_count", "unloaded_count", "all_up_started_at", "status")),
-        ("ballmat", NeoSektorBallmatCount, ("side", "count", "status", "spotter_mode", "right_first", "right_second", "right_open")),
+        ("ballmat", NeoSektorBallmatCount, ("side", "count", "status", *BALLMAT_DETAIL_DEFAULTS)),
     ]
     if include_routing:
         sources.append(("route", NeoSektorDriverRouteSetting, ("route_name", "route_value")))
@@ -1432,8 +1506,10 @@ def _read_only_ballmats(rows):
             side=side_label,
             count=getattr(existing.get(side_label), "count", 0),
             status=getattr(existing.get(side_label), "status", "Empty"),
-            **{key: getattr(existing.get(side_label), key, default) for key, default in
-               (("spotter_mode", 1), ("right_first", 0), ("right_second", 0), ("right_open", 0))},
+            # Use the same field contract as the SQL projection: a new detail
+            # field cannot silently disappear between the UNION and payload.
+            **{key: getattr(existing.get(side_label), key, default)
+               for key, default in BALLMAT_DETAIL_DEFAULTS.items()},
         )
         for _side_key, side_label, _manager_label in DEFAULT_BALLMAT_SIDES
     ]

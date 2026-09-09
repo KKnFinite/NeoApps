@@ -7,7 +7,7 @@ window.NeoBallmatMobile = {
         const counts = new Map();
         const bays = new Map();
         let running = false;
-        let changingMode = false;
+        let noticeTimer;
         let sequence = 0;
         const clamp = value => Math.max(0, Math.min(99, value));
         const stepCount = (value, position, delta) => {
@@ -22,12 +22,13 @@ window.NeoBallmatMobile = {
             if (!detail) return;
             panel.dataset.mode = detail.mode;
             panel.querySelectorAll('[data-bm-mode]').forEach(button => {
-                button.setAttribute('aria-pressed', String(Number(button.dataset.bmMode) === detail.mode));
-                // Only mode changes need a semantic barrier; ordinary saves
-                // never disable count controls, sliders, or the whole panel.
-                button.disabled = !canEdit || !detail.available || running || bays.size > 0;
+                button.disabled = !canEdit || !detail.available || running || detail.pending_mode != null
+                    || Number(button.dataset.bmMode) === detail.mode;
             });
-            panel.querySelectorAll('[data-bm-step]').forEach(button => { button.disabled = !canEdit || changingMode; });
+            const modeStatus = panel.querySelector('[data-bm-mode-status]');
+            if (modeStatus) modeStatus.textContent = `${detail.mode} SPOTTER${detail.mode === 2 ? 'S' : ''}`
+                + (detail.pending_mode ? ` · REQUEST ${detail.pending_mode} PENDING` : '');
+            panel.querySelectorAll('[data-bm-step]').forEach(button => { button.disabled = !canEdit; });
             panel.querySelectorAll('[data-bm-value]').forEach(output => {
                 const [key, position] = output.dataset.bmValue.split(':');
                 output.textContent = (counts.get(key) || detail.counts[key])[position];
@@ -47,13 +48,33 @@ window.NeoBallmatMobile = {
                 panel.querySelector(`[data-bm-bay-value="${bay.bay_name}"]`).textContent = status;
             });
         };
-        const apply = next => { current = next; render(); };
+        const apply = next => {
+            if (!next.spotters) return;
+            const sameSort = next.summary?.sort_date === current.summary?.sort_date
+                && next.summary?.sort_name === current.summary?.sort_name;
+            // A delayed mutation response must not restore an older mode generation.
+            if (sameSort && next.spotters.mode_version < current.spotters.mode_version) return;
+            if (!sameSort || next.spotters.mode_version !== current.spotters.mode_version
+                    || next.spotters.mode !== current.spotters.mode) {
+                // Drop unsent old-generation taps, never reinterpret/retry them.
+                for (let i = queue.length - 1; i >= 0; i--) {
+                    if (queue[i].kind === 'count' || queue[i].kind === 'request') queue.splice(i, 1);
+                }
+                counts.clear();
+                const notice = panel.querySelector('[data-bm-notice]');
+                if (notice) {
+                    notice.textContent = 'MODE CHANGED'; notice.hidden = false;
+                    window.clearTimeout(noticeTimer);
+                    noticeTimer = window.setTimeout(() => { notice.hidden = true; }, 5200);
+                }
+            }
+            current = next; render();
+        };
         const drain = async () => {
             if (running) return;
             running = true;
             while (queue.length) {
                 const task = queue.shift();
-                changingMode = task.kind === 'mode';
                 render();
                 let succeeded = false;
                 try { succeeded = await send(task.payload) !== false; }
@@ -73,7 +94,6 @@ window.NeoBallmatMobile = {
                     }
                 }
                 if (task.kind === 'bay' && bays.get(task.key)?.sequence === task.sequence) bays.delete(task.key);
-                changingMode = false;
                 render();
             }
             running = false;
@@ -94,10 +114,11 @@ window.NeoBallmatMobile = {
             if (!canEdit) return;
             const mode = event.target.closest('[data-bm-mode]');
             const step = event.target.closest('[data-bm-step]');
-            if (mode && !mode.disabled && !running && !bays.size && Number(mode.dataset.bmMode) !== current.spotters.mode) {
-                enqueue({kind: 'mode', payload: {spotter: {expected_mode: current.spotters.mode, mode: Number(mode.dataset.bmMode)}}});
+            if (mode && !mode.disabled) {
+                enqueue({kind: 'request', payload: {mode_request: {expected_mode: current.spotters.mode,
+                    expected_mode_version: current.spotters.mode_version, mode: Number(mode.dataset.bmMode)}}});
             }
-            if (step && !step.disabled && !changingMode) {
+            if (step && !step.disabled) {
                 // Legacy Google-owned 1-spotter operation retains its existing
                 // aggregate endpoint. Neo-owned operation always sends deltas.
                 const key = step.dataset.metric;
@@ -108,9 +129,11 @@ window.NeoBallmatMobile = {
                 if (!current.spotters.available) {
                     value.left = value.total = clamp(value.total + delta);
                     payload = key === 'open' ? {open_bays: value.total} : {waves: {[key]: {count: value.total}}};
+                    payload.mode_guard = {expected_mode: current.spotters.mode, expected_mode_version: current.spotters.mode_version};
                 } else {
                     stepCount(value, position, delta);
-                    payload = {spotter: {expected_mode: current.spotters.mode, metric: key, position, delta}};
+                    payload = {spotter: {expected_mode: current.spotters.mode,
+                        expected_mode_version: current.spotters.mode_version, metric: key, position, delta}};
                 }
                 counts.set(key, value);
                 enqueue({kind: 'count', key, position, delta, value: value.total, payload});
