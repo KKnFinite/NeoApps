@@ -3,10 +3,14 @@ window.NeoBallmatMobile = {
     create(root, {state, canEdit, send, statusLabels}) {
         const panel = root.querySelector('[data-ballmat-mobile]');
         let current = state;
+        let derived = state;
         const queue = [];
         const counts = new Map();
+        const drafts = new Map();
         const bays = new Map();
         let running = false;
+        let countInFlight = false;
+        const countPending = () => countInFlight || queue.some(task => task.kind === 'count');
         let noticeTimer;
         let sequence = 0;
         const clamp = value => Math.max(0, Math.min(99, value));
@@ -17,7 +21,7 @@ window.NeoBallmatMobile = {
             else value.total = value.left + value.right;
         };
         const render = () => {
-            const next = current;
+            const next = derived;
             const detail = current.spotters;
             if (!detail) return;
             panel.dataset.mode = detail.mode;
@@ -31,17 +35,22 @@ window.NeoBallmatMobile = {
             panel.querySelectorAll('[data-bm-step]').forEach(button => { button.disabled = !canEdit; });
             panel.querySelectorAll('[data-bm-value]').forEach(output => {
                 const [key, position] = output.dataset.bmValue.split(':');
-                output.textContent = (counts.get(key) || detail.counts[key])[position];
+                const value = (counts.get(key) || detail.counts[key])[position];
+                if (output.matches('[data-bm-input]')) {
+                    output.disabled = !canEdit;
+                    output.readOnly = detail.mode === 2 ? position === 'total' : position !== 'total';
+                    if (!drafts.has(output.dataset.bmValue)) output.value = value;
+                } else output.textContent = value;
             });
-            const other = next.sides[detail.side === 'east' ? 'west' : 'east'];
+            const other = current.sides[detail.side === 'east' ? 'west' : 'east'];
             const totals = {first: other.waves[0].count, second: other.waves[1].count, open: other.open_bays};
             panel.querySelectorAll('[data-bm-other]').forEach(e => { e.textContent = totals[e.dataset.bmOther]; });
             ['first', 'second'].forEach((key, i) => {
-                panel.querySelector(`[data-bm-arrive="${key}"]`).textContent = next.waves[i].left_to_arrive;
+                panel.querySelector(`[data-bm-arrive="${key}"]`).textContent = current.waves[i].left_to_arrive;
                 panel.querySelector(`[data-bm-unload="${key}"]`).textContent = next.waves[i].left;
                 panel.querySelector(`[data-bm-route="${key}"]`).textContent = next.ballmat_routing[key];
             });
-            next.sides[detail.side].bays.forEach(bay => {
+            current.sides[detail.side].bays.forEach(bay => {
                 const input = panel.querySelector(`[data-bm-bay="${bay.bay_name}"]`);
                 const status = bays.get(bay.bay_name)?.status ?? bay.status;
                 input.value = statusLabels.indexOf(status);
@@ -61,6 +70,8 @@ window.NeoBallmatMobile = {
                     if (queue[i].kind === 'count' || queue[i].kind === 'request') queue.splice(i, 1);
                 }
                 counts.clear();
+                drafts.clear();
+                derived = next;
                 const notice = panel.querySelector('[data-bm-notice]');
                 if (notice) {
                     notice.textContent = 'MODE CHANGED'; notice.hidden = false;
@@ -68,13 +79,16 @@ window.NeoBallmatMobile = {
                     noticeTimer = window.setTimeout(() => { notice.hidden = true; }, 5200);
                 }
             }
-            current = next; render();
+            current = next;
+            if (!countPending()) derived = next;
+            render();
         };
         const drain = async () => {
             if (running) return;
             running = true;
             while (queue.length) {
                 const task = queue.shift();
+                countInFlight = task.kind === 'count';
                 render();
                 let succeeded = false;
                 try { succeeded = await send(task.payload) !== false; }
@@ -87,13 +101,18 @@ window.NeoBallmatMobile = {
                         // subsequent deliberate taps on the recovered snapshot.
                         const value = {...current.spotters.counts[task.key]};
                         remaining.forEach(item => {
-                            if (item.payload.spotter) stepCount(value, item.position, item.delta);
+                            if (item.payload.spotter) stepCount(value, item.position,
+                                item.payload.spotter.value === undefined ? item.delta : item.payload.spotter.value - value[item.position]);
                             else value.left = value.total = item.value;
                         });
                         counts.set(task.key, value);
                     }
                 }
                 if (task.kind === 'bay' && bays.get(task.key)?.sequence === task.sequence) bays.delete(task.key);
+                countInFlight = false;
+                // Keep only the latest canonical derived snapshot for a burst.
+                // No client LTU/routing calculation and no intermediate staircase.
+                if (!countPending()) derived = current;
                 render();
             }
             running = false;
@@ -147,9 +166,36 @@ window.NeoBallmatMobile = {
             return {kind: 'bay', key, sequence: desired.sequence, payload: {bay_statuses: {[key]: desired.status}}};
         };
         panel.addEventListener('input', event => {
+            const input = event.target;
+            if (canEdit && !input.disabled && !input.readOnly && input.matches('[data-bm-input]')) {
+                if (!drafts.has(input.dataset.bmValue)) drafts.set(input.dataset.bmValue, {
+                    expected_mode: current.spotters.mode, expected_mode_version: current.spotters.mode_version,
+                });
+            }
             if (canEdit && !event.target.disabled && event.target.matches('[data-bm-bay]')) previewBay(event.target);
         });
         panel.addEventListener('change', event => {
+            const input = event.target;
+            if (canEdit && !input.disabled && !input.readOnly && input.matches('[data-bm-input]')) {
+                const guard = drafts.get(input.dataset.bmValue);
+                drafts.delete(input.dataset.bmValue);
+                // A generation reconciliation clears drafts; never reinterpret one.
+                if (!guard || !/^\d+$/.test(input.value)) { render(); return; }
+                const [key, position] = input.dataset.bmValue.split(':');
+                const absolute = clamp(Number(input.value));
+                const value = {...(counts.get(key) || current.spotters.counts[key])};
+                let payload;
+                if (current.spotters.available) {
+                    stepCount(value, position, absolute - value[position]);
+                    payload = {spotter: {...guard, metric: key, position, value: absolute}};
+                } else {
+                    value.left = value.total = absolute;
+                    payload = key === 'open' ? {open_bays: absolute} : {waves: {[key]: {count: absolute}}};
+                    payload.mode_guard = guard;
+                }
+                counts.set(key, value);
+                enqueue({kind: 'count', key, position, value: value.total, payload});
+            }
             if (canEdit && !event.target.disabled && event.target.matches('[data-bm-bay]')) enqueue(previewBay(event.target));
         });
         apply(state);

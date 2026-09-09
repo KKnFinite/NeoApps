@@ -24,7 +24,7 @@
                 {% for position in ['total', 'left', 'right'] %}
                 <div class="bm-step bm-{{ position }}">
                     <button type="button" data-bm-step="-1" data-metric="{{ key }}" data-position="{{ position }}" aria-label="Decrease {{ position }} {{ label }}" {% if not can_edit %}disabled{% endif %}>−</button>
-                    <output data-bm-value="{{ key }}:{{ position }}">{{ state.spotters.counts[key][position] }}</output>
+                    <input type="number" inputmode="numeric" min="0" max="99" step="1" data-bm-input data-bm-value="{{ key }}:{{ position }}" value="{{ state.spotters.counts[key][position] }}" aria-label="{{ position.title() }} {{ label }}" {% if not can_edit %}disabled{% endif %} {% if (state.spotters.mode == 2 and position == 'total') or (state.spotters.mode == 1 and position != 'total') %}readonly{% endif %}>
                     <button type="button" data-bm-step="1" data-metric="{{ key }}" data-position="{{ position }}" aria-label="Increase {{ position }} {{ label }}" {% if not can_edit %}disabled{% endif %}>+</button>
                 </div>
                 {% endfor %}

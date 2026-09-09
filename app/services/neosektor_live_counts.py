@@ -686,7 +686,7 @@ def ballmat_operator_state_payload(gateway, sort_date=None, sort_name=None, *,
 
 
 def _apply_spotter_command(bundle, selected_side, command):
-    """Apply a delta to freshly locked state; the caller owns the commit.
+    """Apply a delta or absolute allocation to locked state; caller owns commit.
 
     Aggregate edits from existing screens adjust the derived left allocation.
     If an aggregate is reduced below right, right is clamped to that total.
@@ -702,8 +702,12 @@ def _apply_spotter_command(bundle, selected_side, command):
     validate_ballmat_mode(bundle, selected_side, command)
     if "mode" in command:
         raise ValueError("Only Tunnel Conductor can change spotter mode. Request a mode change instead.")
-    key, position, delta = command.get("metric"), command.get("position"), command.get("delta")
-    if key not in ("first", "second", "open") or type(delta) is not int or delta not in (-1, 1):
+    key, position = command.get("metric"), command.get("position")
+    absolute = "value" in command
+    amount = command.get("value" if absolute else "delta")
+    if (key not in ("first", "second", "open") or type(amount) is not int
+            or (absolute and ("delta" in command or not 0 <= amount <= MAIN_BALLMAT_COUNT_MAX))
+            or (not absolute and amount not in (-1, 1))):
         raise ValueError("Invalid spotter count update.")
     if position not in (("left", "right") if mode == 2 else ("total",)):
         raise BallmatModeConflict("Spotter mode changed. Refresh and try again.")
@@ -717,7 +721,8 @@ def _apply_spotter_command(bundle, selected_side, command):
     total = getattr(count_row, field_name)
     right = min(max(getattr(row, "right_" + key) or 0, 0), total) if mode == 2 else 0
     value = right if position == "right" else total - right
-    change = min(max(value + delta, 0), MAIN_BALLMAT_COUNT_MAX - (total - value)) - value
+    desired = amount if absolute else value + amount
+    change = min(max(desired, 0), MAIN_BALLMAT_COUNT_MAX - (total - value)) - value
     setattr(count_row, field_name, total + change)
     setattr(row, "right_" + key, right + change if position == "right" else right)
     # Mode/allocation changes must invalidate the existing read-only revision.

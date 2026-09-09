@@ -23,6 +23,57 @@ from tests.test_neosektor_integration_modes import _complete_sheet_values, _Fake
 
 
 class BallmatSpotterTest(unittest.TestCase):
+    def test_absolute_spotter_entries_preserve_allocations_and_canonical_derived_state(self):
+        for side in ('east', 'west'):
+            for metric in ('first', 'second', 'open'):
+                with self.subTest(side=side, metric=metric, mode=1):
+                    state = self.post(side, expected_mode=1, metric=metric, position='total', value=10)
+                    self.assertEqual(state['spotters']['counts'][metric], {'left':10, 'right':0, 'total':10})
+            self.post(side, expected_mode=1, mode=2)
+            for metric in ('first', 'second', 'open'):
+                with self.subTest(side=side, metric=metric, mode=2):
+                    self.post(side, expected_mode=2, metric=metric, position='right', value=4)
+                    state = self.post(side, expected_mode=2, metric=metric, position='left', value=12)
+                    self.assertEqual(state['spotters']['counts'][metric], {'left':12, 'right':4, 'total':16})
+                    canonical = self.client.get('/neosektor/ballmat/state?side='+side).json['state']
+                    for key in ('spotters', 'waves', 'routing', 'ballmat_routing'):
+                        self.assertEqual(state[key], canonical[key])
+                    limited = self.post(side, expected_mode=2, metric=metric, position='right', value=99)
+                    self.assertEqual(limited['spotters']['counts'][metric], {'left':12, 'right':87, 'total':99})
+
+    def test_absolute_spotter_entries_reject_stale_modes_readonly_total_and_invalid_values(self):
+        self.post(expected_mode=1, mode=2)
+        before = self.client.get('/neosektor/ballmat/state?side=east').json['state']['spotters']
+        for metric in ('first', 'second', 'open'):
+            for mode, version, position in ((1,0,'total'), (2,0,'right'), (2,1,'total')):
+                with self.subTest(metric=metric, mode=mode, version=version, position=position):
+                    response = self.client.post('/neosektor/ballmat/update?side=east', json={
+                        'side':'east', 'spotter':{'expected_mode':mode, 'expected_mode_version':version,
+                            'metric':metric, 'position':position, 'value':30}})
+                    self.assertEqual(response.status_code, 409)
+                    self.assertEqual(response.json['state']['spotters'], before)
+        for value in (-1, 100, 1.5, True, '5'):
+            response = self.client.post('/neosektor/ballmat/update?side=east', json={
+                'side':'east', 'spotter':{'expected_mode':2, 'expected_mode_version':1,
+                    'metric':'first', 'position':'right', 'value':value}})
+            self.assertEqual(response.status_code, 403)  # Existing invalid-count response contract.
+        self.assertEqual(self.client.get('/neosektor/ballmat/state?side=east').json['state']['spotters'], before)
+
+    def test_mobile_numeric_markup_keeps_published_total_noninteractive(self):
+        from tests.html_contracts import document
+        for path in ('ebm', 'wbm'):
+            page = self.client.get('/neosektor/'+path)
+            self.assertEqual(page.status_code, 200)
+            dom = document(page)
+            inputs = dom.findall('input', **{'data-bm-input':None})
+            self.assertEqual(len(inputs), 9)
+            for field in inputs:
+                self.assertEqual(field.attrs.get('type'), 'number')
+                self.assertEqual((field.attrs.get('min'), field.attrs.get('max')), ('0', '99'))
+            totals = dom.findall(cls='bm-published')
+            self.assertEqual(len(totals), 3)
+            self.assertTrue(all(total.tag == 'output' for total in totals))
+
     def setUp(self):
         self.fixture = existing.NeoSektorIntegrationModesTest()
         self.fixture.setUp()

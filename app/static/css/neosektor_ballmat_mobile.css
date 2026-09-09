@@ -40,7 +40,7 @@
         height:calc(100dvh - var(--operational-mobile-header-height) - var(--neo-dock-clearance) - 52px);
         padding:0 8px; font:400 11px/1.3 var(--font-sans); color:#ccd5db;
     }
-    #ballmat-operator .ballmat-mobile :is(h2,button,output) { font-family:var(--font-sans); letter-spacing:0; }
+    #ballmat-operator .ballmat-mobile :is(h2,button,output,[data-bm-input]) { font-family:var(--font-sans); letter-spacing:0; }
     #ballmat-operator .ballmat-mobile h2 { font-size:14px; line-height:1.3; font-weight:600; text-align:center; margin:0 0 8px; }
     #ballmat-operator .ballmat-mobile :is(button,input):focus-visible { outline:2px solid #e7f9ff; outline-offset:2px; }
     #ballmat-operator .ballmat-mobile button { cursor:pointer; box-shadow:none; }
@@ -74,7 +74,10 @@
     #ballmat-operator .bm-count-row > span { font-size:10px; white-space:nowrap; }
     #ballmat-operator .bm-step { display:grid; grid-template-columns:34px minmax(0,1fr) 34px; gap:4px; align-items:center; }
     #ballmat-operator .bm-step button { min-width:0; width:100%; height:38px; padding:0; border:1px solid #c62235; border-radius:3px; background:linear-gradient(#d50d25,#850c1b); color:white; font:600 23px/1 var(--font-sans); }
-    #ballmat-operator .ballmat-mobile output { min-width:0; display:block; text-align:center; padding:5px 0; border:1px solid #354047; border-radius:3px; background:#071016; color:#f0f6fa; font-size:21px; font-weight:600; line-height:1.2; }
+    #ballmat-operator .ballmat-mobile :is(output,[data-bm-input]) { min-width:0; display:block; text-align:center; padding:5px 0; border:1px solid #354047; border-radius:3px; background:#071016; color:#f0f6fa; font-size:21px; font-weight:600; line-height:1.2; }
+    #ballmat-operator [data-bm-input] { width:100%; height:auto; min-height:0; margin:0; box-sizing:border-box; appearance:textfield; }
+    #ballmat-operator [data-bm-input]::-webkit-inner-spin-button,
+    #ballmat-operator [data-bm-input]::-webkit-outer-spin-button { appearance:none; margin:0; }
     #ballmat-operator .bm-other output { font-size:19px; }
     #ballmat-operator .ballmat-mobile :is(.bm-left,.bm-right,.bm-published,.bm-split-head) { display:none; }
     #ballmat-operator [data-mode="2"] .bm-counts { grid-template-columns:minmax(0,1fr) 77px; column-gap:6px; row-gap:0; grid-template-rows:minmax(40px,auto) 25px repeat(3,46px); }
@@ -84,7 +87,7 @@
     #ballmat-operator .ballmat-mobile[data-mode="2"] :is(.bm-left,.bm-right) { display:grid; grid-template-columns:24px minmax(0,1fr) 24px; gap:2px; }
     #ballmat-operator [data-mode="2"] .bm-left { grid-column:2; grid-row:1; }
     #ballmat-operator [data-mode="2"] .bm-right { grid-column:4; grid-row:1; }
-    #ballmat-operator [data-mode="2"] .bm-step output { font-size:17px; }
+    #ballmat-operator [data-mode="2"] .bm-step :is(output,[data-bm-input]) { font-size:17px; }
     #ballmat-operator .ballmat-mobile[data-mode="2"] .bm-published { display:block; grid-column:3; grid-row:1; border:0; background:transparent; color:#8ef6ff; text-shadow:0 0 6px #37c5d466; font-size:20px; }
     #ballmat-operator .ballmat-mobile[data-mode="2"] .bm-split-head { display:grid; grid-template-columns:43px minmax(0,1fr) 27px minmax(0,1fr); gap:3px; text-align:center; font-size:8px; min-height:25px; align-items:center; }
     #ballmat-operator [data-mode="2"] .bm-other > div { grid-template-columns:1fr 30px; font-size:8px; }

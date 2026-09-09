@@ -21,7 +21,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
     element({bmModeStatus: ''}); element({bmNotice: ''});
     for (const key of ['first', 'second', 'open']) {
         for (const position of ['total', 'left', 'right']) {
-            element({bmValue: `${key}:${position}`});
+            element({bmValue: `${key}:${position}`, bmInput:''});
             [-1, 1].forEach(delta => element({bmStep: String(delta), metric: key, position}));
         }
         element({bmOther: key});
@@ -60,7 +60,8 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
                 if (p.spotter.mode) server.spotters.mode=p.spotter.mode;
                 else {
                     const v=server.spotters.counts[p.spotter.metric], pos=p.spotter.position;
-                    const change=Math.min(Math.max(v[pos]+p.spotter.delta,0),99-(v.total-v[pos]))-v[pos];
+                    const desired=p.spotter.value ?? (v[pos]+p.spotter.delta);
+                    const change=Math.min(Math.max(desired,0),99-(v.total-v[pos]))-v[pos];
                     v[pos]+=change; if(pos==='total') v.left=v.total; else v.total=v.left+v.right;
                 }
             }
@@ -68,15 +69,91 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
             if (p.open_bays !== undefined) server.spotters.counts.open.left=server.spotters.counts.open.total=p.open_bays;
             if (p.bay_statuses) for (const [name,status] of Object.entries(p.bay_statuses)) server.sides.east.bays.find(b=>b.bay_name===name).status=status;
         }
+        // Opaque server-derived values: the client must copy, never compute these.
+        server.waves[0].left='LTU-'+calls.length;
+        server.ballmat_routing.first='ROUTE-'+calls.length;
         api.apply(structuredClone(server)); resolve(ok); await settle();
     };
-    const text = selector => select(selector)[0].textContent;
+    const text = selector => { const e=select(selector)[0]; return 'bmInput' in e.dataset ? Number(e.value) : e.textContent; };
+    const type = (key,position,value,event='change') => {
+        const target=select(`[data-bm-value="${key}:${position}"]`)[0];
+        target.value=String(value); listeners.input({target});
+        if(event==='change') listeners.change({target});
+    };
     const unlocked = () => {
         assert.equal(panel.attrs['aria-busy'],undefined);
         assert.ok(elements.filter(e=>e.dataset.bmStep || e.dataset.bmBay).every(e=>!e.disabled));
     };
-    return {api,server,panel,calls,pending,click,bay,finish,text,unlocked,select,listeners,timers};
+    return {api,server,panel,calls,pending,click,bay,type,finish,text,unlocked,select,listeners,timers};
 }
+
+test('numeric entry uses guarded absolute commands, preserves tap order and two-mode total is read-only', async () => {
+    for(const mode of [1,2]) {
+        const h=harness({mode});
+        for(const key of ['first','second','open']) {
+            const positions=mode===1 ? ['total'] : ['left','right'];
+            for(const pos of positions) {
+                h.type(key,pos,12); h.click(key,pos); h.type(key,pos,17); h.click(key,pos);
+                while(h.pending.length) await h.finish();
+                assert.equal(h.text(`[data-bm-value="${key}:${pos}"]`),18);
+                assert.equal(h.server.spotters.counts[key][pos],18);
+            }
+        }
+        assert.ok(h.calls.every(p=>p.spotter.expected_mode===mode && p.spotter.expected_mode_version===0));
+        assert.deepEqual(h.calls.slice(0,4).map(p=>p.spotter.value ?? p.spotter.delta),[12,1,17,1]);
+        if(mode===2) { const n=h.calls.length; h.type('first','total',90); assert.equal(h.calls.length,n); }
+    }
+});
+
+test('rapid count burst holds derived LTU/routing until latest canonical response; single tap repaints immediately', async () => {
+    const h=harness();
+    h.click(); h.click(); h.click('open'); h.click('second');
+    for(let i=0;i<3;i++) {
+        await h.finish();
+        assert.equal(h.text('[data-bm-unload="first"]'),0);
+        assert.equal(h.text('[data-bm-route="first"]'),'-');
+        h.api.apply(structuredClone(h.server));
+        assert.equal(h.text('[data-bm-unload="first"]'),0);
+    }
+    await h.finish();
+    assert.equal(h.text('[data-bm-unload="first"]'),h.server.waves[0].left);
+    assert.equal(h.text('[data-bm-route="first"]'),h.server.ballmat_routing.first);
+    assert.equal(h.text('[data-bm-value="first:total"]'),2);
+    h.click(); await h.finish();
+    assert.equal(h.text('[data-bm-unload="first"]'),'LTU-5');
+    assert.equal(h.text('[data-bm-route="first"]'),'ROUTE-5');
+});
+
+test('numeric drafts survive responses, stale absolute generations are reconciled without replay', async () => {
+    const h=harness(); h.click(); h.type('first','total',25,'input');
+    await h.finish(); assert.equal(h.text('[data-bm-value="first:total"]'),25);
+    h.listeners.change({target:h.select('[data-bm-value="first:total"]')[0]});
+    h.type('second','total',15);
+    h.server.spotters.mode=2; h.server.spotters.mode_version=1;
+    await h.finish(false); // 409 carrying the canonical newer generation.
+    assert.equal(h.calls.length,2);
+    assert.equal(h.calls[1].spotter.value,25);
+    assert.equal(h.calls[1].spotter.expected_mode_version,0);
+    assert.equal(h.text('[data-bm-value="first:left"]'),1);
+    assert.equal(h.text('[data-bm-unload="first"]'),h.server.waves[0].left);
+});
+
+test('failed write rebases later absolute entry and deltas without retrying; numeric limits remain bounded', async () => {
+    const h=harness({mode:2});
+    h.click('first','right'); h.type('first','right',20); h.click('first','right');
+    await h.finish(false);
+    assert.equal(h.text('[data-bm-value="first:right"]'),21);
+    await h.finish(); await h.finish();
+    assert.equal(h.server.spotters.counts.first.right,21);
+    assert.equal(h.calls.length,3);
+    h.type('first','left',100); await h.finish();
+    assert.equal(h.server.spotters.counts.first.total,99);
+    assert.equal(h.text('[data-bm-value="first:left"]'),78);
+    const n=h.calls.length;
+    h.type('first','left',''); h.type('first','left','1.5');
+    assert.equal(h.calls.length,n);
+    assert.equal(h.text('[data-bm-value="first:left"]'),78);
+});
 
 test('rapid deltas preserve every tap, optimistic values survive polls and intermediate replies', async () => {
     const h=harness({mode:2});
