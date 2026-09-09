@@ -50,6 +50,55 @@ from app.services.uld_requests import (
 
 
 class NeoSektorRoutesTest(unittest.TestCase):
+    def test_discharge_poll_query_budget_and_payload_match_prior_edit_lookup(self):
+        from app.neonodes.neosektor import routes
+
+        self._login_approved_user(role="operator")
+        operation = self._add_sort_operation(date.today(), "night")
+        self._set_sort_window("night", time(0), time(23, 59, 59))
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime.combine(date.today(), time(23))
+        now = datetime.utcnow()
+        update_uld_request(self.gateway, "D34", {"A2": 3}, operation=operation)
+        update_uld_request(self.gateway, "D35", {"AMP": 2}, setup_needed=True, operation=operation)
+        # Same-door legacy data must not enter this operation's queue/events.
+        db.session.add(NeoErmacUldRequest(gateway_id=self.gateway.id, door="D34", a2_count=99))
+        for uld_type, expiry, operation_id in (
+            ("A2", now + timedelta(minutes=5), operation.id),
+            ("AMP", now - timedelta(minutes=5), operation.id),
+            ("A1", now + timedelta(minutes=5), None),
+        ):
+            db.session.add(NeoSektorUldOnTheWayEvent(
+                gateway_id=self.gateway.id, sort_date_operation_id=operation_id,
+                door="D34", uld_type=uld_type, quantity=1,
+                sent_at_utc=now - timedelta(minutes=1), expires_at_utc=expiry,
+            ))
+        db.session.commit()
+        path = "/neosektor/discharge/state"
+        initial = self.client.get(path).get_json()
+        self.assertEqual([row["door"] for row in initial["state"]["requests"]], ["D35", "D34"])
+        self.assertEqual([item["uld_type"] for item in initial["state"]["requests"][1]["on_the_way_events"]], ["A2"])
+        original_access = routes._neosektor_access
+        for suffix, changed, budget in (("old", True, 6), (initial["revision"], False, 4)):
+            with self.subTest(changed=changed):
+                url = path + "?revision=" + suffix
+                with patch.object(routes, "_neosektor_access", side_effect=lambda view, edit=None: original_access(view, "neosektor.discharge.edit")):
+                    before, old_sql, old_commits, _ = self._capture_get_metrics(url)
+                with patch.object(routes, "user_can", wraps=routes.user_can) as permissions:
+                    after, sql, commits, _ = self._capture_get_metrics(url)
+                self.assertEqual(after.status_code, 200)
+                self.assertEqual(after.get_json(), before.get_json())
+                self.assertEqual(after.get_json()["changed"], changed)
+                self.assertEqual(sum(s.startswith("select") for s in old_sql), budget + 1)
+                self.assertEqual(sum(s.startswith("select") for s in sql), budget)
+                self.assertEqual((old_commits, commits), (0, 0))
+                self.assertFalse(any(s.startswith(("insert", "update", "delete")) for s in sql))
+                permissions.assert_any_call("neosektor.discharge.view")
+                self.assertNotIn("neosektor.discharge.edit", [call.args[0] for call in permissions.call_args_list])
+        with patch.object(routes, "user_can", return_value=False):
+            denied = self.client.get(path)
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.get_json(), {"ok": False, "error": "Access denied."})
+
     def test_live_helper_loads_once_before_each_screen_controller(self):
         self._login_approved_user(role="simulator")
         for page, endpoint in (

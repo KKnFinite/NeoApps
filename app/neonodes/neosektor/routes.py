@@ -544,7 +544,7 @@ def discharge():
 @gateway_node_required("sektor")
 def discharge_state():
     page = _page_by_title("DISCHARGE")
-    access = _neosektor_access(page["view_permission"], page["edit_permission"])
+    access = _neosektor_access(page["view_permission"])
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
 
