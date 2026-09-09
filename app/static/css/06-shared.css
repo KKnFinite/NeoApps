@@ -2790,6 +2790,23 @@ body:has(.portal-login-page) .flash {
     box-shadow:0 8px 24px #0004; overflow-wrap:anywhere;
 }
 body:has(.portal-login-page) :is(.flash-info,.flash-success) { background:#11252d; border-color:#417a8c; color:#c8eef5; }
+@media (min-width:901px) {
+    /* Keep the artwork fixed. A compact, bottom-aligned form leaves PORTAL clear. */
+    .portal-login-page .command-login-form { width:min(100%,560px); padding:12px; gap:8px; }
+    .portal-login-page .command-login-fields { gap:6px; }
+    .portal-login-page .command-login-fields label:not(:first-child) { margin-top:0; }
+    .portal-login-page .command-login-fields input { min-height:44px; height:44px; padding:8px 12px; }
+    .portal-login-page .command-enter-button { min-height:44px; margin-top:0; padding:8px 16px; }
+    .portal-login-page .command-link-row a { min-height:40px; padding:6px; }
+}
+@media (min-width:901px) and (max-height:850px) {
+    .portal-login-page .command-login-form { padding:6px; gap:4px; }
+    .portal-login-page .command-login-fields { gap:3px; }
+    .portal-login-page .command-login-fields label { line-height:1.2; }
+    .portal-login-page .command-login-fields input { min-height:40px; height:40px; padding:6px 12px; }
+    .portal-login-page .command-enter-button { min-height:40px; padding:6px 16px; }
+    .portal-login-page .command-link-row a { min-height:36px; padding:4px 6px; }
+}
 @media (max-width:900px) {
     .portal-login-page .command-login-form { padding:12px; border-radius:14px; gap:8px; }
     .portal-login-page .command-login-fields { gap:5px; }

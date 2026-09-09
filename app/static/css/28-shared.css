@@ -108,6 +108,10 @@ body.operational-shell-page .neosubzero-nav { display:none !important; }
 .gateway-dashboard-hero { position:relative; height:clamp(180px,26vh,300px); background:#07090d; }
 .gateway-dashboard-hero img { display:block; width:100%; height:100%; object-fit:contain; }
 .gateway-dashboard-hero::after { content:""; position:absolute; inset:0; pointer-events:none; box-shadow:inset 0 0 16px 5px #07090d; }
+@media (min-width:901px) {
+    /* About twice the artwork area, without changing the node grid or gutters. */
+    .gateway-dashboard-hero { height:clamp(260px,37vh,400px); }
+}
 .gateway-hub-sort-status { margin:0; border-left:3px solid #e8a04a; padding:8px 10px; color:#ffe0b7; background:rgba(86,48,16,.2); font-size:.7rem; font-weight:850; letter-spacing:.05em; text-transform:uppercase; }
 .gateway-node-launcher { display:grid; gap:16px; }
 .gateway-launcher-heading { display:grid; gap:3px; }

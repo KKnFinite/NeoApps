@@ -19,7 +19,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('favicon_16') }}">
     {% for stylesheet in page_stylesheets %}
-    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION, ermac='20260908-hero-mobile-v2' if stylesheet == 'css/01-neoermac.css' else none, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION, ermac='20260908-hero-mobile-v2' if stylesheet == 'css/01-neoermac.css' else none, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none, desktop='20260909-hero-v1' if stylesheet in ['css/06-shared.css', 'css/28-shared.css'] else none) }}">
     {% endfor %}
     {% if is_gateway_typography_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontplain.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
