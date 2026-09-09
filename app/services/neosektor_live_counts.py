@@ -128,6 +128,15 @@ class NeoSektorOperationalStateBundle:
                 db.session.execute(text("UPDATE gateways SET id=id WHERE id=:id"), {"id": gateway.id})
             else:
                 db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
+            if (
+                has_request_context()
+                and request.method == "POST"
+                and request.endpoint == "neosektor.ballmat_update"
+            ):
+                # Start reuse strictly AFTER the Gateway write reservation. The
+                # response's refresh lookup needs these same raw candidates;
+                # commit/rollback clears both this opt-in and the cached rows.
+                set_request_cached("neosektor.locked_operation_scope", (gateway.id, gateway.code), True)
         sort_name = normalize_sort_name(sort_name)
         sort_date = sort_date or current_neosektor_sort_date(gateway, sort_name)
         change_tracker = _PersistentStateChangeTracker()

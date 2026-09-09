@@ -9,7 +9,7 @@ from app.models import GatewaySortMatrix, SortDateOperation, SortTimelineSortSet
 from app.services.operational_request_policy import (
     current_request_is_lightweight_live_state,
 )
-from app.services.request_cache import request_cached, set_request_cached
+from app.services.request_cache import get_request_cached, request_cached, set_request_cached
 from app.services.sort_date_operations import generate_sort_date_operation_from_master
 
 
@@ -226,6 +226,13 @@ def current_operations_for_gateway(gateway, now=None):
         operations = request_cached(
             "gateway.current_operations",
             (gateway.id, gateway.code, current_date),
+            resolve_operations,
+        )
+    elif get_request_cached("neosektor.locked_operation_scope", (gateway.id, gateway.code)) is True:
+        # Ballmat POST opted in only after locking. Re-evaluate visible/window
+        # selection below; cache neither a selected sort nor lifecycle results.
+        operations = request_cached(
+            "gateway.locked_operation_candidates", (gateway.id, gateway.code, current_date),
             resolve_operations,
         )
     elif (
