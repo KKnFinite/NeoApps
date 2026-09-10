@@ -72,6 +72,7 @@ from app.services.neoermac_view_outbound import (
     view_outbound_revision,
 )
 from app.services.permission_rules import permission_access
+from app.services.neoermac_transport import lineup_common, outbound_snapshot, outbound_response
 from app.services.permission_rules import user_can
 from app.services import neostaffing as staffing_service
 from app.services.neoermac_live_refresh import (
@@ -308,11 +309,16 @@ def building_lineup_state():
     operation = current_upcoming_pulls_operation(gateway)
     revision = upcoming_pulls_revision(gateway, operation=operation, include_lineup_choices=True)
     changed = str(request.args.get("revision") or "") != revision
+    changed_payload = {}
+    if changed:
+        state = building_lineup_state_payload(gateway, operation=operation)
+        common_version = lineup_common(state, request.args.get("common"))
+        changed_payload = {"state": state, "common_version": common_version}
     return jsonify(
         {
             "ok": True,
             "changed": changed,
-            **({"state": building_lineup_state_payload(gateway, operation=operation)} if changed else {}),
+            **changed_payload,
             "revision": revision,
             "refresh": neoermac_live_refresh_status(
                 gateway, NEOERMAC_BUILDING_LINEUP_REFRESH_KEY
@@ -345,11 +351,14 @@ def view_outbound():
         initialize_lineup=False,
     )
     revision = view_outbound_revision(gateway, operation=operation)
+    snapshot = outbound_snapshot(context)
     return render_template(
         "neonodes/neoermac/view_outbound.html",
         gateway=gateway,
         can_view=access["can_view"],
         outbound_revision=revision,
+        row_manifest=snapshot["manifest"] if snapshot["safe"] else None,
+        **({"row_html": snapshot["rows"]} if snapshot["safe"] else {}),
         **context,
     )
 
@@ -401,15 +410,14 @@ def view_outbound_state():
         refresh_status=refresh_status,
         initialize_lineup=False,
     )
+    snapshot = outbound_snapshot(context)
     response = jsonify(
         {
             "ok": True,
             "changed": True,
             "revision": revision,
             "refresh": refresh_status,
-            "content_html": current_app.jinja_env.get_template(
-                "neonodes/neoermac/_view_outbound_content.html"
-            ).render(rows=context["rows"]),
+            **outbound_response(context, snapshot, request.args.get("rows")),
         }
     )
     response.headers["Cache-Control"] = "no-store"
@@ -778,6 +786,7 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
         rows=rows,
         destination_choices=destination_choices,
         pull_time_lookup=pull_time_lookup,
+        lineup_common_version=lineup_common({"destination_choices": destination_choices, "pull_times": pull_time_lookup}),
         empty_pull_times=get_destination_pull_times(gateway, ""),
         destination_fields=DESTINATION_FIELDS,
         field_name=lineup_field_name,

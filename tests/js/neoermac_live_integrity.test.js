@@ -99,6 +99,27 @@ test('Lineup conflict retains dirty choice, does not retry; refresh patches choi
     assert.ok(!source.includes('location.reload'));
 });
 
+test('Lineup omitted common data preserves options/times and does not rebuild unchanged native controls', async () => {
+    const h=lineup();
+    const first=h.live.poll();
+    h.pending[0].resolve({ok:true,changed:true,revision:'r1',common_version:'c1',state:h.state,refresh:{}});await first;
+    const options=h.selects[1].options;
+    h.doc.activeElement=h.selects[0];
+    const next=h.live.poll();
+    assert.equal(new URL(h.pending[1].url).searchParams.get('common'),'c1');
+    h.pending[1].resolve({ok:true,changed:true,revision:'r2',common_version:'c1',state:{slots:h.state.slots},refresh:{}});await next;
+    assert.equal(h.selects[1].options,options);
+    assert.equal(h.live.appliedRevision,'r1');
+    h.doc.activeElement=null;
+    const retry=h.live.poll();
+    h.pending[2].resolve({ok:true,changed:true,revision:'r2',common_version:'c1',state:{slots:h.state.slots},refresh:{}});await retry;
+    assert.equal(h.live.appliedRevision,'r2');
+    h.selects[0].change('PHX');
+    h.pending[3].resolve({ok:true,destination:'PHX',original:'east-2',pull_times:{pure:'02:00'}});await tick();
+    const after=h.live.poll();assert.equal(new URL(h.pending[4].url).searchParams.get('common'),null);
+    h.pending[4].resolve({ok:true,changed:true,revision:'r3',common_version:'c2',state:h.state,refresh:{}});await after;
+});
+
 function listOf(...names) {
     const list = {children: [], insertBefore(row, before) { row.remove(); const i=before ? this.children.indexOf(before) : this.children.length;this.children.splice(i,0,row);row.parent=this; }};
     function row(name) { return {name, dirty:false, remove() {if(this.parent){this.parent.children.splice(this.parent.children.indexOf(this),1);this.parent=null;}}}; }
@@ -118,7 +139,7 @@ test('Door membership adds/removes/reorders, preserving only genuinely dirty obs
 });
 
 test('Door actual poll wiring rejects old polls after save and unapplied membership revision', async () => {
-    const html=fs.readFileSync('app/templates/neonodes/neoermac/door_view.html','utf8');
+    const html=fs.readFileSync('app/static/js/neoermac_door_live.js','utf8');
     const source=html.slice(html.indexOf('    const responseOrder ='),html.indexOf('    const escapeHtml ='));
     const requests=[], applied=[];
     const context={window:{NeoErmacLiveIntegrity:integrity,location:{origin:'https://test'}},root:{dataset:{doorViewRevision:'r0'}},stateUrl:'/state',URL,
@@ -138,14 +159,14 @@ test('Door save snapshots cannot overwrite a later mutation or a poll begun duri
     const poll=order.beginPoll();assert.equal(order.endSave(second),false);assert.equal(order.endSave(first),false);
     assert.equal(order.accepts(poll),false);
     const fresh=order.beginPoll();assert.equal(order.accepts(fresh),true);
-    const html=fs.readFileSync('app/templates/neonodes/neoermac/door_view.html','utf8');
+    const html=fs.readFileSync('app/static/js/neoermac_door_live.js','utf8');
     assert.ok(html.includes('if (sequences[pullKey] !== sequence) return;'));
     assert.ok(html.includes('applyCardState(card, payload.card, pullKey, submitted, applySnapshot)'));
     assert.ok(html.includes('window.neoErmacBindPullControls = bindPullControls'));
 });
 
 function doorSaves() {
-    const html=fs.readFileSync('app/templates/neonodes/neoermac/door_view.html','utf8');
+    const html=fs.readFileSync('app/static/js/neoermac_door_live.js','utf8');
     const source=html.slice(html.indexOf('    const savePull ='),html.indexOf('    const scheduleSave ='));
     const requests=[], paints=[], errors=[], order=integrity.createOrder();
     const inputs={pure:{value:'01:45'},mix:{value:'01:55'}}, originals={pure:{value:'p0'},mix:{value:'m0'}};

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const html = fs.readFileSync('app/templates/neonodes/neoermac/door_view.html', 'utf8');
+const html = fs.readFileSync('app/static/js/neoermac_door_live.js', 'utf8');
 function harness() {
     const input = {value: '01:45', dataset: {localDirty: 'true'}};
     const toggle = {checked: false, dataset: {}};

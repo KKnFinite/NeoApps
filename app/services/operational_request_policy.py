@@ -8,6 +8,7 @@ from flask import g, has_request_context
 LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
     {
         "neoermac.door_view_state",
+        "neoermac.building_lineup_state",
         "neoermac.upcoming_pulls_state",
         "neoermac.view_outbound_state",
         "neomotherbrain.parking_plan_live_state_endpoint",
@@ -25,6 +26,7 @@ LIGHTWEIGHT_LIVE_STATE_ENDPOINTS = frozenset(
 
 LIGHTWEIGHT_LIVE_STATE_NODE_CODES = {
     "neoermac.door_view_state": "ermac",
+    "neoermac.building_lineup_state": "ermac",
     "neoermac.upcoming_pulls_state": "ermac",
     "neoermac.view_outbound_state": "ermac",
     "neomotherbrain.parking_plan_live_state_endpoint": "motherbrain",
@@ -49,6 +51,7 @@ OPERATION_ID_LIVE_STATE_ENDPOINTS = frozenset(
 CURRENT_ERMAC_OPERATION_ENDPOINTS = frozenset(
     {
         "neoermac.door_view_state",
+        "neoermac.building_lineup_state",
         "neoermac.upcoming_pulls_state",
         "neoermac.view_outbound_state",
     }

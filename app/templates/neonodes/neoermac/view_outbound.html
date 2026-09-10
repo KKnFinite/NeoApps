@@ -45,83 +45,10 @@
         {% include "neonodes/neoermac/_view_outbound_content.html" %}
     </div>
 </section>
+<script src="{{ url_for('static', filename='js/neoermac_outbound_live.js', v='ermac-transport-1') }}"></script>
 <script>
-(() => {
-    const root = document.querySelector("[data-neoermac-outbound-refresh]");
-    if (!root) {
-        return;
-    }
-
-    const content = root.querySelector("[data-neoermac-outbound-content]");
-    if (!content) {
-        return;
-    }
-
-    let currentRevision = root.dataset.outboundRevision || "";
-
-    const applyRefreshStatus = (status) => {
-        const refresh = status || {};
-        const refreshEnabled = refresh.auto_refresh_enabled !== false;
-        const currentBanner = root.querySelector("[data-operation-refresh-banner]");
-        if (currentBanner) {
-            if (!refreshEnabled && refresh.message) {
-                currentBanner.replaceChildren(document.createTextNode(refresh.message));
-                if (refresh.operation_label && refresh.window_label) {
-                    const detail = document.createElement("span");
-                    detail.textContent = `${refresh.operation_label} \u00b7 ${refresh.window_label}`;
-                    currentBanner.appendChild(detail);
-                }
-            }
-            currentBanner.hidden = refreshEnabled;
-        }
-        root.dataset.refreshActive = refreshEnabled ? "true" : "false";
-        root.dataset.refreshReason = refresh.reason || "outside_sort_window";
-        root.dataset.refreshLabel = refresh.live_status_label
-            || "Live updates off - outside Sort window";
-        controller.setServerStatus(refresh);
-    };
-
-    const refreshOutboundView = async () => {
-        try {
-            const pollUrl = new URL(root.dataset.refreshUrl || window.location.href, window.location.origin);
-            if (currentRevision) {
-                pollUrl.searchParams.set("revision", currentRevision);
-            }
-            const response = await fetch(pollUrl, {
-                cache: "no-store",
-                credentials: "same-origin",
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-            });
-            if (response.status === 428) {
-                window.location.reload();
-                return;
-            }
-            if (!response.ok) {
-                throw new Error("Outbound refresh failed.");
-            }
-            const payload = await response.json();
-            if (!payload.ok) {
-                throw new Error("Outbound refresh failed.");
-            }
-            currentRevision = payload.revision || currentRevision;
-            if (payload.changed === true) {
-                content.innerHTML = payload.content_html || "";
-            }
-            applyRefreshStatus(payload.refresh);
-        } catch (error) {
-            throw error;
-        }
-    };
-
-    const controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
-        statusElement: document.querySelector("[data-live-update-status]"),
-        poll: refreshOutboundView,
-        continuousWhileVisible: true,
-    });
-    controller.setServerStatus({{ refresh_status|tojson }});
-})();
+NeoErmacOutboundLive.create(document.querySelector('[data-neoermac-outbound-refresh]'), {
+    refresh: {{ refresh_status|tojson }}, manifest: {{ row_manifest|tojson }}
+});
 </script>
 {% endblock %}

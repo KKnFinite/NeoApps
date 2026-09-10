@@ -11,6 +11,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
     def test_explicit_live_state_endpoints_are_lightweight_for_reads_only(self):
         expected = {
             "neoermac.door_view_state",
+            "neoermac.building_lineup_state",
             "neoermac.upcoming_pulls_state",
             "neoermac.view_outbound_state",
             "neomotherbrain.parking_plan_live_state_endpoint",
@@ -20,6 +21,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             "neosektor.ballmat_state",
             "neosektor.discharge_state",
             "neosektor.driver_routing_state",
+            "neosektor.driver_routing_version",
             "neosektor.live_counts_state",
             "neosektor.tunnel_conductor_state",
         }
@@ -77,6 +79,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
             {"operation_id": 42},
         )
         door = lightweight_live_state_scope_spec("neoermac.door_view_state")
+        lineup = lightweight_live_state_scope_spec("neoermac.building_lineup_state")
         outbound = lightweight_live_state_scope_spec(
             "neoermac.view_outbound_state"
         )
@@ -93,6 +96,7 @@ class OperationalRequestPolicyTest(unittest.TestCase):
         self.assertFalse(parking["include_current_ermac_operation"])
         self.assertEqual(door["node_code"], "ermac")
         self.assertTrue(door["include_current_ermac_operation"])
+        self.assertEqual(lineup, door)
         self.assertEqual(outbound["node_code"], "ermac")
         self.assertTrue(outbound["include_current_ermac_operation"])
         self.assertEqual(sektor["node_code"], "sektor")

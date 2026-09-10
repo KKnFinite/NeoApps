@@ -6,6 +6,8 @@
         const order = global.NeoErmacLiveIntegrity.createOrder();
         let appliedRevision = root.dataset.lineupRevision || '', observedRevision = appliedRevision;
         let times = config.pullTimes || {};
+        let choices = config.choices || [];
+        let commonVersion = config.commonVersion || '';
         const empty = {pure: '--', mix: '--'};
         const work = new WeakMap();
         const message = (selector, text, state = '') => {
@@ -21,23 +23,27 @@
             || select.dataset.localDirty === 'true' || document.activeElement === select;
         const reconcile = state => {
             let complete = true;
-            times = state.pull_times || {};
+            times = state.pull_times || times;
+            choices = state.destination_choices || choices;
             for (const select of selects) {
                 const slot = state.slots?.[select.name];
                 if (!slot) continue;
                 if (protectedSelect(select)) { complete = false; continue; }
                 const placeholder = select.options[0].textContent;
-                const options = [new Option(placeholder, ''), ...(state.destination_choices || []).map(v => new Option(v, v))];
+                const values = ['', ...choices];
                 // Preserve a persisted value even if its master was retired.
-                if (slot.destination && !(state.destination_choices || []).includes(slot.destination)) options.push(new Option(slot.destination, slot.destination));
-                select.replaceChildren(...options);
+                if (slot.destination && !choices.includes(slot.destination)) values.push(slot.destination);
+                const current = Array.from(select.options, option => option.value);
+                if (JSON.stringify(current) !== JSON.stringify(values)) {
+                    select.replaceChildren(...values.map(v => new Option(v || placeholder, v)));
+                }
                 select.value = slot.destination;
                 select.dataset.lastSavedValue = slot.destination;
                 originalInput(select).value = slot.original;
                 paintTimes(select);
             }
             const emptyNote = root.querySelector('[data-lineup-empty-choices]');
-            if (emptyNote) emptyNote.hidden = Boolean(state.destination_choices?.length);
+            if (emptyNote) emptyNote.hidden = Boolean(choices.length);
             return complete;
         };
         const drain = async select => {
@@ -65,6 +71,7 @@
                 originalInput(select).value = payload.original;
                 select.dataset.lastSavedValue = payload.destination;
                 times[payload.destination] = payload.pull_times || empty;
+                commonVersion = ''; // Local ACK updates only one entry in the common snapshot.
                 if (state.desired === null && select.value === destination) {
                     select.value = payload.destination;
                     delete select.dataset.localDirty;
@@ -100,13 +107,17 @@
             const ticket = order.beginPoll();
             const url = new URL(root.dataset.stateUrl, global.location.origin);
             url.searchParams.set('revision', appliedRevision);
+            if (commonVersion) url.searchParams.set('common', commonVersion);
             const response = await fetch(url, {cache: 'no-store', credentials: 'same-origin'});
             const payload = await response.json();
             if (!response.ok || !payload.ok) throw new Error('Building Lineup refresh failed.');
             if (order.latestPoll(ticket)) controller.setServerStatus(payload.refresh);
             if (!order.accepts(ticket)) return;
             observedRevision = payload.revision || observedRevision;
-            if (payload.changed && payload.state && reconcile(payload.state)) appliedRevision = observedRevision;
+            if (payload.changed && payload.state) {
+                if (reconcile(payload.state)) appliedRevision = observedRevision;
+                commonVersion = payload.common_version || '';
+            }
         };
         const controller = global.NeoLiveUpdates.create({intervalMs: config.refresh.live_screen_refresh_interval_ms, poll, continuousWhileVisible: true});
         controller.setServerStatus(config.refresh);

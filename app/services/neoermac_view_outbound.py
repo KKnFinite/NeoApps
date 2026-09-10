@@ -292,6 +292,7 @@ def _row_for_destination(
 
     return {
         "destination": destination,
+        "mission_id": mission.id if mission else None,
         "flight_number": _text_value(getattr(mission, "flight_number", "")),
         "tail": _text_value(getattr(mission, "assigned_tail_number", "")),
         "parking": _parking_for_mission(mission, parking_by_tail),

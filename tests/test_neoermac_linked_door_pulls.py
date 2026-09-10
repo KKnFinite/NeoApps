@@ -237,6 +237,8 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
 
     def test_scope_client_contract_is_operation_scoped_and_safe(self):
         template = Path("app/templates/neonodes/neoermac/door_view.html").read_text()
+        template += Path("app/static/js/neoermac_door_live.js").read_text()
+        template += Path("app/templates/neonodes/neoermac/_door_pull_content.html").read_text()
 
         self.assertIn(
             'class="neo-segmented-control neoermac-pull-scope-options"',
@@ -363,8 +365,9 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
         page = self.client.get("/neoermac/door-view?door=D1")
 
         self.assertEqual(payload["door_tab_alerts"]["D4"]["state"], "due_now")
-        self.assertIn(b"applyDoorTabAlerts(state.door_tab_alerts", page.data)
-        self.assertIn(b"window.neoErmacApplyDoorTabAlerts", page.data)
+        self.assertIn(b"neoermac_door_live.js?v=ermac-transport-1", page.data)
+        self.assertIn("applyDoorTabAlerts(state.door_tab_alerts", Path("app/static/js/neoermac_door_live.js").read_text())
+        self.assertIn("window.neoErmacApplyDoorTabAlerts", Path("app/static/js/neoermac_door_live.js").read_text())
 
     def test_linked_pull_save_immediately_clears_counterpart_tab_alert(self):
         self._supervise("D1", "D4")

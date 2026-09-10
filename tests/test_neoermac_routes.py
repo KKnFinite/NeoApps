@@ -819,10 +819,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(state["refresh"]["reason"], "active")
 
         outbound_template = Path(
-            "app/templates/neonodes/neoermac/view_outbound.html"
+            "app/static/js/neoermac_outbound_live.js"
         ).read_text()
         self.assertIn("applyRefreshStatus(payload.refresh)", outbound_template)
-        self.assertIn("currentBanner.hidden = refreshEnabled", outbound_template)
+        self.assertIn("banner.hidden = enabled", outbound_template)
 
     def test_neoermac_live_views_stop_at_sort_end(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
@@ -1407,10 +1407,12 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertFalse(card["pulls_complete"])
         self.assertEqual(card["order_index"], 0)
         self.assertIn(b"data-door-destination-list", response.data)
-        self.assertIn(b"dataset.localDirty", response.data)
-        self.assertIn(b"neoErmacApplyDoorCardState", response.data)
-        self.assertIn(b"neoErmacReconcileDoorDestinations", response.data)
-        self.assertNotIn(b"window.location.reload", response.data)
+        self.assertIn(b"neoermac_door_live.js?v=ermac-transport-1", response.data)
+        controller = Path("app/static/js/neoermac_door_live.js").read_text()
+        self.assertIn("dataset.localDirty", controller)
+        self.assertIn("neoErmacApplyDoorCardState", controller)
+        self.assertIn("neoErmacReconcileDoorDestinations", controller)
+        self.assertNotIn("window.location.reload", controller)
 
     def test_door_view_orders_unfinished_by_effective_pure_then_tbd_and_completed(self):
         self._set_sort_window("night", time(22, 0), time(4, 0))
@@ -3228,7 +3230,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         page = self.client.get("/neoermac/door-view?door=D34")
         self.assertIn(b"data-door-view-revision=", page.data)
-        self.assertIn(b'pollUrl.searchParams.set("revision", currentRevision)', page.data)
+        self.assertIn(b'neoermac_door_live.js?v=ermac-transport-1', page.data)
+        self.assertIn('pollUrl.searchParams.set("revision", currentRevision)', Path('app/static/js/neoermac_door_live.js').read_text())
         first = self.client.get("/neoermac/door-view/state?door=D34").get_json()
         with patch("app.neonodes.neoermac.routes.door_view_uld_state") as full_state:
             response = self.client.get(
@@ -4164,7 +4167,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(payload["revision"], revision)
         self.assertIn("refresh", payload)
         full_context.assert_not_called()
-        self.assertIn(b'pollUrl.searchParams.set("revision", currentRevision)', page.data)
+        self.assertIn(b'neoermac_outbound_live.js?v=ermac-transport-1', page.data)
+        self.assertIn("url.searchParams.set('revision', currentRevision)", Path('app/static/js/neoermac_outbound_live.js').read_text())
         self.assertIn(b'data-refresh-url="/neoermac/view-outbound/state"', page.data)
         self.assertEqual(response.headers["Cache-Control"], "no-store")
 
@@ -4365,12 +4369,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertTrue(response.get_json()["changed"])
         self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
 
-    def test_view_outbound_client_replaces_only_fragment_without_dom_parser(self):
+    def test_view_outbound_client_updates_rows_with_full_fragment_fallback(self):
         source = Path(
             "app/templates/neonodes/neoermac/view_outbound.html"
         ).read_text(encoding="utf-8")
+        source += Path("app/static/js/neoermac_outbound_live.js").read_text()
 
-        self.assertIn('content.innerHTML = payload.content_html || ""', source)
+        self.assertIn('content.innerHTML = payload.content_html', source)
+        self.assertIn('applyDelta(content, payload.row_delta', source)
         self.assertIn("const payload = await response.json()", source)
         self.assertIn(
             '{% include "neonodes/neoermac/_view_outbound_content.html" %}',

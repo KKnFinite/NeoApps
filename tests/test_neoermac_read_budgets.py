@@ -104,8 +104,8 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
         # pull 20/1/2/0/1, Attendance 21/0/0/0/0, cold 35/12/0/0/1.
         expected = {
             'Lineup GET': (19, 0, 0, 0, 0),
-            'Lineup changed state': (15, 0, 0, 0, 0),
-            'Lineup unchanged state': (12, 0, 0, 0, 0),
+            'Lineup changed state': (11, 0, 0, 0, 0),
+            'Lineup unchanged state': (8, 0, 0, 0, 0),
             'Lineup autosave': (15, 0, 2, 0, 1),
             'Door pull autosave': (19, 1, 2, 0, 1),
             'Attendance GET': (21, 0, 0, 0, 0),
