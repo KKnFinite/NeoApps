@@ -240,6 +240,24 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neoermac-dashboard-menu", response.data)
         self.assertIn(b'href="/neoermac"', response.data)
 
+    def test_upcoming_pulls_presentation_is_page_scoped_and_preserves_live_hooks(self):
+        self._login_approved_user()
+        page = self.client.get('/neoermac/upcoming-pulls')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b'css/neoermac_upcoming_pulls.css', page.data)
+        for hook in (b'data-neoermac-upcoming-live', b'data-state-url=',
+                     b'data-upcoming-revision=', b'data-upcoming-pulls-board-host',
+                     b'data-upcoming-pulls-board', b'boardHost.replaceChildren(nextBoard)',
+                     b'payload.changed === false'):
+            self.assertIn(hook, page.data)
+        self.assertNotIn(b'css/neoermac_upcoming_pulls.css', self.client.get('/neoermac').data)
+        css = (Path(__file__).resolve().parents[1] / 'app/static/css/neoermac_upcoming_pulls.css').read_text()
+        self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr))', css)
+        self.assertIn('grid-template-columns: minmax(0, 1fr)', css)
+        self.assertIn('white-space: normal', css)
+        self.assertNotIn('text-overflow: ellipsis', css)
+        self.assertNotIn('--node-sektor-', css)
+
     def test_upcoming_pulls_live_state_returns_minimal_unchanged_payload(self):
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(
             2026, 6, 12, 1, 0

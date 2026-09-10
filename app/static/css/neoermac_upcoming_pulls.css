@@ -1,0 +1,93 @@
+/* Upcoming Pulls only. Keep the same board fragment and live replacement hooks. */
+.neoermac-shell.neoermac-upcoming-shell {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding: 16px;
+    border: 0;
+    border-radius: 0;
+    background: #080e10;
+    box-shadow: none;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-panel,
+body.node-desktop-nav-page .neoermac-upcoming-shell .neoermac-upcoming-panel {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-board { gap: 16px; }
+.neoermac-upcoming-shell .neoermac-upcoming-board > h3 {
+    margin: 0;
+    padding: 10px 0;
+    border-block: 1px solid rgba(var(--node-ermac-primary-rgb), .5);
+    color: var(--node-ermac-secondary);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-sides {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px;
+    align-items: start;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-side {
+    min-width: 0;
+    gap: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-side-header { padding: 8px 0 12px; border-color: rgba(201, 208, 214, .3); }
+.neoermac-upcoming-shell .neoermac-upcoming-side-header > span { font-size: 1.2rem; font-weight: 600; }
+.neoermac-upcoming-shell .neoermac-upcoming-side-header > strong { font-size: .75rem; font-weight: 400; color: #acbcb9; }
+.neoermac-upcoming-shell .neoermac-upcoming-list { gap: 0; }
+.neoermac-upcoming-shell .neoermac-upcoming-row {
+    grid-template-columns: 5rem 5rem minmax(0, 1fr);
+    gap: 6px 12px;
+    padding: 16px 0;
+    border: 0;
+    border-bottom: 1px solid rgba(201, 208, 214, .2);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-time { color: #eff5f3; font-size: 1.4rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.neoermac-upcoming-shell .neoermac-upcoming-type { color: var(--node-ermac-secondary); font-size: .85rem; font-weight: 600; }
+.neoermac-upcoming-shell .neoermac-upcoming-detail,
+.neoermac-upcoming-shell .neoermac-upcoming-location {
+    min-width: 0;
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    line-height: 1.4;
+}
+.neoermac-upcoming-shell .neoermac-upcoming-detail { color: #eff5f3; font-size: 1rem; font-weight: 600; }
+.neoermac-upcoming-shell .neoermac-upcoming-location { color: #acbcb9; font-size: .8rem; font-weight: 400; }
+.neoermac-upcoming-shell :is(.neoermac-upcoming-empty, .neoermac-upcoming-side-empty) {
+    width: 100%;
+    padding: 20px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #acbcb9;
+    font-size: .9rem;
+    font-weight: 400;
+}
+/* Mobile is a reading list, not a compressed desktop table. The shared shell
+   continues to own scrolling and the stationary dock's content clearance. */
+@media (max-width: 900px) {
+    .neoermac-shell.neoermac-upcoming-shell { padding: 8px; }
+    .neoermac-upcoming-shell .neoermac-upcoming-sides { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .neoermac-upcoming-shell .neoermac-upcoming-row { grid-template-columns: auto minmax(0, 1fr); gap: 5px 14px; padding: 12px 0; }
+    .neoermac-upcoming-shell .neoermac-upcoming-time { font-size: 1.25rem; }
+    .neoermac-upcoming-shell .neoermac-upcoming-type { justify-self: end; }
+    .neoermac-upcoming-shell .neoermac-upcoming-detail,
+    .neoermac-upcoming-shell .neoermac-upcoming-location { grid-column: 1 / -1; }
+}

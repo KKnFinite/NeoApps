@@ -62,6 +62,9 @@
     {% if request.endpoint == 'neoermac.building_lineup' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neoermac_building_lineup.css', v=config.STATIC_ASSET_VERSION, ui='20260910-flat-v2') }}">
     {% endif %}
+    {% if request.endpoint == 'neoermac.upcoming_pulls' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neoermac_upcoming_pulls.css', v=config.STATIC_ASSET_VERSION, ui='20260910-flat-v1') }}">
+    {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
