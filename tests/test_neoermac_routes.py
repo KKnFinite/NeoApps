@@ -3663,7 +3663,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("02:05", second_card)
         self.assertIn("02:35", second_card)
 
-    def test_building_lineup_mobile_preserves_physical_orientation_and_scrolls(self):
+    def test_building_lineup_mobile_preserves_physical_orientation_and_stacks(self):
         self._add_master_departure("UPS213", "SDF")
         self._add_master_departure("UPS214", "ONT")
         self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")
@@ -3685,7 +3685,6 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.get("/neoermac/building-lineup")
         html = response.data.decode()
-        css = stylesheet_source()
         left_pair = html.split('name="lineup_green_runout_east_destination_1"', 1)[
             1
         ].split("</label>", 1)[0]
@@ -3710,20 +3709,17 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn("02:05", right_pair)
         self.assertIn("02:35", right_pair)
         self.assertNotIn("neoermac-mobile-slot-belt-name", html)
-        self.assertIn(
-            ".neoermac-lineup-shell .neoermac-runout-list {\n"
-            "        display: flex;",
-            css,
-        )
-        self.assertIn("overflow-x: auto;", css)
-        self.assertIn("scroll-snap-type: x proximity;", css)
-        self.assertIn("flex: 0 0 clamp(460px, 128vw, 520px);", css)
-        self.assertIn(
-            ".neoermac-lineup-shell .neoermac-belt-group "
-            ".neoermac-belt-grid {\n"
-            "        grid-template-columns: repeat(2, minmax(0, 1fr));",
-            css,
-        )
+        self.assertIn('css/neoermac_building_lineup.css', html)
+        presentation = Path('app/static/css/neoermac_building_lineup.css').read_text()
+        desktop, mobile = presentation.split('@media (max-width: 760px)', 1)
+        self.assertIn('grid-template-areas: none', desktop)
+        self.assertIn('repeat(auto-fit, minmax(min(100%, 580px), 1fr))', desktop)
+        self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr))', desktop)
+        self.assertIn('.neoermac-runout-list { grid-template-columns: minmax(0, 1fr)', mobile)
+        self.assertIn('.neoermac-belt-grid { grid-template-columns: minmax(0, 1fr)', mobile)
+        self.assertIn('min-height: 44px', presentation)
+        self.assertNotIn('.neo-mobile-bottom', presentation)
+        self.assertNotIn('!important', presentation)
 
         first_pair = html.split('data-door-pair="D1-D4"', 1)[1].split(
             "</article>",

@@ -1,0 +1,122 @@
+/* Building Lineup presentation only. The DOM remains east / belt axis / west,
+   with both canonical destination slots on every physical belt side. */
+.neoermac-shell.neoermac-lineup-shell {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    padding: 12px;
+    border: 0;
+    border-radius: 0;
+    background: #080e10;
+    box-shadow: none;
+    overflow: visible;
+}
+.neoermac-lineup-shell .neoermac-lineup-form { width: 100%; overflow: visible; }
+.neoermac-lineup-shell .neoermac-runout-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 580px), 1fr));
+    gap: 24px;
+    padding: 0;
+    overflow: visible;
+}
+.neoermac-lineup-shell .neoermac-runout-card.neoermac-belt-group {
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+}
+.neoermac-lineup-shell .neoermac-door-pair-boundary {
+    min-height: 36px;
+    padding: 7px 0;
+    border-block: 1px solid rgba(var(--node-ermac-primary-rgb), .6);
+    background: transparent;
+    box-shadow: none;
+    color: var(--node-ermac-secondary);
+    font-size: 1.15rem;
+    font-weight: 600;
+    text-shadow: none;
+}
+.neoermac-lineup-shell .neoermac-belt-group .neoermac-belt-grid {
+    /* Retire the legacy east/door/west named grid: it creates an empty third
+       column even though the current markup contains two physical belts. */
+    grid-template-areas: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    padding: 12px 0;
+}
+.neoermac-lineup-shell .neoermac-belt-block + .neoermac-belt-block {
+    border-left: 1px solid rgba(201, 208, 214, .22);
+    padding-left: 20px;
+}
+.neoermac-lineup-shell .neoermac-belt-side { gap: 8px; }
+.neoermac-lineup-shell .neoermac-belt-side-heading { justify-content: space-between; gap: 6px; }
+.neoermac-lineup-shell .neoermac-belt-side-heading strong { color: var(--node-ermac-secondary); font-size: .85rem; font-weight: 600; }
+.neoermac-lineup-shell .neoermac-belt-side-heading span { color: #acbcb9; font-size: .7rem; font-weight: 400; }
+.neoermac-lineup-shell .neoermac-belt-block .neoermac-belt-name {
+    min-height: 36px;
+    padding: 6px 0;
+    border: 0;
+    border-block: 1px solid var(--neoermac-belt-soft-border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    text-shadow: none;
+}
+.neoermac-lineup-shell .neoermac-belt-block .neoermac-belt-name span { font-size: .7rem; font-weight: 400; }
+.neoermac-lineup-shell .neoermac-belt-block .neoermac-belt-name strong { font-size: .9rem; font-weight: 600; }
+.neoermac-lineup-shell .neoermac-runout-slots .neoermac-belt-block .neoermac-belt-cell.neoermac-belt-destination-card {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.neoermac-lineup-shell .neoermac-runout-slots .neoermac-belt-block .neoermac-destination-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 6px 8px;
+    border: 1px solid rgba(var(--node-ermac-secondary-rgb), .5);
+    border-radius: 4px;
+    background: #0b1214;
+    color: #eff5f3;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: none;
+    box-shadow: none;
+    color-scheme: dark;
+}
+.neoermac-lineup-shell .neoermac-destination-select option { background: #0b1214; color: #eff5f3; }
+.neoermac-lineup-shell .neoermac-destination-select:focus-visible { outline: 2px solid var(--node-ermac-secondary); outline-offset: 2px; }
+.neoermac-lineup-shell .neoermac-belt-destination-card .neoermac-slot-pull-times {
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.neoermac-lineup-shell .neoermac-belt-destination-card .neoermac-slot-pull-times span {
+    font-size: .65rem;
+    font-weight: 400;
+    color: #acbcb9;
+}
+.neoermac-lineup-shell .neoermac-belt-destination-card .neoermac-slot-pull-times strong {
+    font-size: .85rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-shadow: none;
+}
+/* Phone layout: full-width runouts, one physical belt at a time. Never shrink
+   the wide desktop map or put partially hidden destination controls offscreen. */
+@media (max-width: 760px) {
+    .neoermac-shell.neoermac-lineup-shell { padding: 8px; }
+    .neoermac-lineup-shell .neoermac-runout-list { grid-template-columns: minmax(0, 1fr); gap: 24px; scroll-snap-type: none; }
+    .neoermac-lineup-shell .neoermac-runout-card.neoermac-belt-group { flex: none; width: 100%; }
+    .neoermac-lineup-shell .neoermac-belt-group .neoermac-belt-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 10px 0; }
+    .neoermac-lineup-shell .neoermac-belt-block + .neoermac-belt-block { border-left: 0; border-top: 1px solid rgba(201, 208, 214, .22); padding: 16px 0 0; }
+    .neoermac-lineup-shell .neoermac-belt-block .neoermac-belt-side > .neoermac-belt-destination-row { gap: 12px; }
+}
