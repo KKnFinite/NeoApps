@@ -1,3 +1,4 @@
+from tests.neoermac_pull_forms import pull_form
 from tests.css_contracts import stylesheet_source
 import unittest
 from datetime import date, datetime, time
@@ -202,7 +203,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/door-view",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D1",
                 "action": "save_pulls",
                 "destination_count": "1",
@@ -210,7 +211,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
                 "actual_pure_0": "01:45",
                 "actual_mix_0": "",
                 "apply_to_both": "1",
-            },
+            }),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -458,7 +459,7 @@ class NeoErmacLinkedDoorPullsTest(unittest.TestCase):
             data["apply_to_both"] = "1" if apply_to_both is True else str(apply_to_both)
         return self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data=data,
+            data=pull_form(self.gateway, data),
         )
 
     def _state(self, door):

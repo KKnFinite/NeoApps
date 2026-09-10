@@ -207,6 +207,11 @@
                     data-tail-presence="{{ card.tail_presence.state if card.tail_presence else '' }}"
                 >
                     <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
+                    <input type="hidden" name="operation_id_{{ destination_index }}" data-pull-operation value="{{ card.operation_id or '' }}">
+                    <input type="hidden" name="mission_id_{{ destination_index }}" data-pull-mission value="{{ card.mission_id or '' }}">
+                    {% for key in ['pure', 'mix'] %}
+                    <input type="hidden" name="original_{{ key }}_{{ destination_index }}" data-pull-original="{{ key }}" value="{{ card.original[key] }}">
+                    {% endfor %}
                     <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
                         <div class="neoermac-door-destination" data-door-flight-info-cell="destination">
                             <strong class="neoermac-door-destination-title">{{ card.destination }}</strong>
@@ -650,6 +655,16 @@
             return;
         }
         const protectLocal = options.protectLocal !== false;
+        const operationInput = card.querySelector('[data-pull-operation]');
+        const missionInput = card.querySelector('[data-pull-mission]');
+        const identityChanged = missionInput && (
+            missionInput.value !== String(cardData.mission_id || '')
+            || operationInput?.value !== String(cardData.operation_id || '')
+        );
+        // Never rebind an edit in progress to a different mission after a poll.
+        if (identityChanged && protectLocal && cardHasProtectedInput(card)) return;
+        if (operationInput) operationInput.value = String(cardData.operation_id || '');
+        if (missionInput) missionInput.value = String(cardData.mission_id || '');
         card.dataset.tailPresence = cardData.tail_presence?.state || "";
 
         const tail = card.querySelector("[data-door-tail]");
@@ -698,6 +713,8 @@
                 && (controlIsProtected(input) || controlIsProtected(toggle));
             const noPull = Boolean(cardData.no_pull?.[pullKey]);
             if (!protectedValue) {
+                const original = card.querySelector(`[data-pull-original="${pullKey}"]`);
+                if (original) original.value = cardData.original?.[pullKey] || '';
                 if (toggle) {
                     toggle.checked = noPull;
                 }
@@ -1086,16 +1103,26 @@
         })
         .join(" \u00B7 ");
 
-    const applyCardState = (card, cardData, savedPullKey) => {
+    const applyCardState = (card, cardData, savedPullKey, submitted) => {
         if (!cardData) {
             return;
         }
         const savedInput = findActualInput(card, savedPullKey);
         const savedToggle = findNoPullToggle(card, savedPullKey);
-        if (savedInput) {
+        const original = card.querySelector(`[data-pull-original="${savedPullKey}"]`);
+        // Only acknowledge the version actually sent, never a newer edit or a
+        // different mission. An accepted save advances its own field baseline
+        // even while the input remains focused; polling cannot advance dirty fields.
+        if (original?.value !== submitted.original) return;
+        const sameIdentity = String(cardData.mission_id || '') === submitted.mission_id
+            && String(cardData.operation_id || '') === submitted.operation_id;
+        if (original && sameIdentity) original.value = cardData.original?.[savedPullKey] || '';
+        const unchangedSinceSend = Boolean(savedToggle?.checked) === submitted.no_pull
+            && (savedToggle?.checked ? '' : (savedInput?.value || '').trim()) === submitted.value;
+        if (savedInput && unchangedSinceSend) {
             delete savedInput.dataset.localDirty;
         }
-        if (savedToggle) {
+        if (savedToggle && unchangedSinceSend) {
             delete savedToggle.dataset.localDirty;
         }
 
@@ -1134,9 +1161,17 @@
         body.set("door", root.querySelector('[name="door"]')?.value || "");
         body.set("destination", card.dataset.doorDestination || "");
         body.set("pull_key", pullKey);
+        body.set("operation_id", card.querySelector('[data-pull-operation]')?.value || '');
+        body.set("mission_id", card.querySelector('[data-pull-mission]')?.value || '');
+        body.set("original", card.querySelector(`[data-pull-original="${pullKey}"]`)?.value || '');
         body.set("actual_pull", toggle.checked ? "" : value);
         body.set("no_pull", toggle.checked ? "1" : "0");
         body.set("apply_to_both", scopeInput?.value === "1" ? "1" : "0");
+        const submitted = {
+            original: body.get('original'), operation_id: body.get('operation_id'),
+            mission_id: body.get('mission_id'), value: body.get('actual_pull'),
+            no_pull: body.get('no_pull') === '1',
+        };
 
         card.classList.add("is-pull-saving");
         setCardError(card, "");
@@ -1167,7 +1202,7 @@
 
         card.classList.remove("is-pull-saving");
         try {
-            applyCardState(card, payload.card, pullKey);
+            applyCardState(card, payload.card, pullKey, submitted);
             if (payload.state?.destinations) {
                 window.neoErmacReconcileDoorDestinations?.(payload.state.destinations);
             }

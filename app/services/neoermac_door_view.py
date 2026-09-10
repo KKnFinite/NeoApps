@@ -4,10 +4,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, literal, or_, select, union_all
+from flask import current_app
+from itsdangerous import BadSignature, URLSafeSerializer
+from sqlalchemy import func, literal, or_, select, text, union_all
 
 from app.extensions import db
 from app.models import (
+    Gateway,
     MasterFlightSchedule,
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
@@ -62,6 +65,76 @@ PULL_DUE_WARNING_MINUTES = 5
 _OPERATION_UNSET = object()
 _DOOR_PULL_LOOKUP_UNSET = object()
 _BUNDLE_UNSET = object()
+
+
+class DoorPullConflict(ValueError):
+    """The displayed pull identity or individual field is no longer current."""
+
+
+def locked_door_pull_operation(gateway):
+    """Serialize pull creation/rollups, including absent rows, until commit/rollback.
+
+    Same database reservation pattern as Sektor; no process lock or retries.
+    SQLite's no-op UPDATE is local/test-only, not a production state write.
+    """
+    if db.engine.dialect.name == "sqlite":
+        db.session.execute(text("UPDATE gateways SET id=id WHERE id=:id"), {"id": gateway.id})
+    else:
+        db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
+    return current_door_view_operation(gateway)
+
+
+def _pull_serializer():
+    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-pull-field-v1")
+
+
+def _pull_original(bundle, mission, destination, door, field):
+    record = _door_pull_for_mission(bundle, door, destination, mission)
+    return [
+        _time_value(getattr(record, field["actual_attr"], None)),
+        bool(getattr(record, field["no_attr"], False)),
+    ]
+
+
+def _pull_token(bundle, mission, destination, selected_door, field):
+    if mission is None or bundle.operation is None:
+        return ""
+    return _pull_serializer().dumps({
+        "operation_id": bundle.operation.id,
+        "mission_id": mission.id,
+        "door": selected_door,
+        "destination": destination,
+        "field": field["key"],
+        "originals": {
+            door: _pull_original(bundle, mission, destination, door, field)
+            for door in bundle.doors_by_destination.get(destination, ())
+        },
+    })
+
+
+def _validate_pull_edit(bundle, door, destination, field, operation_id, mission_id, token):
+    try:
+        snapshot = _pull_serializer().loads(token or "")
+        operation_id, mission_id = int(operation_id), int(mission_id)
+    except (BadSignature, TypeError, ValueError):
+        raise DoorPullConflict("Pull form is outdated. Reload the door before saving.") from None
+    mission = next((row for row in bundle.missions if row.id == mission_id), None)
+    active_mission = bundle.departure_missions_by_destination.get(destination)
+    if (
+        not bundle.operation or operation_id != bundle.operation.id
+        or not mission or not active_mission or mission.id != active_mission.id
+        or mission.sort_date_operation_id != operation_id
+        or bundle.operation.gateway_id not in (None, bundle.gateway.id)
+        or bundle.operation.gateway_code != bundle.gateway.code
+        or mission.gateway_code != bundle.gateway.code
+        or destination not in bundle.destinations_by_door.get(door, {})
+        or any(snapshot.get(key) != value for key, value in {
+            "operation_id": operation_id, "mission_id": mission_id,
+            "door": door, "destination": destination, "field": field["key"],
+        }.items())
+    ):
+        raise DoorPullConflict("The displayed mission is no longer current for this door. Reload before saving.")
+    return mission, snapshot["originals"]
 
 PULL_FIELDS = (
     {
@@ -153,7 +226,7 @@ class DoorViewOperationalStateBundle:
             self.register_door_pull(record)
 
     @classmethod
-    def load(cls, gateway, operation, *, initialize_lineup):
+    def load(cls, gateway, operation, *, initialize_lineup, for_update=False):
         lineup_load = load_building_lineup_rows(
             gateway,
             initialize=initialize_lineup,
@@ -166,7 +239,7 @@ class DoorViewOperationalStateBundle:
         missions = ()
         door_pulls = []
         if operation:
-            missions = tuple(
+            mission_query = (
                 SortDateMission.query.filter_by(
                     sort_date_operation_id=operation.id,
                 )
@@ -174,9 +247,11 @@ class DoorViewOperationalStateBundle:
                     SortDateMission.planned_datetime_utc.asc(),
                     SortDateMission.id.asc(),
                 )
-                .all()
             )
-            door_pulls = (
+            if for_update:
+                mission_query = mission_query.populate_existing().with_for_update()
+            missions = tuple(mission_query.all())
+            pull_query = (
                 NeoErmacDoorPull.query.filter_by(
                     gateway_id=gateway.id,
                     sort_date_operation_id=operation.id,
@@ -185,8 +260,10 @@ class DoorViewOperationalStateBundle:
                     NeoErmacDoorPull.updated_at.desc(),
                     NeoErmacDoorPull.id.desc(),
                 )
-                .all()
             )
+            if for_update:
+                pull_query = pull_query.populate_existing()
+            door_pulls = pull_query.all()
         return cls(
             gateway=gateway,
             operation=operation,
@@ -296,6 +373,7 @@ def door_view_operational_state(
     *,
     operation=_OPERATION_UNSET,
     initialize_lineup=True,
+    for_update=False,
 ):
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
@@ -303,6 +381,7 @@ def door_view_operational_state(
         gateway,
         operation,
         initialize_lineup=initialize_lineup,
+        for_update=for_update,
     )
 
 
@@ -364,11 +443,12 @@ def save_door_pulls(
     if not selected_door:
         raise ValueError("Select a door.")
 
-    operation = _current_operation(gateway)
+    operation = locked_door_pull_operation(gateway)
     bundle = door_view_operational_state(
         gateway,
         operation=operation,
         initialize_lineup=True,
+        for_update=True,
     )
     allowed_destinations = set(bundle.destinations_by_door.get(selected_door, {}))
 
@@ -382,6 +462,11 @@ def save_door_pulls(
             raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
         for field in PULL_FIELDS:
+            if (
+                f"{field['actual_field']}_{index}" not in form_data
+                and f"{field['no_field']}_{index}" not in form_data
+            ):
+                continue
             no_pull = form_data.get(f"{field['no_field']}_{index}") == "on"
             actual_value = (
                 None
@@ -390,6 +475,15 @@ def save_door_pulls(
                     form_data.get(f"{field['actual_field']}_{index}")
                 )
             )
+            mission, originals = _validate_pull_edit(
+                bundle, selected_door, destination, field,
+                form_data.get(f"operation_id_{index}"),
+                form_data.get(f"mission_id_{index}"),
+                form_data.get(f"original_{field['key']}_{index}"),
+            )
+            # Unchanged displayed fields, especially blanks, are not commands.
+            if [_time_value(actual_value), no_pull] == originals.get(selected_door):
+                continue
             _apply_pull_value(
                 gateway,
                 operation,
@@ -401,8 +495,13 @@ def save_door_pulls(
                 supervised_doors,
                 apply_to_both=apply_to_both,
                 bundle=bundle,
+                mission=mission,
+                originals=originals,
             )
-        changed_destinations.add(destination)
+            changed_destinations.add(destination)
+
+    if not changed_destinations:
+        return
 
     db.session.flush()
     recompute_current_sort_door_pull_aggregates(
@@ -411,6 +510,7 @@ def save_door_pulls(
         destinations=changed_destinations,
         doors_by_destination=bundle.doors_by_destination,
         missions_by_destination=bundle.departure_missions_by_destination,
+        all_operation_missions=bundle.missions,
     )
     db.session.flush()
     bundle.refresh_active_departure_missions()
@@ -428,6 +528,9 @@ def save_single_door_pull(
     *,
     operation=_OPERATION_UNSET,
     bundle=None,
+    expected_operation_id=None,
+    expected_mission_id=None,
+    expected_original=None,
 ):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -443,22 +546,26 @@ def save_single_door_pull(
     if not field:
         raise ValueError("Select a valid pull type.")
 
-    if operation is _OPERATION_UNSET:
-        operation = (
-            bundle.operation if bundle is not None else _current_operation(gateway)
-        )
     if bundle is None:
+        operation = locked_door_pull_operation(gateway)
         bundle = door_view_operational_state(
             gateway,
             operation=operation,
             initialize_lineup=True,
+            for_update=True,
         )
+    else:
+        operation = bundle.operation
     allowed_destinations = set(bundle.destinations_by_door.get(selected_door, {}))
     if destination not in allowed_destinations:
         raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
     no_pull = bool(no_pull)
     parsed_actual = None if no_pull else _parse_optional_time(actual_value)
+    mission, originals = _validate_pull_edit(
+        bundle, selected_door, destination, field,
+        expected_operation_id, expected_mission_id, expected_original,
+    )
     _apply_pull_value(
         gateway,
         operation,
@@ -470,6 +577,8 @@ def save_single_door_pull(
         supervised_doors,
         apply_to_both=apply_to_both,
         bundle=bundle,
+        mission=mission,
+        originals=originals,
     )
     db.session.flush()
     recompute_current_sort_door_pull_aggregates(
@@ -478,6 +587,7 @@ def save_single_door_pull(
         destinations=(destination,),
         doors_by_destination=bundle.doors_by_destination,
         missions_by_destination=bundle.departure_missions_by_destination,
+        all_operation_missions=bundle.missions,
     )
     db.session.flush()
     bundle.refresh_active_departure_missions()
@@ -502,16 +612,25 @@ def _apply_pull_value(
     *,
     apply_to_both=False,
     bundle=None,
+    mission=None,
+    originals=None,
 ):
-    mission = _mission_for_destination(bundle, destination)
-    for target_door in _pull_write_doors(
+    target_doors = _pull_write_doors(
         gateway,
         selected_door,
         destination,
         supervised_doors,
         apply_to_both=apply_to_both,
         bundle=bundle,
-    ):
+    )
+    # Check every target before writing any. The reservation covers absent rows;
+    # field originals omit the other pull field and row-wide updated_at.
+    if mission is None or originals is None:
+        raise DoorPullConflict("Reload the door before saving pulls.")
+    for target_door in target_doors:
+        if originals.get(target_door) != _pull_original(bundle, mission, destination, target_door, field):
+            raise DoorPullConflict("This pull changed since it was displayed. Reload the door before saving.")
+    for target_door in target_doors:
         record = _door_pull_record(
             gateway,
             target_door,
@@ -988,6 +1107,9 @@ def _pull_card_payload(
 
 def _door_card_state_payload(card, order_index):
     return {
+        "operation_id": card["operation_id"],
+        "mission_id": card["mission_id"],
+        "original": card["original"],
         "destination": card["destination"],
         "flight_number": card["flight_number"],
         "tail": card["tail"],
@@ -1081,6 +1203,12 @@ def _destination_cards_for_door(
         pulls_complete = _pulls_complete(actual, no_pull, planned_times)
         cards.append(
             {
+                "operation_id": operation.id if operation else None,
+                "mission_id": mission.id if mission else None,
+                "original": {
+                    field["key"]: _pull_token(bundle, mission, destination, selected_door, field)
+                    for field in PULL_FIELDS
+                },
                 "flight_number": _flight_number_for_card(mission, master),
                 "destination": destination,
                 "status": _status_for_card(mission, master, tail_presence),
@@ -1263,12 +1391,19 @@ def _door_pull_record(
             )
         )
         if record is None and create:
+            # Promoting an unambiguous legacy row must preserve its other pull
+            # field; a new canonical MIX must not silently clear legacy PURE.
+            legacy = _door_pull_for_mission(bundle, door, destination, mission)
             record = NeoErmacDoorPull(
                 gateway_id=gateway.id,
                 sort_date_operation_id=operation.id if operation else None,
                 sort_date_mission_id=mission_id,
                 door=selected_door,
                 destination=destination,
+                actual_pure_pull_time_local=getattr(legacy, "actual_pure_pull_time_local", None),
+                actual_mix_pull_time_local=getattr(legacy, "actual_mix_pull_time_local", None),
+                no_pure_pull=bool(getattr(legacy, "no_pure_pull", False)),
+                no_mix_pull=bool(getattr(legacy, "no_mix_pull", False)),
             )
             db.session.add(record)
             bundle.register_door_pull(record)

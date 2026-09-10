@@ -1,3 +1,4 @@
+from tests.neoermac_pull_forms import pull_form
 from tests.css_contracts import stylesheet_source
 import json
 import unittest
@@ -283,12 +284,12 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "01:44",
-            },
+            }),
         )
 
         self.assertEqual(response.status_code, 200)

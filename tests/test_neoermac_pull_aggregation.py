@@ -1,4 +1,5 @@
 import unittest
+from tests.neoermac_pull_forms import pull_cards
 from datetime import date, datetime, time
 
 from app import create_app
@@ -371,6 +372,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
         return self._save_destination(door, "SDF", pull_key, actual_value, no_pull)
 
     def _save_destination(self, door, destination, pull_key, actual_value="", no_pull=False):
+        original = next(card for card in pull_cards(self.gateway, door) if card['destination'] == destination)
         card = save_single_door_pull(
             self.gateway,
             door,
@@ -378,6 +380,9 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
             pull_key,
             actual_value,
             no_pull,
+            expected_operation_id=original['operation_id'],
+            expected_mission_id=original['mission_id'],
+            expected_original=original['original'][pull_key],
         )
         db.session.commit()
         return card

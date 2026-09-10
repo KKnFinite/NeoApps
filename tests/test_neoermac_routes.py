@@ -1,3 +1,4 @@
+from tests.neoermac_pull_forms import pull_form
 from tests.css_contracts import stylesheet_source
 import re
 import unittest
@@ -973,13 +974,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         save_response = self.client.post(
             "/neoermac/door-view?door=D32",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D32",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:25",
-            },
+            }),
             follow_redirects=False,
         )
         response = self.client.get("/neoermac/upcoming-pulls")
@@ -1007,13 +1008,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         first_side_response = self.client.post(
             "/neoermac/door-view?door=D32",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D32",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "LAX",
                 "no_mix_0": "on",
-            },
+            }),
             follow_redirects=False,
         )
         one_side_dashboard = self.client.get("/neoermac/upcoming-pulls")
@@ -1027,13 +1028,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         second_side_response = self.client.post(
             "/neoermac/door-view?door=D34",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "LAX",
                 "no_mix_0": "on",
-            },
+            }),
             follow_redirects=False,
         )
         complete_dashboard = self.client.get("/neoermac/upcoming-pulls")
@@ -1508,23 +1509,23 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         pure_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "00:31",
                 "no_pull": "0",
-            },
+            }),
         )
         mix_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "mix",
                 "actual_pull": "",
                 "no_pull": "1",
-            },
+            }),
         )
 
         self.assertEqual(pure_response.status_code, 200)
@@ -2018,13 +2019,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         pull_response = self.client.post(
             "/neoermac/door-view?door=D34",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:15",
-            },
+            }),
             follow_redirects=False,
         )
         uld_response = self.client.post(
@@ -2040,13 +2041,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
         autosave_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "01:15",
                 "no_pull": "0",
-            },
+            }),
         )
 
         self.assertEqual(pull_response.status_code, 403)
@@ -2085,14 +2086,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/door-view?door=D34",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:15",
                 "actual_mix_0": "01:55",
-            },
+            }),
             follow_redirects=False,
         )
 
@@ -2118,13 +2119,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "14:05",
                 "no_pull": "0",
-            },
+            }),
         )
 
         payload = response.get_json()
@@ -2145,6 +2146,15 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
         page = self.client.get("/neoermac/door-view?door=D34")
         self.assertEqual(page.status_code, 200)
+        submitted = pull_form(self.gateway, {
+            "door": "D34",
+            "destination": "SDF",
+            "pull_key": "pure",
+            "actual_pull": "14:05",
+            "no_pull": "0",
+        })
+        from flask import g
+        g.__dict__.clear()  # A real POST does not inherit the render's request cache.
         db.session.expire_all()
         statements = []
         commits = [0]
@@ -2160,13 +2170,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         try:
             response = self.client.post(
                 "/neoermac/door-view/pull-autosave",
-                data={
-                    "door": "D34",
-                    "destination": "SDF",
-                    "pull_key": "pure",
-                    "actual_pull": "14:05",
-                    "no_pull": "0",
-                },
+                data=submitted,
             )
         finally:
             event.remove(db.engine, "before_cursor_execute", capture_statement)
@@ -2181,12 +2185,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         # Current/prior-day operation selection and the mission-aware pull
         # aggregator are explicit bounded phases, not repeated per door.
-        self.assertEqual(len(selects), 23)
-        self.assertEqual(sum("from gateway_sort_matrix" in row for row in selects), 2)
+        self.assertEqual(len(selects), 20)
+        self.assertEqual(sum("from gateway_sort_matrix" in row for row in selects), 0)
         self.assertEqual(sum("from neoermac_door_pulls" in row for row in selects), 2)
         self.assertEqual(commits[0], 1)
         self.assertEqual(sum(row.startswith("insert") for row in writes), 1)
-        self.assertEqual(sum(row.startswith("update") for row in writes), 1)
+        self.assertEqual(sum(row.startswith("update") for row in writes), 2)
+        self.assertEqual(sum(row.startswith("update gateways set id=id") for row in writes), 1)
         for table_name in (
             "neoermac_building_lineups",
             "sort_date_missions",
@@ -2240,13 +2245,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D9",
                 "destination": "DEN",
                 "pull_key": "pure",
                 "actual_pull": "01:45",
                 "no_pull": "0",
-            },
+            }),
         )
 
         payload = response.get_json()
@@ -2271,13 +2276,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         )
         outside_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D9",
                 "destination": "DEN",
                 "pull_key": "pure",
                 "actual_pull": "01:46",
                 "no_pull": "0",
-            },
+            }),
         )
         outside_payload = outside_response.get_json()
         db.session.refresh(saved)
@@ -2304,43 +2309,43 @@ class NeoErmacRoutesTest(unittest.TestCase):
         responses = (
             self.client.post(
                 "/neoermac/door-view/pull-autosave",
-                data={
+                data=pull_form(self.gateway, {
                     "door": "D34",
                     "destination": "SDF",
                     "pull_key": "pure",
                     "actual_pull": "01:44",
                     "no_pull": "0",
-                },
+                }),
             ),
             self.client.post(
                 "/neoermac/door-view/pull-autosave",
-                data={
+                data=pull_form(self.gateway, {
                     "door": "D34",
                     "destination": "ONT",
                     "pull_key": "mix",
                     "actual_pull": "02:14",
                     "no_pull": "0",
-                },
+                }),
             ),
             self.client.post(
                 "/neoermac/door-view/pull-autosave",
-                data={
+                data=pull_form(self.gateway, {
                     "door": "D34",
                     "destination": "SDF",
                     "pull_key": "pure",
                     "actual_pull": "01:49",
                     "no_pull": "0",
-                },
+                }),
             ),
             self.client.post(
                 "/neoermac/door-view/pull-autosave",
-                data={
+                data=pull_form(self.gateway, {
                     "door": "D34",
                     "destination": "ONT",
                     "pull_key": "mix",
                     "actual_pull": "02:19",
                     "no_pull": "0",
-                },
+                }),
             ),
         )
 
@@ -2369,23 +2374,23 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         pure_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "",
                 "no_pull": "1",
-            },
+            }),
         )
         mix_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "ONT",
                 "pull_key": "mix",
                 "actual_pull": "",
                 "no_pull": "1",
-            },
+            }),
         )
 
         self.assertEqual(pure_response.status_code, 200)
@@ -2415,13 +2420,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ), self.assertLogs(self.app.logger, level="ERROR") as captured:
             response = self.client.post(
                 "/neoermac/door-view/pull-autosave",
-                data={
+                data=pull_form(self.gateway, {
                     "door": "D34",
                     "destination": "SDF",
                     "pull_key": "pure",
                     "actual_pull": "01:44",
                     "no_pull": "0",
-                },
+                }),
             )
 
         payload = response.get_json()
@@ -2456,24 +2461,24 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
         ok_response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "14:05",
                 "no_pull": "0",
-            },
+            }),
         )
 
         response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "pure",
                 "actual_pull": "2:05 PM",
                 "no_pull": "0",
-            },
+            }),
         )
 
         payload = response.get_json()
@@ -2496,13 +2501,13 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/door-view/pull-autosave",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "destination": "SDF",
                 "pull_key": "mix",
                 "actual_pull": "14:07",
                 "no_pull": "1",
-            },
+            }),
         )
 
         payload = response.get_json()
@@ -4430,14 +4435,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         save_response = self.client.post(
             "/neoermac/door-view?door=D34",
-            data={
+            data=pull_form(self.gateway, {
                 "door": "D34",
                 "action": "save_pulls",
                 "destination_count": "1",
                 "destination_0": "SDF",
                 "actual_pure_0": "01:45",
                 "actual_mix_0": "02:20",
-            },
+            }),
             follow_redirects=False,
         )
         response = self.client.get("/neoermac/view-outbound")

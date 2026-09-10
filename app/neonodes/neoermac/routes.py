@@ -32,6 +32,8 @@ from app.services.neoermac_building_lineup import (
     save_building_lineup_destination,
 )
 from app.services.neoermac_door_view import (
+    DoorPullConflict,
+    locked_door_pull_operation,
     current_door_view_operation,
     delete_door_uld_request,
     door_tab_pull_alerts,
@@ -465,7 +467,7 @@ def door_view():
                 gateway,
                 access,
                 selected_door,
-                status_code=400,
+                status_code=409 if isinstance(exc, DoorPullConflict) else 400,
             )
             return response
 
@@ -639,7 +641,7 @@ def door_view_pull_autosave():
     destination = request.form.get("destination", "")
     pull_key = request.form.get("pull_key", "")
     try:
-        operation = current_door_view_operation(gateway)
+        operation = locked_door_pull_operation(gateway)
         supervised_doors = _uld_workspace_doors(
             _current_user_supervised_doors(gateway, operation=operation),
             selected_door,
@@ -648,6 +650,7 @@ def door_view_pull_autosave():
             gateway,
             operation=operation,
             initialize_lineup=True,
+            for_update=True,
         )
         card = save_single_door_pull(
             gateway,
@@ -660,6 +663,9 @@ def door_view_pull_autosave():
             apply_to_both=_apply_pulls_to_both(request.form.get("apply_to_both")),
             operation=operation,
             bundle=bundle,
+            expected_operation_id=request.form.get("operation_id"),
+            expected_mission_id=request.form.get("mission_id"),
+            expected_original=request.form.get("original"),
         )
         state = door_view_uld_state(
             gateway,
@@ -680,7 +686,7 @@ def door_view_pull_autosave():
                 "error_code": error_code,
                 "field": field,
             }
-        ), 400
+        ), 409 if isinstance(exc, DoorPullConflict) else 400
     except Exception:
         db.session.rollback()
         current_app.logger.exception(

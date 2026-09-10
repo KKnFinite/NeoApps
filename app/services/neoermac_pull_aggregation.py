@@ -41,6 +41,7 @@ def recompute_current_sort_door_pull_aggregates(
     doors_by_destination=None,
     missions_by_destination=None,
     pulls_by_destination_and_door=None,
+    all_operation_missions=None,
 ):
     operation = operation or _current_operation(gateway)
     if not operation:
@@ -57,8 +58,15 @@ def recompute_current_sort_door_pull_aggregates(
     # callers that preloaded the Door View bundle.  Work is deliberately
     # performed per mission, not per destination: two OAK departures may have
     # the same destination and must never share a pull aggregate.
+    # Legacy ambiguity is an operation-wide property, never a property of the
+    # active/edited subset (which contains only one of repeated destinations).
+    complete_missions = (
+        tuple(mission for mission in all_operation_missions if mission.mission_type == "departure")
+        if all_operation_missions is not None
+        else _departure_missions(operation)
+    )
     if missions_by_destination is None:
-        missions = _departure_missions(operation)
+        missions = complete_missions
     else:
         missions = tuple(missions_by_destination.values())
     if requested_destinations:
@@ -72,12 +80,12 @@ def recompute_current_sort_door_pull_aggregates(
         pulls_by_mission_and_door = _door_pulls_by_mission_and_door(
             gateway,
             operation,
-            missions,
+            complete_missions,
         )
     else:
         pulls_by_mission_and_door = _mission_pull_lookup_from_legacy_bundle(
             pulls_by_destination_and_door,
-            missions,
+            complete_missions,
         )
     results = {}
     for mission in missions:
@@ -197,7 +205,8 @@ def _door_pulls_by_mission_and_door(gateway, operation, missions):
         destination = normalize_destination(mission.destination)
         if destination:
             missions_by_destination.setdefault(destination, []).append(mission)
-    for row in rows:
+    # Process canonical rows first even when an unbound legacy row is newer.
+    for row in sorted(rows, key=lambda row: getattr(row, "sort_date_mission_id", None) is None):
         door = str(row.door or "").strip().upper()
         if not door:
             continue
@@ -223,7 +232,9 @@ def _mission_pull_lookup_from_legacy_bundle(records, missions):
         if destination:
             by_destination.setdefault(destination, []).append(mission)
     result = {}
-    for key, record in records.items():
+    for key, record in sorted(
+        records.items(), key=lambda item: getattr(item[1], "sort_date_mission_id", None) is None
+    ):
         mission_id = getattr(record, "sort_date_mission_id", None)
         if mission_id:
             result.setdefault((mission_id, str(record.door or "").strip().upper()), record)
