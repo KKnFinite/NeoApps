@@ -10,7 +10,6 @@
 <div class="neoermac-outbound-table-wrap" data-neoermac-outbound-layout="pull-table">
     <table class="neoermac-outbound-table" data-neoermac-outbound-table>
         <caption class="visually-hidden">Outbound flights with planned and actual pull times.</caption>
-        <colgroup><col class="outbound-flight"><col class="outbound-tail"><col class="outbound-dest"><col class="outbound-pos"><col class="outbound-doors"><col class="outbound-etd"><col class="outbound-status"><col class="outbound-location"><col span="4" class="outbound-pull"></colgroup>
         <thead>
             <tr>
                 <th scope="col" rowspan="2">Flight</th>
@@ -65,23 +64,19 @@
         <span>Doors</span>
         <span>Pull Times</span>
         <span>ETD</span>
-        <span>Status</span>
-        <span>Location</span>
     </div>
     {% for row in rows %}
     <article class="neoermac-outbound-mobile-row{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-mobile-row data-tail-presence="{{ row.tail_presence.state if row.tail_presence else '' }}" aria-label="{{ row.flight_number or row.destination or 'Outbound' }} outbound mission">
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="flight"><small>Flight</small>{{ row.flight_number or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="tail"><small>Tail</small>{{ row.tail or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-destination" data-neoermac-outbound-mobile-field="destination"><small>Destination</small>{{ row.destination or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="position"><small>Position</small>{{ row.parking or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="doors"><small>Doors</small>{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="flight">{{ row.flight_number or "-" }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="tail">{{ row.tail or "-" }}</span>
+        <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-destination" data-neoermac-outbound-mobile-field="destination">{{ row.destination or "-" }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="position">{{ row.parking or "-" }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="doors">{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</span>
         <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-pulls" data-neoermac-outbound-mobile-field="pull-times">
-            <span><b>PURE</b><span><small>PLAN</small> {{ row.adjusted_pulls.pure or "-" }}</span><span><small>ACTUAL</small> {{ actual_pull(row, "pure", "Pure") }}</span></span>
-            <span><b>MIX</b><span><small>PLAN</small> {{ row.adjusted_pulls.mix or "-" }}</span><span><small>ACTUAL</small> {{ actual_pull(row, "mix", "Mix Pull") }}</span></span>
+            <span><b>P</b> {{ row.adjusted_pulls.pure or "-" }} / {{ actual_pull(row, "pure", "Pure") }}</span>
+            <span><b>M</b> {{ row.adjusted_pulls.mix or "-" }} / {{ actual_pull(row, "mix", "Mix Pull") }}</span>
         </span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="etd"><small>ETD</small>{{ row.etd or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="status"><small>Status</small>{{ row.status or "-" }}{% if not row.has_mission %}<span class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</span>{% endif %}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="location"><small>Location</small>{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="etd">{{ row.etd or "-" }}</span>
     </article>
     {% endfor %}
 </div>

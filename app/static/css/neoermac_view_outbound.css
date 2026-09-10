@@ -1,68 +1,56 @@
-/* View Outbound presentation only; desktop table and mobile mission hooks
-   remain separate, inside the existing live-replaced content fragment. */
+/* Dense outbound scan board. Only the board scrolls horizontally; the shared
+   shell continues to own the viewport and stationary mobile dock. */
 .neoermac-shell.neoermac-outbound-shell {
-    width: 100%; max-width: none; min-width: 0; padding: 16px;
+    width: 100%; max-width: none; min-width: 0; padding: 12px;
     border: 0; border-radius: 0; background: #080e10; box-shadow: none;
 }
+.neoermac-outbound-shell [data-neoermac-outbound-content] { width: 100%; min-width: 0; }
 .neoermac-outbound-shell .neoermac-outbound-summary {
-    display: flex; flex-wrap: wrap; gap: 12px 32px; padding: 12px 0;
+    display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 8px 0;
     border-block: 1px solid rgba(var(--node-ermac-primary-rgb), .5);
     background: transparent; box-shadow: none; border-radius: 0;
 }
 .neoermac-outbound-shell .neoermac-outbound-summary > div { padding: 0; border: 0; background: transparent; box-shadow: none; }
-.neoermac-outbound-shell .neoermac-outbound-summary span { font-size: .7rem; font-weight: 400; color: #acbcb9; }
-.neoermac-outbound-shell .neoermac-outbound-summary strong { font-size: .9rem; font-weight: 600; }
-.neoermac-outbound-shell .neoermac-outbound-table { border-collapse: collapse; border-spacing: 0; }
+.neoermac-outbound-shell .neoermac-outbound-summary span { font-size: .65rem; font-weight: 400; color: #acbcb9; }
+.neoermac-outbound-shell .neoermac-outbound-summary strong { font-size: .8rem; font-weight: 600; }
+.neoermac-outbound-shell .neoermac-outbound-table-wrap { overflow-x: auto; max-width: 100%; }
+.neoermac-outbound-shell .neoermac-outbound-table { table-layout: auto; border-collapse: collapse; border-spacing: 0; }
 .neoermac-outbound-shell .neoermac-outbound-table :is(th, td) {
-    padding: 12px 6px; border: 0; border-bottom: 1px solid rgba(201, 208, 214, .2);
-    border-radius: 0; background: transparent; line-height: 1.4;
-    white-space: normal; overflow-wrap: anywhere; font-weight: 400;
+    padding: 5px 4px; border: 0; border-bottom: 1px solid rgba(201, 208, 214, .2);
+    border-radius: 0; background: transparent; line-height: 1.15;
+    white-space: nowrap; overflow-wrap: normal; font-weight: 400;
 }
-.neoermac-outbound-shell .neoermac-outbound-table th { font-size: .7rem; color: #acbcb9; }
-.neoermac-outbound-shell .neoermac-outbound-table td { font-size: .85rem; }
+.neoermac-outbound-shell .neoermac-outbound-table th { font-size: .6rem; color: #acbcb9; }
+.neoermac-outbound-shell .neoermac-outbound-table td { font-size: .75rem; height: 32px; }
 .neoermac-outbound-shell .neoermac-outbound-table tbody tr { background: transparent; }
 .neoermac-outbound-shell .neoermac-outbound-table strong { font-weight: 600; text-shadow: none; }
 .neoermac-outbound-shell [data-outbound-field="flight"] strong,
-.neoermac-outbound-shell .neoermac-outbound-destination strong { font-size: 1rem; color: var(--node-ermac-secondary); }
+.neoermac-outbound-shell .neoermac-outbound-destination strong { font-size: .85rem; color: var(--node-ermac-secondary); }
 .neoermac-outbound-shell [data-outbound-pull-cell] { font-variant-numeric: tabular-nums; }
-.neoermac-outbound-shell [data-outbound-pull-cell="pure-plan"],
-.neoermac-outbound-shell [data-outbound-pull-cell="mix-plan"] { border-left: 1px solid rgba(201, 208, 214, .2); }
-.neoermac-outbound-shell .neoermac-outbound-missing { color: #c9d0d6; font-size: .7rem; line-height: 1.4; font-weight: 400; }
-.neoermac-outbound-table .outbound-flight, .neoermac-outbound-table .outbound-tail { width: 8%; }
-.neoermac-outbound-table .outbound-dest, .neoermac-outbound-table .outbound-doors, .neoermac-outbound-table .outbound-pull { width: 7%; }
-.neoermac-outbound-table .outbound-pos, .neoermac-outbound-table .outbound-etd { width: 6%; }
-.neoermac-outbound-table .outbound-status { width: 12%; }
-.neoermac-outbound-table .outbound-location { width: 18%; }
+.neoermac-outbound-shell .neoermac-outbound-missing { display: inline; margin: 0 0 0 6px; color: #c9d0d6; font-size: .6rem; line-height: 1; font-weight: 400; }
 @media (max-width: 900px) {
     body.mobile-app-chrome .neoermac-shell.neoermac-outbound-shell { padding: 8px; background: #080e10; }
     .neoermac-outbound-shell .neoermac-outbound-table-wrap { display: none; }
-    .neoermac-outbound-shell .neoermac-outbound-mobile-list { display: grid; gap: 0; }
-    .neoermac-outbound-shell .neoermac-outbound-mobile-header { display: none; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-list { display: block; width: 100%; max-width: 100%; overflow-x: auto; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-header,
     .neoermac-outbound-shell .neoermac-outbound-mobile-row {
-        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-        grid-template-areas: "flight flight destination" "tail position etd" "doors status status" "location location location" "pulls pulls pulls";
-        height: auto; min-height: 0; gap: 12px; padding: 16px 0;
-        overflow: visible; border: 0; border-bottom: 1px solid rgba(var(--node-ermac-primary-rgb), .5);
+        display: grid; grid-template-columns: 82px 80px 52px 50px 90px 174px 64px;
+        width: 692px; min-width: 692px; gap: 0; padding: 0;
+    }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-header { font-size: .65rem; line-height: 1.2; color: #acbcb9; padding-block: 6px; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-row {
+        height: 40px; min-height: 40px; overflow: visible;
+        border: 0; border-bottom: 1px solid rgba(var(--node-ermac-primary-rgb), .4);
         border-radius: 0; background: transparent;
     }
     .neoermac-outbound-shell .neoermac-outbound-mobile-field {
-        display: grid; place-items: start; align-content: start; gap: 4px; padding: 0;
-        border: 0; background: transparent; text-align: left;
-        font-size: .9rem; font-weight: 400; line-height: 1.35; white-space: normal;
+        display: grid; place-items: center; min-width: 0; padding: 2px 4px;
+        border: 0; background: transparent; text-align: center;
+        font-size: .75rem; font-weight: 400; line-height: 1.1; white-space: nowrap;
+        overflow-wrap: normal;
     }
-    .neoermac-outbound-shell .neoermac-outbound-mobile-field small { color: #acbcb9; font-size: .65rem; font-weight: 400; text-transform: uppercase; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="flight"] { grid-area: flight; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="destination"] { grid-area: destination; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="tail"] { grid-area: tail; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="position"] { grid-area: position; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="doors"] { grid-area: doors; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="etd"] { grid-area: etd; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="status"] { grid-area: status; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="location"] { grid-area: location; }
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="flight"],
-    .neoermac-outbound-shell [data-neoermac-outbound-mobile-field="destination"] { color: var(--node-ermac-secondary); font-size: 1.2rem; font-weight: 600; }
-    .neoermac-outbound-shell .neoermac-outbound-mobile-pulls { grid-area: pulls; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; padding-top: 10px; border-top: 1px solid rgba(201, 208, 214, .2); font-variant-numeric: tabular-nums; }
-    .neoermac-outbound-shell .neoermac-outbound-mobile-pulls > span { display: grid; gap: 5px; width: 100%; }
-    .neoermac-outbound-shell .neoermac-outbound-mobile-pulls span { white-space: normal; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-destination { color: var(--node-ermac-secondary); font-weight: 600; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-pulls { gap: 1px; font-size: .7rem; font-variant-numeric: tabular-nums; }
+    .neoermac-outbound-shell .neoermac-outbound-mobile-pulls span { white-space: nowrap; }
     .neoermac-outbound-shell .neoermac-outbound-mobile-pulls b { color: var(--node-ermac-secondary); font-weight: 600; }
 }
