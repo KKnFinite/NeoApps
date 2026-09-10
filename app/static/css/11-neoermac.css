@@ -14,31 +14,6 @@
         0 0 22px rgba(var(--node-rgb), 0.11);
 }
 
-.neoermac-runout-card.neoermac-belt-group .neoermac-door-bar {
-    display: grid;
-    place-items: center;
-    min-height: 42px;
-    margin: 0;
-    padding: 8px 12px;
-    border: 0;
-    border-bottom: 1px solid rgba(255, 225, 230, 0.32);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent 26%),
-        linear-gradient(180deg, color-mix(in srgb, var(--node-primary), white 24%) 0%, var(--node-primary) 52%, color-mix(in srgb, var(--node-primary), black 46%) 100%);
-    color: #fff8f9;
-    font-size: clamp(1.02rem, 2vw, 1.34rem);
-    font-weight: 950;
-    letter-spacing: 0.12em;
-    line-height: 1;
-    text-align: center;
-    text-shadow:
-        0 0 14px rgba(255, 255, 255, 0.3),
-        0 2px 0 rgba(0, 0, 0, 0.72);
-    text-transform: uppercase;
-    writing-mode: horizontal-tb;
-    transform: none;
-}
-
 .neoermac-belt-grid-scroll {
     max-width: 100%;
     overflow-x: auto;
@@ -51,31 +26,6 @@
     gap: 0;
     min-width: 540px;
     width: 100%;
-}
-
-.neoermac-belt-row {
-    display: grid;
-    grid-template-columns: 52px repeat(2, minmax(210px, 1fr));
-    min-height: 58px;
-}
-
-.neoermac-side-label {
-    display: grid;
-    place-items: center;
-    border-right: 2px solid rgba(116, 19, 29, 0.34);
-    border-bottom: 1px solid rgba(116, 19, 29, 0.24);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 34%),
-        linear-gradient(180deg, #f4c8d0 0%, #e6929f 100%);
-    color: color-mix(in srgb, var(--node-primary), black 44%);
-    font-size: 1rem;
-    font-weight: 950;
-    letter-spacing: 0.08em;
-}
-
-.neoermac-belt-row:last-child .neoermac-side-label,
-.neoermac-belt-row:last-child .neoermac-belt-cell {
-    border-bottom: 0;
 }
 
 .neoermac-runout-slots .neoermac-belt-cell {
@@ -99,25 +49,6 @@
     border-right: 0;
 }
 
-.neoermac-runout-slots .neoermac-belt-label {
-    display: grid;
-    place-items: center;
-    min-height: 34px;
-    padding: 5px 7px;
-    border: 1px solid rgba(87, 12, 20, 0.32);
-    border-radius: 3px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 44%),
-        rgba(255, 236, 240, 0.76);
-    color: #47060c;
-    font-size: 0.76rem;
-    font-weight: 950;
-    letter-spacing: 0.04em;
-    line-height: 1.05;
-    text-align: center;
-    text-transform: uppercase;
-}
-
 .neoermac-runout-slots .neoermac-belt-cell .neoermac-destination-select {
     min-height: 36px;
     border-color: rgba(74, 4, 10, 0.42);
@@ -134,15 +65,6 @@
     .neoermac-belt-grid {
         min-width: 720px;
     }
-
-    .neoermac-belt-row {
-        grid-template-columns: 64px repeat(2, minmax(260px, 1fr));
-        min-height: 62px;
-    }
-
-    .neoermac-runout-slots .neoermac-belt-label {
-        font-size: 0.84rem;
-    }
 }
 
 @media (max-width: 760px) {
@@ -154,30 +76,14 @@
         padding: 0;
     }
 
-    .neoermac-runout-card.neoermac-belt-group .neoermac-door-bar {
-        min-height: 38px;
-        font-size: 0.98rem;
-    }
-
     .neoermac-belt-grid {
         min-width: 500px;
-    }
-
-    .neoermac-belt-row {
-        grid-template-columns: 42px repeat(2, minmax(190px, 1fr));
-        min-height: 54px;
     }
 
     .neoermac-runout-slots .neoermac-belt-cell {
         grid-template-columns: minmax(66px, 0.36fr) minmax(100px, 0.64fr);
         gap: 6px;
         padding: 7px;
-    }
-
-    .neoermac-runout-slots .neoermac-belt-label {
-        min-height: 32px;
-        padding: 4px 5px;
-        font-size: 0.68rem;
     }
 
     .neoermac-runout-slots .neoermac-belt-cell .neoermac-destination-select {
@@ -204,30 +110,6 @@
     text-shadow:
         0 0 14px rgba(255, 255, 255, 0.3),
         0 2px 0 rgba(0, 0, 0, 0.72);
-}
-
-.neoermac-runout-card.neoermac-belt-group .neoermac-belt-section-title {
-    display: grid;
-    place-items: center;
-    min-height: 30px;
-    margin: 0;
-    padding: 5px 10px;
-    border-bottom: 1px solid rgba(255, 225, 230, 0.18);
-    background:
-        linear-gradient(90deg, rgba(var(--node-rgb), 0.14), rgba(54, 226, 123, 0.07), rgba(var(--node-rgb), 0.14)),
-        rgba(7, 8, 11, 0.82);
-    color: rgba(238, 246, 255, 0.82);
-    font-size: 0.66rem;
-    font-weight: 950;
-    letter-spacing: 0.14em;
-    text-align: center;
-    text-transform: uppercase;
-    writing-mode: horizontal-tb;
-    transform: none;
-}
-
-.neoermac-belt-row {
-    grid-template-columns: minmax(124px, 0.48fr) repeat(2, minmax(170px, 1fr));
 }
 
 .neoermac-belt-name {
@@ -258,15 +140,6 @@
     line-height: 1.05;
 }
 
-.neoermac-belt-row:last-child .neoermac-belt-name {
-    border-bottom: 0;
-}
-
-@media (min-width: 761px) {
-    .neoermac-belt-row {
-        grid-template-columns: minmax(160px, 0.45fr) repeat(2, minmax(240px, 1fr));
-    }
-}
 
 @media (max-width: 760px) {
     .neoermac-sequence-door {
@@ -276,10 +149,6 @@
 
     .neoermac-belt-grid {
         min-width: 520px;
-    }
-
-    .neoermac-belt-row {
-        grid-template-columns: minmax(118px, 0.46fr) repeat(2, minmax(170px, 1fr));
     }
 
     .neoermac-belt-name {
@@ -589,10 +458,6 @@
     }
 }
 
-.neoermac-pull-edge {
-    display: none;
-}
-
 .neoermac-belt-block .neoermac-belt-name,
 .neoermac-belt-block:nth-child(2) .neoermac-belt-name,
 .neoermac-belt-block:nth-child(3) .neoermac-belt-name {
@@ -608,19 +473,6 @@
         0 0 10px rgba(244, 247, 251, 0.12);
 }
 
-.neoermac-belt-pull-strip {
-    display: none;
-}
-
-.neoermac-mobile-pull-strip,
-.neoermac-mobile-slot-belt-name {
-    display: none;
-}
-
-.neoermac-mobile-belt-topline {
-    display: contents;
-}
-
 .neoermac-runout-slots .neoermac-belt-block .neoermac-belt-cell {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(116px, 0.74fr);
@@ -628,8 +480,7 @@
     gap: 5px;
 }
 
-.neoermac-slot-pull-times,
-.neoermac-pull-edge-side {
+.neoermac-slot-pull-times {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
@@ -644,8 +495,7 @@
         0 4px 10px rgba(0, 0, 0, 0.28);
 }
 
-.neoermac-slot-pull-times span,
-.neoermac-pull-edge-side span {
+.neoermac-slot-pull-times span {
     display: grid;
     gap: 2px;
     color: rgba(238, 246, 255, 0.72);
@@ -657,8 +507,7 @@
     text-transform: uppercase;
 }
 
-.neoermac-slot-pull-times strong,
-.neoermac-pull-edge-side strong {
+.neoermac-slot-pull-times strong {
     color: #fff8f9;
     font-size: 0.68rem;
     font-weight: 950;
@@ -681,37 +530,6 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: center;
         gap: 14px;
-    }
-
-    .neoermac-pull-edge {
-        display: none;
-    }
-
-    .neoermac-pull-edge-side {
-        width: 100%;
-        grid-template-columns: 1fr;
-        gap: 3px;
-        padding: 5px 4px;
-        border-color: rgba(var(--node-rgb), 0.38);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    }
-
-    .neoermac-pull-edge span {
-        color: rgba(238, 246, 255, 0.72);
-        font-size: 0.62rem;
-        font-weight: 900;
-        letter-spacing: 0.06em;
-        line-height: 1;
-        text-transform: uppercase;
-    }
-
-    .neoermac-pull-edge strong {
-        color: #fff8f9;
-        font-size: 0.86rem;
-        font-weight: 950;
-        letter-spacing: 0.02em;
-        line-height: 1.1;
-        text-shadow: 0 0 10px rgba(var(--node-rgb), 0.26);
     }
 
     .neoermac-belt-block .neoermac-destination-select option {
@@ -743,18 +561,6 @@
         order: 2;
     }
 
-    .neoermac-mobile-belt-topline {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas:
-            "label"
-            "left"
-            "right";
-        align-items: stretch;
-        gap: 6px;
-        min-width: 0;
-    }
-
     .neoermac-belt-block .neoermac-belt-destination-row {
         display: block;
         min-width: 0;
@@ -778,80 +584,6 @@
         min-width: 0;
         grid-template-columns: minmax(0, 1fr) minmax(92px, 0.62fr);
         gap: 5px;
-    }
-
-    .neoermac-mobile-slot-belt-name {
-        display: grid;
-        grid-area: label;
-        place-items: center;
-        min-width: 0;
-        min-height: 34px;
-        padding: 5px 6px;
-        border: 1px solid rgba(244, 247, 251, 0.86);
-        border-radius: 5px;
-        background: var(--neo-silver);
-        color: #15191f;
-        font-size: clamp(0.68rem, 2.6vw, 0.84rem);
-        font-weight: 950;
-        letter-spacing: 0;
-        line-height: 1.05;
-        text-align: center;
-        overflow-wrap: anywhere;
-        white-space: normal;
-        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.46);
-        box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.66),
-            inset 0 -1px 0 rgba(22, 28, 34, 0.12),
-            0 4px 9px rgba(0, 0, 0, 0.2);
-    }
-
-    .neoermac-mobile-pull-strip {
-        grid-area: strip;
-        display: grid;
-        gap: 5px;
-        min-width: 0;
-        width: 100%;
-        padding: 7px 8px;
-        border: 1px solid rgba(var(--node-rgb), 0.38);
-        border-radius: 5px;
-        background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.07), transparent 36%),
-            linear-gradient(180deg, rgba(20, 9, 13, 0.96), rgba(5, 6, 9, 0.96));
-        box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            inset 0 -1px 0 rgba(22, 28, 34, 0.12),
-            0 4px 10px rgba(0, 0, 0, 0.28);
-    }
-
-    .neoermac-mobile-pull-row {
-        display: grid;
-        grid-template-columns: minmax(64px, 0.84fr) minmax(0, 1fr) minmax(0, 1fr);
-        align-items: center;
-        gap: 7px;
-        min-width: 0;
-    }
-
-    .neoermac-mobile-pull-row span,
-    .neoermac-mobile-pull-row strong {
-        min-width: 0;
-        color: #fff8f9;
-        font-weight: 950;
-        line-height: 1;
-        text-align: center;
-        white-space: nowrap;
-        text-shadow: 0 0 10px rgba(var(--node-rgb), 0.26);
-    }
-
-    .neoermac-mobile-pull-row span {
-        color: rgba(238, 246, 255, 0.72);
-        font-size: clamp(0.58rem, 2.2vw, 0.72rem);
-        letter-spacing: 0.01em;
-        text-align: left;
-    }
-
-    .neoermac-mobile-pull-row strong {
-        font-size: clamp(0.76rem, 3vw, 0.94rem);
-        letter-spacing: 0;
     }
 
     .neoermac-slot-pull-times span {

@@ -14,8 +14,7 @@
     .neoermac-door-planned,
     .neoermac-door-actual,
     .neoermac-door-toggle,
-    .neoermac-uld-grid label,
-    .neoermac-uld-status span {
+    .neoermac-uld-grid label {
         padding: 6px;
     }
 
@@ -36,11 +35,6 @@
         gap: 8px;
         padding: 8px 5px;
         min-width: 0;
-    }
-
-    .neoermac-door-top-grid {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 7px;
     }
 
     .neoermac-door-support-stack {

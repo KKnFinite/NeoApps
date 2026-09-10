@@ -1087,6 +1087,53 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 self.assertNotIn(b"OPERATIONAL LOGIC WILL BE ADDED IN A LATER PASS.", response.data)
                 self.assertNotIn(b"PLACEHOLDER SHELL", response.data)
 
+    def test_ermac_placeholders_share_flat_presentation_without_new_controls(self):
+        self._login_approved_user(role="grandmaster")
+        for path, copy in (
+            ("/neoermac/settings", b"NeoErmac operational settings remain here. Live-screen timing is managed in NeoMotherBrain System Settings."),
+            ("/neoermac/tug-assignments", b"Coming Soon"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(copy, response.data)
+                self.assertIn(b"neoermac-shell neoermac-placeholder", response.data)
+                self.assertIn(b"ermac=20260910-cleanup-v1", response.data)
+        css = (Path(self.app.root_path) / "static/css/01-neoermac.css").read_text()
+        shell = css.split(".neoermac-shell.neoermac-placeholder {", 1)[1].split("}", 1)[0]
+        self.assertIn("border: 0;", shell)
+        self.assertIn("box-shadow: none;", shell)
+        panel = css.split(".neoermac-placeholder-panel {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-block:", panel)
+        self.assertNotIn("background:", panel)
+
+    def test_retired_ermac_css_hooks_have_no_template_or_script_consumers(self):
+        # Static orphan verification only: dynamic belt colors and all live
+        # timing/selection/error hooks intentionally remain outside this list.
+        retired = (
+            "neoermac-outbound-time-stack", "neoermac-staffing-button",
+            "neoermac-uld-status", "neoermac-door-top-grid",
+            "neoermac-belt-label", "neoermac-belt-pull-strip",
+            "neoermac-belt-row", "neoermac-belt-section-title",
+            "neoermac-door-bar", "neoermac-mobile-pull-row",
+            "neoermac-pull-edge-side", "neoermac-side-label",
+            "neoermac-kicker", "neoermac-menu", "neoermac-mobile-belt-topline",
+            "neoermac-mobile-pull-strip", "neoermac-mobile-slot-belt-name", "neoermac-pull-edge",
+        )
+        root = Path(self.app.root_path)
+        consumers = "\n".join(
+            path.read_text(encoding="utf-8")
+            for folder, pattern in ((root / "templates", "*.html"), (root / "static/js", "*.js"))
+            for path in folder.rglob(pattern)
+        )
+        css = "\n".join((root / "static/css" / name).read_text() for name in (
+            "01-neoermac.css", "03-neoermac.css", "05-neoermac.css", "11-neoermac.css",
+        ))
+        for hook in retired:
+            with self.subTest(hook=hook):
+                self.assertNotRegex(consumers, re.escape(hook) + r"(?![\w-])")
+                self.assertNotRegex(css, re.escape(hook) + r"(?![\w-])")
+
     def test_door_view_route_loads_for_view_authorized_user(self):
         self._login_approved_user(role="operator")
 
