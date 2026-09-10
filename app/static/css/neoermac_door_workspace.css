@@ -1,0 +1,122 @@
+/* Door View and its attendance workspace only. Shared shell, autosave hooks
+   and operational pull urgency animations retain their existing ownership. */
+.neoermac-door-shell .neoermac-door-panel,
+.neoermac-door-shell .neoermac-door-destination-card,
+.neoermac-door-shell .neoermac-pull-scope {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.neoermac-door-shell .neoermac-door-panel {
+    padding: 12px 0;
+    border-top: 1px solid rgba(var(--node-ermac-primary-rgb), .65);
+}
+.neoermac-door-shell .neoermac-door-panel > h2 {
+    padding: 0 0 10px;
+    border-bottom: 1px solid rgba(var(--node-ermac-primary-rgb), .3);
+    font-size: .9rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+}
+.neoermac-door-shell .neoermac-pull-scope {
+    justify-content: center;
+    padding: 4px 0 10px;
+    font-size: .75rem;
+    letter-spacing: .03em;
+}
+.neoermac-door-shell .neoermac-pull-scope-options button { min-height: 44px; font-size: .7rem; }
+.neoermac-door-shell .neoermac-pull-scope small { font-size: .7rem; text-align: center; }
+.neoermac-door-shell .neoermac-door-destination-list { gap: 0; }
+.neoermac-door-shell .neoermac-door-destination-card {
+    padding: 10px 0;
+    gap: 6px;
+    border-top: 1px solid rgba(var(--node-ermac-primary-rgb), .65);
+}
+.neoermac-door-shell .neoermac-door-card-head {
+    border: 0;
+    border-bottom: 1px solid rgba(var(--node-ermac-primary-rgb), .25);
+    border-radius: 0;
+    background: transparent;
+    padding-bottom: 8px;
+}
+.neoermac-door-shell .neoermac-door-pull-grid { gap: 0; }
+.neoermac-door-shell .neoermac-door-pull-row { padding-block: 10px; border-color: rgba(var(--node-ermac-primary-rgb), .25); }
+/* Do not flatten away due/late highlighting, which conveys operational state. */
+.neoermac-door-shell .neoermac-door-pull-row:not(.is-pull-due-soon):not(.is-pull-due-now):not(.is-pull-late) :is(.neoermac-door-planned, .neoermac-door-actual) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+.neoermac-door-shell .neoermac-door-actual input { min-height: 44px; border-radius: 3px; background: #080e10; font-weight: 400; }
+.neoermac-door-shell .neoermac-door-attendance-link { grid-column: 1 / -1; }
+
+/* Shared semantic roster markup; no Sektor/Staffing presentation changes. */
+.neostaffing-operational-attendance--ermac {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    padding: 16px;
+    color: #e5eceb;
+    font-family: var(--font-sans);
+}
+.neostaffing-operational-attendance--ermac .neostaffing-operational-head { display: grid; align-items: center; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-heading h1 { margin: 0; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-summary { display: flex; flex-wrap: wrap; align-items: center; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-rosters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster h2 { margin: 0; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster header span { font-size: .7rem; color: #a8b7b5; white-space: nowrap; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table :is(th, td) { border-bottom: 1px solid; text-align: left; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table th { font-size: .7rem; color: #a8b7b5; font-weight: 400; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table td a { color: inherit; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table select { width: 100%; min-width: 0; padding: 6px; border: 1px solid rgba(var(--node-ermac-secondary-rgb), .5); border-radius: 3px; color: #e5eceb; color-scheme: dark; font-family: inherit; }
+.neostaffing-operational-attendance--ermac :is(.neostaffing-operational-back, .neostaffing-operational-roster button) { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--node-ermac-primary); border-radius: 4px; background: #590d18; color: #fff; text-decoration: none; cursor: pointer; font-family: inherit; }
+.neostaffing-operational-attendance--ermac :is(a, button, select):focus-visible { outline: 2px solid var(--node-ermac-secondary); outline-offset: 2px; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster footer { display: flex; justify-content: flex-end; }
+.neostaffing-operational-attendance--ermac { min-height: 0; grid-template-rows: none; gap: 20px; background: #080e10; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-head { grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-heading { border: 0; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-heading h1 { font-size: clamp(1.05rem, 2vw, 1.5rem); font-weight: 600; line-height: 1.25; letter-spacing: .04em; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-heading p { margin-top: 6px; color: var(--node-ermac-secondary); font-size: .85rem; white-space: normal; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-summary { grid-column: 1 / -1; padding-block: 10px; gap: 8px 16px; border-block: 1px solid rgba(201, 208, 214, .2); }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-summary > :is(strong, span) { font-size: .75rem; font-weight: 400; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-summary :is(strong span, span strong) { color: var(--node-ermac-secondary); font-size: 1rem; font-weight: 600; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-rosters { gap: 24px; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster { border-top: 1px solid rgba(var(--node-ermac-primary-rgb), .65); background: transparent; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster > header { padding: 12px 0; border-bottom-color: rgba(201, 208, 214, .2); }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster h2 { color: var(--node-ermac-secondary); font-size: .9rem; font-weight: 600; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table :is(th, td) { padding: 10px 6px; background: transparent; border-bottom-color: rgba(201, 208, 214, .15); }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table td strong { font-size: .85rem; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-flow { color: #bdc9c7; font-size: .75rem; font-weight: 400; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-status.is-readonly { padding: 0; border: 0; border-radius: 0; background: transparent; font-size: .8rem; font-weight: 400; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-table select { min-height: 44px; background: #0b1214; font-size: 16px; }
+.neostaffing-operational-attendance--ermac :is(.neostaffing-operational-back, .neostaffing-operational-roster button) { min-height: 44px; padding: 10px 14px; font-size: .8rem; font-weight: 600; }
+.neostaffing-operational-attendance--ermac .neostaffing-operational-roster footer { padding: 12px 0; }
+
+@media (max-width: 900px) {
+    .neoermac-door-shell .neoermac-door-supervision { gap: 8px; }
+    .neoermac-door-shell :is(.neoermac-door-tab, .neoermac-door-supervision-edit) { min-height: 44px; font-size: .85rem; }
+    .neoermac-door-shell .neoermac-door-card-head { grid-template-columns: 1fr .65fr 1fr 1fr; gap: 4px; }
+    .neoermac-door-shell .neoermac-door-card-head strong { font-size: .8rem; line-height: 1.2; }
+    .neoermac-door-shell .neoermac-door-destination .neoermac-door-destination-title { font-size: 1.3rem; }
+    .neoermac-door-shell .neoermac-door-status strong { color: var(--node-ermac-secondary); font-size: .7rem; }
+    .neoermac-door-shell .neoermac-door-pull-row { grid-template-columns: minmax(65px, .7fr) minmax(100px, 1.5fr) minmax(56px, .6fr); gap: 8px; }
+    .neoermac-door-shell :is(.neoermac-door-planned, .neoermac-door-actual) { padding: 2px; gap: 5px; }
+    .neoermac-door-shell :is(.neoermac-door-planned, .neoermac-door-actual) span { font-size: .65rem; }
+    .neoermac-door-shell .neoermac-door-planned strong { font-size: 1.15rem; font-weight: 400; }
+    .neoermac-door-shell .neoermac-door-actual input.neoermac-ios-safe-input { min-height: 44px; font-size: 16px; }
+    .neoermac-door-shell .neoermac-door-toggle { grid-template-columns: auto 1fr; gap: 6px; min-height: 44px; }
+    .neoermac-door-shell .neoermac-door-toggle input { width: 24px; height: 24px; }
+    .neoermac-door-shell .neoermac-none-toggle span { font-size: .7rem; }
+}
+@media (max-width: 720px) {
+    .neostaffing-operational-attendance--ermac .neostaffing-operational-rosters { grid-template-columns: minmax(0, 1fr); }
+    .neostaffing-operational-attendance--ermac { padding: 10px 8px; }
+    .neostaffing-operational-attendance--ermac .neostaffing-operational-table th:nth-child(1) { width: 30%; }
+    .neostaffing-operational-attendance--ermac .neostaffing-operational-table th:nth-child(2) { width: 40%; }
+    .neostaffing-operational-attendance--ermac .neostaffing-operational-table th:nth-child(3) { width: 30%; }
+    .neostaffing-operational-attendance--ermac .neostaffing-operational-roster button { width: 100%; }
+}

@@ -139,6 +139,8 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertEqual(json.loads(NeoErmacDoorSupervision.query.one().selected_doors_json), ['D1', 'D4', 'D34'])
 
     def test_employee_attendance_action_follows_supervised_door_selection(self):
+        # The disabled legacy STAFFING button is retired, not the real link.
+        self.assertNotIn('>STAFFING</button>', Path('app/templates/neonodes/neoermac/door_view.html').read_text())
         empty = self.client.get("/neoermac/door-view")
 
         self.assertEqual(empty.status_code, 200)

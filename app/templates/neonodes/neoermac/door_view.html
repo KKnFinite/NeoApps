@@ -107,7 +107,7 @@
         >{{ "EDIT DOORS" if supervised_doors else "+ ADD DOOR" }}</button>
         {% if supervised_doors %}
         <a
-            class="neoermac-menu-link neoermac-door-supervision-edit"
+            class="neoermac-menu-link neoermac-door-supervision-edit neoermac-door-attendance-link"
             href="{{ url_for('neoermac.manage_employees') }}"
         >EMPLOYEE ATTENDANCE</a>
         {% endif %}
@@ -334,7 +334,6 @@
         {% endif %}
     </section>
 
-    <button class="neoermac-menu-link neoermac-menu-link-secondary neoermac-staffing-button" type="button" disabled>STAFFING</button>
     {% endif %}
 
     {% if operation or selected_door %}
