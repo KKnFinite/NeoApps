@@ -85,6 +85,7 @@ BELT_COLOR_KEYS = {
 }
 
 DEFAULT_PULL_TIMES = {"pure": "--", "mix": "--"}
+_UNRESOLVED = object()
 
 
 class LineupConflict(ValueError):
@@ -115,8 +116,9 @@ def _lock_lineup(gateway):
         db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
 
 
-def building_lineup_state_payload(gateway):
+def building_lineup_state_payload(gateway, *, operation=_UNRESOLVED):
     rows = get_building_lineup_rows(gateway, initialize=False)
+    masters = get_lineup_departures(gateway)
     return {
         "slots": {
             lineup_field_name(row, field): {
@@ -125,8 +127,8 @@ def building_lineup_state_payload(gateway):
             }
             for row in rows for field in DESTINATION_FIELDS
         },
-        "destination_choices": get_departure_destination_choices(gateway),
-        "pull_times": get_departure_destination_pull_times(gateway),
+        "destination_choices": get_departure_destination_choices(gateway, masters=masters),
+        "pull_times": get_departure_destination_pull_times(gateway, masters=masters, operation=operation),
     }
 
 
@@ -181,32 +183,9 @@ def load_building_lineup_rows(gateway, *, initialize=True, for_update=False):
     )
 
 
-def get_departure_destination_choices(gateway):
-    rows = (
-        MasterFlightSchedule.query.filter(
-            MasterFlightSchedule.mission_type == "departure",
-            MasterFlightSchedule.active.is_(True),
-            or_(
-                MasterFlightSchedule.gateway_id == gateway.id,
-                MasterFlightSchedule.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(MasterFlightSchedule.destination.asc())
-        .all()
-    )
-
-    destinations = {
-        normalize_destination(row.destination)
-        for row in rows
-        if normalize_destination(row.destination)
-    }
-    return sorted(destinations)
-
-
-def get_departure_destination_pull_times(gateway):
-    pull_times = _current_sort_destination_pull_times(gateway)
-
-    rows = (
+def get_lineup_departures(gateway):
+    """One request-local master snapshot for choices and fallback pull times."""
+    return (
         MasterFlightSchedule.query.filter(
             MasterFlightSchedule.mission_type == "departure",
             MasterFlightSchedule.active.is_(True),
@@ -218,6 +197,23 @@ def get_departure_destination_pull_times(gateway):
         .order_by(MasterFlightSchedule.destination.asc(), MasterFlightSchedule.flight_number.asc())
         .all()
     )
+
+
+def get_departure_destination_choices(gateway, *, masters=None):
+    rows = get_lineup_departures(gateway) if masters is None else masters
+    destinations = {
+        normalize_destination(row.destination)
+        for row in rows
+        if normalize_destination(row.destination)
+    }
+    return sorted(destinations)
+
+
+def get_departure_destination_pull_times(gateway, *, masters=None, operation=_UNRESOLVED, missions=None):
+    pull_times = _current_sort_destination_pull_times(
+        gateway, operation=operation, missions=missions,
+    )
+    rows = get_lineup_departures(gateway) if masters is None else masters
 
     for row in rows:
         destination = normalize_destination(row.destination)
@@ -234,11 +230,11 @@ def get_departure_destination_pull_times(gateway):
     return pull_times
 
 
-def get_destination_pull_times(gateway, destination):
+def get_destination_pull_times(gateway, destination, **snapshot):
     destination = normalize_destination(destination)
     if not destination:
         return dict(DEFAULT_PULL_TIMES)
-    return dict(get_departure_destination_pull_times(gateway).get(destination, DEFAULT_PULL_TIMES))
+    return dict(get_departure_destination_pull_times(gateway, **snapshot).get(destination, DEFAULT_PULL_TIMES))
 
 
 def save_building_lineup(gateway, form_data):
@@ -268,7 +264,7 @@ def save_building_lineup(gateway, form_data):
             setattr(row, field_name, value or None)
 
     db.session.flush()
-    _recompute_current_sort_door_pull_aggregates(gateway)
+    _recompute_current_sort_door_pull_aggregates(gateway, rows)
     db.session.flush()
     return rows
 
@@ -378,7 +374,8 @@ def save_building_lineup_destination(gateway, field_token, destination, *, expec
 
     _lock_lineup(gateway)
     rows = get_building_lineup_rows(gateway, for_update=True)
-    destination_choices = set(get_departure_destination_choices(gateway))
+    masters = get_lineup_departures(gateway)
+    destination_choices = set(get_departure_destination_choices(gateway, masters=masters))
     value = normalize_destination(destination)
     if value and value not in destination_choices:
         raise ValueError(f"{value} is not an available master departure destination.")
@@ -397,13 +394,15 @@ def save_building_lineup_destination(gateway, field_token, destination, *, expec
                 _validate_physical_belt_side_destinations(row, normalized_values)
                 setattr(row, field_name, value or None)
                 db.session.flush()
-                _recompute_current_sort_door_pull_aggregates(gateway)
+                operation, missions = _recompute_current_sort_door_pull_aggregates(gateway, rows)
                 db.session.flush()
                 return {
                     "field": field_token,
                     "destination": value,
                     "original": lineup_original(gateway, field_token, value),
-                    "pull_times": get_destination_pull_times(gateway, value),
+                    "pull_times": get_destination_pull_times(
+                        gateway, value, masters=masters, operation=operation, missions=missions,
+                    ),
                 }
 
     raise ValueError("Unknown Building Lineup destination field.")
@@ -541,12 +540,10 @@ def belt_color_key(belt_name):
     return BELT_COLOR_KEYS.get(first_part, "neutral")
 
 
-def _current_sort_destination_pull_times(gateway):
-    operation = current_operational_sort_operation(gateway)
-    if not operation:
-        return {}
-
-    missions = (
+def _lineup_operation_missions(operation):
+    if operation is None:
+        return ()
+    return (
         SortDateMission.query.filter_by(
             sort_date_operation_id=operation.id,
             mission_type="departure",
@@ -555,6 +552,14 @@ def _current_sort_destination_pull_times(gateway):
         .all()
     )
 
+
+def _current_sort_destination_pull_times(gateway, *, operation=_UNRESOLVED, missions=None):
+    if operation is _UNRESOLVED:
+        operation = current_operational_sort_operation(gateway)
+    if not operation:
+        return {}
+    if missions is None:
+        missions = _lineup_operation_missions(operation)
     pull_times = {}
     for mission in missions:
         destination = normalize_destination(mission.destination)
@@ -585,12 +590,21 @@ def _fill_pull_time(destination_times, key, value):
         destination_times[key] = value.strftime("%H:%M")
 
 
-def _recompute_current_sort_door_pull_aggregates(gateway):
+def _recompute_current_sort_door_pull_aggregates(gateway, rows):
     from app.services.neoermac_pull_aggregation import (
         recompute_current_sort_door_pull_aggregates,
     )
 
-    return recompute_current_sort_door_pull_aggregates(gateway)
+    operation = current_operational_sort_operation(gateway)
+    missions = _lineup_operation_missions(operation)
+    if operation is not None:
+        assignments = get_building_lineup_assignments(gateway, rows=rows)
+        recompute_current_sort_door_pull_aggregates(
+            gateway, operation=operation, all_operation_missions=missions,
+            doors_by_destination=get_building_lineup_doors_by_destination(gateway, assignments=assignments),
+        )
+    # These same ORM missions now contain the post-aggregation values.
+    return operation, missions
 
 
 def _door_number(door):

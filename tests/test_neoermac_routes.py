@@ -534,10 +534,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 ]
                 self.assertEqual(len(access_query_keys), len(set(access_query_keys)))
 
-    def test_building_lineup_first_use_commits_once_then_becomes_read_only(self):
+    def test_building_lineup_first_and_repeated_gets_render_read_only_defaults(self):
         NeoErmacBuildingLineup.query.delete()
         db.session.commit()
         self._login_approved_user(role="operator")
+        self.client.get("/neoermac")  # Canonical access setup, not lineup initialization.
 
         response, statements, commits, _query_keys = self._capture_get_metrics(
             "/neoermac/building-lineup"
@@ -549,11 +550,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         ]
 
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(writes), 1)
-        self.assertEqual(commits, 1)
+        self.assertEqual(writes, [])
+        self.assertEqual(commits, 0)
         self.assertEqual(
             NeoErmacBuildingLineup.query.filter_by(gateway_id=self.gateway.id).count(),
-            12,
+            0,
         )
 
         warmed, warmed_statements, warmed_commits, _query_keys = self._capture_get_metrics(
@@ -2141,6 +2142,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(mission.actual_pure_pull_time_local, time(14, 5))
 
     def test_door_view_pull_autosave_reuses_one_operational_bundle(self):
+        from app.services.neoermac_building_lineup import get_building_lineup_rows
+        get_building_lineup_rows(self.gateway, initialize=True)
         self._assign_lineup_destination("runout_10", "west_destination_1", "SDF")
         self._add_operation_departure("UPS302", "SDF")
         db.session.commit()
@@ -2186,9 +2189,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         # Current/prior-day operation selection and the mission-aware pull
         # aggregator are explicit bounded phases, not repeated per door.
-        self.assertEqual(len(selects), 20)
+        self.assertEqual(len(selects), 19)
         self.assertEqual(sum("from gateway_sort_matrix" in row for row in selects), 0)
-        self.assertEqual(sum("from neoermac_door_pulls" in row for row in selects), 2)
+        self.assertEqual(sum("from neoermac_door_pulls" in row for row in selects), 1)
         self.assertEqual(commits[0], 1)
         self.assertEqual(sum(row.startswith("insert") for row in writes), 1)
         self.assertEqual(sum(row.startswith("update") for row in writes), 2)
@@ -3345,7 +3348,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
 
-    def test_door_view_page_still_initializes_missing_lineup_rows(self):
+    def test_door_view_page_does_not_initialize_missing_lineup_rows(self):
         NeoErmacBuildingLineup.query.delete()
         db.session.commit()
         self._login_approved_user(role="operator")
@@ -3353,7 +3356,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/door-view?door=D34")
 
         self.assertEqual(response.status_code, 200)
-        self.assertGreater(NeoErmacBuildingLineup.query.count(), 0)
+        self.assertEqual(NeoErmacBuildingLineup.query.count(), 0)
 
     def test_door_view_changed_state_bulk_loads_door_pulls_once(self):
         from app.services.neoermac_door_view import door_view_uld_state
@@ -3994,12 +3997,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
             follow_redirects=False,
         )
 
-        saved = NeoErmacBuildingLineup.query.filter_by(
-            gateway_id=self.gateway.id,
-            runout_key="green_runout",
-        ).one()
         self.assertEqual(save_response.status_code, 403)
-        self.assertIsNone(saved.east_destination_1)
+        self.assertEqual(NeoErmacBuildingLineup.query.filter_by(gateway_id=self.gateway.id).count(), 0)
 
     def test_building_lineup_destination_autosave_saves_one_field_and_returns_pull_times(self):
         self._add_master_departure("UPS411", "SDF")

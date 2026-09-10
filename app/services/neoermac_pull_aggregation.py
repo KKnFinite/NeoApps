@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.models import NeoErmacDoorPull, SortDateMission
@@ -42,6 +42,7 @@ def recompute_current_sort_door_pull_aggregates(
     missions_by_destination=None,
     pulls_by_destination_and_door=None,
     all_operation_missions=None,
+    door_pull_records=None,
 ):
     operation = operation or _current_operation(gateway)
     if not operation:
@@ -81,6 +82,7 @@ def recompute_current_sort_door_pull_aggregates(
             gateway,
             operation,
             complete_missions,
+            rows=door_pull_records,
         )
     else:
         pulls_by_mission_and_door = _mission_pull_lookup_from_legacy_bundle(
@@ -190,15 +192,25 @@ def _departure_missions(operation):
     )
 
 
-def _door_pulls_by_mission_and_door(gateway, operation, missions):
-    rows = (
-        NeoErmacDoorPull.query.filter_by(
-            gateway_id=gateway.id,
-            sort_date_operation_id=operation.id,
+def _door_pulls_by_mission_and_door(gateway, operation, missions, *, rows=None):
+    if rows is None:
+        rows = (
+            NeoErmacDoorPull.query.filter_by(
+                gateway_id=gateway.id,
+                sort_date_operation_id=operation.id,
+            )
+            .order_by(NeoErmacDoorPull.updated_at.desc(), NeoErmacDoorPull.id.desc())
+            .all()
         )
-        .order_by(NeoErmacDoorPull.updated_at.desc(), NeoErmacDoorPull.id.desc())
-        .all()
-    )
+    else:
+        # A locked, flushed Door bundle includes newly saved canonical rows.
+        # Match the DB ordering before the canonical-over-legacy stable sort.
+        rows = sorted(
+            (row for row in rows if row.gateway_id == gateway.id
+             and row.sort_date_operation_id == operation.id),
+            key=lambda row: (row.updated_at or datetime.min, row.id or 0),
+            reverse=True,
+        )
     result = {}
     missions_by_destination = {}
     for mission in missions:

@@ -27,6 +27,7 @@ from app.services.neoermac_building_lineup import (
     get_building_lineup_rows,
     get_destination_pull_times,
     get_departure_destination_choices,
+    get_lineup_departures,
     get_departure_destination_pull_times,
     get_outbound_door_options,
     load_building_lineup_rows,
@@ -153,6 +154,7 @@ def upcoming_pulls():
         gateway,
         operation=operation,
         refresh_status=refresh_status,
+        initialize_lineup=False,
     )
     revision = upcoming_pulls_revision(gateway, operation=operation)
     if (
@@ -260,7 +262,7 @@ def building_lineup():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
-    lineup_load = load_building_lineup_rows(gateway)
+    lineup_load = load_building_lineup_rows(gateway, initialize=False)
     if (
         lineup_load.persistent_state_changed
         or access_initialization_changed_this_request()
@@ -310,7 +312,7 @@ def building_lineup_state():
         {
             "ok": True,
             "changed": changed,
-            **({"state": building_lineup_state_payload(gateway)} if changed else {}),
+            **({"state": building_lineup_state_payload(gateway, operation=operation)} if changed else {}),
             "revision": revision,
             "refresh": neoermac_live_refresh_status(
                 gateway, NEOERMAC_BUILDING_LINEUP_REFRESH_KEY
@@ -340,6 +342,7 @@ def view_outbound():
         gateway,
         operation=operation,
         refresh_status=refresh_status,
+        initialize_lineup=False,
     )
     revision = view_outbound_revision(gateway, operation=operation)
     return render_template(
@@ -523,7 +526,7 @@ def manage_employees():
                 flash(safe_mutation_error(exc, "save attendance"), "error")
         return redirect(url_for("neoermac.manage_employees"))
     context = staffing_service.operational_manage_employees_context(
-        area_ids, later_final_area_ids=area_ids
+        area_ids, later_final_area_ids=area_ids, scope_candidates=True,
     )
     return render_template(
         "neostaffing/operational_manage_employees.html",
@@ -764,9 +767,11 @@ def _placeholder_page(title):
 
 
 def _building_lineup_response(gateway, access, rows=None, status_code=200):
-    rows = rows or get_building_lineup_rows(gateway)
-    destination_choices = get_departure_destination_choices(gateway)
-    pull_time_lookup = get_departure_destination_pull_times(gateway)
+    if rows is None:
+        rows = get_building_lineup_rows(gateway, initialize=False)
+    masters = get_lineup_departures(gateway)
+    destination_choices = get_departure_destination_choices(gateway, masters=masters)
+    pull_time_lookup = get_departure_destination_pull_times(gateway, masters=masters)
     response = render_template(
         "neonodes/neoermac/building_lineup.html",
         gateway=gateway,
@@ -801,7 +806,7 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
         door_view_operational_state(
             gateway,
             operation=operation,
-            initialize_lineup=True,
+            initialize_lineup=False,
         )
         if active_door
         else None

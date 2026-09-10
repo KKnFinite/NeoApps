@@ -3,7 +3,7 @@ import re
 
 from flask import current_app
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import case, func, or_
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -1156,7 +1156,7 @@ def operational_flow_shorthand(plan):
     return " → ".join(parts)
 
 
-def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=()):
+def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False):
     """Read the effective current-sort attendance roster from shared Staffing data."""
     operation = current_night_attendance_operation()
     if not operation:
@@ -1174,7 +1174,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
     shift_area_ids = {
         unit.id for unit in hierarchy["units"] if _is_shift_work_area(unit, hierarchy["by_id"])
     }
-    assignments = (
+    assignment_query = (
         StaffingWorkAssignment.query.options(
             joinedload(StaffingWorkAssignment.person)
             .joinedload(StaffingPerson.shift_flow_plan)
@@ -1194,8 +1194,26 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             StaffingPerson.active.is_(True),
         )
         .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
-        .all()
     )
+    if scope_candidates:
+        # Candidate superset only: the existing effective-area logic below
+        # still resolves attendance overrides and HERE precedence over COMING.
+        # Keep legacy NULL-operation attendance within the same sort/date.
+        attendance_candidates = select(StaffingDailyAttendance.person_id).where(
+            StaffingDailyAttendance.attendance_date == operation.sort_date,
+            StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+            or_(StaffingDailyAttendance.sort_date_operation_id == operation.id,
+                StaffingDailyAttendance.sort_date_operation_id.is_(None)),
+            StaffingDailyAttendance.work_area_unit_id.in_(start_ids),
+        )
+        assignment_query = assignment_query.filter(or_(
+            StaffingPerson.shift_flow_plan.has(or_(
+                StaffingShiftFlowPlan.sort_start_work_area_id.in_(start_ids),
+                StaffingShiftFlowPlan.final_door_work_area_id.in_(later_ids),
+            )),
+            StaffingPerson.id.in_(attendance_candidates),
+        ))
+    assignments = assignment_query.all()
     person_ids = [assignment.person_id for assignment in assignments]
     records = _daily_attendance_records(person_ids, operation, staffing_sort)
     here = []

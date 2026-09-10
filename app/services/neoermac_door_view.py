@@ -511,6 +511,7 @@ def save_door_pulls(
         doors_by_destination=bundle.doors_by_destination,
         missions_by_destination=bundle.departure_missions_by_destination,
         all_operation_missions=bundle.missions,
+        door_pull_records=bundle.door_pulls,
     )
     db.session.flush()
     bundle.refresh_active_departure_missions()
@@ -588,6 +589,7 @@ def save_single_door_pull(
         doors_by_destination=bundle.doors_by_destination,
         missions_by_destination=bundle.departure_missions_by_destination,
         all_operation_missions=bundle.missions,
+        door_pull_records=bundle.door_pulls,
     )
     db.session.flush()
     bundle.refresh_active_departure_missions()
