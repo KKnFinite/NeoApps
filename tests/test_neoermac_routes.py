@@ -4422,6 +4422,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"01:45", response.data)
         self.assertIn(b"02:20", response.data)
         self.assertIn(b"20 MIN", response.data)
+        mobile_html = response.data.split(b'data-neoermac-outbound-mobile-list', 1)[1]
+        for value in (b'01:40', b'01:45', b'02:15', b'02:20',
+                      b'D32-D34 BELT 1 WEST SLOT 1', b'data-neoermac-outbound-mobile-field="status"'):
+            self.assertIn(value, mobile_html)
 
     def test_view_outbound_mobile_uses_single_scan_row_per_mission_without_horizontal_scroll(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")
@@ -4430,7 +4434,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self._login_approved_user(role="operator")
 
         response = self.client.get("/neoermac/view-outbound")
-        css = stylesheet_source()
+        css = (Path(__file__).resolve().parents[1] / 'app/static/css/neoermac_view_outbound.css').read_text()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(
@@ -4452,26 +4456,27 @@ class NeoErmacRoutesTest(unittest.TestCase):
             b'data-neoermac-outbound-mobile-field="doors"',
             b'data-neoermac-outbound-mobile-field="pull-times"',
             b'data-neoermac-outbound-mobile-field="etd"',
-            b'data-neoermac-outbound-mobile-field="delay"',
+            b'data-neoermac-outbound-mobile-field="status"',
+            b'data-neoermac-outbound-mobile-field="location"',
         )
         positions = [response.data.index(field) for field in mobile_fields]
         self.assertEqual(positions, sorted(positions))
-        self.assertIn(b">Delay<", response.data)
+        self.assertNotIn(b">Delay<", response.data)
+        self.assertNotIn(b'data-neoermac-outbound-mobile-field="delay"', response.data)
         self.assertIn(b"data-neoermac-outbound-mobile-header", response.data)
         self.assertNotIn(b"neoermac-outbound-mobile-fields", response.data)
-        self.assertIn(b'<b>P</b>', response.data)
-        self.assertIn(b'<b>M</b>', response.data)
+        self.assertIn(b'<b>PURE</b>', response.data)
+        self.assertIn(b'<b>MIX</b>', response.data)
+        self.assertIn(b'<small>PLAN</small>', response.data)
+        self.assertIn(b'<small>ACTUAL</small>', response.data)
         self.assertNotIn(b'<b>1</b>', response.data)
-        self.assertIn(".neoermac-outbound-table-wrap {\n        display: none;", css)
-        self.assertIn(".neoermac-outbound-mobile-row {\n        display: grid;", css)
-        self.assertIn(
-            "grid-template-columns: 1.25fr 0.88fr 0.55fr 0.45fr 0.9fr 1.65fr 0.72fr 0.45fr;",
-            css,
-        )
+        self.assertIn(".neoermac-outbound-table-wrap { display: none;", css)
+        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr))', css)
         self.assertIn("body.mobile-app-chrome .neoermac-shell.neoermac-outbound-shell {", css)
         self.assertIn("padding: 0;", css)
-        self.assertIn("background: none;", css)
-        self.assertIn("height: 40px;", css)
+        self.assertIn("height: auto;", css)
+        self.assertIn(b'css/neoermac_view_outbound.css', response.data)
+        self.assertNotIn(b'css/neoermac_view_outbound.css', self.client.get('/neoermac').data)
         self.assertNotIn(".neoermac-outbound-table-wrap {\n        overflow-x: auto;", css)
 
     def test_mobile_topbar_uses_complete_short_labels_without_ellipsis(self):
@@ -4523,6 +4528,8 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertLess(response.data.index(b"UPS602"), response.data.index(b"UPS601"))
         self.assertLess(response.data.index(b"UPS601"), response.data.index(b"PHX"))
         self.assertIn(b"NO CURRENT SORT MISSION FOR PHX.", response.data)
+        mobile_html = response.data.split(b'data-neoermac-outbound-mobile-list', 1)[1]
+        self.assertIn(b"NO CURRENT SORT MISSION FOR PHX.", mobile_html)
 
     def _login_approved_user(self, role="watcher"):
         user = User(
