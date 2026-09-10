@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
+from sqlalchemy import select, text
+
 from app.extensions import db
-from app.models import NeoErmacUldRequest, NeoSektorUldOnTheWayEvent
+from app.models import Gateway, NeoErmacUldRequest, NeoSektorUldOnTheWayEvent
 from app.services.gateway_matrix import current_operations_for_gateway, gateway_timezone
 from app.services.time_display import format_local_hhmm
 
@@ -28,6 +30,7 @@ def get_uld_request(
     setup_needed=None,
     operation=None,
     requested_by_user_id=None,
+    populate_existing=False,
 ):
     normalized_door = normalize_door(door)
     if not normalized_door:
@@ -35,6 +38,8 @@ def get_uld_request(
 
     operation = _resolve_operation(gateway, operation)
     query = _request_query(gateway, operation).filter_by(door=normalized_door)
+    if populate_existing:
+        query = query.populate_existing()
     if setup_needed is not None:
         query = query.filter_by(setup_needed=bool(setup_needed))
     if requested_by_user_id is not None:
@@ -101,12 +106,14 @@ def update_uld_request(
         raise ValueError("Request at least one ULD.")
 
     operation = _resolve_operation(gateway, operation)
+    _lock_uld_increment(gateway)
     request_record = get_uld_request(
         gateway,
         normalized_door,
         setup_needed=setup_needed,
         operation=operation,
         requested_by_user_id=requested_by_user_id,
+        populate_existing=True,
     )
     if request_record is None:
         request_record = NeoErmacUldRequest(
@@ -128,6 +135,19 @@ def update_uld_request(
     request_record.updated_at = now
     db.session.flush()
     return request_record
+
+
+def _lock_uld_increment(gateway):
+    """Serialize creation and increments until the caller commits or rolls back.
+
+    A row lock on the request cannot protect its first creation. Use the same
+    Gateway reservation as Door Pulls; refresh the request only after acquiring
+    it, including when the session already contains an older ORM instance.
+    """
+    if db.engine.dialect.name == "sqlite":
+        db.session.execute(text("UPDATE gateways SET id=id WHERE id=:id"), {"id": gateway.id})
+    else:
+        db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
 
 
 def clear_uld_requests_for_door(gateway, door, setup_needed=None, operation=None):
