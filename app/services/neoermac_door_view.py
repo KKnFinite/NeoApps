@@ -767,6 +767,8 @@ def door_view_uld_state(
     revision=None,
     initialize_lineup=True,
     bundle=None,
+    render_pull_content=False,
+    can_edit=False,
 ):
     selected_door = normalize_door(selected_door)
     if not selected_door:
@@ -817,6 +819,17 @@ def door_view_uld_state(
         _door_card_state_payload(card, order_index=index)
         for index, card in enumerate(destinations)
     ]
+    if render_pull_content:
+        state["pull_content_html"] = current_app.jinja_env.get_template(
+            "neonodes/neoermac/_door_pull_content.html"
+        ).render(
+            destinations=destinations, selected_door=selected_door,
+            can_edit=can_edit, pull_fields=PULL_FIELDS,
+            linked_supervised_pull_doors=any(
+                linked_supervised_pull_doors(gateway, selected_door, card["destination"], supervised_doors, bundle=bundle)
+                for card in destinations
+            ),
+        )
     state["door_tab_alerts"] = door_tab_pull_alerts(
         gateway,
         selected_door,
@@ -971,7 +984,9 @@ def door_view_poll_revision(
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
 
-    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    now_utc = now or datetime.now(timezone.utc)
+    if now_utc.tzinfo is not None:
+        now_utc = now_utc.astimezone(timezone.utc).replace(tzinfo=None)
     operation_id = operation.id if operation else None
     operation_criteria = lambda model: (
         model.sort_date_operation_id == operation_id
@@ -979,6 +994,15 @@ def door_view_poll_revision(
         else model.sort_date_operation_id.is_(None)
     )
     aggregate_queries = (
+        # A count changes only when an assumed-arrival boundary is crossed,
+        # not on every clock tick. Fold into the existing aggregate round trip.
+        _door_revision_aggregate(
+            "assumed_arrivals_reached", SortDateMission, SortDateMission.updated_at,
+            operation_criteria(SortDateMission), SortDateMission.mission_type == "arrival",
+            SortDateMission.api_assumed_arrived_time_utc <= now_utc,
+            SortDateMission.actual_block_in_datetime_utc.is_(None),
+            SortDateMission.assigned_tail_number.isnot(None),
+        ),
         _door_revision_aggregate(
             "lineup",
             NeoErmacBuildingLineup,

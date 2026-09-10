@@ -1,0 +1,144 @@
+        {% set all_pulls_complete = destinations|selectattr("pulls_complete")|list|length == destinations|length %}
+        <form method="post" class="neoermac-door-pull-form{% if all_pulls_complete %} is-all-pulls-complete{% endif %}" data-door-pull-form {% if not destinations %}hidden{% endif %}>
+            <input type="hidden" name="door" value="{{ selected_door }}">
+            <input type="hidden" name="action" value="save_pulls">
+            <input type="hidden" name="destination_count" value="{{ destinations|length }}">
+            <input type="hidden" name="apply_to_both" value="0" data-pull-scope-value>
+
+            {% if can_edit and linked_supervised_pull_doors %}
+            <section class="neoermac-pull-scope" data-pull-scope aria-label="Pull application scope">
+                <span>APPLY PULLS TO</span>
+                <div class="neo-segmented-control neoermac-pull-scope-options" role="group" aria-label="Apply pulls to">
+                    <button type="button" data-pull-scope-option="0" aria-pressed="true">THIS DOOR</button>
+                    <button type="button" data-pull-scope-option="1" aria-pressed="false">BOTH SIDES</button>
+                </div>
+                <small>Linked supervised doors receive the same pull entry.</small>
+            </section>
+            {% endif %}
+
+            <div class="neoermac-door-destination-list" data-door-destination-list>
+                {% for card in destinations %}
+                {% set destination_index = loop.index0 %}
+                <article
+                    class="neoermac-door-destination-card neoermac-door-destination-frame{% if card.pulls_complete %} is-pulls-complete is-pulls-collapsed{% endif %}"
+                    data-door-destination-card
+                    data-door-destination="{{ card.destination }}"
+                    data-destination-index="{{ destination_index }}"
+                    data-tail-presence="{{ card.tail_presence.state if card.tail_presence else '' }}"
+                >
+                    <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
+                    <input type="hidden" name="operation_id_{{ destination_index }}" data-pull-operation value="{{ card.operation_id or '' }}">
+                    <input type="hidden" name="mission_id_{{ destination_index }}" data-pull-mission value="{{ card.mission_id or '' }}">
+                    {% for key in ['pure', 'mix'] %}
+                    <input type="hidden" name="original_{{ key }}_{{ destination_index }}" data-pull-original="{{ key }}" value="{{ card.original[key] }}">
+                    {% endfor %}
+                    <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
+                        <div class="neoermac-door-destination" data-door-flight-info-cell="destination">
+                            <strong class="neoermac-door-destination-title">{{ card.destination }}</strong>
+                        </div>
+                        <div class="neoermac-door-parking" data-door-flight-info-cell="parking">
+                            <strong data-door-parking>{{ card.parking or "-" }}</strong>
+                        </div>
+                        <div class="neoermac-door-tail" data-door-flight-info-cell="tail">
+                            <strong data-door-tail>{{ card.tail or "-" }}</strong>
+                        </div>
+                        <div class="neoermac-door-status" data-door-flight-info-cell="status">
+                            <strong data-door-status>{{ card.status }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="neoermac-door-window-row">
+                        <span class="neoermac-door-window" data-door-window>WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes is not none else "TBD" }}</span>
+                    </div>
+
+                    <div class="neoermac-door-complete-summary" data-pull-complete-summary {% if not card.pulls_complete %}hidden{% endif %}>
+                        <span data-pull-complete-title>{% if card.pulls_complete %}{{ card.complete_title }}{% endif %}</span>
+                        <strong data-pull-complete-lines>{% if card.pulls_complete %}{{ card.pull_summary }}{% endif %}</strong>
+                        {% if can_edit %}
+                        <button
+                            class="neoermac-menu-link neoermac-menu-link-secondary neoermac-door-edit-pulls"
+                            type="button"
+                            data-pull-edit-toggle
+                            aria-expanded="false"
+                        >EDIT PULLS</button>
+                        {% endif %}
+                    </div>
+                    <p class="neoermac-door-autosave-error" data-pull-autosave-error hidden></p>
+                    <p class="neoermac-door-autosave-status" data-pull-autosave-status aria-live="polite" hidden></p>
+
+                    <div class="neoermac-door-pull-grid" data-pull-details>
+                        {% for pull in pull_fields %}
+                        {% set pull_alert = card.pull_alerts[pull.key] %}
+                        <section
+                            class="neoermac-door-pull-row{% if pull_alert.css_class %} {{ pull_alert.css_class }}{% endif %}"
+                            data-pull-key="{{ pull.key }}"
+                            data-pull-alert-state="{{ pull_alert.state }}"
+                            data-pull-alert-key="{{ pull_alert.key }}"
+                            data-pull-accounted="{{ 'true' if pull_alert.accounted else 'false' }}"
+                            data-pull-due-soon-epoch-ms="{{ pull_alert.due_soon_epoch_ms if pull_alert.due_soon_epoch_ms is not none else '' }}"
+                            data-pull-due-now-epoch-ms="{{ pull_alert.due_now_epoch_ms if pull_alert.due_now_epoch_ms is not none else '' }}"
+                            data-pull-late-epoch-ms="{{ pull_alert.late_epoch_ms if pull_alert.late_epoch_ms is not none else '' }}"
+                            data-pull-window-start-epoch-ms="{{ pull_alert.window_start_epoch_ms if pull_alert.window_start_epoch_ms is not none else '' }}"
+                            data-pull-window-end-epoch-ms="{{ pull_alert.window_end_epoch_ms if pull_alert.window_end_epoch_ms is not none else '' }}"
+                        >
+                            <div class="neoermac-door-planned">
+                                {% set show_base_window = card.window_minutes is not none and card.window_minutes != 0 and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
+                                <span class="neoermac-label-desktop">PLANNED {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">{{ pull.short_label }}</span>
+                                <strong data-door-planned="{{ pull.key }}">{{ card.planned[pull.key] or "-" }}</strong>
+                                {% if pull_alert.label %}
+                                <span class="neoermac-pull-alert-badge" data-pull-alert-badge>{{ pull_alert.label }}</span>
+                                {% endif %}
+                                <em
+                                    data-door-base-planned="{{ pull.key }}"
+                                    {% if not show_base_window %}hidden{% endif %}
+                                >{% if show_base_window %}BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN{% endif %}</em>
+                            </div>
+                            {% if can_edit %}
+                            <label class="neoermac-door-actual">
+                                <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">ACTUAL</span>
+                                <input
+                                    class="neoermac-ios-safe-input"
+                                    type="text"
+                                    name="{{ pull.actual_field }}_{{ destination_index }}"
+                                    value="{{ card.actual[pull.key] }}"
+                                    inputmode="numeric"
+                                    autocomplete="off"
+                                    maxlength="5"
+                                    pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
+                                    placeholder="HH:MM"
+                                    data-hhmm-input
+                                    data-pull-key="{{ pull.key }}"
+                                    data-door-destination="{{ card.destination }}"
+                                    data-no-pull-input="{{ pull.key }}-{{ destination_index }}"
+                                    {% if card.no_pull[pull.key] %}disabled{% endif %}
+                                >
+                            </label>
+                            <label class="neoermac-door-toggle neoermac-none-toggle neoermac-large-checkbox-toggle">
+                                <input
+                                    type="checkbox"
+                                    name="{{ pull.no_field }}_{{ destination_index }}"
+                                    data-pull-key="{{ pull.key }}"
+                                    data-door-destination="{{ card.destination }}"
+                                    data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
+                                    {% if card.no_pull[pull.key] %}checked{% endif %}
+                                >
+                                <span class="neoermac-label-desktop">NO {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">NO</span>
+                            </label>
+                            {% else %}
+                            <div class="neoermac-door-actual neoermac-door-static">
+                                <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
+                                <span class="neoermac-label-mobile">ACTUAL</span>
+                                <strong data-door-static-actual="{{ pull.key }}">{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
+                            </div>
+                            {% endif %}
+                        </section>
+                        {% endfor %}
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </form>
+        <p class="neoermac-door-empty" data-door-no-destinations {% if destinations %}hidden{% endif %}>NO DESTINATIONS ASSIGNED TO {{ selected_door }}.</p>

@@ -1,3 +1,4 @@
+from tests.neoermac_lineup_forms import lineup_form
 from tests.neoermac_pull_forms import pull_form
 from tests.css_contracts import stylesheet_source
 import re
@@ -3880,12 +3881,12 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/building-lineup",
-            data={
+            data=lineup_form(self.gateway, {
                 "lineup_green_runout_east_destination_1": "sdf",
                 "lineup_green_runout_east_destination_2": "phx",
                 "lineup_green_runout_west_destination_1": "ont",
                 "lineup_green_runout_west_destination_2": "lax",
-            },
+            }),
             follow_redirects=False,
         )
 
@@ -3941,21 +3942,21 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         self.client.post(
             "/neoermac/building-lineup",
-            data={
+            data=lineup_form(self.gateway, {
                 "lineup_green_runout_east_destination_1": "SDF",
                 "lineup_green_runout_east_destination_2": "",
                 "lineup_green_runout_west_destination_1": "",
                 "lineup_green_runout_west_destination_2": "",
-            },
+            }),
         )
         response = self.client.post(
             "/neoermac/building-lineup",
-            data={
+            data=lineup_form(self.gateway, {
                 "lineup_green_runout_east_destination_1": "",
                 "lineup_green_runout_east_destination_2": "",
                 "lineup_green_runout_west_destination_1": "",
                 "lineup_green_runout_west_destination_2": "",
-            },
+            }),
             follow_redirects=False,
         )
 
@@ -3989,7 +3990,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         save_response = self.client.post(
             "/neoermac/building-lineup",
-            data={"lineup_green_runout_east_destination_1": "SDF"},
+            data=lineup_form(self.gateway, {"lineup_green_runout_east_destination_1": "SDF"}),
             follow_redirects=False,
         )
 
@@ -4017,10 +4018,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/building-lineup/destination",
-            data={
+            data=lineup_form(self.gateway, {
                 "field": "lineup_green_runout_east_destination_1",
                 "destination": "ont",
-            },
+            }),
         )
 
         payload = response.get_json()
@@ -4044,10 +4045,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/building-lineup/destination",
-            data={
+            data=lineup_form(self.gateway, {
                 "field": "lineup_green_runout_east_destination_1",
                 "destination": "",
-            },
+            }),
         )
 
         payload = response.get_json()
@@ -4068,10 +4069,10 @@ class NeoErmacRoutesTest(unittest.TestCase):
 
         response = self.client.post(
             "/neoermac/building-lineup/destination",
-            data={
+            data=lineup_form(self.gateway, {
                 "field": "lineup_green_runout_east_destination_1",
                 "destination": "SDF",
-            },
+            }),
         )
 
         saved = NeoErmacBuildingLineup.query.filter_by(
@@ -4101,7 +4102,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/building-lineup", follow_redirects=False)
 
         self.assertEqual(response.status_code, 200)
-        denied = self.client.post("/neoermac/building-lineup", data={})
+        denied = self.client.post("/neoermac/building-lineup", data=lineup_form(self.gateway, {}))
         self.assertEqual(denied.status_code, 403)
         self.assertIsNone(denied.location)
 

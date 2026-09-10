@@ -11,9 +11,13 @@
 {% macro destination_select(row, slot, selected_value, destination_choices, can_edit) -%}
 <label class="neoermac-slot neoermac-belt-cell neoermac-belt-destination-card" data-lineup-assignment-slot="{{ slot.field or 'empty' }}">
     {% set input_name = field_name(row, slot.field) if slot.field else "" %}
+    {% if slot.field %}<input type="hidden" name="original_{{ input_name }}" value="{{ lineup_original(gateway, input_name, selected_value) }}">{% endif %}
     <select class="neoermac-destination-select" name="{{ input_name }}" data-lineup-destination-select data-lineup-field="{{ input_name }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
         <option value="">{{ slot.placeholder }}</option>
         {% if slot.field %}
+        {% if selected_value and selected_value not in destination_choices %}
+        <option value="{{ selected_value }}" selected>{{ selected_value }}</option>
+        {% endif %}
         {% for destination in destination_choices %}
         <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
         {% endfor %}
@@ -54,9 +58,7 @@
     <p class="neoermac-readonly-note">View Only</p>
     {% endif %}
 
-    {% if not destination_choices %}
-    <p class="neoermac-readonly-note">NO MASTER DEPARTURE DESTINATIONS AVAILABLE.</p>
-    {% endif %}
+    <p class="neoermac-readonly-note" data-lineup-empty-choices {% if destination_choices %}hidden{% endif %}>NO MASTER DEPARTURE DESTINATIONS AVAILABLE.</p>
 
     <form class="neoermac-lineup-form" method="post" data-lineup-autosave-url="{{ url_for('neoermac.building_lineup_destination_autosave') }}">
         <div class="neoermac-runout-list">
@@ -98,115 +100,11 @@
         </div>
     </form>
 </section>
-{% if can_edit %}
+<script src="{{ url_for('static', filename='js/neoermac_live_integrity.js', v='ermac-integrity-1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoermac_lineup_live.js', v='ermac-integrity-1') }}"></script>
 <script>
-(() => {
-    const form = document.querySelector("[data-lineup-autosave-url]");
-    if (!form) {
-        return;
-    }
-
-    const saveUrl = form.dataset.lineupAutosaveUrl;
-    const pullTimesLookup = {{ pull_time_lookup|tojson }};
-    const emptyPullTimes = {{ empty_pull_times|tojson }};
-    const status = form.querySelector("[data-lineup-autosave-status]");
-    const error = form.querySelector("[data-lineup-autosave-error]");
-
-    const timesFor = (destination) => {
-        const key = (destination || "").trim().toUpperCase();
-        return pullTimesLookup[key] || emptyPullTimes;
-    };
-
-    const setMessage = (element, message, state = "") => {
-        if (!element) {
-            return;
-        }
-        element.textContent = message || "";
-        element.hidden = !message;
-        element.dataset.state = state;
-    };
-
-    const updatePullTimes = (card, pullTimes) => {
-        if (!card) {
-            return;
-        }
-        const times = pullTimes || emptyPullTimes;
-        card.querySelectorAll("[data-pull-time-key]").forEach((target) => {
-            target.textContent = times[target.dataset.pullTimeKey] || "--";
-        });
-    };
-
-    form.querySelectorAll("[data-lineup-destination-select]").forEach((select) => {
-        select.dataset.lastSavedValue = select.value || "";
-
-        select.addEventListener("change", async () => {
-            const card = select.closest("[data-lineup-assignment-slot]");
-            const previousValue = select.dataset.lastSavedValue || "";
-            const destination = (select.value || "").trim().toUpperCase();
-            select.dataset.lineupSaving = "true";
-            updatePullTimes(card, timesFor(destination));
-            setMessage(error, "");
-            setMessage(status, "SAVING", "saving");
-
-            const body = new FormData();
-            body.set("field", select.dataset.lineupField || select.name || "");
-            body.set("destination", destination);
-
-            try {
-                const response = await fetch(saveUrl, {
-                    method: "POST",
-                    body,
-                    credentials: "same-origin",
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok || !payload.ok) {
-                    throw new Error(payload.error || "Destination save failed.");
-                }
-                select.value = payload.destination || "";
-                select.dataset.lastSavedValue = select.value;
-                if (payload.destination) {
-                    pullTimesLookup[payload.destination] = payload.pull_times || emptyPullTimes;
-                }
-                updatePullTimes(card, payload.pull_times || timesFor(payload.destination));
-                setMessage(status, "SAVED", "saved");
-                delete select.dataset.lineupSaving;
-            } catch (saveError) {
-                select.value = previousValue;
-                updatePullTimes(card, timesFor(previousValue));
-                setMessage(status, "");
-                setMessage(error, saveError.message || "Destination save failed.", "error");
-                delete select.dataset.lineupSaving;
-            }
-        });
-    });
-})();
-</script>
-{% endif %}
-<script>
-(() => {
-    const root = document.querySelector("[data-neoermac-lineup-live]");
-    if (!root) return;
-    let revision = root.dataset.lineupRevision || "";
-    const hasLocalEdits = () => Array.from(root.querySelectorAll("[data-lineup-destination-select]"))
-        .some((select) => select.dataset.lineupSaving === "true");
-    const poll = async () => {
-        const url = new URL(root.dataset.stateUrl, window.location.origin);
-        url.searchParams.set("revision", revision);
-        const response = await fetch(url, {cache: "no-store", credentials: "same-origin"});
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) throw new Error("Building Lineup refresh failed.");
-        revision = payload.revision || revision;
-        if (payload.changed && !hasLocalEdits()) window.location.reload();
-    };
-    const controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ refresh_status.live_screen_refresh_interval_ms }},
-        poll,
-        continuousWhileVisible: true,
-    });
-    controller.setServerStatus({{ refresh_status|tojson }});
-})();
+NeoErmacLineupLive.create(document.querySelector('[data-neoermac-lineup-live]'), {
+    pullTimes: {{ pull_time_lookup|tojson }}, refresh: {{ refresh_status|tojson }}
+});
 </script>
 {% endblock %}

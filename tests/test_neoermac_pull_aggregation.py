@@ -1,4 +1,5 @@
 import unittest
+from tests.neoermac_lineup_forms import lineup_form
 from tests.neoermac_pull_forms import pull_cards
 from datetime import date, datetime, time
 
@@ -240,6 +241,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
             self.gateway,
             "lineup_runout_10_east_destination_1",
             "",
+            expected_original=lineup_form(self.gateway, {'field': 'lineup_runout_10_east_destination_1'})['original'],
         )
         db.session.commit()
         mission = self._mission()
@@ -251,6 +253,7 @@ class NeoErmacPullAggregationTest(unittest.TestCase):
             self.gateway,
             "lineup_runout_11_west_destination_1",
             "SDF",
+            expected_original=lineup_form(self.gateway, {'field': 'lineup_runout_11_west_destination_1'})['original'],
         )
         db.session.commit()
         mission = self._mission()

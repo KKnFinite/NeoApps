@@ -2,10 +2,11 @@ import hashlib
 import json
 from datetime import datetime
 
-from sqlalchemy import func, literal, select, union_all
+from sqlalchemy import func, literal, or_, select, union_all
 
 from app.extensions import db
 from app.models import (
+    MasterFlightSchedule,
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
     SortDateMission,
@@ -128,7 +129,7 @@ def upcoming_pulls_refresh_status(gateway, *, operation=None):
     return neoermac_live_refresh_status(gateway, NEOERMAC_UPCOMING_PULLS_REFRESH_KEY)
 
 
-def upcoming_pulls_revision(gateway, *, operation=_OPERATION_UNSET):
+def upcoming_pulls_revision(gateway, *, operation=_OPERATION_UNSET, include_lineup_choices=False):
     """Return a compact fingerprint for persisted Upcoming Pulls inputs."""
     if operation is _OPERATION_UNSET:
         operation = _current_operation(gateway)
@@ -167,6 +168,12 @@ def upcoming_pulls_revision(gateway, *, operation=_OPERATION_UNSET):
             operation_criterion(SortDateParkingAssignment),
         ),
     )
+    if include_lineup_choices:
+        aggregate_queries += (_revision_aggregate(
+            "master_departures", MasterFlightSchedule, MasterFlightSchedule.updated_at,
+            or_(MasterFlightSchedule.gateway_id == gateway.id, MasterFlightSchedule.gateway_code == gateway.code),
+            MasterFlightSchedule.mission_type == "departure", MasterFlightSchedule.active.is_(True),
+        ),)
     rows = sorted(
         db.session.execute(union_all(*aggregate_queries)).all(),
         key=lambda row: row.source,

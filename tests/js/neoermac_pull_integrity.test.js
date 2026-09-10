@@ -40,8 +40,9 @@ test('autosave submits displayed identity and signed per-field original', () => 
     for (const key of ['operation_id', 'mission_id', 'original']) {
         assert.ok(html.includes(`body.set("${key}"`));
     }
-    assert.ok(html.includes('name="mission_id_{{ destination_index }}"'));
-    assert.ok(html.includes('name="original_{{ key }}_{{ destination_index }}"'));
+    const fragment = fs.readFileSync('app/templates/neonodes/neoermac/_door_pull_content.html', 'utf8');
+    assert.ok(fragment.includes('name="mission_id_{{ destination_index }}"'));
+    assert.ok(fragment.includes('name="original_{{ key }}_{{ destination_index }}"'));
 });
 
 test('poll never advances the original for a dirty field or rebinds its mission', () => {

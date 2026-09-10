@@ -177,153 +177,7 @@
     <section class="neoermac-door-panel" aria-label="Door pull operations" data-door-pull-content>
         <h2>OUTBOUND PULLS</h2>
 
-        {% if destinations %}
-        {% set all_pulls_complete = destinations|selectattr("pulls_complete")|list|length == destinations|length %}
-        <form method="post" class="neoermac-door-pull-form{% if all_pulls_complete %} is-all-pulls-complete{% endif %}" data-door-pull-form>
-            <input type="hidden" name="door" value="{{ selected_door }}">
-            <input type="hidden" name="action" value="save_pulls">
-            <input type="hidden" name="destination_count" value="{{ destinations|length }}">
-            <input type="hidden" name="apply_to_both" value="0" data-pull-scope-value>
-
-            {% if can_edit and linked_supervised_pull_doors %}
-            <section class="neoermac-pull-scope" data-pull-scope aria-label="Pull application scope">
-                <span>APPLY PULLS TO</span>
-                <div class="neo-segmented-control neoermac-pull-scope-options" role="group" aria-label="Apply pulls to">
-                    <button type="button" data-pull-scope-option="0" aria-pressed="true">THIS DOOR</button>
-                    <button type="button" data-pull-scope-option="1" aria-pressed="false">BOTH SIDES</button>
-                </div>
-                <small>Linked supervised doors receive the same pull entry.</small>
-            </section>
-            {% endif %}
-
-            <div class="neoermac-door-destination-list" data-door-destination-list>
-                {% for card in destinations %}
-                {% set destination_index = loop.index0 %}
-                <article
-                    class="neoermac-door-destination-card neoermac-door-destination-frame{% if card.pulls_complete %} is-pulls-complete is-pulls-collapsed{% endif %}"
-                    data-door-destination-card
-                    data-door-destination="{{ card.destination }}"
-                    data-destination-index="{{ destination_index }}"
-                    data-tail-presence="{{ card.tail_presence.state if card.tail_presence else '' }}"
-                >
-                    <input type="hidden" name="destination_{{ destination_index }}" value="{{ card.destination }}">
-                    <input type="hidden" name="operation_id_{{ destination_index }}" data-pull-operation value="{{ card.operation_id or '' }}">
-                    <input type="hidden" name="mission_id_{{ destination_index }}" data-pull-mission value="{{ card.mission_id or '' }}">
-                    {% for key in ['pure', 'mix'] %}
-                    <input type="hidden" name="original_{{ key }}_{{ destination_index }}" data-pull-original="{{ key }}" value="{{ card.original[key] }}">
-                    {% endfor %}
-                    <div class="neoermac-door-card-head neoermac-door-flight-info-row" data-door-flight-info-row>
-                        <div class="neoermac-door-destination" data-door-flight-info-cell="destination">
-                            <strong class="neoermac-door-destination-title">{{ card.destination }}</strong>
-                        </div>
-                        <div class="neoermac-door-parking" data-door-flight-info-cell="parking">
-                            <strong data-door-parking>{{ card.parking or "-" }}</strong>
-                        </div>
-                        <div class="neoermac-door-tail" data-door-flight-info-cell="tail">
-                            <strong data-door-tail>{{ card.tail or "-" }}</strong>
-                        </div>
-                        <div class="neoermac-door-status" data-door-flight-info-cell="status">
-                            <strong data-door-status>{{ card.status }}</strong>
-                        </div>
-                    </div>
-
-                    <div class="neoermac-door-window-row">
-                        <span class="neoermac-door-window" data-door-window>WINDOW {{ card.window_minutes ~ " MIN" if card.window_minutes is not none else "TBD" }}</span>
-                    </div>
-
-                    <div class="neoermac-door-complete-summary" data-pull-complete-summary {% if not card.pulls_complete %}hidden{% endif %}>
-                        <span data-pull-complete-title>{% if card.pulls_complete %}{{ card.complete_title }}{% endif %}</span>
-                        <strong data-pull-complete-lines>{% if card.pulls_complete %}{{ card.pull_summary }}{% endif %}</strong>
-                        {% if can_edit %}
-                        <button
-                            class="neoermac-menu-link neoermac-menu-link-secondary neoermac-door-edit-pulls"
-                            type="button"
-                            data-pull-edit-toggle
-                            aria-expanded="false"
-                        >EDIT PULLS</button>
-                        {% endif %}
-                    </div>
-                    <p class="neoermac-door-autosave-error" data-pull-autosave-error hidden></p>
-                    <p class="neoermac-door-autosave-status" data-pull-autosave-status aria-live="polite" hidden></p>
-
-                    <div class="neoermac-door-pull-grid" data-pull-details>
-                        {% for pull in pull_fields %}
-                        {% set pull_alert = card.pull_alerts[pull.key] %}
-                        <section
-                            class="neoermac-door-pull-row{% if pull_alert.css_class %} {{ pull_alert.css_class }}{% endif %}"
-                            data-pull-key="{{ pull.key }}"
-                            data-pull-alert-state="{{ pull_alert.state }}"
-                            data-pull-alert-key="{{ pull_alert.key }}"
-                            data-pull-accounted="{{ 'true' if pull_alert.accounted else 'false' }}"
-                            data-pull-due-soon-epoch-ms="{{ pull_alert.due_soon_epoch_ms if pull_alert.due_soon_epoch_ms is not none else '' }}"
-                            data-pull-due-now-epoch-ms="{{ pull_alert.due_now_epoch_ms if pull_alert.due_now_epoch_ms is not none else '' }}"
-                            data-pull-late-epoch-ms="{{ pull_alert.late_epoch_ms if pull_alert.late_epoch_ms is not none else '' }}"
-                            data-pull-window-start-epoch-ms="{{ pull_alert.window_start_epoch_ms if pull_alert.window_start_epoch_ms is not none else '' }}"
-                            data-pull-window-end-epoch-ms="{{ pull_alert.window_end_epoch_ms if pull_alert.window_end_epoch_ms is not none else '' }}"
-                        >
-                            <div class="neoermac-door-planned">
-                                {% set show_base_window = card.window_minutes is not none and card.window_minutes != 0 and card.base_planned[pull.key] and card.base_planned[pull.key] != card.planned[pull.key] %}
-                                <span class="neoermac-label-desktop">PLANNED {{ pull.label }}</span>
-                                <span class="neoermac-label-mobile">{{ pull.short_label }}</span>
-                                <strong data-door-planned="{{ pull.key }}">{{ card.planned[pull.key] or "-" }}</strong>
-                                {% if pull_alert.label %}
-                                <span class="neoermac-pull-alert-badge" data-pull-alert-badge>{{ pull_alert.label }}</span>
-                                {% endif %}
-                                <em
-                                    data-door-base-planned="{{ pull.key }}"
-                                    {% if not show_base_window %}hidden{% endif %}
-                                >{% if show_base_window %}BASE {{ card.base_planned[pull.key] }} +{{ card.window_minutes }} MIN{% endif %}</em>
-                            </div>
-                            {% if can_edit %}
-                            <label class="neoermac-door-actual">
-                                <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
-                                <span class="neoermac-label-mobile">ACTUAL</span>
-                                <input
-                                    class="neoermac-ios-safe-input"
-                                    type="text"
-                                    name="{{ pull.actual_field }}_{{ destination_index }}"
-                                    value="{{ card.actual[pull.key] }}"
-                                    inputmode="numeric"
-                                    autocomplete="off"
-                                    maxlength="5"
-                                    pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
-                                    placeholder="HH:MM"
-                                    data-hhmm-input
-                                    data-pull-key="{{ pull.key }}"
-                                    data-door-destination="{{ card.destination }}"
-                                    data-no-pull-input="{{ pull.key }}-{{ destination_index }}"
-                                    {% if card.no_pull[pull.key] %}disabled{% endif %}
-                                >
-                            </label>
-                            <label class="neoermac-door-toggle neoermac-none-toggle neoermac-large-checkbox-toggle">
-                                <input
-                                    type="checkbox"
-                                    name="{{ pull.no_field }}_{{ destination_index }}"
-                                    data-pull-key="{{ pull.key }}"
-                                    data-door-destination="{{ card.destination }}"
-                                    data-no-pull-toggle="{{ pull.key }}-{{ destination_index }}"
-                                    {% if card.no_pull[pull.key] %}checked{% endif %}
-                                >
-                                <span class="neoermac-label-desktop">NO {{ pull.label }}</span>
-                                <span class="neoermac-label-mobile">NO</span>
-                            </label>
-                            {% else %}
-                            <div class="neoermac-door-actual neoermac-door-static">
-                                <span class="neoermac-label-desktop">ACTUAL {{ pull.label }}</span>
-                                <span class="neoermac-label-mobile">ACTUAL</span>
-                                <strong data-door-static-actual="{{ pull.key }}">{{ "NO " ~ pull.label if card.no_pull[pull.key] else (card.actual[pull.key] or "-") }}</strong>
-                            </div>
-                            {% endif %}
-                        </section>
-                        {% endfor %}
-                    </div>
-                </article>
-                {% endfor %}
-            </div>
-        </form>
-        {% else %}
-        <p class="neoermac-door-empty">NO DESTINATIONS ASSIGNED TO {{ selected_door }}.</p>
-        {% endif %}
+        {% include "neonodes/neoermac/_door_pull_content.html" %}
     </section>
 
     <section class="neoermac-door-panel" aria-label="Tugs assigned">
@@ -472,6 +326,7 @@
 
 {% if selected_door %}
 <script src="{{ url_for('static', filename='js/door_view_alert_clock.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+<script src="{{ url_for('static', filename='js/neoermac_live_integrity.js', v='ermac-integrity-1') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-door-view]");
@@ -869,8 +724,9 @@
         const workspace = state.uld_workspace || state;
         renderRequests(workspace.requests || []);
         renderEvents(workspace.on_the_way_events || []);
-        renderDestinations(state.destinations || []);
+        const complete = renderDestinations(state.destinations || [], state.pull_content_html);
         applyDoorTabAlerts(state.door_tab_alerts || {});
+        return complete;
     };
 
     const setRefreshStatus = (refresh) => {
@@ -901,74 +757,74 @@
         refreshController.setServerStatus(status);
     };
 
-    const renderDestinations = (destinations) => {
-        const rows = new Map(
-            destinations.map((destination) => [
-                String(destination.destination || "").toUpperCase(),
-                destination,
-            ])
-        );
-
-        const cards = new Map();
-        root.querySelectorAll("[data-door-destination-card]").forEach((card) => {
-            const destination = String(card.dataset.doorDestination || "").toUpperCase();
-            cards.set(destination, card);
-            const row = rows.get(destination);
-            if (!row) {
-                return;
-            }
-            applyDoorCardState(card, row, { protectLocal: true });
-        });
-
+    const renderDestinations = (destinations, html) => {
         const list = root.querySelector("[data-door-destination-list]");
-        const protectedCard = Array.from(cards.values()).some(cardHasProtectedInput);
-        if (list && !protectedCard) {
-            destinations
-                .slice()
-                .sort((left, right) => Number(left.order_index) - Number(right.order_index))
-                .forEach((row) => {
-                    const card = cards.get(String(row.destination || "").toUpperCase());
-                    if (card) {
-                        list.appendChild(card);
-                    }
+        if (!list) return false;
+        const rows = new Map(destinations.map(row => [String(row.destination).toUpperCase(), row]));
+        let complete = true;
+        if (typeof html === 'string') {
+            const template = document.createElement('template');
+            template.innerHTML = html;
+            const incoming = Array.from(template.content.querySelectorAll('[data-door-destination-card]'));
+            complete = window.NeoErmacLiveIntegrity.reconcileMembership(
+                list, incoming, card => card.dataset.doorDestination,
+                cardHasProtectedInput,
+                (card) => applyDoorCardState(card, rows.get(card.dataset.doorDestination), {protectLocal: true}),
+            );
+            const form = root.querySelector('[data-door-pull-form]');
+            form.hidden = list.children.length === 0;
+            const empty = root.querySelector('[data-door-no-destinations]');
+            if (empty) empty.hidden = list.children.length !== 0;
+            // Scope visibility follows canonical membership without replacing the
+            // form, its CSRF token, focused controls, or the user's scope choice.
+            const newScope = template.content.querySelector('[data-pull-scope]');
+            const oldScope = form.querySelector('[data-pull-scope]');
+            if (newScope && !oldScope) form.insertBefore(newScope, list);
+            if (!newScope && oldScope && complete) oldScope.remove();
+            Array.from(list.children).forEach((card, index) => {
+                card.dataset.destinationIndex = String(index);
+                card.querySelectorAll('[name]').forEach(control => {
+                    control.name = control.name.replace(/_\d+$/, '_' + index);
                 });
+                card.querySelectorAll('[data-no-pull-input]').forEach(input => { input.dataset.noPullInput = input.dataset.pullKey + '-' + index; });
+                card.querySelectorAll('[data-no-pull-toggle]').forEach(input => { input.dataset.noPullToggle = input.dataset.pullKey + '-' + index; });
+            });
+            form.querySelector('[name="destination_count"]').value = String(list.children.length);
+            window.neoErmacBindPullControls?.();
+        } else {
+            for (const card of list.children) {
+                const row = rows.get(card.dataset.doorDestination);
+                if (row) applyDoorCardState(card, row, {protectLocal: true});
+                if (!row || cardHasProtectedInput(card)) complete = false;
+            }
         }
+        updatePullFormCompleteState();
+        return complete;
     };
 
     window.neoErmacReconcileDoorDestinations = renderDestinations;
-
+    const responseOrder = window.NeoErmacLiveIntegrity.createOrder();
     let currentRevision = root.dataset.doorViewRevision || "";
+    window.neoErmacBeginPullSave = () => {
+        currentRevision = '';
+        return responseOrder.beginSave();
+    };
+    window.neoErmacEndPullSave = ticket => responseOrder.endSave(ticket);
 
     const refreshState = async () => {
-        try {
-            const pollUrl = new URL(stateUrl, window.location.origin);
-            if (currentRevision) {
-                pollUrl.searchParams.set("revision", currentRevision);
-            }
-            const response = await fetch(pollUrl, { cache: "no-store", credentials: "same-origin" });
-            if (!response.ok) {
-                throw new Error("Door View refresh failed.");
-            }
-            const payload = await response.json();
-            if (!payload.ok) {
-                throw new Error("Door View refresh failed.");
-            }
-            currentRevision = payload.revision || currentRevision;
-            if (payload.changed === false) {
-                setRefreshStatus(payload.refresh);
-                return;
-            }
-            if (!payload.state) {
-                throw new Error("Door View refresh failed.");
-            }
-            setRefreshStatus(payload.state.refresh);
-            if (payload.state.refresh?.auto_refresh_enabled === false) {
-                return;
-            }
-            applyState(payload.state);
-        } catch (error) {
-            throw error;
-        }
+        const ticket = responseOrder.beginPoll();
+        const pollUrl = new URL(stateUrl, window.location.origin);
+        if (currentRevision) pollUrl.searchParams.set("revision", currentRevision);
+        const response = await fetch(pollUrl, {cache: "no-store", credentials: "same-origin"});
+        if (!response.ok) throw new Error("Door View refresh failed.");
+        const payload = await response.json();
+        if (!payload.ok) throw new Error("Door View refresh failed.");
+        if (!responseOrder.accepts(ticket)) return;
+        setRefreshStatus(payload.refresh || payload.state?.refresh);
+        if (payload.changed === false) return;
+        if (!payload.state) throw new Error("Door View refresh failed.");
+        // Do not accept a revision for a snapshot that was only partly applied.
+        if (applyState(payload.state)) currentRevision = payload.revision || currentRevision;
     };
 
     const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
@@ -1009,8 +865,10 @@
         mix: "MIX",
     };
     const pendingSaves = new WeakMap();
+    const saveSequences = new WeakMap();
+    const fieldWrites = new WeakMap();
     const hhmmPattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
-    const scopeControl = document.querySelector("[data-pull-scope]");
+    const getScopeControl = () => root.querySelector("[data-pull-scope]");
     const scopeInput = pullForm?.querySelector("[data-pull-scope-value]");
     const operationId = root?.dataset.operationId || "";
     const userId = root?.dataset.userId || "";
@@ -1023,7 +881,7 @@
         if (scopeInput) {
             scopeInput.value = enabled ? "1" : "0";
         }
-        scopeControl?.querySelectorAll("[data-pull-scope-option]").forEach((option) => {
+        getScopeControl()?.querySelectorAll("[data-pull-scope-option]").forEach((option) => {
             const active = (option.dataset.pullScopeOption === "1") === enabled;
             option.setAttribute("aria-pressed", active ? "true" : "false");
         });
@@ -1037,7 +895,7 @@
         }
     };
 
-    if (scopeControl) {
+    if (root) {
         let storedScope = "0";
         try {
             storedScope = window.localStorage.getItem(scopeStorageKey) || "0";
@@ -1045,7 +903,7 @@
             storedScope = "0";
         }
         setPullScope(storedScope === "1", { persist: false });
-        scopeControl.addEventListener("click", (event) => {
+        root.addEventListener("click", (event) => {
             const option = event.target.closest("[data-pull-scope-option]");
             if (option) {
                 setPullScope(option.dataset.pullScopeOption === "1");
@@ -1103,7 +961,7 @@
         })
         .join(" \u00B7 ");
 
-    const applyCardState = (card, cardData, savedPullKey, submitted) => {
+    const applyCardState = (card, cardData, savedPullKey, submitted, applySnapshot = true) => {
         if (!cardData) {
             return;
         }
@@ -1126,6 +984,11 @@
             delete savedToggle.dataset.localDirty;
         }
 
+        if (!applySnapshot) {
+            setCardError(card, "");
+            setCardStatus(card, "SAVED", "saved");
+            return;
+        }
         window.neoErmacApplyDoorCardState?.(
             card,
             {
@@ -1141,9 +1004,11 @@
     };
 
     const savePull = async (card, pullKey) => {
-        if (!saveUrl || !card || !pullKey) {
-            return;
-        }
+        if (!saveUrl || !card || !pullKey) return;
+        const fields = fieldWrites.get(card) || {};
+        const fieldWrite = fields[pullKey] || (fields[pullKey] = {running: false, queued: false});
+        fieldWrites.set(card, fields);
+        if (fieldWrite.running) { fieldWrite.queued = true; return; }
         const input = findActualInput(card, pullKey);
         const toggle = findNoPullToggle(card, pullKey);
         if (!input || !toggle) {
@@ -1173,6 +1038,20 @@
             no_pull: body.get('no_pull') === '1',
         };
 
+        const sequences = saveSequences.get(card) || {};
+        const sequence = (sequences[pullKey] || 0) + 1;
+        sequences[pullKey] = sequence;
+        saveSequences.set(card, sequences);
+        const ticket = window.neoErmacBeginPullSave();
+        fieldWrite.running = true;
+        fieldWrite.queued = false;
+        card.dataset.pendingPullSaves = String(Number(card.dataset.pendingPullSaves || 0) + 1);
+        const finish = () => {
+            fieldWrite.running = false;
+            card.dataset.pendingPullSaves = String(Number(card.dataset.pendingPullSaves) - 1);
+            if (Number(card.dataset.pendingPullSaves) === 0) card.classList.remove("is-pull-saving");
+            return window.neoErmacEndPullSave(ticket);
+        };
         card.classList.add("is-pull-saving");
         setCardError(card, "");
         setCardStatus(card, "SAVING", "saving");
@@ -1194,24 +1073,32 @@
                 throw new Error(serverMessage || "Pull save failed.");
             }
         } catch (error) {
-            setCardError(card, error.message || "Pull save failed.");
-            setCardStatus(card, "", "");
-            card.classList.remove("is-pull-saving");
+            finish();
+            fieldWrite.queued = false; // Never replay a rejected write.
+            if (sequences[pullKey] === sequence) {
+                setCardError(card, error.message || "Pull save failed.");
+                setCardStatus(card, "", "");
+            }
             return;
         }
 
-        card.classList.remove("is-pull-saving");
+        const applySnapshot = finish();
+        if (sequences[pullKey] !== sequence) return;
         try {
-            applyCardState(card, payload.card, pullKey, submitted);
-            if (payload.state?.destinations) {
+            applyCardState(card, payload.card, pullKey, submitted, applySnapshot);
+            if (applySnapshot && payload.state?.destinations) {
                 window.neoErmacReconcileDoorDestinations?.(payload.state.destinations);
             }
-            if (payload.state?.door_tab_alerts) {
+            if (applySnapshot && payload.state?.door_tab_alerts) {
                 window.neoErmacApplyDoorTabAlerts?.(payload.state.door_tab_alerts);
             }
         } catch (_reconciliationError) {
             setCardError(card, "");
             setCardStatus(card, "SAVED - VIEW WILL REFRESH", "saved");
+        }
+        if (fieldWrite.queued && (Boolean(toggle.checked) !== submitted.no_pull
+            || (toggle.checked ? '' : input.value.trim()) !== submitted.value)) {
+            await savePull(card, pullKey);
         }
     };
 
@@ -1245,66 +1132,75 @@
         updatePullFormCompleteState();
     });
 
-    document.querySelectorAll("[data-hhmm-input]").forEach((input) => {
-        input.addEventListener("input", () => {
-            input.dataset.localDirty = "true";
-            const digits = input.value.replace(/\D/g, "").slice(0, 4);
-            if (digits.length >= 3) {
-                input.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
-            } else {
-                input.value = digits;
-            }
-            if (!input.value || hhmmPattern.test(input.value)) {
-                const card = input.closest("[data-door-destination-card]");
-                if (card) {
-                    setCardError(card, "");
+    const bindPullControls = () => {
+        setPullScope(scopeInput?.value === '1', {persist: false});
+        root.querySelectorAll("[data-hhmm-input]").forEach((input) => {
+            if (input.dataset.pullBound) return;
+            input.dataset.pullBound = 'true';
+            input.addEventListener("input", () => {
+                input.dataset.localDirty = "true";
+                const digits = input.value.replace(/\D/g, "").slice(0, 4);
+                if (digits.length >= 3) {
+                    input.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+                } else {
+                    input.value = digits;
                 }
-                scheduleSave(input);
-            } else if (input.value.length >= 5) {
-                const card = input.closest("[data-door-destination-card]");
-                if (card) {
-                    setCardError(card, "Use HH:MM.");
-                    setCardStatus(card, "", "");
+                if (!input.value || hhmmPattern.test(input.value)) {
+                    const card = input.closest("[data-door-destination-card]");
+                    if (card) {
+                        setCardError(card, "");
+                    }
+                    scheduleSave(input);
+                } else if (input.value.length >= 5) {
+                    const card = input.closest("[data-door-destination-card]");
+                    if (card) {
+                        setCardError(card, "Use HH:MM.");
+                        setCardStatus(card, "", "");
+                    }
                 }
-            }
+            });
+
+            input.addEventListener("blur", () => {
+                if (!input.value || hhmmPattern.test(input.value)) {
+                    scheduleSave(input, 0);
+                } else {
+                    const card = input.closest("[data-door-destination-card]");
+                    if (card) {
+                        setCardError(card, "Use HH:MM.");
+                        setCardStatus(card, "", "");
+                    }
+                }
+            });
         });
 
-        input.addEventListener("blur", () => {
-            if (!input.value || hhmmPattern.test(input.value)) {
-                scheduleSave(input, 0);
-            } else {
-                const card = input.closest("[data-door-destination-card]");
-                if (card) {
-                    setCardError(card, "Use HH:MM.");
-                    setCardStatus(card, "", "");
+        root.querySelectorAll("[data-no-pull-toggle]").forEach((toggle) => {
+            if (toggle.dataset.pullBound) return;
+            toggle.dataset.pullBound = 'true';
+            const input = findActualInput(toggle.closest('[data-door-destination-card]'), toggle.dataset.pullKey);
+            if (!input) {
+                return;
+            }
+
+            const syncInput = () => {
+                input.disabled = toggle.checked;
+                if (toggle.checked) {
+                    input.value = "";
                 }
-            }
-        });
-    });
+            };
 
-    document.querySelectorAll("[data-no-pull-toggle]").forEach((toggle) => {
-        const input = document.querySelector(`[data-no-pull-input="${toggle.dataset.noPullToggle}"]`);
-        if (!input) {
-            return;
-        }
-
-        const syncInput = () => {
-            input.disabled = toggle.checked;
-            if (toggle.checked) {
-                input.value = "";
-            }
-        };
-
-        toggle.addEventListener("change", () => {
-            toggle.dataset.localDirty = "true";
+            toggle.addEventListener("change", () => {
+                toggle.dataset.localDirty = "true";
+                syncInput();
+                const card = toggle.closest("[data-door-destination-card]");
+                if (card) {
+                    savePull(card, toggle.dataset.pullKey);
+                }
+            });
             syncInput();
-            const card = toggle.closest("[data-door-destination-card]");
-            if (card) {
-                savePull(card, toggle.dataset.pullKey);
-            }
         });
-        syncInput();
-    });
+    };
+    window.neoErmacBindPullControls = bindPullControls;
+    bindPullControls();
 
     updatePullFormCompleteState();
 })();

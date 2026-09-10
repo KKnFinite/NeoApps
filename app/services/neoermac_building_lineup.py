@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 
-from sqlalchemy import or_
+from flask import current_app
+from itsdangerous import BadSignature, URLSafeSerializer
+from sqlalchemy import or_, select, text
 
 from app.extensions import db
 from app.models import (
+    Gateway,
     MasterFlightSchedule,
     NeoErmacBuildingLineup,
     SortDateMission,
@@ -84,6 +87,49 @@ BELT_COLOR_KEYS = {
 DEFAULT_PULL_TIMES = {"pure": "--", "mix": "--"}
 
 
+class LineupConflict(ValueError):
+    """A slot no longer has the value displayed by this editor."""
+
+
+def lineup_original(gateway, field, value):
+    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-lineup-slot-v1").dumps(
+        [gateway.id, field, normalize_destination(value)]
+    )
+
+
+def _original_value(gateway, field, token):
+    try:
+        original = URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-lineup-slot-v1").loads(token or "")
+    except BadSignature:
+        raise LineupConflict("Lineup form is outdated. Refresh before saving.") from None
+    if not isinstance(original, list) or len(original) != 3 or original[:2] != [gateway.id, field]:
+        raise LineupConflict("Lineup form is outdated. Refresh before saving.")
+    return original[2]
+
+
+def _lock_lineup(gateway):
+    # Same reservation as Door pulls, including first-use rows and rollups.
+    if db.engine.dialect.name == "sqlite":
+        db.session.execute(text("UPDATE gateways SET id=id WHERE id=:id"), {"id": gateway.id})
+    else:
+        db.session.execute(select(Gateway.id).where(Gateway.id == gateway.id).with_for_update())
+
+
+def building_lineup_state_payload(gateway):
+    rows = get_building_lineup_rows(gateway, initialize=False)
+    return {
+        "slots": {
+            lineup_field_name(row, field): {
+                "destination": normalize_destination(getattr(row, field)),
+                "original": lineup_original(gateway, lineup_field_name(row, field), getattr(row, field)),
+            }
+            for row in rows for field in DESTINATION_FIELDS
+        },
+        "destination_choices": get_departure_destination_choices(gateway),
+        "pull_times": get_departure_destination_pull_times(gateway),
+    }
+
+
 @dataclass(frozen=True)
 class BuildingLineupLoadResult:
     rows: list
@@ -94,14 +140,17 @@ def get_outbound_door_options():
     return OUTBOUND_DOOR_OPTIONS
 
 
-def get_building_lineup_rows(gateway, *, initialize=True):
-    return load_building_lineup_rows(gateway, initialize=initialize).rows
+def get_building_lineup_rows(gateway, *, initialize=True, for_update=False):
+    return load_building_lineup_rows(gateway, initialize=initialize, for_update=for_update).rows
 
 
-def load_building_lineup_rows(gateway, *, initialize=True):
+def load_building_lineup_rows(gateway, *, initialize=True, for_update=False):
+    query = NeoErmacBuildingLineup.query.filter_by(gateway_id=gateway.id)
+    if for_update:
+        query = query.populate_existing()
     existing_rows = {
         row.runout_key: row
-        for row in NeoErmacBuildingLineup.query.filter_by(gateway_id=gateway.id).all()
+        for row in query.all()
     }
 
     rows = []
@@ -193,13 +242,24 @@ def get_destination_pull_times(gateway, destination):
 
 
 def save_building_lineup(gateway, form_data):
-    rows = get_building_lineup_rows(gateway)
+    _lock_lineup(gateway)
+    rows = get_building_lineup_rows(gateway, for_update=True)
     destination_choices = set(get_departure_destination_choices(gateway))
 
     for row in rows:
         normalized_values = {}
         for field_name in DESTINATION_FIELDS:
-            value = normalize_destination(form_data.get(lineup_field_name(row, field_name)))
+            field = lineup_field_name(row, field_name)
+            current = normalize_destination(getattr(row, field_name))
+            normalized_values[field_name] = current
+            if field not in form_data:
+                continue
+            value = normalize_destination(form_data.get(field))
+            original = _original_value(gateway, field, form_data.get(f"original_{field}"))
+            if value == original:
+                continue  # Displayed but unchanged is not an intentional clear.
+            if current != original:
+                raise LineupConflict("This lineup slot changed since it was displayed. Refresh before saving.")
             if value and value not in destination_choices:
                 raise ValueError(f"{value} is not an available master departure destination.")
             normalized_values[field_name] = value
@@ -311,12 +371,13 @@ def get_linked_building_lineup_doors(
     )
 
 
-def save_building_lineup_destination(gateway, field_token, destination):
+def save_building_lineup_destination(gateway, field_token, destination, *, expected_original=None):
     field_token = str(field_token or "").strip()
     if not field_token:
         raise ValueError("Building Lineup destination field is required.")
 
-    rows = get_building_lineup_rows(gateway)
+    _lock_lineup(gateway)
+    rows = get_building_lineup_rows(gateway, for_update=True)
     destination_choices = set(get_departure_destination_choices(gateway))
     value = normalize_destination(destination)
     if value and value not in destination_choices:
@@ -325,6 +386,9 @@ def save_building_lineup_destination(gateway, field_token, destination):
     for row in rows:
         for field_name in DESTINATION_FIELDS:
             if lineup_field_name(row, field_name) == field_token:
+                original = _original_value(gateway, field_token, expected_original)
+                if normalize_destination(getattr(row, field_name)) != original:
+                    raise LineupConflict("This lineup slot changed since it was displayed. Refresh before saving.")
                 normalized_values = {
                     candidate: normalize_destination(getattr(row, candidate, None))
                     for candidate in DESTINATION_FIELDS
@@ -338,6 +402,7 @@ def save_building_lineup_destination(gateway, field_token, destination):
                 return {
                     "field": field_token,
                     "destination": value,
+                    "original": lineup_original(gateway, field_token, value),
                     "pull_times": get_destination_pull_times(gateway, value),
                 }
 

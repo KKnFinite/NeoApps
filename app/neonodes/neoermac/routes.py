@@ -20,6 +20,9 @@ from app.services.access_control import (
     get_current_gateway,
 )
 from app.services.neoermac_building_lineup import (
+    LineupConflict,
+    lineup_original,
+    building_lineup_state_payload,
     DESTINATION_FIELDS,
     get_building_lineup_rows,
     get_destination_pull_times,
@@ -247,7 +250,7 @@ def building_lineup():
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
-            return _building_lineup_response(gateway, access, status_code=400)
+            return _building_lineup_response(gateway, access, status_code=409 if isinstance(exc, LineupConflict) else 400)
 
         db.session.commit()
         flash("BUILDING LINEUP SAVED.", "success")
@@ -283,10 +286,11 @@ def building_lineup_destination_autosave():
             gateway,
             request.form.get("field", ""),
             request.form.get("destination", ""),
+            expected_original=request.form.get("original"),
         )
     except ValueError as exc:
         db.session.rollback()
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), 409 if isinstance(exc, LineupConflict) else 400
 
     db.session.commit()
     return jsonify({"ok": True, **result})
@@ -300,11 +304,13 @@ def building_lineup_state():
     if not access["can_view"]:
         return jsonify({"ok": False, "error": "Access denied."}), 403
     operation = current_upcoming_pulls_operation(gateway)
-    revision = upcoming_pulls_revision(gateway, operation=operation)
+    revision = upcoming_pulls_revision(gateway, operation=operation, include_lineup_choices=True)
+    changed = str(request.args.get("revision") or "") != revision
     return jsonify(
         {
             "ok": True,
-            "changed": str(request.args.get("revision") or "") != revision,
+            "changed": changed,
+            **({"state": building_lineup_state_payload(gateway)} if changed else {}),
             "revision": revision,
             "refresh": neoermac_live_refresh_status(
                 gateway, NEOERMAC_BUILDING_LINEUP_REFRESH_KEY
@@ -614,6 +620,8 @@ def door_view_state():
             revision=revision,
             initialize_lineup=False,
             bundle=bundle,
+            render_pull_content=True,
+            can_edit=access["can_edit"],
         )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -768,12 +776,13 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
         empty_pull_times=get_destination_pull_times(gateway, ""),
         destination_fields=DESTINATION_FIELDS,
         field_name=lineup_field_name,
+        lineup_original=lineup_original,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         refresh_status=neoermac_live_refresh_status(
             gateway, NEOERMAC_BUILDING_LINEUP_REFRESH_KEY
         ),
-        building_lineup_revision=upcoming_pulls_revision(gateway),
+        building_lineup_revision=upcoming_pulls_revision(gateway, include_lineup_choices=True),
     )
     return response, status_code
 

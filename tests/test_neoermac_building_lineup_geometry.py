@@ -1,4 +1,5 @@
 import unittest
+from tests.neoermac_lineup_forms import lineup_form
 from datetime import time
 
 from app import create_app
@@ -149,6 +150,7 @@ class NeoErmacBuildingLineupGeometryTest(unittest.TestCase):
             self.gateway,
             f"lineup_{runout_key}_{field_name}",
             destination,
+            expected_original=lineup_form(self.gateway, {'field': f'lineup_{runout_key}_{field_name}'})['original'],
         )
 
 
