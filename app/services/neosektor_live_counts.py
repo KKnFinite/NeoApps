@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
@@ -294,6 +294,30 @@ class NeoSektorOperationalStateBundle:
     @property
     def persistent_state_changed(self):
         return self._change_tracker.changed
+
+    def conflict_read_only_snapshot(self):
+        """Copy an untouched locked Neo bundle for pre-mutation conflicts only.
+
+        Initialization/mirror preparation can flush repairs before validation;
+        the tracker detects those even after ORM dirty history is cleared.
+        Such cases (and Google-primary state) must reload after rollback.
+        """
+        if (self.integration_mode == "google_primary" or self.persistent_state_changed
+                or db.session.new or db.session.deleted
+                or any(db.session.is_modified(row) for row in db.session.dirty)):
+            return None
+        waves = _read_only_waves(self.waves)
+        sort_state = _copy_sort_state(self.sort_state, self.gateway, self.sort_date, self.sort_name)
+        return replace(
+            self, initialize=False, sort_state=sort_state, routing_sort_state=sort_state,
+            ballmat_wave_counts=_read_only_wave_counts(self.ballmat_wave_counts),
+            waves=waves, timer_rows=waves, ballmats=_read_only_ballmats(self.ballmats),
+            open_bays=_read_only_open_bays(self.open_bays),
+            bay_statuses=_read_only_bay_statuses(self.bay_statuses),
+            driver_routes=(_driver_routes_from_rows(self.driver_routes)
+                           if self.driver_routes is not None else None),
+            _change_tracker=_PersistentStateChangeTracker(),
+        )
 
     def resolved_refresh_status(self):
         if self.refresh_status is None:

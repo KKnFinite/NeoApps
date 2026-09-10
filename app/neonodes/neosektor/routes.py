@@ -502,9 +502,9 @@ def ballmat_update():
         if "spotter" in payload or request.args.get("operator") == "1":
             state = ballmat_operator_state_payload(gateway, selected_side=selected_side, bundle=bundle)
     except BallmatModeConflict as exc:
-        db.session.rollback()
-        return jsonify({"ok": False, "error": str(exc), "state": ballmat_operator_state_payload(
-            gateway, selected_side=selected_side, initialize=False)}), 409
+        state = _ballmat_conflict_state(bundle, lambda **kwargs: ballmat_operator_state_payload(
+            gateway, selected_side=selected_side, **kwargs))
+        return jsonify({"ok": False, "error": str(exc), "state": state}), 409
     except NeoSektorGoogleError as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 502
@@ -559,12 +559,26 @@ def _ballmat_mode_response(side, *, conductor):
         _commit_neosektor_update_and_mirror(bundle, before_values, warning_pending)
         return jsonify({"ok": True, "state": state})
     except BallmatModeConflict as exc:
-        db.session.rollback()
-        return jsonify({"ok": False, "error": str(exc), "state": state_for(initialize=False),
+        state = _ballmat_conflict_state(bundle, state_for)
+        return jsonify({"ok": False, "error": str(exc), "state": state,
                         "confirmation_required": isinstance(exc, BallmatModeConfirmationRequired)}), 409
     except (ValueError, NeoSektorGoogleError) as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+def _ballmat_conflict_state(bundle, state_for):
+    # All BallmatModeConflict checks precede command assignments. Render copies:
+    # canonical rollups/timers/routes must never dirty or flush the locked ORM
+    # rows while composing a rejection. Always release the lock, even on error.
+    try:
+        with db.session.no_autoflush:
+            snapshot = bundle.conflict_read_only_snapshot()
+            if snapshot is not None:
+                return state_for(bundle=snapshot)
+    finally:
+        db.session.rollback()
+    return state_for(initialize=False)
 
 
 @bp.route("/discharge")
