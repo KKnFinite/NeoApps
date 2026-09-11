@@ -260,7 +260,6 @@ def save_building_lineup(gateway, form_data):
             if value and value not in destination_choices:
                 raise ValueError(f"{value} is not an available master departure destination.")
             normalized_values[field_name] = value
-        _validate_physical_belt_side_destinations(row, normalized_values)
         for field_name, value in normalized_values.items():
             setattr(row, field_name, value or None)
 
@@ -387,12 +386,6 @@ def save_building_lineup_destination(gateway, field_token, destination, *, expec
                 original = _original_value(gateway, field_token, expected_original)
                 if normalize_destination(getattr(row, field_name)) != original:
                     raise LineupConflict("This lineup slot changed since it was displayed. Refresh before saving.")
-                normalized_values = {
-                    candidate: normalize_destination(getattr(row, candidate, None))
-                    for candidate in DESTINATION_FIELDS
-                }
-                normalized_values[field_name] = value
-                _validate_physical_belt_side_destinations(row, normalized_values)
                 setattr(row, field_name, value or None)
                 db.session.flush()
                 operation, missions = _recompute_current_sort_door_pull_aggregates(gateway, rows)
@@ -505,22 +498,6 @@ def building_lineup_slot_descriptors(row, include_blank=False):
             }
         )
     return tuple(descriptors)
-
-
-def _validate_physical_belt_side_destinations(row, values):
-    for belt_number in (1, 2):
-        for side in ("east", "west"):
-            side_values = [
-                values[field_name]
-                for candidate_belt, candidate_side, _slot_number, field_name
-                in BUILDING_LINEUP_SLOT_LAYOUT
-                if candidate_belt == belt_number and candidate_side == side
-            ]
-            if side_values[0] and side_values[0] == side_values[1]:
-                raise ValueError(
-                    f"{side_values[0]} cannot fill both destination slots on "
-                    f"{row.belt_group_label} Belt {belt_number} {side.title()}."
-                )
 
 
 def normalize_destination(destination):

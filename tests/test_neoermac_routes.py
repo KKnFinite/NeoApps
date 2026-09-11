@@ -4039,6 +4039,65 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(saved.east_destination_1, "ONT")
         self.assertEqual(saved.west_destination_1, "PHX")
 
+    def test_building_lineup_autosave_accepts_repeated_same_side_destination(self):
+        self._add_master_departure("UPS415", "CLE")
+        self._assign_lineup_destination("runout_2", "east_destination_1", "CLE")
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+
+        response = self.client.post(
+            "/neoermac/building-lineup/destination",
+            data=lineup_form(self.gateway, {
+                "field": "lineup_runout_2_east_destination_1_slot_2",
+                "destination": "CLE",
+            }),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["ok"])
+        self.assertEqual(response.get_json()["destination"], "CLE")
+        db.session.expire_all()
+        row = NeoErmacBuildingLineup.query.filter_by(
+            gateway_id=self.gateway.id, runout_key="runout_2",
+        ).one()
+        self.assertEqual((row.east_destination_1, row.east_destination_1_slot_2), ("CLE", "CLE"))
+
+    def test_building_lineup_full_save_repeats_but_door_cards_remain_unique(self):
+        self._add_master_departure("UPS416", "CLE")
+        self._add_operation_departure("UPS416", "CLE")
+        db.session.commit()
+        self._login_approved_user(role="simulator")
+        fields = {
+            "lineup_runout_1_west_destination_1": "CLE",
+            "lineup_runout_1_west_destination_2": "CLE",
+            "lineup_runout_2_east_destination_1": "CLE",
+            "lineup_runout_2_east_destination_1_slot_2": "CLE",
+            "lineup_runout_2_west_destination_1": "CLE",
+            "lineup_runout_2_west_destination_1_slot_2": "CLE",
+        }
+        response = self.client.post(
+            "/neoermac/building-lineup", data=lineup_form(self.gateway, fields),
+        )
+        self.assertEqual(response.status_code, 302)
+        db.session.expire_all()
+        for runout_key in ("runout_1", "runout_2"):
+            row = NeoErmacBuildingLineup.query.filter_by(
+                gateway_id=self.gateway.id, runout_key=runout_key,
+            ).one()
+            prefix = f"lineup_{runout_key}_"
+            for field, destination in fields.items():
+                if field.startswith(prefix):
+                    self.assertEqual(getattr(row, field.removeprefix(prefix)), destination)
+        for door in ("D6", "D9"):
+            with self.subTest(door=door):
+                page = self.client.get(f"/neoermac/door-view?door={door}")
+                self.assertEqual(page.status_code, 200)
+                cards = re.findall(
+                    rb'<article\b[^>]*data-door-destination-card[^>]*>', page.data,
+                )
+                self.assertEqual(len(cards), 1)
+                self.assertIn(b'data-door-destination="CLE"', cards[0])
+
     def test_building_lineup_destination_autosave_can_clear_destination(self):
         self._add_master_departure("UPS414", "SDF")
         self._assign_lineup_destination("green_runout", "east_destination_1", "SDF")

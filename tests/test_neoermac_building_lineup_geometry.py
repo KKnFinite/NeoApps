@@ -161,11 +161,10 @@ class NeoErmacBuildingLineupGeometryTest(unittest.TestCase):
         self.assertNotIn("ONT", get_building_lineup_destinations_for_door(self.gateway, "D4"))
         self.assertNotIn("ONT2", get_building_lineup_destinations_for_door(self.gateway, "D34"))
 
-    def test_duplicate_is_rejected_only_within_one_physical_belt_side(self):
+    def test_duplicate_is_allowed_within_one_physical_belt_side(self):
         self._save("green_runout", "east_destination_1", "ONT")
 
-        with self.assertRaisesRegex(ValueError, "both destination slots"):
-            self._save("green_runout", "east_destination_1_slot_2", "ONT")
+        self._save("green_runout", "east_destination_1_slot_2", "ONT")
 
         self._save("green_runout", "east_destination_2", "ONT")
         self._save("green_runout", "west_destination_1", "ONT")
@@ -173,6 +172,9 @@ class NeoErmacBuildingLineupGeometryTest(unittest.TestCase):
 
         doors = get_building_lineup_doors_by_destination(self.gateway)
         self.assertEqual(doors["ONT"], ("D1", "D4"))
+        destinations = get_building_lineup_destinations_for_door(self.gateway, "D1")
+        self.assertEqual(tuple(destinations), ("ONT",))
+        self.assertEqual(len(destinations["ONT"]), 3)
 
     def test_distinct_operational_destinations_share_one_belt_side(self):
         self._save("green_runout", "east_destination_1", "ONT1")
