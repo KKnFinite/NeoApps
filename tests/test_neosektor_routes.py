@@ -4142,11 +4142,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
             return load
 
         paths = (
-            ("/neosektor/live-counts/state", 10),
+            ("/neosektor/live-counts/state", 9),
             ("/neosektor/driver-routing/state", 10),
             ("/neosektor/tunnel-conductor/state", 10),
-            ("/neosektor/ballmat/state?side=east", 10),
-            ("/neosektor/ballmat/state?side=west", 10),
+            ("/neosektor/ballmat/state?side=east", 9),
+            ("/neosektor/ballmat/state?side=west", 9),
         )
         for path, select_budget in paths:
             with self.subTest(path=path):
@@ -4458,11 +4458,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
         )
         self.client.get("/neosektor/live-counts")
         for path, budget in (
-            ("/neosektor/live-counts/state", 9),
+            ("/neosektor/live-counts/state", 8),
             ("/neosektor/driver-routing/state", 9),
             ("/neosektor/tunnel-conductor/state", 9),
-            ("/neosektor/ballmat/state?side=east", 9),
-            ("/neosektor/ballmat/state?side=west", 9),
+            ("/neosektor/ballmat/state?side=east", 8),
+            ("/neosektor/ballmat/state?side=west", 8),
         ):
             with self.subTest(path=path):
                 initial = self.client.get(path).get_json()

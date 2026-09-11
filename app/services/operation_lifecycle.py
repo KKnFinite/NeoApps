@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 
+from flask import has_request_context, request
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.services.operator_errors import safe_mutation_error
@@ -311,7 +313,17 @@ def _eligible_operation_windows(
 
 
 def _sort_settings_for_gateway(gateway):
-    settings = SortTimelineSettings.query.filter_by(gateway_id=gateway.id).first()
+    query = SortTimelineSettings.query.filter_by(gateway_id=gateway.id)
+    if (
+        has_request_context()
+        and request.method == "GET"
+        and request.endpoint in {"neosektor.live_counts_state", "neosektor.ballmat_state"}
+    ):
+        # These polls need the parent's sort collection for lifecycle selection.
+        # Load that same relationship in one round trip, preserving parent/FK
+        # scope and missing defaults. No cached selection or weekday semantics.
+        query = query.options(joinedload(SortTimelineSettings.sort_settings))
+    settings = query.first()
     if not settings:
         return {}
     return {
