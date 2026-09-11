@@ -252,6 +252,20 @@ def current_operations_for_gateway(gateway, now=None):
             (gateway.id, gateway.code, current_date),
             resolve_operations,
         )
+    elif (
+        has_request_context()
+        and request.method in {"GET", "POST"}
+        and request.endpoint in {"neosektor.discharge", "neosektor.discharge_send"}
+    ):
+        # Queue rendering and response refresh inspect the same raw candidates.
+        # Commit/rollback clears this existing request cache: a send response
+        # resolves anew AFTER commit, never reusing the pre-write sort snapshot.
+        # Window/current selection is still evaluated below on every call.
+        operations = request_cached(
+            "gateway.discharge_operation_candidates",
+            (gateway.id, gateway.code, current_date),
+            resolve_operations,
+        )
     else:
         operations = resolve_operations()
     visible_operations = [

@@ -203,7 +203,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         original_cached = gateway_matrix.request_cached
 
         def prior_candidates(namespace, key, resolve):
-            if namespace == "gateway.initial_page_operation_candidates":
+            if namespace in {"gateway.initial_page_operation_candidates", "gateway.discharge_operation_candidates"}:
                 return resolve()
             return original_cached(namespace, key, resolve)
 
@@ -237,7 +237,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         for slug, before_budget, after_budget in (
             ("", 9, 9), ("live-counts", 29, 21), ("tunnel-conductor", 23, 21),
             ("ebm", 24, 21), ("wbm", 24, 21), ("driver-routing", 22, 20),
-            ("discharge", 17, 17), ("settings", 11, 11),
+            ("discharge", 17, 16), ("settings", 11, 11),
         ):
             path = "/neosektor" + ("/" + slug if slug else "")
             with self.subTest(page=slug or "dashboard"):
@@ -253,7 +253,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     after, after_count, sql = measured(path)
                 self.assertEqual(after, before)
                 self.assertEqual(after, uncached)
-                reused = slug in {"tunnel-conductor", "ebm", "wbm", "driver-routing"}
+                reused = slug in {"tunnel-conductor", "ebm", "wbm", "driver-routing", "discharge"}
                 self.assertEqual(uncached_count - after_count, int(reused))
                 if reused:
                     candidates = lambda rows: [s for s in rows if
