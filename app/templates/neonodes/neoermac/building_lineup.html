@@ -64,8 +64,8 @@
         <div class="neoermac-runout-list">
             {% for row in rows %}
             <article class="neoermac-runout-card neoermac-belt-group" data-door-pair="{{ row.belt_group_label }}">
-                <header class="neoermac-sequence-door neoermac-door-pair-boundary neoermac-door-pair-boundary--top" data-door-position="top" data-facing-side="east" data-supervising-door="{{ row.door_start }}">
-                    <span>{{ row.door_start }}</span>
+                <header class="neoermac-sequence-door neoermac-door-pair-boundary neoermac-door-pair-boundary--top" data-door-position="top" data-facing-side="east" data-supervising-door="{{ row.east_door }}">
+                    <span>{{ row.east_door }}</span>
                 </header>
                 <div class="neoermac-belt-grid-scroll">
                     <div class="neoermac-runout-slots neoermac-belt-grid" aria-label="{{ row.belt_group_label }} belt assignments">
@@ -83,8 +83,8 @@
                         {% endfor %}
                     </div>
                 </div>
-                <footer class="neoermac-sequence-door neoermac-door-pair-boundary neoermac-door-pair-boundary--bottom" data-door-position="bottom" data-facing-side="west" data-supervising-door="{{ row.door_end }}">
-                    <span>{{ row.door_end }}</span>
+                <footer class="neoermac-sequence-door neoermac-door-pair-boundary neoermac-door-pair-boundary--bottom" data-door-position="bottom" data-facing-side="west" data-supervising-door="{{ row.west_door }}">
+                    <span>{{ row.west_door }}</span>
                 </footer>
             </article>
             {% endfor %}

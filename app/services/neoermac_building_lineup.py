@@ -31,6 +31,7 @@ OUTBOUND_DOOR_OPTIONS = (
     "D37",
 )
 
+# Physical tuple order: runout key, EAST door, WEST door, belt names.
 BUILDING_LINEUP_BELT_GROUPS = (
     ("green_runout", OUTBOUND_DOOR_OPTIONS[0], OUTBOUND_DOOR_OPTIONS[1], ("WHT/BLU", "ORG")),
     ("runout_1", OUTBOUND_DOOR_OPTIONS[1], OUTBOUND_DOOR_OPTIONS[2], ("WHT/RED", "WHT/WHT")),
@@ -157,8 +158,8 @@ def load_building_lineup_rows(gateway, *, initialize=True, for_update=False):
 
     rows = []
     persistent_state_changed = False
-    for runout_key, start_door, end_door, belt_names in BUILDING_LINEUP_BELT_GROUPS:
-        runout_name = f"{start_door}-{end_door} Belts"
+    for runout_key, east_door, west_door, belt_names in BUILDING_LINEUP_BELT_GROUPS:
+        runout_name = f"{east_door}-{west_door} Belts"
         row = existing_rows.get(runout_key)
         if not row:
             row = NeoErmacBuildingLineup(
@@ -172,7 +173,7 @@ def load_building_lineup_rows(gateway, *, initialize=True, for_update=False):
         elif initialize and row.runout_name != runout_name:
             row.runout_name = runout_name
             persistent_state_changed = True
-        apply_belt_display_metadata(row, start_door, end_door, belt_names)
+        apply_belt_display_metadata(row, east_door, west_door, belt_names)
         rows.append(row)
 
     if initialize and persistent_state_changed:
@@ -412,11 +413,11 @@ def lineup_field_name(row, field_name):
     return f"lineup_{row.runout_key}_{field_name}"
 
 
-def apply_belt_display_metadata(row, start_door, end_door, belt_names):
+def apply_belt_display_metadata(row, east_door, west_door, belt_names):
     first_belt, second_belt = belt_names
-    row.door_start, row.door_end = _ordered_doors(start_door, end_door)
+    row.east_door, row.west_door = east_door, west_door
     row.belt_names = belt_names
-    row.belt_group_label = f"{row.door_start}-{row.door_end}"
+    row.belt_group_label = f"{row.east_door}-{row.west_door}"
     row.belt_blocks = (
         {
             "belt_number": 1,
@@ -427,7 +428,7 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
                 {
                     "side": "east",
                     "label": "EAST",
-                    "door": row.door_start,
+                    "door": row.east_door,
                     "slots": (
                         {"field": "east_destination_1", "placeholder": "DEST 1"},
                         {"field": "east_destination_1_slot_2", "placeholder": "DEST 2"},
@@ -436,7 +437,7 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
                 {
                     "side": "west",
                     "label": "WEST",
-                    "door": row.door_end,
+                    "door": row.west_door,
                     "slots": (
                         {"field": "west_destination_1", "placeholder": "DEST 1"},
                         {"field": "west_destination_1_slot_2", "placeholder": "DEST 2"},
@@ -453,7 +454,7 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
                 {
                     "side": "east",
                     "label": "EAST",
-                    "door": row.door_start,
+                    "door": row.east_door,
                     "slots": (
                         {"field": "east_destination_2", "placeholder": "DEST 1"},
                         {"field": "east_destination_2_slot_2", "placeholder": "DEST 2"},
@@ -462,7 +463,7 @@ def apply_belt_display_metadata(row, start_door, end_door, belt_names):
                 {
                     "side": "west",
                     "label": "WEST",
-                    "door": row.door_end,
+                    "door": row.west_door,
                     "slots": (
                         {"field": "west_destination_2", "placeholder": "DEST 1"},
                         {"field": "west_destination_2_slot_2", "placeholder": "DEST 2"},
@@ -484,7 +485,7 @@ def building_lineup_slot_descriptors(row, include_blank=False):
         if not destination and not include_blank:
             continue
         belt_name = row.belt_names[belt_number - 1]
-        supervising_door = row.door_start if side == "east" else row.door_end
+        supervising_door = row.east_door if side == "east" else row.west_door
         descriptors.append(
             {
                 "runout_key": row.runout_key,
@@ -520,10 +521,6 @@ def _validate_physical_belt_side_destinations(row, values):
                     f"{side_values[0]} cannot fill both destination slots on "
                     f"{row.belt_group_label} Belt {belt_number} {side.title()}."
                 )
-
-
-def _ordered_doors(first, second):
-    return tuple(sorted((first, second), key=lambda door: _door_number(door) or 0))
 
 
 def normalize_destination(destination):

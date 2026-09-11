@@ -29,14 +29,14 @@ def _door_number(door):
 BUILDING_LINEUP_PARKING_BELT_PAIRS = tuple(
     {
         "runout_key": runout_key,
-        "pair_key": f"{_door_number(start_door)}/{_door_number(end_door)}",
-        "label": f"{_door_number(start_door)}/{_door_number(end_door)}",
-        "start_door": start_door,
-        "end_door": end_door,
+        "pair_key": f"{_door_number(east_door)}/{_door_number(west_door)}",
+        "label": f"{_door_number(east_door)}/{_door_number(west_door)}",
+        "east_door": east_door,
+        "west_door": west_door,
         "belt_names": belt_names,
     }
-    for runout_key, start_door, end_door, belt_names in BUILDING_LINEUP_BELT_GROUPS
-    if end_door != "D37"
+    for runout_key, east_door, west_door, belt_names in BUILDING_LINEUP_BELT_GROUPS
+    if west_door != "D37"
 )
 VALID_BELT_PAIR_KEYS = {pair["pair_key"] for pair in BUILDING_LINEUP_PARKING_BELT_PAIRS}
 RUNOUT_KEY_TO_PAIR = {

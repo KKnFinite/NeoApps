@@ -7,8 +7,11 @@ from app.extensions import db
 from app.models import MasterFlightSchedule
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoermac_building_lineup import (
+    BUILDING_LINEUP_BELT_GROUPS,
     DESTINATION_FIELDS,
+    apply_belt_display_metadata,
     building_lineup_slot_descriptors,
+    get_building_lineup_assignments,
     get_building_lineup_destinations_for_door,
     get_building_lineup_doors_by_destination,
     get_building_lineup_rows,
@@ -86,6 +89,62 @@ class NeoErmacBuildingLineupGeometryTest(unittest.TestCase):
                         for slot in (1, 2)
                     },
                 )
+
+    def test_tuple_defines_east_west_doors_and_belt_order(self):
+        rows = {row.runout_key: row for row in get_building_lineup_rows(self.gateway)}
+        self.assertIn(("runout_2", "D6", "D9", ("YEL", "BLK")), BUILDING_LINEUP_BELT_GROUPS)
+        for runout_key, east_door, west_door, belt_names in BUILDING_LINEUP_BELT_GROUPS:
+            row = rows[runout_key]
+            with self.subTest(runout=runout_key):
+                self.assertEqual((row.east_door, row.west_door), (east_door, west_door))
+                self.assertEqual(row.belt_names, belt_names)
+                for slot in building_lineup_slot_descriptors(row, include_blank=True):
+                    self.assertEqual(slot["belt_name"], belt_names[slot["belt_number"] - 1])
+                    self.assertEqual(
+                        slot["supervising_door"],
+                        east_door if slot["side"] == "east" else west_door,
+                    )
+
+        # Physical orientation comes from the tuple, never numeric door order.
+        row = rows["runout_2"]
+        apply_belt_display_metadata(row, "D9", "D6", ("YEL", "BLK"))
+        self.assertEqual((row.east_door, row.west_door), ("D9", "D6"))
+        for block in row.belt_blocks:
+            self.assertEqual([side["door"] for side in block["sides"]], ["D9", "D6"])
+
+    def test_d6_collects_neighboring_runouts_and_deduplicates_destinations(self):
+        for runout, side in (("runout_1", "west"), ("runout_2", "east")):
+            for belt in (1, 2):
+                self._save(runout, f"{side}_destination_{belt}", "ONT")
+        self._save("runout_1", "west_destination_1_slot_2", "SDF")
+        self._save("runout_2", "east_destination_2_slot_2", "ONT1")
+        self._save("runout_1", "east_destination_1", "ONT2")
+        self._save("runout_2", "west_destination_1", "ONT2")
+        db.session.commit()
+
+        destinations = get_building_lineup_destinations_for_door(self.gateway, "D6")
+        self.assertEqual(set(destinations), {"ONT", "SDF", "ONT1"})
+        self.assertEqual(
+            destinations["ONT"],
+            [
+                "D4-D6 BELT 1 WEST SLOT 1", "D4-D6 BELT 2 WEST SLOT 1",
+                "D6-D9 BELT 1 EAST SLOT 1", "D6-D9 BELT 2 EAST SLOT 1",
+            ],
+        )
+        self.assertEqual(
+            {
+                (slot["runout_key"], slot["side"], slot["belt_name"])
+                for slot in get_building_lineup_assignments(self.gateway)
+                if slot["destination"] == "ONT" and slot["supervising_door"] == "D6"
+            },
+            {
+                ("runout_1", "west", "WHT/RED"),
+                ("runout_1", "west", "WHT/WHT"),
+                ("runout_2", "east", "YEL"),
+                ("runout_2", "east", "BLK"),
+            },
+        )
+        self.assertEqual(get_building_lineup_doors_by_destination(self.gateway)["ONT"], ("D6",))
 
     def test_east_and_west_face_only_the_physical_endpoint_doors(self):
         self._save("green_runout", "east_destination_1", "ONT")
