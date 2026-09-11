@@ -75,6 +75,8 @@ BALLMAT_DETAIL_DEFAULTS = {
     "spotter_mode": 1, "mode_version": 0, "pending_mode": None, "mode_request_version": 0,
     "right_first": 0, "right_second": 0, "right_open": 0,
 }
+DISCHARGE_DEFAULTS = {"back_pickup_mask": 0, "cut_discharge": False, "discharge_auto_fired": False}
+DEFAULT_BAY_PRIORITY_ORDER = ["Bay 5", "Bay 4", "Bay 3", "Bay 2", "Bay 1"]
 
 
 @dataclass
@@ -107,6 +109,8 @@ class NeoSektorOperationalStateBundle:
     google_cells: dict | None = None
     driver_routes: list | None = None
     routing_sort_state: object | None = None
+    arrived_waves: set | None = None
+    discharge_due_before: bool = False
 
     @classmethod
     def load(
@@ -412,6 +416,14 @@ class NeoSektorOperationalStateBundle:
             change_tracker=self._change_tracker,
         )
         if self.initialize:
+            # All successful count paths (including aggregate editors) observe
+            # the same one-shot transition before committing their response.
+            second_left = wave_views[1]["left"]
+            if (not self.sort_state.discharge_auto_fired
+                    and (self.discharge_due_before or (second_left in ("ALL UP", "DOWN")
+                        and _discharge_auto_due(self.sort_state, wave_views, self.resolved_arrived_waves())))):
+                _assign_if_changed(self.sort_state, "cut_discharge", True, change_tracker=self._change_tracker)
+                _assign_if_changed(self.sort_state, "discharge_auto_fired", True, change_tracker=self._change_tracker)
             db.session.flush()
 
         return {
@@ -442,13 +454,28 @@ class NeoSektorOperationalStateBundle:
     def driver_routing_state_payload(self):
         state = self.ballmat_state_payload()
         driver_routes = self.ensure_driver_routes()
+        sort_row = self.routing_sort_state or self.sort_state
+        mask = sort_row.back_pickup_mask or 0
+        for side in state["sides"].values():
+            for bay in side["bays"]:
+                bit = 1 << (_bay_number(bay["bay_name"]) - 1)
+                bay["back_pickup"] = bool(mask & bit) and bay["status"] == "Overflowing"
         routing = _driver_routing_calculation(
             self.gateway,
             self.routing_sort_state or self.sort_state,
             state["sides"],
             state["waves"],
             driver_routes,
+            settings=self.operational_settings,
+            arrived_waves=self.resolved_arrived_waves(),
         )
+        auto_due = self.discharge_due_before or _discharge_auto_due(sort_row, state["waves"], self.resolved_arrived_waves())
+        cut = bool(sort_row.cut_discharge or (auto_due and not sort_row.discharge_auto_fired))
+        routing["cut_discharge"] = cut
+        routing["discharge_auto_fired"] = bool(sort_row.discharge_auto_fired or auto_due)
+        routing["discharge_message"] = "Discharge cut. Report to doors." if cut else ""
+        if cut:
+            routing["bay_priority"] = []
         _sync_driver_route_values(
             driver_routes,
             routing,
@@ -468,6 +495,29 @@ class NeoSektorOperationalStateBundle:
             _driver_route_view(row) for row in driver_routes
         ]
         return state
+
+    def resolved_arrived_waves(self):
+        if self.arrived_waves is None:
+            self.arrived_waves = _current_sort_arrived_waves(self.gateway, self.sort_date, self.sort_name)
+        return self.arrived_waves
+
+    def capture_discharge_transition(self):
+        """Observe timer-only transitions under the write lock, before edits.
+
+        GETs derive an unacknowledged transition without writing. The next valid
+        mutation latches it; an explicit manual OFF acknowledges it permanently.
+        This snapshot must never alter timers/rollups or break conflict rollback.
+        """
+        components = self._google_ballmat_components() if self.integration_mode == "google_primary" else (
+            self.ballmat_wave_counts, self.waves, self.ballmats, self.open_bays, self.bay_statuses)
+        counts, waves, ballmats, open_bays, bays = components
+        sides = _side_state_views(counts, ballmats, open_bays, bays)
+        views = _wave_views(waves, sides, self.operational_settings,
+                            timer_rows=self.timer_rows, persist_timer=False)
+        second = next(wave for wave in views if wave["name"] == "2ND WAVE")
+        self.discharge_due_before = (second["left"] in ("ALL UP", "DOWN")
+            and not self.sort_state.discharge_auto_fired
+            and _discharge_auto_due(self.sort_state, views, self.resolved_arrived_waves()))
 
     def _google_ballmat_components(self):
         cells = self.google_cells
@@ -907,6 +957,7 @@ def update_ballmat_side(
         _apply_spotter_command(bundle, selected_side, payload["spotter"])
         return bundle.driver_routing_state_payload() if include_routing_state else bundle.ballmat_state_payload()
     if bundle.integration_mode == "google_primary":
+        _update_back_pickups(bundle, selected_side, payload)
         updates = _google_ballmat_updates(selected_side, payload)
         if updates:
             from app.services.neosektor_sheets_compat import (
@@ -919,6 +970,7 @@ def update_ballmat_side(
                 integration_mode=bundle.integration_mode,
             )
             bundle.apply_google_updates(updates)
+        _clear_ineligible_back_pickups(bundle)
         if include_routing_state:
             return bundle.driver_routing_state_payload()
         return bundle.ballmat_state_payload()
@@ -961,10 +1013,68 @@ def update_ballmat_side(
     for bay in bundle.bay_statuses:
         if bay.side == side_label and bay.bay_name in bay_payload:
             bay.status = _status(bay_payload[bay.bay_name])
+    _update_back_pickups(bundle, selected_side, payload)
+    _clear_ineligible_back_pickups(bundle)
 
     if include_routing_state:
         return bundle.driver_routing_state_payload()
     return bundle.ballmat_state_payload()
+
+
+def _clear_ineligible_back_pickups(bundle):
+    bays = bundle._google_ballmat_components()[-1] if bundle.integration_mode == "google_primary" else bundle.bay_statuses
+    mask = bundle.sort_state.back_pickup_mask or 0
+    for bay in bays:
+        if _status(bay.status) != "Overflowing":
+            mask &= ~(1 << (_bay_number(bay.bay_name) - 1))
+    _assign_if_changed(bundle.sort_state, "back_pickup_mask", mask, change_tracker=bundle._change_tracker)
+
+
+def _update_back_pickups(bundle, selected_side, payload):
+    updates = (payload or {}).get("back_pickups", {})
+    if not isinstance(updates, dict):
+        raise ValueError("Invalid Back Pickup update.")
+    bays = bundle._google_ballmat_components()[-1] if bundle.integration_mode == "google_primary" else bundle.bay_statuses
+    local = {bay.bay_name: bay for bay in bays if bay.side == side_display_label(selected_side)}
+    mask = bundle.sort_state.back_pickup_mask or 0
+    for name, enabled in updates.items():
+        if name not in local or type(enabled) is not bool:
+            raise ValueError("Invalid Back Pickup bay.")
+        if enabled and _status(local[name].status) != "Overflowing":
+            raise ValueError("Back Pickup requires Overflowing.")
+        bit = 1 << (_bay_number(name) - 1)
+        mask = mask | bit if enabled else mask & ~bit
+    _assign_if_changed(bundle.sort_state, "back_pickup_mask", mask, change_tracker=bundle._change_tracker)
+
+
+def update_discharge_controls(bundle, payload):
+    """Conductor-only PATCH; compare the edited original under the Gateway lock."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid discharge control.")
+    action = payload.get("action")
+    if action == "priority":
+        order = payload.get("order")
+        if (not isinstance(order, list) or len(order) != 5
+                or not all(isinstance(name, str) for name in order)
+                or set(order) != set(DEFAULT_BAY_PRIORITY_ORDER)):
+            raise ValueError("Priority must contain Bays 1–5 exactly once.")
+        if payload.get("expected_order") != _bay_priority_order(bundle.operational_settings):
+            raise BallmatModeConflict("Bay Priority changed. Review the current order.")
+        bundle.operational_settings.bay_priority_order = ",".join(str(_bay_number(bay)) for bay in order)
+    elif action == "cut":
+        if type(payload.get("enabled")) is not bool:
+            raise ValueError("Invalid Cut Discharge value.")
+        current = bool(bundle.sort_state.cut_discharge or bundle.discharge_due_before)
+        if payload.get("expected_cut") is not current:
+            raise BallmatModeConflict("Cut Discharge changed. Review the current state.")
+        # A manual OFF acknowledges an already-due automatic transition, but an
+        # early manual ON/OFF must not consume the future second-wave trigger.
+        if bundle.discharge_due_before:
+            bundle.sort_state.discharge_auto_fired = True
+        bundle.sort_state.cut_discharge = payload["enabled"]
+    else:
+        raise ValueError("Invalid discharge control.")
+    return bundle.driver_routing_state_payload()
 
 
 def tunnel_conductor_context(
@@ -1178,6 +1288,8 @@ def apply_standalone_compat_values(
         parsed = _standalone_compat_status(cell_values.get(cell))
         if parsed is not None:
             changed += _assign_if_changed(row, "status", parsed)
+            if parsed != "Overflowing":
+                sort_state.back_pickup_mask = (sort_state.back_pickup_mask or 0) & ~(1 << (_bay_number(row.bay_name) - 1))
 
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     db.session.flush()
@@ -1435,6 +1547,7 @@ def _copy_sort_state(row, gateway, sort_date, sort_name):
         active_wave=getattr(row, "active_wave", DEFAULT_ACTIVE_WAVE),
         planned_total=getattr(row, "planned_total", 0),
         unloaded_total=getattr(row, "unloaded_total", 0),
+        **{key: getattr(row, key, default) for key, default in DISCHARGE_DEFAULTS.items()},
         updated_at=getattr(row, "updated_at", None),
     )
 
@@ -1466,6 +1579,7 @@ def _read_only_state_rows(gateway, sort_date, sort_name, *, include_routing=Fals
     model = NeoSektorSortState
     sort_row = select(
         model.id, model.active_wave, model.planned_total, model.unloaded_total, model.updated_at,
+        *(getattr(model, key) for key in DISCHARGE_DEFAULTS),
     ).where(
         model.gateway_id == gateway.id,
         model.sort_date == sort_date,
@@ -2149,7 +2263,7 @@ def _driver_route_by_name(driver_routes, route_name):
     return next(row for row in driver_routes if row.route_name == route_name)
 
 
-def _driver_routing_calculation(gateway, sort_state, sides, waves, driver_routes):
+def _driver_routing_calculation(gateway, sort_state, sides, waves, driver_routes, *, settings=None, arrived_waves=None):
     east = sides["east"]
     west = sides["west"]
     west_offset = _driver_route_offset(driver_routes)
@@ -2181,11 +2295,10 @@ def _driver_routing_calculation(gateway, sort_state, sides, waves, driver_routes
         wave_by_name["2ND WAVE"].get("planned") or 0,
         0,
     )
-    first_display_state = "all_in" if first_left_to_arrive == 0 else "route"
-    second_display_state = _second_wave_driver_display_state(
-        gateway,
-        second_left_to_arrive,
-    )
+    if arrived_waves is None:
+        arrived_waves = _current_sort_arrived_waves(gateway, sort_state.sort_date, sort_state.sort_name)
+    first_display_state = _wave_driver_display_state("first", first_left_to_arrive, arrived_waves)
+    second_display_state = _wave_driver_display_state("second", second_left_to_arrive, arrived_waves)
     first_route = _with_driver_display_state(first_route, first_display_state, "first")
     second_route = _with_driver_display_state(second_route, second_display_state, "second")
 
@@ -2209,7 +2322,8 @@ def _driver_routing_calculation(gateway, sort_state, sides, waves, driver_routes
                 **second_route,
             },
         },
-        "bay_priority": _driver_bay_priority(sides, driver_routes),
+        "bay_priority": _driver_bay_priority(sides, driver_routes, settings),
+        "bay_priority_order": _bay_priority_order(settings),
         "bay_priority_enabled_bays": {
             bay_name: _driver_route_bay_priority_enabled(driver_routes, bay_name)
             for _side, bay_name in DEFAULT_BAYS
@@ -2281,7 +2395,13 @@ def _side_wave_count(side, wave_key):
     return max((wave or {}).get("count") or 0, 0)
 
 
-def _driver_bay_priority(sides, driver_routes):
+def _bay_priority_order(settings):
+    stored = str(getattr(settings, "bay_priority_order", "") or "")
+    order = ["Bay " + part for part in stored.split(",")]
+    return order if len(order) == 5 and set(order) == set(DEFAULT_BAY_PRIORITY_ORDER) else list(DEFAULT_BAY_PRIORITY_ORDER)
+
+
+def _driver_bay_priority(sides, driver_routes, settings=None):
     priority = [
         {
             **bay,
@@ -2294,14 +2414,16 @@ def _driver_bay_priority(sides, driver_routes):
         if _status(bay["status"]) != "Empty"
         and _driver_route_bay_priority_enabled(driver_routes, bay["bay_name"])
     ]
-    priority.sort(
-        key=lambda bay: (bay["status_rank"], _bay_number(bay["bay_name"])),
-        reverse=True,
-    )
-    for index, bay in enumerate(priority, start=1):
+    order = _bay_priority_order(settings)
+    priority.sort(key=lambda bay: (-bay["status_rank"], order.index(bay["bay_name"])))
+    backs = [dict(bay, pickup="back", arrow="left") for bay in priority
+             if bay.get("back_pickup") and bay["status"] == "Overflowing"]
+    regular_slots = min(3, max(0, 5 - len(backs)))
+    cards = backs + [dict(bay, pickup="front", arrow="right") for bay in priority[:regular_slots]]
+    for index, bay in enumerate(cards, start=1):
         bay["rank"] = index
         bay["rank_label"] = _ordinal(index)
-    return priority[:3]
+    return cards
 
 
 def _driver_route_bay_priority_enabled_name(bay_name):
@@ -2316,30 +2438,38 @@ def _driver_route_bay_priority_enabled(driver_routes, bay_name):
     return str(row.route_value or "true").strip().lower() != "false"
 
 
-def _second_wave_driver_display_state(gateway, left_to_arrive):
-    operation = current_operational_sort_operation(gateway)
-    if operation is None or not _current_sort_second_wave_has_arrived(operation):
+def _wave_driver_display_state(wave, left_to_arrive, arrived_waves):
+    if wave not in arrived_waves:
         return "not_arrived"
     return "all_in" if left_to_arrive == 0 else "route"
 
 
-def _current_sort_second_wave_has_arrived(operation):
-    return (
-        SortDateMission.query.filter(
-            SortDateMission.sort_date_operation_id == operation.id,
-            SortDateMission.mission_type == "arrival",
-            SortDateMission.wave.in_(("2", "2nd Wave")),
-            SortDateMission.actual_block_in_datetime_utc.isnot(None),
-        )
-        .limit(1)
-        .first()
-        is not None
-    )
+def _current_sort_arrived_waves(gateway, sort_date=None, sort_name=None):
+    operation = current_operational_sort_operation(gateway)
+    if (operation is None or (sort_date is not None and operation.sort_date != sort_date)
+            or (sort_name is not None and operation.sort_name.lower() != sort_name.lower())):
+        return set()
+    # Both proven Block-In gates in the existing single mission round trip.
+    rows = db.session.query(SortDateMission.wave).filter(
+        SortDateMission.sort_date_operation_id == operation.id,
+        SortDateMission.mission_type == "arrival",
+        SortDateMission.wave.in_(("1", "1st Wave", "2", "2nd Wave")),
+        SortDateMission.actual_block_in_datetime_utc.isnot(None),
+    ).distinct().all()
+    return {"first" if row.wave in ("1", "1st Wave") else "second" for row in rows}
+
+
+def _discharge_auto_due(sort_state, waves, arrived_waves):
+    if getattr(sort_state, "discharge_auto_fired", False) or "second" not in arrived_waves:
+        return False
+    second = next(wave for wave in waves if wave["name"] == "2ND WAVE")
+    # DOWN implies the established ALL UP phase has already been crossed.
+    return second["left"] in ("ALL UP", "DOWN")
 
 
 def _with_driver_display_state(route, display_state, wave_key):
     if display_state == "not_arrived":
-        message = "2ND WAVE NOT ARRIVED"
+        message = "1ST WAVE NOT ARRIVED" if wave_key == "first" else "2ND WAVE NOT ARRIVED"
     elif display_state == "all_in":
         message = "1ST WAVE ALL IN" if wave_key == "first" else "2ND WAVE ALL IN"
     else:

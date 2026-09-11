@@ -89,7 +89,7 @@
     #neosektor-tunnel-panel .tunnel-bay-card { display:grid; gap:4px; align-content:start; justify-items:center; padding:0 2px; text-align:center; }
     #neosektor-tunnel-panel .tunnel-bay-card + .tunnel-bay-card { border-left:1px solid #303940; }
     #neosektor-tunnel-panel .tunnel-bay-card :is(span,strong) { font:400 10px/1.2 var(--font-sans); white-space:normal; overflow:visible; overflow-wrap:anywhere; text-overflow:clip; }
-    #neosektor-tunnel-panel .tunnel-bay-card strong { min-height:24px; }
+    #neosektor-tunnel-panel .tunnel-bay-card strong { min-height:0; font-size:clamp(8px,2.25vw,11px); white-space:nowrap; overflow-wrap:normal; }
     #neosektor-tunnel-panel .tunnel-bay-priority-toggle { display:grid; gap:2px; justify-items:center; }
     #neosektor-tunnel-panel .tunnel-bay-priority-toggle input { width:22px; height:22px; accent-color:#d82538; }
     #neosektor-tunnel-panel .tunnel-bay-priority-toggle span { font-size:8px; }

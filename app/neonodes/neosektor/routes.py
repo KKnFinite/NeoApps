@@ -378,6 +378,7 @@ def tunnel_conductor_ballmat():
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 502
     except ValueError as exc:
+        db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 400
 
     _commit_neosektor_update_and_mirror(
@@ -385,6 +386,30 @@ def tunnel_conductor_ballmat():
         before_values,
         warning_pending,
     )
+    return jsonify({"ok": True, "state": state})
+
+
+@bp.route("/tunnel-conductor/discharge-controls", methods=["POST"])
+@gateway_node_required("sektor")
+def tunnel_conductor_discharge_controls():
+    from app.services.neosektor_live_counts import update_discharge_controls
+    access = _neosektor_access(TUNNEL_CONDUCTOR_VIEW_PERMISSION, TUNNEL_CONDUCTOR_EDIT_PERMISSION)
+    if not access["can_edit"]:
+        return jsonify({"ok": False, "error": "Edit access denied."}), 403
+    gateway = get_current_gateway()
+    try:
+        bundle, before, warning = _neosektor_write_bundle(gateway, include_routing=True)
+        state = update_discharge_controls(bundle, request.get_json(silent=True) or {})
+    except BallmatModeConflict as exc:
+        state = _ballmat_conflict_state(bundle, lambda **kwargs: tunnel_conductor_state_payload(gateway, **kwargs))
+        return jsonify({"ok": False, "error": str(exc), "state": state}), 409
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except NeoSektorGoogleError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    _commit_neosektor_update_and_mirror(bundle, before, warning)
     return jsonify({"ok": True, "state": state})
 
 
@@ -1136,6 +1161,7 @@ def _neosektor_write_bundle(gateway, *, include_routing=False):
         include_routing=include_routing,
         for_update=True,
     )
+    bundle.capture_discharge_transition()
     if bundle.integration_mode != NEO_PRIMARY_GOOGLE_MIRROR:
         return bundle, None, False
 

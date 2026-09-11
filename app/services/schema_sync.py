@@ -10,6 +10,11 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 }
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
+    "neosektor_sort_states": {
+        "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
+        "cut_discharge": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "discharge_auto_fired": "BOOLEAN NOT NULL DEFAULT FALSE",
+    },
     "neosektor_ballmat_counts": {
         "mode_version": "INTEGER NOT NULL DEFAULT 0",
         "pending_mode": "INTEGER",
@@ -86,6 +91,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "all_up_started_at": "DATETIME",
     },
     "neosektor_operational_settings": {
+        "bay_priority_order": "VARCHAR(32) NOT NULL DEFAULT '5,4,3,2,1'",
         "google_sheets_compat_enabled": "BOOLEAN NOT NULL DEFAULT 0",
         "last_google_read_at_utc": "DATETIME",
         "integration_mode": "VARCHAR(40) NOT NULL DEFAULT 'google_primary'",
@@ -255,6 +261,11 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
+    "neosektor_sort_states": {
+        "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
+        "cut_discharge": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "discharge_auto_fired": "BOOLEAN NOT NULL DEFAULT FALSE",
+    },
     "neosektor_ballmat_counts": {
         "mode_version": "INTEGER NOT NULL DEFAULT 0",
         "pending_mode": "INTEGER",
@@ -311,6 +322,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "all_up_started_at": "TIMESTAMP",
     },
     "neosektor_operational_settings": {
+        "bay_priority_order": "VARCHAR(32) NOT NULL DEFAULT '5,4,3,2,1'",
         "google_sheets_compat_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",
         "last_google_read_at_utc": "TIMESTAMP",
         "integration_mode": "VARCHAR(40) NOT NULL DEFAULT 'google_primary'",

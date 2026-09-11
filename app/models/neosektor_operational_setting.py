@@ -18,6 +18,7 @@ class NeoSektorOperationalSetting(db.Model):
     first_wave_unload_modifier = db.Column(db.Integer, nullable=False, default=45)
     second_wave_unload_modifier = db.Column(db.Integer, nullable=False, default=37)
     all_up_to_down_minutes = db.Column(db.Integer, nullable=False, default=15)
+    bay_priority_order = db.Column(db.String(32), nullable=False, default="5,4,3,2,1")
     google_sheets_compat_enabled = db.Column(
         db.Boolean,
         nullable=False,

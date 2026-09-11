@@ -129,6 +129,7 @@
                             <span>{{ bay.bay_name }}</span>
                             <strong data-bay-field="{{ bay.bay_name }}">{{ bay.status }}</strong>
                         </div>
+                        {% if side.key == selected_side %}<label class="sektor-back-pickup"><input type="checkbox" data-discharge-back="{{ bay.bay_name }}" data-side="{{ side.key }}" {% if bay.back_pickup %}checked{% endif %} {% if not can_edit or bay.status != 'Overflowing' %}disabled{% endif %}>BACK PICKUP</label>{% endif %}
                         {% if side_editable %}
                         <input
                             type="range"
@@ -152,7 +153,8 @@
     </main>
 </section>
 
-<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260909-numeric-burst-v4') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_ballmat_mobile.js', ballmat='20260911-back-v5') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_discharge_controls.js', controls='20260911-v2') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
 <script>
 (() => {
@@ -180,6 +182,7 @@
     let mutationRequestSequence = 0;
     let latestMutationRequest = 0;
     let mobile = null;
+    let dischargeControls = null;
     let modeSnapshot = {{ state.spotters|tojson }};
     let modeSort = {{ state.summary|tojson }};
     const modeGuard = () => ({expected_mode: modeSnapshot.mode, expected_mode_version: modeSnapshot.mode_version});
@@ -312,6 +315,7 @@
     const applyState = (state) => {
         const sameSort = state.summary.sort_date === modeSort.sort_date && state.summary.sort_name === modeSort.sort_name;
         if (sameSort && state.spotters && state.spotters.mode_version < modeSnapshot.mode_version) return;
+        dischargeControls?.apply(state);
         mobile?.apply(state);
         const modeChanged = state.spotters && (!sameSort || state.spotters.mode_version !== modeSnapshot.mode_version
             || state.spotters.mode !== modeSnapshot.mode);
@@ -535,9 +539,7 @@
         }
     });
 
-    mobile = window.NeoBallmatMobile.create(root, {
-        state: {{ state|tojson }}, canEdit, statusLabels,
-        send: async (changes) => {
+    const sendMobileChanges = async (changes) => {
             const requestSequence = ++mutationRequestSequence;
             latestMutationRequest = requestSequence;
             try {
@@ -569,7 +571,12 @@
                 } catch (_) { /* Keep the safe error visible until connectivity returns. */ }
                 return false;
             }
-        },
+        };
+    mobile = window.NeoBallmatMobile.create(root, {
+        state: {{ state|tojson }}, canEdit, statusLabels, send: sendMobileChanges,
+    });
+    dischargeControls = window.NeoSektorDischargeControls?.create(root, {
+        state: {{ state|tojson }}, canEdit, send: sendMobileChanges, onError: showEditError,
     });
     setRefreshStatus(initialRefreshStatus);
 })();

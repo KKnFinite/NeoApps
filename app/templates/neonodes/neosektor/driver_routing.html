@@ -34,7 +34,6 @@
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
-            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' or route.display_state != 'route' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.display_state != "route" %}
@@ -51,11 +50,13 @@
         {% endfor %}
 
         <section class="driver-bay-priority neosektor-driver-bay-priority" aria-label="Bay priority">
-            {% for index in range(3) %}
+            <p class="driver-discharge-cut" data-driver-discharge-cut {% if not state.routing.cut_discharge %}hidden{% endif %}>Discharge cut. Report to doors.</p>
+            {% for index in range(5) %}
             {% set bay = state.routing.bay_priority[index] if index < state.routing.bay_priority|length else none %}
-            <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ index }}" {% if not bay %}hidden{% endif %}>
+            <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ index }}" data-pickup="{{ bay.pickup if bay else 'front' }}" {% if not bay %}hidden{% endif %}>
                 <span class="driver-priority-rank" data-driver-rank>{{ bay.rank_label if bay else "" }}</span>
                 <strong data-driver-bay-name>{{ bay.bay_name|replace("Bay ", "") if bay else "" }}</strong>
+                <span class="driver-pickup" data-driver-pickup>{{ 'BACK ←' if bay and bay.pickup == 'back' else '→' }}</span>
                 <em class="visually-hidden" data-driver-bay-status>{{ bay.status if bay else "" }}</em>
             </article>
             {% endfor %}
@@ -71,7 +72,6 @@
             aria-label="{{ route.wave_label }} route"
         >
             <h2 class="driver-wave-label">{{ route.wave_label }}</h2>
-            <span class="driver-route-source" data-driver-route-source {% if route.override == 'auto' or route.display_state != 'route' %}hidden{% endif %}>MANUAL OVERRIDE · {{ route.override|upper }}</span>
             <div class="driver-target neosektor-driver-target">
                 <strong data-driver-target aria-label="{{ route.target }}">
                     {% if route.display_state != "route" %}
@@ -134,15 +134,6 @@
         }
         panel.dataset.direction = route.direction;
         panel.dataset.displayState = route.display_state || "route";
-        panel.toggleAttribute(
-            "data-manual-override",
-            route.override !== "auto" && route.display_state === "route",
-        );
-        const source = panel.querySelector("[data-driver-route-source]");
-        if (source) {
-            source.hidden = route.override === "auto" || route.display_state !== "route";
-            source.textContent = `MANUAL OVERRIDE · ${String(route.override || "auto").toUpperCase()}`;
-        }
         const target = panel.querySelector("[data-driver-target]");
         const arrow = panel.querySelector("[data-driver-arrow]");
         if (route.display_state && route.display_state !== "route") {
@@ -183,6 +174,8 @@
             card.querySelector("[data-driver-rank]").textContent = bay.rank_label;
             card.querySelector("[data-driver-bay-name]").textContent = String(bay.bay_name || "").replace(/^Bay\s+/i, "");
             card.querySelector("[data-driver-bay-status]").textContent = bay.status;
+            card.dataset.pickup = bay.pickup;
+            card.querySelector("[data-driver-pickup]").textContent = bay.pickup === "back" ? "BACK ←" : "→";
         });
     };
 
@@ -192,6 +185,7 @@
         applyRoute("first", (routing.routes || {}).first);
         applyRoute("second", (routing.routes || {}).second);
         applyBayPriority(routing.bay_priority);
+        root.querySelector('[data-driver-discharge-cut]').hidden = !routing.cut_discharge;
     };
 
     const setRefreshStatus = (refresh) => {

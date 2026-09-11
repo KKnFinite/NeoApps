@@ -87,6 +87,8 @@ def neosektor_state_revision(
             for wave_name in ("1ST WAVE", "2ND WAVE")
         ]
         if scope == ROUTING_STATE_SCOPE:
+            aggregate_queries.append(_aggregate_query(
+                "sort_state", NeoSektorSortState, NeoSektorSortState.id.in_(sort_state_ids)))
             aggregate_queries.append(
                 _aggregate_query(
                     "driver_routes",
@@ -151,17 +153,20 @@ def neosektor_state_revision(
         )
 
     if scope == ROUTING_STATE_SCOPE:
-        # Match the canonical Wave 2 arrival gate used by Driver Routing.
+        # Match both canonical arrival gates used by Driver Routing.
         # Fold it into the existing UNION so Block-In invalidation needs no
         # separate mission read (the operation resolver is request-cached).
         operation = current_operational_sort_operation(gateway)
-        aggregate_queries.append(_aggregate_query(
-            "second_wave_arrivals", SortDateMission,
-            SortDateMission.sort_date_operation_id == (operation.id if operation else -1),
-            SortDateMission.mission_type == "arrival",
-            SortDateMission.wave.in_(("2", "2nd Wave")),
-            SortDateMission.actual_block_in_datetime_utc.isnot(None),
-        ))
+        operation_id = (operation.id if operation and operation.sort_date == sort_date
+                        and operation.sort_name.lower() == sort_name else -1)
+        for label, aliases in (("first", ("1", "1st Wave")), ("second", ("2", "2nd Wave"))):
+            aggregate_queries.append(_aggregate_query(
+                label + "_wave_arrivals", SortDateMission,
+                SortDateMission.sort_date_operation_id == operation_id,
+                SortDateMission.mission_type == "arrival",
+                SortDateMission.wave.in_(aliases),
+                SortDateMission.actual_block_in_datetime_utc.isnot(None),
+            ))
 
     aggregate_rows = (
         sorted(

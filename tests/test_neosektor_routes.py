@@ -1713,7 +1713,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertLess(response.data.index(b"driver-wave-first"), response.data.index(b"driver-bay-priority"))
         self.assertLess(response.data.index(b"driver-bay-priority"), response.data.index(b"driver-wave-second"))
         self.assertIn(b"driver-wave-message", response.data)
-        self.assertIn(b"1ST WAVE ALL IN", response.data)
+        self.assertIn(b"1ST WAVE NOT ARRIVED", response.data)
         self.assertNotIn(b"East Ballmat <span", response.data)
         self.assertNotIn(b"West Ballmat <span", response.data)
         self.assertIn(b"targetNode.textContent = targetLabel;", response.data)
@@ -1919,8 +1919,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
             "west",
         )
         driver_board = self.client.get("/neosektor/driver-routing")
-        self.assertIn(b"MANUAL OVERRIDE", driver_board.data)
-        self.assertIn(b"data-driver-route-source", driver_board.data)
+        self.assertNotIn(b"MANUAL OVERRIDE", driver_board.data)
+        self.assertNotIn(b"data-driver-route-source", driver_board.data)
 
         switched = self.client.post(
             "/neosektor/tunnel-conductor/settings",
@@ -2217,6 +2217,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_driver_routing_hides_first_wave_route_when_all_in(self):
         self._login_approved_user(role="simulator")
+        operation = self._add_sort_operation(date.today())
+        operation.generated_by_user_id = User.query.first().id
+        self.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = datetime.combine(date.today(), time(23))
+        self._set_sort_window('night', time(0), time(23, 59, 59))
+        db.session.add(SortDateMission(sort_date_operation=operation, sort_date=operation.sort_date,
+            gateway_code=self.gateway.code, sort_name='night', mission_type='arrival', mission_source='manual',
+            wave='1', flight_number='FIRST', origin='OAK', destination='RFD', actual_block_in_datetime_utc=datetime.utcnow()))
+        db.session.commit()
 
         response = self.client.get("/neosektor/driver-routing/state")
 
@@ -2439,7 +2447,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn("justify-content: center;", desktop_css)
         self.assertIn("column-gap: 12px;", desktop_css)
         self.assertIn("font-size: clamp(0.9rem, 1.15vw, 1.08rem);", desktop_css)
-        self.assertIn("font-size: clamp(0.98rem, 1.3vw, 1.24rem);", desktop_css)
+        self.assertIn("font-size: clamp(0.65rem, 0.9vw, 0.88rem);", desktop_css)
         self.assertIn("width: min(100%, 240px);", desktop_css)
         self.assertIn("grid-template-columns: 40px minmax(112px, 1fr) 40px;", desktop_css)
         self.assertIn("width: min(100%, 322px);", desktop_css)
@@ -4496,6 +4504,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 queries.append(revision._aggregate_query("sort_state", NeoSektorSortState,
                     NeoSektorSortState.id == bundle.sort_state.id))
                 if scope == revision.ROUTING_STATE_SCOPE:
+                    queries.append(revision._aggregate_query("first_wave_arrivals", SortDateMission,
+                        SortDateMission.sort_date_operation_id == -1,
+                        SortDateMission.mission_type == "arrival",
+                        SortDateMission.wave.in_(("1", "1st Wave")),
+                        SortDateMission.actual_block_in_datetime_utc.isnot(None)))
                     queries.append(revision._aggregate_query("second_wave_arrivals", SortDateMission,
                         SortDateMission.sort_date_operation_id == -1,
                         SortDateMission.mission_type == "arrival",

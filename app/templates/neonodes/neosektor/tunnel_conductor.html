@@ -16,6 +16,7 @@
     data-mode-url="{{ url_for('neosektor.tunnel_conductor_spotter_mode') }}"
     data-offset-url="{{ url_for('neosektor.tunnel_conductor_offset') }}"
     data-settings-url="{{ url_for('neosektor.tunnel_conductor_settings') }}"
+    data-discharge-url="{{ url_for('neosektor.tunnel_conductor_discharge_controls') }}"
     data-refresh-active="{{ 'true' if state.refresh.auto_refresh_enabled else 'false' }}"
 >
     <header class="app-header tunnel-header neosektor-standalone-header mobile-shell-duplicate-title">
@@ -276,6 +277,8 @@
                 <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
                     <span>{{ bay.bay_name }}</span>
                     <strong>{{ bay.status }}</strong>
+                    <input class="tunnel-bay-status-slider" type="range" min="0" max="4" step="1" value="{{ status_labels.index(bay.status) }}" data-discharge-status="{{ bay.bay_name }}" data-side="{{ side_key }}" aria-label="{{ bay.bay_name }} status" {% if not can_edit %}disabled{% endif %}>
+                    <label class="sektor-back-pickup"><input type="checkbox" data-discharge-back="{{ bay.bay_name }}" data-side="{{ side_key }}" {% if bay.back_pickup %}checked{% endif %} {% if not can_edit or bay.status != 'Overflowing' %}disabled{% endif %}>BACK PICKUP</label>
                     <label class="tunnel-bay-priority-toggle">
                         <input
                             type="checkbox"
@@ -290,6 +293,13 @@
                 {% endfor %}
                 {% endfor %}
             </div>
+            <div class="sektor-conductor-discharge">
+                <h3>Bay Priority</h3>
+                <div class="sektor-priority-order" data-discharge-order aria-label="Bay Priority order">
+                    {% for bay in state.routing.bay_priority_order %}<button type="button" draggable="{{ 'true' if can_edit else 'false' }}" data-priority-bay="{{ bay }}" aria-label="{{ bay }}, position {{ loop.index }}. Drag or use arrow keys to reorder." {% if not can_edit %}disabled{% endif %}>{{ bay }}</button>{% endfor %}
+                </div>
+                <label class="sektor-cut-control"><input type="checkbox" data-discharge-cut {% if state.routing.cut_discharge %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>CUT DISCHARGE</label>
+            </div>
         </section>
         </div>
         <div class="neosektor-inline-edit-error" data-neosektor-edit-error hidden aria-live="polite"></div>
@@ -298,6 +308,7 @@
 
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neosektor_spotter_modes.js', mode='20260909-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neosektor_discharge_controls.js', controls='20260911-v2') }}"></script>
 <script>
 (() => {
     const root = document.querySelector("[data-tunnel-conductor]");
@@ -334,6 +345,7 @@
     let mutationRequestSequence = 0;
     let latestMutationResponse = 0;
     let spotterModes = null;
+    let dischargeControls = null;
 
     const setText = (selector, value) => {
         const element = root.querySelector(selector);
@@ -514,6 +526,7 @@
                 card.querySelector("strong").textContent = bay.status;
             });
         });
+        dischargeControls?.apply(state);
     };
 
     const setRefreshStatus = (refresh) => {
@@ -937,6 +950,28 @@
             const payload = await response.json();
             if (payload.state) applyMutationState(payload, requestSequence);
             if (!response.ok || !payload.ok) throw new Error(payload.error || 'Spotter mode update failed.');
+        },
+    });
+    dischargeControls = window.NeoSektorDischargeControls?.create(root, {
+        state: {{ state|tojson }}, canEdit, onError: showEditError,
+        send: async command => {
+            const requestSequence = ++mutationRequestSequence;
+            mutationEpoch += 1;
+            try {
+                const response = await fetch(command.action ? root.dataset.dischargeUrl : ballmatUrl, {
+                    method: 'POST', credentials: 'same-origin', cache: 'no-store',
+                    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(command),
+                });
+                const payload = await response.json();
+                if (payload.state) applyMutationState(payload, requestSequence);
+                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Discharge update failed.');
+            } catch (error) {
+                // Recover canonical state, never retry the mutation.
+                const response = await fetch(stateUrl, {cache: 'no-store', credentials: 'same-origin'});
+                const payload = await response.json();
+                if (payload.state) applyMutationState(payload, requestSequence);
+                throw error;
+            } finally { mutationEpoch += 1; }
         },
     });
     setRefreshStatus(initialRefreshStatus);

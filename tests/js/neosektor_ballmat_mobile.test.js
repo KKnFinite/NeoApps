@@ -27,7 +27,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
         element({bmOther: key});
         for (const field of ['bmArrive', 'bmUnload', 'bmRoute']) element({[field]: key});
     }
-    ['Bay 1', 'Bay 2'].forEach(name => { element({bmBay: name}); element({bmBayValue: name}); });
+    ['Bay 1', 'Bay 2'].forEach(name => { element({bmBay: name}); element({bmBayValue: name}); element({bmBack:name}); });
     const select = s => {
         if (s === 'button,input') return elements.filter(e => e.dataset.bmStep || e.dataset.bmMode || e.dataset.bmBay);
         const [, attr, value] = s.match(/^\[data-([\w-]+)(?:="([^"]+)")?\]$/);
@@ -68,6 +68,8 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
             if (p.waves) for(const [key,v] of Object.entries(p.waves)) server.spotters.counts[key].left=server.spotters.counts[key].total=v.count;
             if (p.open_bays !== undefined) server.spotters.counts.open.left=server.spotters.counts.open.total=p.open_bays;
             if (p.bay_statuses) for (const [name,status] of Object.entries(p.bay_statuses)) server.sides.east.bays.find(b=>b.bay_name===name).status=status;
+            if (p.back_pickups) for (const [name,enabled] of Object.entries(p.back_pickups)) server.sides.east.bays.find(b=>b.bay_name===name).back_pickup=enabled;
+            for (const bay of server.sides.east.bays) if (bay.status !== 'Overflowing') bay.back_pickup=false;
         }
         // Opaque server-derived values: the client must copy, never compute these.
         server.waves[0].left='LTU-'+calls.length;
@@ -86,6 +88,26 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
     };
     return {api,server,panel,calls,pending,click,bay,type,finish,text,unlocked,select,listeners,timers};
 }
+
+test('Back Pickup shares canonical refresh, respects Overflowing, and never freezes counts', async () => {
+    const h=harness();
+    const back=h.select('[data-bm-back="Bay 1"]')[0];
+    assert.equal(back.disabled,true);
+    h.bay(4,'change'); await h.finish();
+    assert.equal(back.disabled,false);
+    back.checked=true; h.listeners.change({target:back});
+    h.unlocked(); h.click();
+    assert.equal(h.calls.length,2); // status + in-flight Back Pickup; count queues normally.
+    h.api.apply(structuredClone(h.server));
+    assert.equal(back.checked,true); // Old poll cannot repaint the pending flag.
+    await h.finish(); await h.finish();
+    assert.equal(back.checked,true);
+    h.bay(3,'input');
+    assert.equal(back.checked,false); assert.equal(back.disabled,true);
+    h.bay(3,'change'); await h.finish();
+    assert.equal(h.server.sides.east.bays[0].back_pickup,false);
+    assert.equal(h.text('[data-bm-value="first:total"]'),1);
+});
 
 test('numeric entry uses guarded absolute commands, preserves tap order and two-mode total is read-only', async () => {
     for(const mode of [1,2]) {

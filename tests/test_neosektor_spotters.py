@@ -101,7 +101,9 @@ class BallmatSpotterTest(unittest.TestCase):
         return response.json['state']
 
     def test_modes_independent_transition_preserves_all_totals(self):
-        before = ballmat_state_payload(self.gateway)['sides']
+        # Operator snapshots now include the shared Back Pickup bay flag.
+        from app.services.neosektor_live_counts import driver_routing_state_payload
+        before = driver_routing_state_payload(self.gateway)['sides']
         state = self.post(expected_mode=1, mode=2)
         self.assertEqual(state['sides'], before)
         self.assertEqual(state['spotters']['counts']['first'], {'left':7,'right':0,'total':7})

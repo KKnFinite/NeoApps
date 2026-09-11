@@ -8,6 +8,7 @@ window.NeoBallmatMobile = {
         const counts = new Map();
         const drafts = new Map();
         const bays = new Map();
+        const backs = new Map();
         let running = false;
         let countInFlight = false;
         const countPending = () => countInFlight || queue.some(task => task.kind === 'count');
@@ -55,6 +56,11 @@ window.NeoBallmatMobile = {
                 const status = bays.get(bay.bay_name)?.status ?? bay.status;
                 input.value = statusLabels.indexOf(status);
                 panel.querySelector(`[data-bm-bay-value="${bay.bay_name}"]`).textContent = status;
+                const back = panel.querySelector(`[data-bm-back="${bay.bay_name}"]`);
+                if (back) {
+                    back.disabled = !canEdit || status !== 'Overflowing';
+                    back.checked = status === 'Overflowing' && (backs.get(bay.bay_name)?.enabled ?? bay.back_pickup);
+                }
             });
         };
         const apply = next => {
@@ -109,6 +115,7 @@ window.NeoBallmatMobile = {
                     }
                 }
                 if (task.kind === 'bay' && bays.get(task.key)?.sequence === task.sequence) bays.delete(task.key);
+                if (task.kind === 'back' && backs.get(task.key)?.sequence === task.sequence) backs.delete(task.key);
                 countInFlight = false;
                 // Keep only the latest canonical derived snapshot for a burst.
                 // No client LTU/routing calculation and no intermediate staircase.
@@ -121,7 +128,7 @@ window.NeoBallmatMobile = {
         const enqueue = task => {
             // Absolute writes can supersede queued (never in-flight) values.
             // Delta commands are never coalesced: every tap reaches the API.
-            if (task.kind === 'bay' || (task.kind === 'count' && !task.payload.spotter)) {
+            if (task.kind === 'bay' || task.kind === 'back' || (task.kind === 'count' && !task.payload.spotter)) {
                 const prior = queue.findIndex(item => item.kind === task.kind && item.key === task.key);
                 if (prior !== -1) queue.splice(prior, 1);
             }
@@ -176,6 +183,12 @@ window.NeoBallmatMobile = {
         });
         panel.addEventListener('change', event => {
             const input = event.target;
+            if (canEdit && !input.disabled && input.matches('[data-bm-back]')) {
+                const key = input.dataset.bmBack;
+                const desired = {enabled: input.checked, sequence: ++sequence};
+                backs.set(key, desired);
+                enqueue({kind: 'back', key, sequence: desired.sequence, payload: {back_pickups: {[key]: desired.enabled}}});
+            }
             if (canEdit && !input.disabled && !input.readOnly && input.matches('[data-bm-input]')) {
                 const guard = drafts.get(input.dataset.bmValue);
                 drafts.delete(input.dataset.bmValue);

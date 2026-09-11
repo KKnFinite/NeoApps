@@ -22,6 +22,10 @@ class NeoSektorSortState(db.Model):
     active_wave = db.Column(db.String(32), nullable=False, default="1ST WAVE")
     planned_total = db.Column(db.Integer, nullable=False, default=0)
     unloaded_total = db.Column(db.Integer, nullable=False, default=0)
+    # Bits 0..4 represent Bays 1..5; all discharge state belongs to this sort.
+    back_pickup_mask = db.Column(db.Integer, nullable=False, default=0)
+    cut_discharge = db.Column(db.Boolean, nullable=False, default=False)
+    discharge_auto_fired = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

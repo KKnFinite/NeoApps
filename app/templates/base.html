@@ -19,7 +19,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('favicon_32') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('favicon_16') }}">
     {% for stylesheet in page_stylesheets %}
-    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, v=config.STATIC_ASSET_VERSION, ermac='20260910-cleanup-v1' if stylesheet in ['css/01-neoermac.css', 'css/03-neoermac.css', 'css/05-neoermac.css', 'css/11-neoermac.css'] else none, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none, desktop='20260909-gateway-fade-v3' if stylesheet == 'css/28-shared.css' else '20260909-hero-v1' if stylesheet == 'css/06-shared.css' else none) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, discharge='20260911-controls-v1' if stylesheet == 'css/16-neosektor.css' else none, v=config.STATIC_ASSET_VERSION, ermac='20260910-cleanup-v1' if stylesheet in ['css/01-neoermac.css', 'css/03-neoermac.css', 'css/05-neoermac.css', 'css/11-neoermac.css'] else none, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none, desktop='20260909-gateway-fade-v3' if stylesheet == 'css/28-shared.css' else '20260909-hero-v1' if stylesheet == 'css/06-shared.css' else none) }}">
     {% endfor %}
     {% if is_gateway_typography_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontplain.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
@@ -45,14 +45,17 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_mobile.css', v=config.STATIC_ASSET_VERSION, viewport='20260907-shared-v1') }}">
     {% endif %}
     {% if is_neosektor_tunnel_operator_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260907-flat-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260911-discharge-v2') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_spotter_modes.css', mode='20260909-v1') }}">
     {% endif %}
     {% if is_neosektor_ballmat_operator_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260909-numeric-burst-v4') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260911-back-v6') }}">
+    {% endif %}
+    {% if is_neosektor_tunnel_operator_page or is_neosektor_ballmat_operator_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge_controls.css', controls='20260911-v1') }}">
     {% endif %}
     {% if request.endpoint == 'neosektor.driver_routing' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260909-priority-empty-v3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260911-discharge-v7') }}">
     {% elif request.endpoint == 'neosektor.discharge' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge.css', v=config.STATIC_ASSET_VERSION, ui='20260908-split-v1') }}">
     {% endif %}

@@ -93,9 +93,12 @@
     #ballmat-operator [data-mode="2"] .bm-other > div { grid-template-columns:1fr 30px; font-size:8px; }
     #ballmat-operator [data-mode="2"] .bm-other h2 { font-size:10px; }
     #ballmat-operator .bm-bays { border-top:1px solid #354047; padding:12px 0; flex:1; display:flex; flex-direction:column; justify-content:center; }
-    #ballmat-operator .bm-bays label { display:grid; grid-template-columns:40px minmax(0,1fr) 72px; align-items:center; gap:8px; min-height:38px; margin:0; font-size:11px; }
-    #ballmat-operator .bm-bays input { width:100%; min-width:0; height:32px; margin:0; padding:0; accent-color:#ef2138; }
-    #ballmat-operator .bm-bays output { font-size:11px; font-weight:400; border:0; background:transparent; text-align:right; }
+    #ballmat-operator .bm-bay-row { display:grid; grid-template-columns:minmax(0,1fr) 48px; gap:8px; align-items:center; }
+    #ballmat-operator .bm-bay-status { display:grid; grid-template-columns:36px minmax(0,1fr) 76px; align-items:center; gap:6px; min-height:40px; margin:0; font-size:11px; }
+    #ballmat-operator .bm-bay-status input { width:100%; min-width:0; height:32px; margin:0; padding:0; accent-color:#ef2138; }
+    #ballmat-operator .bm-bays [data-bm-bay-value] { font-size:clamp(10px,2.6vw,11px); white-space:nowrap; font-weight:400; border:0; background:transparent; text-align:right; }
+    #ballmat-operator .bm-back-pickup { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:40px; margin:0; font:400 9px/1.1 var(--font-sans); text-align:center; }
+    #ballmat-operator .bm-back-pickup input { width:18px; height:18px; min-height:0; padding:0; margin:0; accent-color:#ef2138; }
     #ballmat-operator .bm-routing { border-top:1px solid #354047; padding:10px 0; }
     #ballmat-operator .bm-routing > div { display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:center; }
     #ballmat-operator .bm-routing > div > div + div { border-left:1px solid #354047; padding-left:12px; }
