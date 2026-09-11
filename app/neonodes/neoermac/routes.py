@@ -515,7 +515,7 @@ def door_view():
 def manage_employees():
     gateway = get_current_gateway()
     doors = _current_user_supervised_doors(gateway)
-    area_ids = staffing_service.attendance_deep_link_work_area_ids(doors)
+    area_ids = staffing_service.attendance_deep_link_work_area_ids(doors, allow_persistent_roster=True)
     if not area_ids and not doors and request.method == "GET":
         return redirect(url_for("neostaffing.attendance"))
     can_edit = user_can("neostaffing.attendance.take")
@@ -535,10 +535,11 @@ def manage_employees():
         return redirect(url_for("neoermac.manage_employees"))
     context = staffing_service.operational_manage_employees_context(
         area_ids, later_final_area_ids=area_ids, scope_candidates=True,
+        allow_roster_without_operation=True,
     )
     return render_template(
         "neostaffing/operational_manage_employees.html",
-        title="EMPLOYEE ATTENDANCE",
+        title="EMPLOYEES",
         attendance=context,
         can_edit_attendance=can_edit,
         show_coming=True,

@@ -31,24 +31,31 @@
     </nav>
     {% endif %}
 
-    {% if attendance.operation %}
+    {% if attendance.operation or attendance.roster_available %}
+    {% if not attendance.operation %}
+    <p class="neostaffing-operational-empty">Attendance available when the Night Sort is active.</p>
+    {% endif %}
     <main class="neostaffing-operational-rosters{% if show_coming %} has-coming{% endif %}">
         <section class="neostaffing-operational-roster is-here" aria-labelledby="attendance-here-title">
             <header>
-                <h2 id="attendance-here-title">ATTENDANCE HERE</h2>
+                <h2 id="attendance-here-title">{{ 'ATTENDANCE HERE' if attendance.operation else 'EMPLOYEES' }}</h2>
                 <span>{{ attendance.here|length }} employees</span>
             </header>
-            <form method="post">
+            {% if attendance.operation %}<form method="post">{% else %}<div>{% endif %}
+                {% if attendance.operation %}
                 <input type="hidden" name="sort_date_operation_id" value="{{ attendance.operation.id }}">
+                {% endif %}
                 <div class="neostaffing-operational-table-wrap">
                     <table class="neostaffing-operational-table">
-                        <thead><tr><th>Employee</th><th>Attendance</th><th>Flow</th></tr></thead>
+                        <thead><tr><th>Employee</th><th>{{ 'Attendance' if attendance.operation else 'Work Area' }}</th><th>Flow</th></tr></thead>
                         <tbody>
                         {% for row in attendance.here %}
                             <tr>
                                 <td><strong>{{ row.person.full_name }}</strong></td>
                                 <td>
-                                    {% if can_edit_attendance and row.status_writable %}
+                                    {% if not attendance.operation %}
+                                    <span>{{ row.assignment_label }}</span>
+                                    {% elif can_edit_attendance and row.status_writable %}
                                     <select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}">
                                         <option value="">Unmarked</option>
                                         {% for value, label in attendance.status_choices %}
@@ -62,15 +69,15 @@
                                 <td><span class="neostaffing-operational-flow">{{ row.flow }}</span></td>
                             </tr>
                         {% else %}
-                            <tr class="is-empty"><td colspan="3">No employees attend in this area.</td></tr>
+                            <tr class="is-empty"><td colspan="3">{{ 'No employees attend in this area.' if attendance.operation else 'No employees assigned to these areas.' }}</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
                 </div>
-                {% if can_edit_attendance %}
+                {% if attendance.operation and can_edit_attendance %}
                 <footer><button type="submit">SAVE ATTENDANCE</button></footer>
                 {% endif %}
-            </form>
+            {% if attendance.operation %}</form>{% else %}</div>{% endif %}
         </section>
 
         {% if show_coming %}
@@ -81,12 +88,12 @@
             </header>
             <div class="neostaffing-operational-table-wrap">
                 <table class="neostaffing-operational-table">
-                    <thead><tr><th>Employee</th><th>Attendance</th><th>Flow</th></tr></thead>
+                    <thead><tr><th>Employee</th><th>{{ 'Attendance' if attendance.operation else 'Work Area' }}</th><th>Flow</th></tr></thead>
                     <tbody>
                     {% for row in attendance.coming %}
                         <tr>
                             <td><a href="{{ url_for('neostaffing.shift_flow', person_id=row.person.id) }}"><strong>{{ row.person.full_name }}</strong></a></td>
-                            <td><span class="neostaffing-operational-status is-readonly">{{ row.status_label }}</span></td>
+                            <td>{% if attendance.operation %}<span class="neostaffing-operational-status is-readonly">{{ row.status_label }}</span>{% else %}<span>{{ row.assignment_label }}</span>{% endif %}</td>
                             <td><span class="neostaffing-operational-flow">{{ row.flow }}</span></td>
                         </tr>
                     {% else %}

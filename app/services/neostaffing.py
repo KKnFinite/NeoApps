@@ -1156,10 +1156,10 @@ def operational_flow_shorthand(plan):
     return " → ".join(parts)
 
 
-def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False):
-    """Read the effective current-sort attendance roster from shared Staffing data."""
+def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False):
+    """Read current attendance, or an explicitly opted-in persistent roster."""
     operation = current_night_attendance_operation()
-    if not operation:
+    if not operation and not allow_roster_without_operation:
         return {
             "operation": None,
             "here": [],
@@ -1168,7 +1168,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             "status_choices": attendance_status_choices(),
         }
     hierarchy = _daily_attendance_hierarchy()
-    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy) if operation else None
     start_ids = _operational_area_id_set(sort_start_area_ids)
     later_ids = _operational_area_id_set(later_final_area_ids)
     shift_area_ids = {
@@ -1195,7 +1195,17 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
         )
         .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
     )
-    if scope_candidates:
+    if not operation:
+        # Persistent assignment/plan truth only: never consult old attendance
+        # to present an off-sort roster or fabricate an attendance status.
+        assignment_query = assignment_query.filter(or_(
+            StaffingWorkAssignment.work_area_unit_id.in_(start_ids),
+            StaffingPerson.shift_flow_plan.has(or_(
+                StaffingShiftFlowPlan.sort_start_work_area_id.in_(start_ids),
+                StaffingShiftFlowPlan.final_door_work_area_id.in_(later_ids),
+            )),
+        ))
+    elif scope_candidates:
         # Candidate superset only: the existing effective-area logic below
         # still resolves attendance overrides and HERE precedence over COMING.
         # Keep legacy NULL-operation attendance within the same sort/date.
@@ -1215,7 +1225,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
         ))
     assignments = assignment_query.all()
     person_ids = [assignment.person_id for assignment in assignments]
-    records = _daily_attendance_records(person_ids, operation, staffing_sort)
+    records = _daily_attendance_records(person_ids, operation, staffing_sort) if operation else {}
     here = []
     coming = []
     here_assignments = []
@@ -1228,16 +1238,18 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             if record and record.work_area_unit_id is not None
             else getattr(plan, "sort_start_work_area_id", None)
         )
+        if not operation and assignment.work_area_unit_id in start_ids:
+            effective_area_id = assignment.work_area_unit_id
         row = {
             "person": person,
             "plan": plan,
             "attendance": record,
             "status": record.status if record else "",
-            "status_label": ATTENDANCE_STATUS_LABELS.get(record.status, "Unmarked") if record else "Unmarked",
+            "status_label": (ATTENDANCE_STATUS_LABELS.get(record.status, "Unmarked") if record else "Unmarked") if operation else "",
             "status_writable": bool(
-                not record
-                or record.status in STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES
+                operation and (not record or record.status in STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES)
             ),
+            "assignment_label": assignment.work_area.name,
             "effective_work_area_id": effective_area_id,
             "flow": operational_flow_shorthand(plan),
         }
@@ -1246,14 +1258,15 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             here_assignments.append(assignment)
         elif plan and plan.final_door_work_area_id in later_ids:
             coming.append(row)
-    counts = _attendance_staffing_count_totals(here_assignments, records)
+    counts = _attendance_staffing_count_totals(here_assignments, records) if operation else {}
     return {
         "operation": operation,
+        "roster_available": True,
         "staffing_sort": staffing_sort,
         "here": here,
         "coming": coming,
         "counts": counts,
-        "status_choices": attendance_status_choices(),
+        "status_choices": attendance_status_choices() if operation else (),
     }
 
 
@@ -4351,7 +4364,11 @@ def _daily_attendance_rows(assignments, existing, hierarchy):
 
 
 def _staffing_sort_for_operation(operation, hierarchy):
-    operation_name = _normalize_staffing_sort_name(operation.sort_name)
+    return _staffing_sort_for_name(operation.sort_name, hierarchy)
+
+
+def _staffing_sort_for_name(sort_name, hierarchy):
+    operation_name = _normalize_staffing_sort_name(sort_name)
     matches = [
         unit
         for unit in hierarchy["units"]
@@ -4360,11 +4377,11 @@ def _staffing_sort_for_operation(operation, hierarchy):
     ]
     if not matches:
         raise ValueError(
-            f'No active NeoStaffing Sort matches "{operation.sort_name}".'
+            f'No active NeoStaffing Sort matches "{sort_name}".'
         )
     if len(matches) > 1:
         raise ValueError(
-            f'Multiple active NeoStaffing Sorts match "{operation.sort_name}".'
+            f'Multiple active NeoStaffing Sorts match "{sort_name}".'
         )
     return matches[0]
 
@@ -4698,14 +4715,17 @@ def _daily_attendance_filters(
     return selected
 
 
-def attendance_deep_link_work_area_ids(area_names, operation=None):
-    """Resolve existing current-sort Work Areas for read-only attendance links."""
+def attendance_deep_link_work_area_ids(area_names, operation=None, *, allow_persistent_roster=False):
+    """Resolve current-sort areas; optionally use the persistent Night hierarchy."""
     operation = operation or current_night_attendance_operation()
-    if not operation:
+    if not operation and not allow_persistent_roster:
         return []
     hierarchy = _daily_attendance_hierarchy()
     try:
-        staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+        staffing_sort = (
+            _staffing_sort_for_operation(operation, hierarchy) if operation
+            else _staffing_sort_for_name(ATTENDANCE_OPERATION_SORT_NAME, hierarchy)
+        )
     except ValueError:
         return []
     areas_by_name = {}

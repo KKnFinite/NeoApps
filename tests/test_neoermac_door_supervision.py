@@ -232,7 +232,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
             self.assertEqual(saved.status_code, 302)
         employees = self.client.get("/neoermac/door-view/manage-employees")
         self.assertEqual(employees.status_code, 200)
-        self.assertIn(b"No current Night Sort.", employees.data)
+        self.assertIn(b"Attendance available when the Night Sort is active.", employees.data)
         record = NeoErmacDoorPreference.query.one()
         self.assertEqual(json.loads(record.selected_doors_json), ["D6", "D13"])
         self.assertEqual(record.active_door, "D13")
