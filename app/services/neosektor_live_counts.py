@@ -135,7 +135,14 @@ class NeoSektorOperationalStateBundle:
             if (
                 has_request_context()
                 and request.method == "POST"
-                and request.endpoint == "neosektor.ballmat_update"
+                and request.endpoint in {
+                    "neosektor.ballmat_update",
+                    "neosektor.tunnel_conductor_wave",
+                    "neosektor.tunnel_conductor_offset",
+                    "neosektor.tunnel_conductor_settings",
+                    "neosektor.tunnel_conductor_ballmat",
+                    "neosektor.tunnel_conductor_discharge_controls",
+                }
             ):
                 # Start reuse strictly AFTER the Gateway write reservation. The
                 # response's refresh lookup needs these same raw candidates;

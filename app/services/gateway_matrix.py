@@ -229,7 +229,7 @@ def current_operations_for_gateway(gateway, now=None):
             resolve_operations,
         )
     elif get_request_cached("neosektor.locked_operation_scope", (gateway.id, gateway.code)) is True:
-        # Ballmat POST opted in only after locking. Re-evaluate visible/window
+        # Sektor mutation POST opted in only after locking. Re-evaluate visible/window
         # selection below; cache neither a selected sort nor lifecycle results.
         operations = request_cached(
             "gateway.locked_operation_candidates", (gateway.id, gateway.code, current_date),

@@ -1652,10 +1652,10 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
                 g.pop("_login_user", None)
                 response, metrics = self._capture_post_metrics(url, payload)
                 self.assertEqual(response.status_code, 200)
-                # 7 auth/gateway + 8 bundle + 7 current-sort/live-refresh reads:
-                # the bundle now resolves its operational date instead of using
-                # the server calendar. Child reads and the commit remain single.
-                self.assertEqual(metrics["selects"], 22)
+                # This no-operation fixture measured 21 before locked candidate
+                # reuse, now 20. The prior 22 assertion predated the side-state
+                # join. Keep the budget tight; child reads/commit remain single.
+                self.assertEqual(metrics["selects"], 20)
                 self.assertEqual(metrics["commits"], 1)
                 self.assertTrue(
                     all(count == 1 for count in metrics["table_selects"].values())
