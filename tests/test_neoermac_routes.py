@@ -20,7 +20,7 @@ from app.models import (
     MasterFlightSchedule,
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
-    NeoErmacDoorSupervision,
+    NeoErmacDoorPreference,
     NeoErmacUldRequest,
     NeoNode,
     NeoSektorUldOnTheWayEvent,
@@ -594,7 +594,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
                 for row in second_statements
             )
         )
-        supervision = NeoErmacDoorSupervision.query.one()
+        supervision = NeoErmacDoorPreference.query.one()
         self.assertEqual(supervision.active_door, "D34")
 
     def test_established_neoermac_get_commits_access_initialization_once(self):

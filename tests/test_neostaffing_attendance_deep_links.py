@@ -120,7 +120,7 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         ermac_route = Path("app/neonodes/neoermac/routes.py").read_text()
         sektor_route = Path("app/neonodes/neosektor/routes.py").read_text()
 
-        self.assertIn("EMPLOYEE ATTENDANCE", ermac_template)
+        self.assertIn("EMPLOYEES", ermac_template)
         self.assertIn("{% if supervised_doors %}", ermac_template)
         self.assertIn("_current_user_supervised_doors", ermac_route)
         self.assertIn("MANAGE EMPLOYEES", sektor_template)

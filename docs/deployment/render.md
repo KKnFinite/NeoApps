@@ -68,6 +68,21 @@ settings/assignment columns and audit/calibration-reset tables, and Rain
 integration authority columns and fuel-authority tables. It does not depend on
 a running web process. `init_db.py` is local SQLite tooling, not deployment tooling.
 
+## NeoErmac saved door preferences
+
+The user/gateway Door View preference release adds `neoermac_door_preferences`
+with a unique `(user_id, gateway_id)` key. The same pre-deploy bootstrap creates
+the table and backfills each user's latest valid per-gateway supervision history
+(ordered by `updated_at`, then ID). Legacy operations without a gateway ID use
+their gateway code. Invalid JSON/invalid-only door lists are skipped; explicit
+empty selections remain empty. Active doors are retained when valid.
+
+Backfill never overwrites a preference already present, including a user's
+intentional clear. Repeated bootstrap is safe. The legacy supervision table is
+retained, and missions, pulls, ULDs and attendance remain sort-scoped. No manual
+SQL migration or data reset is required; run the configured pre-deploy command
+before serving the new code. Normal requests do not run the backfill.
+
 ## Repairing the Ballmat missing-column incident
 
 ### Conductor-owned spotter modes (2026-09-09)

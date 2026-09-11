@@ -560,6 +560,9 @@ def sync_local_sqlite_schema(app):
     _validate_neoermac_door_pull_schema(table_names, table_columns)
     _backfill_neoermac_door_pull_timestamps(table_names, table_columns)
     _migrate_legacy_second_mix_pull_values(table_names, table_columns)
+    from app.services.neoermac_door_preference_schema import backfill_neoermac_door_preferences
+
+    backfill_neoermac_door_preferences(table_names)
     db.session.flush()
 
 
@@ -617,6 +620,9 @@ def sync_database_schema(app):
     _validate_neoermac_door_pull_schema(table_names, table_columns)
     _backfill_neoermac_door_pull_timestamps(table_names, table_columns)
     _migrate_legacy_second_mix_pull_values(table_names, table_columns)
+    from app.services.neoermac_door_preference_schema import backfill_neoermac_door_preferences
+
+    backfill_neoermac_door_preferences(table_names)
     db.session.flush()
 
 
@@ -1670,6 +1676,7 @@ def _create_missing_application_tables(existing_table_names):
         MotherBrainParkingRule,
         MotherBrainParkingSettings,
         NeoErmacDoorSupervision,
+        NeoErmacDoorPreference,
         NeoRainOperationalSetting,
         NeoRainCrewAdminAssignment,
         NeoRainDelayInfo,
@@ -1745,6 +1752,7 @@ def _create_missing_application_tables(existing_table_names):
         MotherBrainParkingRule,
         MotherBrainParkingSettings,
         NeoErmacDoorSupervision,
+        NeoErmacDoorPreference,
         NeoRainOperationalSetting,
         NeoRainCrewAdminAssignment,
         NeoRainDelayInfo,

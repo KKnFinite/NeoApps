@@ -9,10 +9,12 @@ from unittest.mock import patch
 from app import create_app
 from app.extensions import db
 from app.models import (
+    Gateway,
     GatewayMembership,
     GatewayNodeRole,
     NeoErmacBuildingLineup,
     NeoErmacDoorPull,
+    NeoErmacDoorPreference,
     NeoErmacDoorSupervision,
     NeoErmacUldRequest,
     NeoNode,
@@ -62,7 +64,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         selected = self.client.get("/neoermac/door-view?door=D34")
 
         self.assertEqual(selected.status_code, 200)
-        record = NeoErmacDoorSupervision.query.one()
+        record = NeoErmacDoorPreference.query.one()
         self.assertEqual(json.loads(record.selected_doors_json), ["D1", "D34"])
         self.assertEqual(record.active_door, "D34")
         self.assertIn(b">D1</a>", selected.data)
@@ -90,8 +92,8 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertNotIn(b'data-door-view', empty.data)
 
         self.client.get("/neoermac/door-view?door=D4")
-        rows = NeoErmacDoorSupervision.query.order_by(
-            NeoErmacDoorSupervision.user_id.asc()
+        rows = NeoErmacDoorPreference.query.order_by(
+            NeoErmacDoorPreference.user_id.asc()
         ).all()
         self.assertEqual(len(rows), 2)
         selections = {
@@ -123,10 +125,10 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertIn(b'>D1</a>', page.data)
         self.assertIn(b'>D34</a>', page.data)
         self.assertIn(b'data-state-url="/neoermac/door-view/state?door=D34"', page.data)
-        record = NeoErmacDoorSupervision.query.one()
+        record = NeoErmacDoorPreference.query.one()
         self.assertEqual(json.loads(record.selected_doors_json), ['D1', 'D34'])
         self.assertEqual(record.active_door, 'D34')
-        self.assertEqual(record.sort_date_operation_id, self.operation.id)
+        self.assertEqual(record.gateway_id, self.gateway.id)
         state = self.client.get('/neoermac/door-view/state?door=D34').get_json()
         self.assertTrue(state['ok'])
         self.assertFalse(state['state']['refresh']['auto_refresh_enabled'])
@@ -136,8 +138,8 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertEqual(saved.status_code, 302)
         self.client.get('/neoermac/door-view?door=D1')
         db.session.expire_all()
-        self.assertEqual(NeoErmacDoorSupervision.query.one().active_door, 'D1')
-        self.assertEqual(json.loads(NeoErmacDoorSupervision.query.one().selected_doors_json), ['D1', 'D4', 'D34'])
+        self.assertEqual(NeoErmacDoorPreference.query.one().active_door, 'D1')
+        self.assertEqual(json.loads(NeoErmacDoorPreference.query.one().selected_doors_json), ['D1', 'D4', 'D34'])
 
     def test_employee_attendance_action_follows_supervised_door_selection(self):
         # The disabled legacy STAFFING button is retired, not the real link.
@@ -145,12 +147,12 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         empty = self.client.get("/neoermac/door-view")
 
         self.assertEqual(empty.status_code, 200)
-        self.assertNotIn(b"EMPLOYEE ATTENDANCE", empty.data)
+        self.assertNotIn(b"EMPLOYEES", empty.data)
         self.assertNotIn(b'href="/neoermac/door-view/manage-employees"', empty.data)
 
-        supervision = NeoErmacDoorSupervision(
+        supervision = NeoErmacDoorPreference(
             user_id=self.user.id,
-            sort_date_operation_id=self.operation.id,
+            gateway_id=self.gateway.id,
             selected_doors_json=json.dumps(["D1"]),
             active_door="D1",
         )
@@ -170,12 +172,12 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         ):
             additional = self.client.get("/neoermac/door-view")
 
-        self.assertIn(b"EMPLOYEE ATTENDANCE", selected.data)
+        self.assertIn(b"EMPLOYEES", selected.data)
         self.assertIn(b'href="/neoermac/door-view/manage-employees"', selected.data)
-        self.assertIn(b"EMPLOYEE ATTENDANCE", additional.data)
+        self.assertIn(b"EMPLOYEES", additional.data)
         self.assertNotIn(b"MANAGE EMPLOYEES", additional.data)
         self.assertEqual(
-            json.loads(NeoErmacDoorSupervision.query.one().selected_doors_json),
+            json.loads(NeoErmacDoorPreference.query.one().selected_doors_json),
             ["D1", "D4"],
         )
 
@@ -189,31 +191,116 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
             cleared = self.client.get("/neoermac/door-view")
 
         self.assertEqual(cleared.status_code, 200)
-        self.assertNotIn(b"EMPLOYEE ATTENDANCE", cleared.data)
+        self.assertNotIn(b"EMPLOYEES", cleared.data)
         self.assertNotIn(b'href="/neoermac/door-view/manage-employees"', cleared.data)
-        self.assertEqual(json.loads(NeoErmacDoorSupervision.query.one().selected_doors_json), [])
+        self.assertEqual(json.loads(NeoErmacDoorPreference.query.one().selected_doors_json), [])
 
-    def test_new_sort_starts_with_a_fresh_selection(self):
-        self.client.get("/neoermac/door-view?door=D9")
+    def test_new_sort_retains_selection_and_active_door(self):
+        self.client.post("/neoermac/door-view/supervision", data={
+            "doors": ["D6", "D9"], "active_door": "D9",
+        })
         next_operation = self._add_operation(date(2026, 6, 12))
         next_operation.generated_by_user_id = self.user.id
         self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 12, 23, 0)
         db.session.commit()
-
-        fresh = self.client.get("/neoermac/door-view")
-
-        self.assertEqual(fresh.status_code, 200)
-        self.assertIn(b"Select a door.", fresh.data)
-        self.assertNotIn(b'data-door-view', fresh.data)
+        page = self.client.get("/neoermac/door-view")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b'data-door-tab="D6"', page.data)
+        self.assertIn(b'data-door-tab="D9"', page.data)
+        self.assertIn(b'data-state-url="/neoermac/door-view/state?door=D9"', page.data)
+        self.assertEqual(NeoErmacDoorPreference.query.count(), 1)
+        self.assertEqual(NeoErmacDoorPreference.query.one().active_door, "D9")
         self.client.get("/neoermac/door-view?door=D13")
-        rows = NeoErmacDoorSupervision.query.order_by(
-            NeoErmacDoorSupervision.sort_date_operation_id.asc()
-        ).all()
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0].sort_date_operation_id, self.operation.id)
-        self.assertEqual(json.loads(rows[0].selected_doors_json), ["D9"])
-        self.assertEqual(rows[1].sort_date_operation_id, next_operation.id)
-        self.assertEqual(json.loads(rows[1].selected_doors_json), ["D13"])
+        self.assertEqual(json.loads(NeoErmacDoorPreference.query.one().selected_doors_json), ["D6", "D9", "D13"])
+
+    def test_saved_tabs_and_employees_survive_without_an_operation(self):
+        self.client.post("/neoermac/door-view/supervision", data={
+            "doors": ["D6", "D9"], "active_door": "D9",
+        })
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 6, 15, 12)
+        with patch("app.neonodes.neoermac.routes.current_door_view_operation", return_value=None):
+            page = self.client.get("/neoermac/door-view")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(b'data-door-tab="D6"', page.data)
+            self.assertIn(b'data-door-tab="D9"', page.data)
+            self.assertIn(b'>EDIT DOORS</button>', page.data)
+            self.assertIn(b'>EMPLOYEES</a>', page.data)
+            self.assertIn(b'href="/neoermac/door-view/manage-employees"', page.data)
+            saved = self.client.post("/neoermac/door-view/supervision", data={
+                "doors": ["D6", "D13", "D999"], "active_door": "D13",
+            })
+            self.assertEqual(saved.status_code, 302)
+        employees = self.client.get("/neoermac/door-view/manage-employees")
+        self.assertEqual(employees.status_code, 200)
+        self.assertIn(b"No current Night Sort.", employees.data)
+        record = NeoErmacDoorPreference.query.one()
+        self.assertEqual(json.loads(record.selected_doors_json), ["D6", "D13"])
+        self.assertEqual(record.active_door, "D13")
+
+    def test_gateway_preferences_are_independent(self):
+        from app.services.neoermac_door_supervision import save_door_supervision, supervised_doors_for_user
+        from app.services.neoermac_building_lineup import OUTBOUND_DOOR_OPTIONS
+        other = Gateway(code="SDF", name="SDF")
+        db.session.add(other)
+        db.session.flush()
+        save_door_supervision(self.user, self.gateway, ["D6", "D9"], OUTBOUND_DOOR_OPTIONS, "D9")
+        save_door_supervision(self.user, other, ["D13"], OUTBOUND_DOOR_OPTIONS, "D13")
+        db.session.commit()
+        self.assertEqual(supervised_doors_for_user(self.user, self.gateway, OUTBOUND_DOOR_OPTIONS), ["D6", "D9"])
+        self.assertEqual(supervised_doors_for_user(self.user, other, OUTBOUND_DOOR_OPTIONS), ["D13"])
+        self.assertEqual(NeoErmacDoorPreference.query.count(), 2)
+
+    def test_schema_sync_backfills_latest_valid_history_once(self):
+        from app.services.schema_sync import sync_database_schema
+        from app.services.database_bootstrap import bootstrap_database
+        from sqlalchemy import inspect
+        other = Gateway(code="SDF", name="SDF")
+        db.session.add(other)
+        db.session.flush()
+        newer = self._add_operation(date(2026, 6, 12))
+        invalid = self._add_operation(date(2026, 6, 13))
+        other_operation = SortDateOperation(
+            gateway_code=other.code, gateway_id=None, sort_date=date(2026, 6, 12), sort_name="night",
+        )
+        db.session.add(other_operation)
+        second_user = self._add_user("migration")
+        db.session.flush()
+        for user, operation, doors, active, stamp in (
+            (self.user, self.operation, '["D1"]', "D1", datetime(2026, 6, 11)),
+            (self.user, newer, '["D6", "D9", "D999"]', "D9", datetime(2026, 6, 12)),
+            (self.user, invalid, 'invalid json', "D13", datetime(2026, 6, 13)),
+            (self.user, other_operation, '["D13"]', "D999", datetime(2026, 6, 12)),
+            (second_user, newer, '[]', None, datetime(2026, 6, 12)),
+        ):
+            db.session.add(NeoErmacDoorSupervision(
+                user_id=user.id, sort_date_operation_id=operation.id,
+                selected_doors_json=doors, active_door=active, created_at=stamp, updated_at=stamp,
+            ))
+        db.session.commit()
+        # Exercise explicit schema compatibility, not just create_all().
+        NeoErmacDoorPreference.__table__.drop(db.engine)
+        sync_database_schema(self.app)
+        db.session.commit()
+        self.assertIn("neoermac_door_preferences", inspect(db.engine).get_table_names())
+        unique = inspect(db.engine).get_unique_constraints("neoermac_door_preferences")
+        self.assertIn(["user_id", "gateway_id"], [item["column_names"] for item in unique])
+        record = NeoErmacDoorPreference.query.filter_by(user_id=self.user.id, gateway_id=self.gateway.id).one()
+        self.assertEqual(json.loads(record.selected_doors_json), ["D6", "D9"])
+        self.assertEqual(record.active_door, "D9")
+        self.assertEqual(record.updated_at, datetime(2026, 6, 12))
+        other_record = NeoErmacDoorPreference.query.filter_by(user_id=self.user.id, gateway_id=other.id).one()
+        self.assertEqual(json.loads(other_record.selected_doors_json), ["D13"])
+        self.assertEqual(other_record.active_door, "D13")
+        self.assertEqual(NeoErmacDoorPreference.query.filter_by(user_id=second_user.id).one().selected_doors_json, "[]")
+        # A user's intentional clear must never be resurrected by a deployment.
+        record.selected_doors_json = "[]"
+        record.active_door = None
+        db.session.commit()
+        snapshot = [(r.id, r.selected_doors_json, r.active_door, r.updated_at) for r in NeoErmacDoorPreference.query.order_by(NeoErmacDoorPreference.id)]
+        bootstrap_database(self.app)
+        bootstrap_database(self.app)
+        self.assertEqual(snapshot, [(r.id, r.selected_doors_json, r.active_door, r.updated_at) for r in NeoErmacDoorPreference.query.order_by(NeoErmacDoorPreference.id)])
+        self.assertEqual(NeoErmacDoorSupervision.query.count(), 5)
 
     def test_add_remove_and_removing_active_door_selects_another(self):
         added = self.client.post(
@@ -231,7 +318,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         )
         self.assertEqual(removed.status_code, 302)
         self.assertTrue(removed.location.endswith("/neoermac/door-view?door=D1"))
-        record = NeoErmacDoorSupervision.query.one()
+        record = NeoErmacDoorPreference.query.one()
         self.assertEqual(json.loads(record.selected_doors_json), ["D1", "D34"])
         self.assertEqual(record.active_door, "D1")
 
@@ -320,7 +407,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
         self.assertEqual(request_record.door, "D13")
         self.assertEqual(request_record.requested_by_user_id, self.user.id)
         self.assertTrue(request_record.setup_needed)
-        supervision = NeoErmacDoorSupervision.query.one()
+        supervision = NeoErmacDoorPreference.query.one()
         self.assertEqual(json.loads(supervision.selected_doors_json), ["D1"])
         self.assertEqual(supervision.active_door, "D1")
 
@@ -445,7 +532,7 @@ class NeoErmacDoorSupervisionTest(unittest.TestCase):
 
         supervised = self.client.get("/neoermac/door-view?door=D4")
         self.assertEqual(supervised.status_code, 200)
-        record = NeoErmacDoorSupervision.query.one()
+        record = NeoErmacDoorPreference.query.one()
         self.assertEqual(json.loads(record.selected_doors_json), ["D1", "D4"])
         self.assertEqual(record.active_door, "D4")
 

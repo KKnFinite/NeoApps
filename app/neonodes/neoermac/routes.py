@@ -516,7 +516,7 @@ def manage_employees():
     gateway = get_current_gateway()
     doors = _current_user_supervised_doors(gateway)
     area_ids = staffing_service.attendance_deep_link_work_area_ids(doors)
-    if not area_ids and request.method == "GET":
+    if not area_ids and not doors and request.method == "GET":
         return redirect(url_for("neostaffing.attendance"))
     can_edit = user_can("neostaffing.attendance.take")
     if request.method == "POST":
@@ -559,11 +559,10 @@ def door_view_supervision():
         flash("Access denied.", "error")
         return redirect(url_for("neoermac.index"))
 
-    operation = current_door_view_operation(gateway)
     try:
         supervision = save_door_supervision(
             current_user,
-            operation,
+            gateway,
             request.form.getlist("doors"),
             get_outbound_door_options(),
             active_door=request.form.get("active_door", ""),
@@ -611,7 +610,7 @@ def door_view_state():
         supervised_doors = _uld_workspace_doors(
             supervised_doors_for_user(
                 current_user,
-                operation,
+                gateway,
                 get_outbound_door_options(),
             ),
             selected_door,
@@ -662,7 +661,7 @@ def door_view_pull_autosave():
     try:
         operation = locked_door_pull_operation(gateway)
         supervised_doors = _uld_workspace_doors(
-            _current_user_supervised_doors(gateway, operation=operation),
+            _current_user_supervised_doors(gateway),
             selected_door,
         )
         bundle = door_view_operational_state(
@@ -728,11 +727,10 @@ def door_view_pull_autosave():
     return jsonify({"ok": True, "card": card, "state": state})
 
 
-def _current_user_supervised_doors(gateway, operation=None):
-    operation = operation or current_door_view_operation(gateway)
+def _current_user_supervised_doors(gateway):
     return supervised_doors_for_user(
         current_user,
-        operation,
+        gateway,
         get_outbound_door_options(),
     )
 
@@ -806,7 +804,7 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
     operation = current_door_view_operation(gateway)
     supervision = door_supervision_for_user(
         current_user,
-        operation,
+        gateway,
         canonical_door_options,
         requested_door=selected_door,
     )

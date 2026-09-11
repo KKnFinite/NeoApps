@@ -1,15 +1,15 @@
-"""Per-user current-sort door supervision preferences."""
+"""Per-user gateway door supervision preferences."""
 
 import json
 
 from app.extensions import db
-from app.models import NeoErmacDoorSupervision
+from app.models import NeoErmacDoorPreference
 from app.services.neoermac_door_view import normalize_door
 
 
 def door_supervision_for_user(
     user,
-    operation,
+    gateway,
     available_doors,
     requested_door=None,
 ):
@@ -19,10 +19,10 @@ def door_supervision_for_user(
     if requested not in available:
         requested = ""
 
-    if not operation or not getattr(user, "is_authenticated", False):
-        return _payload([], requested or None, operation, changed=False)
+    if not gateway or not getattr(user, "is_authenticated", False):
+        return _payload([], requested or None, gateway, changed=False)
 
-    record = _record_for(user.id, operation.id)
+    record = _record_for(user.id, gateway.id)
     selected = _selected_doors(record, available)
     active = normalize_door(getattr(record, "active_door", ""))
     changed = False
@@ -40,35 +40,35 @@ def door_supervision_for_user(
         changed = bool(record and record.active_door)
 
     if changed:
-        record = record or NeoErmacDoorSupervision(
+        record = record or NeoErmacDoorPreference(
             user_id=user.id,
-            sort_date_operation_id=operation.id,
+            gateway_id=gateway.id,
         )
         record.selected_doors_json = json.dumps(selected)
         record.active_door = active or None
         db.session.add(record)
         db.session.flush()
 
-    return _payload(selected, active or None, operation, changed=changed)
+    return _payload(selected, active or None, gateway, changed=changed)
 
 
 def save_door_supervision(
     user,
-    operation,
+    gateway,
     selected_doors,
     available_doors,
     active_door=None,
 ):
-    """Replace one user's selected doors for one current-sort operation."""
-    if not operation:
-        raise ValueError("No current sort operation is available.")
+    """Replace one user's selected doors for one gateway."""
+    if not gateway:
+        raise ValueError("No gateway is available.")
     if not getattr(user, "is_authenticated", False):
         raise ValueError("Sign in to manage supervised doors.")
 
     available = _normalized_available_doors(available_doors)
     selected = _sort_doors(selected_doors, available)
     requested_active = normalize_door(active_door)
-    record = _record_for(user.id, operation.id)
+    record = _record_for(user.id, gateway.id)
     previous_active = normalize_door(getattr(record, "active_door", ""))
 
     if requested_active in selected:
@@ -78,30 +78,30 @@ def save_door_supervision(
     else:
         active = selected[0] if selected else ""
 
-    record = record or NeoErmacDoorSupervision(
+    record = record or NeoErmacDoorPreference(
         user_id=user.id,
-        sort_date_operation_id=operation.id,
+        gateway_id=gateway.id,
     )
     record.selected_doors_json = json.dumps(selected)
     record.active_door = active or None
     db.session.add(record)
     db.session.flush()
-    return _payload(selected, active or None, operation, changed=True)
+    return _payload(selected, active or None, gateway, changed=True)
 
 
-def supervised_doors_for_user(user, operation, available_doors):
+def supervised_doors_for_user(user, gateway, available_doors):
     """Return one user's persisted supervised doors without changing them."""
-    if not operation or not getattr(user, "is_authenticated", False):
+    if not gateway or not getattr(user, "is_authenticated", False):
         return []
     available = _normalized_available_doors(available_doors)
-    record = _record_for(user.id, operation.id)
+    record = _record_for(user.id, gateway.id)
     return _selected_doors(record, available)
 
 
-def _record_for(user_id, operation_id):
-    return NeoErmacDoorSupervision.query.filter_by(
+def _record_for(user_id, gateway_id):
+    return NeoErmacDoorPreference.query.filter_by(
         user_id=user_id,
-        sort_date_operation_id=operation_id,
+        gateway_id=gateway_id,
     ).first()
 
 
@@ -130,10 +130,10 @@ def _sort_doors(values, available):
     return [door for door in available if door in selected]
 
 
-def _payload(selected_doors, active_door, operation, *, changed):
+def _payload(selected_doors, active_door, gateway, *, changed):
     return {
         "selected_doors": list(selected_doors),
         "active_door": active_door,
-        "operation_id": operation.id if operation else None,
+        "gateway_id": gateway.id if gateway else None,
         "persistent_state_changed": changed,
     }

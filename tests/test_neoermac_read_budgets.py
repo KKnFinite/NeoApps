@@ -108,7 +108,8 @@ class NeoErmacReadBudgetTest(unittest.TestCase):
             'Lineup unchanged state': (8, 0, 0, 0, 0),
             'Lineup autosave': (15, 0, 2, 0, 1),
             'Door pull autosave': (19, 1, 2, 0, 1),
-            'Attendance GET': (21, 0, 0, 0, 0),
+            # Gateway-scoped door preferences no longer resolve an operation.
+            'Attendance GET': (20, 0, 0, 0, 0),
             'Cold Lineup GET': (19, 0, 0, 0, 0),
             'Repeated cold Lineup GET': (19, 0, 0, 0, 0),
         }

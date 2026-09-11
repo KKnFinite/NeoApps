@@ -80,7 +80,7 @@
         {% include "neonodes/_operation_refresh_banner.html" %}
         {% endif %}
 
-        {% if operation %}
+        {% if operation or supervised_doors %}
         <nav class="neoermac-door-supervision" aria-label="Supervised doors" data-door-supervision>
         {% if supervised_doors %}
         <div class="neoermac-door-tabs" role="tablist" aria-label="Supervised Door Views" data-door-tabs>
@@ -109,14 +109,14 @@
         <a
             class="neoermac-menu-link neoermac-door-supervision-edit neoermac-door-attendance-link"
             href="{{ url_for('neoermac.manage_employees') }}"
-        >EMPLOYEE ATTENDANCE</a>
+        >EMPLOYEES</a>
         {% endif %}
         </nav>
         {% endif %}
     </div>
     {% endif %}
 
-    {% if operation %}
+    {% if operation or supervised_doors %}
     <dialog class="neoermac-door-supervision-dialog" data-door-supervision-dialog>
         <form method="post" action="{{ url_for('neoermac.door_view_supervision') }}">
             <input type="hidden" name="active_door" value="{{ selected_door or '' }}">
