@@ -197,6 +197,9 @@ def neosektor_state_revision(
 
     return _digest(
         {
+            # Existing open screens must receive corrected LTU after deployment,
+            # even when the stored operational inputs have not changed yet.
+            "ltu_formula": "spare-openings-v2",
             "gateway_id": gateway.id,
             "scope": scope,
             "sort_date": sort_date.isoformat(),

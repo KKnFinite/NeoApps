@@ -1223,7 +1223,8 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertIn(("B2", 12), worksheet.updates)
         self.assertIn(("D3", 9), worksheet.updates)
         self.assertIn(("E2", 76), worksheet.updates)
-        self.assertIn(("E3", 17), worksheet.updates)
+        # Numeric pre-active second wave: 9 LTA + 5 waiting + modifier 37.
+        self.assertIn(("E3", 51), worksheet.updates)
 
     def test_ltu_google_mirror_cells_are_output_only_and_down_is_zero(self):
         self.assertNotIn("E2", SHEET_CELL_ORDER)
@@ -1267,7 +1268,43 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(worksheet.updates, [("D3", 15), ("E3", 23)])
+        self.assertEqual(worksheet.updates, [("D3", 15), ("E3", 57)])
+
+    def test_spare_capacity_ltu_mirrors_canonical_route_response(self):
+        self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
+        apply_standalone_compat_values(self.gateway, _complete_sheet_values(
+            D2=22, B2=2, C2=0, D3=22, B3=2, C3=0, B4=4, C4=4))
+        db.session.commit()
+        self._login("simulator")
+        worksheet = _FakeWorksheet()
+        with patch.dict(os.environ, FAKE_SHEETS_ENV, clear=False), patch(
+            "app.services.neosektor_sheets_compat._get_worksheet", return_value=worksheet
+        ):
+            self._enable_mirror_writes(worksheet)
+            # Enablement mirrored 61/53, then cleared the fixture's update log.
+            self.assertEqual((worksheet.values['E2'], worksheet.values['E3']), (61, 53))
+            response = self.client.post('/neosektor/tunnel-conductor/wave',
+                json={'wave': 'first', 'value': 23})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual([w['left'] for w in response.json['state']['waves']], [62, 53])
+            self.assertEqual(worksheet.updates, [('D2', 23), ('E2', 62)])
+            refreshed = self.client.get('/neosektor/live-counts/state')
+            self.assertEqual([w['left'] for w in refreshed.json['state']['waves']], [62, 53])
+            # A browser retaining the old formula's revision must not stay on
+            # obsolete LTU until another operator happens to make a write.
+            from app.services import neosektor_live_refresh as refresh
+            digest = refresh._digest
+            with patch.object(refresh, '_digest', side_effect=lambda value: digest(
+                {key: item for key, item in value.items() if key != 'ltu_formula'}
+            )):
+                old_revision = self.client.get('/neosektor/live-counts/state').json['revision']
+            with patch('app.services.neosektor_live_counts.node_auto_refresh_status',
+                       return_value={**refreshed.json['refresh'], 'auto_refresh_enabled': True}):
+                corrected = self.client.get('/neosektor/live-counts/state', query_string={'revision': old_revision}).json
+                self.assertTrue(corrected['changed'])
+                self.assertEqual([w['left'] for w in corrected['state']['waves']], [62, 53])
+                unchanged = self.client.get('/neosektor/live-counts/state', query_string={'revision': corrected['revision']}).json
+                self.assertFalse(unchanged['changed'])
 
     def test_failed_initial_mirror_enablement_remains_off(self):
         self._set_mode(NEO_PRIMARY_GOOGLE_MIRROR)
@@ -1528,7 +1565,8 @@ class NeoSektorIntegrationModesTest(unittest.TestCase):
         self.assertEqual(metrics["commits"], 1)
         self.assertEqual(
             worksheet.updates,
-            [("B2", 11), ("B4", 3), ("B6", "Moderate"), ("E2", 74)],
+            # Open Bays now also affect numeric pre-active second-wave LTU.
+            [("B2", 11), ("B4", 3), ("B6", "Moderate"), ("E2", 74), ("E3", 55)],
         )
         self.assertEqual(order[0], ("commit", None))
         self.assertTrue(all(kind == "google" for kind, _cell in order[1:]))

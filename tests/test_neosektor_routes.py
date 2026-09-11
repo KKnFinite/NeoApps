@@ -36,7 +36,8 @@ from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
 from app.services.gateway_matrix import save_gateway_matrix
 from app.services.neosektor_live_counts import (
-    _active_wave_left_to_unload,
+    NeoSektorOperationalStateBundle,
+    _numeric_wave_left_to_unload,
     _driver_wave_route,
     driver_routing_state_payload,
 )
@@ -3280,27 +3281,28 @@ class NeoSektorRoutesTest(unittest.TestCase):
     def test_active_wave_ltu_offsets_modifier_with_opposite_open_ballmat(self):
         # LTA 11 + West waiting 2 + (modifier 45 - East openings 4) = 54.
         self.assertEqual(
-            _active_wave_left_to_unload(11, 0, 2, 4, 0, 45),
+            _numeric_wave_left_to_unload(11, 0, 2, 4, 0, 45),
             54,
         )
 
     def test_active_wave_ltu_offsets_modifier_for_opposite_ballmat_equivalent(self):
         # LTA 11 + East waiting 2 + (modifier 45 - West openings 4) = 54.
         self.assertEqual(
-            _active_wave_left_to_unload(11, 2, 0, 0, 4, 45),
+            _numeric_wave_left_to_unload(11, 2, 0, 0, 4, 45),
             54,
         )
 
     def test_active_wave_ltu_uses_full_modifier_when_both_ballmats_wait(self):
+        # The numeric helper now receives raw rows: 6-4=2 and 8-5=3 waiting.
         self.assertEqual(
-            _active_wave_left_to_unload(11, 2, 3, 4, 5, 45),
+            _numeric_wave_left_to_unload(11, 6, 8, 4, 5, 45),
             61,
         )
 
-    def test_active_wave_ltu_removes_modifier_when_neither_ballmat_waits(self):
+    def test_numeric_wave_ltu_keeps_modifier_less_spare_when_neither_ballmat_waits(self):
         self.assertEqual(
-            _active_wave_left_to_unload(11, 0, 0, 4, 5, 45),
-            11,
+            _numeric_wave_left_to_unload(11, 0, 0, 4, 5, 45),
+            47,
         )
 
     def test_second_wave_uses_custom_second_modifier_after_first_down(self):
@@ -3436,6 +3438,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_second_wave_all_up_when_matching_open_bays_cover_back_rows(self):
         self._login_approved_user(role="simulator")
+        self.client.post('/neosektor/tunnel-conductor/wave', json={'wave': 'first', 'value': 0})
         self.client.get("/neosektor/live-counts")
         first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
         first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
@@ -3875,6 +3878,9 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(first_wave["left"], 59)
 
     def test_all_up_transitions_to_down_after_15_minutes(self):
+        # Initialization is an explicit write, never a read-only page side effect.
+        NeoSektorOperationalStateBundle.load(self.gateway).ballmat_state_payload()
+        db.session.commit()
         self._login_approved_user(role="watcher")
         page_response = self.client.get("/neosektor/live-counts")
         self.assertEqual(page_response.status_code, 200)
@@ -3958,10 +3964,15 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertEqual(response.get_json()["state"]["waves"][0]["left"], "DOWN")
         self.assertEqual(response.get_json()["state"]["waves"][1]["left"], "ALL UP")
         db.session.refresh(second_wave)
+        self.assertIsNone(second_wave.all_up_started_at)
+        self.assertEqual(self.client.post('/neosektor/tunnel-conductor/wave',
+            json={'wave': 'first', 'value': 0}).status_code, 200)
+        db.session.refresh(second_wave)
         self.assertIsNotNone(second_wave.all_up_started_at)
 
     def test_second_wave_uses_open_bays_and_modifier_after_first_wave_down(self):
         self._login_approved_user(role="simulator")
+        self.client.post('/neosektor/tunnel-conductor/wave', json={'wave': 'first', 'value': 0})
         self.client.get("/neosektor/live-counts")
         first_wave = NeoSektorWaveState.query.filter_by(wave_name="1ST WAVE").one()
         first_wave.all_up_started_at = datetime.utcnow() - timedelta(minutes=16)
@@ -4523,6 +4534,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     with self.subTest(sparse=sparse, scope=scope, elapsed=elapsed):
                         now = started + elapsed
                         expected = revision._digest({
+                            "ltu_formula": "spare-openings-v2",
                             "gateway_id": self.gateway.id, "scope": scope,
                             "sort_date": date.today().isoformat(), "sort_name": "night",
                             "mode": "neo_only", "google_values": None,
