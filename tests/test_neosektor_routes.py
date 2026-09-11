@@ -1029,7 +1029,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
 
     def test_neosektor_mobile_menu_is_compact_single_column_list(self):
         self._login_approved_user(role='simulator')
-        root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor'))
+        root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor/live-counts'))
         menu=drawer.one(**{'data-drawer-view':'menu'})
         for label in ('Live Counts','Tunnel Conductor','East Ballmat','West Ballmat','Driver Routing','Discharge'):
             self.assertIn(label,menu.text)
@@ -1057,13 +1057,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 header=root.one('header', **{'data-operational-mobile-header':None})
                 self.assertEqual(header.one('a').attrs['href'],'/neosektor')
 
-    def test_neosektor_dashboard_mobile_back_points_to_gateway(self):
+    def test_neosektor_dashboard_mobile_menu_has_portal_and_logout_only(self):
         self._login_approved_user(role='simulator')
         root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor'))
         self.assertEqual(dock.one('a').attrs['href'],'/neosektor')
         menu=drawer.one(**{'data-drawer-view':'menu'})
-        self.assertEqual(menu.one('a',href='/rfd').text,'NeoGateway \u00b7 RFD')
+        self.assertEqual([link.attrs['href'] for link in menu.findall('a')], ['/portal'])
         self.assertEqual(menu.one('a',href='/portal').text,'NeoPortal')
+        self.assertEqual(menu.one('button').text,'Logout')
 
     def test_neosektor_internal_menu_filters_links_by_role(self):
         # Node access exposes operational pages read-only.  Action permissions
@@ -1114,8 +1115,11 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 self.assertIn(b'data-node-dashboard="sektor"', response.data)
                 self.assertNotIn(b"motherbrain-header-nav", response.data)
                 self.assertNotIn(b"data-neosektor-internal-menu", response.data)
+                dashboard_menu = document(response).one(**{'data-drawer-view': 'menu'})
+                self.assertEqual([link.text.strip() for link in dashboard_menu.findall('a')], ['NeoPortal'])
+                screen_menu = document(self.client.get('/neosektor/live-counts')).one(**{'data-drawer-view': 'menu'})
                 for label in expected_labels[role]:
-                    self.assertIn(label, response.data)
+                    self.assertIn(label.decode(), screen_menu.text)
                 for link in expected_links:
                     self.assertIn(link, response.data)
                 self.assertNotIn(b"NeoSektor Menu", response.data)
@@ -1168,8 +1172,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 for label in (
                     b"Live Counts",
                     b"Tunnel Conductor",
-                    b"East Ballmat",
-                    b"West Ballmat",
+                    b"EBM" if path == '/neosektor' else b"East Ballmat",
+                    b"WBM" if path == '/neosektor' else b"West Ballmat",
                     b"Driver Routing",
                     b"Discharge",
                 ):
@@ -2623,12 +2627,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
             )
             self.assertEqual(response.data.count(b'class="bay-card"'), 5)
 
+        # The shared dock now owns safe-area clearance, not a Ballmat override.
+        drawer_css = Path(self.app.root_path, "static/css/mobile_drawer.css").read_text()
         self.assertIn(
-            "body.blueprint-neosektor.neosektor-ballmat-operator-page.mobile-app-chrome"
-            ".has-mobile-bottom-nav .content {\n"
-            "        padding-bottom: calc(76px + env(safe-area-inset-bottom));",
-            css,
+            "body:has(> .neo-mobile-navigation):not(.operational-board-view) > .shell > .content { padding-bottom:var(--neo-dock-clearance); }",
+            drawer_css,
         )
+        operator_css = Path(self.app.root_path, "static/css/neosektor_ballmat_mobile.css").read_text()
+        self.assertIn("grid-template-rows:subgrid", operator_css)
+        self.assertIn("grid-template-rows:minmax(40px,auto) 0 repeat(3,46px)", operator_css)
+        self.assertIn("grid-template-rows:minmax(40px,auto) 25px repeat(3,46px)", operator_css)
         self.assertIn(
             "grid-template-rows: 20px repeat(3, minmax(52px, 1fr)) minmax(174px, 1.9fr);",
             mobile_layout,
@@ -3713,7 +3721,8 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"data-can-edit=\"false\"", page.data)
         self.assertIn(b"VIEW ONLY", page.data)
         self.assertEqual(update.status_code, 403)
-        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 4)
+        # A read-only page and rejected write must not create default rows.
+        self.assertEqual(NeoSektorBallmatWaveCount.query.count(), 0)
         self.assertEqual(
             sum(row.count for row in NeoSektorBallmatWaveCount.query.all()),
             0,
@@ -4280,10 +4289,13 @@ class NeoSektorRoutesTest(unittest.TestCase):
                 ]
                 self.assertEqual(len(access_query_keys), len(set(access_query_keys)))
 
-    def test_neosektor_first_use_initialization_commits_once_and_is_durable(self):
+    def test_neosektor_cold_get_is_read_only_and_first_write_initializes(self):
         NeoSektorOperationalSetting.query.delete()
         db.session.commit()
         self._login_approved_user(role="simulator")
+        # Provision shared app access separately; operational state stays cold.
+        self.client.get("/neosektor")
+        db.session.commit()
 
         with (
             patch(
@@ -4305,8 +4317,18 @@ class NeoSektorRoutesTest(unittest.TestCase):
         ]
 
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(len(writes), 1)
-        self.assertEqual(commits, 1)
+        self.assertEqual(writes, [])
+        self.assertEqual(commits, 0)
+        for model in (NeoSektorOperationalSetting, NeoSektorSortState, NeoSektorWaveState,
+                      NeoSektorBallmatWaveCount, NeoSektorBallmatCount, NeoSektorOpenBayState,
+                      NeoSektorBayStatus, NeoSektorDriverRouteSetting):
+            self.assertEqual(model.query.count(), 0, model.__name__)
+
+        # Initialization still belongs to the explicit, authorized write path.
+        with patch("app.services.neosektor_live_counts._neosektor_integration_mode", return_value="neo_only"), \
+             patch("app.services.neosektor_live_refresh._mode_from_settings", return_value="neo_only"):
+            saved = self.client.post("/neosektor/tunnel-conductor/wave", json={"wave": "first", "delta": 1})
+        self.assertEqual(saved.status_code, 200)
         self.assertEqual(NeoSektorOperationalSetting.query.count(), 1)
         self.assertEqual(NeoSektorSortState.query.count(), 1)
         self.assertEqual(NeoSektorWaveState.query.count(), 2)

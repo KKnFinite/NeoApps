@@ -1,0 +1,5 @@
+{# Shared mobile-only global actions. Node screen links belong above this section. #}
+<section class="neo-drawer-links" aria-label="Utilities">
+    <a class="{{ mobile_node_utility_class|default('') }}" href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>
+    <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button class="{{ mobile_node_utility_class|default('') }}" type="submit">Logout</button></form>
+</section>

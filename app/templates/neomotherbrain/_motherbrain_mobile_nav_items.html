@@ -1,7 +1,7 @@
 {% set motherbrain_mobile_operation = motherbrain_mobile_operation if motherbrain_mobile_operation is defined else (selected_operation if selected_operation is defined else (motherbrain_shell_operation if motherbrain_shell_operation is defined else none)) %}
 {% set motherbrain_mobile_item_class = motherbrain_mobile_item_class if motherbrain_mobile_item_class is defined else "mobile-shell-menu-link" %}
 
-{% if user_can("neomotherbrain.manage_sort.view") %}<a class="{{ motherbrain_mobile_item_class }}{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.operation_detail', operation_id=motherbrain_mobile_operation.id) if motherbrain_mobile_operation else url_for('neomotherbrain.manage_sort') }}" role="menuitem" {% if is_manage_sort_page %}aria-current="page"{% endif %}>Manage Sort</a>{% endif %}
+{% if not hide_mobile_manage_sort|default(false) and user_can("neomotherbrain.manage_sort.view") %}<a class="{{ motherbrain_mobile_item_class }}{% if is_manage_sort_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.operation_detail', operation_id=motherbrain_mobile_operation.id) if motherbrain_mobile_operation else url_for('neomotherbrain.manage_sort') }}" role="menuitem" {% if is_manage_sort_page %}aria-current="page"{% endif %}>Manage Sort</a>{% endif %}
 {% if user_can("neomotherbrain.arrival_planning.view") %}
 <a class="{{ motherbrain_mobile_item_class }}{% if is_arrival_planning_page %} is-active{% endif %}" href="{{ url_for('neomotherbrain.alp_import', operation_id=motherbrain_mobile_operation.id, mission_type='arrival') if motherbrain_mobile_operation else url_for('neomotherbrain.manage_sort') }}" role="menuitem" {% if is_arrival_planning_page %}aria-current="page"{% endif %}>Arrival Planning</a>
 {% endif %}

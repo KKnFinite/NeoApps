@@ -86,7 +86,8 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertIn(b"operational-node-topbar", response.data)
                 self.assertIn(b"data-operational-mobile-header", response.data)
                 self.assertIn(b"operational-mobile-bottom-nav", response.data)
-                self.assertIn(b"NeoGateway", response.data)
+                if path != '/neosektor':
+                    self.assertIn(b"NeoGateway", response.data)  # Desktop sidebar utility.
                 self.assertIn(b"NeoPortal", response.data)
                 self.assertIn(node, response.data)
 
@@ -186,6 +187,60 @@ class OperationalShellTest(unittest.TestCase):
                 self.assertNotIn(b"data-operational-shell", response.data)
                 self.assertNotIn(b"data-operational-mobile-header", response.data)
                 self.assertNotIn(b"css/operational_node_shell.css", response.data)
+
+    def test_mobile_node_menus_have_only_screen_links_and_portal_logout(self):
+        for path, dashboard, screen in (
+            ("/neosektor", True, None), ("/neoermac", True, None),
+            ("/neoscorpion", True, None), ("/motherbrain", True, None),
+            ("/neosektor/ebm", False, "Live Counts"),
+            ("/neosektor/tunnel-conductor", False, "Driver Routing"),
+            ("/neoermac/settings", False, "Door View"),
+            ("/neoscorpion/settings", False, "Fuel Dispatch"),
+            ("/neorain/inbound", False, "Outbound"),
+            ("/neosubzero/pretreat", False, "Pretreat"),
+            ("/motherbrain/manage-sort", False, "Master Schedule"),
+            ("/neostaffing", True, None), ("/neostaffing/people", False, "Attendance"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                root = document(response)
+                if path.startswith('/neostaffing'):
+                    menu = root.one(**{'data-mobile-shell-menu-panel': None})
+                else:
+                    menu = root.one(**{'data-drawer-view': 'menu'})
+                    # HOME/NODES remain separate controls, not duplicate menu items.
+                    dock = root.one('nav', 'neo-mobile-bottom')
+                    self.assertEqual([el.text.strip() for el in dock.findall('span')], ['Home', 'Nodes', 'Menu'])
+                    self.assertTrue(root.one(**{'data-drawer-view': 'nodes'}).findall('a'))
+                utilities = menu.one('section', **{'aria-label': 'Utilities'})
+                self.assertEqual([el.text.strip() for el in utilities.findall('a')], ['NeoPortal'])
+                self.assertEqual([el.text.strip() for el in utilities.findall('button')], ['Logout'])
+                logout = utilities.one('form')
+                self.assertEqual(logout.attrs['method'], 'post')
+                self.assertEqual(logout.attrs['action'], '/logout')
+                self.assertTrue(logout.findall('input', name='csrf_token'))
+                labels = [el.text.strip() for el in menu.findall('a')]
+                for forbidden in ('Dashboard', 'Manage Sort', 'NeoGateway', 'NeoGateway · RFD'):
+                    self.assertNotIn(forbidden, labels)
+                self.assertFalse(menu.findall(cls='neo-drawer-user'))
+                self.assertFalse(menu.findall(**{'data-mobile-share-open': None}))
+                if dashboard:
+                    self.assertEqual(labels, ['NeoPortal'])
+                else:
+                    self.assertIn(screen, labels)
+
+    def test_mobile_filter_does_not_remove_desktop_navigation(self):
+        for path in ('/neosektor/ebm', '/neoermac/settings', '/neoscorpion/settings', '/motherbrain/manage-sort'):
+            with self.subTest(path=path):
+                sidebar = document(self.client.get(path)).one(**{'data-operational-sidebar': None})
+                hrefs = [el.attrs['href'] for el in sidebar.findall('a')]
+                self.assertIn('/rfd', hrefs)
+                self.assertIn('/portal', hrefs)
+                # Settings never supported Board View; working boards still do.
+                self.assertEqual(bool(sidebar.findall(**{'data-operational-board-toggle': None})), not path.endswith('/settings'))
+                if path.startswith('/motherbrain'):
+                    self.assertIn('/motherbrain/manage-sort', hrefs)
 
     def test_sidebar_reuses_permission_filtered_node_menu(self):
         watcher = User(username="operational-watcher", role="watcher")

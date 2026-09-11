@@ -528,7 +528,7 @@
                     <span>Menu</span>
                 </button>
                 <div class="mobile-bottom-popover mobile-bottom-popover--menu mobile-bottom-menu-panel mobile-shell-menu-panel" id="mobile-bottom-menu-panel" role="menu" aria-label="Mobile menu" aria-hidden="true" data-mobile-shell-menu-panel data-mobile-popover-anchor="menu">
-                    <button class="mobile-shell-menu-link mobile-share-neoapps-action" type="button" role="menuitem" data-mobile-share-open>Share NeoApps</button>
+                    {% if not is_neostaffing_page %}<button class="mobile-shell-menu-link mobile-share-neoapps-action" type="button" role="menuitem" data-mobile-share-open>Share NeoApps</button>{% endif %}
                     {% if is_neosektor_page %}
                         {% for item in neosektor_internal_menu_items() %}
                         <a class="mobile-shell-menu-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}" role="menuitem" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>
@@ -552,10 +552,13 @@
                         {% set motherbrain_mobile_item_class = "mobile-shell-menu-link" %}
                         {% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
                     {% elif is_neostaffing_page %}
+                        {% if request.endpoint != 'neostaffing.index' %}
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.people') }}" role="menuitem">People</a>
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.org_chart') }}" role="menuitem">Org Chart</a>
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.reports') }}" role="menuitem">Reports</a>
                         <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.attendance') }}" role="menuitem">Attendance</a>
+                        {% endif %}
+                        {% set mobile_node_utility_class = 'mobile-shell-menu-link' %}{% include "_mobile_node_utilities.html" %}
                     {% else %}
                         <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Apps", "apps") }}</a>
                         {% if not is_rfd_hub_page %}

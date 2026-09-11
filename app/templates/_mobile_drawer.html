@@ -24,32 +24,29 @@
             <strong>{{ drawer_name }}</strong>
             {% if uses_operational_shell %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="48" height="48"><span>{{ node_current_label }}</span>{% endif %}
         </header>
-        {% if uses_operational_shell %}
+        {% if uses_operational_shell and request.endpoint != node_home_endpoint %}
         <nav class="neo-drawer-links" aria-label="{{ node_header_name }} screens">
         {% if is_neoermac_page %}
-        <a href="{{ url_for('neoermac.index') }}">Dashboard</a><a href="{{ url_for('neoermac.door_view') }}">Door View</a><a href="{{ url_for('neoermac.building_lineup') }}">Building Lineup</a><a href="{{ url_for('neoermac.view_outbound') }}">View Outbound</a><a href="{{ url_for('neoermac.upcoming_pulls') }}">Upcoming Pulls</a><a href="{{ url_for('neoermac.tug_assignments') }}">Tug Assignments</a>{% if user_can('neoermac.settings.view') %}<a href="{{ url_for('neoermac.settings') }}">Settings</a>{% endif %}
+        <a href="{{ url_for('neoermac.door_view') }}">Door View</a><a href="{{ url_for('neoermac.building_lineup') }}">Building Lineup</a><a href="{{ url_for('neoermac.view_outbound') }}">View Outbound</a><a href="{{ url_for('neoermac.upcoming_pulls') }}">Upcoming Pulls</a><a href="{{ url_for('neoermac.tug_assignments') }}">Tug Assignments</a>{% if user_can('neoermac.settings.view') %}<a href="{{ url_for('neoermac.settings') }}">Settings</a>{% endif %}
         {% elif is_neosektor_page %}
-        <a href="{{ url_for('neosektor.index') }}">Dashboard</a>{% for item in neosektor_internal_menu_items() %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
+        {% for item in neosektor_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
         {% elif is_neoscorpion_page %}
-        {% for item in neoscorpion_internal_menu_items() %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
+        {% for item in neoscorpion_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
         {% elif is_neorain_page %}
-        {% for item in neorain_menu_items() %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
+        {% for item in neorain_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
         {% elif is_neosubzero_page %}
-        {% for label, endpoint in neosubzero_menu_items() %}<a href="{{ url_for(endpoint) }}">{{ label }}</a>{% endfor %}
-        {% elif is_neoreptile_page %}
-        <a href="{{ url_for('neoreptile.index') }}">Dashboard</a>
+        {% for label, endpoint in neosubzero_menu_items() if endpoint != node_home_endpoint %}<a href="{{ url_for(endpoint) }}">{{ label }}</a>{% endfor %}
         {% elif is_motherbrain_page %}
-        {% set motherbrain_mobile_item_class = "" %}{% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
+        {% set motherbrain_mobile_item_class = "" %}{% set hide_mobile_manage_sort = true %}{% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
         {% endif %}
 
         </nav>
-        <section class="neo-drawer-links" aria-label="Operational context">
-            <a href="{{ url_for('neomotherbrain.rfd_hub') }}">NeoGateway · {{ default_gateway.code }}</a>
-            {% if not is_motherbrain_page %}<a href="{{ url_for('neomotherbrain.manage_sort') }}">Manage Sort{% if motherbrain_shell_operation %} · {{ motherbrain_shell_operation.sort_name|upper }}{% endif %}</a>{% endif %}
-        </section>
         {% elif is_rfd_hub_page %}
         <section class="neo-drawer-links" aria-label="Operational context">{{ sort_control() }}</section>
         {% endif %}
+        {% if uses_operational_shell %}
+        {% include "_mobile_node_utilities.html" %}
+        {% else %}
         <section class="neo-drawer-links" aria-label="Utilities">
             {% if not is_portal_page %}<a href="{{ url_for('auth.portal_dashboard') }}">NeoPortal</a>{% endif %}
             {% if is_portal_page and user_can('neoapps.portal_management.view') %}<a href="{{ url_for('auth.portal_management') }}">Portal Management</a>{% endif %}
@@ -59,6 +56,7 @@
             <span class="neo-drawer-user">{{ current_user.header_display_name }}</span>
             <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button type="submit">Logout</button></form>
         </section>
+        {% endif %}
         </section>
     </aside>
     <nav class="neo-mobile-bottom {% if uses_operational_shell %}operational-mobile-bottom-nav{% elif is_rfd_hub_page %}gateway-mobile-bottom-nav{% endif %}" aria-label="{{ drawer_name }} mobile navigation">
