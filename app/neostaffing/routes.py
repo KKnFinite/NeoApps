@@ -121,6 +121,86 @@ def index_slash():
     return redirect(url_for("neostaffing.index"))
 
 
+@bp.route("/accountability")
+@login_required
+def accountability():
+    from app.services import neostaffing_discipline as discipline
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    try:
+        context = discipline.queue_context(current_user, request.args, current_gateway_local_datetime().date())
+    except ValueError as error:
+        return str(error), 403
+    return render_template("neostaffing/accountability.html", **context, filters=request.args,
+        actions=discipline.ACTIONS, default_policy=discipline.DEFAULT_POLICY,
+        master=user_can_access_app(current_user, "neostaffing", minimum_role="master"))
+
+
+@bp.route("/accountability/employee/<int:person_id>", methods=["GET", "POST"])
+@login_required
+def accountability_employee(person_id):
+    import json
+    from app.services import neostaffing_discipline as discipline
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    as_of = current_gateway_local_datetime().date()
+    if request.method == "POST":
+        try:
+            command = request.form.get("command")
+            if command == "workday":
+                discipline.configure_workday(current_user, person_id, int(request.form["first_sort_id"]),
+                    int(request.form["second_sort_id"]), request.form["version"])
+            elif command == "reconcile":
+                entries = []
+                if request.form["decision"] == "history":
+                    entries = ([{"date": day, "status": status} for day, status in zip(
+                        request.form.getlist("history_date"), request.form.getlist("history_status")) if day]
+                        if "history_date" in request.form else json.loads(request.form.get("history") or "[]"))
+                discipline.reconcile_history(current_user, person_id, request.form["decision"], entries, as_of)
+            elif command == "resolve":
+                discipline.resolve_obligation(current_user, person_id, request.form, as_of)
+            elif command == "formal_history":
+                discipline.reconcile_formal_history(current_user, person_id, request.form["action"],
+                    request.form["issued_on"], request.form["note"], as_of)
+            else:
+                raise ValueError("Unknown accountability command.")
+            db.session.commit()
+        except (ValueError, KeyError, TypeError, IntegrityError) as error:
+            db.session.rollback()
+            return safe_mutation_error(error, "save accountability; reload before trying again"), 409
+        return redirect(url_for("neostaffing.accountability_employee", person_id=person_id))
+    try:
+        person, hierarchy, assignments, combo = discipline.lock_authorized_employee(
+            current_user, person_id, configure=True, lock=False)
+        state = discipline.employee_state(person, hierarchy, assignments, combo, as_of)
+    except ValueError as error:
+        return str(error), 403
+    from app.models.staffing_accountability import StaffingAccountabilityResolution
+    history = StaffingAccountabilityResolution.query.filter(
+        StaffingAccountabilityResolution.person_id == person_id,
+        StaffingAccountabilityResolution.resolved_on >= discipline.occurrence_cutoff(as_of)).order_by(
+        StaffingAccountabilityResolution.resolved_on.desc(), StaffingAccountabilityResolution.resolved_at.desc(),
+        StaffingAccountabilityResolution.id.desc()).limit(25).all()
+    return render_template("neostaffing/accountability_employee.html", state=state, person=person,
+        combo=combo, is_combo=person.classification in discipline.FT_COMBO,
+        sorts=[unit for unit in hierarchy["units"] if unit.unit_type == "sort"],
+        history=history, expected_facts=",".join(str(row["id"]) for row in state["facts"]),
+        master=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        formal_actions=discipline.FORMAL)
+
+
+@bp.route("/accountability/settings/<int:unit_id>", methods=["POST"])
+@login_required
+def accountability_setting(unit_id):
+    from app.services import neostaffing_discipline as discipline
+    try:
+        discipline.configure_tracker(current_user, unit_id, request.form.get("enabled") == "on",
+            request.form.get("policy"), request.form.get("version", "0"))
+        db.session.commit()
+    except (ValueError, TypeError, IntegrityError) as error:
+        db.session.rollback()
+        return safe_mutation_error(error, "save tracker configuration; reload before trying again"), 409
+    return redirect(url_for("neostaffing.accountability"))
+
+
 @bp.route("/seniority")
 @neostaffing_app_required(permission_key=SENIORITY_VIEW_PERMISSION)
 def seniority():
@@ -701,9 +781,9 @@ def reverse_change_request_item(item_id):
 def _handle_attendance():
     if request.method == "GET":
         try:
+            selected_sort = db.session.get(StaffingUnit, request.args.get("sort_id", type=int)) if request.args.get("sort_id", type=int) else None
             rollover = attendance_history_service.maintain_current_attendance_rollover(
-                current_user
-            )
+                current_user, sort_name=selected_sort.name if selected_sort and selected_sort.unit_type == "sort" else None)
             if rollover.changed:
                 db.session.commit()
         except Exception:

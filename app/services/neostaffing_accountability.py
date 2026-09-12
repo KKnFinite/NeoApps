@@ -3,7 +3,8 @@ from calendar import monthrange
 from datetime import date
 
 from app.extensions import db
-from app.models import StaffingAttendanceOccurrence
+from app.models import StaffingAttendanceOccurrence, StaffingPerson
+from sqlalchemy import and_
 
 
 OCCURRENCE_CLEANUP_BATCH_SIZE = 250
@@ -47,20 +48,38 @@ def retained_occurrences_query(as_of):
     )
 
 
-def sync_attendance_occurrences(operation, statuses, *, user_id, as_of):
+def sync_attendance_occurrences(operation, statuses, *, user_id, as_of, workday_people=None):
     """Called only after validated current-sort writes under ordered person locks.
 
     One row per employee/operation; switches update it and corrections remove it.
-    No tracker setting gates collection. Unknown history remains unknown on every
-    occurrence until a future explicit reconciliation workflow establishes it.
+    No tracker setting gates collection. Source hints remain unchanged; the
+    employee-wide reconciliation record separately establishes completeness.
     The attendance and occurrence changes commit/rollback together.
     """
     if not statuses:
         return
-    existing = {row.person_id: row for row in StaffingAttendanceOccurrence.query.filter(
-        StaffingAttendanceOccurrence.sort_date_operation_id == operation.id,
-        StaffingAttendanceOccurrence.person_id.in_(statuses),
-    ).populate_existing().all()}
+    missing_groups = []
+    if workday_people is not None:
+        from app.models.staffing_accountability import StaffingAccountabilityWorkday as Workday, StaffingAccountabilitySource as Source
+        from app.services.neostaffing_assignments import FT_COMBO
+        loaded = db.session.query(StaffingPerson.id, StaffingAttendanceOccurrence, Source.workday_id).outerjoin(
+            StaffingAttendanceOccurrence, and_(StaffingAttendanceOccurrence.person_id == StaffingPerson.id,
+                StaffingAttendanceOccurrence.sort_date_operation_id == operation.id),
+        ).outerjoin(Source, and_(Source.person_id == StaffingPerson.id, Source.operation_id == operation.id)
+        ).filter(StaffingPerson.id.in_(statuses)).populate_existing().all()
+        existing = {person_id: row for person_id, row, _ in loaded if row is not None}
+        for person_id, _, group_id in loaded:
+            if (group_id is None and statuses[person_id] in QUALIFYING_STATUSES
+                    and workday_people[person_id].classification not in FT_COMBO):
+                group = Workday(person_id=person_id, workday_date=operation.sort_date,
+                    requires_pair=False, created_by_user_id=user_id)
+                db.session.add(group)
+                missing_groups.append(group)
+    else:
+        existing = {row.person_id: row for row in StaffingAttendanceOccurrence.query.filter(
+            StaffingAttendanceOccurrence.sort_date_operation_id == operation.id,
+            StaffingAttendanceOccurrence.person_id.in_(statuses),
+        ).populate_existing().all()}
     cutoff = occurrence_cutoff(as_of)
     for person_id, status in statuses.items():
         row = existing.get(person_id)
@@ -76,4 +95,8 @@ def sync_attendance_occurrences(operation, statuses, *, user_id, as_of):
         elif row.status != status:
             row.status = status
             row.updated_by_user_id = user_id
+    if missing_groups:
+        db.session.flush()
+        db.session.add_all(Source(person_id=group.person_id, workday_id=group.id,
+            operation_id=operation.id, position=1) for group in missing_groups)
     purge_expired_occurrences(as_of)

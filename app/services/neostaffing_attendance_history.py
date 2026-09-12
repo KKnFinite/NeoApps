@@ -62,7 +62,7 @@ def finalize_attendance_summaries(operation, user=None, finalized_at=None):
     )
     locked_operation = (
         SortDateOperation.query.filter_by(id=operation_id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .first()
     )
     if not locked_operation:
@@ -111,6 +111,28 @@ def finalize_attendance_summaries(operation, user=None, finalized_at=None):
     }
     if not expected_keys.issubset(persisted_keys):
         raise RuntimeError("Attendance summary persistence verification failed.")
+    # Complete frozen workdays only from this canonical finalization command.
+    # Reads never manufacture finalization or treat a missing partner as Here.
+    from app.models.staffing_accountability import StaffingAccountabilityWorkday as Workday, StaffingAccountabilitySource as Source
+    from app.services.neostaffing_workday_identity import bind_workday_sources
+    from sqlalchemy import func
+    last_id = 0
+    while True:
+        pending = db.session.query(Workday.id, Workday.person_id).join(Source, Source.workday_id == Workday.id).filter(
+            Workday.id > last_id, Workday.requires_pair.is_(True),
+            Workday.workday_date.between(locked_operation.sort_date - timedelta(days=14), locked_operation.sort_date),
+            or_(Workday.first_sort_id == calculated["staffing_sort"].id,
+                Workday.second_sort_id == calculated["staffing_sort"].id),
+        ).group_by(Workday.id, Workday.person_id).having(func.count(Source.id) == 1).order_by(Workday.id).limit(500).all()
+        if not pending:
+            break
+        from app.models import StaffingPerson
+        db.session.query(StaffingPerson.id).filter(StaffingPerson.id.in_(
+            {row.person_id for row in pending})).order_by(StaffingPerson.id).with_for_update().all()
+        bind_workday_sources(locked_operation, {row.person_id for row in pending},
+                             user_id=user_id, qualifying_person_ids=set())
+        db.session.flush()
+        last_id = pending[-1].id
     return AttendanceSummaryFinalizationResult(
         sort_date_operation_id=locked_operation.id,
         attendance_date=locked_operation.sort_date,
@@ -164,7 +186,7 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     prior_operation = (
         prior_candidates.filter(or_(outstanding_details, ~has_summary))
         .order_by(SortDateOperation.sort_date, SortDateOperation.id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .first()
     )
     if not prior_operation:
@@ -209,7 +231,7 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     )
 
 
-def maintain_current_attendance_rollover(user=None, *, now_local=None):
+def maintain_current_attendance_rollover(user=None, *, now_local=None, sort_name=None):
     """User-driven rollover hook; it never generates an operation or commits."""
     gateway = _default_gateway()
     if not gateway:
@@ -220,7 +242,7 @@ def maintain_current_attendance_rollover(user=None, *, now_local=None):
             operation
             for operation in current_operations_for_gateway(gateway, now=local_now)
             if staffing_service._normalize_staffing_sort_name(operation.sort_name)
-            == staffing_service.ATTENDANCE_OPERATION_SORT_NAME
+            == staffing_service._normalize_staffing_sort_name(sort_name or staffing_service.ATTENDANCE_OPERATION_SORT_NAME)
             and operation_is_active_at(operation, local_now, gateway)
         ),
         None,
@@ -233,6 +255,9 @@ def maintain_current_attendance_rollover(user=None, *, now_local=None):
     from app.services.neostaffing_accountability import purge_expired_occurrences
 
     result = replace(result, purged_expired_occurrence_count=purge_expired_occurrences(local_now.date(), skip_empty=True))
+    from app.services.neostaffing_discipline import purge_expired_discipline
+    result = replace(result, purged_expired_occurrence_count=(
+        result.purged_expired_occurrence_count + purge_expired_discipline(local_now.date())))
     if result.status != "processed":
         return result
     expired_count = purge_expired_attendance_summaries(

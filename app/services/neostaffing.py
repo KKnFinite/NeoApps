@@ -1368,8 +1368,9 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
 
 def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False, home_only=False):
     """Mutate only people whose effective attendance snapshot is in allowed areas."""
-    operation = current_night_attendance_operation()
-    if not operation or str(values.get("sort_date_operation_id")) != str(operation.id):
+    submitted, gateway = _submitted_attendance_operation(values.get("sort_date_operation_id"), include_gateway=True)
+    operation = current_night_attendance_operation(gateway) if gateway else None
+    if not operation or not submitted or submitted.id != operation.id:
         raise ValueError("The selected Night Sort is no longer current. Reload Manage Employees.")
     allowed = _operational_area_id_set(allowed_sort_start_area_ids)
     person_ids = _submitted_attendance_person_ids(values)
@@ -1476,7 +1477,7 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             {person_id: status for person_id, status in saved_statuses.items() if status},
             user_id=user_id,
         )
-    _sync_attendance_accountability(operation, saved_statuses, user_id)
+    _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person)
     db.session.flush()
     return saved
 
@@ -3862,14 +3863,25 @@ def staffing_groups_context():
 def attendance_context(filters=None, user=None, include_staffing_groups=False):
     filters = dict(filters or {})
     gateway = _attendance_gateway()
-    operation = current_night_attendance_operation(gateway)
+    hierarchy = _daily_attendance_hierarchy()
+    from app.services.neostaffing_assignments import sort_of
+    selected_unit = next((hierarchy["by_id"].get(_parse_int(filters.get(key), default=0))
+                          for key in ("work_area_id", "department_id", "operation_id", "sort_id")
+                          if filters.get(key)), None)
+    selected_sort = sort_of(selected_unit, hierarchy["by_id"])
+    if selected_sort is None:
+        selected_sort = next((unit for unit in hierarchy["units"] if unit.unit_type == "sort"
+            and _normalize_staffing_sort_name(unit.name) == ATTENDANCE_OPERATION_SORT_NAME), None)
+    selected_name = selected_sort.name if selected_sort else ATTENDANCE_OPERATION_SORT_NAME
+    operation = current_attendance_operation(gateway, selected_name)
     if not operation:
         return _empty_daily_attendance_context(
-            filters,
-            ATTENDANCE_OPERATION_MISSING_MESSAGE,
+            {**filters, "sort_id": str(selected_sort.id) if selected_sort else ""},
+            ATTENDANCE_OPERATION_MISSING_MESSAGE if _normalize_staffing_sort_name(selected_name) == ATTENDANCE_OPERATION_SORT_NAME
+            else f"No current {selected_name} Sort is available.",
+            hierarchy=hierarchy,
         )
 
-    hierarchy = _daily_attendance_hierarchy()
     try:
         staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
         selected_scope, selected_work_area_ids = _daily_attendance_selection(
@@ -3935,6 +3947,7 @@ def attendance_context(filters=None, user=None, include_staffing_groups=False):
     )
     return {
         "ready": True,
+        "configured_sorts": [unit for unit in hierarchy["units"] if unit.unit_type == "sort"],
         "message": "",
         "sort_date_operation": operation,
         "attendance_date": operation.sort_date,
@@ -4065,9 +4078,16 @@ def _locked_attendance_records(person_ids, operation, staffing_sort):
         return {}
     # Stable ordered parents serialize competing inserts too. Both attendance
     # entry points use this same lock order, including the occurrence projection.
-    db.session.query(StaffingPerson.id).filter(
+    from app.models import StaffingAttendanceSummary
+    finalized = db.session.query(StaffingAttendanceSummary.id).filter(
+        StaffingAttendanceSummary.sort_date_operation_id == operation.id).exists()
+    parents = db.session.query(StaffingPerson.id, finalized).filter(
         StaffingPerson.id.in_(person_ids)
     ).order_by(StaffingPerson.id).with_for_update().all()
+    # This statement starts AFTER the operation lock was acquired. A scalar
+    # checked in the lock-taking statement could retain a pre-wait MVCC snapshot.
+    if any(row[1] for row in parents):
+        raise ValueError("This Sort attendance has been finalized. Reload Attendance.")
     records = StaffingDailyAttendance.query.filter(
         StaffingDailyAttendance.person_id.in_(person_ids),
         StaffingDailyAttendance.attendance_date == operation.sort_date,
@@ -4084,7 +4104,7 @@ def _validate_attendance_originals(existing, originals):
             raise ValueError("Attendance changed while you were editing. Reload Attendance and review before saving.")
 
 
-def _sync_attendance_accountability(operation, statuses, user_id):
+def _sync_attendance_accountability(operation, statuses, user_id, assignments):
     if not statuses:
         return
     from app.services.gateway_matrix import current_gateway_local_datetime
@@ -4093,7 +4113,14 @@ def _sync_attendance_accountability(operation, statuses, user_id):
     sync_attendance_occurrences(
         operation, statuses, user_id=user_id,
         as_of=current_gateway_local_datetime().date(),
+        workday_people={person_id: assignments[person_id].person for person_id in statuses},
     )
+    from app.services.neostaffing_workday_identity import bind_workday_sources
+    from app.services.neostaffing_assignments import FT_COMBO
+    combo_ids = {person_id for person_id in statuses if assignments[person_id].person.classification in FT_COMBO}
+    bind_workday_sources(operation, combo_ids, user_id=user_id,
+        qualifying_person_ids={person_id for person_id, status in statuses.items()
+                               if status in ("call_in", "no_call")})
 
 
 def save_attendance(values, user, *, form_submission=False):
@@ -4102,9 +4129,10 @@ def save_attendance(values, user, *, form_submission=False):
     Internal service callers already supply deliberate mutations, not a displayed
     roster. Both public attendance POST routes require the form safety contract.
     """
-    gateway = _attendance_gateway()
-    current_operation = current_night_attendance_operation(gateway)
-    operation = _submitted_attendance_operation(values.get("sort_date_operation_id"))
+    operation, gateway = _submitted_attendance_operation(values.get("sort_date_operation_id"), include_gateway=True)
+    current_operation = (current_night_attendance_operation(gateway)
+        if operation and _normalize_staffing_sort_name(operation.sort_name) == ATTENDANCE_OPERATION_SORT_NAME
+        else current_attendance_operation(gateway, operation.sort_name) if operation else None)
     if not current_operation or not operation or operation.id != current_operation.id:
         raise ValueError("The selected Night Sort is no longer current. Reload Attendance.")
 
@@ -4228,13 +4256,18 @@ def save_attendance(values, user, *, form_submission=False):
             {person_id: status for person_id, status in saved_statuses.items() if status},
             user_id=user_id,
         )
-    _sync_attendance_accountability(operation, saved_statuses, user_id)
+    _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person)
     db.session.flush()
     return saved
 
 
 def current_night_attendance_operation(gateway=None):
     """Resolve the existing current Night operation without generating one."""
+    return current_attendance_operation(gateway, ATTENDANCE_OPERATION_SORT_NAME)
+
+
+def current_attendance_operation(gateway=None, sort_name=ATTENDANCE_OPERATION_SORT_NAME):
+    """Shared configured-Sort selector; node adapters retain the Night wrapper."""
     gateway = gateway or _attendance_gateway()
     if not gateway:
         return None
@@ -4243,7 +4276,7 @@ def current_night_attendance_operation(gateway=None):
             operation
             for operation in current_operations_for_gateway(gateway)
             if _normalize_staffing_sort_name(operation.sort_name)
-            == ATTENDANCE_OPERATION_SORT_NAME
+            == _normalize_staffing_sort_name(sort_name)
         ),
         None,
     )
@@ -4254,12 +4287,22 @@ def _attendance_gateway():
     return Gateway.query.filter_by(code=gateway_code, is_active=True).first()
 
 
-def _submitted_attendance_operation(operation_id):
+def _submitted_attendance_operation(operation_id, *, include_gateway=False):
     try:
         normalized_id = int(operation_id)
     except (TypeError, ValueError):
-        return None
-    return db.session.get(SortDateOperation, normalized_id)
+        return (None, None) if include_gateway else None
+    query = db.session.query(SortDateOperation)
+    if include_gateway:
+        query = query.add_entity(Gateway).join(Gateway, Gateway.code == SortDateOperation.gateway_code).filter(
+            Gateway.code == current_app.config.get("DEFAULT_GATEWAY_CODE", "RFD").upper(),
+            Gateway.is_active.is_(True))
+    row = query.filter(
+        SortDateOperation.id == normalized_id).populate_existing().with_for_update(
+            of=SortDateOperation, key_share=True).first()
+    if include_gateway:
+        return (row[0], row[1]) if row else (None, None)
+    return row
 
 
 def _daily_attendance_hierarchy(include_inactive=False):
@@ -4922,6 +4965,7 @@ def _empty_daily_attendance_context(filters, message, operation=None, hierarchy=
     empty_options = {"sorts": [], "operations": [], "departments": [], "work_areas": []}
     return {
         "ready": False,
+        "configured_sorts": [unit for unit in (hierarchy or {}).get("units", []) if unit.unit_type == "sort"],
         "message": message,
         "sort_date_operation": operation,
         "attendance_date": operation.sort_date if operation else None,

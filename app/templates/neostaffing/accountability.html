@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_accountability.css', v='1') }}">
+<section class="staffing-accountability">
+  <header><a href="{{ url_for('neostaffing.index') }}">NEOSTAFFING</a><h1>ACCOUNTABILITY</h1></header>
+  <div class="accountability-summary">
+    {% for action, label in [('Warning Letter', 'Warning Letters Pending'), ('Suspension', 'Suspensions Pending'), ('Termination', 'Terminations Pending')] %}
+    <div><strong>{{ summary|selectattr('0', 'equalto', 'ACTION REQUIRED')|selectattr('1', 'equalto', action)|map(attribute='2')|sum }}</strong><span>{{ label }}</span></div>
+    {% endfor %}
+    <div><strong>{{ summary|selectattr('0', 'equalto', 'RECONCILIATION NEEDED')|map(attribute='2')|sum }}</strong><span>History Reconciliation Needed</span></div>
+  </div>
+  <nav aria-label="Accountability views">
+    {% for key, label in [('needs_action', 'NEEDS ACTION'), ('all', 'ALL EMPLOYEES'), ('formal_history', 'FORMAL HISTORY')] %}
+    <a href="{{ url_for('neostaffing.accountability', tab=key) }}" {% if filters.get('tab', 'needs_action') == key %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <form method="get" class="accountability-filters">
+    <input type="hidden" name="tab" value="{{ filters.get('tab', 'needs_action') }}">
+    <label>Employee search<input name="search" value="{{ filters.get('search', '') }}"></label>
+    {% for key, kind, label in [('operation_id', 'operation', 'Operation'), ('department_id', 'department', 'Department')] %}
+    <label>{{ label }}<select name="{{ key }}"><option value="">All authorized</option>{% for unit in units.values() if unit.unit_type == kind %}<option value="{{ unit.id }}" {% if filters.get(key) == unit.id|string %}selected{% endif %}>{{ unit.name }}</option>{% endfor %}</select></label>
+    {% endfor %}
+    <label>Recommendation<select name="recommendation"><option value="">All</option>{% for action in actions %}<option {% if filters.get('recommendation') == action %}selected{% endif %}>{{ action }}</option>{% endfor %}</select></label>
+    <label>Status<select name="status"><option value="">All</option>{% for status in ['ACTION REQUIRED', 'RECONCILIATION NEEDED', 'CURRENT', 'TRACKER OFF'] %}<option {% if filters.get('status') == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>
+    <button>FILTER</button>
+  </form>
+  <div class="accountability-board" tabindex="0" aria-label="Accountability results">
+    {% if filters.get('tab') == 'formal_history' %}
+    <table><thead><tr><th>Employee</th><th>Date</th><th>Decision</th><th>Action</th><th>Recommendation</th><th>Actor</th><th>Trigger</th><th>Note</th></tr></thead><tbody>
+    {% for row in rows %}<tr><td data-label="Employee"><a href="{{ url_for('neostaffing.accountability_employee', person_id=row.person_id) }}">{{ row.last_name }}, {{ row.first_name }}</a></td><td data-label="Date">{{ row.resolved_on }}</td><td data-label="Decision">{{ row.kind }}</td><td data-label="Action">{{ row.action or 'No formal discipline' }}</td><td data-label="Recommendation">{{ row.recommendation or '-' }}</td><td data-label="Actor">{{ row.actor_id }}</td><td data-label="Trigger">{{ row.trigger_workday_id or '-' }}</td><td data-label="Note">{{ row.note or '' }}</td></tr>{% else %}<tr><td colspan="8">No retained formal resolutions.</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}
+    <table><thead><tr><th>Employee</th><th>Operation / Department</th><th>Active Infractions</th><th>Last Formal Discipline</th><th>Recommendation</th><th>Trigger Date</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>{% for row in rows %}<tr><td data-label="Employee">{{ row.last_name }}, {{ row.first_name }}</td><td data-label="Operation / Department">{{ row.scope_label or '-' }}</td><td data-label="Active Infractions">{{ row.infractions }}</td><td data-label="Last Formal Discipline">{{ row.last_formal or 'None' }}</td><td data-label="Recommendation">{{ row.recommendation or '-' }}</td><td data-label="Trigger Date">{{ row.trigger_date or '-' }}</td><td data-label="Status">{{ row.status }}</td><td><a href="{{ url_for('neostaffing.accountability_employee', person_id=row.id) }}">OPEN</a></td></tr>{% else %}<tr><td colspan="8">No matching employees.</td></tr>{% endfor %}</tbody></table>
+    {% endif %}
+  </div>
+  <p>{{ total }} {{ 'resolutions' if filters.get('tab') == 'formal_history' else 'employees' }} · Page {{ page }}</p>
+  <nav aria-label="Result pages">{% if page > 1 %}<a href="{{ url_for('neostaffing.accountability', **dict(filters, page=page-1)) }}">PREVIOUS</a>{% endif %}{% if total > page * 25 %}<a href="{{ url_for('neostaffing.accountability', **dict(filters, page=page+1)) }}">NEXT</a>{% endif %}</nav>
+  {% if master %}<details><summary>TRACKER / OPERATION POLICY</summary>
+    {% for unit in settings_units %}
+    {% set setting = settings.get(unit.id) %}{% set parent_setting = settings.get(unit.parent_id) %}{% set inherited = unit.unit_type == 'department' and parent_setting and parent_setting.enabled %}
+    <form method="post" action="{{ url_for('neostaffing.accountability_setting', unit_id=unit.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ setting.version if setting else 0 }}">
+      <h3>{{ unit.name }}</h3><label><input type="checkbox" name="enabled" {% if inherited or (setting and setting.enabled) %}checked{% endif %} {% if inherited %}disabled{% endif %}>{{ 'ON BY OPERATION' if inherited else 'Discipline Tracker' }}</label>
+      {% if unit.unit_type == 'operation' %}<label>Custom policy (threshold/action pairs; blank uses default)<textarea name="policy" rows="3">{{ setting.policy_json if setting and setting.policy_json else '' }}</textarea></label><p>Default: {% for threshold, action in default_policy %}{{ threshold }} {{ action }}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+      <button {% if inherited %}disabled{% endif %}>SAVE CONFIGURATION</button>
+    </form>{% endfor %}
+  </details>{% endif %}
+</section>
+{% endblock %}

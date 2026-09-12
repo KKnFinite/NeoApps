@@ -18,8 +18,9 @@ class StaffingAttendanceOccurrence(db.Model):
     sort_date_operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id"), nullable=False)
     attendance_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(16), nullable=False)
-    # No prior history is presumed complete. Future reconciliation may establish
-    # it; this foundation never guesses a clean history or blocks an attendance save.
+    # Legacy collection-time hint, retained for compatibility. Employee-wide
+    # StaffingAccountabilityReconciliation is now the completeness authority;
+    # resolving history does not mass-update these provisional source facts.
     reconciliation_needed = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     recorded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_accountability.css', v='1') }}">
+<section class="staffing-accountability">
+  <header><a href="{{ url_for('neostaffing.accountability') }}">ACCOUNTABILITY</a><h1>{{ person.first_name }} {{ person.last_name }}</h1></header>
+  <p>{% for scope in state.scopes %}{{ scope.operation.name }} / {{ scope.department.name if scope.department else '-' }}{{ ' · ' if not loop.last }}{% endfor %}</p>
+  <dl><dt>Active Infractions</dt><dd>{{ state.count }}</dd><dt>Last Formal Discipline</dt><dd>{{ state.last_formal or 'None' }}</dd><dt>Recommendation</dt><dd>{{ state.recommendation or '-' }}</dd><dt>Status</dt><dd>{{ state.status }}</dd></dl>
+  {% if is_combo %}{% if not combo %}<p>Configure the two Sorts before this employee's next workday. Unpaired attendance remains provisional.</p>{% endif %}<details><summary>FT COMBO WORKDAY</summary>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="workday"><input type="hidden" name="version" value="{{ combo.version if combo else 0 }}">
+      {% for key, label in [('first_sort_id', 'First Sort'), ('second_sort_id', 'Second Sort')] %}<label>{{ label }}<select name="{{ key }}" required><option value="">Select configured Sort</option>{% for sort in sorts %}<option value="{{ sort.id }}" {% if combo and combo[key] == sort.id %}selected{% endif %}>{{ sort.name }}</option>{% endfor %}</select></label>{% endfor %}
+      <button>SAVE WORKDAY</button>
+    </form>
+  </details>{% endif %}
+  {% if state.reconciliation_needed %}<section><h2>RECONCILIATION NEEDED</h2>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="reconcile"><input type="hidden" name="decision" value="first">
+      <button>THIS IS THEIR FIRST INFRACTION</button>
+    </form>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="reconcile"><input type="hidden" name="decision" value="history">
+      <fieldset data-accountability-entries data-entry-limit="100"><legend>Prior attendance — exact date and status; leave unused dates blank</legend>
+      <div data-entry-host><div class="accountability-history-entry"><label>Date<input type="date" name="history_date"></label><label>Status<select name="history_status"><option value="call_in">Call In</option><option value="no_call">No Call</option></select></label></div></div>
+      <template><div class="accountability-history-entry"><label>Date<input type="date" name="history_date"></label><label>Status<select name="history_status"><option value="call_in">Call In</option><option value="no_call">No Call</option></select></label></div></template>
+      <button type="button" data-add-entry>ADD PRIOR OCCURRENCE</button>
+      </fieldset>
+      <button>ENTER PRIOR HISTORY</button>
+    </form>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="reconcile"><input type="hidden" name="decision" value="skip">
+      <button>SKIP FOR NOW</button>
+    </form>
+  </section>{% endif %}
+  {% if state.due %}<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="resolve">
+    <input type="hidden" name="expected_facts" value="{{ expected_facts }}"><input type="hidden" name="recommendation" value="{{ state.recommendation }}">
+    {% if state.recommendation in ['Verbal', 'Written Warning'] %}<button name="kind" value="informal">MARK DELIVERED</button>
+    {% elif master %}<button name="kind" value="issue">ACKNOWLEDGE ISSUED</button><button name="kind" value="no_discipline">NO FORMAL DISCIPLINE</button>
+      <label>Override decision<select name="action">{% for action in formal_actions %}<option>{{ action }}</option>{% endfor %}</select></label><label>Reason / note<textarea name="note" maxlength="4000"></textarea></label><button name="kind" value="override">OVERRIDE</button>
+    {% endif %}
+  </form>{% endif %}
+  <h2>FORMAL / DELIVERY HISTORY</h2>
+  {% if master %}<details><summary>RECONCILE PRIOR FORMAL HISTORY</summary>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="formal_history">
+      <label>Issued date<input type="date" name="issued_on" required></label>
+      <label>Prior formal action<select name="action">{% for action in formal_actions %}<option>{{ action }}</option>{% endfor %}</select></label>
+      <label>History note<textarea name="note" maxlength="4000" required></textarea></label>
+      <button>RECORD PRIOR FORMAL HISTORY</button>
+    </form>
+  </details>{% endif %}
+  <div class="accountability-board" tabindex="0"><table><thead><tr><th>Date</th><th>Decision</th><th>Action</th><th>Actor</th><th>Trigger</th></tr></thead><tbody>{% for row in history %}<tr><td data-label="Date">{{ row.resolved_on }}</td><td data-label="Decision">{{ row.kind }}</td><td data-label="Action">{{ row.action or 'No formal discipline' }}</td><td data-label="Actor">{{ row.actor_id }}</td><td data-label="Trigger">{{ row.trigger_workday_id or '-' }}</td></tr>{% else %}<tr><td colspan="5">No retained resolutions.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+<script src="{{ url_for('static', filename='js/neostaffing_accountability.js', v='1') }}" defer></script>
+{% endblock %}

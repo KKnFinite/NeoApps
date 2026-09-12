@@ -20,6 +20,7 @@ from app.models import (
     NeoNode,
     NeoSektorOperationalSetting,
     PermissionRule,
+    StaffingUnit,
     User,
 )
 from app.services.access_control import DEFAULT_NEONODES, user_can_access_node
@@ -66,6 +67,33 @@ class DatabaseBootstrapTest(unittest.TestCase):
 
         with patch.dict(os.environ, {"DATABASE_URL": neon_url}, clear=False):
             self.assertEqual(resolve_database_uri(), neon_url)
+
+    def test_staffing_sort_roots_created_without_children_and_idempotent(self):
+        bootstrap_database(self.app)
+        roots = StaffingUnit.query.filter_by(unit_type="sort", parent_id=None).all()
+        self.assertEqual({row.name for row in roots}, {"Twilight", "Day", "Sunrise", "Preload"})
+        original = {row.name: row.id for row in roots}
+        self.assertTrue(all(row.active and not row.children for row in roots))
+        bootstrap_database(self.app)
+        self.assertEqual({row.name: row.id for row in StaffingUnit.query.all()}, original)
+
+    def test_staffing_sort_seed_preserves_existing_roots_and_children(self):
+        db.create_all()
+        twilight = StaffingUnit(unit_type="sort", name=" twilight ", active=False, display_order=17)
+        night = StaffingUnit(unit_type="sort", name="Night")
+        ramp = StaffingUnit(unit_type="operation", name="Ramp", parent=night)
+        db.session.add_all([twilight, night, ramp])
+        db.session.commit()
+        identifiers = twilight.id, night.id, ramp.id
+        for _ in range(2):
+            bootstrap_database(self.app)
+        self.assertEqual((twilight.id, night.id, ramp.id), identifiers)
+        self.assertFalse(twilight.active)
+        self.assertEqual(twilight.name, " twilight ")
+        self.assertEqual(twilight.display_order, 17)
+        self.assertEqual(ramp.parent_id, night.id)
+        self.assertEqual(StaffingUnit.query.filter_by(unit_type="sort").count(), 5)
+        self.assertEqual(StaffingUnit.query.filter(StaffingUnit.unit_type != "sort").count(), 1)
 
     def test_bootstrap_repairs_former_worker_contracts_and_remains_idempotent(self):
         from app.models import (

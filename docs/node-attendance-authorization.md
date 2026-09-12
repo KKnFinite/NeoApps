@@ -20,7 +20,9 @@ access still controls entering the node. Reports To only filters MY EMPLOYEES.
 
 Both `save_attendance` and `save_operational_manage_attendance` validate the
 actor's organizational authority against canonical Work Assignments at the
-shared write boundary. They retain current Night operation, signed-original,
+shared write boundary. Node adapters retain the current Night operation; general
+Staffing can select a configured Sort through the same current-operation resolver.
+Both retain signed-original,
 stale-row and ordered parent-lock protection and the existing Call In/No Call
 occurrence synchronization. The operational writer loads assignments after
 locking employee parents; the general writer revalidates them after locking.
@@ -57,3 +59,12 @@ presentation scope only in the current request; writes reauthorize. There is no
 poller or cross-request cache. Approved-access roster GETs perform zero writes.
 Existing membership-only legacy access can still backfill PortalAppAccess on
 the first shell visit; this is unrelated to attendance state.
+
+## Accountability
+
+Sektor and Ermac Employees link to the shared [Accountability workspace](neostaffing-accountability.md).
+Finalized facts, FT two-Sort workdays, policy, reconciliation and delivery remain
+NeoStaffing-owned. Either configured FT side's authorized management can deliver
+the one shared informal obligation. Master+ formal authority is additional to,
+never a substitute for, active management leadership scope. Active attendance
+does not prompt reconciliation or create discipline actions.

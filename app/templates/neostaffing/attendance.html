@@ -3,9 +3,9 @@
 
 {% macro scope_href(unit) -%}
 {%- if unit.unit_type == "sort" -%}{{ url_for("neostaffing.attendance", sort_id=unit.id) }}
-{%- elif unit.unit_type == "operation" -%}{{ url_for("neostaffing.attendance", operation_id=unit.id) }}
-{%- elif unit.unit_type == "department" -%}{{ url_for("neostaffing.attendance", department_id=unit.id) }}
-{%- else -%}{{ url_for("neostaffing.attendance", work_area_id=unit.id) }}{%- endif -%}
+{%- elif unit.unit_type == "operation" -%}{{ url_for("neostaffing.attendance", sort_id=attendance.selected_sort.id, operation_id=unit.id) }}
+{%- elif unit.unit_type == "department" -%}{{ url_for("neostaffing.attendance", sort_id=attendance.selected_sort.id, department_id=unit.id) }}
+{%- else -%}{{ url_for("neostaffing.attendance", sort_id=attendance.selected_sort.id, work_area_id=unit.id) }}{%- endif -%}
 {%- endmacro %}
 
 {% macro scope_node(node, selected_scope, selected_work_area_ids) -%}
@@ -28,6 +28,7 @@
     {% include "neostaffing/_section_nav.html" %}
     <aside class="neostaffing-attendance-scope" data-attendance-tree-scroll aria-label="Attendance organization scope">
         <div class="neostaffing-attendance-scope-head"><span>ATTENDANCE SCOPE</span>{% if attendance.selected_work_area_ids|length > 1 %}<strong>{{ attendance.selected_work_area_ids|length }} AREAS</strong>{% endif %}</div>
+        <form method="get"><label>Sort <select name="sort_id" aria-label="Attendance Sort">{% for sort in attendance.configured_sorts %}<option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>{% endfor %}</select></label><button type="submit">VIEW SORT</button></form>
         {% if attendance.ready %}
             {% if attendance.selected_work_areas %}<div class="neostaffing-attendance-active-areas" aria-label="Active attendance areas">{% for area in attendance.selected_work_areas %}<span>{{ area.name }}</span>{% endfor %}</div>
             {% elif attendance.selected_scope %}<p class="neostaffing-attendance-current-scope">{{ unit_path(attendance.selected_scope) }}</p>{% endif %}

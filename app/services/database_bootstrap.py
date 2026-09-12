@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 
 from app.extensions import db
-from app.models import GatewayMembership, GatewayNodeRole, NeoNode, User
+from app.models import GatewayMembership, GatewayNodeRole, NeoNode, StaffingUnit, User
 from app.services.access_control import (
     backfill_default_gateway_node_roles,
     ensure_default_gateway_and_nodes,
@@ -61,6 +61,10 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     ensure_default_permission_rules()
     ensure_sheets_compatibility_setting(gateway)
     ensure_google_motherbrain_live_polling_setting(gateway)
+    _ensure_staffing_sort_roots()
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    from app.services.neostaffing_discipline import backfill_legacy_workdays
+    backfill_legacy_workdays(current_gateway_local_datetime(gateway).date())
 
     user, created_user = _find_or_create_bootstrap_user(username, email)
     user.username = username
@@ -108,6 +112,21 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
             is_active=True,
         ).count(),
     }
+
+
+def _ensure_staffing_sort_roots():
+    """Seed requested empty Sort roots; never alter an existing organization.
+
+    This is deployment seed data, not an attendance pairing/order definition.
+    Workday configuration must use real configured Sort IDs and chronology.
+    """
+    existing = {
+        row.name.strip().casefold()
+        for row in StaffingUnit.query.filter_by(unit_type="sort", parent_id=None).all()
+    }
+    for name in ("Twilight", "Day", "Sunrise", "Preload"):
+        if name.casefold() not in existing:
+            db.session.add(StaffingUnit(unit_type="sort", name=name, active=True))
 
 
 def _resolve_bootstrap_credentials(app):

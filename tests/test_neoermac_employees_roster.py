@@ -76,6 +76,13 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
             self.assertNotIn(person.full_name.encode(), response.data)
         return response.data
 
+    def test_no_sort_management_links_shared_accountability(self):
+        self._no_sort()
+        page = self._get()
+        self.assertIn(b'href="/neostaffing/accountability">ACCOUNTABILITY</a>', page)
+        self.assertNotIn(b'SAVE ATTENDANCE', page)
+        self.assertEqual(self.client.get('/neostaffing/accountability').status_code, 200)
+
     def _post(self, person, operation_id, status='here'):
         page = self.client.get('/neoermac/door-view/manage-employees').get_data(as_text=True)
         original = re.search(fr'name="original_{person.id}" value="([^"]+)"', page)
