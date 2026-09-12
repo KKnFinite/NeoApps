@@ -50,18 +50,21 @@ function documentStub() {
     };
 }
 
-function pickerFor(label) {
+function pickerFor(label, storage = null) {
     const destination = new Element("select");
     destination.options = [{value: ""}, {value: "17", textContent: label}];
     destination.selectedOptions = [destination.options[1]];
     const document = documentStub();
+    document.body = {textContent: "Person added."};
     document.querySelector = (selector) => {
         if (selector === ".neostaffing-people-console") return new Element();
         if (selector === '#people-selection-form select[name="work_area_unit_id"]') return destination;
+        if (storage && selector === 'form[action="/neostaffing/app-management/people"]') return new Element('form');
         return null;
     };
     vm.runInNewContext(fs.readFileSync(path.join(root, "app/static/js/staffing_people.js"), "utf8"), {
-        document, window: {}, sessionStorage: {getItem: () => null},
+        document, window: {}, sessionStorage: storage || {getItem: () => null},
+        requestAnimationFrame: (callback) => callback(),
     });
     return destination;
 }
@@ -90,6 +93,15 @@ test("prototype-property names are ordinary hierarchy keys, not inherited object
     assert.ok(labels.includes("__proto__"));
     assert.ok(labels.includes("constructor"));
     assert.ok(labels.includes("Work Area"));
+});
+
+test("storage removal denied after a successful add does not break the work-area picker", () => {
+    const destination = pickerFor("Night / Door 6", {
+        getItem: () => '{"first_name":"Saved"}',
+        removeItem: () => {throw new Error("Storage denied");},
+    });
+    assert.equal(destination.dataset.peopleHierarchyPicker, "true");
+    assert.ok(destination.following);
 });
 
 function bulkPreview() {

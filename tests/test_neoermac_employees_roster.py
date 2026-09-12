@@ -1,5 +1,7 @@
 """Ermac door preferences feed Staffing's read-only roster and sort-bound writes."""
 from datetime import date, datetime
+from html import unescape
+import re
 import unittest
 
 from sqlalchemy import event
@@ -69,8 +71,11 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         return response.data
 
     def _post(self, person, operation_id, status='here'):
+        page = self.client.get('/neoermac/door-view/manage-employees').get_data(as_text=True)
+        original = re.search(fr'name="original_{person.id}" value="([^"]+)"', page)
         return self.client.post('/neoermac/door-view/manage-employees', data={
             'sort_date_operation_id': str(operation_id), f'status_{person.id}': status,
+            f'original_{person.id}': unescape(original[1]) if original else '',
         })
 
     def test_no_sort_roster_uses_assignments_and_flow_without_attendance_or_writes(self):

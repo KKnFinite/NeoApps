@@ -56,6 +56,7 @@
                                     {% if not attendance.operation %}
                                     <span>{{ row.assignment_label }}</span>
                                     {% elif can_edit_attendance and row.status_writable %}
+                                    <input type="hidden" name="original_{{ row.person.id }}" value="{{ row.original_snapshot }}">
                                     <select name="status_{{ row.person.id }}" aria-label="Attendance for {{ row.person.full_name }}">
                                         <option value="">Unmarked</option>
                                         {% for value, label in attendance.status_choices %}

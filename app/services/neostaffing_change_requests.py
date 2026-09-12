@@ -66,6 +66,7 @@ APPROVER_CLASSIFICATIONS = {
     "division_manager",
 }
 REQUEST_HISTORY_DAYS = 14
+REQUEST_CLEANUP_BATCH_SIZE = 250
 REQUEST_LIFETIME_DAYS = 30
 REQUEST_OVERDUE_HOURS = 48
 
@@ -955,12 +956,15 @@ def retention_scope_for_page(user, filters=None, now=None):
 
 
 def cleanup_change_request_retention(now=None, *, scope=True):
+    """Expire and purge at most one fixed batch each; preserve oldest-first order."""
     now = now or datetime.utcnow()
     expired_requests = StaffingChangeRequest.query.filter(
         scope,
         StaffingChangeRequest.status == "pending",
         StaffingChangeRequest.submitted_at
         < now - timedelta(days=REQUEST_LIFETIME_DAYS),
+    ).order_by(StaffingChangeRequest.submitted_at, StaffingChangeRequest.id).limit(
+        REQUEST_CLEANUP_BATCH_SIZE
     ).with_for_update().all()
     expired_ids = {row.id for row in expired_requests}
     expired_items = StaffingChangeRequestItem.query.filter(
@@ -1010,7 +1014,9 @@ def cleanup_change_request_retention(now=None, *, scope=True):
         StaffingChangeRequest.status == "completed",
         StaffingChangeRequest.completed_at
         < now - timedelta(days=REQUEST_HISTORY_DAYS),
-    ).all()
+    ).order_by(StaffingChangeRequest.completed_at, StaffingChangeRequest.id).limit(
+        REQUEST_CLEANUP_BATCH_SIZE
+    ).with_for_update().all()
     purge_ids = {row.id for row in purge_rows}
     if purge_ids:
         StaffingNotification.query.filter(

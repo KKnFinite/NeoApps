@@ -1,5 +1,7 @@
 from tests.css_contracts import stylesheet_source
 from datetime import date, datetime, timedelta
+from html import unescape
+import re
 from pathlib import Path
 import unittest
 
@@ -347,6 +349,7 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
         page = self.client.get(
             f"/neostaffing/attendance?work_area_id={second_area.id}"
         )
+        original = re.search(fr'name="original_{person.id}" value="([^"]+)"', page.get_data(as_text=True))
         saved = self.client.post(
             "/neostaffing/attendance",
             data={
@@ -354,6 +357,7 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
                 "sort_id": str(staffing_sort.id),
                 "work_area_id": str(second_area.id),
                 f"status_{person.id}": "here",
+                f"original_{person.id}": unescape(original[1]),
             },
             follow_redirects=True,
         )

@@ -1253,6 +1253,11 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             "effective_work_area_id": effective_area_id,
             "flow": operational_flow_shorthand(plan),
         }
+        if operation:
+            row["original_snapshot"] = _attendance_snapshot_serializer().dumps({
+                "person_id": person.id, "operation_id": operation.id,
+                "original": _attendance_original(record),
+            })
         if effective_area_id in start_ids:
             here.append(row)
             here_assignments.append(assignment)
@@ -1270,13 +1275,16 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
     }
 
 
-def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids):
+def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False):
     """Mutate only people whose effective attendance snapshot is in allowed areas."""
     operation = current_night_attendance_operation()
     if not operation or str(values.get("sort_date_operation_id")) != str(operation.id):
         raise ValueError("The selected Night Sort is no longer current. Reload Manage Employees.")
     allowed = _operational_area_id_set(allowed_sort_start_area_ids)
     person_ids = _submitted_attendance_person_ids(values)
+    originals = {}
+    if form_submission:
+        person_ids, originals = _changed_attendance_form_rows(values, person_ids, operation)
     hierarchy = _daily_attendance_hierarchy()
     staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
     shift_area_ids = {
@@ -1298,7 +1306,8 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
         .all()
     )
     assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
-    existing = _daily_attendance_records(person_ids, operation, staffing_sort)
+    existing = _locked_attendance_records(person_ids, operation, staffing_sort)
+    _validate_attendance_originals(existing, originals)
     for person_id in person_ids:
         assignment = assignments_by_person.get(person_id)
         plan = getattr(getattr(assignment, "person", None), "shift_flow_plan", None)
@@ -1319,6 +1328,7 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
         if not status_value:
             if record:
                 db.session.delete(record); saved += 1
+                saved_statuses[person_id] = ""
             continue
         status = _normalize_choice(
             status_value,
@@ -1368,9 +1378,10 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
 
         deactivate_neosubzero_callouts_for_attendance(
             operation,
-            saved_statuses,
+            {person_id: status for person_id, status in saved_statuses.items() if status},
             user_id=user_id,
         )
+    _sync_attendance_accountability(operation, saved_statuses, user_id)
     db.session.flush()
     return saved
 
@@ -3912,6 +3923,63 @@ def _attendance_original(record):
     }
 
 
+def _changed_attendance_form_rows(values, submitted_ids, operation, *, bulk_status=""):
+    changed, originals = set(), {}
+    for person_id in submitted_ids:
+        try:
+            snapshot = _attendance_snapshot_serializer().loads(values.get(f"original_{person_id}", ""))
+        except BadSignature:
+            raise ValueError("Attendance form is outdated. Reload Attendance before saving.") from None
+        if snapshot["person_id"] != person_id or snapshot["operation_id"] != operation.id:
+            raise ValueError("Attendance form does not match the selected Night Sort.")
+        original = snapshot["original"]
+        status = "here" if bulk_status else str(values.get(f"status_{person_id}") or "").strip()
+        note = _optional_text(values.get(f"note_{person_id}", original["note"])) or ""
+        if status == original["status"] and note == original["note"]:
+            continue
+        if not status and not original["status"]:
+            continue
+        changed.add(person_id)
+        originals[person_id] = original
+    return changed, originals
+
+
+def _locked_attendance_records(person_ids, operation, staffing_sort):
+    if not person_ids:
+        return {}
+    # Stable ordered parents serialize competing inserts too. Both attendance
+    # entry points use this same lock order, including the occurrence projection.
+    db.session.query(StaffingPerson.id).filter(
+        StaffingPerson.id.in_(person_ids)
+    ).order_by(StaffingPerson.id).with_for_update().all()
+    records = StaffingDailyAttendance.query.filter(
+        StaffingDailyAttendance.person_id.in_(person_ids),
+        StaffingDailyAttendance.attendance_date == operation.sort_date,
+        StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
+        or_(StaffingDailyAttendance.sort_date_operation_id == operation.id,
+            StaffingDailyAttendance.sort_date_operation_id.is_(None)),
+    ).order_by(StaffingDailyAttendance.person_id).populate_existing().with_for_update().all()
+    return {record.person_id: record for record in records}
+
+
+def _validate_attendance_originals(existing, originals):
+    for person_id, original in originals.items():
+        if _attendance_original(existing.get(person_id)) != original:
+            raise ValueError("Attendance changed while you were editing. Reload Attendance and review before saving.")
+
+
+def _sync_attendance_accountability(operation, statuses, user_id):
+    if not statuses:
+        return
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    from app.services.neostaffing_accountability import sync_attendance_occurrences
+
+    sync_attendance_occurrences(
+        operation, statuses, user_id=user_id,
+        as_of=current_gateway_local_datetime().date(),
+    )
+
+
 def save_attendance(values, user, *, form_submission=False):
     """Apply explicit commands; browser forms must supply signed original rows.
 
@@ -3954,48 +4022,12 @@ def save_attendance(values, user, *, form_submission=False):
     if form_submission:
         # ALL HERE applies only to the roster actually seen, not newly assigned
         # employees. Comparing to the original also works without JavaScript.
-        person_ids = set()
-        for person_id in submitted_person_ids:
-            try:
-                snapshot = _attendance_snapshot_serializer().loads(values.get(f"original_{person_id}", ""))
-            except BadSignature:
-                raise ValueError("Attendance form is outdated. Reload Attendance before saving.") from None
-            if snapshot["person_id"] != person_id or snapshot["operation_id"] != operation.id:
-                raise ValueError("Attendance form does not match the selected Night Sort.")
-            original = snapshot["original"]
-            status = "here" if bulk_status else str(values.get(f"status_{person_id}") or "").strip()
-            note = _optional_text(values.get(f"note_{person_id}", original["note"])) or ""
-            if status == original["status"] and note == original["note"]:
-                continue
-            # A blank status is a deletion only when changed from a marked row.
-            if not status and not original["status"]:
-                continue
-            person_ids.add(person_id)
-            originals[person_id] = original
+        person_ids, originals = _changed_attendance_form_rows(
+            values, submitted_person_ids, operation, bulk_status=bulk_status,
+        )
 
-    existing = {}
-    if person_ids:
-        # Lock stable parent rows too: an unmarked employee has no attendance row
-        # to lock yet. Ordered locks serialize competing inserts without locking
-        # the whole sort; different employees remain independent.
-        db.session.query(StaffingPerson.id).filter(
-            StaffingPerson.id.in_(person_ids)
-        ).order_by(StaffingPerson.id).with_for_update().all()
-        records = StaffingDailyAttendance.query.filter(
-            StaffingDailyAttendance.person_id.in_(person_ids),
-            StaffingDailyAttendance.attendance_date == operation.sort_date,
-            StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
-            or_(
-                StaffingDailyAttendance.sort_date_operation_id == operation.id,
-                StaffingDailyAttendance.sort_date_operation_id.is_(None),
-            ),
-        ).order_by(StaffingDailyAttendance.person_id).populate_existing().with_for_update().all()
-        existing = {record.person_id: record for record in records}
-
-    # Validate every changed row before staging any write (all-or-nothing form).
-    for person_id, original in originals.items():
-        if _attendance_original(existing.get(person_id)) != original:
-            raise ValueError("Attendance changed while you were editing. Reload Attendance and review before saving.")
+    existing = _locked_attendance_records(person_ids, operation, staffing_sort)
+    _validate_attendance_originals(existing, originals)
 
     saved = 0
     user_id = getattr(user, "id", None)
@@ -4010,6 +4042,7 @@ def save_attendance(values, user, *, form_submission=False):
             if record:
                 db.session.delete(record)
                 saved += 1
+                saved_statuses[person_id] = ""
             continue
 
         status = _normalize_choice(
@@ -4061,9 +4094,10 @@ def save_attendance(values, user, *, form_submission=False):
 
         deactivate_neosubzero_callouts_for_attendance(
             operation,
-            saved_statuses,
+            {person_id: status for person_id, status in saved_statuses.items() if status},
             user_id=user_id,
         )
+    _sync_attendance_accountability(operation, saved_statuses, user_id)
     db.session.flush()
     return saved
 

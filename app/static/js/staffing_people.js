@@ -64,7 +64,7 @@
             const drawer = document.querySelector('[data-people-add-drawer="single"]');
             if (drawer) drawer.open = true;
             requestAnimationFrame(() => employeeId?.focus());
-            sessionStorage.removeItem("neostaffing.people.single-add");
+            try { sessionStorage.removeItem("neostaffing.people.single-add"); } catch (_error) {}
         }
         const destination = document.querySelector('#people-selection-form select[name="work_area_unit_id"]');
         if (destination && !destination.dataset.peopleHierarchyPicker) {

@@ -300,9 +300,10 @@ def _resolve_notification_navigation_state(user):
     if not user_can(CHANGE_REQUEST_VIEW_PERMISSION, user):
         return empty
 
-    unread = StaffingNotification.query.filter_by(
-        recipient_user_id=user.id,
-        read_at=None,
+    unread = StaffingNotification.query.filter(
+        StaffingNotification.recipient_user_id == user.id,
+        StaffingNotification.read_at.is_(None),
+        StaffingNotification.created_at >= datetime.utcnow() - timedelta(days=NOTIFICATION_RETENTION_DAYS),
     ).count()
     app_role = get_user_app_role(user, "neostaffing")
     if app_role == "watcher" or not user_can(CHANGE_REQUEST_APPROVE_PERMISSION, user):

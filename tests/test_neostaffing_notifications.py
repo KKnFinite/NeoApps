@@ -256,6 +256,7 @@ class NeoStaffingNotificationsTest(unittest.TestCase):
         self.assertEqual(len(first["notifications"]), size)
         self.assertEqual(len(second["notifications"]), 3)
         self.assertEqual(first["total"], size + 3)
+        self.assertEqual(first["unread_count"], (size + 4) // 2)
         self.assertEqual([row.id for row in first["notifications"] + second["notifications"]], expected)
         feeds = [statement for statement in sql if "LEFT OUTER JOIN staffing_change_requests" in statement]
         self.assertEqual(len(feeds), 2)

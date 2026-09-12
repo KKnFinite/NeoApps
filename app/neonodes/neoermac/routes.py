@@ -525,7 +525,7 @@ def manage_employees():
         else:
             try:
                 saved = staffing_service.save_operational_manage_attendance(
-                    request.form, current_user, area_ids
+                    request.form, current_user, area_ids, form_submission=True
                 )
                 db.session.commit()
                 flash(f"Attendance saved for {saved} people.", "success")

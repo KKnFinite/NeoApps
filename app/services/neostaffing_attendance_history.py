@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
 from flask import current_app
@@ -42,6 +42,7 @@ class AttendanceRolloverResult:
     purged_detail_count: int = 0
     purged_expired_summary_count: int = 0
     status: str = "no_current_operation"
+    purged_expired_occurrence_count: int = 0
 
     @property
     def changed(self):
@@ -49,6 +50,7 @@ class AttendanceRolloverResult:
             self.finalized_summary_count
             or self.purged_detail_count
             or self.purged_expired_summary_count
+            or self.purged_expired_occurrence_count
         )
 
 
@@ -228,6 +230,9 @@ def maintain_current_attendance_rollover(user=None, *, now_local=None):
         user,
         now_local=local_now,
     )
+    from app.services.neostaffing_accountability import purge_expired_occurrences
+
+    result = replace(result, purged_expired_occurrence_count=purge_expired_occurrences(local_now.date(), skip_empty=True))
     if result.status != "processed":
         return result
     expired_count = purge_expired_attendance_summaries(
@@ -240,6 +245,7 @@ def maintain_current_attendance_rollover(user=None, *, now_local=None):
         purged_detail_count=result.purged_detail_count,
         purged_expired_summary_count=expired_count,
         status=result.status,
+        purged_expired_occurrence_count=result.purged_expired_occurrence_count,
     )
 
 

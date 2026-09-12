@@ -565,6 +565,25 @@ class NeoStaffingChangeRequestsTest(unittest.TestCase):
         with self.app.test_request_context("/neostaffing/requests"):
             self.assertFalse(request_service.can_approve_change_requests(watcher))
 
+    def test_retention_work_is_bounded_for_pending_and_completed_requests(self):
+        now = datetime.utcnow()
+        # A reduced test batch makes the exact bound/continuation easy to prove.
+        rows = [StaffingChangeRequest(
+            person_id=self.target.id, submitted_by_user_id=self.submitter_user.id,
+            status=status, submitted_at=now - timedelta(days=40),
+            completed_at=now - timedelta(days=20) if status == 'completed' else None,
+            routed_approver_person_ids_json='[]',
+        ) for status in ('pending', 'completed') for _ in range(5)]
+        db.session.add_all(rows)
+        db.session.commit()
+        with patch.object(request_service, 'REQUEST_CLEANUP_BATCH_SIZE', 2, create=True):
+            first = request_service.cleanup_change_request_retention(now)
+            db.session.commit()
+            self.assertEqual((first['expired'], first['purged']), (2, 2))
+            second = request_service.cleanup_change_request_retention(now)
+            db.session.commit()
+            self.assertEqual((second['expired'], second['purged']), (2, 2))
+
     def test_retention_expires_unresolved_purges_completed_and_orders_overdue_first(self):
         old_request = self._submit(self.submitter_user, requested_first_name="Old")
         db.session.commit()
