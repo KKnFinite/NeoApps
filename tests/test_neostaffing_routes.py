@@ -231,7 +231,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self._login(watcher.username)
         blocked = self.client.post(
             f"/neostaffing/shift-flow/{person.id}/final-door",
-            json={"final_door_work_area_id": door_two.id, "expected_version": plan.updated_at.isoformat(timespec="microseconds")},
+            json={"final_door_work_area_id": door_two.id, "expected_version": staffing_service.shift_flow_revision(person, plan, staffing_service.assignment_service.shift_home(person))},
         )
         self.assertEqual(blocked.status_code, 302)
         self.assertEqual(db.session.get(StaffingShiftFlowPlan, plan.id).final_door_work_area_id, door_one.id)
@@ -242,13 +242,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
         missing = client.post(
             f"/neostaffing/shift-flow/{person.id}/final-door",
-            json={"final_door_work_area_id": door_two.id, "expected_version": plan.updated_at.isoformat(timespec="microseconds")},
+            json={"final_door_work_area_id": door_two.id, "expected_version": staffing_service.shift_flow_revision(person, plan, staffing_service.assignment_service.shift_home(person))},
             headers={"Accept": "application/json"},
         )
         self.assertEqual(missing.status_code, 400)
         moved = client.post(
             f"/neostaffing/shift-flow/{person.id}/final-door",
-            json={"final_door_work_area_id": door_two.id, "expected_version": plan.updated_at.isoformat(timespec="microseconds")},
+            json={"final_door_work_area_id": door_two.id, "expected_version": staffing_service.shift_flow_revision(person, plan, staffing_service.assignment_service.shift_home(person))},
             headers={"Accept": "application/json", "X-CSRF-Token": token},
         )
         self.assertEqual(moved.status_code, 200)
@@ -303,14 +303,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(missing_csrf.status_code, 400)
         created = client.post(
             f"/neostaffing/shift-flow/{person.id}/final-composite",
-            json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": ""},
+            json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": staffing_service.shift_flow_revision(person, None, staffing_service.assignment_service.shift_home(person))},
             headers={"Accept": "application/json", "X-CSRF-Token": token},
         )
         self.assertEqual(created.status_code, 200)
         self.assertTrue(created.get_json()["created"])
         plan = StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).one()
         self.assertEqual(plan.final_door_work_area_id, areas["Door 24"].id)
-        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["West Ballmat"].id)
         self.assertEqual(plan.ballmat_transition, 1)
         self.assertIsNone(plan.setup_work_area_id)
 
@@ -325,7 +325,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(stale.status_code, 409)
         db.session.refresh(plan)
         self.assertEqual(plan.final_door_work_area_id, areas["Door 24"].id)
-        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["West Ballmat"].id)
         self.assertEqual(plan.ballmat_transition, 1)
         self.assertEqual(plan.setup_work_area_id, areas["Door 34"].id)
 
@@ -389,6 +389,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self._login(user.username)
 
         reports = self.client.get("/neostaffing/reports")
+        attendance_page = self.client.get(f"/neostaffing/attendance?work_area_id={work_area.id}")
+        originals = {name: unescape(value) for name, value in re.findall(
+            r'name="(original_\d+)" value="([^"]*)"', attendance_page.get_data(as_text=True))}
         attendance = self.client.post(
             "/neostaffing/attendance",
             data={
@@ -396,6 +399,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 f"status_{person.id}": "here",
+                **originals,
             },
             follow_redirects=True,
         )
@@ -1781,7 +1785,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         supervisor_context = staffing_service.people_context({"person_id": supervisor.id})
 
         self.assertEqual(hourly_response.status_code, 200)
-        self.assertIn(b"Current Work Area", hourly_response.data)
+        self.assertIn(b"Current Work Assignments", hourly_response.data)
         self.assertIn(
             b"Night Sort / Shift Operation / East Shift Department / EBM",
             hourly_response.data,
@@ -1795,7 +1799,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "Night Sort / Shift Operation / East Shift Department / WBM",
             ],
         )
-        self.assertIn(b"Current Work Area", unassigned_response.data)
+        self.assertIn(b"Current Work Assignments", unassigned_response.data)
         self.assertIn(b'<li class="is-unassigned">Unassigned</li>', unassigned_response.data)
 
     def test_simulator_without_staffing_person_can_assign_and_remove_pt_supervisor(self):
@@ -2224,7 +2228,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         self.assertEqual(blocked.status_code, 302)
         self.assertEqual(blocked.location, "/neostaffing")
-        self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignment.work_area_unit_id, work_area.id)
+        self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignments[0].work_area_unit_id, work_area.id)
 
         simulator_client = self._logged_in_client(simulator.username)
         updated = simulator_client.post(
@@ -2235,7 +2239,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(updated.status_code, 302)
         self.assertIn("/neostaffing/people", updated.location)
-        self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignment.work_area_unit_id, second_work_area.id)
+        self.assertEqual(db.session.get(StaffingPerson, person.id).work_assignments[0].work_area_unit_id, second_work_area.id)
 
     def test_people_bulk_actions_assign_skip_management_and_clear_assignments(self):
         simulator = self._user("staffing_bulk_simulator")
@@ -2318,12 +2322,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(assigned.status_code, 200)
         self.assertIn(b"Bulk work-area action updated 2 people.", assigned.data)
         self.assertIn(b"Skipped management classifications", assigned.data)
-        self.assertEqual(db.session.get(StaffingPerson, part_time.id).work_assignment.work_area_unit_id, second_work_area.id)
-        self.assertEqual(db.session.get(StaffingPerson, combo.id).work_assignment.work_area_unit_id, second_work_area.id)
-        self.assertIsNone(db.session.get(StaffingPerson, supervisor.id).work_assignment)
+        self.assertEqual(db.session.get(StaffingPerson, part_time.id).work_assignments[0].work_area_unit_id, second_work_area.id)
+        self.assertEqual(db.session.get(StaffingPerson, combo.id).work_assignments[0].work_area_unit_id, second_work_area.id)
+        self.assertEqual(db.session.get(StaffingPerson, supervisor.id).work_assignments, [])
         self.assertEqual(cleared.status_code, 200)
-        self.assertFalse(db.session.get(StaffingPerson, part_time.id).work_assignment.active)
-        self.assertFalse(db.session.get(StaffingPerson, combo.id).work_assignment.active)
+        self.assertFalse(db.session.get(StaffingPerson, part_time.id).work_assignments[0].active)
+        self.assertFalse(db.session.get(StaffingPerson, combo.id).work_assignments[0].active)
 
     def _attendance_form_values(self, page):
         return {name: unescape(value) for name, value in re.findall(
@@ -2595,7 +2599,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Added 2 employees.", bulk.data)
         for employee_id in ("PEOPLE-ONE", "PEOPLE-TWO", "PEOPLE-THREE"):
             person = StaffingPerson.query.filter_by(employee_id=employee_id).one()
-            self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
+            self.assertEqual(person.work_assignments[0].work_area_unit_id, work_area.id)
 
     def test_people_global_smart_creation_assignments_and_atomic_rollback(self):
         admin = self._user("staffing_smart_people_admin")
@@ -2735,16 +2739,16 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         no_assignment_person = StaffingPerson.query.filter_by(
             employee_id="SMART-NONE"
         ).one()
-        self.assertIsNone(no_assignment_person.work_assignment)
+        self.assertEqual(no_assignment_person.work_assignments, [])
         self.assertEqual(no_assignment_person.leadership_assignments, [])
         hourly_person = StaffingPerson.query.filter_by(employee_id="SMART-HOURLY").one()
-        self.assertEqual(hourly_person.work_assignment.work_area_unit_id, work_area.id)
+        self.assertEqual(hourly_person.work_assignments[0].work_area_unit_id, work_area.id)
         pt_person = StaffingPerson.query.filter_by(employee_id="SMART-PT").one()
         self.assertEqual(
             {row.unit_id for row in pt_person.leadership_assignments if row.active},
             {work_area.id, second_area.id},
         )
-        self.assertIsNone(pt_person.work_assignment)
+        self.assertEqual(pt_person.work_assignments, [])
         self.assertEqual(one_assignment.status_code, 302)
         one_assignment_person = StaffingPerson.query.filter_by(
             employee_id="SMART-ONE"
@@ -2762,7 +2766,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             {row.unit_id for row in twenty_c_person.leadership_assignments if row.active},
             {work_area.id, second_department.id},
         )
-        self.assertIsNone(twenty_c_person.work_assignment)
+        self.assertEqual(twenty_c_person.work_assignments, [])
         affiliation = StaffingTwentyCAffiliation.query.filter_by(
             twenty_c_person_id=twenty_c_person.id,
             affiliation_type="primary",
@@ -2943,7 +2947,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         )
         shift_person = StaffingPerson.query.filter_by(employee_id="SPLIT-SHIFT").one()
         self.assertEqual(created.status_code, 302)
-        self.assertEqual(shift_person.work_assignment.work_area_unit_id, work_area.id)
+        self.assertEqual(shift_person.work_assignments[0].work_area_unit_id, discharge.id)
         self.assertEqual(shift_person.shift_flow_plan.setup_work_area_id, ballmat.id)
         self.assertEqual(shift_person.shift_flow_plan.sort_start_work_area_id, discharge.id)
 
@@ -2970,7 +2974,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         person = StaffingPerson.query.filter_by(employee_id="SPLIT-DATE").one()
         self.assertEqual(created.status_code, 302)
         self.assertEqual(person.seniority_date, date(2026, 2, 3))
-        self.assertEqual(person.work_assignment.work_area_unit_id, work_area.id)
+        self.assertEqual(person.work_assignments[0].work_area_unit_id, work_area.id)
 
         updated = client.post(
             f"/neostaffing/app-management/people/{person.id}/update",
@@ -3273,6 +3277,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         db.session.commit()
         self._login(user.username)
 
+        attendance_page = self.client.get(f"/neostaffing/attendance?work_area_id={work_area.id}")
+        originals = {name: unescape(value) for name, value in re.findall(
+            r'name="(original_\d+)" value="([^"]*)"', attendance_page.get_data(as_text=True))}
         saved = self.client.post(
             "/neostaffing/attendance",
             data={
@@ -3280,6 +3287,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "sort_id": str(sort.id),
                 "work_area_id": str(work_area.id),
                 "bulk_status": "here",
+                **originals,
                 f"status_{first_person.id}": "call_in",
                 f"status_{second_person.id}": "vacation",
             },

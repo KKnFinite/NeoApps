@@ -166,7 +166,7 @@ class NeoStaffingStaffingGroupsTest(unittest.TestCase):
         self.assertEqual(group["here"], 1)
         self.assertEqual(group["absent"], 1)
         self.assertEqual(group["unmarked"], 1)
-        self.assertEqual(direct_unmarked.work_assignment.work_area_unit_id, direct_area.id)
+        self.assertEqual(direct_unmarked.work_assignments[0].work_area_unit_id, direct_area.id)
 
     def test_selected_door_roster_is_unchanged_with_group_totals(self):
         _sort, operation, _department, selected, other = self._hierarchy()

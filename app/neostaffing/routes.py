@@ -179,6 +179,14 @@ def people():
         current_user if not can_manage else None,
       )
     shift_flow_areas = staffing_service.shift_flow_area_options(context.get("selected_work_area")) if can_edit_people else []
+    profile_flow = None
+    if can_edit_people and context.get("selected_person"):
+        profile_person = context["selected_person"]["person"]
+        profile_home = staffing_service.assignment_service.shift_home(profile_person)
+        if profile_home:
+            profile_flow = {"person": profile_person, "assignment": profile_home,
+                            "plan": profile_person.shift_flow_plan,
+                            "version": staffing_service.shift_flow_revision(profile_person, profile_person.shift_flow_plan, profile_home)}
     creation_context = staffing_service.people_creation_context(context.get("selected_unit")) if can_edit_people else None
     all_classification_choices = staffing_service.classification_choices()
     return render_template(
@@ -188,6 +196,8 @@ def people():
         can_edit_people=can_edit_people,
         can_bulk_people=can_bulk_people,
         shift_flow_areas=shift_flow_areas,
+        profile_flow=profile_flow,
+        profile_flow_areas=staffing_service.shift_flow_area_options(profile_flow["assignment"].work_area) if profile_flow else [],
         creation_context=creation_context,
         classification_choices=all_classification_choices,
         management_classification_choices=[
@@ -293,7 +303,7 @@ def save_shift_flow(person_id):
     phase = request.form.get("phase", "final_door")
     try:
         person = _get_person(person_id)
-        assignment = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).first()
+        assignment = staffing_service.assignment_service.shift_home(person)
         staffing_service.save_shift_flow_plan(person, request.form, assignment.work_area if assignment else None)
         db.session.commit()
     except (ValueError, IntegrityError) as error:
@@ -311,9 +321,7 @@ def move_shift_flow_final_door(person_id):
     payload = request.get_json(silent=True) or request.form
     try:
         person = _get_person(person_id)
-        assignment = StaffingWorkAssignment.query.filter_by(
-            person_id=person.id, active=True
-        ).first()
+        assignment = staffing_service.assignment_service.shift_home(person)
         result = staffing_service.move_shift_flow_final_door(
             person,
             payload.get("final_door_work_area_id"),
@@ -347,9 +355,7 @@ def move_shift_flow_lane(person_id):
     payload = request.get_json(silent=True) or request.form
     try:
         person = _get_person(person_id)
-        assignment = StaffingWorkAssignment.query.filter_by(
-            person_id=person.id, active=True
-        ).first()
+        assignment = staffing_service.assignment_service.shift_home(person)
         result = staffing_service.move_shift_flow_phase_lane(
             person,
             payload.get("phase"),
@@ -384,15 +390,15 @@ def move_shift_flow_final_composite(person_id):
     payload = request.get_json(silent=True) or request.form
     try:
         person = _get_person(person_id)
-        assignment = StaffingWorkAssignment.query.filter_by(
-            person_id=person.id, active=True
-        ).first()
+        assignment = staffing_service.assignment_service.shift_home(person)
         result = staffing_service.move_shift_flow_final_composite(
             person,
             payload.get("final_door_id"),
             payload.get("band"),
             assignment.work_area if assignment else None,
             payload.get("expected_version"),
+            complete_route=payload.get("complete_route") is True,
+            setup_mode=payload.get("setup_mode", "none"),
         )
         if result.get("conflict"):
             db.session.rollback()
@@ -1740,7 +1746,7 @@ def people_assign_work_area(person_id):
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def people_clear_work_area(person_id):
     try:
-        staffing_service.clear_work_assignment(_get_person(person_id))
+        staffing_service.clear_work_assignment(_get_person(person_id), request.form.get("work_area_unit_id") or request.form.get("work_area_id"))
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
@@ -1758,6 +1764,8 @@ def people_bulk_work_area():
         work_area = None
         if action in {"assign", "move"}:
             work_area = _get_unit(request.form.get("work_area_unit_id"))
+        elif action == "clear" and request.form.get("work_area_id"):
+            work_area = _get_unit(request.form.get("work_area_id"))
         result = staffing_service.bulk_update_work_area_assignments(
             request.form.getlist("person_ids"),
             action,
@@ -2171,7 +2179,7 @@ def assign_work_area():
 def clear_work_assignment(person_id):
     person = _get_person(person_id)
     return _mutate(
-        lambda: staffing_service.clear_work_assignment(person),
+        lambda: staffing_service.clear_work_assignment(person, request.form.get("work_area_unit_id")),
         "Work assignment deactivated.",
         "neostaffing.work_assignments",
     )
@@ -2454,14 +2462,14 @@ def _filter_people_for_work_assignment_page(people_rows):
     allowed_work_area_ids = _selected_work_area_filter_ids()
     filtered = []
     for person in people_rows:
-        active_assignment = person.work_assignment if person.work_assignment and person.work_assignment.active else None
-        has_assignment = active_assignment is not None
+        active_assignments = [row for row in person.work_assignments if row.active]
+        has_assignment = bool(active_assignments)
         if assignment_status == "assigned" and not has_assignment:
             continue
         if assignment_status == "unassigned" and has_assignment:
             continue
         if allowed_work_area_ids is not None:
-            if not has_assignment or active_assignment.work_area_unit_id not in allowed_work_area_ids:
+            if not any(row.work_area_unit_id in allowed_work_area_ids for row in active_assignments):
                 continue
         filtered.append(person)
     return filtered

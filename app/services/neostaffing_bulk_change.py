@@ -102,7 +102,12 @@ class BulkChangeDataBundle:
         self.people_by_employee_id = {
             row.employee_id.strip().lower(): row for row in self.people
         }
-        self.work_by_person = {row.person_id: row for row in self.work_assignments}
+        self.work_rows_by_person = defaultdict(list)
+        for row in self.work_assignments:
+            if row.active:
+                self.work_rows_by_person[row.person_id].append(row)
+        # The legacy single-field editor has no implicit primary assignment.
+        self.work_by_person = {person_id: rows[0] for person_id, rows in self.work_rows_by_person.items() if len(rows) == 1}
         self.leadership_by_id = {
             row.id: row for row in self.leadership_assignments
         }
@@ -336,6 +341,12 @@ def apply_workspace(workspace, user):
         state = simulation["states"][ref]
         assignment = work_by_person_id.get(person.id)
         target_id = state["work_area_unit_id"]
+        current_rows = bundle.work_rows_by_person.get(person.id, [])
+        if target_id is not None:
+            assignment = staffing_service.assignment_service.assignment_for_target(
+                person, bundle.units_by_id[target_id], current_rows)
+        elif len(current_rows) > 1:
+            raise ValueError("Clear a selected Work Area assignment in People; other Sorts are independent.")
         if target_id is None:
             if assignment and assignment.active:
                 assignment.active = False
@@ -1152,8 +1163,8 @@ def _require_person_scope(person, user, bundle):
     actor = _actor_context(user, bundle)
     if actor["can_cross_area"] or actor["is_grandmaster"]:
         return
-    assignment = bundle.work_by_person.get(person.id)
-    if assignment and assignment.active and assignment.work_area_unit_id in actor["allowed_unit_ids"]:
+    if any(assignment.work_area_unit_id in actor["allowed_unit_ids"]
+           for assignment in bundle.work_rows_by_person.get(person.id, [])):
         return
     if any(
         row.unit_id in actor["allowed_unit_ids"]

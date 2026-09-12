@@ -42,6 +42,23 @@ class ShiftFlowTest(unittest.TestCase):
     def _values(self, start=None, transition="", setup=None, final=None):
         return {"shift_flow_setup_work_area_id": str(setup.id) if setup else "", "shift_flow_sort_start_work_area_id": str((start or self.door).id), "shift_flow_ballmat_transition": transition, "shift_flow_final_door_work_area_id": str((final or self.door).id)}
 
+    def _plan(self, person, values, selected_work_area):
+        # These projection/interaction fixtures now begin with real canonical
+        # Home assignments, rather than an independent plan-only Sort Start.
+        if values and not staffing_service.assignment_service.shift_home(person):
+            staffing_service.assign_work_area(person, selected_work_area)
+        return staffing_service.create_shift_flow_plan(person, values, selected_work_area)
+
+    def _revision(self, plan):
+        return staffing_service.shift_flow_revision(plan.person, plan,
+            staffing_service.assignment_service.shift_home(plan.person))
+
+    def _assignment(self, person, work_area, active=True):
+        with db.session.no_autoflush:
+            plan = person.shift_flow_plan
+            area = plan.sort_start_work_area if plan else work_area
+        return staffing_service.assign_work_area(person, area)
+
     def _configure_final_composite(self):
         by_name = {area.name: area for area in [self.door, self.empty_door, self.ballmat, self.empty_ballmat, self.discharge, self.other]}
         for name in ("Door 34", "Door 32", "Door 29", "Door 26", "Door 24", "Door 21", "Door 17", "Door 13", "Door 9", "Door 6", "Door 4"):
@@ -70,7 +87,7 @@ class ShiftFlowTest(unittest.TestCase):
     def test_valid_door_ballmat_and_discharge_plans(self):
         for index, (start, transition) in enumerate(((self.door, ""), (self.ballmat, "2"), (self.discharge, "")), 1):
             person = self._person(f"10000{index}")
-            plan = staffing_service.create_shift_flow_plan(person, self._values(start, transition, self.door, self.door), self.door)
+            plan = self._plan(person, self._values(start, transition, self.door, self.door), self.door)
             self.assertEqual(plan.ballmat_transition, int(transition) if transition else None)
         db.session.commit()
         self.assertEqual(StaffingShiftFlowPlan.query.count(), 3)
@@ -78,25 +95,25 @@ class ShiftFlowTest(unittest.TestCase):
     def test_transition_and_area_validation_are_atomic(self):
         person = self._person()
         with self.assertRaisesRegex(ValueError, "Ballmat Transition"):
-            staffing_service.create_shift_flow_plan(person, self._values(self.ballmat, ""), self.door)
+            self._plan(person, self._values(self.ballmat, "4"), self.door)
         with self.assertRaisesRegex(ValueError, "Final Door"):
-            staffing_service.create_shift_flow_plan(person, self._values(self.door, "", final=self.discharge), self.door)
+            self._plan(person, self._values(self.door, "", final=self.discharge), self.door)
         with self.assertRaisesRegex(ValueError, "Shift Work Area"):
-            staffing_service.create_shift_flow_plan(person, self._values(self.door, "", setup=self.non_shift), self.door)
+            self._plan(person, self._values(self.door, "", setup=self.non_shift), self.door)
         db.session.rollback()
         self.assertEqual(StaffingPerson.query.count(), 0)
         self.assertEqual(StaffingShiftFlowPlan.query.count(), 0)
 
     def test_optional_plan_is_not_created_until_any_flow_value_is_submitted(self):
         person = self._person()
-        self.assertIsNone(staffing_service.create_shift_flow_plan(person, {}, self.door))
+        self.assertIsNone(self._plan(person, {}, self.door))
         db.session.commit()
         self.assertEqual(StaffingPerson.query.count(), 1)
         self.assertEqual(StaffingShiftFlowPlan.query.count(), 0)
 
     def test_phase_projection_and_shorthand(self):
         person = self._person()
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(self.ballmat, "2", self.door, self.door), self.door
         )
         self.assertEqual(staffing_service._shift_flow_phase_area(plan, "setup").id, self.door.id)
@@ -108,26 +125,27 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_discharge_remains_through_later_phases_and_plan_can_update(self):
         person = self._person()
-        plan = staffing_service.create_shift_flow_plan(person, self._values(self.discharge, "", final=self.door), self.door)
+        plan = self._plan(person, self._values(self.discharge, "", final=self.door), self.door)
         for phase in ("after_w1", "after_w2", "after_cleanup"):
             self.assertEqual(staffing_service._shift_flow_phase_area(plan, phase).id, self.discharge.id)
         db.session.commit()
-        original_version = staffing_service.entity_version(plan)
+        original_version = self._revision(plan)
         values = self._values(self.door, "", final=self.door)
         values["expected_version"] = original_version
         updated = staffing_service.save_shift_flow_plan(person, values, self.door)
         db.session.commit()
         self.assertEqual(updated.sort_start_work_area.id, self.door.id)
-        self.assertNotEqual(staffing_service.entity_version(updated), original_version)
+        self.assertNotEqual(self._revision(updated), original_version)
         template = (Path(__file__).resolve().parents[1] / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
-        self.assertIn('name="expected_version" value="{{ selected.plan.updated_at.isoformat', template)
+        editor = (Path(__file__).resolve().parents[1] / "app/templates/neostaffing/_shift_flow_editor.html").read_text(encoding="utf-8")
+        self.assertIn('name="expected_version" value="{{ selected.version }}"', editor)
 
     def test_stale_drawer_save_preserves_newer_shift_flow(self):
         person = self._person()
-        plan = staffing_service.create_shift_flow_plan(person, self._values(), self.door)
+        plan = self._plan(person, self._values(), self.door)
         db.session.commit()
         values = self._values(setup=self.door)
-        values["expected_version"] = staffing_service.entity_version(plan)
+        values["expected_version"] = self._revision(plan)
         result = staffing_service.move_shift_flow_final_door(
             person, self.empty_door.id, self.door, values["expected_version"]
         )
@@ -141,9 +159,9 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_stale_cached_drag_plan_is_reloaded_under_transaction_locks(self):
         person = self._person()
-        plan = staffing_service.create_shift_flow_plan(person, self._values(), self.door)
+        plan = self._plan(person, self._values(), self.door)
         db.session.commit()
-        version = staffing_service.entity_version(plan)
+        version = self._revision(plan)
         self.assertIs(person.shift_flow_plan, plan)
         # A different connection commits while this session retains its old ORM
         # relation. Each drag endpoint must lock/reload, not trust that relation.
@@ -198,6 +216,7 @@ class ShiftFlowTest(unittest.TestCase):
             staffing_service.SHIFT_FLOW_PHASES,
             (("setup", "SETUP"), ("sort_start", "SORT START"),
              ("after_w1", "1ST WAVE"), ("after_w2", "2ND WAVE"),
+             ("after_cleanup", "BALLMAT CLEANUP"),
              ("final_door", "FINAL DOOR")),
         )
         self.assertNotIn("AFTER CLEANUP", template)
@@ -220,10 +239,10 @@ class ShiftFlowTest(unittest.TestCase):
         areas = self._configure_final_composite()
         person = self._person()
         assignment = staffing_service.assign_work_area(person, self.door)
-        plan = staffing_service.create_shift_flow_plan(person, self._values(), self.door)
+        plan = self._plan(person, self._values(), self.door)
         db.session.commit()
         assignment_id, plan_id = assignment.id, plan.id
-        version = staffing_service.entity_version(plan)
+        version = self._revision(plan)
 
         def assert_views(expected):
             for phase, _label in staffing_service.SHIFT_FLOW_PHASES:
@@ -255,7 +274,7 @@ class ShiftFlowTest(unittest.TestCase):
                     mutate()
                 db.session.rollback()
         self.assertTrue(db.session.get(StaffingWorkAssignment, assignment_id).active)
-        self.assertEqual(staffing_service.entity_version(plan), version)
+        self.assertEqual(self._revision(plan), version)
         self.assertEqual(StaffingShiftFlowPlan.query.count(), 1)
         self.assertEqual(plan.final_door_work_area_id, self.door.id)
         person.active = True
@@ -266,10 +285,10 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_context_projects_people_into_existing_lanes_without_creating_new_ones(self):
         person = self._person()
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(self.ballmat, "1", final=self.empty_door), self.door
         )
-        db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+        db.session.add(self._assignment(person=person, work_area=self.door, active=True))
         db.session.commit()
         context = staffing_service.shift_flow_context("after_w1")
         lanes = {lane["area"].name: lane for lane in context["groups"]}
@@ -281,7 +300,7 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_unplanned_employee_uses_the_preexisting_flow_not_set_lane(self):
         person = self._person()
-        db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+        db.session.add(self._assignment(person=person, work_area=self.door, active=True))
         db.session.commit()
         context = staffing_service.shift_flow_context("final_door")
         flow_lane = next(lane for lane in context["groups"] if lane["area"].name == "FLOW NOT SET")
@@ -290,12 +309,12 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_final_door_move_changes_only_final_door_and_regroups_counts(self):
         person = self._person()
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(self.ballmat, "2", self.door, self.door), self.door
         )
-        db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+        db.session.add(self._assignment(person=person, work_area=self.door, active=True))
         db.session.commit()
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
 
         result = staffing_service.move_shift_flow_final_door(
             person, self.empty_door.id, self.door, version
@@ -313,13 +332,15 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_final_door_move_rejects_unplanned_invalid_same_and_stale_drops(self):
         unplanned = self._person("100002")
+        home = staffing_service.assign_work_area(unplanned, self.door)
         with self.assertRaisesRegex(ValueError, "FLOW NOT SET"):
-            staffing_service.move_shift_flow_final_door(unplanned, self.empty_door.id, self.door, "v")
+            staffing_service.move_shift_flow_final_door(unplanned, self.empty_door.id, self.door,
+                staffing_service.shift_flow_revision(unplanned, None, home))
 
         person = self._person("100003")
-        plan = staffing_service.create_shift_flow_plan(person, self._values(self.door), self.door)
+        plan = self._plan(person, self._values(self.door), self.door)
         db.session.commit()
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         same = staffing_service.move_shift_flow_final_door(person, self.door.id, self.door, version)
         self.assertFalse(same["changed"])
         with self.assertRaisesRegex(ValueError, "Final Door"):
@@ -332,11 +353,11 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_setup_drag_moves_to_ballmat_and_no_setup_without_touching_other_fields(self):
         person = self._person("100004")
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(self.ballmat, "2", self.door, self.empty_door), self.door
         )
         db.session.commit()
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         moved = staffing_service.move_shift_flow_phase_lane(
             person, "setup", self.empty_ballmat.id, self.door, version
         )
@@ -347,7 +368,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(plan.ballmat_transition, 2)
         self.assertEqual(plan.final_door_work_area_id, self.empty_door.id)
 
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         cleared = staffing_service.move_shift_flow_phase_lane(
             person, "setup", "NO SETUP", self.door, version
         )
@@ -358,11 +379,11 @@ class ShiftFlowTest(unittest.TestCase):
 
     def test_sort_start_drag_requires_preserves_and_clears_ballmat_transition(self):
         person = self._person("100005")
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(self.ballmat, "2", self.door, self.door), self.door
         )
         db.session.commit()
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         preserved = staffing_service.move_shift_flow_phase_lane(
             person, "sort_start", self.empty_ballmat.id, self.door, version
         )
@@ -370,7 +391,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertTrue(preserved["changed"])
         self.assertEqual(plan.ballmat_transition, 2)
 
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         cleared = staffing_service.move_shift_flow_phase_lane(
             person, "sort_start", self.discharge.id, self.door, version
         )
@@ -378,7 +399,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIsNone(plan.ballmat_transition)
         self.assertEqual(plan.sort_start_work_area_id, self.discharge.id)
 
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         with self.assertRaisesRegex(ValueError, "Ballmat Transition"):
             staffing_service.move_shift_flow_phase_lane(person, "sort_start", self.ballmat.id, self.door, version)
         assigned = staffing_service.move_shift_flow_phase_lane(
@@ -391,25 +412,25 @@ class ShiftFlowTest(unittest.TestCase):
         areas = self._configure_final_composite()
         specs = (
             ("100006", None, None, areas["Door 34"], ""),
-            ("100007", areas["Door 34"], areas["East Ballmat"], areas["Door 32"], "1"),
-            ("100008", areas["Door 34"], areas["East Ballmat"], areas["Door 29"], "2"),
+            ("100007", areas["Door 34"], areas["West Ballmat"], areas["Door 32"], "1"),
+            ("100008", areas["Door 34"], areas["West Ballmat"], areas["Door 29"], "2"),
             ("100009", None, self.discharge, areas["Door 26"], ""),
-            ("100010", areas["Door 34"], areas["East Ballmat"], areas["Door 24"], "3"),
+            ("100010", areas["Door 34"], areas["West Ballmat"], areas["Door 24"], "3"),
         )
         people = []
         for employee_id, setup, start, final, transition in specs:
             person = self._person(employee_id)
-            staffing_service.create_shift_flow_plan(person, self._values(start or final, transition, setup, final), self.door)
-            db.session.add(StaffingWorkAssignment(person=person, work_area=self.door, active=True))
+            self._plan(person, self._values(start or final, transition, setup, final), self.door)
+            db.session.add(self._assignment(person=person, work_area=self.door, active=True))
             people.append(person)
         db.session.commit()
-        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        board = staffing_service.shift_flow_context("final_door", "west")["final_composite"]
         self.assertEqual([door.name for door in board["doors"]], ["Door 34", "Door 32", "Door 29", "Door 26", "Door 24", "Door 21"])
-        west = staffing_service.shift_flow_context("final_door", "west")["final_composite"]
+        west = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
         self.assertEqual([door.name for door in west["doors"]], ["Door 17", "Door 13", "Door 9", "Door 6", "Door 4", "Door 1"])
         self.assertEqual(board["bands"], (("at_door", "AT DOOR"), ("bm1", "BM1"), ("bm2", "BM2"), ("discharge", "DISCHARGE"), ("bm3", "BM3")))
-        self.assertEqual(board["ballmat"].name, "East Ballmat")
-        self.assertEqual(west["ballmat"].name, "West Ballmat")
+        self.assertEqual(board["ballmat"].name, "West Ballmat")
+        self.assertEqual(west["ballmat"].name, "East Ballmat")
         self.assertNotIn("Door 2", [door.name for door in board["doors"]])
         self.assertEqual(len(board["columns"]), 6)
         cells = {(column["door"].name, band["key"]): band for column in board["columns"] for band in column["bands"]}
@@ -427,10 +448,10 @@ class ShiftFlowTest(unittest.TestCase):
         same_door_people = []
         for employee_id in ("100030", "100031", "100032"):
             person = self._person(employee_id)
-            staffing_service.create_shift_flow_plan(
+            self._plan(
                 person,
                 self._values(
-                    areas["East Ballmat"],
+                    areas["West Ballmat"],
                     "1",
                     areas["Door 24"],
                     areas["Door 34"],
@@ -438,14 +459,14 @@ class ShiftFlowTest(unittest.TestCase):
                 self.door,
             )
             db.session.add(
-                StaffingWorkAssignment(person=person, work_area=self.door, active=True)
+                self._assignment(person=person, work_area=self.door, active=True)
             )
             same_door_people.append(person)
         other_door = self._person("100033")
-        staffing_service.create_shift_flow_plan(
+        self._plan(
             other_door,
             self._values(
-                areas["East Ballmat"],
+                areas["West Ballmat"],
                 "1",
                 None,
                 areas["Door 32"],
@@ -453,11 +474,11 @@ class ShiftFlowTest(unittest.TestCase):
             self.door,
         )
         db.session.add(
-            StaffingWorkAssignment(person=other_door, work_area=self.door, active=True)
+            self._assignment(person=other_door, work_area=self.door, active=True)
         )
         db.session.commit()
 
-        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        board = staffing_service.shift_flow_context("final_door", "west")["final_composite"]
         band = next(item for item in board["display_bands"] if item["key"] == "bm1")
 
         self.assertEqual(band["occupied_row_count"], 3)
@@ -502,13 +523,14 @@ class ShiftFlowTest(unittest.TestCase):
         west_person = self._person("100013")
         unplanned = self._person("100014")
         invalid = self._person("100015")
-        staffing_service.create_shift_flow_plan(
+        self._plan(
             east_person, self._values(areas["Door 34"], "", final=areas["Door 34"]), self.door
         )
-        staffing_service.create_shift_flow_plan(
+        self._plan(
             west_person, self._values(areas["Door 17"], "", final=areas["Door 17"]), self.door
         )
         # This legacy-shaped plan references a real Shift door outside the fixed East/West map.
+        staffing_service.assign_work_area(invalid, self.other)
         db.session.add(
             StaffingShiftFlowPlan(
                 person=invalid,
@@ -518,13 +540,13 @@ class ShiftFlowTest(unittest.TestCase):
         )
         db.session.add_all(
             [
-                StaffingWorkAssignment(person=person, work_area=self.door, active=True)
+                self._assignment(person=person, work_area=self.door, active=True)
                 for person in (east_person, west_person, unplanned, invalid)
             ]
         )
         db.session.commit()
 
-        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        board = staffing_service.shift_flow_context("final_door", "west")["final_composite"]
         east_ids = {
             row["person"].id
             for column in board["columns"]
@@ -546,13 +568,13 @@ class ShiftFlowTest(unittest.TestCase):
         person = self._person("100016")
         plan = StaffingShiftFlowPlan(
             person=person,
-            sort_start_work_area=areas["East Ballmat"],
+            sort_start_work_area=areas["West Ballmat"],
             final_door_work_area=areas["Door 34"],
             ballmat_transition=None,
         )
-        db.session.add_all([plan, StaffingWorkAssignment(person=person, work_area=self.door, active=True)])
+        db.session.add_all([plan, self._assignment(person=person, work_area=self.door, active=True)])
         db.session.commit()
-        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
+        board = staffing_service.shift_flow_context("final_door", "west")["final_composite"]
         self.assertEqual(
             board["needs_attention"][0]["attention_reason"],
             "Ballmat Transition must be 1, 2, or 3.",
@@ -561,14 +583,14 @@ class ShiftFlowTest(unittest.TestCase):
     def test_exact_setup_assignment_labels_use_real_setup_area(self):
         areas = self._configure_final_composite()
         person = self._person("100026")
-        plan = staffing_service.create_shift_flow_plan(
-            person, self._values(areas["Door 34"], "", areas["East Ballmat"], areas["Door 34"]), self.door
+        plan = self._plan(
+            person, self._values(areas["Door 34"], "", areas["West Ballmat"], areas["Door 34"]), self.door
         )
         db.session.flush()
-        self.assertEqual(staffing_service.shift_flow_setup_assignment_label(plan), "SET EBM")
-        plan.setup_work_area = areas["West Ballmat"]
-        db.session.flush()
         self.assertEqual(staffing_service.shift_flow_setup_assignment_label(plan), "SET WBM")
+        plan.setup_work_area = areas["East Ballmat"]
+        db.session.flush()
+        self.assertEqual(staffing_service.shift_flow_setup_assignment_label(plan), "SET EBM")
         plan.setup_work_area = areas["Door 24"]
         db.session.flush()
         self.assertEqual(staffing_service.shift_flow_setup_assignment_label(plan), "SET D24")
@@ -615,18 +637,18 @@ class ShiftFlowTest(unittest.TestCase):
     def test_wave_drag_moves_use_side_ballmat_and_preserve_setup(self):
         areas = self._configure_final_composite()
         cases = (
-            ("100017", "after_w1", areas["East Ballmat"], "2", areas["Door 32"], areas["Door 34"], 1, areas["East Ballmat"]),
-            ("100018", "after_w1", areas["Door 34"], "", areas["Door 34"], areas["West Ballmat"], 2, areas["West Ballmat"]),
-            ("100019", "after_w2", areas["West Ballmat"], "3", areas["Door 9"], areas["Door 13"], 2, areas["West Ballmat"]),
-            ("100020", "after_w2", areas["Door 34"], "", areas["Door 34"], areas["East Ballmat"], 3, areas["East Ballmat"]),
+            ("100017", "after_w1", areas["West Ballmat"], "2", areas["Door 32"], areas["Door 34"], 1, areas["West Ballmat"]),
+            ("100018", "after_w1", areas["Door 34"], "", areas["Door 34"], areas["East Ballmat"], 2, areas["East Ballmat"]),
+            ("100019", "after_w2", areas["East Ballmat"], "3", areas["Door 9"], areas["Door 13"], 2, areas["East Ballmat"]),
+            ("100020", "after_w2", areas["Door 34"], "", areas["Door 34"], areas["West Ballmat"], 3, areas["West Ballmat"]),
         )
         for employee_id, phase, start, transition, final, destination, expected_transition, expected_start in cases:
             person = self._person(employee_id)
-            plan = staffing_service.create_shift_flow_plan(
+            plan = self._plan(
                 person, self._values(start, transition, self.ballmat, final), self.door
             )
             db.session.commit()
-            version = plan.updated_at.isoformat(timespec="microseconds")
+            version = self._revision(plan)
             result = staffing_service.move_shift_flow_phase_lane(
                 person, phase, destination.id, self.door, version
             )
@@ -643,15 +665,15 @@ class ShiftFlowTest(unittest.TestCase):
     def test_wave_drag_rejects_door_to_door_discharge_and_stale_moves(self):
         areas = self._configure_final_composite()
         door_person = self._person("100021")
-        door_plan = staffing_service.create_shift_flow_plan(
+        door_plan = self._plan(
             door_person, self._values(areas["Door 34"], "", final=areas["Door 34"]), self.door
         )
         discharge_person = self._person("100022")
-        discharge_plan = staffing_service.create_shift_flow_plan(
+        discharge_plan = self._plan(
             discharge_person, self._values(self.discharge, "", final=areas["Door 34"]), self.door
         )
         db.session.commit()
-        version = door_plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(door_plan)
         with self.assertRaisesRegex(ValueError, "Door-to-Door"):
             staffing_service.move_shift_flow_phase_lane(
                 door_person, "after_w1", areas["Door 32"].id, self.door, version
@@ -659,30 +681,30 @@ class ShiftFlowTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Discharge"):
             staffing_service.move_shift_flow_phase_lane(
                 discharge_person, "after_w2", areas["Door 34"].id, self.door,
-                discharge_plan.updated_at.isoformat(timespec="microseconds"),
+                self._revision(discharge_plan),
             )
         door_plan.setup_work_area = self.ballmat
         db.session.commit()
         stale = staffing_service.move_shift_flow_phase_lane(
-            door_person, "after_w1", areas["East Ballmat"].id, self.door, version
+            door_person, "after_w1", areas["West Ballmat"].id, self.door, version
         )
         self.assertEqual(stale["conflict"]["type"], "stale_version")
 
     def test_final_composite_drag_updates_derived_fields_and_preserves_setup_atomically(self):
         areas = self._configure_final_composite()
         person = self._person("100011")
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(self.door, "", self.ballmat, self.door), self.door
         )
         db.session.commit()
-        version = plan.updated_at.isoformat(timespec="microseconds")
+        version = self._revision(plan)
         east = staffing_service.move_shift_flow_final_composite(
             person, areas["Door 24"].id, "bm2", self.door, version
         )
         db.session.commit()
         self.assertTrue(east["changed"])
         self.assertEqual(plan.final_door_work_area_id, areas["Door 24"].id)
-        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["West Ballmat"].id)
         self.assertEqual(plan.ballmat_transition, 2)
         self.assertEqual(plan.setup_work_area_id, self.ballmat.id)
 
@@ -690,7 +712,7 @@ class ShiftFlowTest(unittest.TestCase):
             person, areas["Door 9"].id, "bm1", self.door, east["version"]
         )
         self.assertEqual(plan.final_door_work_area_id, areas["Door 9"].id)
-        self.assertEqual(plan.sort_start_work_area_id, areas["West Ballmat"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
         self.assertEqual(plan.ballmat_transition, 1)
         self.assertEqual(plan.setup_work_area_id, self.ballmat.id)
         with self.assertRaisesRegex(ValueError, "configured East or West doors"):
@@ -701,17 +723,18 @@ class ShiftFlowTest(unittest.TestCase):
     def test_attention_drop_creates_missing_plan_and_repairs_invalid_plan(self):
         areas = self._configure_final_composite()
         unplanned = self._person("100023")
-        db.session.add(StaffingWorkAssignment(person=unplanned, work_area=self.door, active=True))
+        db.session.add(self._assignment(person=unplanned, work_area=self.door, active=True))
         db.session.commit()
 
         created = staffing_service.move_shift_flow_final_composite(
-            unplanned, areas["Door 24"].id, "bm1", self.door, ""
+            unplanned, areas["Door 24"].id, "bm1", self.door,
+            staffing_service.shift_flow_revision(unplanned, None, staffing_service.assignment_service.shift_home(unplanned))
         )
         db.session.commit()
         created_plan = unplanned.shift_flow_plan
         self.assertTrue(created["created"])
         self.assertEqual(created_plan.final_door_work_area_id, areas["Door 24"].id)
-        self.assertEqual(created_plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(created_plan.sort_start_work_area_id, areas["West Ballmat"].id)
         self.assertEqual(created_plan.ballmat_transition, 1)
         self.assertIsNone(created_plan.setup_work_area_id)
 
@@ -724,12 +747,12 @@ class ShiftFlowTest(unittest.TestCase):
         )
         db.session.add_all([
             invalid_plan,
-            StaffingWorkAssignment(person=invalid, work_area=self.door, active=True),
+            self._assignment(person=invalid, work_area=self.door, active=True),
         ])
         db.session.commit()
         repaired = staffing_service.move_shift_flow_final_composite(
             invalid, areas["Door 9"].id, "discharge", self.door,
-            invalid_plan.updated_at.isoformat(timespec="microseconds"),
+            self._revision(invalid_plan),
         )
         db.session.commit()
         self.assertTrue(repaired["changed"])
@@ -739,7 +762,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIsNone(invalid_plan.ballmat_transition)
         self.assertIsNone(invalid_plan.setup_work_area_id)
 
-        board = staffing_service.shift_flow_context("final_door", "west")["final_composite"]
+        board = staffing_service.shift_flow_context("final_door", "east")["final_composite"]
         attention_ids = {row["person"].id for row in board["needs_attention"]}
         placed_ids = {
             row["person"].id
@@ -755,12 +778,13 @@ class ShiftFlowTest(unittest.TestCase):
     def test_composite_stale_drop_changes_nothing(self):
         areas = self._configure_final_composite()
         person = self._person("100025")
-        plan = staffing_service.create_shift_flow_plan(
+        plan = self._plan(
             person, self._values(areas["Door 34"], "", self.ballmat, areas["Door 34"]), self.door
         )
         db.session.commit()
-        stale_version = plan.updated_at.isoformat(timespec="microseconds")
-        plan.sort_start_work_area = areas["East Ballmat"]
+        stale_version = self._revision(plan)
+        staffing_service.assign_work_area(person, areas["West Ballmat"])
+        plan.sort_start_work_area = areas["West Ballmat"]
         plan.ballmat_transition = 3
         db.session.commit()
 
@@ -769,7 +793,7 @@ class ShiftFlowTest(unittest.TestCase):
         )
         self.assertEqual(conflict["conflict"]["type"], "stale_version")
         self.assertEqual(plan.final_door_work_area_id, areas["Door 34"].id)
-        self.assertEqual(plan.sort_start_work_area_id, areas["East Ballmat"].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas["West Ballmat"].id)
         self.assertEqual(plan.ballmat_transition, 3)
         self.assertEqual(plan.setup_work_area_id, self.ballmat.id)
 

@@ -4,7 +4,7 @@ from app.extensions import db
 
 
 class StaffingShiftFlowPlan(db.Model):
-    """Optional, complete Shift Flow plan attached to one employee."""
+    """Optional flow details. Sort Start is a compatibility mirror of Home."""
 
     __tablename__ = "staffing_shift_flow_plans"
     __table_args__ = (
@@ -24,7 +24,7 @@ class StaffingShiftFlowPlan(db.Model):
     )
     ballmat_transition = db.Column(db.Integer, nullable=True)
     final_door_work_area_id = db.Column(
-        db.Integer, db.ForeignKey("staffing_units.id"), nullable=False, index=True
+        db.Integer, db.ForeignKey("staffing_units.id"), nullable=True, index=True
     )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(

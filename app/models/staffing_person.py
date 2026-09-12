@@ -78,11 +78,13 @@ class StaffingPerson(db.Model):
         onupdate=datetime.utcnow,
     )
 
-    work_assignment = db.relationship(
+    # Revision shared by canonical Home and the optional flow plan.
+    shift_flow_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+    work_assignments = db.relationship(
         "StaffingWorkAssignment",
         back_populates="person",
         cascade="all, delete-orphan",
-        uselist=False,
     )
     shift_flow_plan = db.relationship(
         "StaffingShiftFlowPlan", back_populates="person", uselist=False,

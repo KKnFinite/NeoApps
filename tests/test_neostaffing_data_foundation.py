@@ -41,7 +41,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                     list(first.work_assignments)
                     list(second.work_assignments)
                     for person in people:
-                        person.work_assignment
+                        person.work_assignments
                     counts = {"selects": 0, "flushes": 0}
 
                     def sql(_conn, _cursor, statement, *_args):
@@ -63,10 +63,10 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                     self.assertEqual(result, {"updated": expected,
                         "skipped": [supervisor.full_name], "missing": ["999999"]})
                     for person in people:
-                        assignment = person.work_assignment
+                        assignment = person.work_assignments[0] if person.work_assignments else None
                         self.assertEqual(assignment.active, action != "clear")
                         self.assertEqual(assignment.work_area_unit_id, (second if action == "clear" else target).id)
-                    self.assertIsNone(supervisor.work_assignment)
+                    self.assertEqual(supervisor.work_assignments, [])
                     db.session.commit()
 
     def setUp(self):
@@ -281,8 +281,8 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
         self.assertEqual(assignment.effective_date, date(2026, 6, 23))
         staffing_service.assign_work_area(employee, second_work_area)
         self.assertEqual(StaffingWorkAssignment.query.filter_by(person_id=employee.id).count(), 1)
-        self.assertEqual(employee.work_assignment.work_area, second_work_area)
-        self.assertTrue(employee.work_assignment.active)
+        self.assertEqual(employee.work_assignments[0].work_area, second_work_area)
+        self.assertTrue(employee.work_assignments[0].active)
 
         self.assertEqual(staffing_service.assign_work_area(combo, work_area).work_area, work_area)
 
@@ -383,7 +383,7 @@ class NeoStaffingDataFoundationTest(unittest.TestCase):
                 "classification": "manager",
             },
         )
-        self.assertFalse(employee.work_assignment.active)
+        self.assertFalse(employee.work_assignments[0].active)
 
         self._linked_user_for_person(employee)
         staffing_service.create_leadership_assignment(employee, operation)

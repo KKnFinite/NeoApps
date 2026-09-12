@@ -120,9 +120,9 @@ def change_request_context(filters, user):
     current_person = _person_for_user_from_rows(user, people)
 
     work_assignments = StaffingWorkAssignment.query.filter_by(active=True).all()
-    assignments_by_person = {
-        assignment.person_id: assignment for assignment in work_assignments
-    }
+    assignments_by_person = {}
+    for assignment in work_assignments:
+        assignments_by_person.setdefault(assignment.person_id, []).append(assignment)
     leadership_assignments = StaffingLeadershipAssignment.query.filter_by(
         active=True
     ).all()
@@ -301,7 +301,7 @@ def change_request_context(filters, user):
     if selected_person not in candidates:
         selected_person = candidates[0] if len(candidates) == 1 else None
     selected_assignment = (
-        assignments_by_person.get(selected_person.id) if selected_person else None
+        _scoped_request_assignment(selected_person, assignments_by_person.get(selected_person.id, [])) if selected_person else None
     )
     selected_values = None
     if selected_person:
@@ -370,10 +370,11 @@ def submit_change_request(values, user):
     if not person or person.classification not in NON_MANAGEMENT_CLASSIFICATIONS:
         raise ValueError("Select an active non-management employee.")
 
-    assignment = StaffingWorkAssignment.query.filter_by(
+    person_assignments = StaffingWorkAssignment.query.filter_by(
         person_id=person.id,
         active=True,
-    ).with_for_update().first()
+    ).with_for_update().all()
+    assignment = _scoped_request_assignment(person, person_assignments, values.get("requested_work_area_unit_id"))
     if not is_grandmaster and ROLE_LEVELS.get(app_role, 0) < ROLE_LEVELS["simulator"]:
         owned_area_ids = {
             row.unit_id
@@ -383,7 +384,7 @@ def submit_change_request(values, user):
                 active=True,
             ).all()
         }
-        if not assignment or assignment.work_area_unit_id not in owned_area_ids:
+        if not any(row.work_area_unit_id in owned_area_ids for row in person_assignments):
             raise ValueError("This employee is outside your attendance and staffing area.")
 
     pending_fields = {
@@ -540,7 +541,10 @@ def submit_bulk_change_requests(packages, user):
         .with_for_update()
         .all()
     )
-    assignments_by_person = {row.person_id: row for row in assignments if row.active}
+    assignments_by_person = {}
+    for row in assignments:
+        if row.active:
+            assignments_by_person.setdefault(row.person_id, []).append(row)
     pending_items = (
         StaffingChangeRequestItem.query.filter(
             StaffingChangeRequestItem.person_id.in_(person_ids or {-1}),
@@ -602,9 +606,11 @@ def submit_bulk_change_requests(packages, user):
                 }
             )
             continue
-        assignment = assignments_by_person.get(person.id)
+        person_assignments = assignments_by_person.get(person.id, [])
+        assignment = _scoped_request_assignment(person, person_assignments,
+            package["changes"].get("work_area_unit_id"))
         if not can_cross_area and (
-            not assignment or assignment.work_area_unit_id not in owned_area_ids
+            not any(row.work_area_unit_id in owned_area_ids for row in person_assignments)
         ):
             blocked.append(
                 {
@@ -1136,14 +1142,26 @@ def _locked_request_state(request_id):
     ).with_for_update().first()
     if not person:
         raise ValueError("The employee was not found.")
-    assignment = StaffingWorkAssignment.query.filter_by(
+    assignments = StaffingWorkAssignment.query.filter_by(
         person_id=person.id,
         active=True,
-    ).with_for_update().first()
+    ).with_for_update().all()
     items = StaffingChangeRequestItem.query.filter_by(
         request_id=change_request.id
     ).order_by(StaffingChangeRequestItem.id).with_for_update().all()
+    work_item = next((item for item in items if item.field_name == "work_area_unit_id" and item.status == "pending"), None)
+    scope_id = (_decode_value(work_item.original_value_json) or _decode_value(work_item.requested_value_json)) if work_item else None
+    assignment = _scoped_request_assignment(person, assignments, scope_id)
     return change_request, person, assignment, items
+
+
+def _scoped_request_assignment(person, assignments, area_id=None):
+    from app.services.neostaffing_assignments import assignment_for_target
+    if area_id and str(area_id).isdigit():
+        area = db.session.get(StaffingUnit, int(area_id))
+        if area:
+            return assignment_for_target(person, area, assignments)
+    return assignments[0] if len(assignments) == 1 else None
 
 
 def _refresh_request_completion(change_request, items):
@@ -1198,17 +1216,10 @@ def _apply_field_value(person, assignment, field_name, value):
         work_area = db.session.get(StaffingUnit, int(value))
         if not work_area or work_area.unit_type != "work_area":
             raise ValueError("The requested Work Area is no longer available.")
-        if assignment:
-            assignment.work_area_unit_id = work_area.id
-            assignment.active = True
-        else:
-            assignment = StaffingWorkAssignment(
-                person_id=person.id,
-                work_area_unit_id=work_area.id,
-                active=True,
-            )
-            db.session.add(assignment)
-        return assignment
+        # The target Sort selects the FT Combo slot; never repurpose an
+        # arbitrary assignment from a different Sort during approval.
+        from app.services.neostaffing import assign_work_area
+        return assign_work_area(person, work_area)
     else:
         raise ValueError("Unsupported change-request field.")
     return assignment
@@ -1425,8 +1436,7 @@ def _submission_candidates(
     return [
         person
         for person in candidates
-        if assignments_by_person.get(person.id)
-        and assignments_by_person[person.id].work_area_unit_id in owned_area_ids
+        if any(row.work_area_unit_id in owned_area_ids for row in assignments_by_person.get(person.id, []))
     ]
 
 

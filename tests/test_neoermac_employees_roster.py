@@ -105,6 +105,28 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self.assertEqual(staffing.attendance_deep_link_work_area_ids(['D6']), [])
         self.assertEqual(staffing.operational_manage_employees_context([self.door.id])['here'], [])
 
+    def test_changed_canonical_home_updates_ermac_scope_without_other_sort_interference(self):
+        self._no_sort()
+        self.here.classification = 'full_time_combo'
+        twilight = StaffingUnit(unit_type='sort', name='Twilight')
+        extra = StaffingUnit(unit_type='work_area', name='Door 6', parent=twilight)
+        db.session.add_all([twilight, extra]); db.session.flush()
+        staffing.assign_work_area(self.here, extra)
+        staffing.save_shift_flow_plan(self.here, {
+            'expected_version': staffing.shift_flow_revision(self.here, self.here.shift_flow_plan,
+                staffing.assignment_service.shift_home(self.here)),
+            'shift_flow_sort_start_work_area_id': self.other_door.id,
+            'shift_flow_final_door_work_area_id': self.other_door.id,
+        }, self.door)
+        db.session.commit()
+        page = self.client.get('/neoermac/door-view/manage-employees').get_data(as_text=True)
+        self.assertNotIn(f'<strong>{self.here.full_name}</strong>', page)
+        self.client.post('/neoermac/door-view/supervision', data={'doors':['D9'], 'active_door':'D9'})
+        page = self.client.get('/neoermac/door-view/manage-employees').get_data(as_text=True)
+        self.assertEqual(page.count(f'<strong>{self.here.full_name}</strong>'), 1)
+        self.assertIn(extra.id, [a.work_area_unit_id for a in self.here.work_assignments if a.active])
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+
     def test_transition_preserves_roster_and_active_attendance_then_hides_old_status(self):
         self._no_sort()
         self._get()

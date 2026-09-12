@@ -1,0 +1,45 @@
+<section class="shift-map" data-shift-map data-route-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}" aria-label="Shift operation flow map">
+  <header class="shift-map-heading"><h2>SHIFT OPERATION</h2><span>{{ shift_flow.flow_map.count }} employees</span></header>
+  <div class="shift-map-sides"><strong>WEST <small>West Ballmat · D21 D24 D26 D29 D32 D34</small></strong><strong>EAST <small>East Ballmat · D1 D4 D6 D9 D13 D17</small></strong></div>
+  <svg class="shift-map-lines" aria-hidden="true" data-flow-lines></svg>
+  {% for phase in shift_flow.flow_map.phases %}
+  <section class="shift-map-phase" data-map-phase="{{ phase.key }}">
+    <h3>{{ phase.label }}{% if phase.key == 'sort_start' %} / HOME{% endif %}</h3>
+    <div class="shift-map-zones">
+      {% for side in ['west', 'east', 'shared'] %}
+      <div class="shift-map-zone shift-map-zone--{{ side }}">
+        {% for location in phase.locations if location.side == side %}
+        <article class="shift-map-location"><header>{{ location.area.name }} <span>{{ location.count }}</span></header>
+          {% for row in location.rows %}
+          <a class="shift-map-person{% if row.custom %} is-custom{% endif %}{% if phase.key != 'sort_start' %} is-ghost{% endif %}" href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, person_id=row.person.id) }}"
+             data-map-person="{{ row.person.id }}" data-map-custom="{{ 'true' if row.custom else 'false' }}"
+             {% if phase.key == 'sort_start' and can_edit_shift_flow %}draggable="true" data-route-person="{{ row.person.id }}" data-route-version="{{ row.version }}"{% endif %}>
+             {{ row.person.full_name }}{% if phase.key == 'sort_start' %}<small>{{ 'CUSTOM FLOW' if row.custom else row.shorthand or 'FLOW UNSET' }}</small>{% endif %}
+          </a>
+          {% endfor %}
+        </article>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% if can_edit_shift_flow %}
+  <details class="shift-route-picker" data-route-picker><summary>APPLY STANDARD ROUTE</summary>
+    <label>Employee<select data-route-employee><option value="">Select employee</option>{% for row in shift_flow.rows %}<option value="{{ row.person.id }}" data-version="{{ row.version }}">{{ row.person.full_name }}</option>{% endfor %}</select></label>
+    <label>Setup<select data-route-setup><option value="none">None</option><option value="door">Final Door</option><option value="ballmat">Same-side Ballmat</option></select></label>
+    <p class="shift-route-preview" data-route-preview aria-live="polite"></p>
+    <div class="shift-route-targets">
+    {% for side, config in shift_flow.flow_map.configurations.items() %}
+      <section><h3>{{ side|upper }}</h3>
+      {% for door in config.doors %}<div><strong>{{ door.name }}</strong>
+        {% for band, label in [('at_door','HOME DOOR'),('bm1','BALLMAT → 1ST WAVE'),('bm2','BALLMAT → 2ND WAVE'),('bm3','BALLMAT → CLEANUP'),('discharge','DISCHARGE')] %}
+        <button type="button" data-route-target data-door="{{ door.id }}" data-band="{{ band }}" data-preview="NO SETUP → {{ config.ballmat.name if band.startswith('bm') and config.ballmat else 'Discharge' if band == 'discharge' else door.name }} → {{ label }} → {{ door.name }}">{{ label }}</button>
+        {% endfor %}
+      </div>{% endfor %}</section>
+    {% endfor %}
+    </div>
+  </details>
+  <p data-route-feedback aria-live="polite"></p>
+  {% endif %}
+</section>

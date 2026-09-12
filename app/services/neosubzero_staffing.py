@@ -60,9 +60,9 @@ def neosubzero_qualification_people(search="", *, limit=250):
         {
             "person": person,
             "work_area": _work_area_for_person(person.id, assignments, units_by_id),
-            "work_area_path": _unit_path(
-                _work_area_for_person(person.id, assignments, units_by_id),
-                units_by_id,
+            "work_area_path": " / ".join(
+                _unit_path(units_by_id.get(item.work_area_unit_id), units_by_id)
+                for item in assignments.get(person.id, [])
             ),
             "qualified": bool(
                 qualifications.get(person.id)
@@ -471,13 +471,10 @@ def _attendance_restore_person_ids(operation, person_ids):
         ).all()
     }
     qualified_ids &= active_person_ids
-    assignments = {
-        row.person_id: row
-        for row in StaffingWorkAssignment.query.filter(
+    assignments = StaffingWorkAssignment.query.filter(
             StaffingWorkAssignment.person_id.in_(qualified_ids),
             StaffingWorkAssignment.active.is_(True),
         ).all()
-    }
     units_by_id = _staffing_units_by_id(active_only=True)
     permanent_ids = {
         unit.id
@@ -492,12 +489,8 @@ def _attendance_restore_person_ids(operation, person_ids):
         )
         and _has_sort_ancestor(unit, units_by_id, operation.sort_name)
     }
-    return {
-        person_id
-        for person_id in qualified_ids
-        if person_id not in assignments
-        or assignments[person_id].work_area_unit_id not in permanent_ids
-    }
+    permanent_people = {row.person_id for row in assignments if row.work_area_unit_id in permanent_ids}
+    return qualified_ids - permanent_people
 
 
 def _attendance_records(operation, person_ids, units_by_id):
@@ -530,13 +523,13 @@ def _attendance_records(operation, person_ids, units_by_id):
 def _assignments_by_person(person_ids):
     if not person_ids:
         return {}
-    return {
-        assignment.person_id: assignment
-        for assignment in StaffingWorkAssignment.query.filter(
+    result = {}
+    for assignment in StaffingWorkAssignment.query.filter(
             StaffingWorkAssignment.person_id.in_(person_ids),
             StaffingWorkAssignment.active.is_(True),
-        ).all()
-    }
+        ).order_by(StaffingWorkAssignment.id).all():
+        result.setdefault(assignment.person_id, []).append(assignment)
+    return result
 
 
 def _qualification_rows_by_person(person_ids):
@@ -560,7 +553,8 @@ def _staffing_units_by_id(*, active_only=False):
 
 
 def _work_area_for_person(person_id, assignments, units_by_id):
-    assignment = assignments.get(person_id)
+    rows = assignments.get(person_id, [])
+    assignment = rows[0] if len(rows) == 1 else None
     return units_by_id.get(getattr(assignment, "work_area_unit_id", None))
 
 

@@ -147,6 +147,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "staffing_people": {
         "employee_status": "VARCHAR(24)",
+        "shift_flow_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT 1",
@@ -378,6 +379,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "staffing_people": {
         "employee_status": "VARCHAR(24)",
+        "shift_flow_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "staffing_leadership_assignments": {
         "active": "BOOLEAN DEFAULT TRUE",
@@ -570,6 +572,8 @@ def sync_database_schema(app):
     database_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", ""))
     if database_uri.startswith("sqlite:"):
         sync_local_sqlite_schema(app)
+        from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
+        sync_staffing_assignment_schema()
         return
 
     inspector = inspect(db.engine)
@@ -623,6 +627,8 @@ def sync_database_schema(app):
     from app.services.neoermac_door_preference_schema import backfill_neoermac_door_preferences
 
     backfill_neoermac_door_preferences(table_names)
+    from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
+    sync_staffing_assignment_schema()
     db.session.flush()
 
 

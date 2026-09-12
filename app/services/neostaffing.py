@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.extensions import db
 from app.services.live_collaboration import entity_version, version_conflict
+from app.services import neostaffing_assignments as assignment_service
 from app.models import (
     StaffingDailyAttendance,
     StaffingChangeRequest,
@@ -219,22 +220,24 @@ def create_shift_flow_plan(person, values, selected_work_area):
         raise ValueError("Shift Flow is available only for Night / Ramp / Shift Work Areas.")
     allowed = {unit.id: unit for unit in options}
     setup = _shift_flow_area(values.get("shift_flow_setup_work_area_id"), allowed, "Setup Assignment", optional=True)
-    start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id"), allowed, "Sort Start Work Area")
-    final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id"), allowed, "Final Door")
+    home = assignment_service.shift_home(person)
+    if not home:
+        raise ValueError("Shift Flow requires a Night / Ramp / Shift Home assignment.")
+    start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id") or home.work_area_unit_id, allowed, "Home / Sort Start")
+    final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id"), allowed, "Final Door", optional=True)
     if setup and shift_work_area_type(setup) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
         raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
     if shift_work_area_type(start) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
         raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
-    if shift_work_area_type(final) != SHIFT_FLOW_DOOR:
+    if final and shift_work_area_type(final) != SHIFT_FLOW_DOOR:
         raise ValueError("Final Door must be a Shift Door.")
-    transition = _validated_ballmat_transition(
-        start, values.get("shift_flow_ballmat_transition")
-    )
+    transition = _optional_flow_transition(start, values.get("shift_flow_ballmat_transition"))
     plan = StaffingShiftFlowPlan(
         person=person, setup_work_area=setup, sort_start_work_area=start,
         ballmat_transition=transition, final_door_work_area=final,
     )
     db.session.add(plan)
+    home.work_area = start
     return plan
 
 
@@ -244,17 +247,41 @@ def _locked_shift_flow_plan(person, expected_version):
     The person lock also covers FLOW NOT SET -> created races. Every interactive
     writer takes these locks in the same order and holds them through commit.
     """
-    active = db.session.query(StaffingPerson.active).filter_by(
+    locked_person = StaffingPerson.query.filter_by(
         id=person.id
-    ).with_for_update().scalar()
-    if not active:
+    ).populate_existing().with_for_update().one()
+    if not locked_person.active:
         raise ValueError("Inactive employees cannot be edited in Shift Flow.")
     plan = StaffingShiftFlowPlan.query.filter_by(
         staffing_person_id=person.id
     ).populate_existing().with_for_update().first()
-    if plan and not str(expected_version or "").strip():
-        raise ValueError("Shift Flow changed. Reload and try again.")
-    return plan, version_conflict(plan, expected_version)
+    home = assignment_service.shift_home(person)
+    if not home:
+        raise ValueError("Shift Flow requires a Night / Ramp / Shift Home assignment.")
+    current = shift_flow_revision(person, plan, home)
+    if str(expected_version or "") != current:
+        return plan, {"type": "stale_version", "message": "Shift Flow changed while you were editing. Reload and try again.", "current_version": current}
+    return plan, None
+
+
+def shift_flow_revision(person, plan, assignment):
+    return f"{assignment_service.version(person)}:{assignment.id}:{assignment.work_area_unit_id}:{entity_version(assignment)}:{entity_version(plan)}"
+
+
+def _optional_flow_transition(start, value):
+    if shift_work_area_type(start) != SHIFT_FLOW_BALLMAT or not str(value or "").strip():
+        return None
+    return _validated_ballmat_transition(start, value)
+
+
+def _persist_flow_home(plan):
+    with db.session.no_autoflush:
+        home = assignment_service.shift_home(plan.person)
+    if not home:
+        raise ValueError("Shift Flow requires a Night / Ramp / Shift Home assignment.")
+    home.work_area = plan.sort_start_work_area
+    db.session.flush()
+    return shift_flow_revision(plan.person, plan, home)
 
 
 def save_shift_flow_plan(person, values, selected_work_area):
@@ -268,20 +295,22 @@ def save_shift_flow_plan(person, values, selected_work_area):
     if not options:
         raise ValueError("Shift Flow is available only for Night / Ramp / Shift Work Areas.")
     allowed = {unit.id: unit for unit in options}
-    setup = _shift_flow_area(values.get("shift_flow_setup_work_area_id"), allowed, "Setup Assignment", optional=True)
-    start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id"), allowed, "Sort Start Work Area")
-    final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id"), allowed, "Final Door")
+    setup = _shift_flow_area(values.get("shift_flow_setup_work_area_id", existing.setup_work_area_id), allowed, "Setup Assignment", optional=True)
+    home = assignment_service.shift_home(person)
+    start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id", home.work_area_unit_id), allowed, "Home / Sort Start")
+    final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id", existing.final_door_work_area_id), allowed, "Final Door", optional=True)
     if setup and shift_work_area_type(setup) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
         raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
     if shift_work_area_type(start) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
         raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
-    if shift_work_area_type(final) != SHIFT_FLOW_DOOR:
+    if final and shift_work_area_type(final) != SHIFT_FLOW_DOOR:
         raise ValueError("Final Door must be a Shift Door.")
-    transition = _validated_ballmat_transition(start, values.get("shift_flow_ballmat_transition"))
+    transition = _optional_flow_transition(start, values.get("shift_flow_ballmat_transition", existing.ballmat_transition))
     existing.setup_work_area = setup
     existing.sort_start_work_area = start
     existing.ballmat_transition = transition
     existing.final_door_work_area = final
+    home.work_area = start
     return existing
 
 
@@ -306,15 +335,15 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
         return {
             "changed": False,
             "plan": plan,
-            "version": entity_version(plan),
+            "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person)),
         }
 
     plan.final_door_work_area = destination
-    db.session.flush()
+    _persist_flow_home(plan)
     return {
         "changed": True,
         "plan": plan,
-        "version": entity_version(plan),
+        "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person)),
     }
 
 
@@ -348,7 +377,7 @@ def move_shift_flow_phase_lane(
             if shift_work_area_type(destination) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
                 raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
         if plan.setup_work_area_id == getattr(destination, "id", None):
-            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+            return {"changed": False, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
         plan.setup_work_area = destination
     else:
         destination = _shift_flow_area(destination_id, allowed, "Sort Start Work Area")
@@ -356,7 +385,7 @@ def move_shift_flow_phase_lane(
         if destination_type not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
             raise ValueError("Sort Start Work Area must be a Shift Door, Ballmat, or Discharge.")
         if plan.sort_start_work_area_id == destination.id:
-            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+            return {"changed": False, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
         if destination_type == SHIFT_FLOW_BALLMAT:
             chosen_transition = str(transition or "").strip()
             if shift_work_area_type(plan.sort_start_work_area) == SHIFT_FLOW_BALLMAT and not chosen_transition:
@@ -368,8 +397,8 @@ def move_shift_flow_phase_lane(
             plan.ballmat_transition = None
         plan.sort_start_work_area = destination
 
-    db.session.flush()
-    return {"changed": True, "plan": plan, "version": entity_version(plan)}
+    _persist_flow_home(plan)
+    return {"changed": True, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
 
 
 def _move_shift_flow_wave_lane(plan, phase, destination_id, allowed, expected_version):
@@ -411,7 +440,7 @@ def _move_shift_flow_wave_lane(plan, phase, destination_id, allowed, expected_ve
             plan.ballmat_transition != transition,
         ))
         if not changed:
-            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+            return {"changed": False, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
         plan.final_door_work_area = destination
         plan.sort_start_work_area = ballmat
         plan.ballmat_transition = transition
@@ -426,14 +455,14 @@ def _move_shift_flow_wave_lane(plan, phase, destination_id, allowed, expected_ve
             plan.ballmat_transition != transition,
         ))
         if not changed:
-            return {"changed": False, "plan": plan, "version": entity_version(plan)}
+            return {"changed": False, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
         plan.sort_start_work_area = destination
         plan.ballmat_transition = transition
     else:
         raise ValueError("Wave destination must be a configured Door or Ballmat.")
 
-    db.session.flush()
-    return {"changed": True, "plan": plan, "version": entity_version(plan)}
+    _persist_flow_home(plan)
+    return {"changed": True, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
 
 
 def _validated_ballmat_transition(start, value):
@@ -480,12 +509,13 @@ SHIFT_FLOW_PHASES = (
     ("sort_start", "SORT START"),
     ("after_w1", "1ST WAVE"),
     ("after_w2", "2ND WAVE"),
+    ("after_cleanup", "BALLMAT CLEANUP"),
     ("final_door", "FINAL DOOR"),
 )
 
 SHIFT_FLOW_COMPOSITE_SIDES = (
-    ("east", "EAST", ("Door 34", "Door 32", "Door 29", "Door 26", "Door 24", "Door 21")),
-    ("west", "WEST", ("Door 17", "Door 13", "Door 9", "Door 6", "Door 4", "Door 1")),
+    ("west", "WEST", ("Door 34", "Door 32", "Door 29", "Door 26", "Door 24", "Door 21")),
+    ("east", "EAST", ("Door 17", "Door 13", "Door 9", "Door 6", "Door 4", "Door 1")),
 )
 SHIFT_FLOW_COMPOSITE_BANDS = (
     ("at_door", "AT DOOR"),
@@ -702,7 +732,7 @@ def shift_flow_final_door_composite(shift_areas, side="east", rows=()):
 
 
 def move_shift_flow_final_composite(
-    person, final_door_id, band, selected_work_area, expected_version
+    person, final_door_id, band, selected_work_area, expected_version, *, complete_route=False, setup_mode="none"
 ):
     """Create, repair, or move a plan through one atomic composite-cell drop."""
     plan, conflict = _locked_shift_flow_plan(person, expected_version)
@@ -743,6 +773,13 @@ def move_shift_flow_final_composite(
         for area in areas
         if shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}
     }
+    standard_setup = None
+    if complete_route:
+        if setup_mode not in {"none", "door", "ballmat"}:
+            raise ValueError("Choose a valid standard Setup location.")
+        standard_setup = final_door if setup_mode == "door" else configuration["ballmat"] if setup_mode == "ballmat" else None
+        if setup_mode != "none" and standard_setup is None:
+            raise ValueError("The standard Setup location is unavailable.")
     setup_repaired = False
     if created:
         plan = StaffingShiftFlowPlan(person=person)
@@ -755,6 +792,10 @@ def move_shift_flow_final_composite(
         plan.setup_work_area = None
         setup_repaired = True
 
+    if complete_route:
+        setup_repaired = plan.setup_work_area_id != getattr(standard_setup, "id", None)
+        plan.setup_work_area = standard_setup
+
     changed = any((
         created,
         setup_repaired,
@@ -763,16 +804,16 @@ def move_shift_flow_final_composite(
         plan.ballmat_transition != transition,
     ))
     if not changed:
-        return {"changed": False, "plan": plan, "version": entity_version(plan)}
+        return {"changed": False, "plan": plan, "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person))}
     plan.final_door_work_area = final_door
     plan.sort_start_work_area = sort_start
     plan.ballmat_transition = transition
-    db.session.flush()
+    _persist_flow_home(plan)
     return {
         "changed": True,
         "created": created,
         "plan": plan,
-        "version": entity_version(plan),
+        "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person)),
     }
 
 
@@ -880,7 +921,8 @@ def shift_flow_context(phase="final_door", side="east"):
         person = assignment.person
         plan = person.shift_flow_plan
         if not plan:
-            flow_not_set["rows"].append(
+            target = groups_by_id.get(assignment.work_area_unit_id, flow_not_set) if phase == "sort_start" else flow_not_set
+            target["rows"].append(
                 {"person": person, "plan": None, "assignment": assignment, "shorthand": ""}
             )
             continue
@@ -893,6 +935,9 @@ def shift_flow_context(phase="final_door", side="east"):
     for group in groups:
         group["rows"].sort(key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold()))
     rows = [row for group in groups for row in group["rows"]]
+    for row in rows:
+        row["version"] = shift_flow_revision(row["person"], row["plan"], row["assignment"])
+    flow_map = _shift_flow_map(rows, shift_areas)
     final_composite = (
         shift_flow_final_door_composite(shift_areas, side, rows)
         if phase == "final_door" else None
@@ -908,7 +953,42 @@ def shift_flow_context(phase="final_door", side="east"):
         "rows": rows,
         "final_composite": final_composite,
         "shift_area_ids": shift_area_ids,
+        "flow_map": flow_map,
     }
+
+
+def _shift_flow_map(rows, areas):
+    configurations = {side: _shift_flow_composite_configuration(areas, side)
+                      for side, _label, _doors in SHIFT_FLOW_COMPOSITE_SIDES}
+    side_by_area = {door.id: side for side, config in configurations.items() for door in config["doors"]}
+    side_by_area.update({config["ballmat"].id: side for side, config in configurations.items() if config["ballmat"]})
+    for row in rows:
+        plan, home = row["plan"], row["assignment"].work_area
+        final_side = side_by_area.get(getattr(plan, "final_door_work_area_id", None))
+        config = configurations.get(final_side, {})
+        standard_setups = {None, home.id, getattr(config.get("ballmat"), "id", None), getattr(plan, "final_door_work_area_id", None)}
+        has_flow = bool(plan and any((plan.setup_work_area_id, plan.ballmat_transition, plan.final_door_work_area_id)))
+        standard_band = _shift_flow_composite_band(plan, plan.final_door_work_area,
+            config.get("ballmat"), config.get("discharge")) if plan and final_side else None
+        row["custom"] = has_flow and (standard_band is None or plan.setup_work_area_id not in standard_setups)
+        if not has_flow:
+            row["shorthand"] = ""
+        row["home"] = home
+        row["locations"] = {phase: (home if phase == "sort_start" else _shift_flow_phase_area(plan, phase) if plan else None)
+                            for phase, _ in SHIFT_FLOW_PHASES}
+    phases = []
+    for phase, label in SHIFT_FLOW_PHASES:
+        locations = []
+        for area in areas:
+            members = [row for row in rows if getattr(row["locations"][phase], "id", None) == area.id]
+            if shift_work_area_type(area) == SHIFT_FLOW_DISCHARGE and not members and phase != "sort_start":
+                continue
+            if members or shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
+                locations.append({"area": area, "side": side_by_area.get(area.id, "shared"), "rows": members,
+                                  "count": len({row["person"].id for row in members})})
+        phases.append({"key": phase, "label": label, "locations": locations})
+    return {"phases": phases, "configurations": configurations,
+            "count": len({row["person"].id for row in rows})}
 
 
 def _shift_flow_phase_area(plan, phase):
@@ -924,7 +1004,7 @@ def _shift_flow_phase_area(plan, phase):
             return plan.final_door_work_area
         if phase == "after_w2" and plan.ballmat_transition in {1, 2}:
             return plan.final_door_work_area
-        if phase == "after_cleanup":
+        if phase == "after_cleanup" and plan.ballmat_transition:
             return plan.final_door_work_area
     return plan.sort_start_work_area
 
@@ -1217,6 +1297,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             StaffingDailyAttendance.work_area_unit_id.in_(start_ids),
         )
         assignment_query = assignment_query.filter(or_(
+            StaffingWorkAssignment.work_area_unit_id.in_(start_ids),
             StaffingPerson.shift_flow_plan.has(or_(
                 StaffingShiftFlowPlan.sort_start_work_area_id.in_(start_ids),
                 StaffingShiftFlowPlan.final_door_work_area_id.in_(later_ids),
@@ -1236,7 +1317,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
         effective_area_id = (
             record.work_area_unit_id
             if record and record.work_area_unit_id is not None
-            else getattr(plan, "sort_start_work_area_id", None)
+            else assignment.work_area_unit_id
         )
         if not operation and assignment.work_area_unit_id in start_ids:
             effective_area_id = assignment.work_area_unit_id
@@ -1315,7 +1396,7 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
         effective_area_id = (
             record.work_area_unit_id
             if record and record.work_area_unit_id is not None
-            else getattr(plan, "sort_start_work_area_id", None)
+            else getattr(assignment, "work_area_unit_id", None)
         )
         if effective_area_id not in allowed:
             raise ValueError("Attendance includes an employee outside the selected attendance areas.")
@@ -1339,7 +1420,7 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
         work_area = (
             hierarchy["by_id"].get(record.work_area_unit_id)
             if record and record.work_area_unit_id is not None
-            else getattr(plan, "sort_start_work_area", None)
+            else assignments_by_person[person_id].work_area
         )
         if not work_area:
             raise ValueError("The employee's current attendance area is unavailable.")
@@ -1719,7 +1800,9 @@ def delete_unit(unit):
 def assign_work_area(person, work_area, effective_date=None):
     _validate_work_assignment(person, work_area)
     parsed_effective_date = _parse_optional_date(effective_date)
-    assignment = StaffingWorkAssignment.query.filter_by(person_id=person.id).first()
+    person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+    rows = StaffingWorkAssignment.query.filter_by(person_id=person.id).populate_existing().all()
+    assignment = assignment_service.assignment_for_target(person, work_area, rows)
     if assignment:
         assignment.work_area = work_area
         assignment.active = True
@@ -1731,16 +1814,17 @@ def assign_work_area(person, work_area, effective_date=None):
     return assignment
 
 
-def clear_work_assignment(person):
-    assignment = StaffingWorkAssignment.query.filter_by(person_id=person.id).first()
-    if assignment and assignment.active:
-        work_area = assignment.work_area
+def clear_work_assignment(person, work_area_id=None):
+    person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+    rows = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).populate_existing().all()
+    if work_area_id:
+        rows = [row for row in rows if row.work_area_unit_id == int(work_area_id)]
+    elif len(rows) > 1:
+        raise ValueError("Select the Work Assignment to clear; other Sorts are independent.")
+    for assignment in rows:
         assignment.active = False
-        db.session.flush()
-        if person in db.session:
-            db.session.expire(person, ["work_assignment"])
-        if work_area in db.session:
-            db.session.expire(work_area, ["work_assignments"])
+    db.session.flush()
+    db.session.expire(person, ["work_assignments"])
     return None
 
 
@@ -1759,7 +1843,7 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
 
     people = (
         StaffingPerson.query.filter(StaffingPerson.id.in_(ids))
-        .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
+        .order_by(StaffingPerson.id).populate_existing().with_for_update()
         .all()
     )
     people_by_id = {person.id: person for person in people}
@@ -1781,13 +1865,23 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
 
     # Validate the complete selection before staging any changes. Preload only
     # selected eligible employees; no per-person lookups or flushes.
-    assignments = {row.person_id: row for row in StaffingWorkAssignment.query.filter(
+    assignments = {}
+    for row in StaffingWorkAssignment.query.filter(
         StaffingWorkAssignment.person_id.in_([person.id for person in eligible])
-    ).all()} if eligible else {}
+    ).options(joinedload(StaffingWorkAssignment.work_area).joinedload(StaffingUnit.parent)
+              .joinedload(StaffingUnit.parent).joinedload(StaffingUnit.parent)).populate_existing().all() if eligible else []:
+        assignments.setdefault(row.person_id, []).append(row)
     changed = []
     touched_area_ids = set()
     for person in eligible:
-        assignment = assignments.get(person.id)
+        rows = assignments.get(person.id, [])
+        if normalized_action == "clear":
+            active = [row for row in rows if row.active and (not work_area or row.work_area_unit_id == work_area.id)]
+            if len(active) > 1:
+                raise ValueError("Select a Work Area before clearing multi-sort assignments.")
+            assignment = active[0] if active else None
+        else:
+            assignment = assignment_service.assignment_for_target(person, work_area, rows)
         if normalized_action == "clear":
             if not assignment or not assignment.active:
                 continue
@@ -1812,10 +1906,14 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
         changed.append((person, assignment))
         result["updated"] += 1
 
-    db.session.flush()
+    db.session.info["staffing_assignment_snapshot"] = [row for rows in assignments.values() for row in rows]
+    try:
+        db.session.flush()
+    finally:
+        db.session.info.pop("staffing_assignment_snapshot", None)
     # FK batching must not leave already-loaded relationship collections stale.
     for person, assignment in changed:
-        db.session.expire(person, ["work_assignment"])
+        db.session.expire(person, ["work_assignments"])
         db.session.expire(assignment, ["work_area"])
     for area_id in touched_area_ids:
         area = db.session.identity_map.get(db.session.identity_key(StaffingUnit, area_id))
@@ -2116,7 +2214,8 @@ def _validate_twenty_c_affiliation_people(
 
 def remove_invalid_assignments_for_person(person):
     if person.classification not in NON_MANAGEMENT_CLASSIFICATIONS:
-        clear_work_assignment(person)
+        for row in StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).all():
+            row.active = False
 
     for assignment in list(person.leadership_assignments):
         try:
@@ -2486,7 +2585,10 @@ def dashboard_context(filters=None):
     }
     gap_analysis = staffing_gap_analysis(cards)
     summary = {
-        "total_employees": sum(card["assigned"] for card in cards),
+        "total_employees": db.session.query(func.count(func.distinct(StaffingWorkAssignment.person_id)))
+            .join(StaffingPerson, StaffingPerson.id == StaffingWorkAssignment.person_id)
+            .filter(StaffingWorkAssignment.active.is_(True), StaffingPerson.active.is_(True),
+                    StaffingWorkAssignment.work_area_unit_id.in_([card["unit"].id for card in cards] or {-1})).scalar(),
         "total_assigned": sum(card["assigned"] for card in cards),
         "total_required": sum(card["planned"] for card in cards),
         "total_planned": sum(card["planned"] for card in cards),
@@ -2934,7 +3036,7 @@ def people_context(filters=None, user=None):
 
     selected_unit = selected_work_area or selected_department or selected_operation or selected_sort
     query = _filtered_people_query(filters, selected_unit)
-    has_work = StaffingPerson.work_assignment.has(StaffingWorkAssignment.active.is_(True))
+    has_work = StaffingPerson.work_assignments.any(StaffingWorkAssignment.active.is_(True))
     count_fields = {
         "active": StaffingPerson.active.is_(True),
         "inactive": StaffingPerson.active.is_(False),
@@ -2966,7 +3068,7 @@ def people_context(filters=None, user=None):
     detail_person = None
     if selected_id and selected_id not in {person.id for person in displayed_people}:
         detail_person = query.filter(StaffingPerson.id == selected_id).first()
-    rows = _people_rows(displayed_people + ([detail_person] if detail_person else []))
+    rows = _people_rows(displayed_people + ([detail_person] if detail_person else []), selected_unit)
     paginated_rows = rows[:len(displayed_people)]
     selected_person = _resolve_people_detail(filters.get("person_id"), rows)
     if selected_person:
@@ -4846,7 +4948,7 @@ def _attendance_assignments_for_scope(selected_scope, selected_sort):
 
 
 def _attendance_work_area_for_person(person):
-    assignment = person.work_assignment if person.work_assignment and person.work_assignment.active else None
+    assignment = assignment_service.shift_home(person)
     return assignment.work_area if assignment else None
 
 
@@ -4992,13 +5094,25 @@ def people_query(search=None, classification=None, active=None, employee_status=
     return query.order_by(StaffingPerson.seniority_date, StaffingPerson.last_name, StaffingPerson.first_name)
 
 
-def _people_rows(people):
+def _work_assignment_in_scope(assignment, scope):
+    if scope is None:
+        return True
+    area = assignment.work_area
+    while area:
+        if area.id == scope.id:
+            return True
+        if area.unit_type == "sort":
+            break
+        area = area.parent  # Eager-loaded with the displayed assignments.
+    return False
+
+
+def _people_rows(people, selected_scope=None):
     person_ids = [person.id for person in people]
     if not person_ids:
         return []
-    active_work_assignments = {
-        assignment.person_id: assignment
-        for assignment in (
+    active_work_assignments = {}
+    for assignment in (
             StaffingWorkAssignment.query.filter_by(active=True)
             .filter(StaffingWorkAssignment.person_id.in_(person_ids))
             .options(
@@ -5008,8 +5122,8 @@ def _people_rows(people):
                 .joinedload(StaffingUnit.parent)
             )
             .all()
-        )
-    }
+        ):
+        active_work_assignments.setdefault(assignment.person_id, []).append(assignment)
     active_leadership = {}
     for assignment in (
         StaffingLeadershipAssignment.query.filter_by(active=True)
@@ -5026,7 +5140,9 @@ def _people_rows(people):
 
     rows = []
     for person in people:
-        work_assignment = active_work_assignments.get(person.id)
+        assignments = active_work_assignments.get(person.id, [])
+        scoped = [row for row in assignments if _work_assignment_in_scope(row, selected_scope)]
+        work_assignment = scoped[0] if len(scoped) == 1 else None
         work_area = work_assignment.work_area if work_assignment else None
         department, operation, sort = parent_chain_for_work_area(work_area)
         leadership_assignments = sorted(
@@ -5037,6 +5153,8 @@ def _people_rows(people):
             {
                 "person": person,
                 "work_assignment": work_assignment,
+                "work_assignments": assignments,
+                "work_area_label": " / ".join(row.work_area.name for row in scoped) or "-",
                 "work_area": work_area,
                 "department": department,
                 "operation": operation,
@@ -5063,7 +5181,7 @@ def _filtered_people_query(filters, selected_scope):
         query = query.filter(StaffingPerson.classification == classification)
     if employee_status in STAFFING_EMPLOYEE_STATUSES:
         query = query.filter(StaffingPerson.employee_status == employee_status)
-    has_work = StaffingPerson.work_assignment.has(StaffingWorkAssignment.active.is_(True))
+    has_work = StaffingPerson.work_assignments.any(StaffingWorkAssignment.active.is_(True))
     if leadership_only:
         query = query.filter(StaffingPerson.leadership_assignments.any(StaffingLeadershipAssignment.active.is_(True)))
     if assignment_status == "assigned":
@@ -5086,7 +5204,7 @@ def _filtered_people_query(filters, selected_scope):
         ))
         scope_ids = db.select(descendants.c.id)
         query = query.filter(or_(
-            StaffingPerson.work_assignment.has(db.and_(
+            StaffingPerson.work_assignments.any(db.and_(
                 StaffingWorkAssignment.active.is_(True),
                 StaffingWorkAssignment.work_area_unit_id.in_(scope_ids),
             )),
@@ -5138,13 +5256,10 @@ def _people_detail_assignment_display(row):
 
     work_area = row.get("work_area")
     return {
-        "heading": "Current Work Area",
+        "heading": "Current Work Assignments",
         "is_management": False,
-        "items": (
-            [{"label": "Work Area", "path": unit_path(work_area)}]
-            if work_area
-            else []
-        ),
+        "items": [{"label": "Work Area", "path": unit_path(assignment.work_area)}
+                  for assignment in row.get("work_assignments", [])],
     }
 
 

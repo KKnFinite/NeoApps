@@ -196,7 +196,7 @@ class NeoStaffingBulkChangeTest(unittest.TestCase):
         self.assertEqual(db.session.get(StaffingPerson, self.employee_one.id).first_name, "Updated")
         new_person = StaffingPerson.query.filter_by(employee_id="BC-NEW").one()
         self.assertIsNone(User.query.filter_by(employee_id="BC-NEW").first())
-        self.assertEqual(new_person.work_assignment.work_area_unit_id, self.area_two.id)
+        self.assertEqual(new_person.work_assignments[0].work_area_unit_id, self.area_two.id)
 
     def test_reorganization_uses_consolidated_review_and_can_keep_intentional_mismatch(self):
         second_ft = self._person("BC-FT3", "full_time_supervisor", "Second", "East")
@@ -540,7 +540,7 @@ class NeoStaffingBulkChangeTest(unittest.TestCase):
         db.session.commit()
         person = db.session.get(StaffingPerson, self.employee_one.id)
         self.assertEqual(person.classification, "part_time_supervisor")
-        self.assertFalse(person.work_assignment.active)
+        self.assertFalse(person.work_assignments[0].active)
         self.assertEqual(
             [row.unit_id for row in person.leadership_assignments if row.active],
             [self.area_one.id],

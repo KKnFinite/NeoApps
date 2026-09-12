@@ -133,6 +133,7 @@
                         final_door_id: targetCell.dataset.finalDoorId,
                         band: targetCell.dataset.band,
                         expected_version: row.dataset.shiftFlowPlanVersion,
+                        complete_route: true,
                     }),
                 });
                 const payload = await response.json().catch(() => ({}));

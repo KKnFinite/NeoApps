@@ -436,7 +436,7 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         blue = self._calendar(grandmaster, [self.units["blue_area"].id])
         db.session.commit()
         assignment_rows = [
-            (employee, employee.work_assignment),
+            (employee, employee.work_assignments[0]),
             (employee, second_assignment),
         ]
 
@@ -1576,13 +1576,13 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         selection = vacation_service.add_union_week(blue, person, self.YEAR, week, "optional", grandmaster)
         db.session.commit()
 
-        person.work_assignment.work_area_unit_id = self.units["other_area"].id
+        person.work_assignments[0].work_area_unit_id = self.units["other_area"].id
         db.session.commit()
         context = vacation_service.union_calendars_context(self.YEAR, grandmaster)
         self.assertEqual(sum(row["week_rows"][8]["used"] for row in context["calendars"]), 0)
         self.assertEqual(db.session.get(StaffingVacationUnionSelection, selection.id).status, "approved")
 
-        person.work_assignment.work_area_unit_id = self.units["brown_area"].id
+        person.work_assignments[0].work_area_unit_id = self.units["brown_area"].id
         db.session.commit()
         context = vacation_service.union_calendars_context(self.YEAR, grandmaster)
         brown_row = next(row for row in context["calendars"] if row["calendar"].id == brown.id)

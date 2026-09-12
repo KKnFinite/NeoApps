@@ -1,0 +1,23 @@
+<form method="post" action="{{ url_for('neostaffing.save_shift_flow', person_id=selected.person.id) }}" class="neostaffing-people-form">
+  <input type="hidden" name="phase" value="sort_start">
+  <input type="hidden" name="expected_version" value="{{ selected.version }}">
+  <label>Home / Sort Start<select name="shift_flow_sort_start_work_area_id">
+    {% for area in shift_flow_areas %}{% if shift_work_area_type(area) in ['Door','Ballmat','Discharge'] %}
+    <option value="{{ area.id }}" {% if selected.assignment.work_area_unit_id == area.id %}selected{% endif %}>{{ area.name }}</option>
+    {% endif %}{% endfor %}
+  </select></label>
+  <label>Setup<select name="shift_flow_setup_work_area_id"><option value=""></option>
+    {% for area in shift_flow_areas %}{% if shift_work_area_type(area) in ['Door','Ballmat'] %}
+    <option value="{{ area.id }}" {% if selected.plan and selected.plan.setup_work_area_id == area.id %}selected{% endif %}>{{ area.name }}</option>
+    {% endif %}{% endfor %}
+  </select></label>
+  <label>Ballmat transition<select name="shift_flow_ballmat_transition"><option value=""></option>
+    {% for n,label in [(1,'1ST WAVE'),(2,'2ND WAVE'),(3,'BALLMAT CLEANUP')] %}<option value="{{ n }}" {% if selected.plan and selected.plan.ballmat_transition == n %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select></label>
+  <label>Final Door<select name="shift_flow_final_door_work_area_id"><option value=""></option>
+    {% for area in shift_flow_areas %}{% if shift_work_area_type(area) == 'Door' %}
+    <option value="{{ area.id }}" {% if selected.plan and selected.plan.final_door_work_area_id == area.id %}selected{% endif %}>{{ area.name }}</option>
+    {% endif %}{% endfor %}
+  </select></label>
+  <button>SAVE FLOW</button>
+</form>

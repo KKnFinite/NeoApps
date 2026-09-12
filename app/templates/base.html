@@ -25,6 +25,9 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neofontplain.css', v=config.STATIC_ASSET_VERSION, typography='20260907-gateway-v1') }}">
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
+    {% if request.endpoint == 'neostaffing.shift_flow' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20260912-shift-home-3') }}">
+    {% endif %}
     <script defer src="{{ url_for('static', filename='js/interaction_states.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% if is_gateway_dock_page or is_portal_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
