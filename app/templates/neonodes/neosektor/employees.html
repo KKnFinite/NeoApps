@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}EMPLOYEES | NeoSektor{% endblock %}
+{% block content %}
+<section class="theme-sektor neostaffing-operational-attendance neostaffing-operational-attendance--sektor" data-sektor-employees>
+    <header class="neostaffing-operational-head">
+        <a class="neostaffing-operational-back" href="{{ url_for('neosektor.index') }}">BACK</a>
+        <div class="neostaffing-operational-heading"><h1>EMPLOYEES</h1></div>
+    </header>
+    <nav class="neostaffing-operational-tabs sektor-employee-areas" aria-label="Employee area">
+        {% for area in areas %}
+        <a href="{{ url_for('neosektor.manage_employees', area=area.key) }}">{{ area.label }}</a>
+        {% endfor %}
+    </nav>
+</section>
+{% endblock %}

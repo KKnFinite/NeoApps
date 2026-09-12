@@ -1,0 +1,119 @@
+/* Shared Staffing workspace, rendered inside the existing Sektor shell. */
+.neostaffing-operational-attendance--sektor {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    color: #e1e8ee;
+    font-family: NeoFontPlain, sans-serif;
+    background: #091219;
+    padding: clamp(12px, 2vw, 24px);
+    border: 1px solid #34434c;
+    border-radius: 8px;
+    gap: 16px;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid #34434c;
+    padding-bottom: 12px;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    font-size: .9rem;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-summary span {
+    color: #8bd4df;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-tabs {
+    display: flex;
+    gap: 8px;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-tabs a,
+.neostaffing-operational-attendance--sektor .neostaffing-operational-back,
+.neostaffing-operational-attendance--sektor button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    color: #e1e8ee;
+    background: #101e28;
+    border: 1px solid #43616d;
+    border-radius: 5px;
+    text-decoration: none;
+}
+.neostaffing-operational-attendance--sektor [aria-current="page"] {
+    border-color: #8bd4df !important;
+    background: #17323d !important;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-roster > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #34434c;
+}
+.neostaffing-operational-attendance--sektor h2 { font-size: 1rem; }
+.neostaffing-operational-attendance--sektor .neostaffing-operational-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.neostaffing-operational-attendance--sektor th { text-align: left; color: #a6b8c2; }
+.neostaffing-operational-attendance--sektor td { border-bottom: 1px solid #25343e; }
+.neostaffing-operational-attendance--sektor select {
+    background: #101e28;
+    color: #e1e8ee;
+    border: 1px solid #43616d;
+    max-width: 100%;
+}
+.neostaffing-operational-attendance--sektor footer { padding-top: 16px; }
+.neostaffing-operational-attendance--sektor a:focus-visible,
+.neostaffing-operational-attendance--sektor select:focus-visible,
+.neostaffing-operational-attendance--sektor button:focus-visible { outline: 2px solid #8bd4df; outline-offset: 3px; }
+.neostaffing-operational-attendance--sektor h1 {
+    font-family: NeoFontLite, sans-serif;
+    font-size: 1.35rem;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-tabs {
+    flex-wrap: wrap;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-tabs a,
+.neostaffing-operational-attendance--sektor button,
+.neostaffing-operational-attendance--sektor select {
+    min-height: 44px;
+    font-family: NeoFontPlain, sans-serif;
+    font-size: .95rem;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-table {
+    font-size: .95rem;
+}
+.neostaffing-operational-attendance--sektor .neostaffing-operational-table td {
+    padding: 10px 8px;
+}
+.neostaffing-operational-attendance--sektor .sektor-employee-areas {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+.neostaffing-operational-attendance--sektor .sektor-employee-areas a {
+    min-height: 80px;
+    border: 1px solid #43616d;
+    background: #101e28;
+    color: #d2e9ee;
+}
+@media (max-width: 900px) {
+    .neostaffing-operational-attendance--sektor .sektor-employee-areas {
+        grid-template-columns: 1fr;
+    }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-tabs a {
+        min-width: 0;
+        flex: 1 1 auto;
+        padding: 8px;
+        font-size: .85rem;
+    }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-table-wrap {
+        overflow-x: auto;
+    }
+}

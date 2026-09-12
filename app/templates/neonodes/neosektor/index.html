@@ -11,7 +11,7 @@
 
         <section class="sektor-command-menu" data-neosektor-mobile-dashboard aria-label="NeoSektor dashboard actions">
             <nav class="sektor-command-grid" aria-label="NeoSektor operations" data-node-desktop-dashboard data-node-dashboard="sektor">
-                {% for key in ['ebm', 'wbm', 'tunnel', 'driver-routing', 'discharge', 'settings', 'live-counts'] %}
+                {% for key in ['ebm', 'wbm', 'tunnel', 'driver-routing', 'discharge', 'settings', 'live-counts', 'employees'] %}
                 {% for item in mobile_dashboard_items if item.key == key %}
                 <a
                     class="sektor-command-tile sektor-command-tile--{{ item.key }}"

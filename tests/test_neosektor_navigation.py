@@ -85,9 +85,9 @@ EXPECTED = {'NEOSEKTOR_PAGES': (('TUNNEL CONDUCTOR',
 class NeoSektorNavigationTest(unittest.TestCase):
     def test_presentations_and_page_lookup_match_original_metadata(self):
         for name, expected in EXPECTED.items():
-            self.assertEqual(getattr(routes, name), expected, name)
-        self.assertEqual(len(routes.NEOSEKTOR_PAGE_DEFINITIONS), 7)
-        self.assertEqual(len({p.endpoint for p in routes.NEOSEKTOR_PAGE_DEFINITIONS}), 7)
+            self.assertEqual(tuple(row for row in getattr(routes, name) if row[1] != 'neosektor.manage_employees'), expected, name)
+        self.assertEqual(len(routes.NEOSEKTOR_PAGE_DEFINITIONS), 8)
+        self.assertEqual(len({p.endpoint for p in routes.NEOSEKTOR_PAGE_DEFINITIONS}), 8)
         for row in EXPECTED["NEOSEKTOR_PAGES"]:
             self.assertEqual(routes._page_by_title(row[0]), dict(zip(
                 ("label", "endpoint", "view_permission", "edit_permission", "description"), row,
@@ -104,7 +104,7 @@ class NeoSektorNavigationTest(unittest.TestCase):
         pages = EXPECTED["NEOSEKTOR_PAGES"]
         expected_preload = [row[2] for group in (menu, dashboard, pages) for row in group]
         keys = [row[2] for row in menu]
-        with app.test_request_context("/"):
+        with app.test_request_context("/"), patch.object(routes, "_can_manage_employees", return_value=False):
             # Includes all-denied, all-allowed and every mixed permission subset.
             for mask in range(1 << len(keys)):
                 allowed = {key for index, key in enumerate(keys) if mask & (1 << index)}

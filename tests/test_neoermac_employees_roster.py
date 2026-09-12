@@ -7,7 +7,7 @@ import unittest
 from sqlalchemy import event
 
 from app.extensions import db
-from app.models import PortalAppAccess, StaffingUnit, StaffingDailyAttendance
+from app.models import PortalAppAccess, StaffingUnit, StaffingDailyAttendance, StaffingLeadershipAssignment
 from app.services import neostaffing as staffing
 from tests import test_neoermac_door_supervision as supervision_fixture
 
@@ -33,6 +33,12 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self.outside = self._person("Outside Employee", self.other_door, self.other_door)
         self.inactive = self._person("Inactive Employee", self.door, self.door)
         self.inactive.active = False
+        self.user.employee_id = "ERMAC-SUP"
+        self.manager = staffing.create_person({
+            'employee_id': 'ERMAC-SUP', 'first_name': 'Supervisor', 'last_name': 'Fixture',
+            'seniority_date': '2020-01-01', 'classification': 'part_time_supervisor',
+        })
+        db.session.add(StaffingLeadershipAssignment(person=self.manager, unit=self.door, leadership_level='work_area'))
         self.staffing_role = PortalAppAccess(
             user_id=self.user.id, app_code="neostaffing",
             status="approved", role="operator", is_active=True,
@@ -159,6 +165,7 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self._post(self.here, self.operation.id)
         self.assertEqual(StaffingDailyAttendance.query.one().status, 'here')
         self.staffing_role.role = 'watcher'
+        self.manager.active = False
         db.session.commit()
         html = self._get()
         self.assertNotIn(b'SAVE ATTENDANCE', html)

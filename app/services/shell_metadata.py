@@ -585,6 +585,8 @@ def _neosektor_labels(
     is_neosektor_wbm_page,
     is_neosektor_live_counts_page,
 ):
+    if path.startswith("/neosektor/manage-employees"):
+        return "EMPLOYEES", "EMPLOYEES"
     if path.startswith("/neosektor/tunnel-conductor"):
         return "TUNNEL CONDUCTOR", "TUNNEL"
     if is_neosektor_ebm_page:

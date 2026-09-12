@@ -57,6 +57,9 @@
     {% if is_neosektor_tunnel_operator_page or is_neosektor_ballmat_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge_controls.css', controls='20260911-v1') }}">
     {% endif %}
+    {% if request.endpoint == 'neosektor.manage_employees' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_employees.css', v='20260912-v1') }}">
+    {% endif %}
     {% if request.endpoint == 'neosektor.driver_routing' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260911-discharge-v7') }}">
     {% elif request.endpoint == 'neosektor.discharge' %}

@@ -125,14 +125,12 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         self.assertIn("_current_user_supervised_doors", ermac_route)
         self.assertIn("MANAGE EMPLOYEES", sektor_template)
         self.assertNotIn("BALLMAT ATTENDANCE", sektor_template)
-        self.assertIn('names = {"dis": "Discharge", "ebm": "East Ballmat", "wbm": "West Ballmat"}', sektor_route)
-        self.assertIn("attendance_deep_link_work_area_ids", sektor_route)
+        self.assertIn("inbound_attendance_areas", sektor_route)
         self.assertIn("can_manage_employees", sektor_template)
         self.assertIn("area='dis'", tunnel_template)
         self.assertIn("_can_manage_employees", sektor_route)
-        self.assertIn("current_user.management_level in MANAGEMENT_LEVELS", sektor_route)
-        self.assertLess(sektor_route.index('"dis": "Discharge"'), sektor_route.index('"ebm": "East Ballmat"'))
-        self.assertLess(sektor_route.index('"ebm": "East Ballmat"'), sektor_route.index('"wbm": "West Ballmat"'))
+        self.assertNotIn("current_user.management_level in MANAGEMENT_LEVELS", sektor_route)
+        self.assertIn("home_only=True", sektor_route)
         self.assertIn("ATTENDANCE HERE", manage_template)
         self.assertIn("COMING TO THESE DOORS", manage_template)
         self.assertNotIn("<small>READ ONLY</small>", manage_template)
@@ -145,7 +143,7 @@ class NeoStaffingAttendanceDeepLinkTest(unittest.TestCase):
         self.assertIn("theme-ermac", manage_template)
         self.assertIn("attendance_workspace == 'ermac'", manage_template)
         self.assertIn("attendance_scope_label", sektor_route)
-        self.assertIn('{"dis": "DISCHARGE", "ebm": "EBM", "wbm": "WBM"}', sektor_route)
+        self.assertIn('"ebm": "EAST BALLMAT", "wbm": "WEST BALLMAT", "dis": "DISCHARGE"', sektor_route)
         manage_css = base_css.split(
             "/* Shared Ermac/Sektor Manage Employees operations console. */", 1
         )[1]

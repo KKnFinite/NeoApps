@@ -518,7 +518,9 @@ def manage_employees():
     area_ids = staffing_service.attendance_deep_link_work_area_ids(doors, allow_persistent_roster=True)
     if not area_ids and not doors and request.method == "GET":
         return redirect(url_for("neostaffing.attendance"))
-    can_edit = user_can("neostaffing.attendance.take")
+    from app.services.neostaffing_attendance_authority import attendance_authority
+    authority = attendance_authority(current_user)
+    can_edit = bool(set(area_ids) & authority.work_area_ids)
     if request.method == "POST":
         if not can_edit:
             flash("Access denied.", "error")
@@ -537,6 +539,8 @@ def manage_employees():
         area_ids, later_final_area_ids=area_ids, scope_candidates=True,
         allow_roster_without_operation=True,
     )
+    for row in context["here"]:
+        row["authorized"] = row["home_work_area_id"] in authority.work_area_ids
     return render_template(
         "neostaffing/operational_manage_employees.html",
         title="EMPLOYEES",

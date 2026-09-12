@@ -711,11 +711,13 @@ def _handle_attendance():
             current_app.logger.exception(
                 "NeoStaffing attendance rollover maintenance failed"
             )
-    can_edit = user_can(ATTENDANCE_TAKE_PERMISSION)
+    from app.services.neostaffing_attendance_authority import attendance_authority
+    authority = attendance_authority(current_user)
+    can_edit = bool(authority.work_area_ids)
     can_view_staffing_groups = user_can(STAFFING_GROUPS_VIEW_PERMISSION)
     if request.method == "POST":
         if not can_edit:
-            flash("You do not currently have Take Attendance permission.", "error")
+            flash("Active NeoStaffing management attendance authority is required.", "error")
             return redirect(url_for("neostaffing.attendance", **request.args))
         try:
             saved = staffing_service.save_attendance(request.form, current_user, form_submission=True)
@@ -748,6 +750,8 @@ def _handle_attendance():
         current_user,
         include_staffing_groups=can_view_staffing_groups,
     )
+    for row in context["rows"]:
+        row["authorized"] = getattr(row["work_area"], "id", None) in authority.work_area_ids
     return render_template(
         "neostaffing/attendance.html",
         app_role=get_user_app_role(current_user, "neostaffing"),

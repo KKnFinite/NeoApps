@@ -8,7 +8,7 @@ from sqlalchemy import event, inspect
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
-from app.models import StaffingDailyAttendance, StaffingAttendanceOccurrence as Occurrence, StaffingPerson
+from app.models import StaffingDailyAttendance, StaffingAttendanceOccurrence as Occurrence, StaffingPerson, User, StaffingLeadershipAssignment
 from app.services import neostaffing as staffing
 from app.services import neostaffing_accountability as accountability
 from tests import test_neostaffing_attendance_counts as fixture
@@ -20,6 +20,9 @@ class AttendanceAccountabilityTest(unittest.TestCase):
 
     def setUp(self):
         fixture.NeoStaffingAttendanceCountsTest.setUp(self)
+        self.user = User(username="attendance-manager", email="manager@example.test", employee_id="ACCOUNT-MGR", password_hash="test-only-disabled-login", role="watcher", is_active=True)
+        manager = staffing.create_person({"employee_id": "ACCOUNT-MGR", "first_name": "Manager", "last_name": "Fixture", "classification": "division_manager", "seniority_date": "2020-01-01"})
+        db.session.add_all([self.user, StaffingLeadershipAssignment(person=manager, unit=self.night, leadership_level="sort")])
         self.person = self._person('ACCOUNT1', self.door)
         self.second = self._person('ACCOUNT2', self.door)
         for person in (self.person, self.second):
@@ -46,7 +49,7 @@ class AttendanceAccountabilityTest(unittest.TestCase):
         return values
 
     def _save(self, values, **kwargs):
-        return staffing.save_operational_manage_attendance(values, None, [self.door.id], form_submission=True, **kwargs)
+        return staffing.save_operational_manage_attendance(values, self.user, [self.door.id], form_submission=True, **kwargs)
 
     def test_stale_operational_blank_does_not_erase_newer_status(self):
         older = self._form()
@@ -66,7 +69,7 @@ class AttendanceAccountabilityTest(unittest.TestCase):
                 'sort_date_operation_id': str(self.operation.id),
                 'work_area_id': str(self.door.id), 'sort_id': str(self.night.id),
                 f'status_{person.id}': status,
-            }, None)
+            }, self.user)
         form = self._form()
         form[f'status_{person.id}'] = status
         return self._save(form)
@@ -148,7 +151,7 @@ class AttendanceAccountabilityTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._save(stale)
         with self.assertRaises(ValueError):
-            staffing.save_operational_manage_attendance(form, None, [self.outside.id], form_submission=True)
+            staffing.save_operational_manage_attendance(form, self.user, [self.outside.id], form_submission=True)
         form.pop(f'original_{self.person.id}')
         with self.assertRaises(ValueError):
             self._save(form)
@@ -220,14 +223,15 @@ class AttendanceAccountabilityTest(unittest.TestCase):
                     statements.append(sql)
             event.listen(db.engine, 'before_cursor_execute', capture)
             try:
-                staffing.save_attendance(values, None)
+                staffing.save_attendance(values, self.user)
                 db.session.commit()
             finally:
                 event.remove(db.engine, 'before_cursor_execute', capture)
             counts.append(len(statements))
             self.assertEqual(sum('staffing_attendance_occurrences' in s for s in statements), 1)
         self.assertEqual(counts[0], counts[1])
-        self.assertLessEqual(max(counts), 10)
+        # One additional bounded leadership-scope read at the shared writer.
+        self.assertLessEqual(max(counts), 11)
         self.assertEqual(Occurrence.query.count(), 31)
         self.assertTrue(all(r.reconciliation_needed for r in Occurrence.query.all()))
 

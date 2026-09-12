@@ -17,6 +17,7 @@ from app.models import (
     SortDateOperation,
     StaffingDailyAttendance,
     StaffingPerson,
+    StaffingLeadershipAssignment,
     StaffingUnit,
     StaffingWorkAssignment,
     User,
@@ -331,7 +332,7 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
             )
         self.assertEqual(StaffingDailyAttendance.query.count(), 0)
 
-    def test_take_attendance_permission_controls_cross_area_write_dynamically(self):
+    def test_management_authority_controls_cross_area_write_dynamically(self):
         staffing_sort, _operation_unit, department, first_area, _direct_area = self._hierarchy()
         second_area = staffing_service.create_unit(
             {
@@ -372,6 +373,9 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
             permission_key="neostaffing.attendance.take"
         ).one()
         rule.minimum_role = "simulator"
+        # Node/application permission rules no longer grant attendance authority.
+        supervisor = StaffingPerson.query.filter_by(employee_id=operator.employee_id).one()
+        supervisor.active = False
         db.session.commit()
         denied = self.client.post(
             "/neostaffing/attendance",
@@ -383,7 +387,7 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
             },
             follow_redirects=True,
         )
-        self.assertIn(b"Take Attendance permission", denied.data)
+        self.assertIn(b"management attendance authority", denied.data)
         self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 0)
         self.assertNotEqual(first_area.id, second_area.id)
 
@@ -458,7 +462,9 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
                 recorder,
             )
         )
-        self.assertLessEqual(save_selects, 10)
+        # Original ten reads plus one set-based leadership authorization and
+        # one post-lock assignment revalidation, independent of roster size.
+        self.assertLessEqual(save_selects, 12)
         db.session.commit()
         self.assertEqual(
             StaffingDailyAttendance.query.filter_by(
@@ -632,6 +638,14 @@ class NeoStaffingDailyAttendanceTest(unittest.TestCase):
             )
         )
         db.session.flush()
+        if role != "watcher":
+            manager = staffing_service.create_person({
+                "employee_id": user.employee_id, "first_name": "Manager", "last_name": username,
+                "seniority_date": "2020-01-01", "classification": "division_manager",
+            })
+            for scope in StaffingUnit.query.filter_by(unit_type="sort", active=True).all():
+                db.session.add(StaffingLeadershipAssignment(person=manager, unit=scope, leadership_level="sort"))
+            db.session.flush()
         return user
 
     def _login(self, username):

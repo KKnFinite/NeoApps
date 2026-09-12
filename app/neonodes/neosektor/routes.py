@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import date
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
@@ -9,7 +9,7 @@ from app.auth.decorators import gateway_node_required
 from app.extensions import db
 from app.services.operator_errors import safe_mutation_error
 from app.models import SortDateOperation
-from app.models.user import MANAGEMENT_LEVELS
+from app.services.neostaffing_attendance_authority import inbound_attendance_areas
 from app.neonodes.neosektor import bp
 from app.services.access_control import (
     access_initialization_changed_this_request,
@@ -84,7 +84,7 @@ NEOSEKTOR_SETTINGS_EDIT_PERMISSION = "neosektor.settings.edit"
 class _NeoSektorPage:
     label: str
     endpoint: str
-    view_permission: str
+    view_permission: str | None
     edit_permission: str | None
     dashboard_key: str
     dashboard_description: str
@@ -97,6 +97,12 @@ class _NeoSektorPage:
 # Canonical dashboard order; titled pages keep this order minus Live Counts.
 # Internal navigation deliberately has its own order and Ballmat labels.
 NEOSEKTOR_PAGE_DEFINITIONS = (
+    _NeoSektorPage(
+        label="EMPLOYEES", endpoint="neosektor.manage_employees",
+        view_permission=None, edit_permission=None,
+        dashboard_key="employees", dashboard_description="",
+        menu_order=7,
+    ),
     _NeoSektorPage(
         label="Live Counts", endpoint="neosektor.live_counts",
         view_permission=LIVE_COUNTS_VIEW_PERMISSION, edit_permission=None,
@@ -228,7 +234,7 @@ def tunnel_conductor():
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
-        can_manage_employees=_can_manage_employees(),
+        can_manage_employees=_can_manage_employees("dis"),
         **context,
     )
 
@@ -751,7 +757,7 @@ def live_counts():
     )
     context["can_manage_employees"] = _can_manage_employees()
     context["manage_employees_default_area"] = (
-        staffing_service.neosektor_manage_default_area(current_user)
+        next(key for key, ids in _employee_attendance_scope()[1].items() if ids)
         if context["can_manage_employees"] else None
     )
     # Read-only routing updates detached display values, not persistent state.
@@ -848,54 +854,66 @@ def driver_routing():
 @gateway_node_required("sektor")
 def manage_employees():
     if not _can_manage_employees():
-        flash("Access denied.", "error")
-        return redirect(url_for("neosektor.index"))
-    names = {"dis": "Discharge", "ebm": "East Ballmat", "wbm": "West Ballmat"}
+        abort(403)
+    authority, areas = _employee_attendance_scope()
+    names = {"ebm": "EAST BALLMAT", "wbm": "WEST BALLMAT", "dis": "DISCHARGE"}
     requested = request.values.get("area", "").casefold()
     if not requested:
-        requested = (
-            "dis"
-            if request.args.get("source") == "tunnel"
-            else staffing_service.neosektor_manage_default_area(current_user)
+        if request.method == "POST":
+            abort(400)
+        return render_template(
+            "neonodes/neosektor/employees.html", title="EMPLOYEES",
+            areas=[{"key": key, "label": label} for key, label in names.items() if areas[key]],
         )
-    area = requested if requested in names else "ebm"
-    area_ids = staffing_service.attendance_deep_link_work_area_ids([names[area]])
+    if requested not in areas or not areas[requested]:
+        abort(403)
+    area = requested
+    area_ids = areas[area]
+    roster_view = "all" if request.args.get("view") == "all" else "my"
     if request.method == "POST":
         try:
             saved = staffing_service.save_operational_manage_attendance(
-                request.form, current_user, area_ids, form_submission=True
+                request.form, current_user, area_ids, form_submission=True, home_only=True
             )
             db.session.commit()
             flash(f"Attendance saved for {saved} people.", "success")
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
             flash(safe_mutation_error(exc, "save attendance"), "error")
-        return redirect(url_for("neosektor.manage_employees", area=area))
-    context = staffing_service.operational_manage_employees_context(area_ids)
-    tab_labels = {"dis": "DISCHARGE", "ebm": "EBM", "wbm": "WBM"}
+        return redirect(url_for("neosektor.manage_employees", area=area, view=roster_view))
+    context = staffing_service.operational_manage_employees_context(
+        area_ids, home_only=True, allow_roster_without_operation=True,
+        reports_to_person_id=authority.person_id if roster_view == "my" else None,
+    )
     tabs = tuple(
-        {"key": key, "label": tab_labels[key], "selected": key == area}
-        for key in names
+        {"key": key, "label": names[key], "selected": key == area}
+        for key in names if areas[key]
     )
     return render_template(
         "neostaffing/operational_manage_employees.html",
-        title="MANAGE EMPLOYEES",
+        title="EMPLOYEES",
         attendance=context,
         can_edit_attendance=True,
         show_coming=False,
         area_tabs=tabs,
         attendance_scope_label=names[area].upper(),
         attendance_workspace="sektor",
-        back_url=url_for("neosektor.index"),
+        roster_view=roster_view,
+        roster_area=area,
+        back_url=url_for("neosektor.manage_employees"),
     )
 
 
-def _can_manage_employees():
-    return bool(
-        current_user.is_authenticated
-        and current_user.management_level in MANAGEMENT_LEVELS
-        and user_can("neostaffing.attendance.take")
-    )
+def _can_manage_employees(area=None):
+    areas = _employee_attendance_scope()[1]
+    return bool(areas.get(area)) if area else any(areas.values())
+
+
+def _employee_attendance_scope():
+    # Request-local presentation reuse only. The shared writer reauthorizes.
+    if "sektor_attendance_scope" not in request.environ:
+        request.environ["sektor_attendance_scope"] = inbound_attendance_areas(current_user)
+    return request.environ["sektor_attendance_scope"]
 
 
 @bp.route("/driver-routing/state")
@@ -1050,6 +1068,8 @@ def _visible_neosektor_menu_items():
     _preload_neosektor_menu_permissions()
     items = []
     for label, endpoint, view_permission in NEOSEKTOR_INTERNAL_MENU:
+        if endpoint == "neosektor.manage_employees" and not _can_manage_employees():
+            continue
         if view_permission and not user_can(view_permission):
             continue
         items.append(
@@ -1066,6 +1086,8 @@ def _visible_neosektor_mobile_dashboard_items():
     _preload_neosektor_menu_permissions()
     items = []
     for label, endpoint, view_permission, key, description in NEOSEKTOR_MOBILE_DASHBOARD:
+        if endpoint == "neosektor.manage_employees" and not _can_manage_employees():
+            continue
         if view_permission and not user_can(view_permission):
             continue
         items.append(

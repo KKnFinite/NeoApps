@@ -5466,6 +5466,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         db.session.commit()
         error = IntegrityError("SECRET_SQL", {"private": "PRIVATE_PARAMETER"}, Exception("PRIVATE_CONSTRAINT"))
         with patch("app.neonodes.neosektor.routes.staffing_service.save_operational_manage_attendance", side_effect=error), \
+             patch("app.neonodes.neosektor.routes._employee_attendance_scope", return_value=(None, {"ebm": [1], "wbm": [], "dis": []})), \
              patch.object(db.session, "rollback", wraps=db.session.rollback) as rollback, \
              self.assertLogs(self.app.logger, level="ERROR") as logs:
             response = self.client.post("/neosektor/manage-employees?area=ebm", data={})

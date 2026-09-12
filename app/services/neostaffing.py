@@ -1236,7 +1236,7 @@ def operational_flow_shorthand(plan):
     return " → ".join(parts)
 
 
-def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False):
+def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False, home_only=False, reports_to_person_id=None):
     """Read current attendance, or an explicitly opted-in persistent roster."""
     operation = current_night_attendance_operation()
     if not operation and not allow_roster_without_operation:
@@ -1275,6 +1275,15 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
         )
         .order_by(StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.id)
     )
+    if home_only:
+        assignment_query = assignment_query.filter(StaffingWorkAssignment.work_area_unit_id.in_(start_ids))
+    if reports_to_person_id is not None:
+        assignment_query = assignment_query.filter(StaffingPerson.id.in_(
+            select(StaffingReportingRelationship.person_id).where(
+                StaffingReportingRelationship.active.is_(True),
+                StaffingReportingRelationship.reports_to_person_id == reports_to_person_id,
+            )
+        ))
     if not operation:
         # Persistent assignment/plan truth only: never consult old attendance
         # to present an off-sort roster or fabricate an attendance status.
@@ -1319,7 +1328,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             if record and record.work_area_unit_id is not None
             else assignment.work_area_unit_id
         )
-        if not operation and assignment.work_area_unit_id in start_ids:
+        if home_only or (not operation and assignment.work_area_unit_id in start_ids):
             effective_area_id = assignment.work_area_unit_id
         row = {
             "person": person,
@@ -1331,6 +1340,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
                 operation and (not record or record.status in STAFFING_DAILY_ATTENDANCE_WRITABLE_STATUSES)
             ),
             "assignment_label": assignment.work_area.name,
+            "home_work_area_id": assignment.work_area_unit_id,
             "effective_work_area_id": effective_area_id,
             "flow": operational_flow_shorthand(plan),
         }
@@ -1356,7 +1366,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
     }
 
 
-def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False):
+def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False, home_only=False):
     """Mutate only people whose effective attendance snapshot is in allowed areas."""
     operation = current_night_attendance_operation()
     if not operation or str(values.get("sort_date_operation_id")) != str(operation.id):
@@ -1371,6 +1381,8 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
     shift_area_ids = {
         unit.id for unit in hierarchy["units"] if _is_shift_work_area(unit, hierarchy["by_id"])
     }
+    existing = _locked_attendance_records(person_ids, operation, staffing_sort)
+    _validate_attendance_originals(existing, originals)
     assignments = (
         StaffingWorkAssignment.query.options(
             joinedload(StaffingWorkAssignment.person)
@@ -1384,11 +1396,11 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             StaffingWorkAssignment.work_area_unit_id.in_(shift_area_ids or {-1}),
             StaffingPerson.active.is_(True),
         )
-        .all()
+        .populate_existing().all()
     )
     assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
-    existing = _locked_attendance_records(person_ids, operation, staffing_sort)
-    _validate_attendance_originals(existing, originals)
+    from app.services.neostaffing_attendance_authority import require_attendance_assignments
+    require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
     for person_id in person_ids:
         assignment = assignments_by_person.get(person_id)
         plan = getattr(getattr(assignment, "person", None), "shift_flow_plan", None)
@@ -1398,6 +1410,8 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             if record and record.work_area_unit_id is not None
             else getattr(assignment, "work_area_unit_id", None)
         )
+        if home_only:
+            effective_area_id = getattr(assignment, "work_area_unit_id", None)
         if effective_area_id not in allowed:
             raise ValueError("Attendance includes an employee outside the selected attendance areas.")
     saved = 0
@@ -4110,6 +4124,7 @@ def save_attendance(values, user, *, form_submission=False):
     )
     assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
     eligible_person_ids = set(assignments_by_person)
+    original_assignment_areas = {a.person_id: a.work_area_unit_id for a in assignments}
     submitted_person_ids = _submitted_attendance_person_ids(values)
     outside_scope_ids = submitted_person_ids - eligible_person_ids
     if outside_scope_ids:
@@ -4130,6 +4145,20 @@ def save_attendance(values, user, *, form_submission=False):
 
     existing = _locked_attendance_records(person_ids, operation, staffing_sort)
     _validate_attendance_originals(existing, originals)
+
+    # Home may have changed while the parent lock was being acquired.
+    refreshed = StaffingWorkAssignment.query.join(StaffingPerson).filter(
+        StaffingWorkAssignment.id.in_([a.id for a in assignments]),
+        StaffingWorkAssignment.active.is_(True),
+        StaffingPerson.active.is_(True),
+    ).populate_existing().all()
+    assignments_by_person = {a.person_id: a for a in refreshed}
+    if any(person_id not in assignments_by_person or
+           assignments_by_person[person_id].work_area_unit_id != original_assignment_areas[person_id]
+           for person_id in person_ids):
+        raise ValueError("Employee assignment changed while you were editing. Reload Attendance.")
+    from app.services.neostaffing_attendance_authority import require_attendance_assignments
+    require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
 
     saved = 0
     user_id = getattr(user, "id", None)

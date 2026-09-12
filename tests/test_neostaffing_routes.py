@@ -370,10 +370,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(defaults["neostaffing.org_chart.view"], "watcher")
         self.assertEqual(defaults["neostaffing.org_chart.edit_structure"], "master")
 
-    def test_operator_can_take_attendance_and_view_reports(self):
+    def test_linked_management_can_take_attendance_and_view_reports(self):
         user = self._user("staffing_operator_permissions")
         self._grant_app_access(user, "neostaffing", "operator")
         sort, _operation, _department, work_area = self._staffing_hierarchy()
+        self._grant_attendance_authority(user, sort)
         person = staffing_service.create_person(
             {
                 "employee_id": "OP100",
@@ -446,7 +447,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"ALL HERE", page.data)
         self.assertNotIn(b"SAVE ATTENDANCE", page.data)
         self.assertEqual(blocked.status_code, 200)
-        self.assertIn(b"You do not currently have Take Attendance permission.", blocked.data)
+        self.assertIn(b"Active NeoStaffing management attendance authority is required.", blocked.data)
         self.assertEqual(StaffingDailyAttendance.query.filter_by(person_id=person.id).count(), 0)
 
     def test_landing_attendance_shortcut_resolves_one_or_multiple_scopes(self):
@@ -827,6 +828,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         staffing_service.assign_work_area(avery, work_area)
         staffing_service.assign_work_area(morgan, second_work_area)
         recorder = self._user("attendance_report_recorder")
+        self._grant_attendance_authority(recorder, sort)
         night_operation = self._current_night_operation()
         db.session.flush()
         staffing_service.save_attendance(
@@ -2349,6 +2351,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         users = [self._user(f"attendance_supervisor_{index}") for index in range(2)]
         for user in users:
             self._grant_app_access(user, "neostaffing", "operator")
+            self._grant_attendance_authority(user, sort)
         db.session.commit()
         clients = [self._logged_in_client(user.username) for user in users]
         forms = []
@@ -2410,6 +2413,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         user = self._user("staffing_attendance_master")
         self._grant_app_access(user, "neostaffing", "master")
         sort, _operation, _department, work_area = self._staffing_hierarchy()
+        self._grant_attendance_authority(user, sort)
         person = staffing_service.create_person(
             {
                 "employee_id": "AT100",
@@ -2505,6 +2509,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         user = self._user("staffing_attendance_operation")
         self._grant_app_access(user, "neostaffing", "operator")
         sort, operation, _department, nested_work_area = self._staffing_hierarchy()
+        self._grant_attendance_authority(user, sort)
         direct_work_area = staffing_service.create_unit(
             {"unit_type": "work_area", "name": "Load Planning", "parent_id": operation.id}
         )
@@ -3242,6 +3247,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         user = self._user("staffing_attendance_all_here")
         self._grant_app_access(user, "neostaffing", "operator")
         sort, _operation, _department, work_area = self._staffing_hierarchy()
+        self._grant_attendance_authority(user, sort)
         first_person = staffing_service.create_person(
             {
                 "employee_id": "AH100",
@@ -3364,6 +3370,14 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"ok": False, "error": "Unable to move shift flow final door. Please try again."})
         rollback.assert_called_once()
+
+    def _grant_attendance_authority(self, user, sort):
+        user.employee_id = f"MGR-{user.id}"
+        person = staffing_service.create_person({
+            "employee_id": user.employee_id, "first_name": "Manager", "last_name": "Fixture",
+            "seniority_date": "2020-01-01", "classification": "division_manager",
+        })
+        staffing_service.create_leadership_assignment(person, sort)
 
     def _user(self, username):
         user = User(
