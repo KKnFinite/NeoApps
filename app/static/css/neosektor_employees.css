@@ -7,8 +7,8 @@
     font-family: NeoFontPlain, sans-serif;
     background: #091219;
     padding: clamp(12px, 2vw, 24px);
-    border: 1px solid #34434c;
-    border-radius: 8px;
+    border: 0;
+    border-radius: 0;
     gap: 16px;
 }
 .neostaffing-operational-attendance--sektor .neostaffing-operational-head {
@@ -24,6 +24,7 @@
     flex-wrap: wrap;
     gap: 8px 16px;
     font-size: .9rem;
+    width:100%; padding:10px 0; border-block:1px solid #34434c;
 }
 .neostaffing-operational-attendance--sektor .neostaffing-operational-summary span {
     color: #8bd4df;
@@ -62,6 +63,10 @@
 }
 .neostaffing-operational-attendance--sektor th { text-align: left; color: #a6b8c2; }
 .neostaffing-operational-attendance--sektor td { border-bottom: 1px solid #25343e; }
+.neostaffing-operational-attendance--sektor .neostaffing-operational-roster { background:transparent; border-top:1px solid #538a98; }
+.neostaffing-operational-attendance--sektor .neostaffing-operational-table td strong { white-space:normal; overflow-wrap:anywhere; font-size:.85rem; }
+.neostaffing-operational-attendance--sektor .neostaffing-operational-flow { color:#becdd3; font-weight:400; }
+.neostaffing-operational-attendance--sektor .neostaffing-operational-status.is-readonly { border:0; padding:0; background:none; }
 .neostaffing-operational-attendance--sektor select {
     background: #101e28;
     color: #e1e8ee;
@@ -114,6 +119,10 @@
         font-size: .85rem;
     }
     .neostaffing-operational-attendance--sektor .neostaffing-operational-table-wrap {
-        overflow-x: auto;
+        overflow:visible;
     }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-table th:nth-child(1) { width:30%; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-table th:nth-child(2) { width:40%; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-table th:nth-child(3) { width:30%; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-roster footer button { width:100%; }
 }

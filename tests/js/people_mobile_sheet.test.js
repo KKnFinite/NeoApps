@@ -1,0 +1,23 @@
+'use strict';
+const test=require('node:test'), assert=require('node:assert/strict');
+const fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('app/static/js/neostaffing_people_mobile.js','utf8');
+test('mobile sheets lock background, trap focus and restore on close/desktop',()=>{
+  let observer, change, keydown, selected=null, focused=0, restored;
+  const close={disabled:false,getClientRects:()=>[1],focus:()=>{doc.activeElement=close;}}, save={disabled:false,getClientRects:()=>[1],focus:()=>{doc.activeElement=save;}};
+  const sibling={inert:false};
+  const body={style:{},children:[]};
+  const root={parentElement:body,children:[],querySelector:()=>selected};
+  const sheet={parentElement:root,setAttribute(){},removeAttribute(){},querySelector:()=>close,querySelectorAll:()=>[close,save]};
+  root.children=[sheet,sibling];body.children=[root];
+  const doc={body,activeElement:{focus:()=>focused++},querySelector:()=>root,addEventListener:(type,fn)=>{keydown=fn;}};
+  const media={matches:true,addEventListener:(_type,fn)=>{change=fn;}};
+  vm.runInNewContext(source,{document:doc,matchMedia:()=>media,MutationObserver:class{constructor(fn){observer=fn;}observe(){}},window:{scrollY:120,scrollTo:(_x,y)=>{restored=y;}}});
+  selected=sheet;observer();
+  assert.equal(body.style.position,'fixed');assert.equal(body.style.top,'-120px');assert.equal(sibling.inert,true);
+  let prevented=false;keydown({key:'Tab',shiftKey:true,preventDefault:()=>{prevented=true;}});
+  assert.equal(prevented,true);assert.equal(doc.activeElement,save);
+  selected=null;observer();
+  assert.equal(body.style.position,'');assert.equal(sibling.inert,false);assert.equal(restored,120);assert.equal(focused,1);
+  selected=sheet;observer();media.matches=false;change();assert.equal(body.style.position,'');
+});

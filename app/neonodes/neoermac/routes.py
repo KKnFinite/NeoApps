@@ -525,7 +525,7 @@ def manage_employees():
         if not can_edit:
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
-        context = staffing_service.operational_manage_employees_context(
+        context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
             set(area_ids) & authority.work_area_ids, home_only=True, allow_roster_without_operation=True)
         return node_workspace(current_user, context, workspace="ermac",
             scope_label=f"Selected Doors: {' · '.join(doors)}", back_url=url_for("neoermac.door_view"))

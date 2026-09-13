@@ -93,22 +93,24 @@ def require_attendance_assignments(user, assignments, person_ids, hierarchy):
     return authority
 
 
-def inbound_attendance_areas(user):
+def inbound_attendance_areas(user, *, include_unscoped=False):
     """Use canonical Night/Ramp/Shift units, never later Flow destinations.
 
     StaffingUnit has no semantic area key. Reuse its existing area-name
     normalization at the boundary, then pass only authoritative unit IDs.
+    include_unscoped is a viewing exception; the returned authority and all
+    shared write authorization remain unchanged.
     """
     from app.services import neostaffing as staffing
 
     names = {"east ballmat": "ebm", "west ballmat": "wbm", "discharge": "dis"}
     areas = {key: [] for key in names.values()}
-    if not getattr(user, "employee_id", None):
+    if not getattr(user, "employee_id", None) and not include_unscoped:
         return AttendanceAuthority(), areas
     hierarchy = staffing._daily_attendance_hierarchy()
     authority = attendance_authority(user, hierarchy)
     for unit in hierarchy["units"]:
-        if unit.id not in authority.work_area_ids or not staffing._is_shift_work_area(unit, hierarchy["by_id"]):
+        if (not include_unscoped and unit.id not in authority.work_area_ids) or not staffing._is_shift_work_area(unit, hierarchy["by_id"]):
             continue
         key = names.get(staffing._attendance_work_area_name_key(unit.name))
         if key:

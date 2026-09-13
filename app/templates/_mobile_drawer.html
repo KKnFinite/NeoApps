@@ -1,7 +1,7 @@
 {% from "neomotherbrain/_gateway_sort_control.html" import sort_control with context %}
 {% from "_neo_brand.html" import neo_brand %}
-{% set drawer_name = node_header_name if uses_operational_shell else ("NeoGateway" if is_rfd_hub_page else "NeoPortal") %}
-{% set drawer_home = node_home_endpoint if uses_operational_shell else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard") %}
+{% set drawer_name = node_header_name if uses_operational_shell else ("NeoStaffing" if is_neostaffing_page else ("NeoGateway" if is_rfd_hub_page else "NeoPortal")) %}
+{% set drawer_home = node_home_endpoint if uses_operational_shell else ("neostaffing.index" if is_neostaffing_page else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard")) %}
 {# Bottom controls belong to this same modal region, never to an inert background. #}
 <div class="neo-mobile-navigation" data-mobile-navigation data-menu-title="{{ drawer_name }} menu" aria-label="{{ drawer_name }} navigation">
     <div class="neo-mobile-backdrop" data-drawer-backdrop hidden></div>
@@ -41,10 +41,16 @@
         {% endif %}
 
         </nav>
+        {% elif is_neostaffing_page and request.endpoint != 'neostaffing.index' %}
+        <nav class="neo-drawer-links" aria-label="NeoStaffing screens">
+          {% for label,endpoint in [('People','people'),('Org Chart','org_chart'),('Reports','reports'),('Attendance','attendance'),('Shift Flow','shift_flow'),('Accountability','accountability'),('Timecards','timecards')] %}
+          <a href="{{ url_for('neostaffing.' ~ endpoint) }}">{{ label }}</a>
+          {% endfor %}
+        </nav>
         {% elif is_rfd_hub_page %}
         <section class="neo-drawer-links" aria-label="Operational context">{{ sort_control() }}</section>
         {% endif %}
-        {% if uses_operational_shell %}
+        {% if uses_operational_shell or is_neostaffing_page %}
         {% include "_mobile_node_utilities.html" %}
         {% else %}
         <section class="neo-drawer-links" aria-label="Utilities">
