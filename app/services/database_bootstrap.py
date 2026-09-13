@@ -65,6 +65,8 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     from app.services.gateway_matrix import current_gateway_local_datetime
     from app.services.neostaffing_discipline import backfill_legacy_workdays
     backfill_legacy_workdays(current_gateway_local_datetime(gateway).date())
+    from app.services.neostaffing_timecards import backfill_retained_attendance
+    backfill_retained_attendance(current_gateway_local_datetime(gateway).date())
 
     user, created_user = _find_or_create_bootstrap_user(username, email)
     user.username = username

@@ -870,6 +870,13 @@ def manage_employees():
     area = requested
     area_ids = areas[area]
     roster_view = "all" if request.args.get("view") == "all" else "my"
+    if request.method == "GET" and request.args.get("mode") == "times":
+        from app.services.neostaffing_timecard_ui import node_workspace
+        context = staffing_service.operational_manage_employees_context(
+            area_ids, home_only=True, allow_roster_without_operation=True,
+            reports_to_person_id=authority.person_id if roster_view == "my" else None)
+        return node_workspace(current_user, context, workspace="sektor",
+            scope_label=names[area], back_url=url_for("neosektor.manage_employees"))
     if request.method == "POST":
         try:
             saved = staffing_service.save_operational_manage_attendance(

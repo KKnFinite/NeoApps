@@ -1,0 +1,23 @@
+.timecards { min-width:0; max-width:100%; padding-bottom:5rem; }
+.timecards.neostaffing-operational-attendance .neostaffing-operational-head { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; min-width:0; }
+.timecards .neostaffing-operational-head > * { min-width:0; max-width:100%; }
+.timecards nav,.timecards form { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; margin:.8rem 0; }
+.timecards a,.timecards button { min-height:42px; padding:.5rem .75rem; }
+.timecards button { color:#dbe5ee; background:#10222b; border:1px solid #5b95a5; border-radius:4px; font:inherit; cursor:pointer; }
+.timecards.theme-ermac button { background:#231016; border-color:#a32e42; }
+.timecards button:hover { filter:brightness(1.2); }
+.timecards button:focus-visible,.timecards input:focus-visible { outline:2px solid #7fddd8; outline-offset:2px; }
+.timecards button:disabled { opacity:.55; cursor:wait; }
+.timecard-row { border-bottom:1px solid #64768755; padding:.8rem 0; min-width:0; }
+.timecard-row header { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem 1rem; }
+.timecard-row header strong { color:var(--neo-silver,#dbe5ee); }
+.timecard-segment { display:flex; flex-wrap:wrap; gap:.65rem; align-items:end; margin:.6rem 0; }
+.timecard-segment label { display:flex; flex-direction:column; gap:.3rem; }
+.timecard-segment input { width:26ch; max-width:100%; min-height:44px; background:#091018; color:#e3eaf0; border:1px solid #638391; padding:.5rem; }
+.timecards.theme-ermac input { border-color:#338361; }
+.timecard-exception { display:block; color:#f2c76d; margin:.4rem 0; }
+.timecards table { width:100%; border-collapse:collapse; }
+.timecards td,.timecards th { padding:.6rem; text-align:left; border-bottom:1px solid #64768755; }
+.timecard-table { overflow-x:auto; max-width:100%; }
+.timecards [data-timecard-status] { color:#e7d59a; }
+@media(max-width:600px) { .timecard-segment { display:grid; grid-template-columns:minmax(0,1fr); } .timecard-segment input { width:100%; box-sizing:border-box; } .timecards h1 { font-size:1.5rem; } .timecards.neostaffing-operational-attendance .neostaffing-operational-head { flex-direction:column; align-items:flex-start; } .timecards .neostaffing-operational-head nav { display:flex; flex-wrap:wrap; } }

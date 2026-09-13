@@ -80,6 +80,9 @@ from app.models.staffing_change_request import StaffingChangeRequest
 from app.models.staffing_change_request_event import StaffingChangeRequestEvent
 from app.models.staffing_change_request_item import StaffingChangeRequestItem
 from app.models.staffing_daily_attendance import StaffingDailyAttendance
+from app.models.staffing_timecard import (
+    StaffingTimecardWeek, StaffingTimecardSlice, StaffingTimecardSegment, StaffingTimecardEdit,
+)
 from app.models.staffing_attendance_occurrence import StaffingAttendanceOccurrence
 from app.models.staffing_accountability import (
     StaffingTrackerSetting, StaffingComboWorkday, StaffingAccountabilityWorkday,

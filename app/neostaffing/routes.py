@@ -135,6 +135,80 @@ def accountability():
         master=user_can_access_app(current_user, "neostaffing", minimum_role="master"))
 
 
+@bp.route("/timecards")
+@login_required
+def timecards():
+    from app.services import neostaffing_timecards as service
+    from app.services.neostaffing_timecard_exports import can_archive
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    try:
+        master = can_archive(current_user)
+        context = service.report_context(current_user, request.args,
+            as_of=current_gateway_local_datetime().date(), complete=master)
+    except ValueError as error:
+        return str(error), 403
+    return render_template("neostaffing/timecards.html", **context, master=master)
+
+
+@bp.route("/timecards/save", methods=["POST"])
+@login_required
+def timecards_save():
+    from app.services.neostaffing_timecards import save_segments
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    try:
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid timecard payload.")
+        save_segments(current_user, payload.get("commands"), as_of=current_gateway_local_datetime().date())
+        db.session.commit()
+    except (ValueError, TypeError, KeyError, IntegrityError) as error:
+        db.session.rollback()
+        return jsonify(error=safe_mutation_error(error, "save times; reload before trying again")), 409
+    return jsonify(saved=True)
+
+
+@bp.route("/timecards/archive", methods=["POST"])
+@login_required
+def timecards_archive():
+    from datetime import date
+    from io import BytesIO
+    from app.services.neostaffing_timecard_exports import generate
+    from app.services.gateway_matrix import current_gateway_local_datetime
+    try:
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid archive payload.")
+        week = date.fromisoformat(payload.get("week", ""))
+        package, token = generate(current_user, week, complete=payload.get("complete") is True,
+                                  as_of=current_gateway_local_datetime().date())
+        db.session.commit()
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        return jsonify(error=str(error)), 403
+    response = send_file(BytesIO(package), mimetype="application/zip", as_attachment=True,
+                         download_name=f"timecards-{week}.zip")
+    response.headers["Cache-Control"] = "no-store"
+    if token:
+        response.headers["X-Timecard-Archive"] = token
+    return response
+
+
+@bp.route("/timecards/archive/acknowledge", methods=["POST"])
+@login_required
+def timecards_archive_acknowledge():
+    from app.services.neostaffing_timecard_exports import acknowledge_download
+    try:
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid archive acknowledgement.")
+        receipt = acknowledge_download(current_user, payload.get("token", ""))
+        db.session.commit()
+    except (ValueError, TypeError) as error:
+        db.session.rollback()
+        return jsonify(error=str(error)), 409
+    return jsonify(purge_after=receipt.purge_after.isoformat())
+
+
 @bp.route("/accountability/employee/<int:person_id>", methods=["GET", "POST"])
 @login_required
 def accountability_employee(person_id):

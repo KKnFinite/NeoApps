@@ -43,6 +43,8 @@ class AttendanceRolloverResult:
     purged_expired_summary_count: int = 0
     status: str = "no_current_operation"
     purged_expired_occurrence_count: int = 0
+    purged_timecard_count: int = 0
+    timecard_receipt_changed: bool = False
 
     @property
     def changed(self):
@@ -51,6 +53,8 @@ class AttendanceRolloverResult:
             or self.purged_detail_count
             or self.purged_expired_summary_count
             or self.purged_expired_occurrence_count
+            or self.purged_timecard_count
+            or self.timecard_receipt_changed
         )
 
 
@@ -258,6 +262,12 @@ def maintain_current_attendance_rollover(user=None, *, now_local=None, sort_name
     from app.services.neostaffing_discipline import purge_expired_discipline
     result = replace(result, purged_expired_occurrence_count=(
         result.purged_expired_occurrence_count + purge_expired_discipline(local_now.date())))
+    from app.services.neostaffing_timecards import cleanup as cleanup_timecards
+    result = replace(result, purged_timecard_count=cleanup_timecards(as_of=local_now.date()))
+    from app.models.staffing_timecard import StaffingTimecardWeek
+    result = replace(result, timecard_receipt_changed=any(
+        isinstance(row, StaffingTimecardWeek) and db.session.is_modified(row)
+        for row in db.session.dirty))
     if result.status != "processed":
         return result
     expired_count = purge_expired_attendance_summaries(
@@ -271,6 +281,8 @@ def maintain_current_attendance_rollover(user=None, *, now_local=None, sort_name
         purged_expired_summary_count=expired_count,
         status=result.status,
         purged_expired_occurrence_count=result.purged_expired_occurrence_count,
+        purged_timecard_count=result.purged_timecard_count,
+        timecard_receipt_changed=result.timecard_receipt_changed,
     )
 
 

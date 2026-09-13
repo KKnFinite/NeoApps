@@ -1,0 +1,22 @@
+{% for item in rows %}
+<article class="timecard-row" data-timecard-id="{{ item.slice.id }}" data-version="{{ item.slice.version }}">
+  <header><strong>{{ item.employee }}</strong><span>{{ item.employee_id }}</span><span>{{ item.slice.workday_date }} · {{ item.sort }} · {{ item.work_area }}</span>
+    <span>{{ item.slice.attendance_status|replace('_', ' ')|title if item.slice.attendance_status else 'Unmarked' }}</span>
+    {% if item.hours is not none %}<strong>{{ item.hours }} hrs</strong>{% endif %}
+  </header>
+  {% if item.slice.attendance_status == 'here' and item.editable|default(true) %}
+  <div data-time-segments>
+    {% for segment in item.edit_segments %}<div class="timecard-segment">
+      <label>Start <input data-start value="{{ segment.start }}" placeholder="YYYY-MM-DDTHH:MM" aria-label="Start for {{ item.employee }}"></label>
+      <label>End <input data-end value="{{ segment.end }}" placeholder="YYYY-MM-DDTHH:MM" aria-label="End for {{ item.employee }}"></label>
+      <button type="button" data-remove-segment aria-label="Remove segment for {{ item.employee }}">REMOVE</button>
+    </div>{% endfor %}
+  </div>
+  <button type="button" data-add-segment>ADD SEGMENT</button>
+  <small>{{ item.timezone }}. Include the date for overnight times.</small>
+  {% elif item.slice.attendance_status == 'here' %}
+  {% for segment in item.edit_segments %}<p>{{ segment.start }} – {{ segment.end }}</p>{% endfor %}
+  {% endif %}
+  {% for issue in item.issues %}<span class="timecard-exception">{{ issue }}</span>{% endfor %}
+</article>
+{% else %}<p>No retained timecard entries for this selection.</p>{% endfor %}

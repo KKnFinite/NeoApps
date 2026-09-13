@@ -24,6 +24,14 @@
         {% endif %}
     </header>
 
+    {% if can_edit_attendance %}
+    <nav class="neostaffing-operational-tabs" aria-label="Employee mode">
+        <strong aria-current="page">ATTENDANCE</strong>
+        {% set times_args = request.args.to_dict() %}{% set _ = times_args.update({'mode':'times'}) %}
+        <a href="?{{ times_args|urlencode }}">TIMES</a>
+    </nav>
+    {% endif %}
+
     {% if area_tabs %}
     <nav class="neostaffing-operational-tabs" aria-label="Attendance area">
         {% for tab in area_tabs %}

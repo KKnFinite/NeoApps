@@ -17,6 +17,7 @@
     <main class="neostaffing-launch-workspace">
         <header class="neostaffing-launch-workspace-heading"><div><h2>WORKSPACES</h2><span>SELECT AN AUTHORIZED OPERATIONAL AREA</span></div><strong>ROLE · {{ app_role|upper }}</strong></header>
         <nav class="neostaffing-primary-menu neostaffing-launch-grid" aria-label="NeoStaffing main menu">
+            {% if attendance_shortcut.is_management or can_manage_app %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.timecards') }}"><span>TIMECARDS</span><em>Day, week and archive</em></a>{% endif %}
             {% if attendance_shortcut.is_management %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.accountability') }}"><span>ACCOUNTABILITY</span><em>Finalized attendance follow-up</em></a>{% endif %}
             {% if user_can("neostaffing.people.view") %}
             <a class="neostaffing-menu-tile is-priority" href="{{ url_for('neostaffing.attendance') }}"><span>ATTENDANCE</span><em>Current-sort attendance</em></a>

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}EMPLOYEES{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_timecards.css') }}?v=1">
+<section class="theme-{{ workspace }} neostaffing-operational-attendance neostaffing-operational-attendance--{{ workspace }} timecards" data-timecards>
+  <header class="neostaffing-operational-head">
+    <a href="{{ back_url }}">BACK</a><h1>EMPLOYEES</h1><p>{{ scope_label }}</p>
+    <nav class="neostaffing-operational-tabs" aria-label="Employee mode">
+      {% set attendance_args = request.args.to_dict() %}{% set _ = attendance_args.pop('mode', none) %}
+      <a href="?{{ attendance_args|urlencode }}">ATTENDANCE</a><strong aria-current="page">TIMES</strong>
+      <a href="{{ url_for('neostaffing.timecards') }}">DAY / WEEK REPORTS</a>
+    </nav>
+    <form method="get"><input type="hidden" name="mode" value="times">
+      {% for key in ['area', 'view'] %}{% if request.args.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endif %}{% endfor %}
+      <label>Workday <input type="date" name="date" value="{{ day }}" required></label><button>OPEN</button>
+    </form>
+  </header>
+  {% include "neostaffing/_timecard_bulk.html" %}
+  {% include "neostaffing/_timecard_rows.html" %}
+  {% for item in missing %}<div class="timecard-row"><strong>{{ item.person.full_name }}</strong><span>{{ item.assignment_label }}</span><span>No retained attendance for this day. Times unavailable.</span></div>{% endfor %}
+  <p role="status" data-timecard-status></p>
+  {% if rows %}<button type="button" data-save-times>SAVE CHANGED TIMES</button>{% endif %}
+</section>
+<script src="{{ url_for('static', filename='js/neostaffing_timecards.js') }}?v=1" defer></script>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Timecards{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_timecards.css') }}?v=1">
+<section class="theme-staffing timecards" data-timecards>
+<h1>TIMECARDS</h1>
+<a href="{{ url_for('neostaffing.index') }}">NEOSTAFFING</a>
+<form method="get">
+  <label>Date <input type="date" name="date" value="{{ day }}" required></label>
+  <label>Period <select name="period"><option value="day" {% if period == 'day' %}selected{% endif %}>DAY</option><option value="week" {% if period == 'week' %}selected{% endif %}>WEEK</option></select></label>
+  <label>Report <select name="view">{% for value,label in [('sort','SORT LABOR'),('employee','EMPLOYEE HOURS'),('exceptions','EXCEPTIONS'),('times','TIMES')] %}<option value="{{ value }}" {% if view == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>Employee search <input name="search" value="{{ request.args.get('search','') }}"></label>
+  <button>OPEN</button>
+</form>
+<p>{{ start }} – {{ end }} · {{ total }} matching records</p>
+{% if view == 'times' %}
+  {% include 'neostaffing/_timecard_bulk.html' %}
+  {% include 'neostaffing/_timecard_rows.html' %}
+  <button type="button" data-save-times>SAVE CHANGED TIMES</button>
+{% else %}
+<div class="timecard-table"><table><thead><tr>{% for heading in headings %}<th>{{ heading }}</th>{% endfor %}</tr></thead><tbody>
+{% for record in report %}<tr>{% for value in record %}<td>{{ value if value is not none else '—' }}</td>{% endfor %}</tr>{% else %}<tr><td>No records for this selection.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+<nav aria-label="Timecard pages">{% if page > 1 %}<a href="?{{ previous_query }}">PREVIOUS</a>{% endif %}{% if has_next %}<a href="?{{ next_query }}">NEXT</a>{% endif %}</nav>
+<section><h2>WEEKLY DOWNLOAD</h2>
+<p>Scoped reports do not change retention. Complete archives include all retained employees and Sorts. Downloaded archives remain usable after live details expire.</p>
+<label>Sunday <input type="date" data-archive-week value="{{ archive_week }}"></label>
+<button type="button" data-archive-download="scoped">DOWNLOAD SCOPED REPORT</button>
+{% if master %}<button type="button" data-archive-download="complete">COMPLETE WEEK ARCHIVE</button>{% endif %}
+{% if receipt %}<p>Week version {{ receipt.version }}. {% if receipt.purged_at %}Detailed data purged.{% elif receipt.purge_after %}Purge scheduled {{ receipt.purge_after }} UTC.{% elif receipt.archive_version is not none %}Archive stale — complete re-download required.{% else %}No complete archive download recorded.{% endif %}</p>{% endif %}
+</section>
+<p role="status" data-timecard-status></p>
+</section>
+<script src="{{ url_for('static', filename='js/neostaffing_timecards.js') }}?v=1" defer></script>
+<script src="{{ url_for('static', filename='js/neostaffing_timecard_archive.js') }}?v=1" defer></script>
+{% endblock %}

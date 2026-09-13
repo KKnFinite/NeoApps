@@ -1477,7 +1477,8 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
             {person_id: status for person_id, status in saved_statuses.items() if status},
             user_id=user_id,
         )
-    _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person)
+    _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
+                                   hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
     db.session.flush()
     return saved
 
@@ -4073,6 +4074,13 @@ def _changed_attendance_form_rows(values, submitted_ids, operation, *, bulk_stat
     return changed, originals
 
 
+class _AttendanceRecords(dict):
+    """Request-local records and timecards loaded AFTER employee serialization."""
+    def __init__(self, records, timecards):
+        super().__init__(records)
+        self.timecards = timecards
+
+
 def _locked_attendance_records(person_ids, operation, staffing_sort):
     if not person_ids:
         return {}
@@ -4088,14 +4096,25 @@ def _locked_attendance_records(person_ids, operation, staffing_sort):
     # checked in the lock-taking statement could retain a pre-wait MVCC snapshot.
     if any(row[1] for row in parents):
         raise ValueError("This Sort attendance has been finalized. Reload Attendance.")
-    records = StaffingDailyAttendance.query.filter(
-        StaffingDailyAttendance.person_id.in_(person_ids),
+    from app.models.staffing_timecard import StaffingTimecardSlice
+    from sqlalchemy import and_
+    # Start from the already-locked parents so an intentionally cleared/missing
+    # attendance row can still carry its retained timecard. This statement has
+    # a fresh post-lock MVCC snapshot; never hydrate child state in the waiting
+    # parent-lock statement above. All attendance/time writers own these parents.
+    records = db.session.query(StaffingPerson.id, StaffingDailyAttendance, StaffingTimecardSlice).outerjoin(
+        StaffingDailyAttendance, and_(
+        StaffingDailyAttendance.person_id == StaffingPerson.id,
         StaffingDailyAttendance.attendance_date == operation.sort_date,
         StaffingDailyAttendance.sort_unit_id == staffing_sort.id,
         or_(StaffingDailyAttendance.sort_date_operation_id == operation.id,
             StaffingDailyAttendance.sort_date_operation_id.is_(None)),
-    ).order_by(StaffingDailyAttendance.person_id).populate_existing().with_for_update().all()
-    return {record.person_id: record for record in records}
+    )).outerjoin(StaffingTimecardSlice, and_(
+        StaffingTimecardSlice.person_id == StaffingPerson.id,
+        StaffingTimecardSlice.sort_date_operation_id == operation.id,
+    )).filter(StaffingPerson.id.in_(person_ids)).order_by(StaffingPerson.id).populate_existing().all()
+    return _AttendanceRecords({person_id: record for person_id, record, _ in records if record},
+                              {person_id: card for person_id, _, card in records if card})
 
 
 def _validate_attendance_originals(existing, originals):
@@ -4104,11 +4123,15 @@ def _validate_attendance_originals(existing, originals):
             raise ValueError("Attendance changed while you were editing. Reload Attendance and review before saving.")
 
 
-def _sync_attendance_accountability(operation, statuses, user_id, assignments):
+def _sync_attendance_accountability(operation, statuses, user_id, assignments, *, hierarchy, timecards):
     if not statuses:
         return
     from app.services.gateway_matrix import current_gateway_local_datetime
     from app.services.neostaffing_accountability import sync_attendance_occurrences
+    from app.services.neostaffing_timecards import sync_attendance
+
+    sync_attendance(operation, statuses, assignments, user_id,
+                    as_of=current_gateway_local_datetime().date(), units=hierarchy["by_id"], existing_rows=timecards)
 
     sync_attendance_occurrences(
         operation, statuses, user_id=user_id,
@@ -4256,7 +4279,8 @@ def save_attendance(values, user, *, form_submission=False):
             {person_id: status for person_id, status in saved_statuses.items() if status},
             user_id=user_id,
         )
-    _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person)
+    _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
+                                   hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
     db.session.flush()
     return saved
 

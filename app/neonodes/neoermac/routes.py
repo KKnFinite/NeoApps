@@ -521,6 +521,14 @@ def manage_employees():
     from app.services.neostaffing_attendance_authority import attendance_authority
     authority = attendance_authority(current_user)
     can_edit = bool(set(area_ids) & authority.work_area_ids)
+    if request.method == "GET" and request.args.get("mode") == "times":
+        if not can_edit:
+            abort(403)
+        from app.services.neostaffing_timecard_ui import node_workspace
+        context = staffing_service.operational_manage_employees_context(
+            set(area_ids) & authority.work_area_ids, home_only=True, allow_roster_without_operation=True)
+        return node_workspace(current_user, context, workspace="ermac",
+            scope_label=f"Selected Doors: {' · '.join(doors)}", back_url=url_for("neoermac.door_view"))
     if request.method == "POST":
         if not can_edit:
             flash("Access denied.", "error")
