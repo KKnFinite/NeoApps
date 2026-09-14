@@ -658,6 +658,7 @@ def open_staffing_notification(notification_id):
 @neostaffing_app_required(permission_key=BULK_CHANGE_PERMISSION)
 def bulk_change():
     workspace = bulk_change_service.new_workspace(current_user)
+    staging_bundle = None
     token_valid = True
     if request.method == "POST":
         try:
@@ -711,18 +712,21 @@ def bulk_change():
                     )
         elif action:
             try:
+                staging_bundle = bulk_change_service.BulkChangeDataBundle()
                 bulk_change_service.stage_workspace_change(
                     workspace,
                     action,
                     request.form,
                     current_user,
+                    bundle=staging_bundle,
                 )
             except ValueError as error:
                 flash(str(error), "error")
             else:
                 flash("Bulk Change workspace updated. Nothing is live yet.", "success")
 
-    context = bulk_change_service.bulk_change_context(workspace, current_user)
+    # Staging is read-only: render from the same snapshot, not a second full load.
+    context = bulk_change_service.bulk_change_context(workspace, current_user, bundle=staging_bundle)
     return render_template(
         "neostaffing/bulk_change.html",
         app_role=get_user_app_role(current_user, "neostaffing"),

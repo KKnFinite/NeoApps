@@ -14,6 +14,8 @@ from app.models import (
     StaffingReportingRelationship,
     StaffingTwentyCAffiliation,
     StaffingUnit,
+    StaffingVacationManagementSelection,
+    StaffingVacationManagementTurnState,
     StaffingWorkAssignment,
 )
 from app.models.staffing_person import (
@@ -185,8 +187,8 @@ def decode_workspace(token, user):
     return workspace
 
 
-def stage_workspace_change(workspace, action, values, user):
-    bundle = BulkChangeDataBundle()
+def stage_workspace_change(workspace, action, values, user, *, bundle=None):
+    bundle = bundle or BulkChangeDataBundle()
     _require_bulk_access(user)
     if action == "review_latest":
         workspace["base_revision"] = bundle.revision
@@ -316,6 +318,7 @@ def apply_workspace(workspace, user):
         state = simulation["states"][ref]
         person = ref_to_person[ref]
         if not state["is_new"]:
+            person_changed = False
             for field in (
                 "employee_id",
                 "first_name",
@@ -325,9 +328,15 @@ def apply_workspace(workspace, user):
                 "employee_status",
                 "active",
             ):
-                setattr(person, field, state[field])
-            person.seniority_date = date.fromisoformat(state["seniority_date"])
-            person.updated_at = now
+                if getattr(person, field) != state[field]:
+                    setattr(person, field, state[field])
+                    person_changed = True
+            seniority_date = date.fromisoformat(state["seniority_date"])
+            if person.seniority_date != seniority_date:
+                person.seniority_date = seniority_date
+                person_changed = True
+            if person_changed:
+                person.updated_at = now
         changed_people += 1
 
     for unit_id_text, change in workspace["units"].items():
@@ -353,9 +362,10 @@ def apply_workspace(workspace, user):
                 assignment.updated_at = now
             continue
         if assignment:
-            assignment.work_area_unit_id = target_id
-            assignment.active = True
-            assignment.updated_at = now
+            if assignment.work_area_unit_id != target_id or not assignment.active:
+                assignment.work_area_unit_id = target_id
+                assignment.active = True
+                assignment.updated_at = now
         else:
             assignment = StaffingWorkAssignment(
                 person_id=person.id,
@@ -426,9 +436,23 @@ def apply_workspace(workspace, user):
                 )
             )
 
-    purged = staffing_service.purge_expired_reporting_relationship_history(today)
-    db.session.flush()
-    from app.services.neostaffing_vacation import reconcile_management_person_state
+    # The lifecycle guard can reuse these authoritative locked ORM rows, just
+    # as the existing People bulk-assignment writer does. Include new rows via
+    # the guard's normal pending-assignment merge. Cover purge's autoflush too.
+    previous_snapshot = db.session.info.get("staffing_assignment_snapshot")
+    db.session.info["staffing_assignment_snapshot"] = bundle.work_assignments
+    try:
+        purged = staffing_service.purge_expired_reporting_relationship_history(today)
+        db.session.flush()
+    finally:
+        if previous_snapshot is None:
+            db.session.info.pop("staffing_assignment_snapshot", None)
+        else:
+            db.session.info["staffing_assignment_snapshot"] = previous_snapshot
+    from app.services.neostaffing_vacation import (
+        VACATION_MANAGEMENT_CLASSIFICATIONS,
+        reconcile_management_person_state,
+    )
 
     vacation_touched_refs = set(simulation["leadership_touched_refs"])
     vacation_membership_fields = {"classification", "employee_status", "active"}
@@ -437,8 +461,27 @@ def apply_workspace(workspace, user):
         for ref, staged in workspace["people"].items()
         if vacation_membership_fields.intersection(staged.get("changes", {}))
     )
+    # Hourly status edits normally have no management vacation work. Preserve
+    # cleanup for former managers with retained turns/picks, but determine those
+    # exceptions set-wise instead of invoking a three-query no-op per employee.
+    non_management_ids = {
+        ref_to_person[ref].id for ref in vacation_touched_refs
+        if ref_to_person[ref].classification not in VACATION_MANAGEMENT_CLASSIFICATIONS
+    }
+    retained_management_ids = set()
+    if non_management_ids:
+        turns = db.session.query(StaffingVacationManagementTurnState.current_person_id).filter(
+            StaffingVacationManagementTurnState.current_person_id.in_(non_management_ids),
+            StaffingVacationManagementTurnState.completed_at.is_(None))
+        picks = db.session.query(StaffingVacationManagementSelection.staffing_person_id).filter(
+            StaffingVacationManagementSelection.staffing_person_id.in_(non_management_ids),
+            StaffingVacationManagementSelection.cancelled_at.is_(None),
+            StaffingVacationManagementSelection.week_ending >= today)
+        retained_management_ids = {row[0] for row in turns.union(picks).all()}
     for ref in vacation_touched_refs:
-        reconcile_management_person_state(ref_to_person[ref], today=today)
+        person = ref_to_person[ref]
+        if person.id not in non_management_ids or person.id in retained_management_ids:
+            reconcile_management_person_state(person, today=today)
     return {
         "people": changed_people,
         "unit_changes": len(workspace["units"]),
@@ -1538,7 +1581,9 @@ def _serializer():
 
 
 def _load_rows(query, lock):
-    return (query.with_for_update() if lock else query).all()
+    # The database lock does not refresh an object already in the identity map.
+    # Revision validation must use the committed values obtained under the lock.
+    return (query.populate_existing().with_for_update() if lock else query).all()
 
 
 def _person_ref(value):
