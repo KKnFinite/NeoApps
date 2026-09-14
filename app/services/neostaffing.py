@@ -1813,10 +1813,11 @@ def delete_unit(unit):
         db.session.expire(parent, ["children"])
 
 
-def assign_work_area(person, work_area, effective_date=None):
+def assign_work_area(person, work_area, effective_date=None, *, expected_version=assignment_service.TRUSTED_WRITE):
     _validate_work_assignment(person, work_area)
     parsed_effective_date = _parse_optional_date(effective_date)
     person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+    assignment_service.validate_expected_version(person, expected_version)
     rows = StaffingWorkAssignment.query.filter_by(person_id=person.id).populate_existing().all()
     assignment = assignment_service.assignment_for_target(person, work_area, rows)
     if assignment:
@@ -1830,8 +1831,9 @@ def assign_work_area(person, work_area, effective_date=None):
     return assignment
 
 
-def clear_work_assignment(person, work_area_id=None):
+def clear_work_assignment(person, work_area_id=None, *, expected_version=assignment_service.TRUSTED_WRITE):
     person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+    assignment_service.validate_expected_version(person, expected_version)
     rows = StaffingWorkAssignment.query.filter_by(person_id=person.id, active=True).populate_existing().all()
     if work_area_id:
         rows = [row for row in rows if row.work_area_unit_id == int(work_area_id)]
@@ -1844,7 +1846,7 @@ def clear_work_assignment(person, work_area_id=None):
     return None
 
 
-def bulk_update_work_area_assignments(person_ids, action, work_area=None):
+def bulk_update_work_area_assignments(person_ids, action, work_area=None, *, expected_versions=None):
     normalized_action = str(action or "").strip().lower()
     if normalized_action not in {"assign", "move", "clear"}:
         raise ValueError("Choose a valid bulk action.")
@@ -1878,6 +1880,10 @@ def bulk_update_work_area_assignments(person_ids, action, work_area=None):
         if normalized_action != "clear":
             _validate_work_assignment(person, work_area)
         eligible.append(person)
+
+    if expected_versions is not None:
+        for person in eligible:
+            assignment_service.validate_expected_version(person, expected_versions.get(str(person.id)))
 
     # Validate the complete selection before staging any changes. Preload only
     # selected eligible employees; no per-person lookups or flushes.

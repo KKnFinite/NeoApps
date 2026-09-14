@@ -2235,7 +2235,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         simulator_client = self._logged_in_client(simulator.username)
         updated = simulator_client.post(
             f"/neostaffing/people/{person.id}/assign-work-area",
-            data={"work_area_unit_id": str(second_work_area.id)},
+            data={"work_area_unit_id": str(second_work_area.id),
+                  "expected_assignment_version": staffing_service.assignment_service.version(person)},
             follow_redirects=False,
         )
 
@@ -2302,6 +2303,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "bulk_action": "move",
                 "work_area_unit_id": str(second_work_area.id),
                 "person_ids": [str(part_time.id), str(combo.id), str(supervisor.id)],
+                **{f"expected_assignment_version_{p.id}": staffing_service.assignment_service.version(p)
+                   for p in (part_time, combo)},
             },
             follow_redirects=True,
         )
@@ -2310,6 +2313,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             data={
                 "bulk_action": "clear",
                 "person_ids": [str(part_time.id), str(combo.id)],
+                **{f"expected_assignment_version_{p.id}": staffing_service.assignment_service.version(p)
+                   for p in (part_time, combo)},
             },
             follow_redirects=True,
         )

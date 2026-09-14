@@ -13,6 +13,7 @@ from app.extensions import db
 from app.models import StaffingPerson, StaffingShiftFlowPlan, StaffingUnit, StaffingWorkAssignment
 
 FT_COMBO = frozenset({"full_time_combo", "domiciled_full_time_combo", "non_domiciled_full_time_combo"})
+TRUSTED_WRITE = object()
 
 
 def sort_of(area, units=None):
@@ -62,6 +63,16 @@ def assignment_for_target(person, area, rows):
 
 def version(person):
     return str(person.shift_flow_version or 0)
+
+
+def validate_expected_version(person, expected):
+    """Interactive writers check the shared revision under the person lock.
+
+    Internal bootstrap/initialization callers may omit the expected revision;
+    HTTP handlers must pass the submitted value, including missing/blank input.
+    """
+    if expected is not TRUSTED_WRITE and str(expected or '').strip() != version(person):
+        raise ValueError('Work Assignment changed while you were editing. Reload and try again.')
 
 
 def _changed(obj, fields):

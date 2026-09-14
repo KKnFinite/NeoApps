@@ -1890,6 +1890,7 @@ def people_assign_work_area(person_id):
         staffing_service.assign_work_area(
             _get_person(person_id),
             _get_unit(request.form.get("work_area_unit_id")),
+            expected_version=request.form.get("expected_assignment_version"),
         )
         db.session.commit()
     except (ValueError, IntegrityError) as error:
@@ -1904,7 +1905,8 @@ def people_assign_work_area(person_id):
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def people_clear_work_area(person_id):
     try:
-        staffing_service.clear_work_assignment(_get_person(person_id), request.form.get("work_area_unit_id") or request.form.get("work_area_id"))
+        staffing_service.clear_work_assignment(_get_person(person_id), request.form.get("work_area_unit_id") or request.form.get("work_area_id"),
+            expected_version=request.form.get("expected_assignment_version"))
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
@@ -1928,6 +1930,8 @@ def people_bulk_work_area():
             request.form.getlist("person_ids"),
             action,
             work_area,
+            expected_versions={pid: request.form.get(f"expected_assignment_version_{pid}")
+                               for pid in request.form.getlist("person_ids")},
         )
         db.session.commit()
     except (ValueError, IntegrityError) as error:
@@ -2326,6 +2330,7 @@ def assign_work_area():
             _get_person(request.form.get("person_id")),
             _get_unit(request.form.get("work_area_unit_id")),
             request.form.get("effective_date"),
+            expected_version=request.form.get("expected_assignment_version"),
         ),
         "Work assignment updated.",
         "neostaffing.work_assignments",
@@ -2337,7 +2342,8 @@ def assign_work_area():
 def clear_work_assignment(person_id):
     person = _get_person(person_id)
     return _mutate(
-        lambda: staffing_service.clear_work_assignment(person, request.form.get("work_area_unit_id")),
+        lambda: staffing_service.clear_work_assignment(person, request.form.get("work_area_unit_id"),
+            expected_version=request.form.get("expected_assignment_version")),
         "Work assignment deactivated.",
         "neostaffing.work_assignments",
     )

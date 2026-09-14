@@ -89,3 +89,42 @@ class ShiftPostgresTest(fixtures.ShiftAuthorityTest):
         self.assertEqual(plan.sort_start_work_area_id, home.work_area_unit_id)
         self.assertEqual(home.work_area.name, 'West Ballmat' if plan.final_door_work_area_id == doors[0] else 'East Ballmat')
         self.assertIn(other_id, [a.work_area_unit_id for a in person.work_assignments])
+
+    def test_concurrent_single_and_bulk_assignment_versions(self):
+        from app.models import StaffingPerson, StaffingUnit
+        from app.services import neostaffing as staffing
+        for bulk in (False, True):
+            with self.subTest(bulk=bulk):
+                person = self.person('full_time_combo')
+                staffing.assign_work_area(person, self.other)
+                staffing.assign_work_area(person, self.areas['Door 6'])
+                db.session.commit()
+                pid, original = person.id, staffing.assignment_service.version(person)
+                other_id = self.other.id
+                targets = [self.areas[n].id for n in ('Door 9', 'Door 13')]
+                db.session.commit()
+                barrier = Barrier(2)
+                def move(area_id):
+                    with self.app.app_context():
+                        local = db.session.get(StaffingPerson, pid)
+                        area = db.session.get(StaffingUnit, area_id)
+                        barrier.wait(timeout=10)
+                        try:
+                            if bulk:
+                                staffing.bulk_update_work_area_assignments([pid], 'move', area,
+                                    expected_versions={str(pid):original})
+                            else:
+                                staffing.assign_work_area(local, area, expected_version=original)
+                            db.session.commit()
+                            return 'changed'
+                        except ValueError as error:
+                            db.session.rollback()
+                            self.assertIn('changed while', str(error))
+                            return 'conflict'
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    self.assertEqual(sorted(executor.map(move, targets)), ['changed','conflict'])
+                db.session.expire_all()
+                actual = {row.work_area_unit_id for row in person.work_assignments if row.active}
+                self.assertEqual(len(actual), 2)
+                self.assertIn(other_id, actual)
+                self.assertEqual(len(actual.intersection(targets)), 1)
