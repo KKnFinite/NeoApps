@@ -1,4 +1,4 @@
-/* Shared MOBILE navigation only. Desktop sidebars and NeoStaffing are separate. */
+/* Shared MOBILE navigation only. Desktop sidebars remain separate. */
 .neo-mobile-navigation { display:none; }
 @media (max-width:900px) {
     html.neo-drawer-scroll-locked { overflow:hidden; overscroll-behavior:none; }

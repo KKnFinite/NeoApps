@@ -27,6 +27,31 @@ class LiveUxTest(unittest.TestCase):
     attendance = fixtures.TimecardsTest.attendance
     command = fixtures.TimecardsTest.command
 
+    def test_shared_staffing_drawer_always_loads_style_and_behavior(self):
+        self.user.role = 'grandmaster'
+        db.session.add(PortalAppAccess(user_id=self.user.id, app_code='neostaffing', status='approved', role='master', is_active=True))
+        db.session.commit()
+        for path in ('', '/people', '/org-chart', '/reports', '/attendance', '/shift-flow', '/accountability', '/timecards', '/settings'):
+            with self.subTest(path=path):
+                response = self.client.get('/neostaffing' + path)
+                self.assertEqual(response.status_code, 200)
+                html = response.get_data(as_text=True)
+                self.assertIn('data-mobile-navigation', html)
+                self.assertIn('css/mobile_drawer.css', html.split('</head>')[0])
+                self.assertIn('js/mobile_drawer.js', html)
+        # The flag must exist before stylesheet evaluation, not just in body.
+        template = Path('app/templates/base.html').read_text()
+        self.assertLess(template.index('{% set uses_shared_mobile_drawer'), template.index('<head>'))
+        self.assertIn('{% if uses_shared_mobile_drawer or is_gateway_dock_page %}', template)
+
+    def test_people_mobile_control_theme_is_scoped_and_keeps_sheet_geometry(self):
+        css = Path('app/static/css/neostaffing_people_mobile.css').read_text()
+        self.assertTrue(css.index('@media (max-width: 980px)') < css.index('color-scheme:dark'))
+        for contract in ('background-color:#101e26', 'color:#dce6ec', 'appearance:none',
+                         'background-image:linear-gradient', ':focus-visible', 'min-height:44px',
+                         'height:100dvh', 'overflow-y:auto', 'safe-area-inset-bottom'):
+            self.assertIn(contract, css)
+
     def test_grandmaster_can_view_without_staffing_identity_but_not_write(self):
         self.user.role = "grandmaster"
         self.user.employee_id = None

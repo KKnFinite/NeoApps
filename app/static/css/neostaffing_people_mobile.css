@@ -1,5 +1,19 @@
 /* People only. Desktop retains its existing layout and drawers. */
 @media (max-width: 980px) {
+  .neostaffing-people-console :is(input:not([type=checkbox]):not([type=hidden]),select,textarea,button) {
+    color-scheme:dark; color:#dce6ec; background-color:#101e26;
+    border:1px solid #537783; border-radius:4px; min-height:44px;
+    padding:10px 12px; font:inherit;
+  }
+  .neostaffing-people-console :is(input,textarea)::placeholder { color:#a1b4c0; opacity:1; }
+  .neostaffing-people-console select {
+    appearance:none; -webkit-appearance:none; padding-right:32px;
+    background-image:linear-gradient(45deg,transparent 50%,#b9d9e0 50%),linear-gradient(135deg,#b9d9e0 50%,transparent 50%);
+    background-position:calc(100% - 17px) 50%,calc(100% - 12px) 50%;
+    background-size:5px 5px; background-repeat:no-repeat;
+  }
+  .neostaffing-people-console :is(input,select,textarea,button):focus-visible { outline:2px solid #8bd4df; outline-offset:2px; }
+  .neostaffing-people-console button:active { background-color:#19343f; border-color:#8bd4df; }
   body:has(.neostaffing-people-console) { overflow-x:visible; }
   .neostaffing-people-console { display:grid; grid-template-columns:minmax(0,1fr); width:100%; max-width:100%; margin:0; }
   .neostaffing-people-console * { box-sizing:border-box; }
