@@ -48,6 +48,9 @@
     text-transform: uppercase;
 }
 
+.neosektor-menu-link[href="/neosektor/manage-employees"],
+.motherbrain-desktop-side-link[href="/neosektor/manage-employees"] .operational-side-link-label { text-transform:none; }
+
 .neosektor-menu-link:hover,
 .neosektor-menu-link:focus-visible {
     border-color: rgba(255, 180, 150, 0.68);

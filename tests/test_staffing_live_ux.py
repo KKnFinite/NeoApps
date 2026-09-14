@@ -71,6 +71,12 @@ class LiveUxTest(unittest.TestCase):
         self.assertEqual(keys, ['ebm', 'wbm', 'tunnel', 'driver-routing', 'discharge', 'settings', 'live-counts', 'employees'])
         css = Path('app/static/css/neosektor_dashboard.css').read_text()
         self.assertNotIn('.sektor-command-tile--live-counts', css)
+        self.assertIn('<strong>Employees</strong>', html)
+        self.assertIn('.sektor-command-tile--employees .sektor-command-copy strong { text-transform:none; }', css)
+        theme = Path('app/static/css/neosektor_employees.css').read_text()
+        self.assertIn('#ef5361', theme)
+        for obsolete in ('#8bd4df', '#43616d', '#17323d', '#538a98'):
+            self.assertNotIn(obsolete, theme)
 
     def test_optional_phone_create_clear_bulk_and_null_template(self):
         values = dict(employee_id='Optional', first_name='Optional', last_name='Phone',

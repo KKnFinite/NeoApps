@@ -98,7 +98,7 @@ class _NeoSektorPage:
 # Internal navigation deliberately has its own order and Ballmat labels.
 NEOSEKTOR_PAGE_DEFINITIONS = (
     _NeoSektorPage(
-        label="EMPLOYEES", endpoint="neosektor.manage_employees",
+        label="Employees", endpoint="neosektor.manage_employees",
         view_permission=None, edit_permission=None,
         dashboard_key="employees", dashboard_description="",
         menu_order=7,

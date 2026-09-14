@@ -2,8 +2,9 @@
 {% from "_neo_brand.html" import neo_brand %}
 {% block title %}NeoApps{% endblock %}
 {% macro card_content(key, cue) %}
-    <img class="portal-launch-icon" src="{{ url_for('static', filename='images/icons/icon_' ~ key ~ '_small.png') }}"
-         srcset="{{ url_for('static', filename='images/icons/icon_' ~ key ~ '_small.png') }} 1x, {{ url_for('static', filename='images/icons/icon_' ~ key ~ '.png') }} 3x"
+    {% set icon = 'images/icons/neo' ~ key ~ '/inapp/neo' ~ key ~ '-inapp-' %}
+    <img class="portal-launch-icon" src="{{ url_for('static', filename=icon ~ '128.png', v=config.STATIC_ASSET_VERSION) }}"
+         srcset="{{ url_for('static', filename=icon ~ '128.png', v=config.STATIC_ASSET_VERSION) }} 1x, {{ url_for('static', filename=icon ~ '256.png', v=config.STATIC_ASSET_VERSION) }} 2x"
          width="80" height="80" alt="" decoding="async">
     <span class="portal-launch-copy">
         <span class="portal-app-name" role="heading" aria-level="2">{{ neo_brand('Gateway' if key == 'gateway' else 'Staffing', key) }}</span>

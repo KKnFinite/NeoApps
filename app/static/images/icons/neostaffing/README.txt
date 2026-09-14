@@ -1,17 +1,11 @@
-NeoStaffing locked icon pack
+neostaffing approved icon pack
 
-Source image:
-- source/neostaffing-icon-master-1024.png
+Source: source/neostaffing-icon-original.png (approved PNG, preserved byte-for-byte).
+Derived master: source/neostaffing-icon-master-1024.png.
+Rebuild: python scripts/replace_approved_node_icons.py neostaffing <approved-original.png>
 
-Recommended usage:
-- pwa/: install/home-screen icons
-- inapp/: in-app UI icons
-- favicon/: browser tab icons
-- manifest-icon-snippet.json: sample manifest entries
-
-Locked branding:
-- Neo font
-- NEO in white
-- STAFFING in NeoStaffing teal
-- simple single-person design
-- solid fills / no shading
+inapp/: canonical Portal, Nodes and launch icons.
+pwa/: install/home-screen and Apple-touch icons.
+favicon/: browser icons.
+Maskable: intact artwork centered in the established safe-area canvas.
+No dashboard/hero artwork is part of this pack.

@@ -31,6 +31,7 @@ body:has(.sektor-command) .shell > .content {
 }
 .sektor-command-copy { min-width: 0; }
 .sektor-command-copy strong { font: 300 clamp(15px, 1.3vw, 21px)/1.4 NeoFontLite, sans-serif; text-transform: uppercase; letter-spacing: .05em; }
+.sektor-command-tile--employees .sektor-command-copy strong { text-transform:none; }
 .sektor-command-icon { flex: 0 0 34px; color: #ec5360; }
 .sektor-command-icon svg { display: block; width: 34px; height: 34px; fill: currentColor; }
 .sektor-command-tile:hover { border-color: #ff6872; background: #292126ee; }
