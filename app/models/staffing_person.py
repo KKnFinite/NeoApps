@@ -57,6 +57,8 @@ class StaffingPerson(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    # PostgreSQL bootstrap also installs audited strip/lower expression uniqueness
+    # (neostaffing_employee_id_schema); create_all alone is not a schema upgrade.
     employee_id = db.Column(db.String(80), nullable=False, unique=True, index=True)
     first_name = db.Column(db.String(80), nullable=False)
     last_name = db.Column(db.String(80), nullable=False)

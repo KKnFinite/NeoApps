@@ -107,3 +107,7 @@ a disposable localhost `neostaffing_test_*` database. Each test uses a generated
 schema and drops only that schema. The harness rejects non-loopback/other database
 names. No schema/index change, polling, UI redesign or manual deployment is part
 of this patch.
+
+Follow-up: [normalized Employee ID integrity](2026-09-13-neostaffing-employee-id-integrity.md)
+adds database protection for trim/case-equivalent IDs. It does not narrow these
+Bulk Change locks or claim the remaining lock-boundary work is complete.

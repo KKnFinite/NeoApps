@@ -608,6 +608,9 @@ def sync_database_schema(app):
             )
             existing_columns.add(column_name)
 
+    from app.services.neostaffing_employee_id_schema import sync_staffing_employee_id_schema
+
+    sync_staffing_employee_id_schema()
     _sync_neoermac_legacy_defaults_postgres(inspector, table_names)
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_staffing_leadership_level_constraint_postgres(table_names)

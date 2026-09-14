@@ -10,6 +10,12 @@ from sqlalchemy.exc import SQLAlchemyError
 def safe_mutation_error(error, action):
     if not isinstance(error, SQLAlchemyError):
         return str(error)
+    original = getattr(error, "orig", None)
+    if (getattr(original, "pgcode", None) == "23505"
+            and getattr(getattr(original, "diag", None), "constraint_name", None)
+            in {"uq_staffing_people_employee_id_normalized",
+                "ix_staffing_people_employee_id", "staffing_people_employee_id_key"}):
+        return "Employee ID already exists."
     # No exception formatting/locals/SQL/parameters: SQLAlchemy exception text
     # commonly includes complete submitted records, even with exc_info=True.
     frames = traceback.extract_tb(error.__traceback__)
