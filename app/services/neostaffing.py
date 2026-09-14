@@ -3281,7 +3281,7 @@ def org_chart_context(selected_unit_id=None):
     }
 
 
-def management_org_chart_context(selected_person_id=None):
+def management_org_chart_context(selected_person_id=None, selected_unit_id=None):
     people = (
         StaffingPerson.query.filter(
             StaffingPerson.active.is_(True),
@@ -3519,9 +3519,48 @@ def management_org_chart_context(selected_person_id=None):
             "candidates": candidates,
         }
 
+    # Presentation-only projection of the same validated reporting relationships.
+    # Operational affiliation is navigation context, never an inferred manager.
+    try:
+        selected_unit = units_by_id.get(int(selected_unit_id))
+    except (TypeError, ValueError):
+        selected_unit = None
+    unit_ancestors = {}
+    for unit in units:
+        lineage = set()
+        cursor = unit
+        while cursor and cursor.id not in lineage:
+            lineage.add(cursor.id)
+            cursor = units_by_id.get(cursor.parent_id)
+        unit_ancestors[unit.id] = lineage
+    visible_people = [person for person in people if not selected_unit or any(
+        selected_unit.id in unit_ancestors.get(assignment.unit_id, set())
+        for assignment in assignments_by_person.get(person.id, ())
+    )]
+    manager_id = (
+        relationship_by_person[selected_person.id].reports_to_person_id
+        if selected_person and selected_person.id in relationship_by_person else None
+    )
+    peers = [people_by_id[pid] for pid in children_by_supervisor.get(manager_id, ())
+             if not selected_person or pid != selected_person.id]
+    path = []
+    cursor = selected_person
+    seen = set()
+    while cursor and cursor.id not in seen:
+        seen.add(cursor.id)
+        path.append(cursor)
+        relationship = relationship_by_person.get(cursor.id)
+        cursor = people_by_id.get(relationship.reports_to_person_id) if relationship else None
     return {
         "tree": tree,
         "unassigned_tree": unassigned_tree,
+        "navigator": [{"unit": unit, "path": unit_paths[unit.id]} for unit in units],
+        "selected_unit": selected_unit,
+        "visible_people": visible_people,
+        "peers": peers,
+        "direct_reports": [people_by_id[pid] for pid in children_by_supervisor.get(
+            selected_person.id if selected_person else None, ())],
+        "reporting_path": list(reversed(path)),
         "unassigned_count": len(unassigned_people),
         "selected_person": selected_person,
         "selected_detail": selected_detail,

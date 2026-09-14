@@ -1981,7 +1981,8 @@ def _render_org_chart():
             ),
             can_direct_edit=can_direct_edit,
             management=staffing_service.management_org_chart_context(
-                request.args.get("person_id", "").strip()
+                request.args.get("person_id", "").strip(),
+                request.args.get("unit_id", "").strip(),
             ),
             classification_labels=staffing_service.CLASSIFICATION_LABELS,
             employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,

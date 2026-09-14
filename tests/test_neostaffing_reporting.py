@@ -340,6 +340,41 @@ class NeoStaffingReportingTest(unittest.TestCase):
         self.assertEqual(context["unassigned_count"], 1500)
         self.assertLessEqual(select_count, 5)
 
+    def test_explorer_selection_scope_peers_directs_and_inactive_rules(self):
+        sort, operation, department, _area = self._hierarchy("Explorer")
+        leader = self._person("EXP-1", "division_manager")
+        manager = self._person("EXP-2", "manager")
+        peer = self._person("EXP-3", "manager")
+        direct = self._person("EXP-4", "full_time_supervisor")
+        inactive = self._person("EXP-5", "manager")
+        inactive.active = False
+        for person, unit in ((leader, sort), (manager, operation), (peer, operation), (direct, department)):
+            db.session.add(StaffingLeadershipAssignment(person=person, unit=unit, leadership_level=unit.unit_type))
+        for person, parent in ((manager, leader), (peer, leader), (direct, manager), (inactive, leader)):
+            db.session.add(StaffingReportingRelationship(person=person, reports_to_person=parent))
+        db.session.commit()
+        ids = lambda rows: [person.id for person in rows]
+        for selected in (manager, direct, leader, manager):
+            context = staffing_service.management_org_chart_context(selected.id, operation.id)
+            self.assertEqual(context["selected_person"].id, selected.id)
+            self.assertEqual(set(ids(context["visible_people"])), {manager.id, peer.id, direct.id})
+            self.assertNotIn(inactive.id, ids(context["peers"]))
+        context = staffing_service.management_org_chart_context(manager.id)
+        self.assertEqual(ids(context["peers"]), [peer.id])
+        self.assertEqual(ids(context["direct_reports"]), [direct.id])
+        self.assertEqual(ids(context["reporting_path"]), [leader.id, manager.id])
+        self.assertEqual(staffing_service.management_org_chart_context(direct.id)["direct_reports"], [])
+        self.assertIsNone(staffing_service.management_org_chart_context(leader.id)["selected_detail"]["reports_to_person"])
+        self.assertIsNone(staffing_service.management_org_chart_context(inactive.id)["selected_person"])
+        viewer = self._user("explorer_viewer", "watcher")
+        db.session.commit()
+        self._login(viewer.username)
+        response = self.client.get(f"/neostaffing/org-chart?view=management&person_id={manager.id}&unit_id={sort.id}")
+        self.assertEqual(response.status_code, 200)
+        for hook in (b'Hierarchy navigator', b'Reporting explorer', b'Selected reporting path', b'neostaffing_org_explorer.css', b'DIRECT REPORTS'):
+            self.assertIn(hook, response.data)
+        self.assertNotIn(b'SAVE REPORTS TO', response.data)
+
     def test_management_view_is_read_only_and_operational_view_remains_default(self):
         viewer = self._user("reporting_viewer", "watcher")
         self._person("R600", "division_manager")
