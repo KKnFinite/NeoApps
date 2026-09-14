@@ -28,6 +28,7 @@ from app.services.access_control import get_user_app_role
 from app.services import neostaffing as staffing_service
 from app.services import neostaffing_change_requests as change_request_service
 from app.services.permission_rules import user_can
+from app.services.neostaffing_write_authority import lock_staffing_write_authority
 
 
 BULK_CHANGE_PERMISSION = "neostaffing.bulk_change.use"
@@ -284,6 +285,21 @@ def apply_workspace(workspace, user):
     simulation = _simulate(workspace, bundle)
     if simulation["errors"]:
         raise ValueError(simulation["errors"][0])
+    authority_keys = [BULK_CHANGE_PERMISSION]
+    if workspace["people"]:
+        authority_keys.append(PEOPLE_EDIT_PERMISSION)
+    if (workspace["leadership_add"] or workspace["leadership_remove"]
+            or workspace["reporting"] or simulation["management_touched_refs"]):
+        authority_keys.append(MANAGEMENT_ASSIGN_PERMISSION)
+    if workspace["units"]:
+        authority_keys.append(ORG_CHART_EDIT_STRUCTURE_PERMISSION)
+    # The preliminary checks preserve existing error ordering, but cannot
+    # authorize a write: repeat the decision from fresh locked authority.
+    user = lock_staffing_write_authority(user, authority_keys)
+    _require_bulk_access(user)
+    actor = _actor_context(user, bundle)
+    if actor["is_pt_supervisor"] and not actor["is_grandmaster"]:
+        raise ValueError("PT Supervisors must submit supported employee changes for approval.")
     _validate_workspace_scope(workspace, simulation, actor, bundle)
     _validate_direct_authority(workspace, simulation, actor, user)
 
