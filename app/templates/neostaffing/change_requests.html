@@ -6,6 +6,7 @@
     <input type="hidden" name="view" value="{{ context.filters.view }}">
     <input type="hidden" name="queue" value="{{ context.filters.queue }}">
     <input type="hidden" name="search" value="{{ context.filters.search }}">
+    <input type="hidden" name="page" value="{{ context.filters.page }}">
     {% if include_person and context.filters.person_id %}<input type="hidden" name="person_id" value="{{ context.filters.person_id }}">{% endif %}
 {%- endmacro %}
 
@@ -44,6 +45,13 @@
                     <tr data-change-request-id="{{ row.request.id }}"><td><strong>{{ row.person.full_name }}</strong><span>{{ row.person.employee_id }} · #{{ row.request.id }}</span></td><td>{{ row.submitter.display_name if row.submitter else "Unknown user" }}</td><td>{{ row.fields|map(attribute='label')|join(', ') }}</td><td><span class="neostaffing-status-pill {{ status_class(row.request.status) }}{% if row.overdue %} is-red{% endif %}">{% if row.overdue %}OVERDUE{% elif row.request.status == 'pending' %}PENDING{% else %}{{ field_statuses|join(' / ')|upper }}{% endif %}</span></td><td><time datetime="{{ row.request.submitted_at.isoformat() }}">{{ row.request.submitted_at.strftime("%b %d · %H:%M") }}</time><span>{% if row.overdue %}Past 48h{% else %}{{ row.request.submitted_at.strftime("%Y") }}{% endif %}</span></td><td>{% if row.routed_people %}{{ row.routed_people|map(attribute='full_name')|join(', ') }}{% elif row.request.unassigned_approval %}UNASSIGNED{% else %}—{% endif %}</td><td><a class="neostaffing-requests-open" href="#change-request-{{ row.request.id }}" aria-label="Open request {{ row.request.id }} for {{ row.person.full_name }}">OPEN</a></td></tr>
                 {% else %}<tr class="neostaffing-requests-empty"><td colspan="7">NO REQUESTS MATCH THIS VIEW.</td></tr>{% endfor %}</tbody>
             </table></div>
+            {% if context.pagination.has_prev or context.pagination.has_next %}
+            <nav class="neostaffing-pagination" aria-label="Request pages">
+                {% if context.pagination.has_prev %}<a href="{{ url_for('neostaffing.change_requests', view=context.filters.view, queue=context.filters.queue, search=context.filters.search, person_id=context.filters.person_id, page=context.pagination.page - 1) }}">PREVIOUS</a>{% endif %}
+                <span>Page {{ context.pagination.page }}</span>
+                {% if context.pagination.has_next %}<a href="{{ url_for('neostaffing.change_requests', view=context.filters.view, queue=context.filters.queue, search=context.filters.search, person_id=context.filters.person_id, page=context.pagination.page + 1) }}">NEXT</a>{% endif %}
+            </nav>
+            {% endif %}
             {% for row in context.rows %}
             <aside class="neostaffing-requests-drawer" id="change-request-{{ row.request.id }}" aria-label="Request {{ row.request.id }} detail">
                 <div class="neostaffing-requests-drawer-head"><div><span>REQUEST #{{ row.request.id }}</span><h2>{{ row.person.full_name }}</h2><small>{{ row.person.employee_id }} · {{ row.request.submitted_at.strftime("%b %d, %Y %H:%M") }}</small></div><a href="#requests-roster" aria-label="Close request detail">CLOSE</a></div>

@@ -582,6 +582,7 @@ def change_requests():
         db.session.commit()
     context = change_request_service.change_request_context(
         {
+            "page": request.args.get("page", "1"),
             "view": request.args.get("view", "").strip(),
             "queue": request.args.get("queue", "").strip(),
             "search": request.args.get("search", "").strip(),
@@ -2724,7 +2725,7 @@ def _maintain_change_request_activity():
 def _change_requests_return_url():
     query = {
         key: request.form.get(key, "").strip()
-        for key in ("view", "queue", "search", "person_id")
+        for key in ("view", "queue", "search", "person_id", "page")
         if request.form.get(key, "").strip()
     }
     return url_for("neostaffing.change_requests", **query)

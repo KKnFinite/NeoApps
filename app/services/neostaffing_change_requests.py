@@ -3,7 +3,7 @@
 from datetime import date, datetime, timedelta
 import json
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, literal
 
 from app.extensions import db
 from app.models import (
@@ -65,6 +65,7 @@ APPROVER_CLASSIFICATIONS = {
     "manager",
     "division_manager",
 }
+REQUEST_PAGE_SIZE = 100
 REQUEST_HISTORY_DAYS = 14
 REQUEST_CLEANUP_BATCH_SIZE = 250
 REQUEST_LIFETIME_DAYS = 30
@@ -110,29 +111,38 @@ def change_request_context(filters, user):
         unit for unit in units if unit.active and unit.unit_type == "work_area"
     ]
 
-    people = StaffingPerson.query.order_by(
-        StaffingPerson.last_name,
-        StaffingPerson.first_name,
-        StaffingPerson.employee_id,
-        StaffingPerson.id,
-    ).all()
-    people_by_id = {person.id: person for person in people}
-    current_person = _person_for_user_from_rows(user, people)
+    identity = notification_service.notification_person(user)
+    current_person = identity
+    app_role = get_user_app_role(user, "neostaffing")
+    can_submit = bool(user_can(CHANGE_REQUEST_SUBMIT_PERMISSION, user)
+                      and _can_submit_with_context(user, app_role, current_person))
+    can_approve = bool(user_can(CHANGE_REQUEST_APPROVE_PERMISSION, user)
+                       and _can_approve_with_context(user, app_role, current_person))
+    default_scope = _default_queue_scope(current_person)
+    queue_scope = str(filters.get("queue") or default_scope).strip().lower()
+    if queue_scope not in {"routed", "purview", "unassigned", "all"}:
+        queue_scope = default_scope
+    search = str(filters.get("search") or "").strip().lower()
+    try:
+        page = max(1, int(filters.get("page") or 1))
+    except (TypeError, ValueError):
+        page = 1
 
-    work_assignments = StaffingWorkAssignment.query.filter_by(active=True).all()
-    assignments_by_person = {}
-    for assignment in work_assignments:
-        assignments_by_person.setdefault(assignment.person_id, []).append(assignment)
-    leadership_assignments = StaffingLeadershipAssignment.query.filter_by(
-        active=True
-    ).all()
-    leadership_by_person = {}
-    for assignment in leadership_assignments:
-        leadership_by_person.setdefault(assignment.person_id, []).append(assignment)
-    affiliations = StaffingTwentyCAffiliation.query.filter_by(active=True).all()
-    authority_unit_ids_by_person = _management_authority_unit_ids_from_rows(
-        leadership_by_person, affiliations
-    )
+    # Only the current manager's leadership union, including existing 20C
+    # affiliations, is needed. Do not load every manager's assignments.
+    leadership = []
+    if current_person:
+        linked = db.session.query(StaffingTwentyCAffiliation.ft_supervisor_person_id).filter(
+            StaffingTwentyCAffiliation.twenty_c_person_id == current_person.id,
+            StaffingTwentyCAffiliation.active.is_(True))
+        leadership = StaffingLeadershipAssignment.query.filter(
+            StaffingLeadershipAssignment.active.is_(True),
+            or_(StaffingLeadershipAssignment.person_id == current_person.id,
+                StaffingLeadershipAssignment.person_id.in_(linked))).all()
+    authority_ids = {row.unit_id for row in leadership}
+    owned_area_ids = {row.unit_id for row in leadership
+                      if current_person and row.person_id == current_person.id
+                      and row.leadership_level == "work_area"}
 
     requests_query = StaffingChangeRequest.query
     if view == "active":
@@ -153,14 +163,47 @@ def change_request_context(filters, user):
                 >= now - timedelta(days=REQUEST_HISTORY_DAYS),
             )
         )
-    requests = requests_query.order_by(
-        StaffingChangeRequest.submitted_at,
-        StaffingChangeRequest.id,
-    ).all()
+    # The existing badge counts unassigned pending requests across the view,
+    # before queue/search filtering. Keep that separate from page retrieval.
+    unassigned_count = requests_query.filter(
+        StaffingChangeRequest.unassigned_approval.is_(True),
+        StaffingChangeRequest.status == "pending").count()
+    if queue_scope == "unassigned":
+        requests_query = requests_query.filter(StaffingChangeRequest.unassigned_approval.is_(True))
+    elif queue_scope == "purview":
+        visible_units = {unit.id for unit in units
+                         if _unit_is_within(unit.id, authority_ids, units_by_id)}
+        requests_query = requests_query.filter(or_(
+            StaffingChangeRequest.source_work_area_unit_id.in_(visible_units),
+            StaffingChangeRequest.destination_work_area_unit_id.in_(visible_units)))
+    elif queue_scope == "routed" and not current_person:
+        requests_query = requests_query.filter(False)
+    requests, has_next = _request_page(requests_query, queue_scope, current_person, search, page)
+
+    related_ids = {row.person_id for row in requests}
+    related_ids.update(pid for row in requests for pid in _decode_person_ids(row.routed_approver_person_ids_json))
+    if current_person:
+        related_ids.add(current_person.id)
+    candidate_scope = literal(False)
+    if can_submit:
+        candidate_scope = StaffingPerson.active.is_(True) & StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS)
+        if not (_is_grandmaster(user, app_role) or ROLE_LEVELS.get(app_role, 0) >= ROLE_LEVELS["simulator"]):
+            candidate_scope = candidate_scope & StaffingPerson.id.in_(db.session.query(StaffingWorkAssignment.person_id).filter(
+                StaffingWorkAssignment.active.is_(True),
+                StaffingWorkAssignment.work_area_unit_id.in_(owned_area_ids)))
+    # Fetch only displayed request people and authorized submission candidates.
+    # The boolean projection avoids loading assignment rows to filter candidates.
+    people_rows = db.session.query(StaffingPerson, candidate_scope).filter(
+        or_(StaffingPerson.id.in_(related_ids), candidate_scope)).order_by(
+        StaffingPerson.last_name, StaffingPerson.first_name, StaffingPerson.employee_id,
+        StaffingPerson.id).all() if related_ids or can_submit else []
+    people_by_id = {person.id: person for person, _candidate in people_rows}
+    candidates = [person for person, candidate in people_rows if candidate]
+    current_person = people_by_id.get(identity.id) if identity else None
     request_ids = {row.id for row in requests}
     items = StaffingChangeRequestItem.query.filter(
         StaffingChangeRequestItem.request_id.in_(request_ids or {-1})
-    ).order_by(StaffingChangeRequestItem.id).all()
+    ).order_by(StaffingChangeRequestItem.id).all() if request_ids else []
     items_by_request = {}
     for item in items:
         items_by_request.setdefault(item.request_id, []).append(item)
@@ -170,23 +213,8 @@ def change_request_context(filters, user):
     } | {item.decided_by_user_id for item in items if item.decided_by_user_id}
     users_by_id = {
         row.id: row
-        for row in User.query.filter(User.id.in_(user_ids or {-1})).all()
+        for row in (User.query.filter(User.id.in_(user_ids)).all() if user_ids else [])
     }
-
-    app_role = get_user_app_role(user, "neostaffing")
-    can_submit = bool(
-        user_can(CHANGE_REQUEST_SUBMIT_PERMISSION, user)
-        and _can_submit_with_context(user, app_role, current_person)
-    )
-    can_approve = bool(
-        user_can(CHANGE_REQUEST_APPROVE_PERMISSION, user)
-        and _can_approve_with_context(user, app_role, current_person)
-    )
-    default_scope = _default_queue_scope(current_person)
-    queue_scope = str(filters.get("queue") or default_scope).strip().lower()
-    if queue_scope not in {"routed", "purview", "unassigned", "all"}:
-        queue_scope = default_scope
-    search = str(filters.get("search") or "").strip().lower()
 
     rows = []
     for change_request in requests:
@@ -196,19 +224,6 @@ def change_request_context(filters, user):
         routed_ids = _decode_person_ids(
             change_request.routed_approver_person_ids_json
         )
-        if not _request_matches_queue(
-            change_request,
-            queue_scope,
-            current_person,
-            routed_ids,
-            authority_unit_ids_by_person,
-            units_by_id,
-        ):
-            continue
-        if search and search not in (
-            f"{person.full_name} {person.employee_id} {change_request.id}"
-        ).lower():
-            continue
         overdue = bool(
             change_request.status == "pending"
             and change_request.submitted_at
@@ -285,14 +300,6 @@ def change_request_context(filters, user):
         )
     )
 
-    candidates = _submission_candidates(
-        people,
-        assignments_by_person,
-        leadership_by_person,
-        current_person,
-        app_role,
-        user,
-    ) if can_submit else []
     selected_person = None
     try:
         selected_person = people_by_id.get(int(filters.get("person_id") or 0))
@@ -301,7 +308,8 @@ def change_request_context(filters, user):
     if selected_person not in candidates:
         selected_person = candidates[0] if len(candidates) == 1 else None
     selected_assignment = (
-        _scoped_request_assignment(selected_person, assignments_by_person.get(selected_person.id, [])) if selected_person else None
+        _scoped_request_assignment(selected_person, StaffingWorkAssignment.query.filter_by(
+            person_id=selected_person.id, active=True).all()) if selected_person else None
     )
     selected_values = None
     if selected_person:
@@ -318,7 +326,9 @@ def change_request_context(filters, user):
 
     return {
         "rows": rows,
+        "pagination": {"page": page, "has_prev": page > 1, "has_next": has_next},
         "filters": {
+            "page": page,
             "view": view,
             "queue": queue_scope,
             "search": str(filters.get("search") or "").strip(),
@@ -343,11 +353,41 @@ def change_request_context(filters, user):
                 key=lambda value: CLASSIFICATION_LABELS[value],
             )
         ],
-        "unassigned_count": sum(
-            1 for row in requests if row.unassigned_approval and row.status == "pending"
-        ),
+        "unassigned_count": unassigned_count,
         "default_queue": default_scope,
     }
+
+
+def _request_page(query, queue, person, search, page):
+    """Bound detail hydration while retaining historical JSON/search semantics."""
+    query = query.join(StaffingPerson, StaffingPerson.id == StaffingChangeRequest.person_id).order_by(
+        (StaffingChangeRequest.status != "pending"),
+        StaffingChangeRequest.submitted_at, StaffingChangeRequest.id)
+    offset = (page - 1) * REQUEST_PAGE_SIZE
+    if not search and queue != "routed":
+        rows = query.limit(REQUEST_PAGE_SIZE + 1).offset(offset).all()
+        return rows[:REQUEST_PAGE_SIZE], len(rows) > REQUEST_PAGE_SIZE
+    if queue == "routed" and not person:
+        return [], False
+    # JSON can contain legacy encodings. Search uses Unicode lower/substring,
+    # not SQL LIKE wildcards. Do not approximate either with textual SQL matches.
+    ids, matched = [], 0
+    projection = query.with_entities(StaffingChangeRequest.id,
+        StaffingChangeRequest.routed_approver_person_ids_json,
+        StaffingPerson.first_name, StaffingPerson.last_name, StaffingPerson.employee_id)
+    for row in projection.yield_per(REQUEST_PAGE_SIZE):
+        if queue == "routed" and person.id not in _decode_person_ids(row.routed_approver_person_ids_json):
+            continue
+        full_name = f"{row.first_name} {row.last_name}".strip()
+        if search and search not in f"{full_name} {row.employee_id} {row.id}".lower():
+            continue
+        matched += 1
+        if matched > offset:
+            ids.append(row.id)
+        if len(ids) > REQUEST_PAGE_SIZE:
+            break
+    rows = query.filter(StaffingChangeRequest.id.in_(ids[:REQUEST_PAGE_SIZE])).all() if ids else []
+    return rows, len(ids) > REQUEST_PAGE_SIZE
 
 
 def submit_change_request(values, user):
