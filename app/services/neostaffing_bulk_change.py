@@ -6,6 +6,7 @@ import uuid
 
 from flask import current_app
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from sqlalchemy import select, union_all
 
 from app.extensions import db
 from app.models import (
@@ -74,30 +75,30 @@ ASSIGNMENT_UNIT_TYPES = {
 class BulkChangeDataBundle:
     """Bounded, request-local snapshot used for staging and final validation."""
 
-    def __init__(self, *, lock=False):
-        self.units = _load_rows(StaffingUnit.query.order_by(StaffingUnit.id), lock)
-        self.people = _load_rows(StaffingPerson.query.order_by(StaffingPerson.id), lock)
+    def __init__(self, *, lock=False, fresh=False):
+        self.units = _load_rows(StaffingUnit.query.order_by(StaffingUnit.id), lock, fresh)
+        self.people = _load_rows(StaffingPerson.query.order_by(StaffingPerson.id), lock, fresh)
         self.work_assignments = _load_rows(
             StaffingWorkAssignment.query.order_by(StaffingWorkAssignment.id),
-            lock,
+            lock, fresh,
         )
         self.leadership_assignments = _load_rows(
             StaffingLeadershipAssignment.query.order_by(
                 StaffingLeadershipAssignment.id
             ),
-            lock,
+            lock, fresh,
         )
         self.reporting_relationships = _load_rows(
             StaffingReportingRelationship.query.filter_by(active=True).order_by(
                 StaffingReportingRelationship.id
             ),
-            lock,
+            lock, fresh,
         )
         self.twenty_c_affiliations = _load_rows(
             StaffingTwentyCAffiliation.query.filter_by(active=True).order_by(
                 StaffingTwentyCAffiliation.id
             ),
-            lock,
+            lock, fresh,
         )
 
         self.units_by_id = {row.id: row for row in self.units}
@@ -275,9 +276,82 @@ def bulk_change_context(workspace, user, *, bundle=None):
     }
 
 
+def _lock_workspace_dependencies(workspace, simulation, bundle, user):
+    """Protect mutation subjects and dependencies, not the read-only UI snapshot.
+
+    This is a preliminary plan. Apply refreshes and compares the signed global
+    revision again after obtaining locks, before using the final simulation.
+    """
+    refs = set().union(*(simulation[key] for key in (
+        "person_field_touched_refs", "work_touched_refs", "leadership_touched_refs",
+        "relationship_touched_refs", "management_touched_refs")))
+    subtree = _descendant_ids({int(value) for value in workspace["units"]}, bundle)
+    people = {int(ref[2:]) for ref in refs if ref.startswith("p:")}
+    # Hierarchy mutations also run the canonical Home/assignment lifecycle.
+    people.update(row.person_id for row in bundle.work_assignments
+                  if row.active and row.work_area_unit_id in subtree)
+    people.update(row.person_id for row in bundle.leadership_assignments
+                  if row.active and row.unit_id in subtree)
+    dependencies = set()
+    actor = bundle.person_for_user(user)
+    if actor:
+        dependencies.add(actor.id)
+    dependencies.update(row.ft_supervisor_person_id for row in bundle.twenty_c_affiliations
+                        if actor and row.twenty_c_person_id == actor.id)
+    dependencies.update(row.reports_to_person_id for row in bundle.reporting_relationships
+                        if row.person_id in people)
+    for ref in refs:
+        target = simulation["states"][ref].get("reports_to_ref")
+        if target and target.startswith("p:"):
+            dependencies.add(int(target[2:]))
+    subjects = people | dependencies
+    units = set(subtree)
+    units.update(change["parent_id"] for change in workspace["units"].values())
+    units.update(row.work_area_unit_id for row in bundle.work_assignments
+                 if row.person_id in subjects and row.active)
+    units.update(row.unit_id for row in bundle.leadership_assignments
+                 if row.person_id in subjects and row.active)
+    units.update(state["work_area_unit_id"] for ref, state in simulation["states"].items()
+                 if ref in refs and state.get("work_area_unit_id") is not None)
+    units.update(row["unit_id"] for row in workspace["leadership_add"])
+    for unit_id in list(units):
+        unit, seen = bundle.units_by_id.get(unit_id), set()
+        while unit and unit.id not in seen:
+            seen.add(unit.id)
+            units.add(unit.id)
+            unit = bundle.units_by_id.get(unit.parent_id)
+
+    locks = []
+
+    def lock(model, column, ids, *, read=False):
+        if ids:
+            locked = select(model.id).where(column.in_(ids)).order_by(model.id).with_for_update(
+                read=read).cte()
+            locks.append(select(locked.c.id))
+
+    # SHARE permits unrelated packages to use the same actor/work-area paths.
+    # UPDATE on moved subtrees also blocks incoming FK references.
+    lock(StaffingUnit, StaffingUnit.id, subtree)
+    lock(StaffingUnit, StaffingUnit.id, units - subtree, read=True)
+    lock(StaffingPerson, StaffingPerson.id, people)
+    lock(StaffingPerson, StaffingPerson.id, dependencies - people, read=True)
+    lock(StaffingWorkAssignment, StaffingWorkAssignment.person_id, subjects)
+    # Include inactive rows so reactivation cannot bypass protected authority.
+    lock(StaffingLeadershipAssignment, StaffingLeadershipAssignment.person_id, subjects, read=True)
+    # A dormant leader in a moved unit must not reactivate into that unit after
+    # the final reporting/scope simulation. New rows are held by the unit FK.
+    lock(StaffingLeadershipAssignment, StaffingLeadershipAssignment.unit_id, subtree, read=True)
+    lock(StaffingReportingRelationship, StaffingReportingRelationship.person_id, people)
+    lock(StaffingTwentyCAffiliation, StaffingTwentyCAffiliation.twenty_c_person_id, subjects, read=True)
+    if locks:
+        # Consume every row-locking CTE in one bounded round trip. PostgreSQL
+        # forbids FOR UPDATE on a top-level UNION, hence the individual CTEs.
+        db.session.execute(union_all(*locks)).all()
+
+
 def apply_workspace(workspace, user):
     _require_bulk_access(user)
-    bundle = BulkChangeDataBundle(lock=True)
+    bundle = BulkChangeDataBundle(fresh=True)
     _require_current_revision(workspace, bundle)
     actor = _actor_context(user, bundle)
     if actor["is_pt_supervisor"] and not actor["is_grandmaster"]:
@@ -296,6 +370,12 @@ def apply_workspace(workspace, user):
     # The preliminary checks preserve existing error ordering, but cannot
     # authorize a write: repeat the decision from fresh locked authority.
     user = lock_staffing_write_authority(user, authority_keys)
+    _lock_workspace_dependencies(workspace, simulation, bundle, user)
+    bundle = BulkChangeDataBundle(fresh=True)
+    _require_current_revision(workspace, bundle)
+    simulation = _simulate(workspace, bundle)
+    if simulation["errors"]:
+        raise ValueError(simulation["errors"][0])
     _require_bulk_access(user)
     actor = _actor_context(user, bundle)
     if actor["is_pt_supervisor"] and not actor["is_grandmaster"]:
@@ -1596,10 +1676,12 @@ def _serializer():
     return URLSafeTimedSerializer(current_app.secret_key, salt=WORKSPACE_SALT)
 
 
-def _load_rows(query, lock):
+def _load_rows(query, lock, fresh=False):
     # The database lock does not refresh an object already in the identity map.
     # Revision validation must use the committed values obtained under the lock.
-    return (query.populate_existing().with_for_update() if lock else query).all()
+    if lock or fresh:
+        query = query.populate_existing()
+    return (query.with_for_update() if lock else query).all()
 
 
 def _person_ref(value):

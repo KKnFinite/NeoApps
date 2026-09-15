@@ -181,3 +181,117 @@ Final focused validation: **59 passed, 3 skipped, 16 subtests passed** across
 Bulk Change, SQL budgets, PostgreSQL final-authority/concurrency and normalized
 Employee ID suites. The skips are PostgreSQL-only cases in the SQLite cost
 fixture; their PostgreSQL counterparts ran. `compileall` and diff-check passed.
+
+## Narrow application and topology locks — 2026-09-14
+
+Base: `770c93397e67cc922e8883a900c9b9b93fe1bf53`. All measurements below use
+disposable PostgreSQL schemas, not production data. This section supersedes the
+earlier statement that the full workspace lock footprint remains unchanged.
+
+### Application boundary
+
+Apply first reads/simulates the workspace without locking it. The existing
+transaction-safe authority helper locks the actor's User/app access and required
+permission rules. A set-based dependency query then locks changed employees,
+their assignments, required reporting targets, actor Staffing identity and
+leadership/20C authority, and the source/target hierarchy paths. Moved subtrees
+include their dependent workers and leaders. Inactive leadership rows in a moved
+subtree are protected against reactivation after validation.
+
+Read-only hierarchy/authority dependencies use SHARE locks, permitting independent
+employee packages to use the same actor/work areas. Changed people/subtrees use
+UPDATE locks. All six snapshot collections are freshly loaded with
+`populate_existing()` after acquiring locks; the signed global revision is
+compared again and simulation/scope/permissions are revalidated before mutation.
+There is no cached-ORM substitute for that second validation. The route retains
+its single commit/rollback and existing assignment lifecycle snapshot.
+
+Real independent-connection `FOR UPDATE SKIP LOCKED` probes count locked rows,
+including SHARE locks. The previous full-bundle boundary is also executed in the
+fixture for direct comparison. These numbers exclude the unchanged actor User,
+app-access and PermissionRule locks documented above.
+
+| Package | People before → after | Assignments | Units | Leadership | Reporting |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2 Work Area changes | 119 → 3 | 112 → 2 | 7 → 7 | 7 → 1 | 6 → 0 |
+| 100 Work Area changes | 119 → 101 | 112 → 100 | 7 → 7 | 7 → 1 | 6 → 0 |
+| Move East Work Area subtree | 119 → 114 | 112 → 111 | 7 → 6 | 7 → 3 | 6 → 2 |
+
+The extra person for ordinary packages is the actor's Staffing identity. All
+seven units really are on the source/target/authority paths for the two-Operation
+fixture; unrelated hierarchy records are not selected. The larger hierarchy
+case legitimately contains 111 assigned workers, two supervisors and the actor.
+The worker in the other Work Area is no longer locked.
+
+### PostgreSQL topology backstop
+
+The prior `staffing_topology_validate()` locked every actively assigned person
+on any parent update, even without application locks. The explicit bootstrap now
+installs a BEFORE-row `staffing_topology_lock()` helper and replaces the existing
+AFTER-statement validator with a transition-table-scoped check:
+
+1. Lock the moved subtree's units FOR UPDATE. Re-read its closure after waits
+   until all current descendants are protected. Incoming unit/assignment foreign
+   keys cannot enter the protected subtree before commit.
+2. SHARE-lock and freshly resolve the new parent ancestry; enforce the existing
+   parent-type/cycle rules.
+3. Lock assignment rows in the subtree, including inactive rows (reactivation),
+   and its actively assigned people in ID order. The existing assignment trigger
+   serializes edits to other assignments of those same people.
+4. After the entire UPDATE statement, use old/new transition rows to identify
+   changed roots and validate **all active assignments of affected employees**
+   against final ancestry. This catches FT same-Sort conflicts without rejecting
+   a valid multi-row swap on an intermediate row. Unchanged-parent updates skip
+   the check. No global employee lock remains in the topology function.
+
+| Direct SQL hierarchy case | People before → after | Assignments | Units |
+| --- | ---: | ---: | ---: |
+| Isolated Work Area, one worker | 112 → 1 | 0 → 1 | 2 → 4 |
+| Operation with one FT Combo assigned there and in another Sort | 112 → 1 | 0 → 1 | 2 → 4 |
+
+The frozen old trigger is installed only in the disposable schema to measure
+baseline, with DDL committed before probing; the new definitions are then
+restored. Additional unit/assignment locks are necessary subtree/ancestry locks,
+not unrelated employee locks. A no-op parent update locks zero People and zero
+Assignments. Reparenting an FT branch into its other assigned Sort still raises
+PostgreSQL 23514 and rolls back.
+
+### Read/write tradeoff and scope
+
+Narrowing adds **seven fixed read statements**: one dependency-lock CTE statement
+and six fresh snapshot reads. Work Area Apply is 16 → 23 reads (22 SELECT + one
+WITH); FT no-op is 13 → 20; hourly status Apply is 14 → 21. The cost is identical
+for 2 and 100 employees. GET/Stage remains 15. Existing exact write budgets remain:
+two batched UPDATEs for changed assignments, one for hourly status, zero for an
+FT no-op, and no new INSERTs. The 1,500-person service budget still passes and now
+counts WITH statements too. Full read-only workspace hydration remains a known
+scaling limitation; it has not been disguised as a read optimization.
+
+No table, column, persisted version/cache, background task, polling or UI change.
+The existing explicit `sync_staffing_assignment_schema()` bootstrap installs the
+functions/triggers transactionally and idempotently; request GETs do not install
+them. SQLite behavior, normalized ID enforcement, final authorization and Home
+lifecycle remain unchanged. Render's existing pre-deploy bootstrap must complete
+before new workers start; no manual deployment or production verification was
+performed for this work.
+
+### Regression proof
+
+Focused tests cover exact small/large/application/topology lock counts; unrelated
+assignment writes committing while Bulk Apply is open; protected affected rows;
+a committed edit between preliminary read and locks rejecting the whole package;
+stale packages/two Bulk writers; authorization revocation/role/rule/session races;
+normalized ID races; FT multi-Sort persistence and canonical Home lifecycle;
+atomic rollback; repeat bootstrap; incoming assignment insertion and inactive-row
+reactivation; an assignment committed before a waiting reparent; other-Sort
+assignment validation after a waiting topology change; two concurrent hierarchy
+moves (one commit, one rejection); valid multi-row swaps; invalid parents and
+unchanged-parent no-op behavior.
+
+Validation: combined focused run **107 passed, 3 skipped, 16 subtests passed**
+(Bulk Change, cost, PostgreSQL locks/authorization/Employee ID/topology, Shift
+authority and database bootstrap). The three skips are PostgreSQL-only cases in
+the SQLite cost fixture; their PostgreSQL equivalents ran. Final PostgreSQL
+reruns passed **10/10 topology tests** and **7/7 narrow-Bulk tests**, including two
+additional guarded Home-reparent/atomic-failure cases. Existing deprecation
+warnings remain. `python -m compileall -q app` and `git diff --check` passed.

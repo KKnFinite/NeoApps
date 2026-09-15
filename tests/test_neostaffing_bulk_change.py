@@ -704,7 +704,7 @@ class NeoStaffingBulkChangeTest(unittest.TestCase):
 
         def count_selects(_connection, _cursor, statement, _parameters, _context, _many):
             nonlocal select_count
-            if statement.lstrip().upper().startswith("SELECT"):
+            if statement.lstrip().upper().startswith(("SELECT", "WITH")):
                 select_count += 1
 
         event.listen(db.engine, "before_cursor_execute", count_selects)

@@ -104,14 +104,72 @@ def install_assignment_guards(connection):
             name = f"{table}_validate"
             connection.execute(text(f"DROP TRIGGER IF EXISTS {name} ON {table}"))
             connection.execute(text(f"CREATE TRIGGER {name} AFTER {action} ON {table} FOR EACH ROW EXECUTE FUNCTION staffing_assignment_validate()"))
+        connection.execute(text("""CREATE OR REPLACE FUNCTION staffing_topology_lock() RETURNS trigger AS $$
+        DECLARE subtree_ids integer[]; parent_ids integer[];
+                locked_subtree integer[] := '{}'; locked_parents integer[] := '{}';
+                parent_type text;
+        BEGIN
+          -- Lock the subtree before changing its ancestry. UPDATE locks also
+          -- block incoming FK references; include inactive assignment rows so
+          -- reactivation cannot enter the validation gap.
+          LOOP
+            WITH RECURSIVE subtree(id) AS (
+              SELECT OLD.id UNION SELECT u.id FROM staffing_units u JOIN subtree s ON u.parent_id=s.id
+            ) SELECT array_agg(id ORDER BY id) INTO subtree_ids FROM subtree;
+            EXIT WHEN subtree_ids <@ locked_subtree;
+            PERFORM id FROM staffing_units WHERE id=ANY(subtree_ids) ORDER BY id FOR UPDATE;
+            locked_subtree := ARRAY(SELECT DISTINCT unnest(locked_subtree || subtree_ids));
+            -- A lock wait may have allowed a child to enter/leave the subtree.
+          END LOOP;
+          LOOP
+            WITH RECURSIVE parents(id,parent_id) AS (
+              SELECT id,parent_id FROM staffing_units WHERE id=NEW.parent_id
+              UNION SELECT u.id,u.parent_id FROM staffing_units u JOIN parents p ON u.id=p.parent_id
+            ) SELECT coalesce(array_agg(id ORDER BY id), '{}') INTO parent_ids FROM parents;
+            IF OLD.id=ANY(parent_ids) THEN
+              RAISE EXCEPTION 'A staffing unit cannot move under its descendants.' USING ERRCODE='23514';
+            END IF;
+            EXIT WHEN parent_ids <@ locked_parents;
+            PERFORM id FROM staffing_units WHERE id=ANY(parent_ids) ORDER BY id FOR SHARE;
+            locked_parents := ARRAY(SELECT DISTINCT unnest(locked_parents || parent_ids));
+          END LOOP;
+          SELECT unit_type INTO parent_type FROM staffing_units WHERE id=NEW.parent_id;
+          IF NOT coalesce((NEW.unit_type='operation' AND parent_type='sort')
+             OR (NEW.unit_type='department' AND parent_type='operation')
+             OR (NEW.unit_type='work_area' AND parent_type IN ('operation','department')), false) THEN
+            RAISE EXCEPTION 'Invalid staffing parent type.' USING ERRCODE='23514';
+          END IF;
+          PERFORM id FROM staffing_work_assignments WHERE work_area_unit_id=ANY(subtree_ids)
+            ORDER BY id FOR UPDATE;
+          PERFORM id FROM staffing_people WHERE id IN (
+            SELECT person_id FROM staffing_work_assignments WHERE active AND work_area_unit_id=ANY(subtree_ids)
+          ) ORDER BY id FOR UPDATE;
+          RETURN NEW;
+        END $$ LANGUAGE plpgsql"""))
+        connection.execute(text("DROP TRIGGER IF EXISTS staffing_topology_lock ON staffing_units"))
+        connection.execute(text("""CREATE TRIGGER staffing_topology_lock BEFORE UPDATE OF parent_id ON staffing_units
+          FOR EACH ROW WHEN (OLD.parent_id IS DISTINCT FROM NEW.parent_id)
+          EXECUTE FUNCTION staffing_topology_lock()"""))
+        affected = """w.person_id IN (
+          WITH RECURSIVE subtree(id) AS (
+            SELECT n.id FROM topology_new n JOIN topology_old o USING(id)
+              WHERE n.parent_id IS DISTINCT FROM o.parent_id
+            UNION SELECT u.id FROM staffing_units u JOIN subtree s ON u.parent_id=s.id
+          ) SELECT person_id FROM staffing_work_assignments
+            WHERE active AND work_area_unit_id IN (SELECT id FROM subtree)
+        )"""
+        topology_invalid = INVALID.replace("WHERE w.active", "WHERE w.active AND " + affected)
         connection.execute(text(f"""CREATE OR REPLACE FUNCTION staffing_topology_validate() RETURNS trigger AS $$
         BEGIN
-          PERFORM id FROM staffing_people WHERE id IN (SELECT person_id FROM staffing_work_assignments WHERE active) ORDER BY id FOR UPDATE;
-          IF EXISTS ({INVALID}) THEN RAISE EXCEPTION 'Reparent would duplicate a Sort assignment.' USING ERRCODE='23514'; END IF;
+          IF NOT EXISTS (SELECT 1 FROM topology_new n JOIN topology_old o USING(id)
+            WHERE n.parent_id IS DISTINCT FROM o.parent_id) THEN RETURN NULL; END IF;
+          IF EXISTS ({topology_invalid}) THEN RAISE EXCEPTION 'Reparent would duplicate a Sort assignment.' USING ERRCODE='23514'; END IF;
           RETURN NULL;
         END $$ LANGUAGE plpgsql"""))
         connection.execute(text("DROP TRIGGER IF EXISTS staffing_topology_validate ON staffing_units"))
-        connection.execute(text("CREATE TRIGGER staffing_topology_validate AFTER UPDATE OF parent_id ON staffing_units FOR EACH STATEMENT EXECUTE FUNCTION staffing_topology_validate()"))
+        connection.execute(text("""CREATE TRIGGER staffing_topology_validate AFTER UPDATE ON staffing_units
+          REFERENCING OLD TABLE AS topology_old NEW TABLE AS topology_new
+          FOR EACH STATEMENT EXECUTE FUNCTION staffing_topology_validate()"""))
         connection.execute(text(f"""CREATE OR REPLACE FUNCTION staffing_flow_home_validate() RETURNS trigger AS $$
         BEGIN
           IF EXISTS (SELECT 1 FROM staffing_shift_flow_plans

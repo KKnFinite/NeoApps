@@ -97,7 +97,10 @@ class BulkChangeCostTest(unittest.TestCase):
             writes = [(statement.split(' SET ')[0], len(parameters) if many else 1)
                       for statement, parameters, many in sql if statement.startswith('UPDATE')]
             print('BULK', count, dict(counts), dict(hydrated), writes)
-            self.assertEqual(counts['SELECT'], 16)  # +2 net: fresh, locked final authority.
+            # Six fresh snapshot reads after one set-based dependency-lock CTE.
+            # Fixed overhead buys narrow locks; never per-employee query fanout.
+            self.assertEqual(counts['SELECT'], 22)
+            self.assertEqual(counts['WITH'], 1)
             self.assertEqual(counts['UPDATE'], 2)
             self.assertEqual(counts['INSERT'], 0)
             self.assertEqual(writes, [('UPDATE staffing_people', 2 if count == 2 else 98),
@@ -127,7 +130,8 @@ class BulkChangeCostTest(unittest.TestCase):
         print('NOOP', dict(Counter(s.split()[0] for s, _, _ in sql)),
               [s for s, _, _ in sql if s.startswith('UPDATE')])
         self.assertFalse(any(s.startswith('UPDATE') for s, _, _ in sql))
-        self.assertEqual(sum(s.startswith('SELECT') for s, _, _ in sql), 13)
+        self.assertEqual(sum(s.startswith('SELECT') for s, _, _ in sql), 19)
+        self.assertEqual(sum(s.startswith('WITH') for s, _, _ in sql), 1)
         db.session.remove()
         self.assertEqual(StaffingWorkAssignment.query.filter_by(person_id=pid, active=True).count(), 2)
 
@@ -140,7 +144,8 @@ class BulkChangeCostTest(unittest.TestCase):
             self.assertEqual(response.status_code, 302)
             counts = Counter(s.split()[0] for s, _, _ in sql)
             print('STATUS', count, dict(counts))
-            self.assertEqual(counts['SELECT'], 14)  # +2 authority; still no per-person fanout.
+            self.assertEqual(counts['SELECT'], 20)
+            self.assertEqual(counts['WITH'], 1)
             self.assertEqual(counts['UPDATE'], 1)
             db.session.remove()
             self.assertEqual(StaffingPerson.query.filter(
@@ -236,12 +241,14 @@ class BulkChangeCostTest(unittest.TestCase):
         workspace = self.workspace(self.employee_ids[:2])
         db.session.remove()
         self._service_call(service.apply_workspace, workspace, db.session.get(User, self.actor_id))
-        for pid in (self.employee_ids[0], self.employee_ids[-1]):
-            with db.engine.connect() as connection:
-                # Existing global workspace revision locks even a nonparticipant.
-                with self.assertRaises(OperationalError) as error:
-                    connection.execute(text('SELECT id FROM staffing_people WHERE id=:id FOR UPDATE NOWAIT'), {'id':pid})
-                self.assertEqual(error.exception.orig.pgcode, '55P03')
+        with db.engine.connect() as connection:
+            with self.assertRaises(OperationalError) as error:
+                connection.execute(text('SELECT id FROM staffing_people WHERE id=:id FOR UPDATE NOWAIT'),
+                                   {'id':self.employee_ids[0]})
+            self.assertEqual(error.exception.orig.pgcode, '55P03')
+        with db.engine.connect() as connection:
+            connection.execute(text('SELECT id FROM staffing_people WHERE id=:id FOR UPDATE NOWAIT'),
+                               {'id':self.employee_ids[-1]})
         db.session.rollback()
 
     def test_ft_move_preserves_other_sort_and_fresh_login(self):
