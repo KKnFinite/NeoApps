@@ -53,17 +53,29 @@ class NeoSektorLtuTest(unittest.TestCase):
                 self.assertEqual(state[0]['left'], expected)
                 self.assertEqual(state[0]['left_to_unload'], expected)
 
-    def test_every_numeric_second_wave_phase_uses_its_configured_modifier(self):
+    def test_only_active_second_wave_uses_its_configured_modifier(self):
         for active in (False, True):
             for modifier, expected in [(37, 53), (19, 35), (0, 22)]:
                 with self.subTest(active=active, modifier=modifier):
                     state = self.views(first_lta=0 if active else 10, first_down=active,
                         east=(0, 2), west=(0, 0), modifiers=(45, modifier))
-                    self.assertEqual(state[1]['left'], expected)
+                    self.assertEqual(state[1]['left'], expected if active else 22)
 
-    def test_inactive_second_wave_zero_counts_still_include_upstream_work(self):
+    def test_inactive_second_wave_zero_counts_exclude_upstream_modifier(self):
         state = self.views(first_lta=10, second_lta=0, east=(0, 0), west=(0, 0), openings=(0, 0))
-        self.assertEqual(state[1]['left'], 37)
+        self.assertEqual(state[1]['left'], 0)
+
+    def test_observed_second_wave_inactive_and_active(self):
+        for active, expected in [(False, 79), (True, 102)]:
+            state = self.views(first_lta=0 if active else 10, first_down=active,
+                second_lta=79, east=(0, 0), west=(0, 0), openings=(4, 10))
+            self.assertEqual(state[1]['left'], expected)
+
+    def test_early_second_wave_counts_include_waiting_but_do_not_activate_modifier(self):
+        for modifier in (37, 999):
+            state = self.views(first_lta=10, second_lta=79, east=(0, 6), west=(0, 13),
+                openings=(4, 10), modifiers=(45, modifier))
+            self.assertEqual(state[1]['left'], 84)
 
     def test_modifiers_do_not_prevent_all_up_or_change_pending_and_down(self):
         kwargs = dict(first_lta=0, second_lta=0, east=(3, 2), west=(2, 3),
@@ -73,7 +85,7 @@ class NeoSektorLtuTest(unittest.TestCase):
         self.assertEqual([w['left'] for w in self.views(**kwargs, first_down=True, second_down=True)], ['DOWN', 'DOWN'])
 
     def test_google_mirror_uses_corrected_canonical_numbers_and_keeps_labels(self):
-        self.assertEqual(_google_mirror_left_to_unload_values(self.views()), {'E2': 61, 'E3': 53})
+        self.assertEqual(_google_mirror_left_to_unload_values(self.views()), {'E2': 61, 'E3': 22})
         state = self.views(first_lta=0, second_lta=0, east=(0, 0), west=(0, 0), modifiers=(999, 999))
         self.assertEqual(_google_mirror_left_to_unload_values(state), {'E2': 'ALL UP', 'E3': 'PENDING'})
 

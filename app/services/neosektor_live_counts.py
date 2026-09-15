@@ -2081,7 +2081,7 @@ def _wave_views(
             second_west_wave_count,
             east_open_bays,
             west_open_bays,
-            _settings_second_modifier(operational_settings),
+            _settings_second_modifier(operational_settings) if second_is_active else 0,
         )
 
     return [
@@ -2117,11 +2117,12 @@ def _numeric_wave_left_to_unload(
     west_open_bays,
     modifier,
 ):
-    """Every numeric LTU includes upstream work, less genuinely spare openings.
+    """Calculate LTU with the lifecycle-selected modifier and spare openings.
 
     Same-side back-row ULDs consume openings first: an opening cannot both
     absorb waiting work and reduce the configured modifier. Lifecycle labels
-    are selected separately by _wave_views, without using this numeric result.
+    and modifier eligibility are selected by _wave_views, without using this
+    numeric result. Pre-active numeric waves pass a zero modifier.
     """
     east_waiting = _side_wave_waiting(east_back_row, east_open_bays)
     west_waiting = _side_wave_waiting(west_back_row, west_open_bays)

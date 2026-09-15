@@ -111,6 +111,17 @@ class DischargeControlsTest(unittest.TestCase):
                 other = live.driver_routing_state_payload(self.gateway, day, 'night', initialize=False)
             self.assertEqual(other['routing']['bay_priority_order'], order)
 
+    def test_not_arrived_second_wave_ltu_excludes_modifier_with_early_counts(self):
+        self.post('wave', {'wave': 'second', 'value': 79})
+        self.post('ballmat', {'side': 'east', 'open_bays': 4})
+        self.post('ballmat', {'side': 'west', 'open_bays': 10})
+        for early, expected in [(0, 79), (6, 81)]:
+            self.post('ballmat', {'side': 'east', 'waves': {'second': {'count': early}}})
+            state = self.state()['state']
+            self.assertEqual(state['routing']['routes']['second']['display_state'], 'not_arrived')
+            self.assertEqual(state['waves'][1]['left_to_unload'], expected)
+            self.assertFalse(state['routing']['cut_discharge'])
+
     def test_back_pickup_validation_local_scope_clear_and_repeated_refresh(self):
         before = self.stored()
         self.post('ballmat', {'side': 'east', 'back_pickups': {'Bay 1': True}}, 400)

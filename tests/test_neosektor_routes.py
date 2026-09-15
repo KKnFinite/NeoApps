@@ -4556,7 +4556,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     with self.subTest(sparse=sparse, scope=scope, elapsed=elapsed):
                         now = started + elapsed
                         expected = revision._digest({
-                            "ltu_formula": "spare-openings-v2",
+                            "ltu_formula": "active-wave-spare-openings-v3",
                             "gateway_id": self.gateway.id, "scope": scope,
                             "sort_date": date.today().isoformat(), "sort_name": "night",
                             "mode": "neo_only", "google_values": None,
