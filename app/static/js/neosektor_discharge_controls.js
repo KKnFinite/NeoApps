@@ -31,7 +31,11 @@ window.NeoSektorDischargeControls = {
                 if (statusLabel) statusLabel.textContent = labels[Number(status.value)];
                 const back = root.querySelector(`[data-discharge-back="${bay.bay_name}"]`);
                 if (back && !pending.has(bay.bay_name)) back.checked = Boolean(bay.back_pickup);
-                if (back) back.disabled = !canEdit || bay.status !== 'Overflowing' || pending.has(bay.bay_name);
+                if (back) {
+                    const control = back.closest('[data-back-pickup-control]');
+                    if (control) control.hidden = bay.status !== 'Overflowing';
+                    back.disabled = !canEdit || bay.status !== 'Overflowing' || pending.has(bay.bay_name);
+                }
             }
         };
         const save = async (key, command) => {

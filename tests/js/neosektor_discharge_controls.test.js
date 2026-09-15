@@ -16,6 +16,8 @@ function harness(canEdit=true) {
     };
     const cut=node({dischargeCut:''});
     const back=node({dischargeBack:'Bay 1',side:'east'});
+    back.control={hidden:false};
+    back.closest=s=>s==='[data-back-pickup-control]'?back.control:null;
     const slider=node({dischargeStatus:'Bay 1',side:'east'});
     const statusLabel={textContent:'Overflowing'};
     slider.closest=s=>s==='[data-tunnel-bay]'?{querySelector:()=>statusLabel}:null;
@@ -106,4 +108,30 @@ test('view-only controls cannot submit or reorder',()=>{
     h.cut.checked=true;h.listeners.change({target:h.cut});
     h.orderListeners.keydown({target:h.orderHost.children[0],key:'ArrowRight',preventDefault(){}});
     assert.equal(h.calls.length,0);assert.equal(h.cut.disabled,true);assert.equal(h.back.disabled,true);
+});
+
+test('Back Pickup hides for every ineligible status and toggles on/off when Overflowing',async()=>{
+    const h=harness();
+    const state=(status,enabled=false)=>({...h.state,sides:{east:{bays:[
+        {bay_name:'Bay 1',status,back_pickup:enabled}]},west:{bays:[]}}});
+    for(const status of ['Empty','Light','Moderate','Full']) {
+        h.apply(state(status));
+        assert.equal(h.back.control.hidden,true);
+        assert.equal(h.back.disabled,true);
+        h.listeners.change({target:h.back});
+        assert.equal(h.calls.length,0);
+    }
+    h.apply(state('Overflowing'));
+    assert.equal(h.back.control.hidden,false);
+    for(const enabled of [true,false]) {
+        assert.equal(h.back.disabled,false);
+        h.back.checked=enabled; h.listeners.change({target:h.back});
+        assert.equal(h.calls.at(-1).back_pickups['Bay 1'],enabled);
+        await h.finish(state('Overflowing',enabled));
+        assert.equal(h.back.checked,enabled);
+        assert.equal(h.back.disabled,false);
+    }
+    h.apply(state('Full'));
+    assert.equal(h.back.control.hidden,true);
+    assert.equal(h.back.checked,false);
 });

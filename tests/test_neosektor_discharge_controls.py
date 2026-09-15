@@ -316,6 +316,44 @@ class DischargeControlsTest(unittest.TestCase):
         driver_css = Path('app/static/css/neosektor_driver_routing.css').read_text()
         self.assertIn('grid-auto-flow:column; grid-auto-columns:minmax(0,1fr)', driver_css)
 
+    def test_back_pickup_visibility_and_shared_toggle_without_card_arrows(self):
+        for side, name, page in [('east', 'Bay 1', 'ebm'), ('west', 'Bay 5', 'wbm')]:
+            for status in ['Empty', 'Light', 'Moderate', 'Full', 'Overflowing']:
+                self.post('ballmat', {'side': side, 'bay_statuses': {name: status}})
+                for surface in [page, 'tunnel-conductor']:
+                    dom = document(self.client.get('/neosektor/' + surface))
+                    controls = [label for label in dom.findall(**{'data-back-pickup-control': None})
+                                if any(input.attrs.get('data-bm-back', input.attrs.get('data-discharge-back')) == name
+                                       for input in label.findall('input'))]
+                    self.assertTrue(controls)
+                    for control in controls:
+                        self.assertEqual('hidden' in control.attrs, status != 'Overflowing')
+                        self.assertEqual('disabled' in control.one('input').attrs, status != 'Overflowing')
+            for enabled in [True, False, True]:
+                response = self.client.post('/neosektor/ballmat/update?operator=1&side=' + side,
+                    json={'side':side, 'back_pickups':{name:enabled}})
+                self.assertEqual(response.status_code, 200)
+                for url in ['/neosektor/tunnel-conductor/state', '/neosektor/ballmat/state?side=' + side]:
+                    bays = self.state(url)['state']['sides'][side]['bays']
+                    self.assertEqual(next(b for b in bays if b['bay_name'] == name)['back_pickup'], enabled)
+            for url in ['/neosektor/driver-routing', '/neosektor/driver-routing?tv=1']:
+                dom = document(self.client.get(url))
+                cards = dom.findall(**{'data-driver-priority-index':None})
+                self.assertTrue(any(c.attrs.get('data-pickup') == 'back' for c in cards))
+                for card in cards:
+                    self.assertNotIn('←', card.text)
+                    self.assertNotIn('→', card.text)
+            self.post('ballmat', {'side':side, 'back_pickups':{name:False}})
+            self.assertFalse(next(b for b in self.state()['state']['sides'][side]['bays'] if b['bay_name'] == name)['back_pickup'])
+            self.post('ballmat', {'side':side, 'back_pickups':{name:True}})
+            self.post('ballmat', {'side':side, 'bay_statuses':{name:'Full'}})
+            self.assertFalse(next(b for b in self.state()['state']['sides'][side]['bays'] if b['bay_name'] == name)['back_pickup'])
+        css = Path('app/static/css/neosektor_discharge_controls.css').read_text()
+        self.assertIn('.sektor-back-pickup[hidden], #ballmat-operator .bm-back-pickup[hidden] { display:none !important; }', css)
+        template = Path('app/templates/neonodes/neosektor/driver_routing.html').read_text()
+        self.assertNotIn('BACK ←', template)
+        self.assertIn('bay.pickup === "back" ? "BACK" : ""', template)
+
 
 if __name__ == '__main__':
     unittest.main()

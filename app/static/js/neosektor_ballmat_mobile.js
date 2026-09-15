@@ -58,6 +58,8 @@ window.NeoBallmatMobile = {
                 panel.querySelector(`[data-bm-bay-value="${bay.bay_name}"]`).textContent = status;
                 const back = panel.querySelector(`[data-bm-back="${bay.bay_name}"]`);
                 if (back) {
+                    const control = back.closest('[data-back-pickup-control]');
+                    if (control) control.hidden = status !== 'Overflowing';
                     back.disabled = !canEdit || status !== 'Overflowing';
                     back.checked = status === 'Overflowing' && (backs.get(bay.bay_name)?.enabled ?? bay.back_pickup);
                 }

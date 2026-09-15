@@ -12,6 +12,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
             setAttribute(k, v) { this.attrs[k] = v; },
             matches(s) { return this.closest(s) === this; },
             closest(s) {
+                if (s === '[data-back-pickup-control]') return this.control || null;
                 const key = s.slice(6, -1).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
                 return key in this.dataset ? this : null;
             }};
@@ -27,7 +28,7 @@ function harness({available = true, mode = 1, canEdit = true} = {}) {
         element({bmOther: key});
         for (const field of ['bmArrive', 'bmUnload', 'bmRoute']) element({[field]: key});
     }
-    ['Bay 1', 'Bay 2'].forEach(name => { element({bmBay: name}); element({bmBayValue: name}); element({bmBack:name}); });
+    ['Bay 1', 'Bay 2'].forEach(name => { element({bmBay: name}); element({bmBayValue: name}); element({bmBack:name}).control={hidden:false}; });
     const select = s => {
         if (s === 'button,input') return elements.filter(e => e.dataset.bmStep || e.dataset.bmMode || e.dataset.bmBay);
         const [, attr, value] = s.match(/^\[data-([\w-]+)(?:="([^"]+)")?\]$/);
@@ -93,8 +94,10 @@ test('Back Pickup shares canonical refresh, respects Overflowing, and never free
     const h=harness();
     const back=h.select('[data-bm-back="Bay 1"]')[0];
     assert.equal(back.disabled,true);
+    assert.equal(back.control.hidden,true);
     h.bay(4,'change'); await h.finish();
     assert.equal(back.disabled,false);
+    assert.equal(back.control.hidden,false);
     back.checked=true; h.listeners.change({target:back});
     h.unlocked(); h.click();
     assert.equal(h.calls.length,2); // status + in-flight Back Pickup; count queues normally.
@@ -102,8 +105,12 @@ test('Back Pickup shares canonical refresh, respects Overflowing, and never free
     assert.equal(back.checked,true); // Old poll cannot repaint the pending flag.
     await h.finish(); await h.finish();
     assert.equal(back.checked,true);
+    back.checked=false; h.listeners.change({target:back}); await h.finish();
+    assert.equal(back.checked,false);
+    assert.equal(h.server.sides.east.bays[0].back_pickup,false);
     h.bay(3,'input');
     assert.equal(back.checked,false); assert.equal(back.disabled,true);
+    assert.equal(back.control.hidden,true);
     h.bay(3,'change'); await h.finish();
     assert.equal(h.server.sides.east.bays[0].back_pickup,false);
     assert.equal(h.text('[data-bm-value="first:total"]'),1);
