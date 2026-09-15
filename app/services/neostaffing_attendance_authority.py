@@ -116,3 +116,37 @@ def inbound_attendance_areas(user, *, include_unscoped=False):
         if key:
             areas[key].append(unit.id)
     return authority, areas
+
+
+def node_attendance_authority(user, workspace, area=None):
+    """Node writes: linked active management AND existing operational edit permission.
+
+    Leadership and Reports To remain authoritative for central Staffing only.
+    Callers cannot supply an arbitrary work-area grant.
+    """
+    from app.services.access_control import get_current_gateway, user_can_access_node
+    from app.services.permission_rules import user_can
+    from app.services import neostaffing as staffing
+
+    if workspace not in {"sektor", "ermac"}:
+        raise ValueError("Invalid employee workspace.")
+    gateway = get_current_gateway()
+    authority = attendance_authority(user)
+    if not authority.person_id or not user_can_access_node(user, gateway.code, workspace):
+        return AttendanceAuthority()
+    if workspace == "sektor":
+        _, areas = inbound_attendance_areas(user, include_unscoped=True)
+        permissions = {"ebm": "neosektor.ebm.edit", "wbm": "neosektor.wbm.edit",
+                       "dis": "neosektor.discharge.edit"}
+        if area is not None and area not in permissions:
+            raise ValueError("Invalid attendance area.")
+        allowed = {unit_id for key, permission in permissions.items()
+                   if (area is None or area == key) and user_can(permission, user)
+                   for unit_id in areas[key]}
+    else:
+        from app.services.neoermac_door_supervision import supervised_doors_for_user
+        from app.services.neoermac_building_lineup import get_outbound_door_options
+        doors = supervised_doors_for_user(user, gateway, get_outbound_door_options())
+        allowed = set(staffing.attendance_deep_link_work_area_ids(doors, allow_persistent_roster=True)) \
+            if user_can("neoermac.door_view.edit", user) else set()
+    return AttendanceAuthority(authority.person_id, frozenset(allowed))

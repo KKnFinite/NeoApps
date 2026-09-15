@@ -13,6 +13,16 @@ from app.services import neostaffing as staffing_service
 
 
 class ShiftFlowTest(unittest.TestCase):
+    def test_flow_map_phase_doors_follow_configured_order(self):
+        self._configure_final_composite()
+        board = staffing_service.shift_flow_context('sort_start')['flow_map']
+        for phase in board['phases']:
+            for side, config in board['configurations'].items():
+                expected = [door.id for door in config['doors']]
+                actual = [location['area'].id for location in phase['locations']
+                          if location['side'] == side and location['area'].id in expected]
+                self.assertEqual(actual, expected)
+
     def setUp(self):
         config = type("TestConfig", (), {"SECRET_KEY": "test", "TESTING": True,
             "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:", "SQLALCHEMY_TRACK_MODIFICATIONS": False})

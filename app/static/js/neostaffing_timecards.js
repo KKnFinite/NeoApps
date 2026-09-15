@@ -39,7 +39,7 @@
     controls.forEach(control => { control.disabled = true; });
     try {
       const token = document.querySelector('meta[name="csrf-token"]')?.content;
-      const response = await fetch('/neostaffing/timecards/save', {method:'POST', headers:{'Content-Type':'application/json', ...(token ? {'X-CSRFToken':token} : {})}, body:JSON.stringify({commands})});
+      const response = await fetch('/neostaffing/timecards/save', {method:'POST', headers:{'Content-Type':'application/json', ...(token ? {'X-CSRFToken':token} : {})}, body:JSON.stringify({commands, node_workspace:root.dataset.nodeWorkspace || null, node_area:root.dataset.nodeArea || null})});
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Save rejected. Reload before retrying.');
       window.location.reload();

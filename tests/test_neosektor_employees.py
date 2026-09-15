@@ -3,6 +3,7 @@ from datetime import date, datetime
 from html import unescape
 import re
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import event
 from werkzeug.datastructures import MultiDict
@@ -86,6 +87,41 @@ class SektorEmployeesTest(unittest.TestCase):
         self.assertEqual(self.client.post('/neosektor/manage-employees?area=ebm').status_code, 403)
         self.assertNotIn(b'data-node-dashboard-tile="employees"', self.client.get('/neosektor').data)
 
+    def test_node_autosave_without_leadership_scope_and_stale_rejection(self):
+        self.active_sort()
+        self.leadership.active = False
+        db.session.commit()
+        page = self.page(view='my')
+        self.assertIn(self.peer.full_name, page)
+        stale = self.form(self.peer, 'no_call')
+        headers = {'Accept': 'application/json'}
+        response = self.client.post('/neosektor/manage-employees?area=ebm',
+            data=self.form(self.peer, 'here'), headers=headers)
+        self.assertEqual(response.status_code, 200, response.json)
+        row_id = StaffingDailyAttendance.query.one().id
+        self.assertEqual(response.json['rows'][str(self.peer.id)]['status'], 'here')
+        conflict = self.client.post('/neosektor/manage-employees?area=ebm', data=stale, headers=headers)
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(StaffingDailyAttendance.query.one().status, 'here')
+        self.assertIn('value="here" selected', self.page())
+        data = self.form(self.peer, 'call_in')
+        data[f'original_{self.peer.id}'] = response.json['rows'][str(self.peer.id)]['original']
+        response = self.client.post('/neosektor/manage-employees?area=ebm', data=data, headers=headers)
+        self.assertEqual(response.status_code, 200, response.json)
+        db.session.expire_all()
+        self.assertEqual((StaffingDailyAttendance.query.one().id, StaffingDailyAttendance.query.one().status), (row_id, 'call_in'))
+
+    def test_node_edit_permission_required_without_tunnel_umbrella(self):
+        self.active_sort()
+        data = self.form(self.peer, 'here')
+        from app.services.permission_rules import user_can
+        def permissions(key, user=None):
+            return False if key == 'neosektor.ebm.edit' else user_can(key, user)
+        with patch('app.services.permission_rules.user_can', side_effect=permissions):
+            self.assertEqual(self.client.post('/neosektor/manage-employees?area=ebm', data=data).status_code, 403)
+            self.assertEqual(self.client.get('/neosektor/manage-employees?area=ebm&mode=times').status_code, 403)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+
     def test_classification_levels_union_inactive_and_no_reports_to_grant(self):
         for classification in ("part_time_supervisor", "full_time_supervisor", "twenty_c_full_time_supervisor", "full_time_specialist"):
             self.manager.classification = classification
@@ -125,7 +161,9 @@ class SektorEmployeesTest(unittest.TestCase):
                     self.assertNotIn(absent, html)
             my = self.page(view="my")
             self.assertIn(self.workers["ebm"].full_name, my)
-            self.assertNotIn(self.peer.full_name, my)
+            self.assertIn(self.peer.full_name, my)
+            self.assertNotIn('MY EMPLOYEES', my)
+            self.assertNotIn('ALL AREA', my)
             self.assertIn(self.peer.full_name, self.page())
         finally:
             event.remove(db.engine, "before_cursor_execute", capture)
@@ -182,10 +220,11 @@ class SektorEmployeesTest(unittest.TestCase):
     def test_authorized_management_does_not_need_staffing_app_role(self):
         self.active_sort()
         self.assertFalse(PortalAppAccess.query.filter_by(user_id=self.user.id, app_code="neostaffing").first())
-        self.assertIn('SAVE ATTENDANCE', self.page())
+        self.assertIn('data-attendance-autosave', self.page())
+        self.assertNotIn('SAVE ATTENDANCE', self.page())
         self.leadership.active = False
         db.session.commit()
-        self.assertEqual(self.client.get('/neosektor/manage-employees?area=ebm').status_code, 403)
+        self.assertEqual(self.client.get('/neosektor/manage-employees?area=ebm').status_code, 200)
 
     def test_roster_reads_do_not_scale_per_employee(self):
         def measure():

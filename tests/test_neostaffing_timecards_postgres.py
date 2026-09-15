@@ -66,6 +66,28 @@ class TimecardsPostgresTest(fixtures.TimecardsTest):
             self.assertEqual(sorted(pool.map(save, range(2))), ["conflict", "saved"])
         self.assertEqual(Segment.query.count(), 1)
 
+    def test_node_concurrent_same_slice_without_leadership(self):
+        row = self.attendance()
+        command, user_id = self.command(row), self.user.id
+        self.leadership.active = False
+        db.session.commit()
+        barrier = Barrier(2)
+        def save(_):
+            with self.app.test_request_context('/neosektor/manage-employees?area=ebm'):
+                actor = db.session.get(User, user_id)
+                barrier.wait(timeout=10)
+                try:
+                    tc.save_segments(actor, [command], as_of=date(2026,9,12),
+                                     node_workspace='sektor', node_area='ebm')
+                    db.session.commit()
+                    return 'saved'
+                except ValueError:
+                    db.session.rollback()
+                    return 'conflict'
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(sorted(pool.map(save, range(2))), ['conflict', 'saved'])
+        self.assertEqual(Segment.query.count(), 1)
+
     def test_concurrent_distinct_employees_both_persist(self):
         row, peer = self.attendance(), self.attendance(self.peer)
         commands = [self.command(row), self.command(peer)]

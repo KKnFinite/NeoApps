@@ -19,7 +19,7 @@ def decorate(rows):
     return rows
 
 
-def node_workspace(user, attendance, *, workspace, scope_label, back_url):
+def node_workspace(user, attendance, *, workspace, scope_label, back_url, node_area=None):
     weekly = request.args.get("period") == "week"
     try:
         day = date.fromisoformat(request.args.get("date") or str(
@@ -29,7 +29,8 @@ def node_workspace(user, attendance, *, workspace, scope_label, back_url):
     person_ids = None if weekly else {row["person"].id for row in attendance["here"]}
     # Canonical chronological pairing can cross midnight. Include only the
     # actual partner operation, not every adjacent-day slice of that employee.
-    rows = timecards.read_rows(user, timecards.week_start(day) if weekly else day, day, person_ids=person_ids)
+    rows = timecards.read_rows(user, timecards.week_start(day) if weekly else day, day, person_ids=person_ids,
+                              node_workspace=workspace, node_area=node_area)
     included = {item["slice"].id for item in rows}
     wanted = {(item["slice"].person_id, operation_id) for item in rows
               for operation_id in item.get("partner_operation_ids", ())}
@@ -42,9 +43,9 @@ def node_workspace(user, attendance, *, workspace, scope_label, back_url):
         if partners:
             rows.extend(timecards.read_rows(user, min(part.workday_date for part in partners),
                 max(part.workday_date for part in partners), person_ids=person_ids,
-                slice_ids=[part.id for part in partners]))
+                slice_ids=[part.id for part in partners], node_workspace=workspace, node_area=node_area))
     represented = {item["slice"].person_id for item in rows}
     missing = [] if weekly else [row for row in attendance["here"] if row["person"].id not in represented]
     return render_template("neostaffing/timecards_node.html", title="EMPLOYEES", rows=decorate(rows),
-        missing=missing, day=day, workspace=workspace, weekly=weekly,
+        missing=missing, day=day, workspace=workspace, weekly=weekly, node_area=node_area,
         scope_label="THIS WEEK — AUTHORIZED EMPLOYEES" if weekly else scope_label, back_url=back_url)

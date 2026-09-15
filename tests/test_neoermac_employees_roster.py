@@ -3,6 +3,7 @@ from datetime import date, datetime
 from html import unescape
 import re
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import event
 
@@ -83,6 +84,26 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self.assertNotIn(b'SAVE ATTENDANCE', page)
         self.assertEqual(self.client.get('/neostaffing/accountability').status_code, 200)
 
+    def test_node_autosave_and_times_without_leadership_require_door_edit(self):
+        StaffingLeadershipAssignment.query.filter_by(person_id=self.manager.id).update({'active':False})
+        db.session.commit()
+        page = self._get().decode()
+        original = unescape(re.search(fr'name="original_{self.here.id}" value="([^"]+)"', page).group(1))
+        data = {'sort_date_operation_id':self.operation.id, f'status_{self.here.id}':'here',
+                f'original_{self.here.id}':original}
+        response = self.client.post('/neoermac/door-view/manage-employees', data=data,
+                                    headers={'Accept':'application/json'})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual(StaffingDailyAttendance.query.one().status, 'here')
+        self.assertIn(b'value="here" selected', self._get())
+        self.assertEqual(self.client.get('/neoermac/door-view/manage-employees?mode=times').status_code, 200)
+        from app.services.permission_rules import user_can
+        with patch('app.services.permission_rules.user_can', side_effect=lambda key, user=None:
+                   False if key == 'neoermac.door_view.edit' else user_can(key, user)):
+            self.assertEqual(self.client.post('/neoermac/door-view/manage-employees', data=data).status_code, 403)
+            self.assertEqual(self.client.get('/neoermac/door-view/manage-employees?mode=times').status_code, 403)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 1)
+
     def _post(self, person, operation_id, status='here'):
         page = self.client.get('/neoermac/door-view/manage-employees').get_data(as_text=True)
         original = re.search(fr'name="original_{person.id}" value="([^"]+)"', page)
@@ -150,7 +171,8 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self.assertEqual(staffing.current_night_attendance_operation(self.gateway).id, current.id)
         html = self._get()
         self.assertIn(f'name="status_{self.here.id}"'.encode(), html)
-        self.assertIn(b'SAVE ATTENDANCE', html)
+        self.assertIn(b'data-attendance-autosave', html)
+        self.assertNotIn(b'SAVE ATTENDANCE', html)
         self._post(self.here, self.operation.id)  # Real prior operation, not current.
         self.assertEqual(StaffingDailyAttendance.query.count(), 0)
         self._post(self.here, current.id)

@@ -986,6 +986,10 @@ def _shift_flow_map(rows, areas):
             if members or shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
                 locations.append({"area": area, "side": side_by_area.get(area.id, "shared"), "rows": members,
                                   "count": len({row["person"].id for row in members})})
+        door_order = {door.id: index for config in configurations.values()
+                      for index, door in enumerate(config["doors"])}
+        locations.sort(key=lambda location: (location["area"].id in door_order,
+                                            door_order.get(location["area"].id, 0)))
         phases.append({"key": phase, "label": label, "locations": locations})
     return {"phases": phases, "configurations": configurations,
             "count": len({row["person"].id for row in rows})}
@@ -1236,7 +1240,7 @@ def operational_flow_shorthand(plan):
     return " → ".join(parts)
 
 
-def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False, home_only=False, reports_to_person_id=None):
+def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False, home_only=False, reports_to_person_id=None, home_ownership=False):
     """Read current attendance, or an explicitly opted-in persistent roster."""
     operation = current_night_attendance_operation()
     if not operation and not allow_roster_without_operation:
@@ -1328,7 +1332,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
             if record and record.work_area_unit_id is not None
             else assignment.work_area_unit_id
         )
-        if home_only or (not operation and assignment.work_area_unit_id in start_ids):
+        if home_only or home_ownership or (not operation and assignment.work_area_unit_id in start_ids):
             effective_area_id = assignment.work_area_unit_id
         row = {
             "person": person,
@@ -1366,7 +1370,23 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
     }
 
 
-def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False, home_only=False):
+def operational_attendance_saved_rows(values):
+    """Refresh signed originals for the submitted rows after a successful save."""
+    operation_id = int(values.get("sort_date_operation_id"))
+    person_ids = _submitted_attendance_person_ids(values)
+    records = {row.person_id: row for row in StaffingDailyAttendance.query.filter(
+        StaffingDailyAttendance.person_id.in_(person_ids),
+        StaffingDailyAttendance.sort_date_operation_id == operation_id).all()}
+    return {str(person_id): {
+        "status": records[person_id].status if person_id in records else "",
+        "original": _attendance_snapshot_serializer().dumps({
+            "person_id": person_id, "operation_id": operation_id,
+            "original": _attendance_original(records.get(person_id)),
+        }),
+    } for person_id in person_ids}
+
+
+def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids, *, form_submission=False, home_only=False, node_workspace=None, node_area=None):
     """Mutate only people whose effective attendance snapshot is in allowed areas."""
     submitted, gateway = _submitted_attendance_operation(values.get("sort_date_operation_id"), include_gateway=True)
     operation = current_night_attendance_operation(gateway) if gateway else None
@@ -1401,7 +1421,17 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
     )
     assignments_by_person = {assignment.person_id: assignment for assignment in assignments}
     from app.services.neostaffing_attendance_authority import require_attendance_assignments
-    require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
+    if node_workspace is None:
+        require_attendance_assignments(user, assignments_by_person, person_ids, hierarchy)
+    else:
+        from app.services.neostaffing_attendance_authority import node_attendance_authority
+        authority = node_attendance_authority(user, node_workspace, node_area)
+        if not authority.work_area_ids or any(
+            person_id not in assignments_by_person
+            or assignments_by_person[person_id].work_area_unit_id not in authority.work_area_ids
+            for person_id in person_ids
+        ):
+            raise ValueError("Active linked management and node edit permission for this area are required.")
     for person_id in person_ids:
         assignment = assignments_by_person.get(person_id)
         plan = getattr(getattr(assignment, "person", None), "shift_flow_plan", None)

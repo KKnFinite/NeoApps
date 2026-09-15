@@ -59,6 +59,32 @@ class TimecardsTest(unittest.TestCase):
         self.assertEqual(Segment.query.count(), 2)
         self.assertEqual(Edit.query.count(), 3)
 
+    def test_node_times_use_node_permission_not_leadership_and_reject_stale(self):
+        row = self.attendance()
+        self.leadership.active = False
+        db.session.commit()
+        command = self.command(row)
+        for period in ('day', 'week'):
+            response = self.client.get('/neosektor/manage-employees', query_string={
+                'area':'ebm', 'mode':'times', 'period':period})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(self.workers['ebm'].full_name.encode(), response.data)
+        payload = {'commands':[command], 'node_workspace':'sektor', 'node_area':'ebm'}
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 200)
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
+        self.assertEqual(Segment.query.count(), 1)
+        # A different operational area is not a grant over this employee.
+        payload['commands'] = [self.command(row)]
+        payload['node_area'] = 'wbm'
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
+        # Central Staffing retains its leadership contract.
+        with self.assertRaisesRegex(ValueError, 'leadership'):
+            tc.authorization(self.user)
+        self.manager.active = False
+        db.session.commit()
+        payload['node_area'] = 'ebm'
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
+
     def test_attendance_gating_retains_audit_and_stale_rejection(self):
         row = self.attendance()
         stale = self.command(row)

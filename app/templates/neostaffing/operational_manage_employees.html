@@ -14,11 +14,11 @@
         </div>
         {% if attendance.operation %}
         <div class="neostaffing-operational-summary" aria-label="Attendance summary">
-            <strong><span>{{ attendance.counts.on_payroll }}</span> On Payroll</strong>
-            <strong><span>{{ attendance.counts.working }}</span> Working</strong>
-            <strong><span>{{ attendance.counts.unmarked }}</span> Unmarked</strong>
+            <strong><span data-attendance-count="on_payroll">{{ attendance.counts.on_payroll }}</span> On Payroll</strong>
+            <strong><span data-attendance-count="working">{{ attendance.counts.working }}</span> Working</strong>
+            <strong><span data-attendance-count="unmarked">{{ attendance.counts.unmarked }}</span> Unmarked</strong>
             {% for key, label in [('called_in', 'Called In'), ('no_call', 'No Call'), ('scheduled_off', 'Scheduled Off'), ('anniversary_day', 'Anniversary Day'), ('vacation', 'Vacation'), ('opt_day', 'Opt Day'), ('disability', 'Disability'), ('work_comp', 'Work Comp'), ('funeral', 'Funeral'), ('jury', 'Jury'), ('fmla', 'FMLA'), ('military', 'Military'), ('personal_leave', 'Personal Leave'), ('cleared', 'Cleared')] %}
-                {% if attendance.counts[key] %}<span>{{ label }} <strong>{{ attendance.counts[key] }}</strong></span>{% endif %}
+                <span data-attendance-summary-item {% if not attendance.counts[key] %}hidden{% endif %}>{{ label }} <strong data-attendance-count="{{ key }}">{{ attendance.counts[key] }}</strong></span>
             {% endfor %}
         </div>
         {% endif %}
@@ -40,13 +40,6 @@
     </nav>
     {% endif %}
 
-    {% if roster_view %}
-    <nav class="neostaffing-operational-tabs" aria-label="Employee scope">
-        <a href="?area={{ roster_area }}&view=my" {% if roster_view == 'my' %}aria-current="page"{% endif %}>MY EMPLOYEES</a>
-        <a href="?area={{ roster_area }}&view=all" {% if roster_view == 'all' %}aria-current="page"{% endif %}>ALL AREA</a>
-    </nav>
-    {% endif %}
-
     {% if attendance.operation or attendance.roster_available %}
     {% if not attendance.operation %}
     <p class="neostaffing-operational-empty">Attendance available when the Night Sort is active.</p>
@@ -57,7 +50,7 @@
                 <h2 id="attendance-here-title">{{ 'ATTENDANCE HERE' if attendance.operation else 'EMPLOYEES' }}</h2>
                 <span>{{ attendance.here|length }} employees</span>
             </header>
-            {% if attendance.operation %}<form method="post">{% else %}<div>{% endif %}
+            {% if attendance.operation %}<form method="post" data-attendance-autosave>{% else %}<div>{% endif %}
                 {% if attendance.operation %}
                 <input type="hidden" name="sort_date_operation_id" value="{{ attendance.operation.id }}">
                 {% endif %}
@@ -92,7 +85,7 @@
                     </table>
                 </div>
                 {% if attendance.operation and can_edit_attendance %}
-                <footer><button type="submit">SAVE ATTENDANCE</button></footer>
+                <p role="status" aria-live="polite" data-attendance-save-status></p>
                 {% endif %}
             {% if attendance.operation %}</form>{% else %}</div>{% endif %}
         </section>
@@ -126,4 +119,5 @@
     <div class="neostaffing-operational-empty">No current Night Sort.</div>
     {% endif %}
 </section>
+<script src="{{ url_for('static', filename='js/neostaffing_node_attendance.js', v='20260915') }}" defer></script>
 {% endblock %}

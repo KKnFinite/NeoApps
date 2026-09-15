@@ -1,6 +1,6 @@
 <section class="shift-map" data-shift-map data-route-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}" aria-label="Shift operation flow map">
   <header class="shift-map-heading"><h2>SHIFT OPERATION</h2><span>{{ shift_flow.flow_map.count }} employees</span></header>
-  <div class="shift-map-sides"><strong>WEST <small>West Ballmat · D21 D24 D26 D29 D32 D34</small></strong><strong>EAST <small>East Ballmat · D1 D4 D6 D9 D13 D17</small></strong></div>
+  <div class="shift-map-sides">{% for side, config in shift_flow.flow_map.configurations.items() %}<strong>{{ side|upper }} <small>{{ config.ballmat.name if config.ballmat else '' }} · {% for door in config.doors %}{{ door.name|replace('Door ', 'D') }}{% if not loop.last %} {% endif %}{% endfor %}</small></strong>{% endfor %}</div>
   <svg class="shift-map-lines" aria-hidden="true" data-flow-lines></svg>
   {% for phase in shift_flow.flow_map.phases %}
   <section class="shift-map-phase" data-map-phase="{{ phase.key }}">

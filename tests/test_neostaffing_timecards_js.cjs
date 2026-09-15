@@ -6,12 +6,13 @@ async function mutation() {
   const events = {}, status = {}, controls = [{disabled:false}];
   const part = {querySelector: key => ({value:key === '[data-start]' ? '22:00' : '02:10'})};
   const row = {dataset:{timecardId:'3',version:'7'},querySelectorAll:()=>[part]};
-  const root = {addEventListener:(name, fn)=>events[name]=fn,
+  const root = {dataset:{nodeWorkspace:'sektor',nodeArea:'ebm'},addEventListener:(name, fn)=>events[name]=fn,
     querySelector:()=>status,querySelectorAll:()=>controls};
   let resolve, calls = 0, reloads = 0;
   const context = {document:{querySelector:key=>key === '[data-timecards]' ? root : {content:'csrf'}},
     window:{location:{reload:()=>reloads++}}, fetch:(_url, options)=>{
       calls++; const body = JSON.parse(options.body);
+      assert.equal(body.node_workspace,'sektor'); assert.equal(body.node_area,'ebm');
       assert.deepEqual(body.commands,[{id:3,version:7,segments:[{start:'22:00',end:'02:10'}]}]);
       return new Promise(done=>resolve=done);
     }};

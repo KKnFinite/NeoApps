@@ -2,7 +2,7 @@
 {% block title %}EMPLOYEES{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_timecards.css') }}?v=1">
-<section class="theme-{{ workspace }} neostaffing-operational-attendance neostaffing-operational-attendance--{{ workspace }} timecards" data-timecards>
+<section class="theme-{{ workspace }} neostaffing-operational-attendance neostaffing-operational-attendance--{{ workspace }} timecards" data-timecards data-node-workspace="{{ workspace }}" data-node-area="{{ node_area or '' }}">
   <header class="neostaffing-operational-head">
     <a href="{{ back_url }}">BACK</a><h1>EMPLOYEES</h1><p>{{ scope_label }}</p>
     <nav class="neostaffing-operational-tabs" aria-label="Employee mode">
@@ -28,5 +28,5 @@
   <p role="status" data-timecard-status></p>
   {% if rows %}<button type="button" data-save-times>SAVE CHANGED TIMES</button>{% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_timecards.js') }}?v=1" defer></script>
+<script src="{{ url_for('static', filename='js/neostaffing_timecards.js') }}?v=2" defer></script>
 {% endblock %}

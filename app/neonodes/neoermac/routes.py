@@ -1,4 +1,5 @@
 from flask import (
+    abort,
     current_app,
     flash,
     jsonify,
@@ -518,34 +519,40 @@ def manage_employees():
     area_ids = staffing_service.attendance_deep_link_work_area_ids(doors, allow_persistent_roster=True)
     if not area_ids and not doors and request.method == "GET":
         return redirect(url_for("neostaffing.attendance"))
-    from app.services.neostaffing_attendance_authority import attendance_authority
-    authority = attendance_authority(current_user)
+    from app.services.neostaffing_attendance_authority import node_attendance_authority
+    authority = node_attendance_authority(current_user, "ermac")
     can_edit = bool(set(area_ids) & authority.work_area_ids)
     if request.method == "GET" and request.args.get("mode") == "times":
         if not can_edit:
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
         context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
-            set(area_ids) & authority.work_area_ids, home_only=True, allow_roster_without_operation=True)
+            area_ids, home_only=True, allow_roster_without_operation=True)
         return node_workspace(current_user, context, workspace="ermac",
             scope_label=f"Selected Doors: {' · '.join(doors)}", back_url=url_for("neoermac.door_view"))
     if request.method == "POST":
         if not can_edit:
-            flash("Access denied.", "error")
+            abort(403)
         else:
             try:
                 saved = staffing_service.save_operational_manage_attendance(
-                    request.form, current_user, area_ids, form_submission=True
+                    request.form, current_user, area_ids, form_submission=True, home_only=True,
+                    node_workspace="ermac",
                 )
                 db.session.commit()
+                if request.accept_mimetypes.best == "application/json":
+                    return jsonify(ok=True, rows=staffing_service.operational_attendance_saved_rows(request.form),
+                        counts=staffing_service.operational_manage_employees_context(area_ids, home_only=True)['counts'])
                 flash(f"Attendance saved for {saved} people.", "success")
             except (ValueError, IntegrityError) as exc:
                 db.session.rollback()
+                if request.accept_mimetypes.best == "application/json":
+                    return jsonify(ok=False, error=safe_mutation_error(exc, "save attendance")), 409
                 flash(safe_mutation_error(exc, "save attendance"), "error")
         return redirect(url_for("neoermac.manage_employees"))
     context = staffing_service.operational_manage_employees_context(
         area_ids, later_final_area_ids=area_ids, scope_candidates=True,
-        allow_roster_without_operation=True,
+        allow_roster_without_operation=True, home_ownership=True,
     )
     for row in context["here"]:
         row["authorized"] = row["home_work_area_id"] in authority.work_area_ids

@@ -130,11 +130,15 @@ def sync_attendance(operation, statuses, assignments, user_id, *, as_of, units=N
         audit(row, user_id, None)
 
 
-def authorization(user, *, person_ids=None):
+def authorization(user, *, person_ids=None, node_workspace=None, node_area=None):
     """Bounded shared leadership + configured-Combo union, no role fallback."""
     from app.services import neostaffing as staffing
     hierarchy = staffing._daily_attendance_hierarchy()
-    authority = attendance_authority(user, hierarchy)
+    if node_workspace is None:
+        authority = attendance_authority(user, hierarchy)
+    else:
+        from app.services.neostaffing_attendance_authority import node_attendance_authority
+        authority = node_attendance_authority(user, node_workspace, node_area)
     if not authority.work_area_ids:
         raise ValueError("Active NeoStaffing management leadership scope is required.")
     scoped_people = select(StaffingWorkAssignment.person_id).where(
@@ -188,7 +192,7 @@ def parse_timestamp(value, zone):
         raise ValueError("Enter a valid timestamp; include its UTC offset during a daylight-saving transition.") from error
 
 
-def save_segments(user, commands, *, as_of):
+def save_segments(user, commands, *, as_of, node_workspace=None, node_area=None):
     """Atomic bulk edit; expected versions cover attendance changes too."""
     if not isinstance(commands, list) or not 1 <= len(commands) <= 100:
         raise ValueError("Save 1–100 changed timecards at a time.")
@@ -203,7 +207,7 @@ def save_segments(user, commands, *, as_of):
     people = {row.person_id for row in source}
     db.session.query(StaffingPerson.id).filter(StaffingPerson.id.in_(people)).order_by(
         StaffingPerson.id).with_for_update().all()
-    allowed = authorization(user, person_ids=people)
+    allowed = authorization(user, person_ids=people, node_workspace=node_workspace, node_area=node_area)
     weeks = {key: lock_week(key) for key in sorted({week_start(row.workday_date) for row in source})}
     rows = {row.id: row for row in Slice.query.filter(Slice.id.in_(ids)).populate_existing().all()}
     staged = []
@@ -261,11 +265,11 @@ def save_segments(user, commands, *, as_of):
     return len(changed_weeks)
 
 
-def read_rows(user, start, end, *, complete=False, person_ids=None, slice_ids=None):
+def read_rows(user, start, end, *, complete=False, person_ids=None, slice_ids=None, node_workspace=None, node_area=None):
     """One date-bounded projection plus one segment read, never per-row lookups."""
     if end < start or (end - start).days > (28 if slice_ids is not None else 6):
         raise ValueError("Choose one day or Sunday–Saturday week.")
-    allowed = None if complete else authorization(user, person_ids=person_ids)
+    allowed = None if complete else authorization(user, person_ids=person_ids, node_workspace=node_workspace, node_area=node_area)
     query = Slice.query.filter(Slice.workday_date.between(start, end))
     if person_ids is not None:
         query = query.filter(Slice.person_id.in_(person_ids))

@@ -6,25 +6,25 @@
     color: #e1e8ee;
     font-family: NeoFontPlain, sans-serif;
     background: #0c0d10;
-    padding: clamp(12px, 2vw, 24px);
+    padding: clamp(8px, 1vw, 16px);
     border: 0;
     border-radius: 0;
-    gap: 16px;
+    gap: 8px;
 }
 .neostaffing-operational-attendance--sektor .neostaffing-operational-head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
     border-bottom: 1px solid #493438;
-    padding-bottom: 12px;
+    padding-bottom: 6px;
 }
 .neostaffing-operational-attendance--sektor .neostaffing-operational-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 16px;
     font-size: .9rem;
-    width:100%; padding:10px 0; border-block:1px solid #493438;
+    width:100%; padding:4px 0; border-block:1px solid #493438;
 }
 .neostaffing-operational-attendance--sektor .neostaffing-operational-summary span {
     color: #ef5361;
@@ -34,12 +34,13 @@
     gap: 8px;
 }
 .neostaffing-operational-attendance--sektor .neostaffing-operational-tabs a,
+.neostaffing-operational-attendance--sektor .neostaffing-operational-tabs > strong,
 .neostaffing-operational-attendance--sektor .neostaffing-operational-back,
 .neostaffing-operational-attendance--sektor button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 16px;
+    padding: 6px 10px;
     color: #e1e8ee;
     background: #211317;
     border: 1px solid #8b3742;
@@ -118,6 +119,12 @@
         padding: 8px;
         font-size: .85rem;
     }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-tabs { gap:4px; flex-wrap:nowrap; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-tabs > :is(a,strong) { min-height:44px; flex:1 1 0; font-size:.75rem; padding:4px; text-align:center; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-heading :is(h1,p) { margin:2px 0; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-summary { font-size:.75rem; gap:4px 8px; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-table { table-layout:fixed; }
+    .neostaffing-operational-attendance--sektor .neostaffing-operational-table td { padding:5px 3px; overflow-wrap:anywhere; }
     .neostaffing-operational-attendance--sektor .neostaffing-operational-table-wrap {
         overflow:visible;
     }

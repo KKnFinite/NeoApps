@@ -159,7 +159,8 @@ def timecards_save():
         payload = request.get_json(silent=True) or {}
         if not isinstance(payload, dict):
             raise ValueError("Invalid timecard payload.")
-        save_segments(current_user, payload.get("commands"), as_of=current_gateway_local_datetime().date())
+        save_segments(current_user, payload.get("commands"), as_of=current_gateway_local_datetime().date(),
+                      node_workspace=payload.get("node_workspace"), node_area=payload.get("node_area"))
         db.session.commit()
     except (ValueError, TypeError, KeyError, IntegrityError) as error:
         db.session.rollback()

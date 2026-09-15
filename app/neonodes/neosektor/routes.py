@@ -869,33 +869,37 @@ def manage_employees():
         abort(403)
     area = requested
     area_ids = areas[area]
-    can_edit = bool(set(area_ids) & authority.work_area_ids)
-    roster_view = "all" if request.args.get("view") == "all" else "my"
+    from app.services.neostaffing_attendance_authority import node_attendance_authority
+    can_edit = bool(node_attendance_authority(current_user, "sektor", area).work_area_ids)
     if request.method == "GET" and request.args.get("mode") == "times":
         if not can_edit:
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
         context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
-            area_ids, home_only=True, allow_roster_without_operation=True,
-            reports_to_person_id=authority.person_id if roster_view == "my" else None)
+            area_ids, home_only=True, allow_roster_without_operation=True)
         return node_workspace(current_user, context, workspace="sektor",
-            scope_label=names[area], back_url=url_for("neosektor.manage_employees"))
+            scope_label=names[area], back_url=url_for("neosektor.manage_employees"), node_area=area)
     if request.method == "POST":
         if not can_edit:
             abort(403)
         try:
             saved = staffing_service.save_operational_manage_attendance(
-                request.form, current_user, area_ids, form_submission=True, home_only=True
+                request.form, current_user, area_ids, form_submission=True, home_only=True,
+                node_workspace="sektor", node_area=area,
             )
             db.session.commit()
+            if request.accept_mimetypes.best == "application/json":
+                return jsonify(ok=True, rows=staffing_service.operational_attendance_saved_rows(request.form),
+                    counts=staffing_service.operational_manage_employees_context(area_ids, home_only=True)['counts'])
             flash(f"Attendance saved for {saved} people.", "success")
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
+            if request.accept_mimetypes.best == "application/json":
+                return jsonify(ok=False, error=safe_mutation_error(exc, "save attendance")), 409
             flash(safe_mutation_error(exc, "save attendance"), "error")
-        return redirect(url_for("neosektor.manage_employees", area=area, view=roster_view))
+        return redirect(url_for("neosektor.manage_employees", area=area))
     context = staffing_service.operational_manage_employees_context(
         area_ids, home_only=True, allow_roster_without_operation=True,
-        reports_to_person_id=authority.person_id if roster_view == "my" else None,
     )
     tabs = tuple(
         {"key": key, "label": names[key], "selected": key == area}
@@ -910,8 +914,6 @@ def manage_employees():
         area_tabs=tabs,
         attendance_scope_label=names[area].upper(),
         attendance_workspace="sektor",
-        roster_view=roster_view,
-        roster_area=area,
         back_url=url_for("neosektor.manage_employees"),
     )
 
@@ -926,8 +928,12 @@ def _can_manage_employees(area=None):
 def _employee_attendance_scope():
     # Request-local presentation reuse only. The shared writer reauthorizes.
     if "sektor_attendance_scope" not in request.environ:
-        request.environ["sektor_attendance_scope"] = inbound_attendance_areas(
-            current_user, include_unscoped=current_user.role == "grandmaster")
+        authority, areas = inbound_attendance_areas(current_user, include_unscoped=True)
+        permissions = {"ebm": EBM_VIEW_PERMISSION, "wbm": WBM_VIEW_PERMISSION,
+                       "dis": "neosektor.discharge.view"}
+        request.environ["sektor_attendance_scope"] = (authority, {
+            key: ids if (authority.person_id or current_user.role == "grandmaster")
+            and user_can(permissions[key]) else [] for key, ids in areas.items()})
     return request.environ["sektor_attendance_scope"]
 
 
