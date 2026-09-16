@@ -132,7 +132,7 @@ class DischargeControlsTest(unittest.TestCase):
                 self.assertTrue(all(c['pickup'] == 'back' and not c['bay_name'] for c in cards))
                 dom = document(self.client.get('/neosektor/driver-routing'))
                 shown = [c for c in dom.findall(**{'data-driver-priority-index': None}) if 'hidden' not in c.attrs]
-                self.assertEqual([c.text.strip() for c in shown], ['← BACK PICKUP ' + s.upper() for s in selected])
+                self.assertEqual([c.text.strip() for c in shown], ['DISCHARGE ' + s.upper() for s in selected])
             before = self.stored()
             for _ in range(2):
                 for url in ['/neosektor/tunnel-conductor/state', '/neosektor/driver-routing/state']:
@@ -357,11 +357,26 @@ class DischargeControlsTest(unittest.TestCase):
             dom = document(self.client.get(url))
             cards = [c for c in dom.findall(**{'data-driver-priority-index': None}) if 'hidden' not in c.attrs]
             self.assertEqual(len(cards), 2)
-            self.assertEqual([c.text.strip() for c in cards], ['← BACK PICKUP EAST', '← BACK PICKUP WEST'])
+            self.assertEqual([c.text.strip() for c in cards], ['DISCHARGE EAST', 'DISCHARGE WEST'])
             self.assertTrue(all(c.attrs['data-pickup'] == 'back' for c in cards))
         self.cut(True, False)
         self.assertEqual(self.state()['state']['routing']['back_pickups'], {'east': True, 'west': True})
         self.assertEqual(len(self.cut(False, True)['routing']['bay_priority']), 2)
+
+    def test_driver_side_instructions_are_large_centered_without_bay_or_arrow(self):
+        for side in ['east', 'west']:
+            self.back(side, True)
+            dom = document(self.client.get('/neosektor/driver-routing'))
+            cards = [card for card in dom.findall(**{'data-driver-priority-index': None})
+                     if 'hidden' not in card.attrs]
+            expected = ['DISCHARGE EAST'] if side == 'east' else ['DISCHARGE EAST', 'DISCHARGE WEST']
+            self.assertEqual([card.text.strip() for card in cards], expected)
+            for card in cards:
+                self.assertEqual(card.attrs['data-pickup'], 'back')
+                self.assertEqual(card.one('strong', **{'data-driver-bay-name': None}).text, '')
+        css = Path('app/static/css/neosektor_driver_routing.css').read_text()
+        self.assertIn('white-space:normal; text-align:center; font-size:clamp(24px,3.2vw,48px)', css)
+        self.assertIn('background:#651120; border-color:#ef2138', css)
 
     def test_tunnel_reference_sections_and_hooks_with_or_without_notice(self):
         for active in (True, False):

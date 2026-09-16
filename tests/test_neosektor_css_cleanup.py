@@ -35,6 +35,13 @@ class NeoSektorCssCleanupTest(unittest.TestCase):
         self.assertIn('grid-template-rows:auto auto', rule('.tunnel-route-overrides'))
         self.assertIn('grid-template-columns:88px minmax(0,1fr)', rule('.tunnel-route-override'))
         self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', rule('.tunnel-settings-grid'))
+        for selector, width in [('.tunnel-route-overrides', 760), ('.tunnel-settings-grid', 560),
+                                ('.sektor-conductor-discharge', 640), ('.neosektor-driver-offset-control', 220)]:
+            self.assertIn(f'width:min(100%,{width}px)', rule(selector))
+        self.assertIn('grid-template-columns:minmax(0,1fr) auto', rule('.sektor-conductor-discharge'))
+        self.assertIn('[data-open-bays-value]) { font-size:24px; }', desktop)
+        self.assertIn('[data-metric=left_to_unload] { font-size:28px;', desktop)
+        self.assertIn('padding-block:6px', desktop)
         self.assertIn(':is(.tunnel-desktop-workspace,.tunnel-desktop-left,.tunnel-ballmat-wave-workspace) { display:contents; }', desktop)
         self.assertIn('height:auto; min-height:100vh; overflow:visible;', desktop)
         self.assertNotIn('side-nav', desktop)

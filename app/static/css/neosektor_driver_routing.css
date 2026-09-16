@@ -31,7 +31,7 @@
 .neosektor-driver-priority-card[data-pickup="back"] :is([data-driver-rank],[data-driver-bay-name],[data-driver-bay-status]),
 #sektor-tv .neosektor-driver-priority-card[data-pickup="back"] :is([data-driver-rank],[data-driver-bay-name],[data-driver-bay-status]) { display:none; }
 .neosektor-driver-priority-card[data-pickup="back"] { display:flex; align-items:center; justify-content:center; }
-.neosektor-driver-priority-card[data-pickup="back"] .driver-pickup { white-space:normal; text-align:center; }
+.neosektor-driver-priority-card[data-pickup="back"] .driver-pickup { white-space:normal; text-align:center; font-size:clamp(24px,3.2vw,48px); }
 .neosektor-driver-priority-card .driver-pickup { display:block; color:#f0f6fa; font:600 clamp(12px,1.8vw,24px)/1.1 var(--font-sans); letter-spacing:0; white-space:nowrap; }
 .driver-discharge-cut { grid-column:1 / -1; align-self:center; margin:auto; color:#f0f6fa; text-align:center; font:600 clamp(18px,3vw,44px)/1.3 var(--font-sans); }
 .driver-discharge-cut[hidden] { display:none; }

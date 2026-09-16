@@ -13,7 +13,7 @@ test('canonical side cards replace normal recommendations and clear stale bay la
     const context = {root:{querySelectorAll:()=>cards}};
     vm.runInNewContext(template.slice(start,end) + '\nthis.render = applyBayPriority;', context);
     const normal = [{pickup:'front',bay_name:'Bay 5',rank_label:'1ST',status:'Full'}];
-    const back = side => ({pickup:'back',bay_name:'',rank_label:'',status:'',label:'← BACK PICKUP '+side});
+    const back = side => ({pickup:'back',side:side.toLowerCase(),bay_name:'',rank_label:'',status:'',label:'← BACK PICKUP '+side});
     context.render(normal);
     assert.equal(cards[0].fields['[data-driver-bay-name]'].textContent, '5');
     for (const sides of [['EAST'], ['WEST'], ['EAST','WEST']]) {
@@ -23,7 +23,7 @@ test('canonical side cards replace normal recommendations and clear stale bay la
             assert.equal(cards[i].dataset.pickup,'back');
             assert.equal(cards[i].fields['[data-driver-bay-name]'].textContent,'');
             assert.equal(cards[i].fields['[data-driver-rank]'].textContent,'');
-            assert.equal(cards[i].fields['[data-driver-pickup]'].textContent,'← BACK PICKUP '+side);
+            assert.equal(cards[i].fields['[data-driver-pickup]'].textContent,'DISCHARGE '+side);
         });
     }
     context.render([]); // Cut Discharge's canonical empty priority list.
