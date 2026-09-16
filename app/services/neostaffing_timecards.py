@@ -238,7 +238,7 @@ def save_segments(user, commands, *, as_of, node_workspace=None, node_area=None)
                 end_day = start.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(zone)).date() if start else row.workday_date
                 end_value = f"{end_day}T{end_value}"
                 end = parse_timestamp(end_value, zone)
-                if start and end <= start:
+                if start and end < start:
                     end_value = f"{end_day + timedelta(days=1)}T{end_value.split('T')[1]}"
             parsed.append((start, parse_timestamp(end_value, zone)))
         parsed = [(start, end) for start, end in parsed if start or end]

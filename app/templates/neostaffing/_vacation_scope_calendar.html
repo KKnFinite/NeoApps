@@ -1,0 +1,21 @@
+{# Derived view of the selected canonical pool; no extra calendar state. #}
+<div class="vacation-scope-matrix" tabindex="0" aria-label="{{ row.area.name }} vacation weeks">
+  <table><thead><tr><th>Employee</th>{% for week in vacation.weeks %}<th>{{ week.week_ending.strftime('%b %d') }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for employee in row.person_rows %}<tr><th>{{ employee.person.full_name }}</th>
+      {% set selected_weeks = employee.selections|map(attribute='week_ending')|list %}
+      {% for week in vacation.weeks %}<td{% if week.week_ending in selected_weeks %} class="is-vacation"{% endif %}>{{ 'VAC' if week.week_ending in selected_weeks else '—' }}</td>{% endfor %}
+    </tr>{% endfor %}</tbody>
+  </table>
+</div>
+<div class="vacation-scope-months">
+  {% for month in range(1,13) %}
+  {% set month_start = vacation.weeks|selectattr('week_ending.month','equalto',month)|map(attribute='week_ending')|first %}
+  <details><summary>{{ month_start.strftime('%B') if month_start is defined else month }}</summary>
+    {% for week in row.week_rows if week.week.week_ending.month == month %}
+    <article><strong>Week ending {{ week.week.week_ending.strftime('%b %d') }}</strong><span>{{ week.used }} / {{ week.limit if week.limit is not none else 'Not configured' }}</span>
+      {% for employee in row.person_rows %}{% if week.week.week_ending in employee.selections|map(attribute='week_ending')|list %}<p>{{ employee.person.full_name }}</p>{% endif %}{% endfor %}
+    </article>
+    {% endfor %}
+  </details>
+  {% endfor %}
+</div>

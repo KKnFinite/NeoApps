@@ -1074,13 +1074,15 @@ def vacation_selection():
 @neostaffing_app_required(permission_key=VACATION_SELECTION_VIEW_PERMISSION)
 def vacation_management():
     vacation_year = _vacation_year_arg()
+    try:
+        vacation = vacation_service.management_vacation_context(
+            vacation_year, current_user, scoped=True, selected_area_id=request.args.get("area_id"))
+    except ValueError as exc:
+        abort(403, str(exc))
     return render_template(
         "neostaffing/vacation_management.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
-        vacation=vacation_service.management_vacation_context(
-            vacation_year,
-            current_user,
-        ),
+        vacation=vacation,
         vacation_years=_vacation_year_options(vacation_year),
     )
 

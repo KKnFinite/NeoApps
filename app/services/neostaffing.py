@@ -1240,9 +1240,19 @@ def operational_flow_shorthand(plan):
     return " → ".join(parts)
 
 
-def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False, home_only=False, reports_to_person_id=None, home_ownership=False):
+def operational_manage_employees_context(sort_start_area_ids, *, later_final_area_ids=(), scope_candidates=False, allow_roster_without_operation=False, home_only=False, reports_to_person_id=None, home_ownership=False, selected_operation_id=None, allow_completed=False):
     """Read current attendance, or an explicitly opted-in persistent roster."""
     operation = current_night_attendance_operation()
+    operation_choices = []
+    if allow_completed:
+        operation_choices = node_attendance_operations(current=operation)
+        if selected_operation_id:
+            operation = next((item for item in operation_choices if str(item.id) == str(selected_operation_id)), None)
+            if operation is None:
+                from werkzeug.exceptions import BadRequest
+                raise BadRequest("Choose an active or completed Night Sort in the current week.")
+        elif not operation:
+            operation = next(iter(operation_choices), None)
     if not operation and not allow_roster_without_operation:
         return {
             "operation": None,
@@ -1362,6 +1372,7 @@ def operational_manage_employees_context(sort_start_area_ids, *, later_final_are
     return {
         "operation": operation,
         "roster_available": True,
+        "operation_choices": operation_choices,
         "staffing_sort": staffing_sort,
         "here": here,
         "coming": coming,
@@ -1390,6 +1401,11 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
     """Mutate only people whose effective attendance snapshot is in allowed areas."""
     submitted, gateway = _submitted_attendance_operation(values.get("sort_date_operation_id"), include_gateway=True)
     operation = current_night_attendance_operation(gateway) if gateway else None
+    historical = bool(node_workspace and submitted and gateway and
+        (not operation or submitted.id != operation.id) and
+        any(item.id == submitted.id for item in node_attendance_operations(gateway, current=operation)))
+    if historical:
+        operation = submitted
     if not operation or not submitted or submitted.id != operation.id:
         raise ValueError("The selected Night Sort is no longer current. Reload Manage Employees.")
     allowed = _operational_area_id_set(allowed_sort_start_area_ids)
@@ -1402,8 +1418,12 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
     shift_area_ids = {
         unit.id for unit in hierarchy["units"] if _is_shift_work_area(unit, hierarchy["by_id"])
     }
-    existing = _locked_attendance_records(person_ids, operation, staffing_sort)
+    existing = _locked_attendance_records(person_ids, operation, staffing_sort, allow_finalized=historical)
     _validate_attendance_originals(existing, originals)
+    original_statuses = {person_id: record.status for person_id, record in existing.items()}
+    if historical and any(person_id not in existing and person_id in existing.timecards
+                          and existing.timecards[person_id].attendance_status for person_id in person_ids):
+        raise ValueError("This attendance detail was already purged before the correction window was introduced; it cannot be safely reconstructed.")
     assignments = (
         StaffingWorkAssignment.query.options(
             joinedload(StaffingWorkAssignment.person)
@@ -1510,6 +1530,34 @@ def save_operational_manage_attendance(values, user, allowed_sort_start_area_ids
     _sync_attendance_accountability(operation, saved_statuses, user_id, assignments_by_person,
                                    hierarchy=hierarchy, timecards=existing.timecards if saved_statuses else {})
     db.session.flush()
+    if historical and saved_statuses:
+        # Do not re-finalize from today's roster or change the original close
+        # timestamp. Only the worked count of each retained source scope changes.
+        from app.models import StaffingAttendanceSummary
+        deltas = {}
+        for person_id, status in saved_statuses.items():
+            delta = int(status == "here") - int(original_statuses.get(person_id) == "here")
+            record = existing.get(person_id)
+            if record:
+                scope_ids = (record.department_unit_id, record.operation_unit_id)
+            else:
+                department, operation_unit, _ = _daily_attendance_placement(
+                    assignments_by_person[person_id].work_area, hierarchy)
+                scope_ids = (getattr(department, "id", None), getattr(operation_unit, "id", None))
+            for scope_id in scope_ids:
+                if scope_id and delta:
+                    deltas[scope_id] = deltas.get(scope_id, 0) + delta
+        summaries = StaffingAttendanceSummary.query.filter(
+            StaffingAttendanceSummary.sort_date_operation_id == operation.id,
+        ).populate_existing().all()
+        for summary in summaries:
+            delta = deltas.get(summary.scope_unit_id, 0)
+            if delta:
+                summary.worked_count += delta
+                summary.updated_by_user_id = user_id
+        if not summaries:
+            from app.services.neostaffing_attendance_history import finalize_attendance_summaries
+            finalize_attendance_summaries(operation, user)
     return saved
 
 
@@ -4156,7 +4204,7 @@ class _AttendanceRecords(dict):
         self.timecards = timecards
 
 
-def _locked_attendance_records(person_ids, operation, staffing_sort):
+def _locked_attendance_records(person_ids, operation, staffing_sort, *, allow_finalized=False):
     if not person_ids:
         return {}
     # Stable ordered parents serialize competing inserts too. Both attendance
@@ -4169,7 +4217,7 @@ def _locked_attendance_records(person_ids, operation, staffing_sort):
     ).order_by(StaffingPerson.id).with_for_update().all()
     # This statement starts AFTER the operation lock was acquired. A scalar
     # checked in the lock-taking statement could retain a pre-wait MVCC snapshot.
-    if any(row[1] for row in parents):
+    if not allow_finalized and any(row[1] for row in parents):
         raise ValueError("This Sort attendance has been finalized. Reload Attendance.")
     from app.models.staffing_timecard import StaffingTimecardSlice
     from sqlalchemy import and_
@@ -4363,6 +4411,24 @@ def save_attendance(values, user, *, form_submission=False):
 def current_night_attendance_operation(gateway=None):
     """Resolve the existing current Night operation without generating one."""
     return current_attendance_operation(gateway, ATTENDANCE_OPERATION_SORT_NAME)
+
+
+def node_attendance_operations(gateway=None, *, current=None):
+    """Active Night first, then completed Nights in this local Sunday–Saturday week."""
+    from app.services.gateway_matrix import current_gateway_local_datetime, sort_lookup_window_for_operation
+    from app.services.neostaffing_timecards import week_start
+    gateway = gateway or _attendance_gateway()
+    if not gateway:
+        return []
+    now = current_gateway_local_datetime(gateway)
+    today = now.date()
+    completed = SortDateOperation.query.filter(
+        SortDateOperation.gateway_code == gateway.code,
+        func.lower(SortDateOperation.sort_name) == ATTENDANCE_OPERATION_SORT_NAME.lower(),
+        SortDateOperation.sort_date.between(week_start(today), today),
+    ).order_by(SortDateOperation.sort_date.desc(), SortDateOperation.id.desc()).all()
+    completed = [item for item in completed if sort_lookup_window_for_operation(item, gateway)[1] <= now]
+    return ([current] if current else []) + [item for item in completed if not current or item.id != current.id]
 
 
 def current_attendance_operation(gateway=None, sort_name=ATTENDANCE_OPERATION_SORT_NAME):

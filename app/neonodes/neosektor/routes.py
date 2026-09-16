@@ -876,7 +876,8 @@ def manage_employees():
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
         context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
-            area_ids, home_only=True, allow_roster_without_operation=True)
+            area_ids, home_only=True, allow_roster_without_operation=True,
+            allow_completed=True, selected_operation_id=request.args.get("operation_id"))
         return node_workspace(current_user, context, workspace="sektor",
             scope_label=names[area], back_url=url_for("neosektor.manage_employees"), node_area=area)
     if request.method == "POST":
@@ -890,7 +891,8 @@ def manage_employees():
             db.session.commit()
             if request.accept_mimetypes.best == "application/json":
                 return jsonify(ok=True, rows=staffing_service.operational_attendance_saved_rows(request.form),
-                    counts=staffing_service.operational_manage_employees_context(area_ids, home_only=True)['counts'])
+                    counts=staffing_service.operational_manage_employees_context(area_ids, home_only=True,
+                        allow_completed=True, selected_operation_id=request.form.get("sort_date_operation_id"))['counts'])
             flash(f"Attendance saved for {saved} people.", "success")
         except (ValueError, IntegrityError) as exc:
             db.session.rollback()
@@ -900,6 +902,7 @@ def manage_employees():
         return redirect(url_for("neosektor.manage_employees", area=area))
     context = staffing_service.operational_manage_employees_context(
         area_ids, home_only=True, allow_roster_without_operation=True,
+        allow_completed=True, selected_operation_id=request.args.get("operation_id"),
     )
     tabs = tuple(
         {"key": key, "label": names[key], "selected": key == area}

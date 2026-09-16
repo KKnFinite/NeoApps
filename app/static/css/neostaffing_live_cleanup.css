@@ -1,0 +1,39 @@
+/* Scoped operational polish; no overflow hiding or desktop map changes. */
+.vacation-scope-matrix { max-width:100%; overflow-x:auto; margin:12px 0; }
+.vacation-scope-matrix table { border-collapse:collapse; font-size:.75rem; }
+.vacation-scope-matrix :is(th,td) { padding:6px; white-space:nowrap; border:1px solid #354b56; text-align:center; }
+.vacation-scope-matrix th:first-child { position:sticky; left:0; background:#101e26; text-align:left; }
+.vacation-scope-matrix .is-vacation { background:#15424a; color:#baf9ff; }
+.vacation-scope-months { display:none; }
+.neostaffing-vacation-management-list,
+.neostaffing-vacation-management-row,
+.vacation-scope-matrix { min-width:0; }
+.neostaffing-vacation-context-nav :is(select,button) { background:#101e26; color:#dce6ec; border:1px solid #537783; padding:8px; border-radius:4px; }
+.blueprint-neostaffing .neostaffing-people-management-list { display:grid; grid-template-columns:minmax(0,1fr); }
+.blueprint-neostaffing .neostaffing-org-assignment { min-width:0; }
+.blueprint-neostaffing .neostaffing-org-assignment a { display:block; min-width:0; color:inherit; padding:8px 0; }
+.blueprint-neostaffing .neostaffing-org-assignment strong { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
+.neostaffing-vacation-context-nav label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
+.neostaffing-vacation-context-nav select { min-width:0; max-width:100%; }
+.neostaffing-vacation-console :is(input,select,button),
+.neostaffing-operational-attendance :is(input,select,button) { color-scheme:dark; font:inherit; }
+.neostaffing-operational-attendance .neostaffing-operational-tabs select { max-width:100%; min-height:44px; background:#101a21; color:#e1e3e9; border:1px solid currentColor; }
+@media(max-width:900px) {
+  .vacation-scope-matrix { display:none; }
+  .vacation-scope-months { display:grid; gap:8px; }
+  .vacation-scope-months summary { padding:12px; background:#101e26; color:#dce6ec; cursor:pointer; }
+  .vacation-scope-months article { padding:10px; border-bottom:1px solid #354b56; }
+  .vacation-scope-months article>span { display:block; }
+  .blueprint-neostaffing .page-content { padding-inline:6px; }
+  .blueprint-neostaffing :is(.neostaffing-people-console,.org-explorer,.org-explorer-operational) { padding-inline:0; gap:6px; }
+  .blueprint-neostaffing :is(.org-focus-canvas,.org-unit-canvas,.org-explorer-navigator,.neostaffing-org-drawer-section) { padding:8px; }
+  .neostaffing-operational-attendance .neostaffing-operational-tabs label { min-width:0; flex:1; }
+  .neostaffing-vacation-console :is(form,label,select,input) { min-width:0; max-width:100%; box-sizing:border-box; }
+  .neostaffing-vacation-console :is(select,input,button) { min-height:44px; background:#101e26; color:#dce6ec; border:1px solid #537783; }
+  .neostaffing-vacation-console :is(.neostaffing-vacation-management-list,.neostaffing-vacation-management-row,.neostaffing-vacation-roster) { min-width:0; }
+  .neostaffing-vacation-console .neostaffing-vacation-roster { overflow:visible; }
+  .neostaffing-vacation-console .neostaffing-vacation-roster-head { display:none; }
+  .neostaffing-vacation-console .neostaffing-vacation-roster-row { min-width:0; display:flex; flex-direction:column; align-items:stretch; }
+  .neostaffing-vacation-person { flex-wrap:wrap; }
+  .neostaffing-vacation-console .neostaffing-vacation-bank { display:flex; flex-wrap:wrap; gap:6px; border-top:1px solid #537783; padding-top:8px; }
+}

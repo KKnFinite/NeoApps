@@ -527,7 +527,8 @@ def manage_employees():
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
         context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
-            area_ids, home_only=True, allow_roster_without_operation=True)
+            area_ids, home_only=True, allow_roster_without_operation=True,
+            allow_completed=True, selected_operation_id=request.args.get("operation_id"))
         return node_workspace(current_user, context, workspace="ermac",
             scope_label=f"Selected Doors: {' · '.join(doors)}", back_url=url_for("neoermac.door_view"))
     if request.method == "POST":
@@ -542,7 +543,8 @@ def manage_employees():
                 db.session.commit()
                 if request.accept_mimetypes.best == "application/json":
                     return jsonify(ok=True, rows=staffing_service.operational_attendance_saved_rows(request.form),
-                        counts=staffing_service.operational_manage_employees_context(area_ids, home_only=True)['counts'])
+                        counts=staffing_service.operational_manage_employees_context(area_ids, home_only=True,
+                            allow_completed=True, selected_operation_id=request.form.get("sort_date_operation_id"))['counts'])
                 flash(f"Attendance saved for {saved} people.", "success")
             except (ValueError, IntegrityError) as exc:
                 db.session.rollback()
@@ -553,6 +555,7 @@ def manage_employees():
     context = staffing_service.operational_manage_employees_context(
         area_ids, later_final_area_ids=area_ids, scope_candidates=True,
         allow_roster_without_operation=True, home_ownership=True,
+        allow_completed=True, selected_operation_id=request.args.get("operation_id"),
     )
     for row in context["here"]:
         row["authorized"] = row["home_work_area_id"] in authority.work_area_ids

@@ -27,12 +27,15 @@
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
     {% if request.endpoint == 'neostaffing.shift_flow' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20260912-shift-home-3') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20260916-mobile-side') }}">
     {% endif %}
     {% if request.endpoint in ['neostaffing.org_chart', 'neostaffing.hierarchy'] %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_org_explorer.css', v='20260914-explorer-1') }}">
     {% endif %}
     <script defer src="{{ url_for('static', filename='js/interaction_states.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    {% if is_neostaffing_page or request.endpoint in ['neosektor.manage_employees', 'neoermac.manage_employees'] %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_live_cleanup.css', v='20260916') }}">
+    {% endif %}
     {% if uses_shared_mobile_drawer or is_gateway_dock_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_drawer.css', v=config.STATIC_ASSET_VERSION, dock='20260907-viewport-v1') }}">
     {% endif %}
@@ -425,7 +428,7 @@
                         {{ neo_brand(mobile_shell_word, mobile_shell_key, "mobile-topbar-brand neo-brand-title", mobile_shell_name) }}
                         {% endif %}
                     </span>
-                    <strong>{{ mobile_shell_label }}</strong>
+                    {% if not (is_neostaffing_page and mobile_shell_label == 'NeoStaffing') %}<strong>{{ mobile_shell_label }}</strong>{% endif %}
                 </a>
                 {% endif %}
             </div>

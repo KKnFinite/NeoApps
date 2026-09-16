@@ -102,6 +102,9 @@ class TimecardsTest(unittest.TestCase):
         db.session.rollback()
         self.attendance(status="here")
         self.assertEqual(tc.read_rows(self.user, row.workday_date, row.workday_date)[0]["hours"], Decimal("4.17"))
+        with self.assertRaises(ValueError):
+            tc.save_segments(self.user, [self.command(row, [{"start":"22:00", "end":"22:00"}])], as_of=row.workday_date)
+        db.session.rollback()
 
     def test_role_alone_never_edits_and_different_employees_independent(self):
         row, peer = self.attendance(), self.attendance(self.peer)

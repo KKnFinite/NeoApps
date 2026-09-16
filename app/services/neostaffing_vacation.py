@@ -483,7 +483,7 @@ def operation_has_editable_union_scope(actor, operation_id, hierarchy):
     )
 
 
-def management_vacation_context(vacation_year, user, today=None):
+def management_vacation_context(vacation_year, user, today=None, *, selected_area_id=None, scoped=False):
     year = normalize_vacation_year(vacation_year)
     today = today or date.today()
     hierarchy = vacation_hierarchy()
@@ -717,14 +717,7 @@ def management_vacation_context(vacation_year, user, today=None):
                             for row in day_rows_by_person.get(person.id, ())
                         ),
                     ),
-                    "anniversary_available": max(
-                        0,
-                        1
-                        - sum(
-                            row.item_type == "anniversary_day"
-                            for row in day_rows_by_person.get(person.id, ())
-                        ),
-                    ),
+                    "anniversary_available": 0,
                     "floating_available": _available_floating_entitlements(
                         floating_by_person.get(person.id, ()),
                         day_rows_by_person.get(person.id, ()),
@@ -821,6 +814,20 @@ def management_vacation_context(vacation_year, user, today=None):
                 _unit_sort_key(row["area"], hierarchy),
             )
         )
+    scope_options = []
+    if scoped:
+        area_rows = [row for row in area_rows if actor.is_grandmaster or
+                     row["area"].id == default_area_id or
+                     row["area"].id in actor.management_capacity_ids or
+                     row["area"].id in actor.normal_scope_ids]
+        scope_options = [{"id": row["area"].id, "label": row["path"]} for row in area_rows]
+        if selected_area_id:
+            selected_id = _positive_int(selected_area_id, "Management scope")
+            if selected_id not in {row["area"].id for row in area_rows}:
+                raise ValueError("Management vacation scope is not authorized.")
+        else:
+            selected_id = default_area_id or (area_rows[0]["area"].id if area_rows else None)
+        area_rows = [row for row in area_rows if row["area"].id == selected_id]
     return {
         "vacation_year": year,
         "weeks": weeks,
@@ -829,6 +836,7 @@ def management_vacation_context(vacation_year, user, today=None):
         "actor": actor,
         "today": today,
         "default_area_id": default_area_id,
+        "scope_options": scope_options,
         "is_dynamic": True,
     }
 
@@ -3527,6 +3535,8 @@ def schedule_vacation_entitlement_day(
         if sum(cycle_start <= row.vacation_date <= cycle_end for row in active_rows) >= OPTIONAL_DAY_ENTITLEMENT:
             raise ValueError("No Optional Days remain in this August-July cycle.")
     elif item_type == "anniversary_day":
+        if program != "union" or person.classification in VACATION_MANAGEMENT_CLASSIFICATIONS:
+            raise ValueError("Anniversary Days apply only to Union employees.")
         anniversary = employee_anniversary_date(person.seniority_date, day.year)
         if day != anniversary:
             raise ValueError("Anniversary Day may be used only on the actual anniversary date.")

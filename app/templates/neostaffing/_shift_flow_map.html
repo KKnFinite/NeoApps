@@ -1,4 +1,7 @@
-<section class="shift-map" data-shift-map data-route-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}" aria-label="Shift operation flow map">
+<section class="shift-map" data-shift-map data-mobile-side="{{ 'east' if request.args.get('side') == 'east' else 'west' }}" data-route-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}" aria-label="Shift operation flow map">
+  <nav class="shift-map-mobile-sides" aria-label="Shift side">
+    {% for side in ['west', 'east'] %}<a href="{{ url_for('neostaffing.shift_flow', side=side, phase=shift_flow.phase) }}" {% if side == ('east' if request.args.get('side') == 'east' else 'west') %}aria-current="page"{% endif %}>{{ side|upper }}</a>{% endfor %}
+  </nav>
   <header class="shift-map-heading"><h2>SHIFT OPERATION</h2><span>{{ shift_flow.flow_map.count }} employees</span></header>
   <div class="shift-map-sides">{% for side, config in shift_flow.flow_map.configurations.items() %}<strong>{{ side|upper }} <small>{{ config.ballmat.name if config.ballmat else '' }} · {% for door in config.doors %}{{ door.name|replace('Door ', 'D') }}{% if not loop.last %} {% endif %}{% endfor %}</small></strong>{% endfor %}</div>
   <svg class="shift-map-lines" aria-hidden="true" data-flow-lines></svg>
@@ -11,7 +14,7 @@
         {% for location in phase.locations if location.side == side %}
         <article class="shift-map-location"><header>{{ location.area.name }} <span>{{ location.count }}</span></header>
           {% for row in location.rows %}
-          <a class="shift-map-person{% if row.custom %} is-custom{% endif %}{% if phase.key != 'sort_start' %} is-ghost{% endif %}" href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, person_id=row.person.id) }}"
+          <a class="shift-map-person{% if row.custom %} is-custom{% endif %}{% if phase.key != 'sort_start' %} is-ghost{% endif %}" href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, side=request.args.get('side', 'west'), person_id=row.person.id) }}"
              data-map-person="{{ row.person.id }}" data-map-custom="{{ 'true' if row.custom else 'false' }}"
              {% if phase.key == 'sort_start' and can_edit_shift_flow %}draggable="true" data-route-person="{{ row.person.id }}" data-route-version="{{ row.version }}"{% endif %}>
              {{ row.person.full_name }}{% if phase.key == 'sort_start' %}<small>{{ 'CUSTOM FLOW' if row.custom else row.shorthand or 'FLOW UNSET' }}</small>{% endif %}

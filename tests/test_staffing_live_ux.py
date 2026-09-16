@@ -27,6 +27,21 @@ class LiveUxTest(unittest.TestCase):
     attendance = fixtures.TimecardsTest.attendance
     command = fixtures.TimecardsTest.command
 
+    def test_current_cleanup_mobile_and_time_only_contracts(self):
+        self.attendance()
+        html = self.client.get('/neosektor/manage-employees?area=ebm&mode=times').get_data(as_text=True)
+        self.assertIn('type="time"', html)
+        self.assertIn('THIS WEEK', html)
+        template = Path('app/templates/neostaffing/org_chart.html').read_text()
+        self.assertLess(template.index('neostaffing-tree-management-summary'), template.index('org-unit-canvas'))
+        self.assertIn('<details id="structure-editor"', template)
+        shift = Path('app/templates/neostaffing/_shift_flow_map.html').read_text()
+        self.assertIn('data-mobile-side', shift)
+        css = Path('app/static/css/neostaffing_live_cleanup.css').read_text()
+        self.assertIn('min-width:0; display:flex; flex-direction:column', css)
+        self.assertIn('vacation-scope-months', css)
+        self.assertIn("('Vacation','vacation_selection')", Path('app/templates/_mobile_drawer.html').read_text())
+
     def test_shared_staffing_drawer_always_loads_style_and_behavior(self):
         self.user.role = 'grandmaster'
         db.session.add(PortalAppAccess(user_id=self.user.id, app_code='neostaffing', status='approved', role='master', is_active=True))
@@ -115,9 +130,13 @@ class LiveUxTest(unittest.TestCase):
             response = self.client.get(url + '&period=week&date=2026-09-12')
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        for row in (current, historical):
-            self.assertIn(f'data-timecard-id="{row.id}"', html)
-        self.assertIn('Call In', html)
+        self.assertIn(f'data-timecard-id="{current.id}"', html)
+        self.assertNotIn(f'data-timecard-id="{historical.id}"', html)
+        # Node authority follows current Home, not the old leadership union.
+        # The retained slice is available in the employee's current area.
+        moved = self.client.get(url.replace('area=ebm', 'area=wbm') + '&period=week&date=2026-09-12').get_data(as_text=True)
+        self.assertIn(f'data-timecard-id="{historical.id}"', moved)
+        self.assertIn('Call In', moved)
         self.assertNotIn(self.outsider.full_name, html)
         self.assertIn('TODAY', html)
         self.assertIn('THIS WEEK', html)
@@ -169,6 +188,7 @@ class LiveUxTest(unittest.TestCase):
         from sqlalchemy import event
         from app.models.neoermac_door_preference import NeoErmacDoorPreference
         row = self.attendance()
+        staffing.assign_work_area(self.workers['ebm'], self.areas['door'])
         self.user.role = 'grandmaster'
         db.session.add(NeoErmacDoorPreference(user_id=self.user.id, gateway_id=self.gateway.id,
             selected_doors_json='["D6"]', active_door='D6'))

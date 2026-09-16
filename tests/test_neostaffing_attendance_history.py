@@ -231,7 +231,7 @@ class NeoStaffingAttendanceHistoryTest(unittest.TestCase):
         self.assertEqual(self._summary(self.hub).worked_count, 2)
         self.assertEqual(self._summary(self.outbound).worked_count, 2)
 
-    def test_next_active_sort_finalizes_then_purges_prior_details(self):
+    def test_next_active_sort_finalizes_but_retains_current_week_details(self):
         with patch.object(history_service, "operation_is_active_at", return_value=True):
             result = history_service.process_attendance_rollover(
                 self.current,
@@ -241,9 +241,23 @@ class NeoStaffingAttendanceHistoryTest(unittest.TestCase):
 
         self.assertEqual(result.status, "processed")
         self.assertEqual(result.finalized_summary_count, 3)
-        self.assertEqual(result.purged_detail_count, 3)
-        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+        self.assertEqual(result.purged_detail_count, 0)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 3)
         self.assertEqual(StaffingAttendanceSummary.query.count(), 3)
+
+        closed = [(row.id, row.finalized_at, row.on_payroll_count, row.worked_count)
+                  for row in StaffingAttendanceSummary.query.order_by(StaffingAttendanceSummary.id)]
+        with patch.object(history_service, "operation_is_active_at", return_value=True):
+            retry = history_service.process_attendance_rollover(
+                self.current, now_local=datetime(2026, 8, 25, 21))
+            self.assertEqual(retry.status, "already_processed")
+            expired = history_service.process_attendance_rollover(
+                self.current, now_local=datetime(2026, 8, 30, 21))
+        self.assertEqual(expired.purged_detail_count, 3)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+        self.assertEqual(expired.finalized_summary_count, 0)
+        self.assertEqual([(row.id, row.finalized_at, row.on_payroll_count, row.worked_count)
+                         for row in StaffingAttendanceSummary.query.order_by(StaffingAttendanceSummary.id)], closed)
 
     def test_rollover_purges_legacy_unlinked_rows_after_prior_finalization(self):
         history_service.finalize_attendance_summaries(self.prior)
@@ -334,8 +348,8 @@ class NeoStaffingAttendanceHistoryTest(unittest.TestCase):
             )
             db.session.commit()
         self.assertEqual(second.prior_sort_date_operation_id, self.prior.id)
-        self.assertEqual(second.purged_detail_count, 3)
-        self.assertEqual(StaffingDailyAttendance.query.count(), 0)
+        self.assertEqual(second.purged_detail_count, 0)
+        self.assertEqual(StaffingDailyAttendance.query.count(), 3)
         self.assertEqual(StaffingAttendanceSummary.query.filter_by(
             sort_date_operation_id=expired.id).count(), 0)
 

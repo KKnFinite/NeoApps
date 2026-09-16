@@ -161,7 +161,7 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self.assertIn(extra.id, [a.work_area_unit_id for a in self.here.work_assignments if a.active])
         self.assertEqual(StaffingDailyAttendance.query.count(), 0)
 
-    def test_transition_preserves_roster_and_active_attendance_then_hides_old_status(self):
+    def test_transition_preserves_current_week_attendance_for_correction(self):
         self._no_sort()
         self._get()
         current = self._add_operation(date(2026, 6, 15))
@@ -182,10 +182,10 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         self.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = datetime(2026, 6, 18, 12)
         html = self._get()
         self.assertNotIn(b'SAVE ATTENDANCE', html)
-        self.assertNotIn(b'value="here"', html)
-        self._post(self.here, current.id, 'called_in')
+        self.assertIn(b'value="here" selected', html)
+        self._post(self.here, current.id, 'call_in')
         db.session.expire_all()
-        self.assertEqual(StaffingDailyAttendance.query.one().status, 'here')
+        self.assertEqual(StaffingDailyAttendance.query.one().status, 'call_in')
 
     def test_wrong_stale_out_of_scope_and_unauthorized_posts_do_not_mutate(self):
         for person, operation_id in ((self.here, self.operation.id + 1000), (self.outside, self.operation.id)):

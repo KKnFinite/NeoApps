@@ -2,7 +2,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 
 from flask import current_app
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from app.extensions import db
 from app.models import (
@@ -187,8 +187,11 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
     has_summary = db.session.query(StaffingAttendanceSummary.id).filter(
         StaffingAttendanceSummary.sort_date_operation_id == SortDateOperation.id
     ).exists()
+    from app.services.neostaffing_timecards import week_start
+    correction_start = week_start(local_now.date())
     prior_operation = (
-        prior_candidates.filter(or_(outstanding_details, ~has_summary))
+        prior_candidates.filter(or_(~has_summary, and_(
+            outstanding_details, SortDateOperation.sort_date < correction_start)))
         .order_by(SortDateOperation.sort_date, SortDateOperation.id)
         .with_for_update(key_share=True)
         .first()
@@ -217,19 +220,20 @@ def process_attendance_rollover(current_operation, user=None, *, now_local=None)
             status="already_processed",
         )
 
-    finalization = finalize_attendance_summaries(
-        prior_operation,
-        user,
-    )
+    # Retained correction-window details are cleanup work, not a second close.
+    # Re-finalizing next week would replace the source headcount/timestamp with
+    # today's assignments and could undo correctly applied historical deltas.
+    finalization = None if existing_summary_count else finalize_attendance_summaries(prior_operation, user)
     legacy_or_linked = StaffingDailyAttendance.query.filter(
-        *_attendance_detail_scope(prior_operation, finalization.staffing_sort_unit_id)
+        *_attendance_detail_scope(prior_operation, staffing_sort.id)
     )
-    purged_detail_count = legacy_or_linked.delete(synchronize_session=False)
+    purged_detail_count = (legacy_or_linked.delete(synchronize_session=False)
+                          if prior_operation.sort_date < correction_start else 0)
     db.session.flush()
     return AttendanceRolloverResult(
         current_operation.id,
         prior_operation.id,
-        finalized_summary_count=finalization.summary_count,
+        finalized_summary_count=finalization.summary_count if finalization else 0,
         purged_detail_count=purged_detail_count,
         status="processed",
     )

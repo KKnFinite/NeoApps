@@ -43,7 +43,7 @@
         </nav>
         {% elif is_neostaffing_page and request.endpoint != 'neostaffing.index' %}
         <nav class="neo-drawer-links" aria-label="NeoStaffing screens">
-          {% for label,endpoint in [('People','people'),('Org Chart','org_chart'),('Reports','reports'),('Attendance','attendance'),('Shift Flow','shift_flow'),('Accountability','accountability'),('Timecards','timecards')] %}
+          {% for label,endpoint in [('People','people'),('Org Chart','org_chart'),('Reports','reports'),('Attendance','attendance'),('Shift Flow','shift_flow'),('Accountability','accountability'),('Timecards','timecards'),('Vacation','vacation_selection')] %}
           <a href="{{ url_for('neostaffing.' ~ endpoint) }}">{{ label }}</a>
           {% endfor %}
         </nav>

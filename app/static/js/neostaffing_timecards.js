@@ -26,13 +26,20 @@
       const segment = document.createElement('div');
       segment.className = 'timecard-segment';
       segment.innerHTML = '<label>Start <input data-start placeholder="YYYY-MM-DDTHH:MM"></label><label>End <input data-end placeholder="YYYY-MM-DDTHH:MM"></label><button type="button" data-remove-segment>REMOVE</button>';
+      if (root.dataset.nodeWorkspace) segment.querySelectorAll('input').forEach(input => {
+        input.type = 'time'; input.step = '1'; input.removeAttribute('placeholder');
+      });
       row.querySelector('[data-time-segments]').append(segment); mark(add);
     }
     const remove = event.target.closest('[data-remove-segment]');
     if (remove) { mark(remove); remove.closest('.timecard-segment').remove(); }
     if (!event.target.closest('[data-save-times]') || saving || !dirty.size) return;
+    const timestamp = input => {
+      const original = input.dataset.original;
+      return original && input.value && input.value === original.slice(11, 11 + input.value.length) ? original : input.value;
+    };
     const commands = [...dirty].map(row => ({id: Number(row.dataset.timecardId), version: Number(row.dataset.version),
-      segments: [...row.querySelectorAll('.timecard-segment')].map(part => ({start:part.querySelector('[data-start]').value, end:part.querySelector('[data-end]').value}))}));
+      segments: [...row.querySelectorAll('.timecard-segment')].map(part => ({start:timestamp(part.querySelector('[data-start]')), end:timestamp(part.querySelector('[data-end]'))}))}));
     saving = true;
     // Prevent editing a submitted draft while the server checks its version.
     const controls = [...root.querySelectorAll('button,input')];

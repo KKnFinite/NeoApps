@@ -7,13 +7,13 @@
   {% if item.slice.attendance_status == 'here' and item.editable|default(true) %}
   <div data-time-segments>
     {% for segment in item.edit_segments %}<div class="timecard-segment">
-      <label>Start <input data-start value="{{ segment.start }}" placeholder="YYYY-MM-DDTHH:MM" aria-label="Start for {{ item.employee }}"></label>
-      <label>End <input data-end value="{{ segment.end }}" placeholder="YYYY-MM-DDTHH:MM" aria-label="End for {{ item.employee }}"></label>
+      <label>Start <input data-start {% if workspace|default('') in ['sektor','ermac'] %}type="time" step="1" value="{{ segment.start[11:19] }}" data-original="{{ segment.start }}"{% else %}value="{{ segment.start }}" placeholder="YYYY-MM-DDTHH:MM"{% endif %} aria-label="Start for {{ item.employee }}"></label>
+      <label>End <input data-end {% if workspace|default('') in ['sektor','ermac'] %}type="time" step="1" value="{{ segment.end[11:19] }}" data-original="{{ segment.end }}"{% else %}value="{{ segment.end }}" placeholder="YYYY-MM-DDTHH:MM"{% endif %} aria-label="End for {{ item.employee }}"></label>
       <button type="button" data-remove-segment aria-label="Remove segment for {{ item.employee }}">REMOVE</button>
     </div>{% endfor %}
   </div>
   <button type="button" data-add-segment>ADD SEGMENT</button>
-  <small>{{ item.timezone }}. Include the date for overnight times.</small>
+  <small>{{ item.timezone }}. {% if workspace|default('') in ['sektor','ermac'] %}Sort date {{ item.slice.workday_date }}; an earlier end time is next day.{% else %}Include the date for overnight times.{% endif %}</small>
   {% elif item.slice.attendance_status == 'here' %}
   {% for segment in item.edit_segments %}<p>{{ segment.start }} – {{ segment.end }}</p>{% endfor %}
   {% endif %}

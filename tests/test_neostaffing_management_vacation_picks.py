@@ -58,6 +58,18 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         db.drop_all()
         self.context.pop()
 
+    def test_scoped_workspace_defaults_to_primary_and_rejects_outside_pool(self):
+        _, user = self._management_user("SCOPE", "Scope", "Manager", "2000-01-01", "manager", unit=self.units["ramp"])
+        context = vacation_service.management_vacation_context(self.YEAR, user, today=self.OPEN_DAY, scoped=True)
+        self.assertEqual(len(context["areas"]), 1)
+        self.assertEqual(context["areas"][0]["area"].id, context["default_area_id"])
+        selected = vacation_service.management_vacation_context(self.YEAR, user, today=self.OPEN_DAY,
+            scoped=True, selected_area_id=self.units["ramp"].id)
+        self.assertEqual([row["area"].id for row in selected["areas"]], [self.units["ramp"].id])
+        with self.assertRaisesRegex(ValueError, "not authorized"):
+            vacation_service.management_vacation_context(self.YEAR, user, today=self.OPEN_DAY,
+                scoped=True, selected_area_id=999999)
+
     def test_management_entitlement_thresholds_use_seniority_date(self):
         year_end = date(self.YEAR, 12, 31)
         cases = (
@@ -524,7 +536,7 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self.assertEqual(day.status, "cancelled")
         self._login(manager_user)
         rendered = self.client.get(
-            f"/neostaffing/vacation-selection/management?year={self.YEAR}"
+            f"/neostaffing/vacation-selection/management?year={self.YEAR}&area_id={self.units['ramp'].id}"
         )
         self.assertEqual(rendered.status_code, 200)
         self.assertIn(b"5 / 5 SPLIT DAYS AVAILABLE", rendered.data)
@@ -1146,11 +1158,11 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
                 today=date(self.YEAR, 12, 31),
             )
 
-    def test_anniversary_day_is_available_only_on_actual_anniversary(self):
+    def test_management_cannot_receive_anniversary_day(self):
         person, actor = self._management_user(
             "MVA1", "Ann", "Supervisor", "2000-03-15", "full_time_supervisor"
         )
-        with self.assertRaisesRegex(ValueError, "actual anniversary"):
+        with self.assertRaisesRegex(ValueError, "only to Union"):
             vacation_service.schedule_vacation_entitlement_day(
                 person,
                 date(self.YEAR, 3, 14),
@@ -1159,15 +1171,10 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
                 program="management",
                 today=date(self.YEAR, 3, 15),
             )
-        row = vacation_service.schedule_vacation_entitlement_day(
-            person,
-            date(self.YEAR, 3, 15),
-            "anniversary_day",
-            actor,
-            program="management",
-            today=date(self.YEAR, 3, 15),
-        )
-        self.assertEqual(row.item_type, "anniversary_day")
+        with self.assertRaisesRegex(ValueError, "only to Union"):
+            vacation_service.schedule_vacation_entitlement_day(
+                person, date(self.YEAR, 3, 15), "anniversary_day", actor,
+                program="management", today=date(self.YEAR, 3, 15))
 
     def test_special_assignment_and_corporate_class_eligibility_and_exclusivity(self):
         ft, ft_user = self._management_user(

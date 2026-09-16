@@ -2,9 +2,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-async function mutation() {
+async function mutation(clock = '22:00', original = '', expected = clock) {
   const events = {}, status = {}, controls = [{disabled:false}];
-  const part = {querySelector: key => ({value:key === '[data-start]' ? '22:00' : '02:10'})};
+  const part = {querySelector: key => ({dataset:{original:key === '[data-start]' ? original : ''},value:key === '[data-start]' ? clock : '02:10'})};
   const row = {dataset:{timecardId:'3',version:'7'},querySelectorAll:()=>[part]};
   const root = {dataset:{nodeWorkspace:'sektor',nodeArea:'ebm'},addEventListener:(name, fn)=>events[name]=fn,
     querySelector:()=>status,querySelectorAll:()=>controls};
@@ -13,7 +13,7 @@ async function mutation() {
     window:{location:{reload:()=>reloads++}}, fetch:(_url, options)=>{
       calls++; const body = JSON.parse(options.body);
       assert.equal(body.node_workspace,'sektor'); assert.equal(body.node_area,'ebm');
-      assert.deepEqual(body.commands,[{id:3,version:7,segments:[{start:'22:00',end:'02:10'}]}]);
+      assert.deepEqual(body.commands,[{id:3,version:7,segments:[{start:expected,end:'02:10'}]}]);
       return new Promise(done=>resolve=done);
     }};
   vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_timecards.js','utf8'),context);
@@ -53,4 +53,4 @@ async function archive(complete = true, interrupted = false) {
   assert.match(status.textContent,interrupted ? /interrupted/ : complete ? /countdown started/ : /Retention unchanged/);
 }
 
-(async()=>{await mutation(); await archive(); await archive(false); await archive(true,true); console.log('4 Timecards JS workflow checks passed');})().catch(error=>{console.error(error);process.exitCode=1;});
+(async()=>{await mutation(); await mutation('22:00', '2026-09-12T22:00:00-05:00', '2026-09-12T22:00:00-05:00'); await mutation('', '2026-09-12T22:00:00-05:00', ''); await archive(); await archive(false); await archive(true,true); console.log('6 Timecards JS workflow checks passed');})().catch(error=>{console.error(error);process.exitCode=1;});
