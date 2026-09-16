@@ -378,6 +378,23 @@ class DischargeControlsTest(unittest.TestCase):
         self.assertIn('white-space:normal; text-align:center; font-size:clamp(24px,3.2vw,48px)', css)
         self.assertIn('background:#651120; border-color:#ef2138', css)
 
+    def test_driver_normal_cards_show_only_large_bay_numbers_without_ordinals(self):
+        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 1': 'Full', 'Bay 2': 'Full', 'Bay 3': 'Full'}})
+        for url in ['/neosektor/driver-routing', '/neosektor/driver-routing?tv=1']:
+            dom = document(self.client.get(url))
+            self.assertFalse(dom.findall(**{'data-driver-rank': None}))
+            cards = [c for c in dom.findall(**{'data-driver-priority-index': None}) if 'hidden' not in c.attrs]
+            self.assertEqual(len(cards), 3)
+            self.assertEqual([c.one('strong', **{'data-driver-bay-name': None}).text for c in cards], ['3', '2', '1'])
+            for card in cards:
+                self.assertFalse(card.findall('span', 'driver-priority-rank'))
+                self.assertEqual(card.one('span', **{'data-driver-pickup': None}).text, '')
+        css = Path('app/static/css/neosektor_driver_routing.css').read_text()
+        self.assertIn('height:90%; min-height:0; padding:4px 6px; gap:0;', css)
+        self.assertIn('font-size:76px; line-height:1;', css)
+        self.assertIn('calc(2 * var(--tv-bay-size', css)
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', css)
+
     def test_tunnel_reference_sections_and_hooks_with_or_without_notice(self):
         for active in (True, False):
             with self.subTest(active_refresh=active):

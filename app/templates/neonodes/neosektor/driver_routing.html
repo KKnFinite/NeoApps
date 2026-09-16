@@ -54,7 +54,6 @@
             {% for index in range(3) %}
             {% set bay = state.routing.bay_priority[index] if index < state.routing.bay_priority|length else none %}
             <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ index }}" data-pickup="{{ bay.pickup if bay else 'front' }}" {% if not bay %}hidden{% endif %}>
-                <span class="driver-priority-rank" data-driver-rank>{{ bay.rank_label if bay else "" }}</span>
                 <strong data-driver-bay-name>{{ bay.bay_name|replace("Bay ", "") if bay else "" }}</strong>
                 <span class="driver-pickup" data-driver-pickup>{{ 'DISCHARGE ' ~ bay.side|upper if bay and bay.pickup == 'back' else '' }}</span>
                 <em class="visually-hidden" data-driver-bay-status>{{ bay.status if bay else "" }}</em>
@@ -171,7 +170,6 @@
             if (!bay) {
                 return;
             }
-            card.querySelector("[data-driver-rank]").textContent = bay.rank_label;
             card.querySelector("[data-driver-bay-name]").textContent = String(bay.bay_name || "").replace(/^Bay\s+/i, "");
             card.querySelector("[data-driver-bay-status]").textContent = bay.status;
             card.dataset.pickup = bay.pickup;

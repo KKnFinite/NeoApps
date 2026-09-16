@@ -9,7 +9,7 @@ test('canonical side cards replace normal recommendations and clear stale bay la
     const end = template.indexOf('    const applyState =', start);
     assert.ok(start > 0 && end > start);
     const cards = Array.from({length:3}, () => ({dataset:{}, hidden:false, fields:{},
-        querySelector(key) { return this.fields[key] ||= {textContent:''}; }}));
+        querySelector(key) { assert.notEqual(key, '[data-driver-rank]'); return this.fields[key] ||= {textContent:''}; }}));
     const context = {root:{querySelectorAll:()=>cards}};
     vm.runInNewContext(template.slice(start,end) + '\nthis.render = applyBayPriority;', context);
     const normal = [{pickup:'front',bay_name:'Bay 5',rank_label:'1ST',status:'Full'}];
@@ -22,7 +22,7 @@ test('canonical side cards replace normal recommendations and clear stale bay la
         sides.forEach((side,i) => {
             assert.equal(cards[i].dataset.pickup,'back');
             assert.equal(cards[i].fields['[data-driver-bay-name]'].textContent,'');
-            assert.equal(cards[i].fields['[data-driver-rank]'].textContent,'');
+            assert.equal(cards[i].fields['[data-driver-rank]'],undefined);
             assert.equal(cards[i].fields['[data-driver-pickup]'].textContent,'DISCHARGE '+side);
         });
     }
