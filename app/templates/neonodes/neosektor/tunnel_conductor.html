@@ -274,10 +274,11 @@
             <div class="tunnel-bay-grid">
                 {% for side_key in ["east", "west"] %}
                 {% for bay in state.sides[side_key].bays %}
-                <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}">
+                <article class="tunnel-bay-card" data-tunnel-bay="{{ bay.bay_name }}" data-tunnel-bay-side="{{ side_key }}">
                     <span>{{ bay.bay_name }}</span>
                     <strong>{{ bay.status }}</strong>
                     <input class="tunnel-bay-status-slider" type="range" min="0" max="4" step="1" value="{{ status_labels.index(bay.status) }}" data-discharge-status="{{ bay.bay_name }}" data-side="{{ side_key }}" aria-label="{{ bay.bay_name }} status" {% if not can_edit %}disabled{% endif %}>
+                    {% if loop.first %}<label class="sektor-back-pickup" data-back-pickup-control><input type="checkbox" data-discharge-back="{{ side_key }}" {% if state.routing.back_pickups[side_key] %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>BACK PICKUP {{ side_key|upper }}</label>{% endif %}
                     <label class="tunnel-bay-priority-toggle">
                         <input
                             type="checkbox"
@@ -297,9 +298,6 @@
                 <div class="sektor-priority-order" data-discharge-order aria-label="Bay Priority order">
                     {% for bay in state.routing.bay_priority_order %}<button type="button" draggable="{{ 'true' if can_edit else 'false' }}" data-priority-bay="{{ bay }}" aria-label="{{ bay }}, position {{ loop.index }}. Drag or use arrow keys to reorder." {% if not can_edit %}disabled{% endif %}>{{ bay }}</button>{% endfor %}
                 </div>
-                {% for side in ['east', 'west'] %}
-                <label class="sektor-back-pickup"><input type="checkbox" data-discharge-back="{{ side }}" {% if state.routing.back_pickups[side] %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>BACK PICKUP {{ side|upper }}</label>
-                {% endfor %}
                 <label class="sektor-cut-control"><input type="checkbox" data-discharge-cut {% if state.routing.cut_discharge %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>CUT DISCHARGE</label>
             </div>
         </section>

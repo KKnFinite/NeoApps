@@ -363,6 +363,42 @@ class DischargeControlsTest(unittest.TestCase):
         self.assertEqual(self.state()['state']['routing']['back_pickups'], {'east': True, 'west': True})
         self.assertEqual(len(self.cut(False, True)['routing']['bay_priority']), 2)
 
+    def test_tunnel_side_controls_reuse_bay_slots_and_keep_reference_layout_assets(self):
+        response = self.client.get('/neosektor/tunnel-conductor')
+        self.assertEqual(response.status_code, 200)
+        dom = document(response)
+        workspace = dom.one('div', 'tunnel-desktop-workspace')
+        workspace.one('div', 'tunnel-desktop-left')
+        panel = workspace.one('section', 'tunnel-bay-panel')
+        grid = panel.one('div', 'tunnel-bay-grid')
+        cards = grid.findall('article', 'tunnel-bay-card')
+        self.assertEqual([card.attrs['data-tunnel-bay'] for card in cards],
+                         ['Bay 1', 'Bay 2', 'Bay 3', 'Bay 4', 'Bay 5'])
+        # Keep the original five direct grid children: no side wrappers or new panels.
+        self.assertEqual([child for child in grid.children if hasattr(child, 'tag')], cards)
+        for side, bay in [('east', 'Bay 1'), ('west', 'Bay 4')]:
+            card = grid.one(**{'data-tunnel-bay': bay, 'data-tunnel-bay-side': side})
+            control = card.one('label', 'sektor-back-pickup')
+            self.assertEqual(control.text.strip(), 'BACK PICKUP ' + side.upper())
+            checkbox = control.one('input', **{'data-discharge-back': side})
+            self.assertNotIn('disabled', checkbox.attrs)  # Empty bays do not gate side controls.
+            children = [child for child in card.children if hasattr(child, 'tag')]
+            self.assertLess(children.index(card.one('input', **{'data-discharge-status': bay})), children.index(control))
+            self.assertLess(children.index(control), children.index(card.one('label', 'tunnel-bay-priority-toggle')))
+        self.assertEqual(len(grid.findall(**{'data-discharge-back': None})), 2)
+        footer = panel.one('div', 'sektor-conductor-discharge')
+        self.assertFalse(footer.findall(**{'data-discharge-back': None}))
+        self.assertEqual(len(footer.findall(**{'data-priority-bay': None})), 5)
+        footer.one('input', **{'data-discharge-cut': None})
+        styles = [link.attrs['href'].split('?')[0] for link in dom.findall('link', rel='stylesheet')]
+        desktop, mobile, controls = ['/static/css/' + name for name in
+            ['16-neosektor.css', 'neosektor_tunnel_mobile.css', 'neosektor_discharge_controls.css']]
+        self.assertLess(styles.index(desktop), styles.index(mobile))
+        self.assertLess(styles.index(mobile), styles.index(controls))
+        self.assertNotIn('/static/css/neosektor_driver_routing.css', styles)
+        css = Path('app/static/css/neosektor_discharge_controls.css').read_text()
+        self.assertIn('.neosektor-tunnel-operator-page .sektor-back-pickup { flex-direction:column; gap:3px; font-size:9px; text-align:center; }', css)
+
 
 
 if __name__ == '__main__':
