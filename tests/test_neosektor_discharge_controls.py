@@ -363,6 +363,34 @@ class DischargeControlsTest(unittest.TestCase):
         self.assertEqual(self.state()['state']['routing']['back_pickups'], {'east': True, 'west': True})
         self.assertEqual(len(self.cut(False, True)['routing']['bay_priority']), 2)
 
+    def test_tunnel_desktop_workspace_stays_in_flexible_row_with_or_without_notice(self):
+        # 4fc4ee1's desktop board uses the remaining-height third track after
+        # the notice and spotter toolbar. Hidden/removed links must not move it
+        # into an auto-height track (CSS grid auto-placement did exactly that).
+        css = Path('app/static/css/neosektor_spotter_modes.css').read_text()
+        desktop = css.split('@media (min-width:901px) {', 1)[1]
+        self.assertIn('grid-template-rows:auto auto minmax(0,1fr)', desktop)
+        prefix = 'body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap > '
+        for selector, row in [('.operation-refresh-banner', 1),
+                              ('.tunnel-spotter-authority', 2),
+                              ('.tunnel-desktop-workspace', 3)]:
+            self.assertIn(prefix + selector + ' { grid-row:' + str(row) + '; }', desktop)
+        for active in (True, False):
+            with self.subTest(active_refresh=active):
+                day = self.day if active else self.day + timedelta(days=1)
+                self.fixture.app.config['CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE'] = datetime.combine(day, time(23))
+                response = self.client.get('/neosektor/tunnel-conductor')
+                self.assertEqual(response.status_code, 200)
+                dom = document(response)
+                dom.one('aside', **{'data-node-desktop-side-nav': None})
+                wrap = dom.one('main', 'tunnel-wrap')
+                self.assertFalse(wrap.findall('a', 'neosektor-menu-link'))
+                notice = wrap.one('div', 'operation-refresh-banner')
+                self.assertEqual('hidden' in notice.attrs, active)
+                children = [child for child in wrap.children if hasattr(child, 'tag')]
+                self.assertIn(wrap.one('section', 'tunnel-spotter-authority'), children)
+                self.assertIn(wrap.one('div', 'tunnel-desktop-workspace'), children)
+
     def test_tunnel_side_controls_have_separate_row_below_bay_priorities(self):
         response = self.client.get('/neosektor/tunnel-conductor')
         self.assertEqual(response.status_code, 200)

@@ -5,8 +5,13 @@
 .tunnel-mode-controls > span:empty { display:none; }
 .tunnel-mode-controls button { min-height:32px; padding:4px 8px; font:600 11px/1.2 var(--font-sans); }
 @media (min-width:901px) {
-    /* Reserve a row for authority controls outside the positioned count grid. */
+    /* Retain 4fc4ee1's notice / authority / remaining-height board geometry.
+       Do not auto-place the board into an auto track when the notice or the
+       desktop-only hidden Employees link takes no space. */
     body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap {
         grid-template-rows:auto auto minmax(0,1fr);
     }
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap > .operation-refresh-banner { grid-row:1; }
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap > .tunnel-spotter-authority { grid-row:2; }
+    body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap > .tunnel-desktop-workspace { grid-row:3; }
 }
