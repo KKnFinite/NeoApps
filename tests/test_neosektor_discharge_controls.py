@@ -363,18 +363,7 @@ class DischargeControlsTest(unittest.TestCase):
         self.assertEqual(self.state()['state']['routing']['back_pickups'], {'east': True, 'west': True})
         self.assertEqual(len(self.cut(False, True)['routing']['bay_priority']), 2)
 
-    def test_tunnel_desktop_workspace_stays_in_flexible_row_with_or_without_notice(self):
-        # 4fc4ee1's desktop board uses the remaining-height third track after
-        # the notice and spotter toolbar. Hidden/removed links must not move it
-        # into an auto-height track (CSS grid auto-placement did exactly that).
-        css = Path('app/static/css/neosektor_spotter_modes.css').read_text()
-        desktop = css.split('@media (min-width:901px) {', 1)[1]
-        self.assertIn('grid-template-rows:auto auto minmax(0,1fr)', desktop)
-        prefix = 'body.blueprint-neosektor.node-desktop-nav-page.neosektor-tunnel-operator-page .tunnel-wrap > '
-        for selector, row in [('.operation-refresh-banner', 1),
-                              ('.tunnel-spotter-authority', 2),
-                              ('.tunnel-desktop-workspace', 3)]:
-            self.assertIn(prefix + selector + ' { grid-row:' + str(row) + '; }', desktop)
+    def test_tunnel_reference_sections_and_hooks_with_or_without_notice(self):
         for active in (True, False):
             with self.subTest(active_refresh=active):
                 day = self.day if active else self.day + timedelta(days=1)
@@ -390,6 +379,19 @@ class DischargeControlsTest(unittest.TestCase):
                 children = [child for child in wrap.children if hasattr(child, 'tag')]
                 self.assertIn(wrap.one('section', 'tunnel-spotter-authority'), children)
                 self.assertIn(wrap.one('div', 'tunnel-desktop-workspace'), children)
+                waves = wrap.one('section', 'tunnel-wave-grid')
+                self.assertEqual([w.attrs['data-tunnel-wave-key'] for w in waves.findall('article')], ['first', 'second'])
+                counts = wrap.one('section', 'tunnel-counts-panel')
+                sides = counts.findall('section', 'tunnel-ballmat-column')
+                self.assertEqual([s.attrs['data-tunnel-side'] for s in sides], ['east', 'west'])
+                for side in sides:
+                    self.assertEqual([w.attrs['data-wave'] for w in side.findall('article', **{'data-wave': None})], ['first', 'second'])
+                    side.one('input', **{'data-open-bays': None})
+                    self.assertEqual(len(side.findall('button', **{'data-tunnel-count-step': None})), 6)
+                operations = wrap.one('section', 'tunnel-operations-card')
+                self.assertEqual([r.attrs['data-tunnel-route-override'] for r in operations.findall('section', 'tunnel-route-override')], ['first', 'second'])
+                self.assertEqual([i.attrs['data-tunnel-setting'] for i in operations.findall('input', **{'data-tunnel-setting': None})], ['first_modifier', 'second_modifier', 'down_timer_minutes'])
+                wrap.one('section', 'tunnel-offset-panel').one('input', **{'data-tunnel-offset-input': None})
 
     def test_tunnel_side_controls_have_separate_row_below_bay_priorities(self):
         response = self.client.get('/neosektor/tunnel-conductor')

@@ -7,7 +7,7 @@ import unittest
 
 
 class NeoSektorCssCleanupTest(unittest.TestCase):
-    def test_tunnel_desktop_flat_skin_is_content_scoped_and_preserves_geometry(self):
+    def test_tunnel_desktop_reference_geometry_keeps_flat_skin_and_shell(self):
         css_root = Path(__file__).resolve().parents[1] / 'app/static/css'
         css = (css_root / 'neosektor_tunnel_mobile.css').read_text()
         desktop = css.split('@media (min-width:901px) {', 1)[1].split('@media (max-width:900px)', 1)[0]
@@ -15,16 +15,33 @@ class NeoSektorCssCleanupTest(unittest.TestCase):
         for selector in ('.tunnel-panel', '.tunnel-metric', '.tunnel-readonly-card', '.tunnel-bay-card'):
             self.assertIn(selector, desktop)
         self.assertIn('#neosektor-tunnel-panel .tunnel-wrap > .neosektor-menu-link { display:none; }', desktop)
-        self.assertIn('grid-template-rows:auto minmax(0,1fr) auto auto', desktop)
-        self.assertNotIn('grid-template-areas', desktop)
-        self.assertNotIn('grid-template-columns', desktop)
+        def rule(selector):
+            # Read the last, effective page-scoped declaration rather than
+            # accepting the obsolete board rules in the shared CSS bundle.
+            matches = re.findall(re.escape('#neosektor-tunnel-panel ' + selector) + r'\s*\{([^}]+)\}', desktop)
+            self.assertTrue(matches, selector)
+            return matches[-1]
+        for selector, order in [('.tunnel-wave-grid', 1), ('.tunnel-counts-panel', 2),
+                                ('.tunnel-bay-panel', 3), ('.tunnel-operations-card', 4),
+                                ('.tunnel-offset-panel', 5)]:
+            self.assertIn(f'order:{order}', rule(selector))
+        self.assertIn('display:flex; flex-direction:column; height:auto', rule('.tunnel-wrap'))
+        for selector in ('.tunnel-wave-grid', '.tunnel-ballmat-grid'):
+            self.assertIn('grid-template-columns:repeat(2,minmax(0,1fr))', rule(selector))
+        self.assertIn('grid-template-rows:auto repeat(3,auto)', rule('.tunnel-ballmat-column'))
+        self.assertIn('grid-template-columns:80px minmax(0,1fr)', rule('.tunnel-ballmat-card'))
+        self.assertIn('grid-template-columns:repeat(5,minmax(0,1fr))', rule('.tunnel-bay-grid'))
+        self.assertIn('grid-template-columns:minmax(0,1fr)', rule('.tunnel-bay-card'))
+        self.assertIn('grid-template-rows:auto auto', rule('.tunnel-route-overrides'))
+        self.assertIn('grid-template-columns:88px minmax(0,1fr)', rule('.tunnel-route-override'))
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', rule('.tunnel-settings-grid'))
+        self.assertIn(':is(.tunnel-desktop-workspace,.tunnel-desktop-left,.tunnel-ballmat-wave-workspace) { display:contents; }', desktop)
+        self.assertIn('height:auto; min-height:100vh; overflow:visible;', desktop)
         self.assertNotIn('side-nav', desktop)
-        self.assertNotIn('body.', desktop)
-        # The desktop grid remains wide and reserves space for the persistent nav.
+        self.assertNotIn('grid-template-areas', desktop)
+        # Keep the shared header/sidebar inset; no replacement shell.
         geometry = (css_root / '16-neosektor.css').read_text()
         self.assertIn('calc(var(--motherbrain-side-nav-width) + 24px)', geometry)
-        self.assertIn('"wave-first east-first west-first"', geometry)
-        self.assertIn('"wave-second east-second west-second"', geometry)
 
     def test_display_bundles_keep_page_rules_and_mobile_overrides_separate(self):
         css_root = Path(__file__).resolve().parents[1] / "app/static/css"
