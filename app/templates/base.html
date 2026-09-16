@@ -52,14 +52,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_mobile.css', v=config.STATIC_ASSET_VERSION, viewport='20260907-shared-v1') }}">
     {% endif %}
     {% if is_neosektor_tunnel_operator_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260911-discharge-v2') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_tunnel_mobile.css', v=config.STATIC_ASSET_VERSION, mobile='20260915-flat-desktop') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_spotter_modes.css', mode='20260909-v1') }}">
     {% endif %}
     {% if is_neosektor_ballmat_operator_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_ballmat_mobile.css', v=config.STATIC_ASSET_VERSION, ballmat='20260915-side-back') }}">
     {% endif %}
     {% if is_neosektor_tunnel_operator_page or is_neosektor_ballmat_operator_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge_controls.css', controls='20260915-tunnel-layout') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge_controls.css', controls='20260915-side-row') }}">
     {% endif %}
     {% if request.endpoint == 'neosektor.manage_employees' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_employees.css', v='20260915-compact-v4') }}">

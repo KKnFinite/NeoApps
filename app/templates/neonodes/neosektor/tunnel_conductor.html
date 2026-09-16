@@ -278,7 +278,6 @@
                     <span>{{ bay.bay_name }}</span>
                     <strong>{{ bay.status }}</strong>
                     <input class="tunnel-bay-status-slider" type="range" min="0" max="4" step="1" value="{{ status_labels.index(bay.status) }}" data-discharge-status="{{ bay.bay_name }}" data-side="{{ side_key }}" aria-label="{{ bay.bay_name }} status" {% if not can_edit %}disabled{% endif %}>
-                    {% if loop.first %}<label class="sektor-back-pickup" data-back-pickup-control><input type="checkbox" data-discharge-back="{{ side_key }}" {% if state.routing.back_pickups[side_key] %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>BACK PICKUP {{ side_key|upper }}</label>{% endif %}
                     <label class="tunnel-bay-priority-toggle">
                         <input
                             type="checkbox"
@@ -291,6 +290,11 @@
                     </label>
                 </article>
                 {% endfor %}
+                {% endfor %}
+            </div>
+            <div class="tunnel-back-pickup-row" role="group" aria-label="Back Pickup sides">
+                {% for side_key in ['east', 'west'] %}
+                <label class="sektor-back-pickup" data-back-pickup-control><input type="checkbox" data-discharge-back="{{ side_key }}" {% if state.routing.back_pickups[side_key] %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>BACK PICKUP {{ side_key|upper }}</label>
                 {% endfor %}
             </div>
             <div class="sektor-conductor-discharge">

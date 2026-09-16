@@ -15,6 +15,7 @@ from app.models import (User, PortalAppAccess, StaffingUnit, StaffingPerson, Sta
 from app.services import neostaffing as staffing
 from app.services.neostaffing_attendance_authority import attendance_authority
 from tests import test_neosektor_routes as sektor_fixture
+from tests.html_contracts import document
 
 
 class SektorEmployeesTest(unittest.TestCase):
@@ -86,6 +87,20 @@ class SektorEmployeesTest(unittest.TestCase):
         self.assertEqual(self.client.get('/neosektor/manage-employees').status_code, 403)
         self.assertEqual(self.client.post('/neosektor/manage-employees?area=ebm').status_code, 403)
         self.assertNotIn(b'data-node-dashboard-tile="employees"', self.client.get('/neosektor').data)
+
+    def test_tunnel_keeps_employees_sidebar_and_mobile_content_access(self):
+        response = self.client.get('/neosektor/tunnel-conductor')
+        self.assertEqual(response.status_code, 200)
+        dom = document(response)
+        sidebar = dom.one('aside', **{'data-node-desktop-side-nav': None})
+        links = [link for link in sidebar.findall('a')
+                 if '/neosektor/manage-employees' in link.attrs.get('href', '')]
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].one('span', 'operational-side-link-label').text.strip(), 'Employees')
+        # Retained for mobile; only this in-content link is hidden by desktop CSS.
+        content_link = dom.one('main', 'tunnel-wrap').one('a', 'neosektor-menu-link')
+        self.assertEqual(content_link.text.strip(), 'MANAGE EMPLOYEES')
+        self.assertIn('area=dis', content_link.attrs['href'])
 
     def test_node_autosave_without_leadership_scope_and_stale_rejection(self):
         self.active_sort()

@@ -1,5 +1,23 @@
-/* Tunnel Conductor only. Existing DOM hooks, desktop layout and state are retained. */
+/* Tunnel content polish. Shared shell/navigation and existing desktop geometry stay intact. */
 .tunnel-polish-mobile-only { display:none; }
+@media (min-width:901px) {
+    /* The clean content treatment must not fall back to legacy red card skins
+       above the mobile breakpoint. Keep 16-neosektor's grid areas and sizing. */
+    #neosektor-tunnel-panel { background:#060d11; border:0; border-radius:0; box-shadow:none; }
+    #neosektor-tunnel-panel .tunnel-wrap > .neosektor-menu-link { display:none; }
+    #neosektor-tunnel-panel :is(.tunnel-panel,.tunnel-metric,.tunnel-readonly-card,.tunnel-bay-card,.tunnel-setting-card,.tunnel-offset-control-card,.tunnel-route-override) {
+        border:0; border-radius:0; box-shadow:none; background:transparent;
+    }
+    #neosektor-tunnel-panel :is(.tunnel-wave-panel,.tunnel-ballmat-card,.tunnel-offset-panel,.tunnel-operations-card) { border-top:1px solid #354047; }
+    #neosektor-tunnel-panel .tunnel-bay-panel { border-left:1px solid #354047; grid-template-rows:auto minmax(0,1fr) auto auto; }
+    #neosektor-tunnel-panel .tunnel-bay-card + .tunnel-bay-card { border-top:1px solid #303940; }
+    #neosektor-tunnel-panel :is(h2,h3,.tunnel-desktop-label,.tunnel-desktop-wave-heading) {
+        color:#e1e8ee; font-family:var(--font-sans); font-weight:600; letter-spacing:0; text-shadow:none;
+    }
+    #neosektor-tunnel-panel :is(.counter-control,.neosektor-driver-offset-control) { background:transparent; border:0; box-shadow:none; }
+    #neosektor-tunnel-panel :is(input[type=number],.counter-number) { background:#070f14; border:1px solid #354047; border-radius:3px; color:#eff3f6; box-shadow:none; text-shadow:none; }
+    #neosektor-tunnel-panel :is(button,input):focus-visible { outline:2px solid #e9edf2; outline-offset:2px; }
+}
 @media (max-width:900px) {
     body.neosektor-tunnel-operator-page {
         --operational-mobile-header-height:calc(88px + var(--neo-safe-top));
