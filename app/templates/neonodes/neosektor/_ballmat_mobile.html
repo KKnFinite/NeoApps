@@ -43,7 +43,7 @@
         <div class="bm-bay-row"><label class="bm-bay-status"><span>{{ bay.bay_name.upper() }}</span>
             <input type="range" min="0" max="4" step="1" value="{{ status_labels.index(bay.status) }}" data-bm-bay="{{ bay.bay_name }}" aria-label="{{ bay.bay_name }} status" {% if not can_edit %}disabled{% endif %}>
             <output data-bm-bay-value="{{ bay.bay_name }}">{{ bay.status }}</output>
-        </label><label class="bm-back-pickup" data-back-pickup-control {% if bay.status != 'Overflowing' %}hidden{% endif %}><input type="checkbox" data-bm-back="{{ bay.bay_name }}" {% if bay.back_pickup %}checked{% endif %} {% if not can_edit or bay.status != 'Overflowing' %}disabled{% endif %}>BACK PICKUP</label></div>
+        </label></div>
         {% endfor %}
     </section>
     <section class="bm-routing" aria-label="Driver routing"><h2>DRIVER ROUTING</h2><div>

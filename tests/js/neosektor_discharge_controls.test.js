@@ -15,7 +15,8 @@ function harness(canEdit=true) {
         elements.push(e); return e;
     };
     const cut=node({dischargeCut:''});
-    const back=node({dischargeBack:'Bay 1',side:'east'});
+    const back=node({dischargeBack:'east'});
+    const west=node({dischargeBack:'west'});
     back.control={hidden:false};
     back.closest=s=>s==='[data-back-pickup-control]'?back.control:null;
     const slider=node({dischargeStatus:'Bay 1',side:'east'});
@@ -30,8 +31,8 @@ function harness(canEdit=true) {
         const e=node({priorityBay:'Bay '+n}); orderHost.children.push(e);
         Object.defineProperty(e,'nextSibling',{get:()=>orderHost.children[orderHost.children.indexOf(e)+1] || null});
     }
-    let state={routing:{cut_discharge:false,bay_priority_order:orderHost.children.map(e=>e.dataset.priorityBay)},
-        sides:{east:{bays:[{bay_name:'Bay 1',status:'Overflowing',back_pickup:false}]},west:{bays:[]}}};
+    let state={routing:{back_pickups:{east:false,west:false},cut_discharge:false,bay_priority_order:orderHost.children.map(e=>e.dataset.priorityBay)},
+        sides:{east:{bays:[{bay_name:'Bay 1',status:'Overflowing',}]},west:{bays:[]}}};
     const root={querySelector:s=>s==='[data-discharge-order]'?orderHost:elements.find(e=>match(e,s)),
         addEventListener:(name,fn)=>{listeners[name]=fn;}};
     const calls=[],pending=[],errors=[];
@@ -41,7 +42,7 @@ function harness(canEdit=true) {
         onError:e=>errors.push(e),send:command=>new Promise((resolve,reject)=>{calls.push(command);pending.push({resolve,reject});})});
     const apply=next=>{state=next;api.apply(next);};
     const finish=async(next,fail=false)=>{apply(next);const p=pending.shift();fail?p.reject(new Error('conflict')):p.resolve();await tick();};
-    return {api,cut,back,slider,statusLabel,orderHost,calls,errors,listeners,orderListeners,apply,finish,get state(){return state;}};
+    return {api,cut,back,west,slider,statusLabel,orderHost,calls,errors,listeners,orderListeners,apply,finish,get state(){return state;}};
 }
 
 test('cut pending state survives a poll; acknowledgement reconciles with no global disabling', async()=>{
@@ -89,18 +90,18 @@ test('native desktop drag survives mouse pointer cancellation and saves once',as
     assert.equal(h.calls.length,1);
 });
 
-test('bay release saves latest desired status after in-flight save; shared Back Pickup reconciles',async()=>{
+test('bay release saves latest desired status without disabling side Back Pickup',async()=>{
     const h=harness();
     for(const value of ['3','1','4']) { h.slider.value=value; h.listeners.change({target:h.slider}); }
     assert.equal(h.calls.length,1);assert.equal(h.slider.disabled,false);
-    const full={...h.state,sides:{...h.state.sides,east:{bays:[{bay_name:'Bay 1',status:'Full',back_pickup:false}]}}};
+    const full={...h.state,sides:{...h.state.sides,east:{bays:[{bay_name:'Bay 1',status:'Full'}]}}};
     await h.finish(full);
     assert.equal(h.calls.length,2);assert.equal(h.calls[1].bay_statuses['Bay 1'],'Overflowing');
     assert.equal(h.slider.value,'4');
     assert.equal(h.statusLabel.textContent,'Overflowing');
-    await h.finish({...full,sides:{...full.sides,east:{bays:[{bay_name:'Bay 1',status:'Overflowing',back_pickup:true}]}}});
-    assert.equal(h.back.checked,true);assert.equal(h.back.disabled,false);
-    h.apply(full);assert.equal(h.back.checked,false);assert.equal(h.back.disabled,true);
+    await h.finish({...full,sides:{...full.sides,east:{bays:[{bay_name:'Bay 1',status:'Overflowing'}]}}});
+    assert.equal(h.back.checked,false);assert.equal(h.back.disabled,false);
+    h.apply(full);assert.equal(h.back.disabled,false);
 });
 
 test('view-only controls cannot submit or reorder',()=>{
@@ -110,28 +111,41 @@ test('view-only controls cannot submit or reorder',()=>{
     assert.equal(h.calls.length,0);assert.equal(h.cut.disabled,true);assert.equal(h.back.disabled,true);
 });
 
-test('Back Pickup hides for every ineligible status and toggles on/off when Overflowing',async()=>{
+test('independent EAST and WEST commands retain both pending selections through refresh',async()=>{
     const h=harness();
-    const state=(status,enabled=false)=>({...h.state,sides:{east:{bays:[
-        {bay_name:'Bay 1',status,back_pickup:enabled}]},west:{bays:[]}}});
-    for(const status of ['Empty','Light','Moderate','Full']) {
-        h.apply(state(status));
-        assert.equal(h.back.control.hidden,true);
-        assert.equal(h.back.disabled,true);
-        h.listeners.change({target:h.back});
-        assert.equal(h.calls.length,0);
-    }
-    h.apply(state('Overflowing'));
-    assert.equal(h.back.control.hidden,false);
-    for(const enabled of [true,false]) {
+    for(const input of [h.back,h.west]) { input.checked=true; h.listeners.change({target:input}); }
+    assert.deepEqual(h.calls.map(c=>c.side),['east','west']);
+    assert.ok(h.calls.every(c=>c.expected_enabled===false));
+    await h.finish({...h.state,routing:{...h.state.routing,back_pickups:{east:true,west:false}}});
+    assert.equal(h.back.checked,true);
+    assert.equal(h.west.checked,true);
+    await h.finish({...h.state,routing:{...h.state.routing,back_pickups:{east:true,west:true}}});
+    h.apply({...h.state,routing:{...h.state.routing,cut_discharge:true}});
+    assert.equal(h.back.checked,true);
+    assert.equal(h.west.checked,true);
+});
+
+test('side Back Pickup ignores bay status, protects pending choice and sends guarded Conductor command',async()=>{
+    const h=harness();
+    for(const status of ['Empty','Light','Moderate','Full','Overflowing']) {
+        h.apply({...h.state,sides:{east:{bays:[{bay_name:'Bay 1',status}]},west:{bays:[]}}});
         assert.equal(h.back.disabled,false);
+    }
+    for(const enabled of [true,false]) {
         h.back.checked=enabled; h.listeners.change({target:h.back});
-        assert.equal(h.calls.at(-1).back_pickups['Bay 1'],enabled);
-        await h.finish(state('Overflowing',enabled));
+        assert.equal(h.calls.at(-1).action,'back_pickup');
+        assert.equal(h.calls.at(-1).side,'east');
+        assert.equal(h.calls.at(-1).enabled,enabled);
+        assert.equal(h.calls.at(-1).expected_enabled,!enabled);
+        assert.equal(h.back.disabled,true);
+        h.apply(structuredClone(h.state));
+        assert.equal(h.back.checked,enabled);
+        await h.finish({...h.state,routing:{...h.state.routing,back_pickups:{east:enabled,west:false}}});
         assert.equal(h.back.checked,enabled);
         assert.equal(h.back.disabled,false);
     }
-    h.apply(state('Full'));
-    assert.equal(h.back.control.hidden,true);
+    h.back.checked=true;h.listeners.change({target:h.back});
+    await h.finish(h.state,true);
     assert.equal(h.back.checked,false);
+    assert.equal(h.calls.length,3); // Conflict is reconciled, never replayed.
 });

@@ -46,10 +46,11 @@ class ConductorMutationQueriesTest(unittest.TestCase):
                 ('bay_enable', 'settings', {'bay_priority_enabled': {'Bay 2': True}}, 200),
                 ('bay_status', 'ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Overflowing'}}, 200),
                 ('bay_status_noop', 'ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Overflowing'}}, 200),
-                ('back_pickup', 'ballmat', {'side': 'east', 'back_pickups': {'Bay 2': True}}, 200),
-                ('back_pickup_noop', 'ballmat', {'side': 'east', 'back_pickups': {'Bay 2': True}}, 200),
-                ('back_pickup_invalid', 'ballmat', {'side': 'east', 'back_pickups': {'Bay 1': True}}, 400),
-                ('back_pickup_clear', 'ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Full'}}, 200),
+                ('back_pickup', 'discharge-controls', {'action': 'back_pickup', 'side': 'east', 'enabled': True, 'expected_enabled': False}, 200),
+                ('back_pickup_noop', 'discharge-controls', {'action': 'back_pickup', 'side': 'east', 'enabled': True, 'expected_enabled': True}, 200),
+                ('back_pickup_invalid', 'discharge-controls', {'action': 'back_pickup', 'side': 'invalid', 'enabled': True}, 400),
+                # Status no longer clears Back Pickup: one fewer state UPDATE.
+                ('bay_status_with_back', 'ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Full'}}, 200),
                 ('priority', 'discharge-controls', {'action': 'priority', 'order': new_order, 'expected_order': old_order}, 200),
                 ('priority_noop', 'discharge-controls', {'action': 'priority', 'order': new_order, 'expected_order': new_order}, 200),
                 ('priority_stale', 'discharge-controls', {'action': 'priority', 'order': old_order, 'expected_order': old_order}, 409),
@@ -141,7 +142,7 @@ class ConductorMutationQueriesTest(unittest.TestCase):
                 self.assertEqual(counts[1], 0)
                 self.assertEqual(counts[3], 0)
                 update_budget = (0 if name == 'invalid_side' else 1 if early_failure or name.endswith('_stale')
-                                 else 2 if name.endswith('_noop') else 4 if name == 'back_pickup_clear' else 3)
+                                 else 2 if name.endswith('_noop') else 3)
                 self.assertEqual(counts[2], update_budget)
                 self.assertEqual(new_writes, writes)  # Exact tables AND columns unchanged.
                 self.assertEqual(new_payload, payload)

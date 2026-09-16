@@ -16,29 +16,19 @@ from tests.html_contracts import document
 
 
 class BayRankingTest(unittest.TestCase):
-    def test_status_first_saved_ties_disabled_and_back_capacity(self):
+    def test_status_first_saved_ties_disabled_and_three_regular_cards(self):
         order = SimpleNamespace(bay_priority_order='2,5,1,4,3')
         sides = {'east': {'label': 'EAST', 'bays': []}, 'west': {'label': 'WEST', 'bays': []}}
         for n in range(1, 6):
             sides['east' if n <= 3 else 'west']['bays'].append(
-                {'bay_name': f'Bay {n}', 'status': 'Overflowing', 'back_pickup': False})
+                {'bay_name': f'Bay {n}', 'status': 'Overflowing'})
         bays = [bay for side in sides.values() for bay in side['bays']]
         routes = live._driver_routes_from_rows([])
-        for backs in range(6):
-            with self.subTest(backs=backs):
-                for n, bay in enumerate(bays):
-                    bay['back_pickup'] = n < backs
-                cards = live._driver_bay_priority(sides, routes, order)
-                normal = min(3, 5 - backs)
-                self.assertEqual(len(cards), backs + normal)
-                self.assertEqual([b['pickup'] for b in cards], ['back'] * backs + ['front'] * normal)
-                self.assertEqual([b['arrow'] for b in cards], ['left'] * backs + ['right'] * normal)
-                self.assertEqual([b['bay_name'] for b in cards[:backs]],
-                                 [f'Bay {n}' for n in (2, 5, 1, 4, 3) if n <= backs])
-                if backs == 2:
-                    self.assertTrue(set(b['bay_name'] for b in cards[:backs]) & set(b['bay_name'] for b in cards[backs:]))
+        cards = live._driver_bay_priority(sides, routes, order)
+        self.assertEqual([b['bay_name'] for b in cards], ['Bay 2', 'Bay 5', 'Bay 1'])
+        self.assertTrue(all(b['pickup'] == 'front' for b in cards))
         for bay, status in zip(bays, ['Overflowing', 'Full', 'Moderate', 'Light', 'Full']):
-            bay.update(status=status, back_pickup=False)
+            bay.update(status=status)
         self.assertEqual([b['bay_name'] for b in live._driver_bay_priority(sides, routes, order)], ['Bay 1', 'Bay 2', 'Bay 5'])
         disabled = live._driver_routes_from_rows([SimpleNamespace(route_name='BAY 1 PRIORITY ENABLED', route_value='false')])
         self.assertEqual([b['bay_name'] for b in live._driver_bay_priority(sides, disabled, order)], ['Bay 2', 'Bay 5', 'Bay 3'])
@@ -94,17 +84,20 @@ class DischargeControlsTest(unittest.TestCase):
     def cut(self, enabled, expected):
         return self.post('discharge-controls', {'action': 'cut', 'enabled': enabled, 'expected_cut': expected})['state']
 
-    def test_saved_order_cross_sort_and_disabled_preserves_position_and_back_state(self):
+    def back(self, side, enabled, expected=False, status=200):
+        return self.post('discharge-controls', {'action': 'back_pickup', 'side': side,
+            'enabled': enabled, 'expected_enabled': expected}, status)['state']
+
+    def test_saved_order_cross_sort_and_disabled_preserves_position(self):
         initial = self.state()['state']['routing']['bay_priority_order']
         self.assertEqual(initial, ['Bay 5', 'Bay 4', 'Bay 3', 'Bay 2', 'Bay 1'])
         order = ['Bay 2', 'Bay 5', 'Bay 1', 'Bay 3', 'Bay 4']
         self.post('discharge-controls', {'action': 'priority', 'order': order, 'expected_order': initial})
-        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Overflowing'}, 'back_pickups': {'Bay 2': True}})
+        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Overflowing'}})
         disabled = self.post('settings', {'bay_priority_enabled': {'Bay 2': False}})['state']
         self.assertEqual(disabled['routing']['bay_priority'], [])
-        self.assertTrue(disabled['sides']['east']['bays'][1]['back_pickup'])
         enabled = self.post('settings', {'bay_priority_enabled': {'Bay 2': True}})['state']
-        self.assertEqual([b['pickup'] for b in enabled['routing']['bay_priority']], ['back', 'front'])
+        self.assertEqual([b['pickup'] for b in enabled['routing']['bay_priority']], ['front'])
         self.assertEqual(enabled['routing']['bay_priority_order'], order)
         for day in (self.day, self.day + timedelta(days=1)):
             with self.fixture.app.test_request_context('/neosektor/driver-routing/state'):
@@ -122,27 +115,43 @@ class DischargeControlsTest(unittest.TestCase):
             self.assertEqual(state['waves'][1]['left_to_unload'], expected)
             self.assertFalse(state['routing']['cut_discharge'])
 
-    def test_back_pickup_validation_local_scope_clear_and_repeated_refresh(self):
+    def test_side_back_pickup_independence_legacy_conflicts_and_read_only_refresh(self):
+        row = NeoSektorSortState.query.one()
+        row.back_pickup_mask = 31  # Every retired bay flag set.
+        db.session.commit()
+        self.assertEqual(self.state()['state']['routing']['back_pickups'], {'east': False, 'west': False})
+        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 1': 'Light'}})
+        normal = self.state()['state']['routing']['bay_priority']
+        for side, enabled, expected, selected in [
+            ('east', True, False, ['east']), ('west', True, False, ['east', 'west']),
+            ('east', False, True, ['west']), ('west', False, True, [])]:
+            state = self.back(side, enabled, expected)
+            cards = state['routing']['bay_priority']
+            self.assertEqual(cards, normal) if not selected else self.assertEqual([c['side'] for c in cards], selected)
+            if selected:
+                self.assertTrue(all(c['pickup'] == 'back' and not c['bay_name'] for c in cards))
+                dom = document(self.client.get('/neosektor/driver-routing'))
+                shown = [c for c in dom.findall(**{'data-driver-priority-index': None}) if 'hidden' not in c.attrs]
+                self.assertEqual([c.text.strip() for c in shown], ['← BACK PICKUP ' + s.upper() for s in selected])
+            before = self.stored()
+            for _ in range(2):
+                for url in ['/neosektor/tunnel-conductor/state', '/neosektor/driver-routing/state']:
+                    self.assertEqual(self.state(url)['state']['routing']['bay_priority'], cards)
+            self.assertEqual(self.stored(), before)
+        self.back('east', True)
         before = self.stored()
-        self.post('ballmat', {'side': 'east', 'back_pickups': {'Bay 1': True}}, 400)
-        self.post('ballmat', {'side': 'east', 'back_pickups': {'Bay 5': True}}, 400)
+        for invalid in [{'side': []}, {'side': 'north'}, {'side': 'west', 'enabled': 'true'}]:
+            self.post('discharge-controls', {'action': 'back_pickup', 'enabled': True,
+                'expected_enabled': False, **invalid}, 400)
+        conflict = self.back('east', False, False, 409)
+        self.assertTrue(conflict['routing']['back_pickups']['east'])
         self.assertEqual(self.stored(), before)
-        for side, names in [('east', ['Bay 1', 'Bay 2']), ('west', ['Bay 5'])]:
-            response = self.client.post('/neosektor/ballmat/update?operator=1&side=' + side,
-                json={'side': side, 'bay_statuses': {n: 'Overflowing' for n in names}, 'back_pickups': {n: True for n in names}})
-            self.assertEqual(response.status_code, 200, response.json)
-        before = self.stored()
-        for _ in range(2):
-            for url in ['/neosektor/tunnel-conductor/state', '/neosektor/ballmat/state?side=east', '/neosektor/ballmat/state?side=west', '/neosektor/driver-routing/state']:
-                state = self.state(url)['state']
-                self.assertEqual([b['bay_name'] for b in state['routing']['bay_priority'][:3]], ['Bay 5', 'Bay 2', 'Bay 1'])
-                self.assertEqual(len(state['routing']['bay_priority']), 5)
-        self.assertEqual(self.stored(), before)
-        self.post('settings', {'bay_priority_enabled': {'Bay 2': False}})
-        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Full'}})
-        self.assertFalse(NeoSektorSortState.query.one().back_pickup_mask & 2)
-        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 2': 'Overflowing'}})
-        self.assertFalse(self.state()['state']['sides']['east']['bays'][1]['back_pickup'])
+        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 1': 'Empty'}})
+        self.post('settings', {'bay_priority_enabled': {'Bay 1': False}})
+        self.assertTrue(self.state()['state']['routing']['back_pickups']['east'])
+        with self.fixture.app.test_request_context('/neosektor/driver-routing/state'):
+            next_state = live.driver_routing_state_payload(self.gateway, self.day + timedelta(days=1), 'night', initialize=False)
+        self.assertEqual(next_state['routing']['back_pickups'], {'east': False, 'west': False})
 
     def test_first_wave_gate_and_block_in_revision_current_sort_only(self):
         wrong = self.fixture._add_sort_operation(self.day - timedelta(days=1), 'night')
@@ -160,12 +169,12 @@ class DischargeControlsTest(unittest.TestCase):
         self.assertEqual(state['routing']['routes']['first']['display_message'], '1ST WAVE ALL IN')
 
     def test_manual_cut_restores_cards_without_erasing_back_state(self):
-        self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 1': 'Overflowing'}, 'back_pickups': {'Bay 1': True}})
+        self.back('east', True)
         before = self.state()['state']
         cut = self.cut(True, False)
         self.assertEqual(cut['routing']['bay_priority'], [])
         self.assertEqual(cut['routing']['discharge_message'], 'Discharge cut. Report to doors.')
-        self.assertTrue(cut['sides']['east']['bays'][0]['back_pickup'])
+        self.assertTrue(cut['routing']['back_pickups']['east'])
         self.assertFalse(cut['routing']['discharge_auto_fired'])
         self.assertEqual(self.cut(False, True)['routing']['bay_priority'], before['routing']['bay_priority'])
 
@@ -174,7 +183,7 @@ class DischargeControlsTest(unittest.TestCase):
         paths = ['/neosektor/driver-routing/state', '/neosektor/tunnel-conductor/state',
                  '/neosektor/ballmat/state?side=east', '/neosektor/ballmat/state?side=west']
         for endpoint, command in [
-            ('ballmat', {'side': 'east', 'back_pickups': {'Bay 1': True}}),
+            ('discharge-controls', {'action': 'back_pickup', 'side': 'east', 'enabled': True, 'expected_enabled': False}),
             ('discharge-controls', {'action': 'priority', 'order': ['Bay 1','Bay 2','Bay 3','Bay 4','Bay 5'],
                 'expected_order': ['Bay 5','Bay 4','Bay 3','Bay 2','Bay 1']}),
             ('discharge-controls', {'action': 'cut', 'enabled': True, 'expected_cut': False}),
@@ -242,18 +251,18 @@ class DischargeControlsTest(unittest.TestCase):
         sheet = _FakeWorksheet(_complete_sheet_values(B6='Overflowing'))
         with patch.dict(os.environ, FAKE_SHEETS_ENV), patch('app.services.neosektor_sheets_compat._get_worksheet', return_value=sheet):
             try:
-                self.post('ballmat', {'side': 'east', 'back_pickups': {'Bay 1': True}})
+                self.back('east', True)
                 before = self.state()
-                self.assertTrue(before['state']['sides']['east']['bays'][0]['back_pickup'])
+                self.assertTrue(before['state']['routing']['back_pickups']['east'])
                 self.cut(True, False)
                 after = self.state('/neosektor/driver-routing/state?revision=' + before['revision'])
                 self.assertTrue(after['changed'])
                 self.assertTrue(after['state']['routing']['cut_discharge'])
                 self.post('ballmat', {'side': 'east', 'bay_statuses': {'Bay 1': 'Full'}})
-                self.assertFalse(NeoSektorSortState.query.one().back_pickup_mask & 1)
+                self.assertTrue(NeoSektorSortState.query.one().back_pickup_mask & live.BACK_PICKUP_SIDE_BITS['east'])
                 self.assertIn(('B6', 'Full'), sheet.updates)
                 self.cut(False, True)
-                self.assertFalse(self.state()['state']['sides']['east']['bays'][0]['back_pickup'])
+                self.assertTrue(self.state()['state']['routing']['back_pickups']['east'])
             finally:
                 clear_neosektor_google_cache()
 
@@ -303,17 +312,17 @@ class DischargeControlsTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertNotIn(b'MANUAL OVERRIDE', response.data)
             dom = document(response)
-            self.assertEqual(len(dom.findall(**{'data-driver-priority-index': None})), 5)
+            self.assertEqual(len(dom.findall(**{'data-driver-priority-index': None})), 3)
             self.assertEqual(dom.one(**{'data-driver-discharge-cut': None}).text, 'Discharge cut. Report to doors.')
         tunnel = document(self.client.get('/neosektor/tunnel-conductor'))
         self.assertEqual(len(tunnel.findall(**{'data-priority-bay': None})), 5)
-        self.assertEqual(len(tunnel.findall(**{'data-discharge-back': None})), 5)
+        self.assertEqual(len(tunnel.findall(**{'data-discharge-back': None})), 2)
         self.assertEqual(len(tunnel.findall(**{'data-discharge-cut': None})), 1)
         for page, count in [('ebm', 3), ('wbm', 2)]:
             response = self.client.get('/neosektor/' + page)
             dom = document(response)
-            self.assertEqual(len(dom.findall(**{'data-bm-back': None})), count)
-            self.assertEqual(len(dom.findall(**{'data-discharge-back': None})), count)
+            self.assertEqual(len(dom.findall(**{'data-bm-back': None})), 0)
+            self.assertEqual(len(dom.findall(**{'data-discharge-back': None})), 0)
             self.assertFalse(dom.findall(**{'data-discharge-cut': None}))
             self.assertFalse(dom.findall(**{'data-priority-bay': None}))
         css = Path('app/static/css/neosektor_discharge_controls.css').read_text()
@@ -327,43 +336,33 @@ class DischargeControlsTest(unittest.TestCase):
         driver_css = Path('app/static/css/neosektor_driver_routing.css').read_text()
         self.assertIn('grid-auto-flow:column; grid-auto-columns:minmax(0,1fr)', driver_css)
 
-    def test_back_pickup_visibility_and_shared_toggle_without_card_arrows(self):
-        for side, name, page in [('east', 'Bay 1', 'ebm'), ('west', 'Bay 5', 'wbm')]:
-            for status in ['Empty', 'Light', 'Moderate', 'Full', 'Overflowing']:
-                self.post('ballmat', {'side': side, 'bay_statuses': {name: status}})
-                for surface in [page, 'tunnel-conductor']:
-                    dom = document(self.client.get('/neosektor/' + surface))
-                    controls = [label for label in dom.findall(**{'data-back-pickup-control': None})
-                                if any(input.attrs.get('data-bm-back', input.attrs.get('data-discharge-back')) == name
-                                       for input in label.findall('input'))]
-                    self.assertTrue(controls)
-                    for control in controls:
-                        self.assertEqual('hidden' in control.attrs, status != 'Overflowing')
-                        self.assertEqual('disabled' in control.one('input').attrs, status != 'Overflowing')
-            for enabled in [True, False, True]:
+    def test_conductor_only_controls_and_spotter_mutations_rejected(self):
+        for page in ['ebm', 'wbm']:
+            response = self.client.get('/neosektor/' + page)
+            self.assertNotIn(b'BACK PICKUP', response.data)
+        before = self.stored()
+        for side in ['east', 'west']:
+            for payload in [{'back_pickups': {'Bay 1': True}}, {'back_pickups': {side: True}}]:
                 response = self.client.post('/neosektor/ballmat/update?operator=1&side=' + side,
-                    json={'side':side, 'back_pickups':{name:enabled}})
-                self.assertEqual(response.status_code, 200)
-                for url in ['/neosektor/tunnel-conductor/state', '/neosektor/ballmat/state?side=' + side]:
-                    bays = self.state(url)['state']['sides'][side]['bays']
-                    self.assertEqual(next(b for b in bays if b['bay_name'] == name)['back_pickup'], enabled)
-            for url in ['/neosektor/driver-routing', '/neosektor/driver-routing?tv=1']:
-                dom = document(self.client.get(url))
-                cards = dom.findall(**{'data-driver-priority-index':None})
-                self.assertTrue(any(c.attrs.get('data-pickup') == 'back' for c in cards))
-                for card in cards:
-                    self.assertNotIn('←', card.text)
-                    self.assertNotIn('→', card.text)
-            self.post('ballmat', {'side':side, 'back_pickups':{name:False}})
-            self.assertFalse(next(b for b in self.state()['state']['sides'][side]['bays'] if b['bay_name'] == name)['back_pickup'])
-            self.post('ballmat', {'side':side, 'back_pickups':{name:True}})
-            self.post('ballmat', {'side':side, 'bay_statuses':{name:'Full'}})
-            self.assertFalse(next(b for b in self.state()['state']['sides'][side]['bays'] if b['bay_name'] == name)['back_pickup'])
-        css = Path('app/static/css/neosektor_discharge_controls.css').read_text()
-        self.assertIn('.sektor-back-pickup[hidden], #ballmat-operator .bm-back-pickup[hidden] { display:none !important; }', css)
-        template = Path('app/templates/neonodes/neosektor/driver_routing.html').read_text()
-        self.assertNotIn('BACK ←', template)
-        self.assertIn('bay.pickup === "back" ? "BACK" : ""', template)
+                    json={'side': side, **payload})
+                self.assertEqual(response.status_code, 403)
+                self.assertIn('only by Tunnel Conductor', response.json['error'])
+        with patch('app.neonodes.neosektor.routes._neosektor_access', return_value={'can_edit': False}):
+            self.post('discharge-controls', {'action': 'back_pickup', 'side': 'east',
+                'enabled': True, 'expected_enabled': False}, 403)
+        self.assertEqual(self.stored(), before)
+        for side in ['east', 'west']:
+            self.back(side, True)
+        for url in ['/neosektor/driver-routing', '/neosektor/driver-routing?tv=1']:
+            dom = document(self.client.get(url))
+            cards = [c for c in dom.findall(**{'data-driver-priority-index': None}) if 'hidden' not in c.attrs]
+            self.assertEqual(len(cards), 2)
+            self.assertEqual([c.text.strip() for c in cards], ['← BACK PICKUP EAST', '← BACK PICKUP WEST'])
+            self.assertTrue(all(c.attrs['data-pickup'] == 'back' for c in cards))
+        self.cut(True, False)
+        self.assertEqual(self.state()['state']['routing']['back_pickups'], {'east': True, 'west': True})
+        self.assertEqual(len(self.cut(False, True)['routing']['bay_priority']), 2)
+
 
 
 if __name__ == '__main__':

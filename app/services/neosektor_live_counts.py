@@ -76,6 +76,8 @@ BALLMAT_DETAIL_DEFAULTS = {
     "right_first": 0, "right_second": 0, "right_open": 0,
 }
 DISCHARGE_DEFAULTS = {"back_pickup_mask": 0, "cut_discharge": False, "discharge_auto_fired": False}
+# Bits 0–4 are retired per-bay values. Never interpret them as side controls.
+BACK_PICKUP_SIDE_BITS = {"east": 1 << 5, "west": 1 << 6}
 DEFAULT_BAY_PRIORITY_ORDER = ["Bay 5", "Bay 4", "Bay 3", "Bay 2", "Bay 1"]
 
 
@@ -463,10 +465,6 @@ class NeoSektorOperationalStateBundle:
         driver_routes = self.ensure_driver_routes()
         sort_row = self.routing_sort_state or self.sort_state
         mask = sort_row.back_pickup_mask or 0
-        for side in state["sides"].values():
-            for bay in side["bays"]:
-                bit = 1 << (_bay_number(bay["bay_name"]) - 1)
-                bay["back_pickup"] = bool(mask & bit) and bay["status"] == "Overflowing"
         routing = _driver_routing_calculation(
             self.gateway,
             self.routing_sort_state or self.sort_state,
@@ -481,8 +479,15 @@ class NeoSektorOperationalStateBundle:
         routing["cut_discharge"] = cut
         routing["discharge_auto_fired"] = bool(sort_row.discharge_auto_fired or auto_due)
         routing["discharge_message"] = "Discharge cut. Report to doors." if cut else ""
+        routing["back_pickups"] = {side: bool(mask & bit) for side, bit in BACK_PICKUP_SIDE_BITS.items()}
         if cut:
             routing["bay_priority"] = []
+        elif any(routing["back_pickups"].values()):
+            routing["bay_priority"] = [
+                {"pickup": "back", "side": side, "label": f"← BACK PICKUP {side.upper()}",
+                 "bay_name": "", "rank_label": "", "status": ""}
+                for side, enabled in routing["back_pickups"].items() if enabled
+            ]
         _sync_driver_route_values(
             driver_routes,
             routing,
@@ -953,6 +958,8 @@ def update_ballmat_side(
     target_side = normalize_ballmat_side((payload or {}).get("side"))
     if not selected_side or not target_side or selected_side != target_side:
         raise ValueError("Selected side does not match update side.")
+    if "back_pickups" in (payload or {}):
+        raise ValueError("Back Pickup is controlled only by Tunnel Conductor discharge controls.")
 
     bundle = bundle or NeoSektorOperationalStateBundle.load(
         gateway,
@@ -964,7 +971,6 @@ def update_ballmat_side(
         _apply_spotter_command(bundle, selected_side, payload["spotter"])
         return bundle.driver_routing_state_payload() if include_routing_state else bundle.ballmat_state_payload()
     if bundle.integration_mode == "google_primary":
-        _update_back_pickups(bundle, selected_side, payload)
         updates = _google_ballmat_updates(selected_side, payload)
         if updates:
             from app.services.neosektor_sheets_compat import (
@@ -977,7 +983,6 @@ def update_ballmat_side(
                 integration_mode=bundle.integration_mode,
             )
             bundle.apply_google_updates(updates)
-        _clear_ineligible_back_pickups(bundle)
         if include_routing_state:
             return bundle.driver_routing_state_payload()
         return bundle.ballmat_state_payload()
@@ -1020,38 +1025,10 @@ def update_ballmat_side(
     for bay in bundle.bay_statuses:
         if bay.side == side_label and bay.bay_name in bay_payload:
             bay.status = _status(bay_payload[bay.bay_name])
-    _update_back_pickups(bundle, selected_side, payload)
-    _clear_ineligible_back_pickups(bundle)
 
     if include_routing_state:
         return bundle.driver_routing_state_payload()
     return bundle.ballmat_state_payload()
-
-
-def _clear_ineligible_back_pickups(bundle):
-    bays = bundle._google_ballmat_components()[-1] if bundle.integration_mode == "google_primary" else bundle.bay_statuses
-    mask = bundle.sort_state.back_pickup_mask or 0
-    for bay in bays:
-        if _status(bay.status) != "Overflowing":
-            mask &= ~(1 << (_bay_number(bay.bay_name) - 1))
-    _assign_if_changed(bundle.sort_state, "back_pickup_mask", mask, change_tracker=bundle._change_tracker)
-
-
-def _update_back_pickups(bundle, selected_side, payload):
-    updates = (payload or {}).get("back_pickups", {})
-    if not isinstance(updates, dict):
-        raise ValueError("Invalid Back Pickup update.")
-    bays = bundle._google_ballmat_components()[-1] if bundle.integration_mode == "google_primary" else bundle.bay_statuses
-    local = {bay.bay_name: bay for bay in bays if bay.side == side_display_label(selected_side)}
-    mask = bundle.sort_state.back_pickup_mask or 0
-    for name, enabled in updates.items():
-        if name not in local or type(enabled) is not bool:
-            raise ValueError("Invalid Back Pickup bay.")
-        if enabled and _status(local[name].status) != "Overflowing":
-            raise ValueError("Back Pickup requires Overflowing.")
-        bit = 1 << (_bay_number(name) - 1)
-        mask = mask | bit if enabled else mask & ~bit
-    _assign_if_changed(bundle.sort_state, "back_pickup_mask", mask, change_tracker=bundle._change_tracker)
 
 
 def update_discharge_controls(bundle, payload):
@@ -1068,6 +1045,17 @@ def update_discharge_controls(bundle, payload):
         if payload.get("expected_order") != _bay_priority_order(bundle.operational_settings):
             raise BallmatModeConflict("Bay Priority changed. Review the current order.")
         bundle.operational_settings.bay_priority_order = ",".join(str(_bay_number(bay)) for bay in order)
+    elif action == "back_pickup":
+        side = payload.get("side")
+        if not isinstance(side, str) or side not in BACK_PICKUP_SIDE_BITS or type(payload.get("enabled")) is not bool:
+            raise ValueError("Invalid Back Pickup side/value.")
+        bit = BACK_PICKUP_SIDE_BITS[side]
+        mask = bundle.sort_state.back_pickup_mask or 0
+        if payload.get("expected_enabled") is not bool(mask & bit):
+            raise BallmatModeConflict("Back Pickup changed. Review the current state.")
+        _assign_if_changed(bundle.sort_state, "back_pickup_mask",
+                           mask | bit if payload["enabled"] else mask & ~bit,
+                           change_tracker=bundle._change_tracker)
     elif action == "cut":
         if type(payload.get("enabled")) is not bool:
             raise ValueError("Invalid Cut Discharge value.")
@@ -1295,8 +1283,6 @@ def apply_standalone_compat_values(
         parsed = _standalone_compat_status(cell_values.get(cell))
         if parsed is not None:
             changed += _assign_if_changed(row, "status", parsed)
-            if parsed != "Overflowing":
-                sort_state.back_pickup_mask = (sort_state.back_pickup_mask or 0) & ~(1 << (_bay_number(row.bay_name) - 1))
 
     _sync_ballmat_rollups(sort_state, ballmat_wave_counts, waves, ballmats)
     db.session.flush()
@@ -2404,10 +2390,7 @@ def _driver_bay_priority(sides, driver_routes, settings=None):
     ]
     order = _bay_priority_order(settings)
     priority.sort(key=lambda bay: (-bay["status_rank"], order.index(bay["bay_name"])))
-    backs = [dict(bay, pickup="back", arrow="left") for bay in priority
-             if bay.get("back_pickup") and bay["status"] == "Overflowing"]
-    regular_slots = min(3, max(0, 5 - len(backs)))
-    cards = backs + [dict(bay, pickup="front", arrow="right") for bay in priority[:regular_slots]]
+    cards = [dict(bay, pickup="front") for bay in priority[:3]]
     for index, bay in enumerate(cards, start=1):
         bay["rank"] = index
         bay["rank_label"] = _ordinal(index)

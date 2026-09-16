@@ -1,4 +1,4 @@
-/* Conductor controls and desktop Back Pickup use the existing page transport.
+/* Conductor discharge controls use the existing page transport.
  * No poller, retry, or client-side routing calculation. */
 window.NeoSektorDischargeControls = {
     create(root, {state, canEdit, send, onError}) {
@@ -24,18 +24,17 @@ window.NeoSektorDischargeControls = {
                 });
                 if (restoreFocus) focused.focus();
             }
+            for (const side of ['east', 'west']) {
+                const back = root.querySelector(`[data-discharge-back="${side}"]`);
+                if (!back) continue;
+                if (!pending.has('back:' + side)) back.checked = Boolean(current.routing.back_pickups[side]);
+                back.disabled = !canEdit || pending.has('back:' + side);
+            }
             for (const side of Object.values(current.sides)) for (const bay of side.bays) {
                 const status = root.querySelector(`[data-discharge-status="${bay.bay_name}"]`);
                 if (status && !pending.has(bay.bay_name)) status.value = labels.indexOf(bay.status);
                 const statusLabel = status?.closest('[data-tunnel-bay]')?.querySelector('strong');
                 if (statusLabel) statusLabel.textContent = labels[Number(status.value)];
-                const back = root.querySelector(`[data-discharge-back="${bay.bay_name}"]`);
-                if (back && !pending.has(bay.bay_name)) back.checked = Boolean(bay.back_pickup);
-                if (back) {
-                    const control = back.closest('[data-back-pickup-control]');
-                    if (control) control.hidden = bay.status !== 'Overflowing';
-                    back.disabled = !canEdit || bay.status !== 'Overflowing' || pending.has(bay.bay_name);
-                }
             }
         };
         const save = async (key, command) => {
@@ -66,8 +65,9 @@ window.NeoSektorDischargeControls = {
             if (input.matches('[data-discharge-cut]')) void save('cut', {
                 action: 'cut', enabled: input.checked, expected_cut: current.routing.cut_discharge,
             });
-            if (input.matches('[data-discharge-back]')) void save(input.dataset.dischargeBack, {
-                side: input.dataset.side, back_pickups: {[input.dataset.dischargeBack]: input.checked},
+            if (input.matches('[data-discharge-back]')) void save('back:' + input.dataset.dischargeBack, {
+                action: 'back_pickup', side: input.dataset.dischargeBack, enabled: input.checked,
+                expected_enabled: current.routing.back_pickups[input.dataset.dischargeBack],
             });
             if (input.matches('[data-discharge-status]')) void save(input.dataset.dischargeStatus, {
                 side: input.dataset.side, bay_statuses: {[input.dataset.dischargeStatus]: labels[Number(input.value)]},
