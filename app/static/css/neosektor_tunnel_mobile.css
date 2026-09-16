@@ -1,5 +1,6 @@
 /* Tunnel content polish. Shared shell/navigation and mobile geometry stay intact. */
 .tunnel-polish-mobile-only { display:none; }
+.tunnel-lower-controls { display:contents; }
 @media (min-width:901px) {
     /* Keep the current flat skin; desktop geometry below follows the supplied
        reference rather than 16-neosektor's legacy side-column board. */
@@ -40,7 +41,8 @@
     #neosektor-tunnel-panel :is(.counter-control,.neosektor-driver-offset-control) button { inline-size:44px; block-size:44px; min-width:44px; min-height:44px; padding:0; }
     #neosektor-tunnel-panel :is(input[type=number],.counter-number) { width:100%; min-width:0; height:44px; block-size:44px; min-height:44px; margin:0; padding:2px 6px; font-size:20px; line-height:1.3; text-align:center; }
     #neosektor-tunnel-panel :is([data-metric=left_to_arrive],[data-wave-count],[data-open-bays],[data-open-bays-value]) { font-size:24px; }
-    #neosektor-tunnel-panel .tunnel-arrive-control .counter-control { width:min(100%,200px); justify-self:center; }
+    #neosektor-tunnel-panel .tunnel-arrive-control .counter-control { width:min(100%,320px); justify-self:center; align-items:center; }
+    #neosektor-tunnel-panel .tunnel-arrive-control [data-metric=left_to_arrive] { font-size:72px; line-height:1; height:84px; block-size:84px; min-height:84px; padding:0 6px; }
     #neosektor-tunnel-panel :is(.tunnel-counts-panel,.tunnel-bay-panel,.tunnel-operations-card,.tunnel-offset-panel) { display:block; padding:12px 0; border-top:1px solid #354047; border-left:0; }
     #neosektor-tunnel-panel :is(.tunnel-counts-panel,.tunnel-bay-panel,.tunnel-operations-card,.tunnel-offset-panel) > h2 { display:block; width:100%; margin:0 0 10px; padding:0 4px 8px; border-bottom:1px solid #252e34; font-size:16px; text-align:center; }
     #neosektor-tunnel-panel .tunnel-counts-panel { order:2; }
@@ -78,6 +80,17 @@
     #neosektor-tunnel-panel .sektor-conductor-discharge h3 { grid-column:1 / -1; margin:0; }
     #neosektor-tunnel-panel .sektor-priority-order { gap:4px; }
     #neosektor-tunnel-panel .sektor-cut-control { min-height:44px; }
+    /* Repack existing controls, without duplicating inputs or shrinking them. */
+    #neosektor-tunnel-panel .tunnel-lower-controls { order:4; display:grid; grid-template-columns:minmax(0,560px) minmax(180px,220px); grid-template-rows:auto auto; align-items:end; gap:8px 16px; width:min(100%,796px); margin-inline:auto; }
+    #neosektor-tunnel-panel .tunnel-operations-card { display:contents; }
+    #neosektor-tunnel-panel .tunnel-operations-card > h2 { display:none; }
+    #neosektor-tunnel-panel .tunnel-route-overrides { grid-column:1 / -1; grid-row:1; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:auto; width:100%; gap:12px; }
+    #neosektor-tunnel-panel .tunnel-route-override + .tunnel-route-override { border-top:0; }
+    #neosektor-tunnel-panel .tunnel-settings-panel { grid-column:1; grid-row:2; padding:0; }
+    #neosektor-tunnel-panel .tunnel-offset-panel { grid-column:2; grid-row:2; padding:0; border-top:0; }
+    #neosektor-tunnel-panel .tunnel-offset-panel > h2 { padding:0; margin:0 0 4px; border:0; font-size:12px; }
+    #neosektor-tunnel-panel .tunnel-offset-control-card { display:block; padding:0; }
+    #neosektor-tunnel-panel .tunnel-offset-control-card .tunnel-mobile-label { display:none; }
     #neosektor-tunnel-panel .neosektor-inline-edit-error { position:static; order:6; }
 }
 @media (max-width:900px) {

@@ -10,6 +10,7 @@ class NeoSektorCssCleanupTest(unittest.TestCase):
     def test_tunnel_desktop_reference_geometry_keeps_flat_skin_and_shell(self):
         css_root = Path(__file__).resolve().parents[1] / 'app/static/css'
         css = (css_root / 'neosektor_tunnel_mobile.css').read_text()
+        self.assertIn('.tunnel-lower-controls { display:contents; }', css.split('@media', 1)[0])
         desktop = css.split('@media (min-width:901px) {', 1)[1].split('@media (max-width:900px)', 1)[0]
         self.assertIn('border:0; border-radius:0; box-shadow:none; background:transparent;', desktop)
         for selector in ('.tunnel-panel', '.tunnel-metric', '.tunnel-readonly-card', '.tunnel-bay-card'):
@@ -22,8 +23,7 @@ class NeoSektorCssCleanupTest(unittest.TestCase):
             self.assertTrue(matches, selector)
             return matches[-1]
         for selector, order in [('.tunnel-wave-grid', 1), ('.tunnel-counts-panel', 2),
-                                ('.tunnel-bay-panel', 3), ('.tunnel-operations-card', 4),
-                                ('.tunnel-offset-panel', 5)]:
+                                ('.tunnel-bay-panel', 3), ('.tunnel-lower-controls', 4)]:
             self.assertIn(f'order:{order}', rule(selector))
         self.assertIn('display:flex; flex-direction:column; height:auto', rule('.tunnel-wrap'))
         for selector in ('.tunnel-wave-grid', '.tunnel-ballmat-grid'):
@@ -32,10 +32,18 @@ class NeoSektorCssCleanupTest(unittest.TestCase):
         self.assertIn('grid-template-columns:80px minmax(0,1fr)', rule('.tunnel-ballmat-card'))
         self.assertIn('grid-template-columns:repeat(5,minmax(0,1fr))', rule('.tunnel-bay-grid'))
         self.assertIn('grid-template-columns:minmax(0,1fr)', rule('.tunnel-bay-card'))
-        self.assertIn('grid-template-rows:auto auto', rule('.tunnel-route-overrides'))
+        self.assertIn('grid-template-columns:repeat(2,minmax(0,1fr))', rule('.tunnel-route-overrides'))
+        self.assertIn('grid-row:1', rule('.tunnel-route-overrides'))
+        self.assertIn('grid-row:2', rule('.tunnel-settings-panel'))
+        self.assertIn('grid-column:1;', rule('.tunnel-settings-panel'))
+        self.assertIn('grid-row:2', rule('.tunnel-offset-panel'))
+        self.assertIn('grid-column:2;', rule('.tunnel-offset-panel'))
+        self.assertIn('display:contents', rule('.tunnel-operations-card'))
+        self.assertIn('font-size:72px', rule('.tunnel-arrive-control [data-metric=left_to_arrive]'))
+        self.assertIn('width:min(100%,320px)', rule('.tunnel-arrive-control .counter-control'))
         self.assertIn('grid-template-columns:88px minmax(0,1fr)', rule('.tunnel-route-override'))
         self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', rule('.tunnel-settings-grid'))
-        for selector, width in [('.tunnel-route-overrides', 760), ('.tunnel-settings-grid', 560),
+        for selector, width in [('.tunnel-lower-controls', 796), ('.tunnel-settings-grid', 560),
                                 ('.sektor-conductor-discharge', 640), ('.neosektor-driver-offset-control', 220)]:
             self.assertIn(f'width:min(100%,{width}px)', rule(selector))
         self.assertIn('grid-template-columns:minmax(0,1fr) auto', rule('.sektor-conductor-discharge'))
