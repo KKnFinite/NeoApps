@@ -2782,7 +2782,9 @@ def _render_vacation_union_editor(calendar, vacation_year):
         or "official"
     ).casefold()
     operations = [
-        unit for unit in hierarchy["units"] if unit.unit_type == "operation"
+        unit for unit in hierarchy["units"]
+        if unit.unit_type == "operation"
+        and vacation_service.operation_has_editable_union_scope(actor, unit.id, hierarchy)
     ]
     submitted_operation_id = request.form.get("operation_unit_id") if request.method == "POST" else None
     try:
@@ -2793,16 +2795,14 @@ def _render_vacation_union_editor(calendar, vacation_year):
         )
     except (TypeError, ValueError):
         selected_operation_id = 0
-    if not selected_operation_id and operations:
+    if selected_operation_id not in {operation.id for operation in operations} and operations:
         selected_operation_id = next(
             (
                 operation.id
                 for operation in operations
-                if vacation_service.operation_has_editable_union_scope(
-                    actor,
-                    operation.id,
-                    hierarchy,
-                )
+                if (own_tree := vacation_service.union_scope_tree(
+                    operation.id, actor.normal_scope_ids, hierarchy
+                ))["checked"] or own_tree["indeterminate"]
             ),
             operations[0].id,
         )
@@ -2817,7 +2817,8 @@ def _render_vacation_union_editor(calendar, vacation_year):
             scope.staffing_unit_id for scope in calendar.scopes
         }
     else:
-        selected_scope_ids = set()
+        # Prefer the actor's own leadership scope, not Master sideways authority.
+        selected_scope_ids = set(actor.normal_scope_ids)
 
     if calendar and not vacation_service.can_edit_union_calendar(
         calendar, current_user
@@ -2844,6 +2845,7 @@ def _render_vacation_union_editor(calendar, vacation_year):
                 operation.id,
                 selected_scope_ids if operation.id == selected_operation_id else (),
                 hierarchy,
+                actor=actor,
             ),
         }
         for operation in operations

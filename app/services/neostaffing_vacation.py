@@ -1770,7 +1770,9 @@ def _save_union_calendar(calendar, values, user):
             raise ValueError("You do not have authority to configure this View Only scope.")
         name = str(values.get("name") or "").strip()
         if not name:
-            raise ValueError("A custom View Only calendar name is required.")
+            name = ("View Only - " + generated_official_calendar_name(
+                scope_ids, include_pt, include_ft, hierarchy
+            ))[:140]
         if len(name) > 140:
             raise ValueError("View Only calendar name must be 140 characters or fewer.")
 
@@ -5068,7 +5070,7 @@ def union_calendars_context(vacation_year, user, today=None):
     }
 
 
-def union_scope_tree(operation_id, selected_ids=(), hierarchy=None):
+def union_scope_tree(operation_id, selected_ids=(), hierarchy=None, *, actor=None):
     hierarchy = hierarchy or vacation_hierarchy()
     operation = hierarchy["by_id"].get(_positive_int(operation_id, "Operation"))
     if not operation or operation.unit_type != "operation":
@@ -5082,11 +5084,17 @@ def union_scope_tree(operation_id, selected_ids=(), hierarchy=None):
             for child in hierarchy["children"].get(unit.id, ())
             if child.unit_type in {"department", "work_area"}
         ]
+        if actor is not None:
+            children = [child for child in children if child is not None]
+        selectable = actor is None or can_edit_union_scope(actor, {unit.id})
+        if not selectable and not children:
+            return None
         child_checked = [child["checked"] or child["indeterminate"] for child in children]
-        checked = checked_here or (bool(children) and all(child["checked"] for child in children))
+        checked = selectable and (checked_here or (bool(children) and all(child["checked"] for child in children)))
         indeterminate = not checked and any(child_checked)
         return {
             "unit": unit,
+            "selectable": selectable,
             "checked": checked,
             "explicit": unit.id in selected,
             "indeterminate": indeterminate,

@@ -995,6 +995,15 @@ body:has(.neostaffing-vacation-console) { overflow-x:clip; }
 .neostaffing-vacation-scope-tree li > label { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:6px; min-height:28px; padding:3px 6px; border-bottom:1px solid rgba(42,78,85,.45); color:#d0e3e4; font-size:.67rem; }
 .neostaffing-vacation-scope-tree input { accent-color:#4db9b4; }
 .neostaffing-vacation-scope-tree em { color:#68898d; font-size:.52rem; font-style:normal; }
+.neostaffing-vacation-scope-tree summary { padding:10px 6px; color:#78cec9; cursor:pointer; font-size:.75rem; }
+.neostaffing-vacation-scope-tree summary:focus-visible { outline:2px solid #78cec9; outline-offset:-2px; }
+.neostaffing-vacation-scope-tree label > span { overflow-wrap:anywhere; }
+@media (max-width:767px) {
+    .neostaffing-vacation-scope-tree li > label { min-height:44px; }
+    .neostaffing-vacation-scope-tree summary { min-height:44px; box-sizing:border-box; }
+    .neostaffing-vacation-scope-builder > header { flex-direction:column; gap:5px; }
+    .neostaffing-vacation-editor-fields fieldset { flex-wrap:wrap; }
+}
 .neostaffing-vacation-editor-help p { color:#859fa3; font-size:.66rem; line-height:1.45; }
 .neostaffing-vacation-management-row.is-selection-enabled { display:block; padding:0; overflow:visible; }
 .neostaffing-vacation-management-row.is-selection-enabled > header { align-items:center; padding:7px 9px; border-bottom:1px solid #17383f; background:#0d2329; }

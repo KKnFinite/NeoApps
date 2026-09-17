@@ -44,6 +44,40 @@ from app.services.permission_rules import ensure_default_permission_rules
 class NeoStaffingVacationSelectionTest(unittest.TestCase):
     YEAR = 2027
 
+    def test_calendar_editor_defaults_to_authorized_scope_and_prunes_other_branches(self):
+        user = self._union_actor("scopeeditor", "simulator", "full_time_supervisor")
+        self._login(user)
+        response = self.client.get(f"/neostaffing/vacation-selection/union/new?year={self.YEAR}")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn(f'value="{self.units["blue_department"].id}" data-vacation-scope-check data-scope-selectable="1" checked', html)
+        self.assertNotIn(f'value="{self.units["brown_area"].id}" data-vacation-scope-check', html)
+        self.assertIn('data-scope-selectable="0" disabled', html)
+        hierarchy = vacation_service.vacation_hierarchy()
+        tree = vacation_service.union_scope_tree(
+            self.units["ramp"].id, {self.units["blue_department"].id}, hierarchy,
+            actor=vacation_service.vacation_actor(user, hierarchy),
+        )
+        self.assertFalse(tree["selectable"])
+        self.assertFalse(tree["checked"])
+        self.assertTrue(tree["indeterminate"])
+        self.assertEqual([child["unit"].id for child in tree["children"]], [self.units["blue_department"].id])
+
+    def test_view_only_calendar_generates_scope_name_without_claiming_official_population(self):
+        user = self._union_actor("autoname", "simulator", "full_time_supervisor")
+        self._union_person("AUTO-1", "Calendar", "Employee", self.units["blue_area"])
+        official = self._calendar(user, [self.units["blue_area"].id])
+        view = vacation_service.create_union_calendar({
+            "vacation_year": self.YEAR, "calendar_type": "view_only",
+            "operation_unit_id": self.units["ramp"].id,
+            "staffing_unit_ids": [self.units["blue_area"].id],
+            "include_part_time": "1", "name": "",
+        }, user)
+        self.assertEqual(view.name, "View Only - " + official.name)
+        self.assertEqual(view.calendar_type, "view_only")
+        with self.assertRaisesRegex(ValueError, "Conflicts"):
+            self._calendar(user, [self.units["blue_area"].id])
+
     def setUp(self):
         self.config = type(
             "VacationSelectionConfig",
