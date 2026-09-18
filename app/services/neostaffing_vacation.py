@@ -1327,6 +1327,7 @@ def review_management_selection_change_request(
             selection.vacation_year, row.requested_week_ending
         )
         _ensure_management_week_not_started(destination, today)
+        _ensure_management_move_turn(person, selection.vacation_year, area, hierarchy, today)
         _move_management_selection_row(
             selection,
             person,
@@ -1366,6 +1367,7 @@ def move_management_selection(
     _ensure_management_week_not_started(destination, today)
     if destination == selection.week_ending:
         raise ValueError("Choose a different destination week.")
+    _ensure_management_move_turn(person, selection.vacation_year, area, hierarchy, today)
     result = _move_management_selection_row(
         selection,
         person,
@@ -4369,6 +4371,22 @@ def _ensure_person_has_no_active_management_week(
         raise ValueError("The employee already has this vacation week selected.")
 
 
+def _ensure_management_move_turn(person, year, area, hierarchy, today):
+    # A replacement week is still an employee selection, even when entered
+    # by a scoped manager. Reuse the initial-selection cursor and bank.
+    if today < vacation_selection_opens_on(year):
+        raise ValueError("Initial Management vacation selection has not opened yet.")
+    if person.classification == "division_manager":
+        return  # Pinned availability has no pooled seniority turn.
+    people = _management_people_for_area(area.id, hierarchy)
+    selections = _management_active_selections_by_person(year)
+    state = _locked_management_turn_state(year, area, people, selections, today)
+    turn = management_turn_snapshot(year, people, selections, state, today=today)
+    current_person = next((row for row in people if row.id == turn.current_person_id), None)
+    if not _turn_allows_person(turn, person, current_person):
+        raise ValueError("Initial selection has not reached this supervisor yet.")
+
+
 def _validate_management_move_capacity(
     person,
     vacation_year,
@@ -4428,6 +4446,8 @@ def _validate_management_move_capacity(
     )
     used = usage.get((area.id, week_ending), 0)
     override = _boolean(capacity_override)
+    if override and not actor.is_grandmaster:
+        raise ValueError("Scoped managers may not override Management vacation capacity.")
     if used >= limit and not override:
         raise ValueError(
             "Management capacity is full; confirm a one-time override for this move."

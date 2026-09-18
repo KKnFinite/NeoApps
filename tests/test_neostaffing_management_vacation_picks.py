@@ -93,6 +93,71 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         db.session.rollback()
         self.assertEqual(StaffingVacationManagementSelection.query.filter_by(cancelled_at=None).count(), 1)
 
+    def test_scoped_manager_cannot_bypass_move_capacity_even_with_override(self):
+        person, owner = self._management_user("GUARD1", "Moving", "Employee", "1990-01-01", "full_time_supervisor")
+        blocker, _ = self._management_user("GUARD2", "Capacity", "Employee", "2000-01-01", "full_time_supervisor")
+        _, manager = self._management_user("GUARDM", "Scoped", "Manager", "1980-01-01", "manager", unit=self.units["ramp"])
+        self._capacity(self.units["ramp"], 1)
+        source = self._selection(person, date(self.YEAR, 3, 6))
+        destination = date(self.YEAR, 3, 13)
+        self._selection(blocker, destination)
+        db.session.commit()
+        request_row = vacation_service.request_management_selection_change(
+            source, "move", owner, requested_week_ending=destination, today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        for override in (False, True):
+            with self.subTest(override=override):
+                with self.assertRaisesRegex(ValueError, "capacity"):
+                    vacation_service.move_management_selection(source, destination, manager,
+                        capacity_override=override, today=self.OPEN_DAY)
+                db.session.rollback()
+                with self.assertRaisesRegex(ValueError, "capacity"):
+                    vacation_service.review_management_selection_change_request(request_row, "approve", manager,
+                        capacity_override=override, today=self.OPEN_DAY)
+                db.session.rollback()
+                self.assertEqual(source.week_ending, date(self.YEAR, 3, 6))
+                self.assertEqual(request_row.status, "pending")
+        self._login(manager)
+        with patch.object(vacation_service, "vacation_selection_opens_on", return_value=date(2020, 1, 1)):
+            response = self.client.post(f"/neostaffing/vacation-selection/management/selection/{source.id}/move", data={
+                "vacation_year": self.YEAR, "requested_week_ending": destination.isoformat(),
+                "capacity_override": "1", "return_area_id": self.units["ramp"].id,
+            }, follow_redirects=True)
+        db.session.expire_all()
+        self.assertEqual(source.week_ending, date(self.YEAR, 3, 6))
+        self.assertIn(b"may not override", response.data)
+        self.assertNotIn(b"APPROVE OVERRIDE", response.data)
+        self.assertNotIn(b"MOVE OVERRIDE", response.data)
+
+    def test_manager_replacement_week_obeys_employee_window_and_turn(self):
+        senior, _ = self._management_user("TURN1", "Senior", "Employee", "1990-01-01", "full_time_supervisor")
+        junior, owner = self._management_user("TURN2", "Junior", "Employee", "2000-01-01", "full_time_supervisor")
+        _, manager = self._management_user("TURNM", "Scoped", "Manager", "1980-01-01", "manager", unit=self.units["ramp"])
+        self._capacity(self.units["ramp"], 2)
+        source = self._selection(junior, date(self.YEAR, 3, 6), initial_round_complete=False)
+        db.session.commit()
+        request_row = vacation_service.request_management_selection_change(
+            source, "move", owner, requested_week_ending=date(self.YEAR, 3, 13), today=self.OPEN_DAY,
+        )
+        db.session.commit()
+        for today, message in ((date(2026, 10, 31), "not opened"), (self.OPEN_DAY, "has not reached")):
+            with self.subTest(today=today):
+                with self.assertRaisesRegex(ValueError, message):
+                    vacation_service.move_management_selection(source, date(self.YEAR, 3, 13), manager, today=today)
+                db.session.rollback()
+                with self.assertRaisesRegex(ValueError, message):
+                    vacation_service.review_management_selection_change_request(request_row, "approve", manager, today=today)
+                db.session.rollback()
+                self.assertEqual(source.week_ending, date(self.YEAR, 3, 6))
+        vacation_service.pass_management_turn(self.YEAR, self.units["ramp"].id, senior, manager,
+            administrative=True, today=self.OPEN_DAY)
+        moved = vacation_service.move_management_selection(source, date(self.YEAR, 3, 13), manager, today=self.OPEN_DAY)
+        db.session.commit()
+        self.assertEqual(moved.staffing_person_id, junior.id)
+        self.assertEqual(moved.selected_by_user_id, manager.id)
+        self.assertEqual(self._remaining(junior), 5)
+
     def setUp(self):
         config = type(
             "ManagementVacationPicksConfig",
@@ -740,7 +805,8 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
             "MVC5", "Capacity", "Blocker", "2001-01-01", "full_time_supervisor"
         )
         _admin, admin_user = self._management_user(
-            "MVC6", "Approve", "Admin", "1990-01-01", "full_time_supervisor"
+            "MVC6", "Approve", "Admin", "1990-01-01", "full_time_supervisor",
+            app_role="grandmaster",
         )
         self._capacity(self.units["ramp"], 1)
         source = self._selection(person, date(self.YEAR, 4, 3))
@@ -1150,7 +1216,21 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
         self.assertIn(b"PENDING CANCEL", rendered.data)
         self.assertIn(b"CANCEL REQUEST", rendered.data)
 
-    def _selection(self, person, week_ending):
+    def _selection(self, person, week_ending, *, initial_round_complete=True):
+        # Historical picks used by change/correction tests follow a completed
+        # initial round. Turn-rule tests explicitly keep the round active.
+        if initial_round_complete:
+            area = vacation_service.management_primary_area(person)
+            state = StaffingVacationManagementTurnState.query.filter_by(
+                vacation_year=self.YEAR, area_unit_id=area.id,
+            ).first()
+            if state is None:
+                state = StaffingVacationManagementTurnState(
+                    vacation_year=self.YEAR, area_unit_id=area.id,
+                )
+                db.session.add(state)
+            state.completed_at = datetime.utcnow()
+            state.current_person_id = None
         row = StaffingVacationManagementSelection(
             staffing_person_id=person.id,
             vacation_year=self.YEAR,
