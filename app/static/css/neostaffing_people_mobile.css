@@ -46,4 +46,13 @@
   .neostaffing-people-console .neostaffing-people-detail-drawer input,
   .neostaffing-people-console .neostaffing-people-detail-drawer select { min-height:44px; }
   .neostaffing-people-detail-empty { display:none; }
+  .neostaffing-people-console .neostaffing-people-roster-workspace { padding:8px; }
+  .neostaffing-people-console .neostaffing-people-organization { padding:8px; max-height:170px; }
+  .neostaffing-people-console .neostaffing-people-console-toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; padding:0; }
+  .neostaffing-people-console-toolbar input[type=search] { grid-column:1/-1; }
+  .neostaffing-people-console .neostaffing-people-console-toolbar > * { padding:8px; font-size:.85rem; }
+  .neostaffing-people-console .neostaffing-people-console-toolbar select { padding-right:28px; }
+  .neostaffing-people-console .neostaffing-people-management { padding:6px; }
+  .neostaffing-people-console .neostaffing-people-management-list { grid-template-columns:minmax(0,1fr); gap:6px; }
+  .neostaffing-people-console .neostaffing-org-assignment { padding:0; display:block; }
 }

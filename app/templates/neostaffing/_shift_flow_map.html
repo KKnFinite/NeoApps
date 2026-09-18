@@ -34,7 +34,7 @@
     <p class="shift-route-preview" data-route-preview aria-live="polite"></p>
     <div class="shift-route-targets">
     {% for side, config in shift_flow.flow_map.configurations.items() %}
-      <section><h3>{{ side|upper }}</h3>
+      <section data-route-side="{{ side }}"><h3>{{ side|upper }}</h3>
       {% for door in config.doors %}<div><strong>{{ door.name }}</strong>
         {% for band, label in [('at_door','HOME DOOR'),('bm1','BALLMAT → 1ST WAVE'),('bm2','BALLMAT → 2ND WAVE'),('bm3','BALLMAT → CLEANUP'),('discharge','DISCHARGE')] %}
         <button type="button" data-route-target data-door="{{ door.id }}" data-band="{{ band }}" data-preview="NO SETUP → {{ config.ballmat.name if band.startswith('bm') and config.ballmat else 'Discharge' if band == 'discharge' else door.name }} → {{ label }} → {{ door.name }}">{{ label }}</button>

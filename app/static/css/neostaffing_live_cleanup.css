@@ -22,12 +22,27 @@
 .blueprint-neostaffing .neostaffing-org-assignment { min-width:0; }
 .blueprint-neostaffing .neostaffing-org-assignment a { display:block; min-width:0; color:inherit; padding:8px 0; }
 .blueprint-neostaffing .neostaffing-org-assignment strong { white-space:normal; overflow:visible; overflow-wrap:anywhere; }
+.blueprint-neostaffing .neostaffing-org-assignment > a { display:flex; flex-direction:column; gap:5px; padding:10px; min-height:44px; text-decoration:none; box-sizing:border-box; }
+.blueprint-neostaffing .neostaffing-org-assignment > a > span { display:block; white-space:normal; overflow:visible; overflow-wrap:anywhere; font-size:.75rem; color:#a9c5cc; }
+.blueprint-neostaffing .neostaffing-org-assignment > a:focus-visible { outline:2px solid #8ddbd3; outline-offset:2px; }
+.org-explorer :is(input:not([type="checkbox"]):not([type="hidden"]),select,textarea,button),
+.neostaffing-shift-flow :is(input:not([type="checkbox"]):not([type="hidden"]),select,textarea,button) { color-scheme:dark; background:#101e26; color:#dce6ec; border:1px solid #537783; border-radius:4px; font:inherit; }
 .neostaffing-vacation-context-nav label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
 .neostaffing-vacation-context-nav select { min-width:0; max-width:100%; }
 .neostaffing-vacation-console :is(input,select,button),
 .neostaffing-operational-attendance :is(input,select,button) { color-scheme:dark; font:inherit; }
 .neostaffing-operational-attendance .neostaffing-operational-tabs select { max-width:100%; min-height:44px; background:#101a21; color:#e1e3e9; border:1px solid currentColor; }
 @media(max-width:900px) {
+  .blueprint-neostaffing .org-explorer { gap:8px; }
+  .org-explorer .neostaffing-org-tree-surface { padding:6px; min-height:0; height:auto; }
+  .org-explorer .neostaffing-org-tree-scroll { max-height:170px; }
+  .org-explorer .neostaffing-org-tree-list { padding-left:6px; margin-left:0; }
+  .org-explorer .neostaffing-org-drawer-section { border-inline:0; border-radius:0; }
+  .org-explorer .neostaffing-org-drawer-section > summary { padding:10px 0; min-height:44px; box-sizing:border-box; color:#8ddbd3; cursor:pointer; overflow-wrap:anywhere; }
+  .org-explorer .neostaffing-org-assignment { display:flex; flex-direction:column; align-items:stretch; padding:0; }
+  .org-explorer .neostaffing-org-assignment > form { align-self:flex-end; padding:0 8px 8px; }
+  .org-explorer :is(form,label,input,select,textarea),.neostaffing-shift-flow :is(form,label,input,select,textarea) { min-width:0; max-width:100%; box-sizing:border-box; }
+  .org-explorer :is(input:not([type="hidden"]),select,textarea,button),.neostaffing-shift-flow :is(input:not([type="hidden"]),select,textarea,button) { min-height:44px; padding:8px; }
   .neostaffing-vacation-console .neostaffing-vacation-pick-action { display:block; width:100%; }
   .neostaffing-vacation-console .neostaffing-vacation-pick-action > details { width:100%; }
   .neostaffing-vacation-console .neostaffing-vacation-pick-action details[open] > form { position:static; width:100%; margin-block:8px; box-shadow:none; }
