@@ -1737,11 +1737,51 @@ class NeoSektorRoutesTest(unittest.TestCase):
                     self.assertEqual([line.text for line in cut.findall("span")],
                                      ["DISCHARGE CUT.", "REPORT TO DOORS."])
                     self.assertNotIn("Discharge cut. Report to doors.", cut.text)
+                    asset_version = "ui=20260918-tv-scale-v2"
                 else:
                     self.assertEqual(cut.text, "Discharge cut. Report to doors.")
                     self.assertFalse(cut.findall("span"))
+                    asset_version = "ui=20260916-bay-numbers"
+                stylesheet = next(link.attrs["href"] for link in root.findall("link")
+                                  if "neosektor_driver_routing.css" in link.attrs.get("href", ""))
+                self.assertIn(asset_version, stylesheet)
                 self.assertFalse(root.findall(**{"data-driver-rank": None}))
                 self.assertFalse(root.findall(cls="driver-priority-rank"))
+
+    def test_driver_tv_scale_is_unconditional_and_not_recapped_on_narrow_portrait(self):
+        css = Path(self.app.root_path, "static/css/neosektor_driver_routing.css").read_text(encoding="utf-8")
+        default, responsive = css.split("@media", 1)
+
+        def rule(selector):
+            return default.split(selector + " {", 1)[1].split("}", 1)[0]
+
+        board = rule("#sektor-tv .neosektor-driver-board")
+        self.assertIn("grid-template-rows:minmax(0,1fr) minmax(0,.52fr) minmax(0,1fr)", board)
+        strip = rule("#sektor-tv .neosektor-driver-bay-priority")
+        for declaration in ("width:100%", "max-width:none", "height:100%", "min-height:0"):
+            self.assertIn(declaration, strip)
+        self.assertIn("font:600 clamp(28px,6.372vh,max(94px,8.7vw))",
+                      rule("#sektor-tv .driver-wave-label"))
+        self.assertIn("font:600 max(28px,8.352vw)",
+                      rule("#sektor-tv :is(.driver-target-node,.driver-wave-message)"))
+        self.assertIn("font:600 max(20px,4.779vw)", rule("#sektor-tv .driver-instruction"))
+        arrow = rule("#sektor-tv .driver-arrow")
+        self.assertIn("width:58%", arrow)
+        self.assertIn("height:18vw", arrow)
+        self.assertIn("polygon(0 30%,64% 30%,64% 0,100% 50%,64% 100%,64% 70%,0 70%)",
+                      rule("#sektor-tv .driver-arrow::before"))
+        self.assertIn("font-size:max(60px,17.28vw)",
+                      rule('#sektor-tv [data-driver-routing] [data-pickup="front"] [data-driver-bay-name]'))
+        # These were the two breakpoint-dependent caps that defeated TV sizing.
+        self.assertNotIn("min-width:601px", css)
+        self.assertNotIn("--tv-compact-arrow-height", css)
+        self.assertNotIn("--tv-arrow-height", css)
+        narrow, landscape = responsive.split("@media (orientation:landscape)", 1)
+        self.assertNotIn("#sektor-tv .driver-arrow", narrow)
+        self.assertNotIn("#sektor-tv .driver-wave-label", narrow)
+        self.assertNotIn("#sektor-tv :is(.driver-target-node", narrow)
+        self.assertNotIn("#sektor-tv .driver-instruction", narrow)
+        self.assertIn("#sektor-tv .driver-arrow { height:9vh; }", landscape)
 
     def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
         css = stylesheet_source()

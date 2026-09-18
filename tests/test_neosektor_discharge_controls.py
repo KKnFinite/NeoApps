@@ -392,7 +392,7 @@ class DischargeControlsTest(unittest.TestCase):
         css = Path('app/static/css/neosektor_driver_routing.css').read_text()
         self.assertIn('height:90%; min-height:0; padding:4px 6px; gap:0;', css)
         self.assertIn('font-size:76px; line-height:1;', css)
-        self.assertIn('calc(2 * var(--tv-bay-size', css)
+        self.assertIn('#sektor-tv [data-driver-routing] [data-pickup="front"] [data-driver-bay-name] { font-size:max(60px,17.28vw); }', css)
         self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', css)
 
     def test_tunnel_reference_sections_and_hooks_with_or_without_notice(self):

@@ -68,7 +68,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_employees.css', v='20260915-compact-v4') }}">
     {% endif %}
     {% if request.endpoint == 'neosektor.driver_routing' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260916-bay-numbers') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_driver_routing.css', v=config.STATIC_ASSET_VERSION, ui='20260918-tv-scale-v2' if request.args.get('tv') == '1' else '20260916-bay-numbers') }}">
     {% elif request.endpoint == 'neosektor.discharge' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosektor_discharge.css', v=config.STATIC_ASSET_VERSION, ui='20260908-split-v1') }}">
     {% endif %}

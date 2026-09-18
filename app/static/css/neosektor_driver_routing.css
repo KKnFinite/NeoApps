@@ -6,16 +6,20 @@
 #sektor-tv :is(.topbar,.operational-mobile-header,.operational-desktop-sidebar,.neo-mobile-bottom,.mobile-bottom-nav,[data-mobile-drawer],.live-update-controls,.operation-refresh-banner,.app-header,.flash-stack) { display:none; }
 #sektor-tv .shell, #sektor-tv .content { margin:0; padding:0; width:100%; max-width:none; min-height:0; height:100dvh; }
 #sektor-tv [data-driver-routing] { display:block; position:fixed; inset:0; width:100%; height:100dvh; min-height:0; max-height:none; margin:0; padding:30px; background:#05090d; border:0; box-shadow:none; }
-#sektor-tv .neosektor-driver-board { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,.65fr) minmax(0,1fr); height:100%; width:100%; max-width:none; min-height:0; margin:0; padding:0; gap:12px; }
+#sektor-tv .neosektor-driver-board { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,.52fr) minmax(0,1fr); height:100%; width:100%; max-width:none; min-height:0; margin:0; padding:0; gap:12px; }
 #sektor-tv .neosektor-driver-wave-card { min-height:0; margin:0; padding:12px 24px; display:flex; flex-direction:column; align-items:center; justify-content:center; border:1px solid #354047; background:#0a1117; box-shadow:none; }
-#sektor-tv .driver-wave-label { font:600 var(--tv-label-size,clamp(24px,3vh,44px))/1.15 var(--font-sans); margin:0 0 var(--tv-text-gap,8px); }
-#sektor-tv .driver-target { width:100%; min-height:0; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:var(--tv-target-gap,12px); }
-#sektor-tv [data-driver-target] { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--tv-text-gap,8px); max-width:100%; }
-#sektor-tv :is(.driver-target-node,.driver-wave-message) { font:600 var(--tv-target-size,clamp(24px,4vw,64px))/1.15 var(--font-sans); letter-spacing:0; }
-#sektor-tv .driver-instruction { font:600 var(--tv-instruction-size,clamp(17px,2.5vw,34px))/1.2 var(--font-sans); letter-spacing:.02em; }
-#sektor-tv .driver-arrow { width:var(--tv-arrow-width,min(65%,400px)); height:var(--tv-arrow-height,72px); flex-shrink:0; font-size:0; filter:none; }
-#sektor-tv .driver-arrow::before { height:100%; }
-#sektor-tv .neosektor-driver-bay-priority { display:flex; justify-content:center; align-items:stretch; gap:24px; min-height:0; padding:0; }
+#sektor-tv .driver-wave-label { font:600 clamp(28px,6.372vh,max(94px,8.7vw))/1.15 var(--font-sans); margin:0 0 min(10px,1vh); }
+#sektor-tv .driver-target { width:100%; min-height:0; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:min(14px,1.2vh); }
+#sektor-tv [data-driver-target] { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:min(10px,1vh); max-width:100%; }
+/* TV sizing applies at every CSS width, including zoomed/low-resolution TVs.
+   Portrait text scales with width without the former 6vh/3.5vh ceilings. */
+#sektor-tv :is(.driver-target-node,.driver-wave-message) { font:600 max(28px,8.352vw)/1.15 var(--font-sans); letter-spacing:0; }
+#sektor-tv .driver-instruction { font:600 max(20px,4.779vw)/1.2 var(--font-sans); letter-spacing:.02em; }
+#sektor-tv .driver-arrow { width:58%; height:18vw; flex-shrink:0; font-size:0; filter:none; }
+/* Fill the arrow box: 40% shaft thickness and a full-height head. */
+#sektor-tv .driver-arrow::before { height:100%; clip-path:polygon(0 30%,64% 30%,64% 0,100% 50%,64% 100%,64% 70%,0 70%); }
+/* Override inherited desktop strip width/height, not just its grid row. */
+#sektor-tv .neosektor-driver-bay-priority { display:flex; justify-content:center; align-items:stretch; width:100%; max-width:none; height:100%; gap:24px; min-height:0; padding:0; }
 #sektor-tv .neosektor-driver-priority-card { min-height:0; flex:1; max-width:450px; padding:8px; display:flex; align-items:center; justify-content:center; gap:24px; }
 #sektor-tv .neosektor-driver-priority-card[hidden] { display:none; }
 #sektor-tv .driver-priority-rank { font:600 var(--tv-rank-size,28px)/1.2 var(--font-sans); }
@@ -44,7 +48,8 @@
 #sektor-tv .neosektor-driver-priority-card[data-pickup="front"]:not([hidden]) { display:flex; align-items:center; justify-content:center; align-self:center; box-sizing:border-box; height:90%; min-height:0; padding:4px 6px; gap:0; }
 .blueprint-neosektor [data-driver-routing] [data-pickup="front"] .driver-pickup { display:none; }
 .blueprint-neosektor [data-driver-routing] [data-pickup="front"] [data-driver-bay-name] { padding:0; line-height:1; font-size:clamp(5.7rem,min(16.8vw,15.6svh),9.9rem); text-align:center; text-overflow:clip; }
-#sektor-tv [data-driver-routing] [data-pickup="front"] [data-driver-bay-name] { font-size:min(calc(2 * var(--tv-bay-size,clamp(36px,6vw,80px))),16vh); }
+#sektor-tv .neosektor-driver-priority-card[data-pickup="front"]:not([hidden]) { flex:1 1 0; max-width:none; }
+#sektor-tv [data-driver-routing] [data-pickup="front"] [data-driver-bay-name] { font-size:max(60px,17.28vw); }
 
 @media (max-width:900px) {
     html:not(#sektor-tv) [data-driver-routing] > .app-header .header-title { display:none; }
@@ -62,29 +67,17 @@
     html:not(#sektor-tv) [data-driver-routing] [data-pickup="front"] [data-driver-bay-name] { font-size:76px; line-height:1; padding:0; }
     #sektor-tv [data-driver-routing] { padding:32px 10px 10px; }
     #sektor-tv .neosektor-driver-wave-card { padding:12px 8px; }
-    #sektor-tv .neosektor-driver-bay-priority { width:100%; max-width:100%; gap:8px; height:auto; }
+    #sektor-tv .neosektor-driver-bay-priority { gap:8px; }
     #sektor-tv .neosektor-driver-priority-card { flex-direction:column; gap:8px; min-width:0; }
     #sektor-tv .driver-priority-rank { font-size:var(--tv-compact-rank-size,18px); }
-    #sektor-tv .driver-arrow { height:var(--tv-compact-arrow-height,48px); }
     .sektor-tv-entry { bottom:calc(var(--neo-dock-clearance) + 8px); }
 }
 
-/* Wall displays: reference-scale text and arrows within the existing cards.
-   Height bounds protect landscape panels; compact TV retains its fallbacks. */
-@media (min-width:601px) and (min-height:601px) {
-    #sektor-tv {
-        --tv-label-size:clamp(43.5px,5.4vh,79.5px);
-        --tv-target-size:clamp(42.05px,min(6.96vw,6vh),111.65px);
-        --tv-instruction-size:clamp(27px,min(4.05vw,3.5vh),55.35px);
-        --tv-arrow-width:min(99.84%,614.4px);
-        --tv-arrow-height:min(154.8px,10vh);
-        --tv-rank-size:34px;
-        --tv-bay-size:clamp(43px,min(7.2vw,10vh),96px);
-        --tv-target-gap:min(14px,1.2vh);
-        --tv-text-gap:min(10px,1vh);
-        --tv-compact-rank-size:22px;
-        --tv-compact-arrow-height:min(104.4px,10vh);
-    }
-    /* A 36% head (formerly 26%) grows its length 1.77x with the wider arrow. */
-    #sektor-tv .driver-arrow::before { clip-path:polygon(0 38%,64% 38%,64% 14%,100% 50%,64% 86%,64% 62%,0 62%); }
+/* Only short landscape TV panels need height limits; portrait has none. */
+@media (orientation:landscape) {
+    #sektor-tv .driver-wave-label { font-size:5vh; }
+    #sektor-tv :is(.driver-target-node,.driver-wave-message) { font-size:6vh; }
+    #sektor-tv .driver-instruction { font-size:3.5vh; }
+    #sektor-tv .driver-arrow { height:9vh; }
+    #sektor-tv [data-driver-routing] [data-pickup="front"] [data-driver-bay-name] { font-size:15vh; }
 }
