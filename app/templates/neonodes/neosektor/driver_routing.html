@@ -50,7 +50,7 @@
         {% endfor %}
 
         <section class="driver-bay-priority neosektor-driver-bay-priority" aria-label="Bay priority">
-            <p class="driver-discharge-cut" data-driver-discharge-cut {% if not state.routing.cut_discharge %}hidden{% endif %}>Discharge cut. Report to doors.</p>
+            <p class="driver-discharge-cut" data-driver-discharge-cut {% if not state.routing.cut_discharge %}hidden{% endif %}>{% if request.args.get('tv') == '1' %}<span>DISCHARGE CUT.</span><span>REPORT TO DOORS.</span>{% else %}Discharge cut. Report to doors.{% endif %}</p>
             {% for index in range(3) %}
             {% set bay = state.routing.bay_priority[index] if index < state.routing.bay_priority|length else none %}
             <article class="driver-priority-card neosektor-driver-priority-card" data-driver-priority-index="{{ index }}" data-pickup="{{ bay.pickup if bay else 'front' }}" {% if not bay %}hidden{% endif %}>

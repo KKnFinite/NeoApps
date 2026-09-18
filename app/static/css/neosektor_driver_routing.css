@@ -35,6 +35,8 @@
 .neosektor-driver-priority-card .driver-pickup { display:block; color:#f0f6fa; font:600 clamp(12px,1.8vw,24px)/1.1 var(--font-sans); letter-spacing:0; white-space:nowrap; }
 .driver-discharge-cut { grid-column:1 / -1; align-self:center; margin:auto; color:#f0f6fa; text-align:center; font:600 clamp(18px,3vw,44px)/1.3 var(--font-sans); }
 .driver-discharge-cut[hidden] { display:none; }
+#sektor-tv .driver-discharge-cut { font-size:clamp(24px,min(6vw,7vh),96px); line-height:1.15; }
+#sektor-tv .driver-discharge-cut > span { display:block; white-space:nowrap; }
 #sektor-tv .neosektor-driver-priority-card { flex-direction:column; gap:6px; }
 /* Normal recommendations only: retain Back Pickup and Cut geometry. */
 .blueprint-neosektor [data-driver-routing] .driver-bay-priority:has([data-pickup="front"]:not([hidden])) { grid-template-columns:repeat(3,minmax(0,1fr)); }
@@ -67,21 +69,22 @@
     .sektor-tv-entry { bottom:calc(var(--neo-dock-clearance) + 8px); }
 }
 
-/* Wall displays at 100% zoom: about 20% larger content, not larger cards.
-   Height bounds protect landscape panels; phone-sized TV and normal views
-   retain their original values through the fallbacks above. */
+/* Wall displays: reference-scale text and arrows within the existing cards.
+   Height bounds protect landscape panels; compact TV retains its fallbacks. */
 @media (min-width:601px) and (min-height:601px) {
     #sektor-tv {
-        --tv-label-size:clamp(29px,3.6vh,53px);
-        --tv-target-size:clamp(29px,min(4.8vw,7.2vh),77px);
-        --tv-instruction-size:clamp(20px,min(3vw,4.5vh),41px);
-        --tv-arrow-width:min(78%,480px);
-        --tv-arrow-height:min(86px,7.8vh);
+        --tv-label-size:clamp(43.5px,5.4vh,79.5px);
+        --tv-target-size:clamp(42.05px,min(6.96vw,6vh),111.65px);
+        --tv-instruction-size:clamp(27px,min(4.05vw,3.5vh),55.35px);
+        --tv-arrow-width:min(99.84%,614.4px);
+        --tv-arrow-height:min(154.8px,10vh);
         --tv-rank-size:34px;
         --tv-bay-size:clamp(43px,min(7.2vw,10vh),96px);
         --tv-target-gap:min(14px,1.2vh);
         --tv-text-gap:min(10px,1vh);
         --tv-compact-rank-size:22px;
-        --tv-compact-arrow-height:min(58px,7.8vh);
+        --tv-compact-arrow-height:min(104.4px,10vh);
     }
+    /* A 36% head (formerly 26%) grows its length 1.77x with the wider arrow. */
+    #sektor-tv .driver-arrow::before { clip-path:polygon(0 38%,64% 38%,64% 14%,100% 50%,64% 86%,64% 62%,0 62%); }
 }

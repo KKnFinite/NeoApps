@@ -1725,6 +1725,24 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b"instruction.textContent = instructionLabel;", response.data)
         self.assertNotIn(b"targetNode.textContent = route.target;", response.data)
 
+    def test_driver_routing_tv_cut_message_has_two_lines_only_in_tv_mode(self):
+        self._login_approved_user(role="watcher")
+        for suffix in ("", "?tv=1"):
+            with self.subTest(suffix=suffix):
+                response = self.client.get("/neosektor/driver-routing" + suffix)
+                self.assertEqual(response.status_code, 200)
+                root = document(response)
+                cut = root.one(**{"data-driver-discharge-cut": None})
+                if suffix:
+                    self.assertEqual([line.text for line in cut.findall("span")],
+                                     ["DISCHARGE CUT.", "REPORT TO DOORS."])
+                    self.assertNotIn("Discharge cut. Report to doors.", cut.text)
+                else:
+                    self.assertEqual(cut.text, "Discharge cut. Report to doors.")
+                    self.assertFalse(cut.findall("span"))
+                self.assertFalse(root.findall(**{"data-driver-rank": None}))
+                self.assertFalse(root.findall(cls="driver-priority-rank"))
+
     def test_driver_routing_css_uses_wide_arrows_without_sidebars(self):
         css = stylesheet_source()
         driver_body_block = css.split(
