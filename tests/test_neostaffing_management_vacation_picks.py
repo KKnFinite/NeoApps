@@ -33,6 +33,66 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
     YEAR = 2027
     OPEN_DAY = date(2026, 11, 1)
 
+    def test_manager_on_behalf_route_add_reload_move_cancel_and_audit(self):
+        employee, _ = self._management_user("BEHALF1", "Employee", "Senior", "1990-01-01", "full_time_supervisor")
+        _, manager = self._management_user("BEHALF2", "Scoped", "Manager", "1980-01-01", "manager", unit=self.units["ramp"])
+        self._capacity(self.units["ramp"], 1)
+        db.session.commit()
+        self._login(manager)
+        area_id = self.units["ramp"].id
+        with patch.object(vacation_service, "vacation_selection_opens_on", return_value=date(2020, 1, 1)):
+            response = self.client.post("/neostaffing/vacation-selection/management/select", data={
+                "vacation_year": self.YEAR, "staffing_person_id": employee.id,
+                "week_endings": "2027-03-06", "return_area_id": area_id,
+            })
+            self.assertIn(f"area_id={area_id}", response.location)
+            db.session.expire_all()
+            saved = StaffingVacationManagementSelection.query.one()
+            self.assertEqual(saved.staffing_person_id, employee.id)
+            self.assertEqual(saved.selected_by_user_id, manager.id)
+            page = self.client.get(response.location)
+            self.assertIn(b"WE MAR 06", page.data)
+            self.assertIn(b"USED 1 WEEKS", page.data)
+            self.assertIn(b"D-DAYS / SPECIAL DAYS", page.data)
+            moved = self.client.post(f"/neostaffing/vacation-selection/management/selection/{saved.id}/move", data={
+                "vacation_year": self.YEAR, "requested_week_ending": "2027-03-13", "return_area_id": area_id,
+            })
+            db.session.expire_all()
+            active = StaffingVacationManagementSelection.query.filter_by(cancelled_at=None).one()
+            self.assertEqual(active.week_ending, date(2027, 3, 13))
+            self.assertEqual(active.selected_by_user_id, manager.id)
+            self.assertIn(b"WE MAR 13", self.client.get(moved.location).data)
+            cancelled = self.client.post(f"/neostaffing/vacation-selection/management/selection/{active.id}/cancel", data={
+                "vacation_year": self.YEAR, "return_area_id": area_id,
+            })
+            db.session.expire_all()
+            self.assertEqual(StaffingVacationManagementSelection.query.filter_by(cancelled_at=None).count(), 0)
+            self.assertEqual(db.session.get(StaffingVacationManagementSelection, active.id).cancelled_by_user_id, manager.id)
+            self.assertIn(b"USED 0 WEEKS", self.client.get(cancelled.location).data)
+
+    def test_on_behalf_preserves_employee_turn_bank_capacity_and_scope(self):
+        senior, _ = self._management_user("LIMIT1", "Senior", "Employee", "1990-01-01", "full_time_supervisor")
+        junior, _ = self._management_user("LIMIT2", "Junior", "Employee", "2000-01-01", "full_time_supervisor")
+        _, manager = self._management_user("LIMIT3", "Area", "Manager", "1980-01-01", "manager", unit=self.units["ramp"])
+        _, outsider = self._management_user("LIMIT4", "Other", "Manager", "1980-01-01", "manager", unit=self.units["hub"])
+        self._capacity(self.units["ramp"], 1)
+        db.session.commit()
+        for target, actor, pattern in ((senior, outsider, "not authorized"), (junior, manager, "has not reached")):
+            with self.assertRaisesRegex(ValueError, pattern):
+                vacation_service.add_management_week(target, self.YEAR, date(2027, 3, 6), actor, today=self.OPEN_DAY)
+            db.session.rollback()
+        with self.assertRaisesRegex(ValueError, "remaining vacation bank"):
+            vacation_service.add_management_weeks(senior, self.YEAR,
+                [week.week_ending for week in vacation_service.vacation_year_weeks(self.YEAR)][:7], manager, today=self.OPEN_DAY)
+        db.session.rollback()
+        vacation_service.add_management_week(senior, self.YEAR, date(2027, 3, 6), manager, today=self.OPEN_DAY)
+        vacation_service.pass_management_turn(self.YEAR, self.units["ramp"].id, senior, manager, administrative=True, today=self.OPEN_DAY)
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "capacity is full"):
+            vacation_service.add_management_week(junior, self.YEAR, date(2027, 3, 6), manager, today=self.OPEN_DAY)
+        db.session.rollback()
+        self.assertEqual(StaffingVacationManagementSelection.query.filter_by(cancelled_at=None).count(), 1)
+
     def setUp(self):
         config = type(
             "ManagementVacationPicksConfig",

@@ -1,0 +1,19 @@
+<p class="vacation-picker-instructions">Choose weeks for {{ person_row.person.full_name }}. Selections use this employee's turn and bank.</p>
+<div class="neostaffing-vacation-week-picker vacation-month-picker">
+{% set selected_dates = person_row.selections|map(attribute='week_ending')|list %}
+{% for month in range(1, 13) %}
+{% set month_weeks = row.week_rows|selectattr('week.week_ending.month', 'equalto', month)|list %}
+{% if month_weeks %}
+<details><summary>{{ month_weeks[0].week.week_ending.strftime('%B') }}</summary>
+{% for week_row in month_weeks %}
+{% set selected = week_row.week.week_ending in selected_dates %}
+<label{% if week_row.full or selected %} class="is-full"{% endif %}>
+<input type="checkbox" name="week_endings" value="{{ week_row.week.week_ending.isoformat() }}"{% if week_row.full or selected %} disabled{% endif %}>
+<span>Week ending {{ week_row.week.week_ending.strftime('%b %d, %Y') }}</span>
+<small>{% if selected %}SELECTED{% elif week_row.limit is none %}NOT CONFIGURED{% else %}{{ week_row.used }}/{{ week_row.limit }} USED{% if week_row.over %} · OVER{% elif week_row.full %} · FULL{% endif %}{% endif %}</small>
+</label>
+{% endfor %}
+</details>
+{% endif %}
+{% endfor %}
+</div>

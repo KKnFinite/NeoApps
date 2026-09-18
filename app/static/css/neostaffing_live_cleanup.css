@@ -5,6 +5,15 @@
 .vacation-scope-matrix th:first-child { position:sticky; left:0; background:#101e26; text-align:left; }
 .vacation-scope-matrix .is-vacation { background:#15424a; color:#baf9ff; }
 .vacation-scope-months { display:none; }
+.vacation-month-picker { display:block; max-height:none; }
+.vacation-month-picker > details { border-bottom:1px solid #354b56; }
+.vacation-month-picker summary,.vacation-special-days summary { padding:10px 4px; color:#8ddbd3; cursor:pointer; }
+.vacation-picker-instructions { max-width:36rem; white-space:normal; color:#b3cccf; font-size:.8rem; }
+.vacation-special-days { flex-basis:100%; margin-top:8px; padding-top:6px; border-top:1px solid #354b56; }
+.vacation-special-days summary { font-size:.7rem; line-height:1.4; }
+.neostaffing-vacation-management-list :is(select,button,input:not([type="checkbox"]):not([type="hidden"])) { background:#101e26; color:#dce6ec; border:1px solid #537783; border-radius:4px; padding:6px; }
+.vacation-special-days > form { margin-block:6px; }
+.neostaffing-vacation-pick-action summary:focus-visible,.vacation-special-days summary:focus-visible { outline:2px solid #8ddbd3; }
 .neostaffing-vacation-management-list,
 .neostaffing-vacation-management-row,
 .vacation-scope-matrix { min-width:0; }
@@ -19,6 +28,16 @@
 .neostaffing-operational-attendance :is(input,select,button) { color-scheme:dark; font:inherit; }
 .neostaffing-operational-attendance .neostaffing-operational-tabs select { max-width:100%; min-height:44px; background:#101a21; color:#e1e3e9; border:1px solid currentColor; }
 @media(max-width:900px) {
+  .neostaffing-vacation-console .neostaffing-vacation-pick-action { display:block; width:100%; }
+  .neostaffing-vacation-console .neostaffing-vacation-pick-action > details { width:100%; }
+  .neostaffing-vacation-console .neostaffing-vacation-pick-action details[open] > form { position:static; width:100%; margin-block:8px; box-shadow:none; }
+  .neostaffing-vacation-console .vacation-month-picker { max-height:none; overflow:visible; }
+  .neostaffing-vacation-console .vacation-month-picker label { grid-template-columns:auto minmax(0,1fr); min-height:44px; }
+  .neostaffing-vacation-console .vacation-month-picker label small { grid-column:2; }
+  .neostaffing-vacation-console .vacation-month-picker summary { display:block; min-height:44px; box-sizing:border-box; }
+  .neostaffing-vacation-console .neostaffing-vacation-pinned-actions form { flex-wrap:wrap; }
+  .neostaffing-vacation-console .neostaffing-vacation-pinned-row { display:flex; flex-direction:column; align-items:stretch; }
+  .neostaffing-vacation-console .neostaffing-vacation-pinned-row > span { min-width:0; width:100%; }
   .vacation-scope-matrix { display:none; }
   .vacation-scope-months { display:grid; gap:8px; }
   .vacation-scope-months summary { padding:12px; background:#101e26; color:#dce6ec; cursor:pointer; }

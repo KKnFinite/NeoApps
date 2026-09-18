@@ -665,7 +665,7 @@ def management_vacation_context(vacation_year, user, today=None, *, selected_are
             owner_can_write = bool(
                 _actor_has_vacation_mutation_access(actor)
                 and (
-                    actor.is_grandmaster
+                    _can_administer_management_week_changes(actor, area.id)
                     or (actor.person and actor.person.id == person.id)
                 )
             )
@@ -984,10 +984,10 @@ def add_management_weeks(
         raise ValueError("The selected person does not have a primary Management area.")
     actor = vacation_actor(user, hierarchy)
     if not (
-        actor.is_grandmaster
+        _can_administer_management_week_changes(actor, area.id)
         or (actor.person and actor.person.id == person.id)
     ):
-        raise ValueError("You may only select your own Management vacation weeks.")
+        raise ValueError("You are not authorized to select this employee's Management vacation weeks.")
 
     _lock_management_area(area.id)
     capacity = (

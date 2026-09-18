@@ -1186,7 +1186,8 @@ def vacation_management_select():
     else:
         flash(f"Added {len(saved)} Management vacation week(s).", "success")
     return redirect(
-        url_for("neostaffing.vacation_management", year=vacation_year)
+        url_for("neostaffing.vacation_management", year=vacation_year,
+                area_id=request.form.get("return_area_id"))
     )
 
 
@@ -1207,7 +1208,8 @@ def vacation_management_change_request():
         flash(safe_mutation_error(error, "update vacation management change request"), "error")
     else:
         flash("Management vacation change request submitted.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/management/change-request/<int:request_id>/cancel")
@@ -1224,7 +1226,8 @@ def vacation_management_change_request_cancel(request_id):
         flash(safe_mutation_error(error, "update vacation management change request cancel"), "error")
     else:
         flash("Management vacation change request cancelled.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/management/change-request/<int:request_id>/review")
@@ -1244,7 +1247,8 @@ def vacation_management_change_request_review(request_id):
         flash(safe_mutation_error(error, "update vacation management change request review"), "error")
     else:
         flash("Management vacation change request resolved.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/management/selection/<int:selection_id>/move")
@@ -1264,7 +1268,8 @@ def vacation_management_selection_move(selection_id):
         flash(safe_mutation_error(error, "update vacation management selection move"), "error")
     else:
         flash("Management vacation week moved.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/management/selection/<int:selection_id>/cancel")
@@ -1283,7 +1288,8 @@ def vacation_management_selection_cancel(selection_id):
         flash(safe_mutation_error(error, "update vacation management selection cancel"), "error")
     else:
         flash("Management vacation week removed and bank restored.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/management/split")
