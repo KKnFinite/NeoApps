@@ -849,12 +849,9 @@ def _google_ballmat_updates(selected_side, payload):
         )
 
     bay_cells = {
-        "Bay 1": "B6",
-        "Bay 2": "B8",
-        "Bay 3": "B10",
-        "Bay 4": "C6",
-        "Bay 5": "C8",
-    }
+        "east": {"Bay 1": "B6", "Bay 2": "B8", "Bay 3": "B10"},
+        "west": {"Bay 4": "C6", "Bay 5": "C8"},
+    }[selected_side]
     for bay_name, value in (payload.get("bay_statuses") or {}).items():
         if bay_name in bay_cells:
             updates[bay_cells[bay_name]] = _status(value)

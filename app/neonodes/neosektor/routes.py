@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date
+from math import isfinite
 
 from flask import abort, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
@@ -78,6 +79,33 @@ LIVE_COUNTS_VIEW_PERMISSION = "neosektor.live_counts.view"
 NEOSEKTOR_DASHBOARD_VIEW_PERMISSION = "neosektor.dashboard.view"
 NEOSEKTOR_SETTINGS_VIEW_PERMISSION = "neosektor.settings.view"
 NEOSEKTOR_SETTINGS_EDIT_PERMISSION = "neosektor.settings.edit"
+
+
+@bp.before_request
+def validate_json_command_shape():
+    """Reject malformed API containers before acquiring operational locks."""
+    if request.method != "POST" or not request.is_json:
+        return None
+    payload = request.get_json(silent=True)
+    valid = isinstance(payload, dict)
+    if valid:
+        valid = all(payload.get(key) is None or isinstance(payload[key], dict)
+                    for key in ("waves", "bay_statuses", "spotter", "mode_guard", "bay_priority_enabled"))
+    if valid and payload.get("waves"):
+        valid = all(value is None or isinstance(value, dict) for value in payload["waves"].values())
+    # Flask's JSON parser accepts NaN/Infinity, but count conversion and SQL
+    # integer columns cannot. Reject them without touching operational state.
+    pending = [payload] if valid else []
+    while valid and pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, float):
+            valid = isfinite(value)
+    if not valid:
+        return jsonify({"ok": False, "error": "Invalid JSON command."}), 400
 
 
 @dataclass(frozen=True)

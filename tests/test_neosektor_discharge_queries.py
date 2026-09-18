@@ -113,8 +113,10 @@ class DischargeQueriesTest(unittest.TestCase):
                     new_counts,new_payload,new_sql,new_commits = after[name]
                     success = name in ('partial','multi_partial','already_zero_type','complete')
                     failed_lookup = name in ('wrong_door','missing_id','stale_completed')
-                    baseline = (29+int(not current) if name=='cold_page' else
-                                18+int(not current) if name=='page' else
+                    # The existing Employees navigation performs one scoped
+                    # staffing_units read on HTML pages (not on state polls).
+                    baseline = (30+int(not current) if name=='cold_page' else
+                                19+int(not current) if name=='page' else
                                 17+int(not current) if success else
                                 10 if failed_lookup else
                                 (5 if current else 4) if name=='unchanged' else
@@ -123,6 +125,8 @@ class DischargeQueriesTest(unittest.TestCase):
                               (1 if current else 4) if success else
                               int(not current) if failed_lookup else 0)
                     self.assertEqual(counts[0],baseline)
+                    if name in ('cold_page', 'page'):
+                        self.assertEqual(sum('from staffing_units' in query for query in sql), 1)
                     self.assertEqual(new_counts,(baseline-saving,*counts[1:]))
                     self.assertEqual(new_payload,payload)
                     self.assertEqual(len(new_commits),len(commits))
@@ -131,7 +135,10 @@ class DischargeQueriesTest(unittest.TestCase):
                     self.assertEqual([s for s in new_sql if s.startswith(('update ','insert ','delete '))],writes)
                     expected_writes = {'partial':(1,1,0),'multi_partial':(1,3,0),
                         'already_zero_type':(0,1,0),'complete':(0,2,1),'cold_page':(0,1,0)}
-                    self.assertEqual(counts[1:],expected_writes.get(name,(0,0,0)))
+                    updates, inserts, deletes = expected_writes.get(name,(0,0,0))
+                    # Fulfillment now shares the request increment reservation;
+                    # SQLite represents that lock as one no-op Gateway UPDATE.
+                    self.assertEqual(counts[1:],(updates + int(success or failed_lookup), inserts, deletes))
                     candidate = 'from sort_date_operations where sort_date_operations.gateway_code ='
                     # Drop only duplicates WITHIN each transaction, never across commit.
                     expected,seen = [],set()

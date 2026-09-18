@@ -448,7 +448,12 @@ def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None,
     normalized_counts = normalize_uld_counts(counts)
     if not any(normalized_counts.values()):
         raise ValueError("Send at least one ULD.")
+    if any(count > 2_147_483_647 for count in normalized_counts.values()):
+        raise ValueError("ULD send counts exceed the supported range.")
 
+    # Share the requester increment lock. Resolve scope and read fresh counts
+    # only after acquiring it; otherwise concurrent sends can lose decrements.
+    _lock_uld_increment(gateway)
     operation = _resolve_operation(gateway, operation)
     if request_id:
         request_record = get_uld_request_by_id(
@@ -456,9 +461,11 @@ def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None,
             request_id,
             normalized_door,
             operation=operation,
+            populate_existing=True,
         )
     else:
-        request_record = get_uld_request(gateway, normalized_door, operation=operation)
+        request_record = get_uld_request(gateway, normalized_door, operation=operation,
+                                        populate_existing=True)
     if request_record is None:
         raise ValueError("No active ULD request for this door.")
 
@@ -490,18 +497,20 @@ def send_uld_totals_on_the_way(gateway, door, counts, request_id=None, now=None,
     return events
 
 
-def get_uld_request_by_id(gateway, request_id, door=None, operation=None):
+def get_uld_request_by_id(gateway, request_id, door=None, operation=None, *, populate_existing=False):
     try:
         request_id = int(request_id)
     except (TypeError, ValueError):
         return None
-    if request_id <= 0:
+    if request_id <= 0 or request_id > 2_147_483_647:
         return None
 
     operation = _resolve_operation(gateway, operation)
     query = _request_query(gateway, operation).filter_by(
         id=request_id,
     )
+    if populate_existing:
+        query = query.populate_existing()
     normalized_door = normalize_door(door)
     if normalized_door:
         query = query.filter_by(door=normalized_door)
