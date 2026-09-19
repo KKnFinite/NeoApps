@@ -11,4 +11,7 @@
 .employee-records small{color:#a3b9c0}.employee-records canvas{width:100%;height:auto;background:#fff;touch-action:none;border:2px solid #65a8a5;border-radius:4px}
 .employee-records .record-signature{display:block;max-width:100%;max-height:220px;background:#fff}
 .employee-records [data-record-review]>p,.employee-records [data-record-review]>canvas{flex-basis:100%}
+.employee-records .record-delivery label{display:flex;align-items:center;min-height:44px;gap:10px}
+.employee-records .record-delivery input[type=checkbox]{flex:0 0 20px;width:20px;height:20px;accent-color:#80ddd2}
+.employee-records .record-delivery>p{flex-basis:100%}
 @media(max-width:760px){.employee-records{margin:4px;padding:12px 8px calc(90px + env(safe-area-inset-bottom));}.employee-records form{gap:8px}.employee-records h1{font-size:1.4rem}.employee-records label{flex-basis:100%}}

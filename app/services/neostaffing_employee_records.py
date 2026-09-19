@@ -18,7 +18,7 @@ from app.services import neostaffing_record_storage as storage
 from app.services.neostaffing_write_authority import lock_staffing_write_authority
 
 KINDS = {"talk_with": "Talk With", "verbal": "Verbal", "written_warning": "Written Warning"}
-ACKNOWLEDGMENT = "This information was reviewed with me."
+DELIVERY_CONFIRMATION = "I reviewed and delivered this action to the employee."
 
 
 def is_grandmaster(user):
@@ -164,22 +164,20 @@ def edit(user, record_id, version, kind, body):
     return record
 
 
-def finalize(user, record_id, version, method, acknowledged, raw=None):
+def finalize(user, record_id, version, delivered):
     if version is None:
         raise ValueError("Record version is required. Reload before reviewing.")
     record = locked_record(user, record_id, version)
     if record.finalized_at:
         raise ValueError("Record is already finalized.")
-    if method not in ("signature", "rts") or acknowledged != "yes":
-        raise ValueError("Confirm in-person review and choose acknowledgment or Refuse to Sign.")
-    if method == "signature":
-        record.signature_key, record.signature_sha256, record.signature_size = storage.store(record.id, raw)
-    record.acknowledgment = method
-    record.acknowledgment_text = ACKNOWLEDGMENT
+    if delivered != "yes":
+        raise ValueError("Confirm that you reviewed and delivered this action to the employee.")
+    record.acknowledgment = "delivered"
+    record.acknowledgment_text = DELIVERY_CONFIRMATION
     record.finalized_at = record.updated_at = datetime.utcnow()
     record.finalized_by = user.id
     record.version += 1
-    add_event(record, "finalized", method, user)
+    add_event(record, "finalized", "Delivered / Discipline Given", user)
     return record
 
 

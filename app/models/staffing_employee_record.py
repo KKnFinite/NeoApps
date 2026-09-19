@@ -21,7 +21,7 @@ class StaffingEmployeeRecord(db.Model):
         db.CheckConstraint("kind IN ('talk_with','verbal','written_warning')", name="ck_employee_record_kind"),
         db.CheckConstraint("(finalized_at IS NULL AND acknowledgment IS NULL AND signature_key IS NULL) OR "
                            "(finalized_at IS NOT NULL AND finalized_by IS NOT NULL AND "
-                           "((acknowledgment = 'rts' AND signature_key IS NULL) OR "
+                           "((acknowledgment IN ('rts','delivered') AND signature_key IS NULL) OR "
                            "(acknowledgment = 'signature' AND signature_key IS NOT NULL AND signature_sha256 IS NOT NULL)))",
                            name="ck_employee_record_finalization"),
         db.Index("ix_employee_record_history", "person_id", "created_at", "id"),

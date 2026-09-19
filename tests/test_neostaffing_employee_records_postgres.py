@@ -63,12 +63,12 @@ class EmployeeRecordPostgresTest(fixtures.EmployeeRecordTest):
         self.assertEqual(records.Event.query.count(), 2)
 
     def test_two_finalizations_only_one_wins(self):
-        action = lambda user, key: records.finalize(user, key, 1, 'rts', 'yes')
+        action = lambda user, key: records.finalize(user, key, 1, 'yes')
         self.race([action, action])
 
     def test_edit_cannot_race_review_of_original_version(self):
         self.race([lambda user,key: records.edit(user,key,1,'verbal','New draft'),
-                   lambda user,key: records.finalize(user,key,1,'rts','yes')])
+                   lambda user,key: records.finalize(user,key,1,'yes')])
 
     def test_committed_management_revocation_beats_cached_authority(self):
         self.enable()
@@ -79,6 +79,6 @@ class EmployeeRecordPostgresTest(fixtures.EmployeeRecordTest):
         with self.admin.begin() as conn:
             conn.execute(text(f'UPDATE {self.schema}.staffing_leadership_assignments SET active=false WHERE id=:id'), {'id':leadership_id})
         with self.assertRaises(ValueError):
-            records.finalize(db.session.get(User,user_id),record_id,1,'rts','yes')
+            records.finalize(db.session.get(User,user_id),record_id,1,'yes')
         db.session.rollback()
         self.assertIsNone(db.session.get(records.Record, record_id).finalized_at)

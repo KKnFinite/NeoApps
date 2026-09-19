@@ -79,9 +79,9 @@ def employee_record_detail(record_id):
             if command == "edit":
                 records.edit(current_user, record.id, request.form.get("version"), request.form.get("kind"), request.form.get("body"))
             elif command == "finalize":
-                upload = request.files.get("signature")
-                raw = upload.stream.read(records.storage.MAX_BYTES + 1) if upload else None
-                records.finalize(current_user, record.id, request.form.get("version"), request.form.get("method"), request.form.get("reviewed"), raw)
+                if request.form.get("method") or request.files:
+                    raise ValueError("Employee acknowledgment is no longer used. Reload and confirm delivery.")
+                records.finalize(current_user, record.id, request.form.get("version"), request.form.get("delivered"))
             elif command == "addendum":
                 records.addendum(current_user, record.id, request.form.get("body"), request.form.get("sequence"))
             else:
@@ -102,7 +102,7 @@ def employee_record_detail(record_id):
     return render_template("neostaffing/employee_record_detail.html", person=person, record=record, events=events,
         context=json.loads(record.context_json), editable=editable, kinds=records.KINDS, sequence=sequence,
         event_text={event.id: (json.loads(event.body)["body"] if event.kind in ("created", "edited") else event.body) for event in events.items},
-        acknowledgment=records.ACKNOWLEDGMENT)
+        delivery_confirmation=records.DELIVERY_CONFIRMATION)
 
 
 @bp.get("/employee-records/<record_id>/signature")

@@ -1845,6 +1845,8 @@ def _create_missing_application_tables(existing_table_names):
 
     for model in (StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent):
         model.__table__.create(bind=db.engine, checkfirst=True)
+    from app.services.neostaffing_employee_record_schema import ensure_employee_record_delivery
+    ensure_employee_record_delivery()
 
 
 def _create_google_mission_link_table():

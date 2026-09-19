@@ -56,9 +56,9 @@ class EmployeeRecordTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual(self.client.get(f'/neostaffing/employee-records/{record.id}').status_code, 200)
         records.edit(self.user, record.id, 1, 'verbal', 'Updated saved draft')
-        records.finalize(self.user, record.id, 2, 'rts', 'yes')
+        records.finalize(self.user, record.id, 2, 'yes')
         db.session.commit()
-        self.assertEqual(record.acknowledgment_text, 'This information was reviewed with me.')
+        self.assertEqual(record.acknowledgment_text, records.DELIVERY_CONFIRMATION)
         with self.assertRaisesRegex(ValueError, 'OFF'):
             self.draft()
 
@@ -76,7 +76,7 @@ class EmployeeRecordTest(unittest.TestCase):
     def test_final_original_and_audit_immutable_addenda_append(self):
         self.enable()
         record = self.draft()
-        records.finalize(self.user, record.id, 1, 'rts', 'yes')
+        records.finalize(self.user, record.id, 1, 'yes')
         db.session.commit()
         original = record.body
         with self.assertRaisesRegex(ValueError, 'Finalized'):
@@ -103,7 +103,7 @@ class EmployeeRecordTest(unittest.TestCase):
         records.edit(self.user, record.id, 1, 'written_warning', 'Changed content.')
         db.session.commit()
         with self.assertRaisesRegex(ValueError, 'changed'):
-            records.finalize(self.user, record.id, 1, 'rts', 'yes')
+            records.finalize(self.user, record.id, 1, 'yes')
         db.session.rollback()
         self.assertIsNone(record.finalized_at)
 
@@ -113,7 +113,7 @@ class EmployeeRecordTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'version is required'):
             records.edit(self.user,record.id,None,'verbal','No expected version')
         with self.assertRaisesRegex(ValueError,'version is required'):
-            records.finalize(self.user,record.id,None,'rts','yes')
+            records.finalize(self.user,record.id,None,'yes')
         self.assertIsNone(record.finalized_at)
 
     def test_transfer_author_not_entitled_return_regains_and_grandmaster_history(self):
@@ -151,19 +151,35 @@ class EmployeeRecordTest(unittest.TestCase):
             self.draft()
         self.assertEqual(records.Record.query.count(), 0)
 
-    def test_signature_fails_closed_and_bytes_only_in_external_store(self):
+    def test_delivery_without_storage_saves_actor_time_and_no_signature(self):
+        self.enable()
+        record = self.draft()
+        self.assertIsNone(self.app.config.get('EMPLOYEE_RECORD_SIGNATURE_STORAGE'))
+        records.finalize(self.user, record.id, 1, 'yes')
+        db.session.commit()
+        db.session.expire_all()
+        self.assertEqual(record.acknowledgment, 'delivered')
+        self.assertEqual(record.finalized_by, self.user.id)
+        self.assertIsNotNone(record.finalized_at)
+        self.assertIsNone(record.signature_key)
+        self.assertIsNone(record.signature_sha256)
+        self.assertEqual(records.Event.query.filter_by(kind='finalized').one().body, 'Delivered / Discipline Given')
+
+    def test_legacy_signature_history_remains_readable_but_not_an_active_workflow(self):
+        from datetime import datetime
         self.enable()
         record = self.draft()
         image = Image.new('RGB', (400, 100), 'white')
         ImageDraw.Draw(image).line([(10, 20), (60, 70), (120, 20)], fill='black', width=4)
         buffer = BytesIO(); image.save(buffer, format='PNG'); raw = buffer.getvalue()
-        with self.assertRaisesRegex(ValueError, 'not configured'):
-            records.finalize(self.user, record.id, 1, 'signature', 'yes', raw)
-        db.session.rollback()
-        self.assertIsNone(record.finalized_at)
         store = MemorySignatures()
         self.app.config['EMPLOYEE_RECORD_SIGNATURE_STORAGE'] = store
-        records.finalize(self.user, record.id, 1, 'signature', 'yes', raw)
+        # Historical row produced by the prior release, not the new write path.
+        actor_id = self.user.id
+        record.signature_key, record.signature_sha256, record.signature_size = records.storage.store(record.id, raw)
+        record.acknowledgment = 'signature'
+        record.finalized_by = actor_id
+        record.finalized_at = datetime.utcnow()
         db.session.commit()
         self.assertEqual(len(store.objects), 1)
         self.assertTrue(records.storage.read(record).startswith(b'\x89PNG'))
@@ -182,13 +198,16 @@ class EmployeeRecordTest(unittest.TestCase):
         record = records.create(self.user, self.worker.id, 'verbal', 'Reviewed.', resolution.id)
         db.session.commit()
         self.assertEqual(json.loads(record.discipline_snapshot_json)['id'], resolution.id)
+        records.finalize(self.user, record.id, 1, 'yes')
+        db.session.commit()
+        self.assertEqual(record.discipline_resolution_id, resolution.id)
         self.assertEqual(StaffingAccountabilityResolution.query.count(), 1)
         resolution.person_id = self.outsider.id
         db.session.commit()
         with self.assertRaisesRegex(ValueError, 'does not belong'):
             records.create(self.user, self.worker.id, 'verbal', 'Forged.', resolution.id)
 
-    def test_routes_draft_edit_rts_reload_addendum_and_bootstrap_idempotent(self):
+    def test_routes_draft_edit_delivered_reload_addendum_and_bootstrap_idempotent(self):
         from app.services.schema_sync import _create_missing_application_tables
         from sqlalchemy import inspect
         self.enable()
@@ -197,23 +216,31 @@ class EmployeeRecordTest(unittest.TestCase):
         url = response.location
         response = self.client.post(url, data={'command':'edit','version':'1','kind':'verbal','body':'Revised.'})
         self.assertEqual(response.status_code, 302)
-        response = self.client.post(url, data={'command':'finalize','version':'2','method':'rts','reviewed':'yes'})
+        response = self.client.post(url, data={'command':'finalize','version':'2','delivered':'yes'})
         self.assertEqual(response.status_code, 302)
         self.assertIn(b'ORIGINAL IMMUTABLE', self.client.get(url).data)
         _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
         _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
         self.assertEqual(records.Record.query.count(), 1)
 
-    def test_storage_failure_invalid_image_and_missing_ack_leave_draft(self):
+    def test_missing_confirmation_and_legacy_forms_leave_draft(self):
         self.enable()
         record = self.draft()
-        self.app.config['EMPLOYEE_RECORD_SIGNATURE_STORAGE'] = MemorySignatures()
-        for method, ack, raw in [('rts',None,None),('signature','yes',b'not an image'),('invalid','yes',None)]:
+        for delivered in (None, 'no', 'rts', 'signature'):
             with self.assertRaises(ValueError):
-                records.finalize(self.user,record.id,1,method,ack,raw)
+                records.finalize(self.user,record.id,1,delivered)
             db.session.rollback()
             self.assertIsNone(record.finalized_at)
             self.assertEqual(records.Event.query.count(),1)
+        url = f'/neostaffing/employee-records/{record.id}'
+        for method in ('rts', 'signature'):
+            response = self.client.post(url, data={'command':'finalize','version':'1','method':method,'reviewed':'yes','delivered':'yes'})
+            self.assertEqual(response.status_code, 409)
+            self.assertIsNone(record.finalized_at)
+        response = self.client.get(url)
+        self.assertIn(b'MARK DELIVERED', response.data)
+        for obsolete in (b'<canvas', b'data-signature-pad', b'REFUSE TO SIGN', b'ACKNOWLEDGE &amp;', b'neostaffing_employee_records.js'):
+            self.assertNotIn(obsolete, response.data)
 
     def test_grandmaster_fallback_is_not_active_outside_scope_write_grant(self):
         self.user.role = 'grandmaster'
@@ -234,7 +261,7 @@ class EmployeeRecordTest(unittest.TestCase):
         _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
         self.enable()
         record=self.draft()
-        records.finalize(self.user,record.id,1,'rts','yes'); db.session.commit()
+        records.finalize(self.user,record.id,1,'yes'); db.session.commit()
         with self.assertRaises(DatabaseError):
             db.session.execute(text('DELETE FROM staffing_employee_records WHERE id=:id'),{'id':record.id})
         db.session.rollback()
@@ -249,6 +276,58 @@ class EmployeeRecordTest(unittest.TestCase):
         response=self.client.get('/neostaffing/employee-records')
         self.assertEqual(response.status_code,200)
         self.assertIn('no-store',response.headers['Cache-Control'])
+
+    def test_old_constraint_upgrade_preserves_history_and_is_idempotent(self):
+        from datetime import datetime
+        from sqlalchemy import inspect
+        from app.services.schema_sync import _create_missing_application_tables
+        constraint = next(c for c in records.Record.__table__.constraints if c.name == 'ck_employee_record_finalization')
+        new_sql = constraint.sqltext
+        records.Event.__table__.drop(db.engine)
+        records.Record.__table__.drop(db.engine)
+        try:
+            constraint.sqltext = text(str(new_sql).replace("acknowledgment IN ('rts','delivered')", "acknowledgment = 'rts'"))
+            records.Record.__table__.create(db.engine)
+            records.Event.__table__.create(db.engine)
+        finally:
+            constraint.sqltext = new_sql
+        self.enable()
+        legacy = self.draft()
+        actor_id = self.user.id
+        legacy.acknowledgment = 'rts'
+        legacy.acknowledgment_text = 'This information was reviewed with me.'
+        legacy.finalized_by = actor_id
+        legacy.finalized_at = datetime.utcnow()
+        db.session.commit()
+        pending = self.draft()
+        legacy_id, pending_id = legacy.id, pending.id
+        before = (legacy.body, legacy.context_json, legacy.finalized_at, legacy.acknowledgment_text)
+        db.session.commit()
+        _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
+        _create_missing_application_tables(set(inspect(db.engine).get_table_names()))
+        db.session.expire_all()
+        self.assertEqual(records.Record.query.count(), 2)
+        self.assertEqual(records.Event.query.count(), 2)
+        self.assertEqual((legacy.body, legacy.context_json, legacy.finalized_at, legacy.acknowledgment_text), before)
+        self.assertEqual(legacy.acknowledgment, 'rts')
+        records.finalize(self.user, pending_id, 1, 'yes')
+        db.session.commit()
+        with self.assertRaises(DatabaseError):
+            db.session.execute(text('DELETE FROM staffing_employee_records WHERE id=:id'), {'id':legacy_id})
+        db.session.rollback()
+        records.addendum(self.user, legacy_id, 'Historical context retained.', 1)
+        db.session.commit()
+
+    def test_delivery_rechecks_current_scope(self):
+        self.enable()
+        record = self.draft()
+        assignment = StaffingWorkAssignment.query.filter_by(person_id=self.worker.id).one()
+        assignment.work_area_unit_id = self.outside.id
+        db.session.commit()
+        with self.assertRaises(ValueError):
+            records.finalize(self.user, record.id, 1, 'yes')
+        db.session.rollback()
+        self.assertIsNone(record.finalized_at)
 
     def test_directory_is_paginated_with_constant_query_count(self):
         from sqlalchemy import event
