@@ -84,6 +84,7 @@ from app.models.staffing_timecard import (
     StaffingTimecardWeek, StaffingTimecardSlice, StaffingTimecardSegment, StaffingTimecardEdit,
 )
 from app.models.staffing_attendance_occurrence import StaffingAttendanceOccurrence
+from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent
 from app.models.staffing_accountability import (
     StaffingTrackerSetting, StaffingComboWorkday, StaffingAccountabilityWorkday,
     StaffingAccountabilitySource, StaffingAccountabilityResolution,

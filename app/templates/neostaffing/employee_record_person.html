@@ -1,0 +1,10 @@
+{% extends "neostaffing/_record_shell.html" %}
+{% block records_content %}
+<h1>{{ person.full_name }}</h1><p>{{ person.employee_id or '' }} · Employee Records {{ 'ON' if enabled else 'OFF' }}</p>
+{% if enabled and editable %}<details><summary>NEW RECORD</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Type<select name="kind">{% for value,label in kinds.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+<label>Documentation<textarea name="body" maxlength="12000" required rows="6"></textarea></label>
+<label>Existing Discipline resolution ID (optional)<input name="resolution_id" type="number" min="1" value="{{ request.args.get('resolution_id','') }}"></label><button>CREATE DRAFT</button></form></details>{% endif %}
+<ul class="record-list">{% for record in history.items %}<li><a href="{{ url_for('neostaffing.employee_record_detail', record_id=record.id) }}">{{ kinds[record.kind] }} · {{ record.created_at }} UTC · {{ 'FINALIZED' if record.finalized_at else 'DRAFT' }}</a><small>{{ record.id }}</small></li>{% else %}<li>No Employee Records.</li>{% endfor %}</ul>
+<nav>{% if history.has_prev %}<a href="{{ url_for('neostaffing.employee_record_person', person_id=person.id,page=history.prev_num) }}">PREVIOUS</a>{% endif %}{% if history.has_next %}<a href="{{ url_for('neostaffing.employee_record_person',person_id=person.id,page=history.next_num) }}">NEXT</a>{% endif %}</nav>
+{% endblock %}

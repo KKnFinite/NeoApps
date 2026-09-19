@@ -2,7 +2,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_accountability.css', v='1') }}">
 <section class="staffing-accountability">
-  <header><a href="{{ url_for('neostaffing.accountability') }}">ACCOUNTABILITY</a><h1>{{ person.first_name }} {{ person.last_name }}</h1></header>
+  <header><a href="{{ url_for('neostaffing.accountability') }}">ACCOUNTABILITY</a><a href="{{ url_for('neostaffing.employee_record_person',person_id=person.id) }}">EMPLOYEE RECORDS</a><h1>{{ person.first_name }} {{ person.last_name }}</h1></header>
   <p>{% for scope in state.scopes %}{{ scope.operation.name }} / {{ scope.department.name if scope.department else '-' }}{{ ' · ' if not loop.last }}{% endfor %}</p>
   <dl><dt>Active Infractions</dt><dd>{{ state.count }}</dd><dt>Last Formal Discipline</dt><dd>{{ state.last_formal or 'None' }}</dd><dt>Recommendation</dt><dd>{{ state.recommendation or '-' }}</dd><dt>Status</dt><dd>{{ state.status }}</dd></dl>
   {% if is_combo %}{% if not combo %}<p>Configure the two Sorts before this employee's next workday. Unpaired attendance remains provisional.</p>{% endif %}<details><summary>FT COMBO WORKDAY</summary>
@@ -44,7 +44,7 @@
       <button>RECORD PRIOR FORMAL HISTORY</button>
     </form>
   </details>{% endif %}
-  <div class="accountability-board" tabindex="0"><table><thead><tr><th>Date</th><th>Decision</th><th>Action</th><th>Actor</th><th>Trigger</th></tr></thead><tbody>{% for row in history %}<tr><td data-label="Date">{{ row.resolved_on }}</td><td data-label="Decision">{{ row.kind }}</td><td data-label="Action">{{ row.action or 'No formal discipline' }}</td><td data-label="Actor">{{ row.actor_id }}</td><td data-label="Trigger">{{ row.trigger_workday_id or '-' }}</td></tr>{% else %}<tr><td colspan="5">No retained resolutions.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="accountability-board" tabindex="0"><table><thead><tr><th>Date</th><th>Decision</th><th>Action</th><th>Actor</th><th>Trigger</th><th>Documentation</th></tr></thead><tbody>{% for row in history %}<tr><td data-label="Date">{{ row.resolved_on }}</td><td data-label="Decision">{{ row.kind }}</td><td data-label="Action">{{ row.action or 'No formal discipline' }}</td><td data-label="Actor">{{ row.actor_id }}</td><td data-label="Trigger">{{ row.trigger_workday_id or '-' }}</td><td data-label="Documentation"><a href="{{ url_for('neostaffing.employee_record_person',person_id=person.id,resolution_id=row.id) }}">EMPLOYEE RECORD</a></td></tr>{% else %}<tr><td colspan="6">No retained resolutions.</td></tr>{% endfor %}</tbody></table></div>
 </section>
 <script src="{{ url_for('static', filename='js/neostaffing_accountability.js', v='1') }}" defer></script>
 {% endblock %}

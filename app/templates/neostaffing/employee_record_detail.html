@@ -1,0 +1,27 @@
+{% extends "neostaffing/_record_shell.html" %}
+{% block records_content %}
+<a href="{{ url_for('neostaffing.employee_record_person',person_id=person.id) }}">{{ person.full_name }} · HISTORY</a>
+<h1>{{ kinds[record.kind] }}</h1><p>{{ 'FINALIZED — ORIGINAL IMMUTABLE' if record.finalized_at else 'DRAFT — NOT YET REVIEWED' }}</p>
+<small>Record {{ record.id }} · Created {{ record.created_at }} UTC · Actor {{ record.created_by }}</small>
+<p>Organization at creation: {% for path in context %}{{ path|map(attribute='name')|join(' / ') }}{{ ' · ' if not loop.last }}{% endfor %}</p>
+{% if record.discipline_resolution_id %}<p>Discipline resolution {{ record.discipline_resolution_id }} (documentation only; progression unchanged).</p>{% endif %}
+<article class="record-body">{{ record.body }}</article>
+{% if not record.finalized_at and editable %}
+<details><summary>EDIT DRAFT</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="edit"><input type="hidden" name="version" value="{{ record.version }}">
+<label>Type<select name="kind">{% for value,label in kinds.items() %}<option value="{{ value }}" {% if record.kind==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>Documentation<textarea name="body" maxlength="12000" required rows="6">{{ record.body }}</textarea></label><button>SAVE DRAFT</button></form></details>
+<section><h2>In-person review</h2><p>Show the saved record above to the employee. No employee account is required.</p>
+<form method="post" enctype="multipart/form-data" data-record-review><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="finalize"><input type="hidden" name="version" value="{{ record.version }}">
+<p>{{ acknowledgment }}</p><canvas width="1000" height="300" aria-label="Employee initials or signature" data-signature-pad></canvas>
+<button type="button" data-clear-signature>CLEAR SIGNATURE</button>
+<label><input type="checkbox" name="reviewed" value="yes" required>In-person review completed.</label>
+<button name="method" value="signature">ACKNOWLEDGE &amp; FINALIZE</button><button name="method" value="rts">RTS — REFUSE TO SIGN &amp; FINALIZE</button>
+<p role="status" data-record-status></p><p>Finalization is permanent. RTS records refusal, not agreement. Storage failure leaves the draft unchanged.</p></form></section>
+{% endif %}
+{% if record.finalized_at %}<p>{{ acknowledgment }} · {{ 'RTS — Refuse to Sign' if record.acknowledgment=='rts' else 'Employee acknowledgment' }}</p><small>Finalized {{ record.finalized_at }} UTC · Actor {{ record.finalized_by }}</small>
+{% if record.signature_key %}<img class="record-signature" src="{{ url_for('neostaffing.employee_record_signature',record_id=record.id) }}" alt="Employee initials or signature">{% endif %}
+{% if editable %}<details><summary>ADD DATED CONTEXT / CORRECTION</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="command" value="addendum"><input type="hidden" name="sequence" value="{{ sequence }}"><label>Addendum<textarea name="body" maxlength="12000" required rows="4"></textarea></label><button>APPEND TO HISTORY</button></form></details>{% endif %}{% endif %}
+<h2>Audit history / Addenda</h2>{% for event in events.items %}<article><strong>{{ event.kind|upper }}</strong> · {{ event.created_at.strftime('%Y-%m-%d %H:%M') }} UTC · Actor {{ event.actor_id }}<div class="record-body">{{ event_text[event.id] }}</div><small>Event {{ event.id }}</small></article>{% endfor %}
+<nav>{% if events.has_prev %}<a href="{{ url_for('neostaffing.employee_record_detail',record_id=record.id,page=events.prev_num) }}">PREVIOUS</a>{% endif %}{% if events.has_next %}<a href="{{ url_for('neostaffing.employee_record_detail',record_id=record.id,page=events.next_num) }}">NEXT</a>{% endif %}</nav>
+<script src="{{ url_for('static',filename='js/neostaffing_employee_records.js',v='1') }}" defer></script>
+{% endblock %}

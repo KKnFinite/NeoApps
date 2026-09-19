@@ -36,6 +36,8 @@ def resolve_database_uri():
 
 
 class Config:
+    # Inject a private durable adapter in deployment configuration; no DB/disk fallback.
+    EMPLOYEE_RECORD_SIGNATURE_STORAGE = None
     SECRET_KEY = os.getenv("SECRET_KEY")
     NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
     STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260913-approved-icons")

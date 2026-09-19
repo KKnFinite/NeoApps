@@ -1675,6 +1675,9 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
 
 
 def _create_missing_application_tables(existing_table_names):
+    from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent
+    # Parent tables already exist on production; create these after the normal
+    # registry below on fresh databases as well.
     from app.models import (
         AuthRateLimitState,
         FlightApiReviewItem,
@@ -1838,6 +1841,9 @@ def _create_missing_application_tables(existing_table_names):
     ):
         if model.__tablename__ in existing_table_names:
             continue
+        model.__table__.create(bind=db.engine, checkfirst=True)
+
+    for model in (StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent):
         model.__table__.create(bind=db.engine, checkfirst=True)
 
 

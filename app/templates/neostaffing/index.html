@@ -33,6 +33,7 @@
             {% if user_can("neostaffing.bulk_change.use") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.bulk_change') }}"><span>BULK CHANGE</span><em>Session change workspace</em></a>{% endif %}
             {% if user_can("neostaffing.reports.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.reports') }}"><span>REPORTS</span><em>Staffing and attendance</em></a>{% endif %}
             {% if user_can("neostaffing.vacation_selection.view") %}<a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.vacation_selection') }}"><span>VACATION SELECTION</span><em>Selection workspace</em></a>{% endif %}
+            <a class="neostaffing-menu-tile" href="{{ url_for('neostaffing.employee_records') }}"><span>EMPLOYEE RECORDS</span><em>Manual documentation · current management scope</em></a>
         </nav>
 
         {% if attendance_shortcut.is_management and attendance_shortcut.assignments %}
