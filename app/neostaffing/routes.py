@@ -1538,7 +1538,8 @@ def vacation_management_availability():
         flash(safe_mutation_error(error, "update vacation management availability"), "error")
     else:
         flash("Management availability updated.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                            area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/management/availability/<int:day_id>/remove")
@@ -1553,7 +1554,8 @@ def vacation_management_availability_remove(day_id):
         flash(safe_mutation_error(error, "update vacation management availability remove"), "error")
     else:
         flash("Management availability entry removed.", "success")
-    return redirect(url_for("neostaffing.vacation_management", year=vacation_year))
+    return redirect(url_for("neostaffing.vacation_management", year=vacation_year,
+                            area_id=request.form.get("return_area_id")))
 
 
 @bp.post("/vacation-selection/split-week/<int:conversion_id>/recombine")

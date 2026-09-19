@@ -5,6 +5,9 @@
 .vacation-scope-matrix th:first-child { position:sticky; left:0; background:#101e26; text-align:left; }
 .vacation-scope-matrix .is-vacation { background:#15424a; color:#baf9ff; }
 .vacation-scope-months { display:none; }
+.vacation-availability-help { margin:6px 8px; color:#9db9be; font-size:.72rem; line-height:1.4; }
+.neostaffing-vacation-pinned-actions label { display:grid; gap:4px; color:#b3cccf; font-size:.7rem; }
+.vacation-capacity-summary { color:#8ddbd3; }
 .vacation-month-picker { display:block; max-height:none; }
 .vacation-month-picker > details { border-bottom:1px solid #354b56; }
 .vacation-month-picker summary,.vacation-special-days summary { padding:10px 4px; color:#8ddbd3; cursor:pointer; }

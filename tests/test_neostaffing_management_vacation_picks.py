@@ -33,6 +33,35 @@ class NeoStaffingManagementVacationPicksTest(unittest.TestCase):
     YEAR = 2027
     OPEN_DAY = date(2026, 11, 1)
 
+    def test_availability_route_retains_scope_and_updates_capacity_display(self):
+        pt, _ = self._management_user("AVUX1", "Roster", "Supervisor", "1990-01-01", "part_time_supervisor")
+        ft, actor = self._management_user("AVUX2", "Overseeing", "Supervisor", "1980-01-01", "full_time_supervisor")
+        area_id = self.units["blue_department"].id
+        self._capacity(self.units["blue_department"], 1)
+        capacity = StaffingVacationManagementCapacity.query.one()
+        capacity.one_pinned_limit = 0
+        db.session.add(StaffingVacationManagementSelection(staffing_person_id=pt.id, vacation_year=self.YEAR, week_ending=date(self.YEAR, 5, 8)))
+        db.session.commit()
+        self._login(actor)
+        response = self.client.post("/neostaffing/vacation-selection/management/availability", data={
+            "vacation_year": self.YEAR, "staffing_person_id": ft.id,
+            "availability_date": f"{self.YEAR}-05-03", "item_type": "corporate_class",
+            "return_area_id": area_id,
+        })
+        self.assertIn(f"area_id={area_id}", response.location)
+        page = self.client.get(response.location)
+        self.assertIn(b"OVERSEEING MANAGEMENT", page.data)
+        self.assertIn(b"CLEAR DAY", page.data)
+        self.assertIn(b"0 OVER", page.data)
+        day = StaffingVacationDaySelection.query.filter_by(status="scheduled", item_type="corporate_class").one()
+        response = self.client.post(f"/neostaffing/vacation-selection/management/availability/{day.id}/remove", data={
+            "vacation_year": self.YEAR, "return_area_id": area_id,
+        })
+        self.assertIn(f"area_id={area_id}", response.location)
+        self.assertNotIn(b"0 OVER", self.client.get(response.location).data)
+        self.assertEqual(StaffingVacationManagementSelection.query.filter_by(cancelled_at=None).count(), 1)
+
+
     def test_manager_on_behalf_route_add_reload_move_cancel_and_audit(self):
         employee, _ = self._management_user("BEHALF1", "Employee", "Senior", "1990-01-01", "full_time_supervisor")
         _, manager = self._management_user("BEHALF2", "Scoped", "Manager", "1980-01-01", "manager", unit=self.units["ramp"])

@@ -34,6 +34,32 @@ from app.services.password_policy import set_user_password
 
 
 class NeoStaffingRoutesTest(unittest.TestCase):
+    def test_initial_shift_assignment_catalog_and_multiple_assignments_persist(self):
+        user = self._user("shift_assignment_admin")
+        self._grant_app_access(user, "neostaffing", "master")
+        _, operation, shift, _ = self._staffing_hierarchy()
+        shift.name = "Shift"
+        other = StaffingUnit(name="Outbound", unit_type="department", parent=operation, active=True)
+        db.session.add(other)
+        db.session.commit()
+        ids = {shift.id, other.id}
+        client = self._logged_in_client(user.username)
+        page = client.get("/neostaffing/people")
+        self.assertIn(b'data-unit-name="Shift"', page.data)
+        response = client.post("/neostaffing/app-management/people", data={
+            "creation_flow": "management", "employee_id": "SHIFT-NEW",
+            "first_name": "Shift", "last_name": "Supervisor", "seniority_date": "2000-01-01",
+            "classification": "full_time_supervisor", "employee_status": "active",
+            "initial_assignment_unit_ids": [str(shift.id), str(other.id), str(shift.id)],
+        })
+        self.assertEqual(response.status_code, 302)
+        db.session.remove()
+        person = StaffingPerson.query.filter_by(employee_id="SHIFT-NEW").one()
+        assignments = StaffingLeadershipAssignment.query.filter_by(person_id=person.id, active=True).all()
+        self.assertEqual(len(assignments), 2)
+        self.assertEqual({row.unit_id for row in assignments}, ids)
+        self.assertTrue(all(row.leadership_level == "department" for row in assignments))
+
     def setUp(self):
         TestConfig = type(
             "TestConfig",
