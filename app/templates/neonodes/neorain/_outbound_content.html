@@ -29,15 +29,67 @@
     {% endif %}
 </td>
 {%- endmacro %}
-{% macro delay_info(row) -%}
-<details class="neorain-delay-info" id="delay-info-{{ row.mission_id }}"><summary>DELAY INFO ({{ row.delay_info|length }})</summary>
-{% if can_edit %}
-<div data-neorain-outbound-edit-protected {% if row.no_return or row.status == 'CANCELLED' %}hidden{% endif %}>{% for delay in row.delay_info %}<div class="neorain-delay-row"><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="update"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><input name="minutes" value="{{ delay.minutes }}"><input name="code" maxlength="2" value="{{ delay.code }}"><textarea name="notes">{{ delay.notes }}</textarea><button type="submit">SAVE</button></form><form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="delete"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="delay_id" value="{{ delay.id }}"><input type="hidden" name="expected_version" value="{{ delay.version }}"><button type="submit">DELETE</button></form></div>{% endfor %}<form method="post" action="{{ url_for('neorain.delay_info') }}"><input type="hidden" name="board" value="outbound"><input type="hidden" name="action" value="add"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input required name="minutes" inputmode="numeric" placeholder="Minutes"><input required name="code" maxlength="2" placeholder="Code"><textarea name="notes" placeholder="Notes"></textarea><button type="submit">ADD</button></form></div>
-<div data-neorain-outbound-edit-readonly {% if not row.no_return and row.status != 'CANCELLED' %}hidden{% endif %}>{% for delay in row.delay_info %}<div class="neorain-delay-row"><strong>{{ delay.minutes }}</strong> {{ delay.code }} {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>{% else %}<span>—</span>{% endfor %}</div>
-{% else %}
-<div data-neorain-no-return-readonly>{% for delay in row.delay_info %}<div class="neorain-delay-row"><strong>{{ delay.minutes }}</strong> {{ delay.code }} {% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>{% else %}<span>—</span>{% endfor %}</div>
-{% endif %}
-</details>
+{% macro delay_info_toggle(row) -%}
+<button type="button" class="neorain-delay-toggle" data-neorain-delay-toggle aria-expanded="false" aria-controls="delay-info-{{ row.mission_id }}">DELAY INFO ({{ row.delay_info|length }})</button>
+{%- endmacro %}
+{% macro delay_info_panel(row) -%}
+<tr id="delay-info-{{ row.mission_id }}" class="neorain-delay-panel-row" data-neorain-delay-panel data-neorain-delay-mission-id="{{ row.mission_id }}" hidden>
+    <td colspan="18" class="neorain-delay-panel-cell">
+        <div class="neorain-delay-panel">
+            {% if can_edit %}
+            <div data-neorain-outbound-edit-protected {% if row.no_return or row.status == 'CANCELLED' %}hidden{% endif %}>
+                <div class="neorain-delay-existing-list">
+                    {% for delay in row.delay_info %}
+                    <div class="neorain-delay-existing-row">
+                        <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+                            <input type="hidden" name="board" value="outbound">
+                            <input type="hidden" name="action" value="update">
+                            <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+                            <input type="hidden" name="delay_id" value="{{ delay.id }}">
+                            <input type="hidden" name="expected_version" value="{{ delay.version }}">
+                            <input required name="minutes" inputmode="numeric" value="{{ delay.minutes }}" aria-label="Minutes">
+                            <input required name="code" maxlength="2" value="{{ delay.code }}" aria-label="Code">
+                            <input name="notes" value="{{ delay.notes }}" aria-label="Notes">
+                            <button type="submit">SAVE</button>
+                        </form>
+                        <form class="neorain-delay-delete-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+                            <input type="hidden" name="board" value="outbound">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+                            <input type="hidden" name="delay_id" value="{{ delay.id }}">
+                            <input type="hidden" name="expected_version" value="{{ delay.version }}">
+                            <button type="submit">DELETE</button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+                    <input type="hidden" name="board" value="outbound">
+                    <input type="hidden" name="action" value="add">
+                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+                    <input required name="minutes" inputmode="numeric" placeholder="Minutes">
+                    <input required name="code" maxlength="2" placeholder="Code">
+                    <input name="notes" placeholder="Notes">
+                    <button type="submit">ADD</button>
+                </form>
+            </div>
+            <div data-neorain-outbound-edit-readonly {% if not row.no_return and row.status != 'CANCELLED' %}hidden{% endif %}>
+                <div class="neorain-delay-existing-list">
+                    {% for delay in row.delay_info %}
+                    <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
+                    {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="neorain-delay-existing-list">
+                {% for delay in row.delay_info %}
+                <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
+                {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </td>
+</tr>
 {%- endmacro %}
 <div class="neorain-outbound-table-wrap neorain-desktop-board">
     <table class="neorain-outbound-table">
@@ -95,8 +147,9 @@
                     </div>
                     {% endif %}
                 </td>
-                <td data-label="Delay Info">{{ delay_info(row) }}</td>
+                <td data-label="Delay Info">{{ delay_info_toggle(row) }}</td>
             </tr>
+            {{ delay_info_panel(row) }}
             {% endfor %}
         </tbody>
     </table>

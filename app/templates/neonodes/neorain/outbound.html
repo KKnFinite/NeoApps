@@ -32,6 +32,7 @@
         {% include "neonodes/neorain/_outbound_content.html" %}
     </div>
 </section>
+{% include "neonodes/neorain/_delay_panel_shared.html" %}
 <script>
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
@@ -126,10 +127,17 @@
         view.dataset.neorainOutboundEditLocked = String(locked);
         view.querySelectorAll("[data-neorain-hhmm], [data-neorain-mobile-time-open], [data-neorain-late-inclusion-toggle], [data-neorain-no-return-action]")
             .forEach((control) => { control.disabled = locked; });
-        view.querySelectorAll("[data-neorain-outbound-edit-protected]")
-            .forEach((section) => { section.hidden = locked; });
-        view.querySelectorAll("[data-neorain-outbound-edit-readonly]")
-            .forEach((section) => { section.hidden = !locked; });
+        const scopes = [view];
+        if (view.matches("tr[data-neorain-outbound-row]")) {
+            const panel = root.querySelector('[data-neorain-delay-panel][data-neorain-delay-mission-id="' + view.dataset.neorainMissionId + '"]');
+            if (panel) scopes.push(panel);
+        }
+        scopes.forEach((scope) => {
+            scope.querySelectorAll("[data-neorain-outbound-edit-protected]")
+                .forEach((section) => { section.hidden = locked; });
+            scope.querySelectorAll("[data-neorain-outbound-edit-readonly]")
+                .forEach((section) => { section.hidden = !locked; });
+        });
         view.querySelector("[data-neorain-no-return-action='set']")?.toggleAttribute("hidden", isNoReturn || (isCancelled && locked));
         view.querySelector("[data-neorain-no-return-action='reverse']")?.toggleAttribute("hidden", !isNoReturn || locked);
         view.querySelector("[data-neorain-no-return-edit]")?.toggleAttribute("hidden", !locked);

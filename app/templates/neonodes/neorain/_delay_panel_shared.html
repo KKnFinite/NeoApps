@@ -1,0 +1,148 @@
+<style>
+.neorain-delay-toggle {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #aeb9c7;
+    font: inherit;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.neorain-delay-toggle::before { content: "▸ "; }
+.neorain-delay-toggle[aria-expanded="true"]::before { content: "▾ "; }
+.neorain-delay-toggle:hover,
+.neorain-delay-toggle:focus-visible { color: var(--node-highlight); }
+.neorain-delay-toggle:focus-visible { outline: 1px solid var(--node-highlight); outline-offset: 3px; }
+
+.neorain-delay-panel-row[hidden] { display: none; }
+.neorain-outbound-table .neorain-delay-panel-cell {
+    padding: 0;
+    white-space: normal;
+    background: #080e16;
+}
+.neorain-delay-panel {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px 12px;
+    border-top: 1px solid rgba(var(--node-rgb), .24);
+    border-bottom: 1px solid rgba(var(--node-rgb), .24);
+    box-shadow: inset 3px 0 0 rgba(var(--node-rgb), .6);
+}
+.neorain-delay-existing-list {
+    display: grid;
+    gap: 6px;
+}
+.neorain-delay-existing-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+}
+.neorain-delay-existing-copy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 8px;
+    min-width: 0;
+    color: #c6d2dd;
+    font-size: .7rem;
+}
+.neorain-delay-existing-copy strong {
+    color: var(--node-highlight);
+    white-space: nowrap;
+}
+.neorain-delay-existing-copy span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.neorain-delay-line-form {
+    display: grid;
+    grid-template-columns: 5rem 4rem minmax(0, 1fr) auto;
+    gap: 7px;
+    align-items: center;
+    min-width: 0;
+}
+.neorain-delay-line-form input:not([type="hidden"]),
+.neorain-delay-panel button {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 34px;
+    border: 1px solid rgba(var(--node-rgb), .38);
+    border-radius: 3px;
+    background: #101a27;
+    color: #e4edf6;
+    font: inherit;
+    padding: 5px 7px;
+}
+.neorain-delay-line-form input[name="minutes"],
+.neorain-delay-line-form input[name="code"] {
+    text-align: center;
+}
+.neorain-delay-panel button {
+    padding-inline: 10px;
+    color: var(--node-highlight);
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.neorain-delay-panel button:hover,
+.neorain-delay-panel button:focus-visible {
+    background: rgba(var(--node-rgb), .16);
+    color: #fff;
+}
+.neorain-delay-line-form input:focus-visible,
+.neorain-delay-panel button:focus-visible {
+    outline: 2px solid var(--node-highlight);
+    outline-offset: 1px;
+}
+.neorain-delay-delete-form { margin: 0; }
+.neorain-delay-delete-form button {
+    border-color: rgba(217, 116, 116, .52);
+    color: #df8c8c;
+}
+.neorain-delay-empty {
+    color: #728194;
+    font-size: .66rem;
+}
+@media (max-width: 900px) {
+    .neorain-delay-line-form {
+        grid-template-columns: 4.5rem 3.5rem minmax(0, 1fr) auto;
+    }
+}
+</style>
+<script>
+(() => {
+    const initDelayPanels = () => {
+        const root = document.querySelector("[data-neorain-inbound-live], [data-neorain-outbound-live]");
+        if (!root || root.dataset.neorainDelayPanelsReady === "true") return;
+        root.dataset.neorainDelayPanelsReady = "true";
+        const setOpen = (panel, open) => {
+            if (!panel) return;
+            panel.hidden = !open;
+            const button = root.querySelector('[data-neorain-delay-toggle][aria-controls="' + panel.id + '"]');
+            button?.setAttribute("aria-expanded", open ? "true" : "false");
+        };
+        root.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-neorain-delay-toggle]");
+            if (!button || !root.contains(button)) return;
+            const panel = document.getElementById(button.getAttribute("aria-controls"));
+            if (!panel || !root.contains(panel)) return;
+            setOpen(panel, panel.hidden);
+        });
+        const openHashPanel = () => {
+            const id = window.location.hash.slice(1);
+            if (!id || !id.startsWith("delay-info-")) return;
+            const panel = document.getElementById(id);
+            if (!panel || !root.contains(panel)) return;
+            setOpen(panel, true);
+            window.requestAnimationFrame(() => panel.scrollIntoView({ block: "nearest" }));
+        };
+        window.addEventListener("hashchange", openHashPanel);
+        openHashPanel();
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initDelayPanels, { once: true });
+    else initDelayPanels();
+})();
+</script>
