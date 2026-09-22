@@ -44,6 +44,7 @@ from app.services.neoscorpion_spear import (
     SPEAR_READINESS_REASON_LABELS,
     build_spear_plan,
     effective_spear_settings,
+    first_automatic_step,
     priority_rows,
     spear_dispatch_status,
 )
@@ -401,6 +402,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
     context.update(
         spear_plan=spear_plan,
         spear_unavailable=False,
+        spear_automatic_available=first_automatic_step(spear_plan) is not None,
         spear_indicator=spear_dispatch_status(spear_plan, context["spear_settings"]),
         spear_calibration=calibration_summary(live_calibrations),
     )
@@ -446,6 +448,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "truck_visuals": [],
             "spear_plan": None,
             "spear_unavailable": False,
+            "spear_automatic_available": False,
             "spear_settings": spear_settings,
             "spear_indicator": spear_dispatch_status(None, spear_settings),
             "spear_calibration": {"active_count": 0, "collecting_count": 0, "label": "SPEAR CALIBRATION · COLLECTING", "items": ()},
@@ -504,6 +507,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "settings": settings,
         "spear_plan": None,
         "spear_unavailable": False,
+        "spear_automatic_available": False,
         "spear_settings": spear_settings,
         "spear_indicator": spear_dispatch_status(None, spear_settings),
         "spear_calibration": _empty_spear_calibration(),
@@ -547,6 +551,7 @@ def _mark_spear_unavailable(context):
     context.update(
         spear_plan=None,
         spear_unavailable=True,
+        spear_automatic_available=False,
         spear_indicator={
             "state": "unavailable",
             "label": "SPEAR · UNAVAILABLE",

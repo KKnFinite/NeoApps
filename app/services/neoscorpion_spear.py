@@ -115,6 +115,8 @@ def spear_dispatch_status(plan, settings):
         state = "late"
     elif plan is not None and (plan.at_risk_count or plan.unplanned_count):
         state = "at-risk"
+    elif plan is not None and plan.timing_unknown_count:
+        state = "timing"
     elif settings.automation_enabled:
         state = "auto"
     else:
@@ -122,6 +124,7 @@ def spear_dispatch_status(plan, settings):
     labels = {
         "ready": "SPEAR · READY",
         "auto": "SPEAR · AUTO",
+        "timing": "SPEAR · TIMING",
         "at-risk": "SPEAR · AT RISK",
         "late": "SPEAR · LATE",
     }

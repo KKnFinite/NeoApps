@@ -1232,3 +1232,8 @@
     text-decoration: none;
     white-space: nowrap;
 }
+.neoscorpion-spear-indicator.is-timing {
+    border-color: #4b88aa;
+    background: #0c1d29;
+    color: #9ccce3;
+}

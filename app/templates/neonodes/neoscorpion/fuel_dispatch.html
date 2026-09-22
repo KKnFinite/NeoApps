@@ -25,7 +25,7 @@
     data-revision="{{ nightly_asset_revision }}"
     data-refresh-interval-ms="{{ fuel_dispatch_refresh.effective_interval_ms }}"
     data-refresh-source="{{ fuel_dispatch_refresh.source }}"
-    data-spear-automation-enabled="{{ 'true' if spear_settings.automation_enabled and spear_plan and spear_plan.steps else 'false' }}"
+    data-spear-automation-enabled="{{ 'true' if spear_settings.automation_enabled and spear_automatic_available else 'false' }}"
     data-spear-stability-delay-ms="{{ spear_settings.automation_stability_delay_seconds * 1000 }}"
     data-spear-recalculation-ms="{{ spear_settings.recalculation_interval_minutes * 60000 }}"
     data-spear-recommendations-enabled="{{ 'true' if spear_settings.recommendations_enabled else 'false' }}"

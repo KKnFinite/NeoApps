@@ -114,6 +114,16 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
             spear_dispatch_status(plan, SpearSettings(automation_enabled=True))["state"],
             "auto",
         )
+        timing_unknown = SpearPlan(
+            (), {}, {}, 0, 0, 0, 0, "", "token", timing_unknown_count=1
+        )
+        self.assertEqual(
+            spear_dispatch_status(
+                timing_unknown,
+                SpearSettings(automation_enabled=True),
+            )["state"],
+            "timing",
+        )
         at_risk = SpearPlan((), {}, {}, 0, 1, 0, 0, "", "token")
         self.assertEqual(
             spear_dispatch_status(at_risk, SpearSettings(automation_enabled=True))["state"],
@@ -531,6 +541,25 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
             '<form method="post" action="{{ url_for(\'neoscorpion.spear_vault_test\') }}">',
             template,
         )
+
+    def test_dispatch_automation_only_arms_with_an_eligible_spear_step(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (
+            root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html"
+        ).read_text(encoding="utf-8")
+        css = (
+            root / "app/static/css/14-neoscorpion.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "spear_settings.automation_enabled and spear_automatic_available",
+            template,
+        )
+        self.assertNotIn(
+            "spear_settings.automation_enabled and spear_plan and spear_plan.steps",
+            template,
+        )
+        self.assertIn(".neoscorpion-spear-indicator.is-timing", css)
 
     def test_dispatch_renders_compact_readiness_and_collapsed_why_hook(self):
         root = Path(__file__).resolve().parents[1]
