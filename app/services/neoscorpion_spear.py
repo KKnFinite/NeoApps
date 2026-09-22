@@ -35,13 +35,8 @@ SPEAR_HARD_CONSTRAINTS = (
 SPEAR_READINESS_REASON_LABELS = {
     "required_fuel": "Required Fuel",
     "inbound_fuel": "Inbound Fuel",
-    "estimated_gallons": "Estimated Gallons unavailable",
     "parking": "Parking / Ramp",
-    "arrival_timing": "ETA / Block-In unavailable",
-    "departure_timing": "Departure unavailable",
-    "pump_rate": "Aircraft pump-rate configuration",
-    "planning_settings": "Fuel planning configuration",
-    "aircraft_type": "Aircraft type",
+    "arrival_timing": "Block-In / Staging Window",
 }
 
 
@@ -98,6 +93,7 @@ class SpearPlan:
     waiting_for_data_count: int = 0
     relevant_count: int = 0
     readiness_by_mission_id: dict[int, tuple[str, ...]] = field(default_factory=dict)
+    timing_unknown_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -319,7 +315,10 @@ def build_spear_plan(
         ramp = _ramp(row.get("parking_position"), allow_unknown=True)
         timing = _spear_timing(row, operation, planning_settings)
         readiness_reasons = _readiness_reasons(
-            row, demand=demand, ramp=ramp, timing=timing, planning_settings=planning_settings
+            row,
+            ramp=ramp,
+            spear_settings=spear_settings,
+            now_utc=now_utc,
         )
         readiness[mission_id] = readiness_reasons
         if readiness_reasons:
@@ -370,9 +369,14 @@ def build_spear_plan(
                 truck = usable_trucks[truck_id]["truck"]
                 remaining = truck_gallons[truck_id]
                 capacity = int(truck.capacity_gallons)
-                feasible, projected = _fuel_feasibility(remaining, capacity, demand)
+                feasible, projected = (
+                    (True, remaining)
+                    if demand is None
+                    else _fuel_feasibility(remaining, capacity, demand)
+                )
                 if (
-                    demand > 0
+                    demand is not None
+                    and demand > 0
                     and capacity >= int(demand) + spear_settings.minimum_truck_reserve_gallons
                     and remaining - int(demand) < spear_settings.minimum_truck_reserve_gallons
                 ):
@@ -398,7 +402,11 @@ def build_spear_plan(
                     ramp,
                     spear_settings.truck_minutes_per_ramp_move,
                 )
-                reserve_short = demand > 0 and projected < spear_settings.minimum_truck_reserve_gallons
+                reserve_short = (
+                    demand is not None
+                    and demand > 0
+                    and projected < spear_settings.minimum_truck_reserve_gallons
+                )
                 score = _candidate_score(
                     spear_settings.priority_order,
                     risk=risk,
@@ -476,7 +484,11 @@ def build_spear_plan(
                 start, finish, risk,
                 "Replace invalid sent resource" if invalid_sent_resource else "Minimum-delay deterministic assignment",
                 automatic_eligible=(
-                    not bool(row.get("work_has_begun"))
+                    demand is not None
+                    and timing is not None
+                    and timing.total_duration_minutes is not None
+                    and _departure_at(row) is not None
+                    and not bool(row.get("work_has_begun"))
                     and fueler_state[fueler_id].workload == 0
                     and truck_state[truck_id].workload == 0
                     and now_utc >= staging_allowed_at
@@ -581,9 +593,10 @@ def _plan(
     late = sum(value == "LATE" for value in risks.values())
     unplanned = len(unavailable)
     waiting_count = len(waiting_for_data)
+    timing_unknown = sum(value == "TIMING UNKNOWN" for value in risks.values())
     evaluated = len(risks) + unplanned
     if status_text is None:
-        if covered and not late and not at_risk and not waiting_count and not unplanned:
+        if covered and not late and not at_risk and not timing_unknown and not waiting_count and not unplanned:
             status_text = "SPEAR: ALL LOADS COVERED"
         else:
             status_parts = []
@@ -593,6 +606,8 @@ def _plan(
                 status_parts.append(f"{covered} COVERED")
             if at_risk:
                 status_parts.append(f"{at_risk} AT RISK")
+            if timing_unknown:
+                status_parts.append(f"{timing_unknown} TIMING UNKNOWN")
             if waiting_count:
                 status_parts.append(f"{waiting_count} WAITING FOR DATA")
             if unplanned:
@@ -616,43 +631,49 @@ def _plan(
         waiting_count,
         relevant_count if relevant_count is not None else evaluated + waiting_count,
         dict(readiness_by_mission_id or {}),
+        timing_unknown,
     )
 
 
-def _readiness_reasons(row, *, demand, ramp, timing, planning_settings):
-    """Return only missing canonical inputs, never a temporary resource state."""
+def _readiness_reasons(row, *, ramp, spear_settings, now_utc):
+    """Return only the canonical basic SPEAR readiness gate."""
     reasons = []
     mission = row["mission"]
     cycle_type = str(row.get("cycle_type") or "fuel").lower()
-    if demand is None or demand == 0:
-        if cycle_type != "defuel" and getattr(mission, "planned_fuel_load", None) is None:
+
+    if cycle_type != "defuel":
+        required_fuel_lbs = row.get(
+            "required_fuel_lbs",
+            getattr(mission, "planned_fuel_load", None),
+        )
+        if required_fuel_lbs is None:
             reasons.append("required_fuel")
-        if cycle_type != "defuel" and row.get("inbound_fuel_lbs") is None:
+        if row.get("inbound_fuel_lbs") is None:
             reasons.append("inbound_fuel")
-        reasons.append("estimated_gallons")
+
     if ramp not in SPEAR_RAMP_ORDER:
         reasons.append("parking")
 
     arrival = row.get("arrival_mission")
-    if arrival is None or (
-        getattr(arrival, "actual_block_in_datetime_utc", None) is None
-        and getattr(arrival, "eta_datetime_utc", None) is None
-        and getattr(arrival, "planned_datetime_utc", None) is None
-    ):
+    arrival_ready = False
+    if arrival is not None:
+        actual_block_in = _utc_naive(
+            getattr(arrival, "actual_block_in_datetime_utc", None)
+        )
+        if actual_block_in is not None:
+            arrival_ready = True
+        else:
+            arrival_eta = _utc_naive(
+                getattr(arrival, "eta_datetime_utc", None)
+                or getattr(arrival, "planned_datetime_utc", None)
+            )
+            if arrival_eta is not None:
+                staging_opens_at = arrival_eta - timedelta(
+                    minutes=spear_settings.incoming_early_staging_minutes
+                )
+                arrival_ready = now_utc >= staging_opens_at
+    if not arrival_ready:
         reasons.append("arrival_timing")
-    if _departure_at(row) is None:
-        reasons.append("departure_timing")
-
-    aircraft_type = row.get("detailed_aircraft_type")
-    if not aircraft_type or aircraft_type == "UNKNOWN":
-        reasons.append("aircraft_type")
-    elif not planning_settings.is_complete_for(aircraft_type):
-        reasons.append("pump_rate")
-    elif timing is not None and not timing.available:
-        if timing.unavailable_reason == "planning_settings_incomplete":
-            reasons.append("planning_settings")
-        elif timing.unavailable_reason == "unsupported_aircraft":
-            reasons.append("aircraft_type")
 
     return tuple(dict.fromkeys(reasons))
 
@@ -705,14 +726,22 @@ def _assignment_explanation(
         "projected_completion": _display_time(selected["finish"], mission),
         "risk": selected["risk"],
         "truck_gallons_before": int(selected["truck_gallons_before"]),
-        "estimated_gallons": int(abs(timing.planning_demand_gallons)),
+        "estimated_gallons": (
+            int(abs(timing.planning_demand_gallons))
+            if timing.planning_demand_gallons is not None
+            else "unknown"
+        ),
         "truck_gallons_after": int(selected["projected"]),
         "reserve_gallons": settings.minimum_truck_reserve_gallons,
         "truck_location": selected["truck_location"],
         "fueler_location": selected["fueler_location"],
         "early_staging_available": staging_allowed_at_utc < timing.aircraft_ready_utc,
         "alternatives": alternatives,
-        "hard_constraint_notes": _truck_constraint_notes(truck_rows),
+        "hard_constraint_notes": _truck_constraint_notes(truck_rows) + (
+            ("Fuel demand unavailable: truck fuel feasibility is unverified",)
+            if timing.planning_demand_gallons is None
+            else ()
+        ),
         "live_calibration": _live_calibration_notes(
             calibrations, row.get("detailed_aircraft_type")
         ),
@@ -759,6 +788,8 @@ def _candidate_explanation_reason(candidate, selected):
         return "Selected: best deterministic priority result"
     if candidate["risk"] != selected["risk"]:
         return f"{candidate['risk']}: worse completion risk"
+    if candidate["finish"] is None or selected["finish"] is None:
+        return "Timing incomplete; ranked by deterministic resource priorities"
     minutes_later = int(
         (candidate["finish"] - selected["finish"]).total_seconds() / 60
     )
@@ -803,16 +834,23 @@ def _minutes_display(value):
 def _spear_timing(row, operation, planning_settings):
     mission = row["mission"]
     arrival = row.get("arrival_mission")
-    departure = _departure_at(row)
-    if arrival is None or departure is None:
+    if arrival is None:
         return None
+
+    actual_block_in = _utc_naive(
+        getattr(arrival, "actual_block_in_datetime_utc", None)
+    )
+    arrival_eta = _utc_naive(
+        getattr(arrival, "eta_datetime_utc", None)
+        or getattr(arrival, "planned_datetime_utc", None)
+    )
+    if actual_block_in is None and arrival_eta is None:
+        return None
+
+    departure = _departure_at(row)
     timing_mission = SimpleNamespace(
-        actual_block_in_datetime_utc=_utc_naive(
-            arrival.actual_block_in_datetime_utc
-        ),
-        eta_datetime_utc=_utc_naive(
-            arrival.eta_datetime_utc or arrival.planned_datetime_utc
-        ),
+        actual_block_in_datetime_utc=actual_block_in,
+        eta_datetime_utc=arrival_eta,
         planned_datetime_utc=departure,
     )
     spear_planning_settings = SimpleNamespace(
@@ -820,8 +858,16 @@ def _spear_timing(row, operation, planning_settings):
         finishing_minutes=planning_settings.finishing_minutes,
         eta_safety_buffer_minutes=Decimal("5"),
         pump_rate_for=planning_settings.pump_rate_for,
-        setup_for=getattr(planning_settings, "setup_for", lambda _type: planning_settings.setup_minutes),
-        finishing_for=getattr(planning_settings, "finishing_for", lambda _type: planning_settings.finishing_minutes),
+        setup_for=getattr(
+            planning_settings,
+            "setup_for",
+            lambda _type: planning_settings.setup_minutes,
+        ),
+        finishing_for=getattr(
+            planning_settings,
+            "finishing_for",
+            lambda _type: planning_settings.finishing_minutes,
+        ),
         is_complete_for=lambda aircraft_type: (
             planning_settings.setup_minutes is not None
             and planning_settings.finishing_minutes is not None
@@ -835,7 +881,54 @@ def _spear_timing(row, operation, planning_settings):
         planning_demand_gallons=row.get("planning_demand_gallons"),
         planning_settings=spear_planning_settings,
     )
-    return timing
+    if timing.available:
+        return timing
+
+    aircraft_ready_utc = (
+        actual_block_in
+        if actual_block_in is not None
+        else arrival_eta + timedelta(minutes=5)
+    )
+    aircraft_ready_source = (
+        "actual_block_in" if actual_block_in is not None else "eta_plus_buffer"
+    )
+    demand = _decimal_or_none(row.get("planning_demand_gallons"))
+    setup_minutes = _decimal_or_none(timing.setup_minutes)
+    finishing_minutes = _decimal_or_none(timing.finishing_minutes)
+    pump_rate = _decimal_or_none(timing.pump_rate_gallons_per_minute)
+    pump_minutes = (
+        abs(demand) / pump_rate
+        if demand is not None and pump_rate is not None and pump_rate > 0
+        else None
+    )
+    total_duration_minutes = (
+        setup_minutes + pump_minutes + finishing_minutes
+        if setup_minutes is not None
+        and pump_minutes is not None
+        and finishing_minutes is not None
+        else None
+    )
+    return SimpleNamespace(
+        available=total_duration_minutes is not None,
+        aircraft_type=row.get("detailed_aircraft_type"),
+        planning_demand_gallons=demand,
+        setup_minutes=setup_minutes,
+        pump_rate_gallons_per_minute=pump_rate,
+        pump_minutes=pump_minutes,
+        finishing_minutes=finishing_minutes,
+        total_duration_minutes=total_duration_minutes,
+        aircraft_ready_utc=aircraft_ready_utc,
+        aircraft_ready_source=aircraft_ready_source,
+        fuel_complete_deadline_utc=None,
+        earliest_possible_finish_utc=(
+            aircraft_ready_utc
+            + timedelta(minutes=float(total_duration_minutes))
+            if total_duration_minutes is not None
+            else None
+        ),
+        deadline_feasible=None,
+        unavailable_reason=timing.unavailable_reason,
+    )
 
 
 def _departure_at(row):
@@ -874,7 +967,11 @@ def _schedule_pair(
     truck_ready = max(truck_arrival, staging_allowed_at_utc)
     fueler_ready = max(fueler_arrival, staging_allowed_at_utc)
     start = max(timing.aircraft_ready_utc, truck_ready, fueler_ready)
-    finish = start + timedelta(minutes=float(timing.total_duration_minutes))
+    finish = (
+        start + timedelta(minutes=float(timing.total_duration_minutes))
+        if timing.total_duration_minutes is not None
+        else None
+    )
     return start, finish
 
 
@@ -890,7 +987,8 @@ def _staging_allowed_at(row, settings, now_utc):
 
 def _advance_resources(fueler, truck, ramp, finish):
     for state in (fueler, truck):
-        state.available_at = finish
+        if finish is not None:
+            state.available_at = finish
         state.ramp = ramp
         state.workload += 1
         state.location_source = "current_assignment"
@@ -950,13 +1048,15 @@ def _fuel_feasibility(current, capacity, demand):
 
 
 def _apply_demand(gallons_by_truck, truck_id, demand):
-    if truck_id not in gallons_by_truck:
+    if truck_id not in gallons_by_truck or demand is None:
         return
     gallons_by_truck[truck_id] += -int(abs(demand)) if demand > 0 else int(abs(demand))
 
 
 def _risk(finish, departure):
-    if departure is None or finish > departure:
+    if finish is None or departure is None:
+        return "TIMING UNKNOWN"
+    if finish > departure:
         return "LATE"
     if finish > departure - timedelta(minutes=20):
         return "AT RISK"

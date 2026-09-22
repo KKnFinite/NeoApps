@@ -81,6 +81,8 @@ def _row(identifier=100, *, demand=500, assignment=None, work_has_begun=False):
         ),
         "administratively_complete": False,
         "planning_demand_gallons": demand,
+        "required_fuel_lbs": 20_000,
+        "inbound_fuel_lbs": 12_000,
         "parking_position": "Charlie4",
         "detailed_aircraft_type": "B757",
         "assignment": assignment,
@@ -148,11 +150,14 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(plan.steps[0].mission_id, 100)
         self.assertEqual(
             plan.readiness_by_mission_id[101],
-            ("arrival_timing", "departure_timing"),
+            ("arrival_timing",),
         )
 
     def test_incomplete_fuel_data_is_waiting_not_covered_or_at_risk(self):
-        plan = _plan([_row(demand=None)])
+        row = _row(demand=None)
+        row["required_fuel_lbs"] = None
+        row["inbound_fuel_lbs"] = None
+        plan = _plan([row])
 
         self.assertEqual(plan.waiting_for_data_count, 1)
         self.assertEqual(plan.covered_count, 0)
@@ -160,8 +165,98 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(plan.status_text, "SPEAR: 1 WAITING FOR DATA")
         self.assertEqual(
             plan.readiness_by_mission_id[100],
-            ("required_fuel", "inbound_fuel", "estimated_gallons"),
+            ("required_fuel", "inbound_fuel"),
         )
+
+    def test_basic_gate_requires_required_and_inbound_even_when_demand_exists(self):
+        missing_required = _row(100)
+        missing_required["required_fuel_lbs"] = None
+        missing_inbound = _row(101)
+        missing_inbound["inbound_fuel_lbs"] = None
+
+        plan = _plan([missing_required, missing_inbound])
+
+        self.assertEqual(plan.waiting_for_data_count, 2)
+        self.assertEqual(
+            plan.readiness_by_mission_id[100],
+            ("required_fuel",),
+        )
+        self.assertEqual(
+            plan.readiness_by_mission_id[101],
+            ("inbound_fuel",),
+        )
+
+    def test_arrival_gate_opens_only_at_block_in_or_early_staging_window(self):
+        outside = _row(100)
+        outside["arrival_mission"].actual_block_in_datetime_utc = None
+        outside["arrival_mission"].eta_datetime_utc = NOW + timedelta(minutes=30)
+        outside["arrival_mission"].planned_datetime_utc = NOW + timedelta(minutes=30)
+
+        inside = _row(101)
+        inside["arrival_mission"].actual_block_in_datetime_utc = None
+        inside["arrival_mission"].eta_datetime_utc = NOW + timedelta(minutes=10)
+        inside["arrival_mission"].planned_datetime_utc = NOW + timedelta(minutes=10)
+
+        plan = _plan([outside, inside])
+
+        self.assertEqual(
+            plan.readiness_by_mission_id[100],
+            ("arrival_timing",),
+        )
+        self.assertEqual(plan.readiness_by_mission_id[101], ())
+        self.assertEqual([step.mission_id for step in plan.steps], [101])
+
+    def test_missing_departure_keeps_recommendation_with_neutral_timing(self):
+        row = _row()
+        row["mission"].planned_datetime_utc = None
+
+        plan = _plan([row])
+
+        self.assertEqual(plan.waiting_for_data_count, 0)
+        self.assertEqual(len(plan.steps), 1)
+        self.assertEqual(plan.steps[0].risk, "TIMING UNKNOWN")
+        self.assertFalse(plan.steps[0].automatic_eligible)
+        self.assertEqual(plan.late_count, 0)
+        self.assertEqual(plan.timing_unknown_count, 1)
+        self.assertEqual(plan.status_text, "SPEAR: 1 TIMING UNKNOWN")
+
+    def test_missing_derived_gallons_does_not_become_waiting_for_data(self):
+        row = _row(demand=None)
+
+        plan = _plan([row])
+
+        self.assertEqual(plan.waiting_for_data_count, 0)
+        self.assertEqual(len(plan.steps), 1)
+        self.assertEqual(plan.steps[0].risk, "TIMING UNKNOWN")
+        self.assertFalse(plan.steps[0].automatic_eligible)
+
+    def test_incomplete_planning_settings_degrade_timing_without_blocking(self):
+        class _IncompletePlanningSettings:
+            setup_minutes = None
+            finishing_minutes = None
+
+            @staticmethod
+            def pump_rate_for(_aircraft_type):
+                return None
+
+            @staticmethod
+            def is_complete_for(_aircraft_type):
+                return False
+
+        plan = build_spear_plan(
+            [_row()],
+            operation=SimpleNamespace(id=1),
+            planning_settings=_IncompletePlanningSettings(),
+            spear_settings=SpearSettings(),
+            nightly_fuelers=(_fueler(),),
+            nightly_trucks=(_truck(),),
+            now_utc=NOW,
+        )
+
+        self.assertEqual(plan.waiting_for_data_count, 0)
+        self.assertEqual(len(plan.steps), 1)
+        self.assertEqual(plan.steps[0].risk, "TIMING UNKNOWN")
+        self.assertFalse(plan.steps[0].automatic_eligible)
 
     def test_temporary_resource_shortage_is_evaluable_not_waiting_for_data(self):
         plan = _plan([_row()], trucks=(_truck(status="unavailable_oos"),))
