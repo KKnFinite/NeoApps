@@ -1,6 +1,203 @@
 {% extends "base.html" %}
 {% block title %}Inbound | NeoRain{% endblock %}
 {% block content %}
+<style>
+.neorain-crew-admin {
+    margin-bottom: 14px;
+    overflow: hidden;
+}
+
+.neorain-crew-admin-list {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px;
+}
+
+.neorain-crew-admin-card {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(var(--node-rgb), .2);
+    border-radius: 4px;
+    background: #0e1621;
+}
+
+.neorain-crew-admin-card--add {
+    border-style: dashed;
+}
+
+.neorain-crew-admin-form,
+.neorain-crew-admin-readonly {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 2.1fr) minmax(0, .6fr) minmax(0, .6fr);
+    gap: 8px 10px;
+    align-items: end;
+    min-width: 0;
+}
+
+.neorain-crew-admin-field {
+    min-width: 0;
+    margin: 0;
+}
+
+.neorain-crew-admin-field > span,
+.neorain-crew-admin-field > legend,
+.neorain-crew-admin-readonly span {
+    display: block;
+    margin: 0 0 4px;
+    color: #8291a3;
+    font-size: .58rem;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.neorain-crew-admin-fieldset {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+}
+
+.neorain-crew-admin select,
+.neorain-crew-admin input:not([type="hidden"]):not([type="checkbox"]) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding: 5px 7px;
+    border: 1px solid rgba(var(--node-rgb), .38);
+    border-radius: 3px;
+    background: #101a27;
+    color: #e4edf6;
+    font: inherit;
+    color-scheme: dark;
+}
+
+.neorain-crew-admin select:focus-visible,
+.neorain-crew-admin input:focus-visible,
+.neorain-crew-admin button:focus-visible {
+    outline: 2px solid var(--node-highlight);
+    outline-offset: 1px;
+}
+
+.neorain-crew-admin-ramp-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+.neorain-crew-admin-ramp-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 30px;
+    padding: 3px 7px;
+    border: 1px solid rgba(var(--node-rgb), .28);
+    border-radius: 999px;
+    background: #101a27;
+    color: #c6d2dd;
+    font-size: .66rem;
+    white-space: nowrap;
+}
+
+.neorain-crew-admin-ramp-option input {
+    margin: 0;
+}
+
+.neorain-crew-admin-actions {
+    display: flex;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.neorain-crew-admin button {
+    min-height: 32px;
+    padding: 5px 9px;
+    border: 1px solid rgba(var(--node-rgb), .45);
+    border-radius: 3px;
+    background: #101a27;
+    color: var(--node-highlight);
+    font: inherit;
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    cursor: pointer;
+}
+
+.neorain-crew-admin button:hover,
+.neorain-crew-admin button:focus-visible {
+    background: rgba(var(--node-rgb), .16);
+    color: #fff;
+}
+
+.neorain-crew-admin-remove-form {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
+}
+
+.neorain-crew-admin-remove-form button {
+    border-color: rgba(217, 116, 116, .55);
+    color: #df8c8c;
+}
+
+.neorain-crew-admin-readonly > div {
+    min-width: 0;
+}
+
+.neorain-crew-admin-readonly strong {
+    display: block;
+    color: #edf2f7;
+    font-size: .75rem;
+    overflow-wrap: anywhere;
+}
+
+.neorain-crew-admin-empty {
+    margin: 0;
+    padding: 8px 2px;
+    color: #8291a3;
+    font-size: .7rem;
+}
+
+@media (max-width: 1050px) {
+    .neorain-crew-admin-form,
+    .neorain-crew-admin-readonly {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .neorain-crew-admin-ramps,
+    .neorain-crew-admin-actions {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 760px) {
+    .neorain-crew-admin-list {
+        padding: 8px;
+    }
+
+    .neorain-crew-admin-card {
+        padding: 8px;
+    }
+
+    .neorain-crew-admin-form,
+    .neorain-crew-admin-readonly {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .neorain-crew-admin-ramps,
+    .neorain-crew-admin-actions {
+        grid-column: 1;
+    }
+
+    .neorain-crew-admin-actions,
+    .neorain-crew-admin-remove-form {
+        justify-content: flex-start;
+    }
+}
+</style>
 <section class="neorain-outbound-shell" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-late-inclusion-url="{{ url_for('neorain.inbound_late_inclusion') }}" data-block-in-url="{{ url_for('neorain.inbound_block_in') }}" data-inbound-revision="{{ inbound_revision }}">
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div><p>LIVE OPERATIONS</p><h1>INBOUND</h1></div>
@@ -16,9 +213,95 @@
     </section>
     <section class="neorain-settings-panel neorain-crew-admin" aria-labelledby="crew-admin-title">
         <header><div><h2 id="crew-admin-title">CREW ADMIN</h2><p>Current-sort nightly assignments.</p></div></header>
-        {% if operation %}<div class="neorain-outbound-table-wrap"><table class="neorain-outbound-table"><thead><tr><th>Name</th><th>Ramp(s)</th><th>Printer #</th><th>Van #</th>{% if can_edit_crew_admin %}<th>Actions</th>{% endif %}</tr></thead><tbody>
-        {% for item in crew_admin_assignments %}<tr>{% if can_edit_crew_admin %}<form method="post" action="{{ url_for('neorain.inbound_crew_admin') }}"><input type="hidden" name="action" value="update"><input type="hidden" name="assignment_id" value="{{ item.assignment.id }}"><input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}"><td><select name="person_id">{% for person in eligible_crew_admins %}<option value="{{ person.id }}" {% if person.id == item.assignment.person_id %}selected{% endif %}>{{ person.full_name }}</option>{% endfor %}</select></td><td>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<label><input type="checkbox" name="ramps" value="{{ ramp }}" {% if ramp in item.ramps %}checked{% endif %}>{{ ramp }}</label>{% endfor %}</td><td><input name="printer_number" value="{{ item.assignment.printer_number or '' }}"></td><td><input name="van_number" value="{{ item.assignment.van_number or '' }}"></td><td><button type="submit">SAVE</button></form><form method="post" action="{{ url_for('neorain.inbound_crew_admin') }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="assignment_id" value="{{ item.assignment.id }}"><input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}"><button type="submit">REMOVE</button></form></td>{% else %}<td>{{ item.person.full_name if item.person else 'UNASSIGNED' }}</td><td>{{ item.ramps|join(', ') or '-' }}</td><td>{{ item.assignment.printer_number or '-' }}</td><td>{{ item.assignment.van_number or '-' }}</td>{% endif %}</tr>{% endfor %}
-        {% if can_edit_crew_admin %}<tr><td colspan="5"><form method="post" action="{{ url_for('neorain.inbound_crew_admin') }}"><input type="hidden" name="action" value="add"><select name="person_id">{% for person in eligible_crew_admins %}<option value="{{ person.id }}">{{ person.full_name }}</option>{% endfor %}</select>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<label><input type="checkbox" name="ramps" value="{{ ramp }}">{{ ramp }}</label>{% endfor %}<input name="printer_number" placeholder="Printer #"><input name="van_number" placeholder="Van #"><button type="submit">ADD CREW ADMIN</button></form></td></tr>{% endif %}</tbody></table></div>{% else %}<p class="muted">No current sort.</p>{% endif %}
+        {% if operation %}
+        <div class="neorain-crew-admin-list">
+            {% for item in crew_admin_assignments %}
+            <article class="neorain-crew-admin-card">
+                {% if can_edit_crew_admin %}
+                <form class="neorain-crew-admin-form" method="post" action="{{ url_for('neorain.inbound_crew_admin') }}">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="assignment_id" value="{{ item.assignment.id }}">
+                    <input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}">
+                    <label class="neorain-crew-admin-field">
+                        <span>Name</span>
+                        <select name="person_id">
+                            {% for person in eligible_crew_admins %}
+                            <option value="{{ person.id }}" {% if person.id == item.assignment.person_id %}selected{% endif %}>{{ person.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <fieldset class="neorain-crew-admin-field neorain-crew-admin-fieldset neorain-crew-admin-ramps">
+                        <legend>Ramp(s)</legend>
+                        <div class="neorain-crew-admin-ramp-options">
+                            {% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}
+                            <label class="neorain-crew-admin-ramp-option"><input type="checkbox" name="ramps" value="{{ ramp }}" {% if ramp in item.ramps %}checked{% endif %}>{{ ramp }}</label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    <label class="neorain-crew-admin-field">
+                        <span>Printer #</span>
+                        <input name="printer_number" value="{{ item.assignment.printer_number or '' }}">
+                    </label>
+                    <label class="neorain-crew-admin-field">
+                        <span>Van #</span>
+                        <input name="van_number" value="{{ item.assignment.van_number or '' }}">
+                    </label>
+                    <div class="neorain-crew-admin-actions"><button type="submit">SAVE</button></div>
+                </form>
+                <form class="neorain-crew-admin-remove-form" method="post" action="{{ url_for('neorain.inbound_crew_admin') }}">
+                    <input type="hidden" name="action" value="remove">
+                    <input type="hidden" name="assignment_id" value="{{ item.assignment.id }}">
+                    <input type="hidden" name="expected_version" value="{{ item.assignment.updated_at.isoformat() if item.assignment.updated_at else '' }}">
+                    <button type="submit">REMOVE</button>
+                </form>
+                {% else %}
+                <div class="neorain-crew-admin-readonly">
+                    <div><span>Name</span><strong>{{ item.person.full_name if item.person else 'UNASSIGNED' }}</strong></div>
+                    <div><span>Ramp(s)</span><strong>{{ item.ramps|join(', ') or '-' }}</strong></div>
+                    <div><span>Printer #</span><strong>{{ item.assignment.printer_number or '-' }}</strong></div>
+                    <div><span>Van #</span><strong>{{ item.assignment.van_number or '-' }}</strong></div>
+                </div>
+                {% endif %}
+            </article>
+            {% else %}
+            <p class="neorain-crew-admin-empty">No Crew Admin assignments yet.</p>
+            {% endfor %}
+            {% if can_edit_crew_admin %}
+            <article class="neorain-crew-admin-card neorain-crew-admin-card--add">
+                <form class="neorain-crew-admin-form" method="post" action="{{ url_for('neorain.inbound_crew_admin') }}">
+                    <input type="hidden" name="action" value="add">
+                    <label class="neorain-crew-admin-field">
+                        <span>Name</span>
+                        <select name="person_id">
+                            {% for person in eligible_crew_admins %}
+                            <option value="{{ person.id }}">{{ person.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <fieldset class="neorain-crew-admin-field neorain-crew-admin-fieldset neorain-crew-admin-ramps">
+                        <legend>Ramp(s)</legend>
+                        <div class="neorain-crew-admin-ramp-options">
+                            {% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}
+                            <label class="neorain-crew-admin-ramp-option"><input type="checkbox" name="ramps" value="{{ ramp }}">{{ ramp }}</label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    <label class="neorain-crew-admin-field">
+                        <span>Printer #</span>
+                        <input name="printer_number" placeholder="Printer #">
+                    </label>
+                    <label class="neorain-crew-admin-field">
+                        <span>Van #</span>
+                        <input name="van_number" placeholder="Van #">
+                    </label>
+                    <div class="neorain-crew-admin-actions"><button type="submit">ADD CREW ADMIN</button></div>
+                </form>
+            </article>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="muted">No current sort.</p>
+        {% endif %}
     </section>
     {% if not operation %}
     <p class="neorain-outbound-empty">No current sort.</p>
