@@ -4367,6 +4367,9 @@ def _fuel_rows(
                 "inbound_fuel_lbs": (
                     tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
                 ),
+                "measured_inbound_fuel_lbs": (
+                    remaining_total_lbs if remaining_complete else None
+                ),
                 "fob_display": format_display_thousands(
                     tail_fuel_state.fob_lbs if tail_fuel_state else None
                 ),

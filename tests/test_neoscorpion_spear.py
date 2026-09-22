@@ -83,6 +83,7 @@ def _row(identifier=100, *, demand=500, assignment=None, work_has_begun=False):
         "planning_demand_gallons": demand,
         "required_fuel_lbs": 20_000,
         "inbound_fuel_lbs": 12_000,
+        "measured_inbound_fuel_lbs": None,
         "parking_position": "Charlie4",
         "detailed_aircraft_type": "B757",
         "assignment": assignment,
@@ -193,6 +194,31 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         )
         self.assertEqual(
             plan.readiness_by_mission_id[101],
+            ("inbound_fuel",),
+        )
+
+    def test_measured_inbound_satisfies_readiness_without_dispatcher_inbound(self):
+        row = _row()
+        row["inbound_fuel_lbs"] = None
+        row["measured_inbound_fuel_lbs"] = 11_500
+
+        plan = _plan([row])
+
+        self.assertEqual(plan.waiting_for_data_count, 0)
+        self.assertEqual(plan.readiness_by_mission_id[100], ())
+        self.assertEqual(len(plan.steps), 1)
+
+    def test_fallback_estimate_does_not_satisfy_inbound_readiness(self):
+        row = _row()
+        row["inbound_fuel_lbs"] = None
+        row["measured_inbound_fuel_lbs"] = None
+        row["planning_demand_gallons"] = 500
+
+        plan = _plan([row])
+
+        self.assertEqual(plan.waiting_for_data_count, 1)
+        self.assertEqual(
+            plan.readiness_by_mission_id[100],
             ("inbound_fuel",),
         )
 

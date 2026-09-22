@@ -651,7 +651,10 @@ def _readiness_reasons(row, *, ramp, spear_settings, now_utc):
         )
         if required_fuel_lbs is None:
             reasons.append("required_fuel")
-        if row.get("inbound_fuel_lbs") is None:
+        if (
+            row.get("measured_inbound_fuel_lbs") is None
+            and row.get("inbound_fuel_lbs") is None
+        ):
             reasons.append("inbound_fuel")
 
     if ramp not in SPEAR_RAMP_ORDER:
