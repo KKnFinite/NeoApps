@@ -147,6 +147,24 @@ class OperationalShellTest(unittest.TestCase):
         self.assertIn('#sektor-tv .operational-node-topbar { display: none; }', css)
         self.assertNotIn('!important', css)
 
+    def test_neoscorpion_desktop_sidebar_has_no_legacy_off_canvas_override(self):
+        css = Path(
+            self.app.root_path,
+            "static",
+            "css",
+            "26-neoscorpion.css",
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("translateX(calc(-100% - 20px))", css)
+        self.assertNotIn(
+            "neoscorpion-menu-open .node-desktop-side-nav.node-scorpion",
+            css,
+        )
+        self.assertNotIn(
+            "node-fixed-header .content { padding-left: 24px; }",
+            css,
+        )
+
     def test_operational_shell_uses_locked_logos_and_board_opt_in(self):
         response = self.client.get("/neoscorpion/fuel-dispatch")
 

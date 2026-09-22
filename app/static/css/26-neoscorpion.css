@@ -86,17 +86,6 @@
 .neoscorpion-dispatch-combobox-option { min-height:27px; border:0; border-radius:6px; background:transparent; color:#eee4d8; padding:5px 8px; text-align:left; font:700 .64rem/1.15 var(--font-sans); cursor:pointer; }
 .neoscorpion-dispatch-combobox-option:hover,.neoscorpion-dispatch-combobox-option:focus-visible,.neoscorpion-dispatch-combobox-option[aria-selected="true"] { background:rgba(var(--node-scorpion-primary-rgb),.18); color:#fff3bd; outline:0; }
 
-@media (min-width: 980px) {
-    body.neoscorpion-node-page.node-desktop-nav-page.node-fixed-header .content { padding-left: 24px; }
-    body.neoscorpion-node-page.node-desktop-nav-page .node-desktop-side-nav.node-scorpion {
-        z-index: 94;
-        transform: translateX(calc(-100% - 20px));
-        pointer-events: none;
-        transition: transform 180ms ease;
-    }
-    body.neoscorpion-node-page.neoscorpion-menu-open .node-desktop-side-nav.node-scorpion { transform: translateX(0); pointer-events: auto; }
-    body.neoscorpion-node-page.node-desktop-nav-page .neoscorpion-menu-control { display: flex; }
-}
 @media (max-width: 1320px) {
     .neoscorpion-dispatch-detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
