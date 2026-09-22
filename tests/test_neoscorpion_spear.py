@@ -328,6 +328,64 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(plan.steps[0].action_type, "top_off")
         self.assertEqual(plan.steps[0].truck_id, 10)
 
+    def test_partial_manual_assignment_is_preserved_while_spear_fills_the_gap(self):
+        fueler_only = SimpleNamespace(
+            id=7,
+            assigned_fueler_user_id=1,
+            assigned_truck_id=None,
+            operational_status="active",
+            completed_at_utc=None,
+        )
+        truck_only = SimpleNamespace(
+            id=8,
+            assigned_fueler_user_id=None,
+            assigned_truck_id=10,
+            operational_status="active",
+            completed_at_utc=None,
+        )
+
+        fueler_plan = _plan(
+            [_row(100, assignment=fueler_only)],
+            trucks=(_truck(10), _truck(20)),
+        )
+        truck_plan = build_spear_plan(
+            [_row(101, assignment=truck_only)],
+            operation=SimpleNamespace(id=1),
+            planning_settings=_PlanningSettings(),
+            spear_settings=SpearSettings(),
+            nightly_fuelers=(_fueler(1, "Smith"), _fueler(2, "Jones")),
+            nightly_trucks=(_truck(10),),
+            now_utc=NOW,
+        )
+
+        self.assertEqual(fueler_plan.steps[0].fueler_id, 1)
+        self.assertIn(fueler_plan.steps[0].truck_id, {10, 20})
+        self.assertEqual(truck_plan.steps[0].truck_id, 10)
+        self.assertIn(truck_plan.steps[0].fueler_id, {1, 2})
+
+    def test_dispatch_rows_show_spear_recommendation_for_each_unassigned_resource(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (
+            root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "SPEAR → {{ row.spear_step.fueler_name }}",
+            template,
+        )
+        self.assertIn(
+            "SPEAR → {{ row.spear_step.truck_number }}",
+            template,
+        )
+        self.assertIn(
+            "and not row.assigned_fueler",
+            template,
+        )
+        self.assertIn(
+            "and not row.assigned_truck",
+            template,
+        )
+
     def test_sent_work_locks_valid_resources_but_invalidity_replans(self):
         assignment = SimpleNamespace(
             id=7,
