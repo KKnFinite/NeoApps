@@ -730,21 +730,31 @@ def fueler_off():
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     if result.changed and effective_spear_settings(settings).automation_enabled:
         try:
-            completion = complete_fueled_assignment(
-                gateway,
-                current_user,
-                request.form.get("assignment_id"),
-            )
-            spear_completed = completion.changed
-            if completion.changed:
-                operation = current_sort_operation(gateway)
-                record_spear_completion(
-                    operation,
-                    completion.assignment,
+            # Fueler OFF is canonical. Keep optional SPEAR completion isolated so
+            # any automation failure cannot roll back the valid OFF milestone.
+            with db.session.begin_nested():
+                completion = complete_fueled_assignment(
+                    gateway,
                     current_user,
+                    request.form.get("assignment_id"),
                 )
+                spear_completed = completion.changed
+                if completion.changed:
+                    operation = current_sort_operation(gateway)
+                    record_spear_completion(
+                        operation,
+                        completion.assignment,
+                        current_user,
+                    )
         except ValueError as exc:
             spear_completion_error = str(exc)
+        except Exception:
+            current_app.logger.exception(
+                "SPEAR auto-complete failed after canonical Fueler OFF."
+            )
+            spear_completion_error = (
+                "Automation failed safely. Dispatcher COMPLETE remains available."
+            )
     if result.changed:
         db.session.commit()
         flash(

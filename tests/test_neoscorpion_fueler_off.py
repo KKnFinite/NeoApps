@@ -213,6 +213,39 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
         self.assertIn(b"<dt>OFF</dt>", rendered.data)
         self.assertNotIn(b">MARK OFF</button>", rendered.data)
 
+    def test_spear_auto_complete_failure_does_not_rollback_valid_off(self):
+        _operation, mission, assignment = self._assignment()
+        self._save_complete(assignment)
+        settings = NeoScorpionSettings.query.filter_by(
+            gateway_id=self.gateway.id
+        ).one()
+        settings.spear_recommendations_enabled = True
+        settings.spear_automation_enabled = True
+        db.session.commit()
+        self._login(self.user)
+
+        with patch(
+            "app.neonodes.neoscorpion.routes.complete_fueled_assignment",
+            side_effect=RuntimeError("simulated automation failure"),
+        ):
+            response = self.client.post(
+                "/neoscorpion/fueler/off",
+                data={"assignment_id": str(assignment.id)},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 302)
+        work = NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id
+        ).one()
+        self.assertIsNotNone(work.off_at_utc)
+        self.assertIsNotNone(work.off_by_user_id)
+        db.session.refresh(assignment)
+        db.session.refresh(mission)
+        self.assertIsNone(assignment.completed_at_utc)
+        self.assertNotEqual(assignment.review_status, "complete")
+        self.assertNotEqual(mission.fuel_status, "complete")
+
     def test_reassigned_fueler_cannot_mark_off(self):
         operation, _mission, assignment = self._assignment()
         self._save_complete(assignment)
