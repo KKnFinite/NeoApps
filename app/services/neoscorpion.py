@@ -1118,9 +1118,10 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
     requested_fueler_id = _int_or_none(form.get("assigned_fueler_user_id"))
     requested_truck_id = _int_or_none(form.get("assigned_truck_id"))
 
+    fueler_change_requested = requested_fueler_id != current_fueler_id
+    truck_change_requested = requested_truck_id != current_truck_id
     resource_change_requested = bool(
-        requested_fueler_id != current_fueler_id
-        or requested_truck_id != current_truck_id
+        fueler_change_requested or truck_change_requested
     )
     if assignment is not None and resource_change_requested:
         confirmed_tail = _effective_confirmed_tail(assignment, mission)
@@ -1129,9 +1130,23 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
             confirmed_tail,
         )
         if _fuel_work_has_begun(fuel_work_state, assignment):
-            raise ValueError(
-                "Fuel work has begun. Use the dedicated FUELER SWAP or TRUCK SWAP action."
+            current_tail = _normalize_tail(mission.assigned_tail_number)
+            initial_truck_assignment = bool(
+                not fueler_change_requested
+                and current_fueler_id is not None
+                and current_truck_id is None
+                and requested_truck_id is not None
+                and assignment.operational_status != "hold_review"
+                and confirmed_tail == current_tail
+                and not (
+                    fuel_work_state
+                    and fuel_work_state.ended_early_at_utc is not None
+                )
             )
+            if not initial_truck_assignment:
+                raise ValueError(
+                    "Fuel work has begun. Use the dedicated FUELER SWAP or TRUCK SWAP action."
+                )
 
     if requested_fueler_id != current_fueler_id and requested_fueler_id is not None:
         _validate_nightly_fueler_assignment(
@@ -4213,6 +4228,16 @@ def _fuel_rows(
                 ),
                 "resource_swap_required": bool(
                     assignment and work_has_begun and not administratively_complete
+                ),
+                "initial_truck_assignment_available": bool(
+                    assignment
+                    and work_has_begun
+                    and assignment.assigned_fueler_user_id is not None
+                    and assignment.assigned_truck_id is None
+                    and not administratively_complete
+                    and not effective_hold
+                    and not tail_mismatch
+                    and not work_ended_early
                 ),
                 "aircraft_type": aircraft_type,
                 "detailed_aircraft_type": detailed_aircraft_type,

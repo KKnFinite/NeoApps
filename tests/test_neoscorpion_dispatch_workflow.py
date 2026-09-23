@@ -197,6 +197,93 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertIn("Truck:", assignment.fueler_update_message)
 
     @patch("app.services.neoscorpion.current_sort_operation")
+    def test_work_started_with_missing_truck_allows_initial_truck_only(
+        self,
+        current_sort_operation,
+    ):
+        operation, mission = self._operation_and_mission()
+        current_sort_operation.return_value = operation
+        fueler = self._add_user("started_missing_truck_fueler", "operator")
+        truck_a = self._truck("STARTED TRUCK A")
+        truck_b = self._truck("STARTED TRUCK B")
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id,
+            assigned_fueler_user_id=fueler.id,
+            review_status="assigned",
+        )
+        db.session.add_all(
+            [
+                assignment,
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=operation.id,
+                    user_id=fueler.id,
+                ),
+                self._nightly_truck(operation, truck_a),
+                self._nightly_truck(operation, truck_b),
+            ]
+        )
+        db.session.flush()
+        db.session.add(
+            NeoScorpionFuelWorkState(
+                fuel_assignment_id=assignment.id,
+                tail_number=mission.assigned_tail_number,
+                apu_running=True,
+                apu_confirmed_at_utc=datetime(2026, 8, 20, 1, 0),
+                apu_allowance_lbs=400,
+                automatic_apu_allowance_lbs=400,
+                applied_apu_rate_thousand_lbs_per_hour=Decimal("0.30"),
+            )
+        )
+        db.session.commit()
+
+        page = self.client.get("/neoscorpion/fuel-dispatch").get_data(as_text=True)
+        primary_row = page.split(
+            '<tr class="neoscorpion-dispatch-primary-row">',
+            1,
+        )[1].split("</tr>", 1)[0]
+        self.assertIn(
+            f'<select form="neoscorpion-dispatch-assignment-{mission.id}" '
+            'class="neoscorpion-inline-select" name="assigned_truck_id"'.replace(
+                "{mission.id}",
+                str(mission.id),
+            ),
+            primary_row,
+        )
+        self.assertNotIn(
+            f'<select form="neoscorpion-dispatch-assignment-{mission.id}" '
+            'class="neoscorpion-inline-select" name="assigned_fueler_user_id"'.replace(
+                "{mission.id}",
+                str(mission.id),
+            ),
+            primary_row,
+        )
+
+        initial = self._save_assignment(
+            mission,
+            assignment=assignment,
+            fueler_id=fueler.id,
+            truck_id=truck_a.id,
+        )
+        self.assertEqual(initial.status_code, 200)
+        db.session.refresh(assignment)
+        self.assertEqual(assignment.assigned_truck_id, truck_a.id)
+
+        replacement = self._save_assignment(
+            mission,
+            assignment=assignment,
+            fueler_id=fueler.id,
+            truck_id=truck_b.id,
+        )
+        self.assertEqual(replacement.status_code, 400)
+        self.assertIn(
+            "dedicated FUELER SWAP or TRUCK SWAP",
+            replacement.get_json()["error"],
+        )
+        db.session.refresh(assignment)
+        self.assertEqual(assignment.assigned_truck_id, truck_a.id)
+
+    @patch("app.services.neoscorpion.current_sort_operation")
     def test_read_only_user_cannot_update_a_sent_assignment(
         self,
         current_sort_operation,
