@@ -192,9 +192,79 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertEqual(updated.get_json()["revision"], 3)
         db.session.refresh(assignment)
         self.assertEqual(assignment.assigned_truck_id, truck_b.id)
-        self.assertEqual(assignment.review_status, "review")
+        self.assertEqual(assignment.review_status, "assigned")
         self.assertEqual(assignment.fueler_update_version, 2)
         self.assertIn("Truck:", assignment.fueler_update_message)
+
+    @patch("app.services.neoscorpion.current_sort_operation")
+    def test_dispatch_status_is_derived_and_assigned_truck_is_locked(
+        self,
+        current_sort_operation,
+    ):
+        operation, mission = self._operation_and_mission()
+        current_sort_operation.return_value = operation
+        fueler = self._add_user("derived_status_fueler", "operator")
+        truck = self._truck("DERIVED STATUS TRUCK")
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id,
+            assigned_fueler_user_id=fueler.id,
+            assigned_truck_id=truck.id,
+            review_status="assigned",
+        )
+        db.session.add_all(
+            [
+                assignment,
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=operation.id,
+                    user_id=fueler.id,
+                ),
+                self._nightly_truck(operation, truck),
+            ]
+        )
+        db.session.commit()
+
+        def primary_row():
+            page = self.client.get("/neoscorpion/fuel-dispatch").get_data(
+                as_text=True
+            )
+            self.assertNotIn('name="review_status"', page)
+            return page.split(
+                '<tr class="neoscorpion-dispatch-primary-row">',
+                1,
+            )[1].split("</tr>", 1)[0]
+
+        row = primary_row()
+        self.assertIn(">Assigned</span>", row)
+        self.assertIn("DERIVED STATUS TRUCK", row)
+        self.assertNotIn('name="assigned_truck_id"', row)
+
+        assignment.ready_for_fuel_at_utc = datetime(2026, 8, 20, 1, 5)
+        db.session.commit()
+        self.assertIn(">Ready</span>", primary_row())
+
+        work = NeoScorpionFuelWorkState(
+            fuel_assignment_id=assignment.id,
+            tail_number=mission.assigned_tail_number,
+            on_at_utc=datetime(2026, 8, 20, 1, 10),
+            apu_running=False,
+            apu_confirmed_at_utc=datetime(2026, 8, 20, 1, 10),
+            apu_allowance_lbs=0,
+            automatic_apu_allowance_lbs=0,
+        )
+        db.session.add(work)
+        db.session.commit()
+        self.assertIn(">Fueling</span>", primary_row())
+
+        work.off_at_utc = datetime(2026, 8, 20, 1, 30)
+        db.session.commit()
+        self.assertIn(">OFF</span>", primary_row())
+
+        assignment.completed_at_utc = datetime(2026, 8, 20, 1, 35)
+        assignment.review_status = "complete"
+        mission.fuel_status = "complete"
+        db.session.commit()
+        self.assertIn(">Complete</span>", primary_row())
 
     @patch("app.services.neoscorpion.current_sort_operation")
     def test_work_started_with_missing_truck_allows_initial_truck_only(

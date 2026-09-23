@@ -1219,13 +1219,13 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
         db.session.add(assignment)
         changed = True
 
-    requested_review_status = (form.get("review_status") or "pending").strip()
-    if requested_review_status == "complete":
-        raise ValueError("Use the COMPLETE action to complete fueled work.")
-    review_status = _clean_choice(
-        requested_review_status,
-        {"pending", "assigned", "review"},
-        "pending",
+    # Pending/Assigned/Review is legacy storage, not an operator-controlled
+    # workflow. Keep it synchronized from the actual resource assignment while
+    # visible Dispatch status is derived from canonical operational milestones.
+    review_status = (
+        "assigned"
+        if requested_fueler_id is not None or requested_truck_id is not None
+        else "pending"
     )
     assignment_changed = assignment_created
     if (
@@ -1251,11 +1251,6 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
                 change_messages.append(
                     f"Truck: {_resource_change_label(old_value)} -> "
                     f"{_resource_change_label(value)}"
-                )
-            elif field_name == "review_status":
-                change_messages.append(
-                    f"Status: {(old_value or 'pending').replace('_', ' ').title()} -> "
-                    f"{value.replace('_', ' ').title()}"
                 )
 
     fuel_work_state = None
@@ -4190,6 +4185,67 @@ def _fuel_rows(
             normal_completion_reason = "Insufficient truck gallons."
         else:
             normal_completion_reason = ""
+
+        if fuel_on_board_complete:
+            dispatch_status_key = "fob"
+            dispatch_status_label = "FOB"
+            dispatch_status_detail = ""
+        elif administratively_complete:
+            dispatch_status_key = "complete"
+            dispatch_status_label = "Complete"
+            dispatch_status_detail = ""
+        elif effective_hold or tail_mismatch or work_ended_early:
+            dispatch_status_key = "review"
+            dispatch_status_label = "Hold / Review"
+            dispatch_status_detail = (
+                assignment.hold_reason
+                if assignment and assignment.hold_reason
+                else tail_safety_label
+                or "Dispatcher review required"
+            )
+        elif assignment and assignment.review_status == "review":
+            dispatch_status_key = "review"
+            dispatch_status_label = "Review"
+            dispatch_status_detail = "Dispatcher review required"
+        elif fuel_work_state and fuel_work_state.off_at_utc:
+            dispatch_status_key = "off"
+            dispatch_status_label = "OFF"
+            dispatch_status_detail = format_local_hhmm(
+                fuel_work_state.off_at_utc,
+                mission.timezone,
+            )
+        elif fuel_work_state and fuel_work_state.on_at_utc:
+            dispatch_status_key = "fueling"
+            dispatch_status_label = "Fueling"
+            dispatch_status_detail = format_local_hhmm(
+                fuel_work_state.on_at_utc,
+                mission.timezone,
+            )
+        elif assignment and assignment.ready_for_fuel_at_utc:
+            dispatch_status_key = "ready"
+            dispatch_status_label = "Ready"
+            dispatch_status_detail = format_local_hhmm(
+                assignment.ready_for_fuel_at_utc,
+                mission.timezone,
+            )
+        elif (
+            assignment
+            and assignment.assigned_fueler_user_id is not None
+            and assignment.assigned_truck_id is not None
+        ):
+            dispatch_status_key = "assigned"
+            dispatch_status_label = "Assigned"
+            dispatch_status_detail = ""
+        else:
+            dispatch_status_key = "pending"
+            dispatch_status_label = "Pending"
+            if assignment and assignment.assigned_fueler_user_id is not None:
+                dispatch_status_detail = "Needs truck"
+            elif assignment and assignment.assigned_truck_id is not None:
+                dispatch_status_detail = "Needs fueler"
+            else:
+                dispatch_status_detail = ""
+
         rows.append(
             {
                 "mission": mission,
@@ -4449,6 +4505,9 @@ def _fuel_rows(
                 "review_status": (
                     assignment.review_status if assignment else (mission.fuel_status or "pending")
                 ),
+                "dispatch_status_key": dispatch_status_key,
+                "dispatch_status_label": dispatch_status_label,
+                "dispatch_status_detail": dispatch_status_detail,
                 "load_planning_output": load_planning_output,
                 "load_planning_ready": load_planning_output is not None,
                 "load_planning_placeholder": "-",

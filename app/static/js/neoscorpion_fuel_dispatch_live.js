@@ -371,7 +371,6 @@
         }
         Array.from(form.elements).filter((control) => control.matches?.(
             "select[name='assigned_fueler_user_id'], select[name='assigned_truck_id'], "
-            + "select[name='review_status'], "
             + "input[data-dispatch-apu-override-enabled], input[data-dispatch-apu-override-value]"
         )).forEach((control) => {
             initialControlValues.set(control, controlValue(control));
@@ -418,6 +417,23 @@
         } else if (apuEnabled) {
             apuEnabled.value = "1";
         }
+        const expectedFuelerBefore = String(
+            form.elements.namedItem("expected_assigned_fueler_user_id")?.value || ""
+        );
+        const expectedTruckBefore = String(
+            form.elements.namedItem("expected_assigned_truck_id")?.value || ""
+        );
+        const requestedFuelerBefore = String(
+            form.elements.namedItem("assigned_fueler_user_id")?.value || ""
+        );
+        const requestedTruckBefore = String(
+            form.elements.namedItem("assigned_truck_id")?.value || ""
+        );
+        const resourceChangeRequested = (
+            expectedFuelerBefore !== requestedFuelerBefore
+            || expectedTruckBefore !== requestedTruckBefore
+        );
+
         form.dataset.assignmentSaving = "true";
         button.disabled = true;
         setStatus(status, "Saving...");
@@ -441,6 +457,11 @@
             updateApuAllowanceDisplay(form, payload, button);
             button.textContent = payload.button_label || "UPDATE ASSIGNMENT";
             setStatus(status, payload.changed ? "Saved" : "No change");
+            if (payload.changed && resourceChangeRequested) {
+                preserveDispatchScroll();
+                window.location.reload();
+                return;
+            }
         } catch (error) {
             setStatus(
                 status,
