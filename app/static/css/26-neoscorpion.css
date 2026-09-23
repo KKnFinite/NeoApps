@@ -49,8 +49,20 @@
 .neoscorpion-dispatch-transfer-estimate small { display: block; margin-top: 2px; color: var(--muted); font-size: .61rem; line-height: 1.15; }
 .neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex; width:max-content; max-width:100%; margin:4px auto 0; padding:2px 4px; font-size:.52rem; white-space:nowrap; }
 .neoscorpion-dispatch-fuel-input { display: block; width: min(100%, 58px) !important; margin: 0 auto; text-align: center; }
-.neoscorpion-dispatch-actual-apu { display: grid; gap: 3px; }
+/* Keep every primary-row cell in the browser's table layout. Turning a td into
+   grid breaks shared row geometry and makes mission separators step between
+   columns when cell content heights differ. */
+.neoscorpion-dispatch-actual-apu { display: table-cell; }
+.neoscorpion-dispatch-actual-apu > strong,
+.neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed { display: block; }
 .neoscorpion-dispatch-actual-apu > strong { font-size: .68rem; }
+.neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed { margin-top: 3px; }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row {
+    border-bottom: 1px solid rgba(201, 208, 214, .16);
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > td {
+    border-bottom: 0;
+}
 .neoscorpion-dispatch-transfer-estimate { white-space: nowrap; }
 .neoscorpion-dispatch-action-cell { min-width: 0; }
 .neoscorpion-dispatch-action-cell .action-button { min-height: 24px; margin: 1px; padding: 3px 5px; font-size: .57rem; }
