@@ -568,11 +568,6 @@
         const next = items[index + (dx < 0 ? 1 : -1)];
         if (next) open(next.dataset.neorainMissionId);
     });
-    const summary = root.querySelector("[data-neorain-late-summary]");
-    const updateSummary = () => root.classList.toggle("neorain-mobile-summary-compact", window.matchMedia("(max-width: 760px)").matches && window.scrollY > (summary?.offsetTop || 0) + 12);
-    window.addEventListener("scroll", updateSummary, { passive: true });
-    window.addEventListener("resize", updateSummary);
-    updateSummary();
     const state = mobileState();
     if (state.neorainMobileMissionId) open(state.neorainMobileMissionId, { restore: true });
 })();
