@@ -21,3 +21,24 @@
 .timecard-table { overflow-x:auto; max-width:100%; }
 .timecards [data-timecard-status] { color:#e7d59a; }
 @media(max-width:600px) { .timecard-segment { display:grid; grid-template-columns:minmax(0,1fr); } .timecard-segment input { width:100%; box-sizing:border-box; } .timecards h1 { font-size:1.5rem; } .timecards.neostaffing-operational-attendance .neostaffing-operational-head { flex-direction:column; align-items:flex-start; } .timecards .neostaffing-operational-head nav { display:flex; flex-wrap:wrap; } }
+
+/* Node-only compact controls and wrapping reports. */
+[data-node-workspace] .timecard-segment input { width:12ch; box-sizing:border-box; }
+[data-node-selection] select { max-width:100%; min-height:44px; background:#091018; color:#e3eaf0; border:1px solid #638391; padding:.5rem; }
+[data-node-workspace] [data-row-status] { color:#e7d59a; overflow-wrap:anywhere; }
+[data-node-workspace] .timecard-row header { overflow-wrap:anywhere; }
+@media(max-width:600px) {
+  [data-node-workspace] .timecard-segment { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  [data-node-workspace] .timecard-segment input { width:100%; }
+  [data-node-workspace] .node-timecard-report thead { display:none; }
+  [data-node-workspace] .node-timecard-report tr { display:block; padding:.6rem 0; border-bottom:1px solid #64768755; }
+  [data-node-workspace] .node-timecard-report td { display:block; border:0; overflow-wrap:anywhere; }
+  [data-node-workspace] .node-timecard-report td[data-label]::before { content:attr(data-label) ': '; color:#9fadb9; }
+}
+
+[data-node-workspace] .timecard-exception[hidden] { display:none; }
+
+[data-node-workspace] h1 { font-size:clamp(1.5rem,2.2vw,2rem); margin:.4rem 0; }
+[data-node-workspace] .neostaffing-operational-tabs { margin:.4rem 0; gap:.4rem; }
+[data-node-workspace] .neostaffing-operational-tabs a { display:inline-flex; align-items:center; border:1px solid #64768755; border-radius:4px; }
+[data-node-workspace] .neostaffing-operational-tabs a[aria-current="page"] { background:#26353c; border-color:#93b6b4; }

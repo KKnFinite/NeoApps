@@ -147,6 +147,10 @@ def node_attendance_authority(user, workspace, area=None):
         from app.services.neoermac_door_supervision import supervised_doors_for_user
         from app.services.neoermac_building_lineup import get_outbound_door_options
         doors = supervised_doors_for_user(user, gateway, get_outbound_door_options())
+        if area is not None:
+            if area not in doors:
+                raise ValueError("Door is outside your supervision scope.")
+            doors = [area]
         allowed = set(staffing.attendance_deep_link_work_area_ids(doors, allow_persistent_roster=True)) \
             if user_can("neoermac.door_view.edit", user) else set()
     return AttendanceAuthority(authority.person_id, frozenset(allowed))

@@ -42,6 +42,100 @@ class TimecardsTest(unittest.TestCase):
         return {"id": row.id, "version": row.version,
             "segments": segments if segments is not None else [{"start":"2026-09-12T22:00:00-05:00", "end":"2026-09-13T02:10:00-05:00"}]}
 
+    def test_node_compact_autosave_response_persistence_and_scope(self):
+        row = self.attendance()
+        payload = {'node_workspace':'sektor','node_area':'ebm','commands':[
+            self.command(row, [{'start':'2230','end':'930'}, {'start':'0930','end':'1000'}])]}
+        result = self.client.post('/neostaffing/timecards/save', json=payload)
+        self.assertEqual(result.status_code, 200, result.json)
+        saved = result.json['rows'][0]
+        self.assertEqual(saved['hours'], '11.50')
+        self.assertEqual(saved['segments'][0]['end'][:10], '2026-09-13')
+        self.assertGreater(saved['version'], payload['commands'][0]['version'])
+        page = self.client.get('/neosektor/manage-employees?area=ebm&mode=times')
+        self.assertIn(b'value="22:30:00"', page.data)
+        for forbidden in (b'data-save-times', b'data-bulk-start', b'>OPEN</button>', b'>ACCOUNTABILITY</a>'):
+            self.assertNotIn(forbidden, page.data)
+        self.assertIn(b'data-node-selection', page.data)
+        payload['commands'][0].update(version=saved['version'], segments=[{'start':'930','end':'1030'}])
+        changed = self.client.post('/neostaffing/timecards/save', json=payload)
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(changed.json['rows'][0]['hours'], '1.00')
+        payload['commands'][0].update(version=changed.json['rows'][0]['version'], segments=[])
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 200)
+        self.assertEqual(Segment.query.count(), 0)
+        payload['commands'][0] = self.command(db.session.get(Slice,row.id), [{'start':'2460','end':'1000'}])
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
+
+    def test_node_autosave_requires_csrf(self):
+        import re
+        row = self.attendance()
+        self.app.config['CSRF_PROTECT_TESTING'] = True
+        page = self.client.get('/neosektor/manage-employees?area=ebm&mode=times').get_data(as_text=True)
+        token = re.search(r'<meta name="csrf-token" content="([^"]+)"', page)[1]
+        payload = {'node_workspace':'sektor','node_area':'ebm','commands':[self.command(row)]}
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 400)
+        response = self.client.post('/neostaffing/timecards/save', json=payload, headers={'X-CSRFToken':token})
+        self.assertEqual(response.status_code, 200, response.json)
+
+    def test_node_reads_do_not_grow_per_employee(self):
+        row = self.attendance()
+        def measured():
+            statements = []
+            def capture(_c, _cursor, sql, *_args):
+                statements.append(sql.lower().lstrip())
+            event.listen(db.engine, 'before_cursor_execute', capture)
+            try:
+                tc.read_rows(self.user, row.workday_date, row.workday_date,
+                    node_workspace='sektor', node_area='ebm', work_area_ids=[self.areas['ebm'].id])
+                tc.report_context(self.user, {'date':str(row.workday_date), 'view':'employee'},
+                    as_of=row.workday_date, node_workspace='sektor', node_area='ebm', work_area_ids=[self.areas['ebm'].id])
+            finally:
+                event.remove(db.engine, 'before_cursor_execute', capture)
+            self.assertFalse(any(sql.startswith(('insert','update','delete')) for sql in statements))
+            return sum(sql.startswith('select') for sql in statements)
+        # Warm request-independent metadata, then compare equally warm reads.
+        measured()
+        small = measured()
+        from app.models import StaffingWorkAssignment
+        people = [self.person(f'Budget-{index}', area=self.areas['ebm']) for index in range(15)]
+        assignments = {a.person_id:a for a in StaffingWorkAssignment.query.filter(
+            StaffingWorkAssignment.person_id.in_([p.id for p in people])).all()}
+        tc.sync_attendance(self.operation, {p.id:'here' for p in people}, assignments, self.user.id, as_of=row.workday_date)
+        db.session.commit()
+        measured()
+        large = measured()
+        self.assertEqual(large, small)
+        print(f'Node Times + employee report: {small} SELECTs / 0 writes for 1 and 16 employees')
+
+    def test_node_day_week_reports_are_scoped_read_only_and_bounded(self):
+        row = self.attendance()
+        from app.models import StaffingWorkAssignment
+        other = self.workers['wbm']
+        assignment = StaffingWorkAssignment.query.filter_by(person_id=other.id, active=True).one()
+        tc.sync_attendance(self.operation, {other.id:'here'}, {other.id:assignment}, self.user.id, as_of=row.workday_date)
+        db.session.commit()
+        self.leadership.active = False
+        db.session.commit()
+        for mode in ('times','reports'):
+            for period in ('day','week'):
+                statements = []
+                def capture(_c, _cursor, statement, *_args):
+                    statements.append(statement.lower().lstrip())
+                event.listen(db.engine, 'before_cursor_execute', capture)
+                try:
+                    response = self.client.get('/neosektor/manage-employees', query_string={
+                        'area':'ebm', 'mode':mode, 'period':period, 'operation_id':self.operation.id})
+                finally:
+                    event.remove(db.engine, 'before_cursor_execute', capture)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(self.workers['ebm'].full_name.encode(), response.data)
+                self.assertNotIn(other.full_name.encode(), response.data)
+                self.assertFalse(any(sql.startswith(('insert','update','delete')) for sql in statements))
+                self.assertLess(len(statements), 100)
+                if mode == 'reports':
+                    self.assertIn(b'aria-label="Scoped time report"', response.data)
+
     def test_workday_week_and_exact_multiple_segments(self):
         row = self.attendance()
         self.assertEqual(row.workday_date, date(2026, 9, 12))
@@ -152,7 +246,8 @@ class TimecardsTest(unittest.TestCase):
         self.assertEqual(report["total"], 2)
         response = self.client.get('/neosektor/manage-employees?area=ebm&view=all&mode=times')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'SAVE CHANGED TIMES', response.data)
+        self.assertNotIn(b'SAVE CHANGED TIMES', response.data)
+        self.assertIn(b'neostaffing_node_times.js', response.data)
         self.assertIn(self.peer.full_name.encode(), response.data)
         self.assertEqual(self.client.get('/neostaffing/timecards?date=2026-09-12').status_code, 200)
 

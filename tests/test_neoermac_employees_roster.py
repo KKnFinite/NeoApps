@@ -77,10 +77,10 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
             self.assertNotIn(person.full_name.encode(), response.data)
         return response.data
 
-    def test_no_sort_management_links_shared_accountability(self):
+    def test_no_sort_hides_accountability_but_preserves_staffing_backend(self):
         self._no_sort()
         page = self._get()
-        self.assertIn(b'href="/neostaffing/accountability">ACCOUNTABILITY</a>', page)
+        self.assertNotIn(b'>ACCOUNTABILITY</a>', page)
         self.assertNotIn(b'SAVE ATTENDANCE', page)
         self.assertEqual(self.client.get('/neostaffing/accountability').status_code, 200)
 
@@ -103,6 +103,43 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
             self.assertEqual(self.client.post('/neoermac/door-view/manage-employees', data=data).status_code, 403)
             self.assertEqual(self.client.get('/neoermac/door-view/manage-employees?mode=times').status_code, 403)
         self.assertEqual(StaffingDailyAttendance.query.count(), 1)
+
+    def test_selected_door_times_reports_and_write_scope(self):
+        from app.models.staffing_timecard import StaffingTimecardSlice as Slice, StaffingTimecardSegment as Segment
+        self._post(self.here, self.operation.id)
+        row = Slice.query.filter_by(person_id=self.here.id).one()
+        base = '/neoermac/door-view/manage-employees?door=D6'
+        for mode in ('times', 'reports'):
+            for period in ('day', 'week'):
+                response = self.client.get(base + f'&mode={mode}&period={period}')
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(self.here.full_name.encode(), response.data)
+                self.assertNotIn(self.outside.full_name.encode(), response.data)
+                self.assertNotIn(b'>ACCOUNTABILITY</a>', response.data)
+                self.assertIn(b'name="door" value="D6"', response.data)
+        payload = {'node_workspace':'ermac', 'node_area':'D6', 'commands':[
+            {'id':row.id, 'version':row.version, 'segments':[{'start':'2230','end':'930'}]}]}
+        result = self.client.post('/neostaffing/timecards/save', json=payload)
+        self.assertEqual(result.status_code, 200, result.json)
+        saved = result.json['rows'][0]
+        self.assertEqual(saved['segments'][0]['start'][11:16], '22:30')
+        self.assertEqual(saved['segments'][0]['end'][11:16], '09:30')
+        self.assertEqual(Segment.query.count(), 1)
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
+        payload['commands'][0]['version'] = saved['version']
+        payload['node_area'] = 'D9'
+        self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
+        self.assertEqual(self.client.get(base.replace('D6','D9') + '&mode=times').status_code, 403)
+        self.assertIn(b'value="22:30:00"', self.client.get(base + '&mode=times').data)
+        self.client.post('/neoermac/door-view/supervision', data={'doors':['D6','D9'], 'active_door':'D6'})
+        self._post(self.outside, self.operation.id)
+        for mode in ('times','reports'):
+            for period in ('day','week'):
+                page = self.client.get(base + f'&mode={mode}&period={period}')
+                self.assertEqual(page.status_code, 200)
+                self.assertNotIn(self.outside.full_name.encode(), page.data)
+                self.assertIn(b'data-node-area="D6"', page.data)
+
 
     def _post(self, person, operation_id, status='here'):
         page = self.client.get('/neoermac/door-view/manage-employees').get_data(as_text=True)

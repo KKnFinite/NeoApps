@@ -108,7 +108,7 @@
         {% if supervised_doors %}
         <a
             class="neoermac-menu-link neoermac-door-supervision-edit neoermac-door-attendance-link"
-            href="{{ url_for('neoermac.manage_employees') }}"
+            href="{{ url_for('neoermac.manage_employees', door=selected_door) }}"
         >EMPLOYEES</a>
         {% endif %}
         </nav>

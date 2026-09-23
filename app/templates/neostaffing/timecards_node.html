@@ -1,32 +1,35 @@
 {% extends "base.html" %}
 {% block title %}EMPLOYEES{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_timecards.css') }}?v=1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_timecards.css') }}?v=2">
 <section class="theme-{{ workspace }} neostaffing-operational-attendance neostaffing-operational-attendance--{{ workspace }} timecards" data-timecards data-node-workspace="{{ workspace }}" data-node-area="{{ node_area or '' }}">
   <header class="neostaffing-operational-head">
     <a href="{{ back_url }}">BACK</a><h1>EMPLOYEES</h1><p>{{ scope_label }}</p>
     <nav class="neostaffing-operational-tabs" aria-label="Employee mode">
       {% set attendance_args = request.args.to_dict() %}{% set _ = attendance_args.pop('mode', none) %}
-      <a href="?{{ attendance_args|urlencode }}">ATTENDANCE</a><strong aria-current="page">TIMES</strong>
-      <a href="{{ url_for('neostaffing.timecards') }}">DAY / WEEK REPORTS</a>
+      <a href="?{{ attendance_args|urlencode }}">ATTENDANCE</a>{% set mode_args=request.args.to_dict() %}{% set _=mode_args.update({'mode':'times'}) %}<a href="?{{ mode_args|urlencode }}" {% if not node_report %}aria-current="page"{% endif %}>TIMES</a>
+      {% set _=mode_args.update({'mode':'reports'}) %}<a href="?{{ mode_args|urlencode }}" {% if node_report %}aria-current="page"{% endif %}>DAY / WEEK REPORTS</a>
     </nav>
     <nav class="neostaffing-operational-tabs" aria-label="Time entry period">
-      {% for key,label in [('day','TODAY'),('week','THIS WEEK')] %}
-      {% set period_args=request.args.to_dict() %}{% set _=period_args.update({'mode':'times','period':key}) %}
+      {% for key,label in [('day','DAY'),('week','WEEK')] %}
+      {% set period_args=request.args.to_dict() %}{% set _=period_args.update({'period':key,'page':1}) %}
       <a href="?{{ period_args|urlencode }}" {% if weekly == (key == 'week') %}aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
-    <form method="get"><input type="hidden" name="mode" value="times">
-      <input type="hidden" name="period" value="{{ 'week' if weekly else 'day' }}">
-      {% for key in ['area', 'view'] %}{% if request.args.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endif %}{% endfor %}
-      <label>Workday <input type="date" name="date" value="{{ day }}" required></label><button>OPEN</button>
-    </form>
+    {% include "neostaffing/_node_sort_selector.html" %}
   </header>
-  {% include "neostaffing/_timecard_bulk.html" %}
+  {% if node_report %}
+  <section class="node-timecard-report" aria-label="Scoped time report">
+    <h2>{{ node_report.start }}{% if weekly %} – {{ node_report.end }}{% endif %}</h2>
+    <table><thead><tr>{% for heading in node_report.headings %}<th>{{ heading }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for record in node_report.report %}<tr>{% for cell in record %}<td data-label="{{ node_report.headings[loop.index0] }}">{{ cell if cell is not none else '—' }}</td>{% endfor %}</tr>{% else %}<tr><td colspan="4">No retained attendance for this selection.</td></tr>{% endfor %}</tbody></table>
+    <nav>{% if node_report.page > 1 %}<a href="?{{ node_report.previous_query }}">PREVIOUS</a>{% endif %}{% if node_report.has_next %}<a href="?{{ node_report.next_query }}">NEXT</a>{% endif %}</nav>
+    <a href="{{ url_for('neostaffing.timecards', date=day, period='week' if weekly else 'day') }}">Full NeoStaffing report</a>
+  </section>
+  {% else %}
   {% include "neostaffing/_timecard_rows.html" %}
-  {% for item in missing %}<div class="timecard-row"><strong>{{ item.person.full_name }}</strong><span>{{ item.assignment_label }}</span><span>No retained attendance for this day. Times unavailable.</span></div>{% endfor %}
-  <p role="status" data-timecard-status></p>
-  {% if rows %}<button type="button" data-save-times>SAVE CHANGED TIMES</button>{% endif %}
+  {% for item in missing %}<div class="timecard-row"><strong>{{ item.person.full_name }}</strong><span>No retained attendance for this Sort. Times unavailable.</span></div>{% endfor %}
+  {% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_timecards.js') }}?v=20260916-clock-entry" defer></script>
+<script src="{{ url_for('static', filename='js/neostaffing_node_times.js') }}?v=1" defer></script>
 {% endblock %}

@@ -192,7 +192,16 @@ def parse_timestamp(value, zone):
         raise ValueError("Enter a valid timestamp; include its UTC offset during a daylight-saving transition.") from error
 
 
-def save_segments(user, commands, *, as_of, node_workspace=None, node_area=None):
+def clock_value(value):
+    """Normalize compact entry before canonical date/overnight/DST validation."""
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d{3,4}", text):
+        text = text.zfill(4)
+        return f"{text[:2]}:{text[2:]}"
+    return text
+
+
+def save_segments(user, commands, *, as_of, node_workspace=None, node_area=None, saved_rows=None):
     """Atomic bulk edit; expected versions cover attendance changes too."""
     if not isinstance(commands, list) or not 1 <= len(commands) <= 100:
         raise ValueError("Save 1–100 changed timecards at a time.")
@@ -230,6 +239,7 @@ def save_segments(user, commands, *, as_of, node_workspace=None, node_area=None)
             if not isinstance(part, dict):
                 raise ValueError("Invalid segment.")
             start_value, end_value = part.get("start"), part.get("end")
+            start_value, end_value = clock_value(start_value), clock_value(end_value)
             clock = r"\d{2}:\d{2}(?::\d{2})?"
             if start_value and re.fullmatch(clock, str(start_value)):
                 start_value = f"{row.workday_date}T{start_value}"
@@ -262,15 +272,30 @@ def save_segments(user, commands, *, as_of, node_workspace=None, node_area=None)
         changed_weeks.add(week_start(row.workday_date))
     for key in changed_weeks:
         invalidate(weeks[key])
+    if saved_rows is not None:
+        for row, parsed in staged:
+            zone = ZoneInfo(json.loads(row.context_json)["timezone"])
+            saved_rows.append({"id": row.id, "version": row.version,
+                "hours": str(hours(sum((end - start).total_seconds() for start, end in parsed if start and end))), "segments": [
+                {key: value.replace(tzinfo=timezone.utc).astimezone(zone).isoformat() if value else ""
+                 for key, value in (("start", start), ("end", end))} for start, end in parsed]})
     return len(changed_weeks)
 
 
-def read_rows(user, start, end, *, complete=False, person_ids=None, slice_ids=None, node_workspace=None, node_area=None):
+def read_rows(user, start, end, *, complete=False, person_ids=None, slice_ids=None, node_workspace=None, node_area=None, work_area_ids=None, operation_id=None, sort_name=None):
     """One date-bounded projection plus one segment read, never per-row lookups."""
     if end < start or (end - start).days > (28 if slice_ids is not None else 6):
         raise ValueError("Choose one day or Sunday–Saturday week.")
     allowed = None if complete else authorization(user, person_ids=person_ids, node_workspace=node_workspace, node_area=node_area)
     query = Slice.query.filter(Slice.workday_date.between(start, end))
+    if work_area_ids is not None:
+        query = query.filter(Slice.work_area_unit_id.in_(work_area_ids))
+    if operation_id is not None:
+        query = query.filter(Slice.sort_date_operation_id == operation_id)
+    if sort_name is not None:
+        from app.models import SortDateOperation
+        query = query.filter(Slice.sort_date_operation_id.in_(
+            select(SortDateOperation.id).where(SortDateOperation.sort_name == sort_name)))
     if person_ids is not None:
         query = query.filter(Slice.person_id.in_(person_ids))
     if slice_ids is not None:
@@ -371,7 +396,7 @@ def annotate_combo_exceptions(items, start, end):
             item["issues"].append("FT Combo missing half")
 
 
-def report_context(user, values, *, as_of, complete=False):
+def report_context(user, values, *, as_of, complete=False, node_workspace=None, node_area=None, work_area_ids=None, operation_id=None, sort_name=None):
     """SQL aggregate/group/paginate before hydration; exact seconds stay source."""
     from sqlalchemy import case, cast, Integer, Float, JSON, func, tuple_
     from urllib.parse import urlencode
@@ -384,8 +409,16 @@ def report_context(user, values, *, as_of, complete=False):
         raise ValueError("Unknown timecard report.")
     page = max(1, int(values.get("page", 1)))
     query = Slice.query.filter(Slice.workday_date.between(start, end))
+    if work_area_ids is not None:
+        query = query.filter(Slice.work_area_unit_id.in_(work_area_ids))
+    if operation_id is not None:
+        query = query.filter(Slice.sort_date_operation_id == operation_id)
+    if sort_name is not None:
+        from app.models import SortDateOperation
+        query = query.filter(Slice.sort_date_operation_id.in_(
+            select(SortDateOperation.id).where(SortDateOperation.sort_name == sort_name)))
     if not complete:
-        query = query.filter(tuple_(Slice.person_id, Slice.sort_unit_id).in_(authorization(user)))
+        query = query.filter(tuple_(Slice.person_id, Slice.sort_unit_id).in_(authorization(user, node_workspace=node_workspace, node_area=node_area)))
     search = str(values.get("search", "")).strip()
     if search:
         query = query.join(StaffingPerson, StaffingPerson.id == Slice.person_id).filter(or_(
@@ -448,7 +481,7 @@ def report_context(user, values, *, as_of, complete=False):
         total = query.count()
         ids = [row[0] for row in query.with_entities(Slice.id).order_by(Slice.person_id, Slice.workday_date, Slice.id).offset((page - 1) * 50).limit(50).all()]
         from app.services.neostaffing_timecard_ui import decorate
-        rows = decorate(read_rows(user, start, end, complete=complete, slice_ids=ids))
+        rows = decorate(read_rows(user, start, end, complete=complete, slice_ids=ids, node_workspace=node_workspace, node_area=node_area))
         if complete and view == "times":
             try:
                 editable = authorization(user, person_ids={item["slice"].person_id for item in rows})

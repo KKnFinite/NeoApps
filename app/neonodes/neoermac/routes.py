@@ -516,21 +516,27 @@ def door_view():
 def manage_employees():
     gateway = get_current_gateway()
     doors = _current_user_supervised_doors(gateway)
+    selected_door = request.args.get("door") or None
+    if selected_door:
+        if selected_door not in doors:
+            abort(403)
+        doors = [selected_door]
     area_ids = staffing_service.attendance_deep_link_work_area_ids(doors, allow_persistent_roster=True)
     if not area_ids and not doors and request.method == "GET":
         return redirect(url_for("neostaffing.attendance"))
     from app.services.neostaffing_attendance_authority import node_attendance_authority
     authority = node_attendance_authority(current_user, "ermac")
     can_edit = bool(set(area_ids) & authority.work_area_ids)
-    if request.method == "GET" and request.args.get("mode") == "times":
+    if request.method == "GET" and request.args.get("mode") in {"times", "reports"}:
         if not can_edit:
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
-        context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
+        context = staffing_service.operational_manage_employees_context(
             area_ids, home_only=True, allow_roster_without_operation=True,
             allow_completed=True, selected_operation_id=request.args.get("operation_id"))
         return node_workspace(current_user, context, workspace="ermac",
-            scope_label=f"Selected Doors: {' · '.join(doors)}", back_url=url_for("neoermac.door_view"))
+            scope_label=f"Selected Doors: {' · '.join(doors)}", back_url=url_for("neoermac.door_view", door=selected_door),
+            node_area=selected_door, work_area_ids=area_ids)
     if request.method == "POST":
         if not can_edit:
             abort(403)
@@ -551,7 +557,7 @@ def manage_employees():
                 if request.accept_mimetypes.best == "application/json":
                     return jsonify(ok=False, error=safe_mutation_error(exc, "save attendance")), 409
                 flash(safe_mutation_error(exc, "save attendance"), "error")
-        return redirect(url_for("neoermac.manage_employees"))
+        return redirect(url_for("neoermac.manage_employees", door=selected_door, operation_id=request.form.get("sort_date_operation_id")))
     context = staffing_service.operational_manage_employees_context(
         area_ids, later_final_area_ids=area_ids, scope_candidates=True,
         allow_roster_without_operation=True, home_ownership=True,
@@ -568,7 +574,7 @@ def manage_employees():
         area_tabs=(),
         attendance_scope_label=f"Selected Doors: {' · '.join(doors)}",
         attendance_workspace="ermac",
-        back_url=url_for("neoermac.door_view"),
+        back_url=url_for("neoermac.door_view", door=selected_door),
     )
 
 

@@ -1,0 +1,9 @@
+{% if attendance.operation_choices %}
+<form method="get" class="neostaffing-operational-tabs" data-node-selection>
+  {% for key in ['area','door','mode','period'] %}{% if request.args.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.args[key] }}">{% endif %}{% endfor %}
+  <label>Sort / date <select name="operation_id" aria-label="Attendance Sort">
+    {% for operation in attendance.operation_choices %}<option value="{{ operation.id }}" {% if attendance.operation.id == operation.id %}selected{% endif %}>{{ operation.sort_date }} · {{ operation.sort_name }}</option>{% endfor %}
+  </select></label>
+</form>
+{% endif %}
+<script src="{{ url_for('static', filename='js/neostaffing_node_selection.js') }}?v=1" defer></script>

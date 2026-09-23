@@ -159,13 +159,14 @@ def timecards_save():
         payload = request.get_json(silent=True) or {}
         if not isinstance(payload, dict):
             raise ValueError("Invalid timecard payload.")
+        saved_rows = []
         save_segments(current_user, payload.get("commands"), as_of=current_gateway_local_datetime().date(),
-                      node_workspace=payload.get("node_workspace"), node_area=payload.get("node_area"))
+                      node_workspace=payload.get("node_workspace"), node_area=payload.get("node_area"), saved_rows=saved_rows)
         db.session.commit()
     except (ValueError, TypeError, KeyError, IntegrityError) as error:
         db.session.rollback()
         return jsonify(error=safe_mutation_error(error, "save times; reload before trying again")), 409
-    return jsonify(saved=True)
+    return jsonify(saved=True, rows=saved_rows)
 
 
 @bp.route("/timecards/archive", methods=["POST"])

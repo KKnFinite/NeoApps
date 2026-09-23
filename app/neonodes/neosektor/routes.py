@@ -899,15 +899,15 @@ def manage_employees():
     area_ids = areas[area]
     from app.services.neostaffing_attendance_authority import node_attendance_authority
     can_edit = bool(node_attendance_authority(current_user, "sektor", area).work_area_ids)
-    if request.method == "GET" and request.args.get("mode") == "times":
+    if request.method == "GET" and request.args.get("mode") in {"times", "reports"}:
         if not can_edit:
             abort(403)
         from app.services.neostaffing_timecard_ui import node_workspace
-        context = {} if request.args.get("period") == "week" else staffing_service.operational_manage_employees_context(
+        context = staffing_service.operational_manage_employees_context(
             area_ids, home_only=True, allow_roster_without_operation=True,
             allow_completed=True, selected_operation_id=request.args.get("operation_id"))
         return node_workspace(current_user, context, workspace="sektor",
-            scope_label=names[area], back_url=url_for("neosektor.manage_employees"), node_area=area)
+            scope_label=names[area], back_url=url_for("neosektor.manage_employees"), node_area=area, work_area_ids=area_ids)
     if request.method == "POST":
         if not can_edit:
             abort(403)
