@@ -14,6 +14,7 @@
     {% endif %}
 </div>
 {%- endmacro %}
+
 {% macro inclusion_control(row) -%}
 <div class="neorain-mobile-inclusion" data-neorain-late-inclusion-cell>
     {% if can_edit %}
@@ -25,35 +26,87 @@
     {% endif %}
 </div>
 {%- endmacro %}
+
+{% macro delay_info_mobile(row) -%}
+<details class="neorain-mobile-detail-delay" data-neorain-mobile-delay>
+    <summary>DELAY INFO ({{ row.delay_info|length }})</summary>
+    {% if can_edit %}
+    <div data-neorain-inbound-edit-protected {% if row.status == 'CANCELLED' %}hidden{% endif %}>
+        <div class="neorain-delay-existing-list">
+            {% for delay in row.delay_info %}
+            <div class="neorain-delay-existing-row">
+                <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
+                <form class="neorain-delay-delete-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+                    <input type="hidden" name="board" value="inbound">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="return_view" value="mobile">
+                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+                    <input type="hidden" name="delay_id" value="{{ delay.id }}">
+                    <input type="hidden" name="expected_version" value="{{ delay.version }}">
+                    <button type="submit">DELETE</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+            <input type="hidden" name="board" value="inbound">
+            <input type="hidden" name="action" value="add">
+            <input type="hidden" name="return_view" value="mobile">
+            <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
+            <input required name="minutes" inputmode="numeric" placeholder="Minutes">
+            <input required name="code" maxlength="2" placeholder="Code">
+            <input name="notes" placeholder="Notes">
+            <button type="submit">ADD</button>
+        </form>
+    </div>
+    <div data-neorain-inbound-edit-readonly {% if row.status != 'CANCELLED' %}hidden{% endif %}>
+        <div class="neorain-delay-existing-list">
+            {% for delay in row.delay_info %}
+            <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
+            {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="neorain-delay-existing-list">
+        {% for delay in row.delay_info %}
+        <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
+        {% else %}<span class="neorain-delay-empty">—</span>{% endfor %}
+    </div>
+    {% endif %}
+</details>
+{%- endmacro %}
+
 <section class="neorain-mobile-board" data-neorain-mobile-board="inbound" aria-label="Compact inbound list">
-    <div class="neorain-mobile-mission-list" data-neorain-mobile-list>
+    <div class="neorain-mobile-mission-list">
         {% for row in rows %}
         {% set row_state = 'neorain-inbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-inbound-row--blocked-in' if row.block_in else '') %}
-        <article class="neorain-mobile-mission {{ row_state }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
+        <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
             <div class="neorain-mobile-mission-grid">
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open><strong>{{ row.flight_number or '-' }}</strong><small>FLIGHT</small></button>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open><span>{{ row.origin or '-' }}</span><small>ORIGIN</small></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong><small>FLIGHT</small></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.origin or '-' }}</span><small>ORIGIN</small></button>
                 {{ block_in_control(row) }}
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open><span data-neorain-display="status">{{ row.status }}</span><small>STATUS</small></button>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open><span data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span><small>+/-</small></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="status">{{ row.status }}</span><small>STATUS</small></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span><small>+/-</small></button>
                 {{ inclusion_control(row) }}
+            </div>
+            <div id="mobile-flight-detail-{{ row.mission_id }}" class="neorain-mobile-inline-detail" data-neorain-mobile-inline-detail hidden>
+                <header class="neorain-mobile-inline-detail-head"><strong>{{ row.flight_number or '-' }} DETAILS</strong><span data-neorain-display="status">{{ row.status }}</span></header>
+                <dl class="neorain-mobile-detail-facts">
+                    <div><dt>WAVE</dt><dd>{{ row.wave }}</dd></div>
+                    <div><dt>TAIL</dt><dd>{{ row.tail or '-' }}</dd></div>
+                    <div><dt>ORIGIN</dt><dd>{{ row.origin or '-' }}</dd></div>
+                    <div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
+                    <div><dt>ETA/STA</dt><dd>{{ row.eta_sta or '-' }}</dd></div>
+                    <div><dt>BLOCK-IN</dt><dd data-neorain-display="block_in">{{ row.block_in or row.eta_sta or '-' }}</dd></div>
+                    <div><dt>+/-</dt><dd data-neorain-display="arrival_variance">{{ row.arrival_variance }}</dd></div>
+                    <div><dt>INCLUSION</dt><dd data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</dd></div>
+                    <div><dt>CONNECTING OUTBOUND</dt><dd>{{ row.connecting_outbound or '-' }}</dd></div>
+                    <div><dt>GROUND TIME</dt><dd class="{% if row.ground_time_warning %}neorain-ground-time-warning{% endif %}">{{ row.ground_time or '-' }}</dd></div>
+                </dl>
+                {{ delay_info_mobile(row) }}
             </div>
         </article>
         {% endfor %}
     </div>
-    {% for row in rows %}
-    {% set row_state = 'neorain-inbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-inbound-row--blocked-in' if row.block_in else '') %}
-    <article class="neorain-mobile-detail {{ row_state }}" data-neorain-inbound-row data-neorain-mobile-detail data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}" hidden>
-        <header><button type="button" class="neorain-mobile-back" data-neorain-mobile-back>‹ BACK</button><strong>{{ row.flight_number or '-' }}</strong><span data-neorain-display="status">{{ row.status }}</span></header>
-        <dl class="neorain-mobile-detail-facts">
-            <div><dt>WAVE</dt><dd>{{ row.wave }}</dd></div><div><dt>TAIL</dt><dd>{{ row.tail or '-' }}</dd></div>
-            <div><dt>ORIGIN</dt><dd>{{ row.origin or '-' }}</dd></div><div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
-            <div><dt>ETA/STA</dt><dd>{{ row.eta_sta or '-' }}</dd></div><div><dt>BLOCK-IN</dt><dd>{{ block_in_control(row) }}</dd></div>
-            <div><dt>+/-</dt><dd data-neorain-display="arrival_variance">{{ row.arrival_variance }}</dd></div><div><dt>INCLUSION</dt><dd>{{ inclusion_control(row) }}</dd></div>
-            <div><dt>CONNECTING OUTBOUND</dt><dd>{{ row.connecting_outbound or '-' }}</dd></div><div><dt>GROUND TIME</dt><dd class="{% if row.ground_time_warning %}neorain-ground-time-warning{% endif %}">{{ row.ground_time or '-' }}</dd></div>
-        </dl>
-        <details class="neorain-mobile-detail-delay"><summary>DELAY INFO ({{ row.delay_info|length }})</summary>{% for delay in row.delay_info %}<p><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %} {{ delay.notes }}{% endif %}</p>{% else %}<p>—</p>{% endfor %}</details>
-    </article>
-    {% endfor %}
 </section>
 {% endif %}

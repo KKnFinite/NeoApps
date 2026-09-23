@@ -65,7 +65,8 @@
     min-width: 0;
 }
 .neorain-delay-line-form input:not([type="hidden"]),
-.neorain-delay-panel button {
+.neorain-delay-line-form button,
+.neorain-delay-delete-form button {
     box-sizing: border-box;
     min-width: 0;
     min-height: 34px;
@@ -80,20 +81,24 @@
 .neorain-delay-line-form input[name="code"] {
     text-align: center;
 }
-.neorain-delay-panel button {
+.neorain-delay-line-form button,
+.neorain-delay-delete-form button {
     padding-inline: 10px;
     color: var(--node-highlight);
     font-weight: 800;
     cursor: pointer;
     white-space: nowrap;
 }
-.neorain-delay-panel button:hover,
-.neorain-delay-panel button:focus-visible {
+.neorain-delay-line-form button:hover,
+.neorain-delay-line-form button:focus-visible,
+.neorain-delay-delete-form button:hover,
+.neorain-delay-delete-form button:focus-visible {
     background: rgba(var(--node-rgb), .16);
     color: #fff;
 }
 .neorain-delay-line-form input:focus-visible,
-.neorain-delay-panel button:focus-visible {
+.neorain-delay-line-form button:focus-visible,
+.neorain-delay-delete-form button:focus-visible {
     outline: 2px solid var(--node-highlight);
     outline-offset: 1px;
 }
@@ -109,6 +114,54 @@
 @media (max-width: 900px) {
     .neorain-delay-line-form {
         grid-template-columns: 4.5rem 3.5rem minmax(0, 1fr) auto;
+    }
+}
+@media (max-width: 760px) {
+    .neorain-mobile-mission.is-expanded {
+        border-color: rgba(var(--node-rgb), .58);
+        box-shadow: 0 5px 16px rgba(0, 0, 0, .28), inset 0 0 0 1px rgba(var(--node-rgb), .18);
+    }
+    .neorain-mobile-inline-detail[hidden] { display: none; }
+    .neorain-mobile-inline-detail {
+        min-width: 0;
+        padding: 9px;
+        border-top: 1px solid rgba(var(--node-rgb), .24);
+        background: #080e16;
+    }
+    .neorain-mobile-inline-detail-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    .neorain-mobile-inline-detail-head strong {
+        color: #edf2f7;
+        font-size: .72rem;
+        letter-spacing: .06em;
+    }
+    .neorain-mobile-inline-detail-head span {
+        color: var(--node-highlight);
+        font-size: .6rem;
+        font-weight: 800;
+    }
+    .neorain-mobile-inline-detail .neorain-mobile-detail-facts {
+        margin: 0;
+    }
+    .neorain-mobile-inline-detail .neorain-mobile-detail-delay {
+        margin-top: 9px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(var(--node-rgb), .18);
+    }
+    .neorain-mobile-inline-detail .neorain-delay-line-form {
+        grid-template-columns: 4.25rem 3.4rem minmax(0, 1fr) auto;
+        gap: 5px;
+    }
+    .neorain-mobile-inline-detail .neorain-delay-line-form input:not([type="hidden"]),
+    .neorain-mobile-inline-detail .neorain-delay-line-form button,
+    .neorain-mobile-inline-detail .neorain-delay-delete-form button {
+        min-height: 32px;
+        font-size: .62rem;
     }
 }
 </style>
@@ -132,6 +185,7 @@
             setOpen(panel, panel.hidden);
         });
         const openHashPanel = () => {
+            if (window.matchMedia("(max-width: 760px)").matches) return;
             const id = window.location.hash.slice(1);
             if (!id || !id.startsWith("delay-info-")) return;
             const panel = document.getElementById(id);

@@ -213,7 +213,8 @@ def delay_info():
         db.session.commit(); flash("DELAY INFO SAVED.", "success")
     except (NeoRainDelayInfoError, IntegrityError) as exc:
         db.session.rollback(); flash(str(exc) if isinstance(exc, NeoRainDelayInfoError) else "Unable to save Delay Info.", "error")
-    return redirect(f"{url_for(endpoint)}#delay-info-{mission_id}")
+    anchor = f"mobile-flight-{mission_id}" if request.form.get("return_view") == "mobile" else f"delay-info-{mission_id}"
+    return redirect(f"{url_for(endpoint)}#{anchor}")
 
 
 @bp.route("/inbound/revision")

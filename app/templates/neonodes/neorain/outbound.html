@@ -463,57 +463,50 @@
     const root = document.querySelector("[data-neorain-outbound-live]");
     const board = root?.querySelector('[data-neorain-mobile-board="outbound"]');
     if (!root || !board) return;
-    const list = board.querySelector("[data-neorain-mobile-list]");
-    const details = () => Array.from(board.querySelectorAll("[data-neorain-mobile-detail]"));
-    const current = () => details().find((item) => !item.hidden) || null;
+
+    const items = () => Array.from(board.querySelectorAll(".neorain-mobile-mission[data-neorain-mission-id]"));
     const mobileState = () => history.state?.neorainMobileBoard === "outbound" ? history.state : {};
-    const saveState = (missionId = null, scrollY = window.scrollY) => history.replaceState(
-        { ...(history.state || {}), neorainMobileBoard: "outbound", neorainMobileMissionId: missionId, neorainMobileListScroll: scrollY },
+    const saveState = (missionId = null) => history.replaceState(
+        { ...(history.state || {}), neorainMobileBoard: "outbound", neorainMobileMissionId: missionId },
         "",
     );
-    const open = (missionId, { restore = false } = {}) => {
-        const detail = details().find((item) => item.dataset.neorainMissionId === String(missionId));
+
+    const setOpen = (item, open) => {
+        if (!item) return;
+        const detail = item.querySelector("[data-neorain-mobile-inline-detail]");
         if (!detail) return;
-        const scrollY = restore ? (mobileState().neorainMobileListScroll || 0) : window.scrollY;
-        details().forEach((item) => { item.hidden = item !== detail; });
-        list.hidden = true;
-        saveState(missionId, scrollY);
-        if (!restore) window.scrollTo({ top: root.offsetTop, behavior: "auto" });
+        detail.hidden = !open;
+        item.classList.toggle("is-expanded", open);
+        item.querySelectorAll("[data-neorain-mobile-row-open]").forEach((button) => {
+            button.setAttribute("aria-expanded", open ? "true" : "false");
+        });
     };
-    const close = () => {
-        const state = mobileState();
-        const missionId = current()?.dataset.neorainMissionId;
-        details().forEach((item) => { item.hidden = true; });
-        list.hidden = false;
-        saveState(null, state.neorainMobileListScroll || 0);
-        window.scrollTo({ top: state.neorainMobileListScroll || 0, behavior: "auto" });
-        const row = list.querySelector(`[data-neorain-mission-id="${missionId}"]`);
-        row?.classList.add("neorain-mobile-returned");
-        window.setTimeout(() => row?.classList.remove("neorain-mobile-returned"), 900);
+
+    const openMission = (missionId, { openDelay = false } = {}) => {
+        const item = items().find((candidate) => candidate.dataset.neorainMissionId === String(missionId));
+        if (!item) return;
+        setOpen(item, true);
+        if (openDelay) item.querySelector("[data-neorain-mobile-delay]")?.setAttribute("open", "");
+        saveState(item.dataset.neorainMissionId);
     };
+
     board.addEventListener("click", (event) => {
-        const openButton = event.target.closest("[data-neorain-mobile-row-open]");
-        if (openButton) { open(openButton.closest("[data-neorain-mission-id]")?.dataset.neorainMissionId); return; }
-        if (event.target.closest("[data-neorain-mobile-back]")) close();
+        const opener = event.target.closest("[data-neorain-mobile-row-open]");
+        if (!opener) return;
+        const item = opener.closest(".neorain-mobile-mission[data-neorain-mission-id]");
+        if (!item) return;
+        const detail = item.querySelector("[data-neorain-mobile-inline-detail]");
+        const shouldOpen = detail?.hidden !== false;
+        setOpen(item, shouldOpen);
+        saveState(shouldOpen ? item.dataset.neorainMissionId : null);
     });
-    let swipeStart = null;
-    board.addEventListener("pointerdown", (event) => {
-        if (!current() || event.target.closest("input, button, textarea, select, details")) return;
-        swipeStart = { x: event.clientX, y: event.clientY };
-    });
-    board.addEventListener("pointerup", (event) => {
-        if (!swipeStart || event.target.closest("input, button, textarea, select, details")) { swipeStart = null; return; }
-        const dx = event.clientX - swipeStart.x;
-        const dy = event.clientY - swipeStart.y;
-        swipeStart = null;
-        if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy)) return;
-        const items = details();
-        const index = items.indexOf(current());
-        const next = items[index + (dx < 0 ? 1 : -1)];
-        if (next) open(next.dataset.neorainMissionId);
-    });
-    const state = mobileState();
-    if (state.neorainMobileMissionId) open(state.neorainMobileMissionId, { restore: true });
+
+    const hash = window.location.hash.slice(1);
+    const mobileMatch = /^mobile-flight-(\d+)$/.exec(hash);
+    const legacyDelayMatch = /^delay-info-(\d+)$/.exec(hash);
+    if (mobileMatch) openMission(mobileMatch[1], { openDelay: true });
+    else if (legacyDelayMatch) openMission(legacyDelayMatch[1], { openDelay: true });
+    else if (mobileState().neorainMobileMissionId) openMission(mobileState().neorainMobileMissionId);
 })();
 </script>
 {% endblock %}
