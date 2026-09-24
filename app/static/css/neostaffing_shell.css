@@ -41,3 +41,29 @@ body.blueprint-neostaffing .neostaffing-org-console:not(.org-explorer-operationa
 @media(min-width:901px) and (max-width:1200px) {
   body.blueprint-neostaffing .neostaffing-org-console:not(.org-explorer-operational) { grid-template-columns:minmax(0,1fr); }
 }
+
+/* Staffing pages fill the shared shell's content box, not the viewport. */
+body.blueprint-neostaffing .content > :is(section, .employee-records, .timecards) {
+  width:100%; max-width:none; min-width:0; margin-left:0; margin-right:0; box-sizing:border-box;
+}
+body.blueprint-neostaffing .neostaffing-launch-console { margin:0; padding:0; }
+body.blueprint-neostaffing .neostaffing-primary-menu.neostaffing-launch-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); }
+body.blueprint-neostaffing .neostaffing-launch-grid .neostaffing-menu-tile { min-height:140px; padding:24px; }
+body.blueprint-neostaffing .neostaffing-launch-grid .neostaffing-menu-tile > span { font-size:clamp(1rem,1.5vw,1.4rem); }
+.org-person-assignment { display:block; color:#abd6d1; font-size:.8rem; white-space:normal; overflow-wrap:anywhere; }
+@media(min-width:901px) {
+  body.blueprint-neostaffing.operational-shell-page:not(.staffing-dashboard) .content { padding-left:calc(var(--operational-sidebar-width) + 24px); padding-right:24px; max-width:none; }
+  body.blueprint-neostaffing .operational-desktop-sidebar { display:flex; flex-direction:column; overflow-y:auto; }
+  body.blueprint-neostaffing .operational-desktop-sidebar > * { flex:0 0 auto; }
+  body.blueprint-neostaffing .operational-desktop-sidebar .motherbrain-desktop-side-menu { overflow:visible; max-height:none; }
+  body.blueprint-neostaffing.staffing-dashboard .content { padding-left:24px; padding-right:24px; }
+}
+@media(max-width:900px) {
+  body.blueprint-neostaffing .neostaffing-launch-grid .neostaffing-menu-tile { min-height:110px; padding:18px; }
+}
+
+body.blueprint-neostaffing .neostaffing-launch-console { min-height:0; }
+body.blueprint-neostaffing .neostaffing-launch-workspace { grid-template-rows:auto auto auto; gap:12px; overflow:visible; }
+body.blueprint-neostaffing .neostaffing-menu-tile em { white-space:normal; overflow:visible; text-overflow:clip; font-size:.8rem; }
+
+body.blueprint-neostaffing .org-explorer .neostaffing-org-workspace { width:100%; box-sizing:border-box; }

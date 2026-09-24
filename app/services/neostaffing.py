@@ -3302,6 +3302,22 @@ def work_area_ids_under(unit):
     return ids
 
 
+def _management_work_area_labels(assignments, units_by_id):
+    """Read-only card labels from active canonical leadership assignments."""
+    labels = {}
+    for assignment in assignments:
+        area = units_by_id.get(assignment.unit_id)
+        if not assignment.active or not area or not area.active or area.unit_type != "work_area":
+            continue
+        cursor, seen = area, set()
+        while cursor and cursor.unit_type != "sort" and cursor.id not in seen:
+            seen.add(cursor.id)
+            cursor = units_by_id.get(cursor.parent_id)
+        label = f"{cursor.name} · {area.name}" if cursor and cursor.unit_type == "sort" else area.name
+        labels.setdefault(assignment.person_id, set()).add(label)
+    return {person_id: sorted(values) for person_id, values in labels.items()}
+
+
 def org_chart_context(selected_unit_id=None):
     selected_unit = None
     if selected_unit_id:
@@ -3318,7 +3334,16 @@ def org_chart_context(selected_unit_id=None):
         )
     else:
         current_children = root_units
+    units = StaffingUnit.query.order_by(
+        StaffingUnit.unit_type,
+        StaffingUnit.display_order,
+        StaffingUnit.name,
+    ).all()
     unit_card_meta = _org_chart_unit_meta()
+    work_area_labels = _management_work_area_labels(
+        [assignment for meta in unit_card_meta.values() for assignment in meta["leadership"]],
+        {unit.id: unit for unit in units},
+    )
     selected_detail = unit_card_meta.get(selected_unit.id) if selected_unit else None
     work_area_detail = None
     if selected_unit and selected_unit.unit_type == "work_area":
@@ -3345,13 +3370,10 @@ def org_chart_context(selected_unit_id=None):
         "breadcrumb": unit_breadcrumb(selected_unit),
         "current_children": current_children,
         "unit_card_meta": unit_card_meta,
+        "work_area_labels": work_area_labels,
         "selected_detail": selected_detail,
         "work_area_detail": work_area_detail,
-        "units": StaffingUnit.query.order_by(
-            StaffingUnit.unit_type,
-            StaffingUnit.display_order,
-            StaffingUnit.name,
-        ).all(),
+        "units": units,
         "sorts": units_by_type("sort"),
         "operations": units_by_type("operation"),
         "departments": units_by_type("department"),
@@ -3631,6 +3653,7 @@ def management_org_chart_context(selected_person_id=None, selected_unit_id=None)
         cursor = people_by_id.get(relationship.reports_to_person_id) if relationship else None
     return {
         "tree": tree,
+        "work_area_labels": _management_work_area_labels(leadership_assignments, units_by_id),
         "unassigned_tree": unassigned_tree,
         "navigator": [{"unit": unit, "path": unit_paths[unit.id]} for unit in units],
         "selected_unit": selected_unit,
@@ -5569,7 +5592,11 @@ def _has_explicit_scope(filters):
 def _org_chart_unit_meta():
     assigned_counts = _board_assigned_counts()
     active_leadership = {}
-    for assignment in StaffingLeadershipAssignment.query.filter_by(active=True).all():
+    for assignment in StaffingLeadershipAssignment.query.join(StaffingPerson).filter(
+        StaffingLeadershipAssignment.active.is_(True),
+        StaffingPerson.active.is_(True),
+        StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS),
+    ).options(joinedload(StaffingLeadershipAssignment.person)).all():
         if assignment.unit_id:
             active_leadership.setdefault(assignment.unit_id, []).append(assignment)
     meta = {}

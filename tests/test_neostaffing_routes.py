@@ -117,7 +117,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neo-brand--apps", response.data)
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"operational-node-topbar", response.data)
-        self.assertIn(b"operational-desktop-sidebar", response.data)
+        self.assertNotIn(b"data-operational-sidebar ", response.data)
         self.assertIn(b"neostaffing-launch-console", response.data)
         self.assertIn(b"neostaffing-launch-grid", response.data)
         self.assertIn(b"SHIFT FLOW", response.data)
