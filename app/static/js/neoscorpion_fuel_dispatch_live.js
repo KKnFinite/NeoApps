@@ -58,25 +58,83 @@
     }
 
     function initializeDispatchScroll(scope) {
-        const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v1";
+        const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v2";
+        const tableWrap = scope.querySelector(".neoscorpion-table-wrap--sticky");
+
+        const restoreDetailRows = (detailIds) => {
+            if (!Array.isArray(detailIds)) return;
+            detailIds.forEach((detailId) => {
+                const detail = document.getElementById(detailId);
+                const toggle = scope.querySelector(
+                    `[data-neoscorpion-dispatch-details][aria-controls="${detailId}"]`
+                );
+                if (!detail || !toggle) return;
+                detail.hidden = false;
+                detail.setAttribute("aria-hidden", "false");
+                toggle.setAttribute("aria-expanded", "true");
+            });
+        };
+
         const restore = () => {
             try {
                 const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
-                if (!saved || saved.path !== window.location.pathname || !Number.isFinite(saved.y)) return;
+                if (!saved || saved.path !== window.location.pathname) return;
                 window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-                    window.scrollTo({top: saved.y, left: 0, behavior: "auto"});
+                    restoreDetailRows(saved.openDetails);
+                    const anchor = saved.missionId
+                        ? scope.querySelector(
+                            `.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="${saved.missionId}"]`
+                        )
+                        : null;
+                    if (anchor && Number.isFinite(saved.missionOffset)) {
+                        const anchorTop = anchor.getBoundingClientRect().top;
+                        window.scrollTo({
+                            top: Math.max(
+                                0,
+                                window.scrollY + anchorTop - saved.missionOffset
+                            ),
+                            left: Number.isFinite(saved.x) ? saved.x : 0,
+                            behavior: "auto",
+                        });
+                    } else if (Number.isFinite(saved.y)) {
+                        window.scrollTo({
+                            top: saved.y,
+                            left: Number.isFinite(saved.x) ? saved.x : 0,
+                            behavior: "auto",
+                        });
+                    }
+                    if (tableWrap && Number.isFinite(saved.tableScrollLeft)) {
+                        tableWrap.scrollLeft = saved.tableScrollLeft;
+                    }
                     window.sessionStorage.removeItem(storageKey);
                 }));
             } catch (_error) {
                 // Scroll restoration must never interfere with Dispatch actions.
             }
         };
+
         restore();
         return () => {
             try {
+                const rows = Array.from(scope.querySelectorAll(
+                    ".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]"
+                ));
+                const anchor = rows.find(
+                    (row) => row.getBoundingClientRect().bottom > 0
+                ) || rows[0] || null;
+                const openDetails = Array.from(scope.querySelectorAll(
+                    "[data-neoscorpion-dispatch-details][aria-expanded='true']"
+                )).map((toggle) => toggle.getAttribute("aria-controls")).filter(Boolean);
                 window.sessionStorage.setItem(storageKey, JSON.stringify({
                     path: window.location.pathname,
                     y: window.scrollY,
+                    x: window.scrollX,
+                    missionId: anchor?.dataset.dispatchMissionId || null,
+                    missionOffset: anchor
+                        ? anchor.getBoundingClientRect().top
+                        : null,
+                    tableScrollLeft: tableWrap?.scrollLeft || 0,
+                    openDetails,
                 }));
             } catch (_error) {
                 // Browser storage is an enhancement only.

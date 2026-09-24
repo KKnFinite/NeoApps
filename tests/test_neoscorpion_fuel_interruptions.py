@@ -432,6 +432,20 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         self.assertEqual(assignment.confirmed_tail_number, "N413UP")
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
+    def test_tail_change_before_work_renders_direct_confirm_action(self):
+        operation, mission, assignment = self._assignment()
+        mission.assigned_tail_number = "N413UP"
+        db.session.commit()
+        self._login(self.dispatcher)
+
+        response = self.client.get("/neoscorpion/fuel-dispatch")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"TAIL SWAP DETECTED", response.data)
+        self.assertIn(b"N412UP", response.data)
+        self.assertIn(b"N413UP", response.data)
+        self.assertIn(b"CONFIRM TAIL SWAP", response.data)
+        self.assertNotIn(b"END OLD TAIL FIRST", response.data)
+
     def test_midfuel_tail_change_end_early_then_new_tail_uses_new_work_state(self):
         operation, mission, assignment = self._assignment()
         self._select_fueler(operation, self.fueler)
@@ -590,8 +604,12 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             response = self.client.get("/neoscorpion/fuel-dispatch")
             self.assertEqual(commit.call_count, 0)
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"TAIL SWAP DETECTED", response.data)
+        self.assertIn(b"N412UP", response.data)
+        self.assertIn(b"N413UP", response.data)
         self.assertIn(b"HOLD / STOP &amp; REVIEW", response.data)
-        self.assertIn(b"CONFIRM NEW TAIL", response.data)
+        self.assertIn(b"END OLD TAIL FIRST", response.data)
+        self.assertNotIn(b"CONFIRM TAIL SWAP</button>", response.data)
         self.assertIn(b"END EARLY", response.data)
         self.assertEqual(NeoScorpionFuelAuditEntry.query.count(), audit_count)
         self.assertEqual(self._revision(operation), revision)

@@ -344,6 +344,11 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn("continuousWhileVisible: true", script)
         self.assertIn('root.dataset.liveDirty = "true"', script)
         self.assertIn("window.location.reload()", script)
+        self.assertIn("data-dispatch-mission-id", body)
+        self.assertIn("missionOffset", script)
+        self.assertIn("tableScrollLeft", script)
+        self.assertIn("openDetails", script)
+        self.assertIn("fuel-dispatch.scroll.v2", script)
         self.assertNotIn("setMonitorMode", script)
 
     def _add_operation(self, *, revision):
