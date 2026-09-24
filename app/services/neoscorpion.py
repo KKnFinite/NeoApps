@@ -83,6 +83,7 @@ NEOSCORPION_LIVE_REFRESH_SCREENS = (
 NEOSCORPION_LIVE_REFRESH_SCREEN_KEYS = frozenset(
     screen_key for screen_key, _label in NEOSCORPION_LIVE_REFRESH_SCREENS
 )
+TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD = "tail_swap_inherited_event_id"
 NEOSCORPION_FUEL_CYCLE_TYPES = frozenset({"fuel", "uplift", "defuel"})
 
 NEOSCORPION_TANK_LAYOUTS = {
@@ -1129,7 +1130,13 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
             assignment,
             confirmed_tail,
         )
-        if _fuel_work_has_begun(fuel_work_state, assignment):
+        inherited_measurement = _validated_tail_swap_inherited_measurement(
+            operation,
+            assignment,
+            mission,
+            fuel_work_state,
+        )
+        if _fuel_work_has_begun(fuel_work_state, assignment) and inherited_measurement is None:
             current_tail = _normalize_tail(mission.assigned_tail_number)
             initial_truck_assignment = bool(
                 not fueler_change_requested
@@ -1916,12 +1923,6 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         raise ValueError(
             "HOLD / REVIEW REQUIRED must be resolved before Fuel On Board."
         )
-    if assignment.assigned_fueler_user_id is None:
-        raise ValueError("Assign a fueler before Fuel On Board.")
-    if assignment.assigned_truck_id is not None:
-        raise ValueError("Clear the unused truck before Fuel On Board.")
-    if assignment.transfer_fuel_gallons not in (None, 0):
-        raise ValueError("T/F must be blank or 0 for Fuel On Board.")
 
     tail_number = _normalize_tail(mission.assigned_tail_number)
     if not tail_number:
@@ -1936,39 +1937,53 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         .with_for_update()
         .first()
     )
-    if fuel_work_state is None:
-        raise ValueError(
-            "Complete Actual fuel and confirm APU before Fuel On Board."
-        )
-    if fuel_work_state.ended_early_at_utc is not None:
-        raise ValueError("Ended Early fuel work cannot use Fuel On Board.")
-    tank_states = (
-        NeoScorpionFuelTankState.query.filter_by(
-            fuel_work_state_id=fuel_work_state.id,
-        )
-        .with_for_update()
-        .all()
+    tank_states = _locked_tank_states(fuel_work_state)
+    inherited_measurement = _validated_tail_swap_inherited_measurement(
+        operation,
+        assignment,
+        mission,
+        fuel_work_state,
+        tank_states=tank_states,
     )
-    tank_states_by_code = {state.tank_code: state for state in tank_states}
-    tank_layout = tank_layout_for_tail(tail_number)
-    if not _apu_source_is_valid(fuel_work_state, tank_layout):
-        raise ValueError("Select a valid APU source tank before Fuel On Board.")
-    (
-        _remaining_complete,
-        _remaining_total_lbs,
-        _actual_complete,
-        _actual_total_lbs,
-        neo_fuel_lbs,
-    ) = _fuel_work_calculation(
-        tank_layout,
-        tank_states_by_code,
-        fuel_work_state.apu_running,
-        fuel_work_state.apu_allowance_lbs,
+    inherited_fob_ready = bool(
+        inherited_measurement is not None
+        and mission.planned_fuel_load is not None
+        and inherited_measurement["total_lbs"] >= mission.planned_fuel_load
     )
-    if neo_fuel_lbs is None:
-        raise ValueError(
-            "Complete Actual fuel and confirm APU before Fuel On Board."
+
+    if not inherited_fob_ready:
+        if assignment.assigned_fueler_user_id is None:
+            raise ValueError("Assign a fueler before Fuel On Board.")
+        if assignment.assigned_truck_id is not None:
+            raise ValueError("Clear the unused truck before Fuel On Board.")
+        if assignment.transfer_fuel_gallons not in (None, 0):
+            raise ValueError("T/F must be blank or 0 for Fuel On Board.")
+        if fuel_work_state is None:
+            raise ValueError(
+                "Complete Actual fuel and confirm APU before Fuel On Board."
+            )
+        if fuel_work_state.ended_early_at_utc is not None:
+            raise ValueError("Ended Early fuel work cannot use Fuel On Board.")
+        tank_states_by_code = {state.tank_code: state for state in tank_states}
+        tank_layout = tank_layout_for_tail(tail_number)
+        if not _apu_source_is_valid(fuel_work_state, tank_layout):
+            raise ValueError("Select a valid APU source tank before Fuel On Board.")
+        (
+            _remaining_complete,
+            _remaining_total_lbs,
+            _actual_complete,
+            _actual_total_lbs,
+            neo_fuel_lbs,
+        ) = _fuel_work_calculation(
+            tank_layout,
+            tank_states_by_code,
+            fuel_work_state.apu_running,
+            fuel_work_state.apu_allowance_lbs,
         )
+        if neo_fuel_lbs is None:
+            raise ValueError(
+                "Complete Actual fuel and confirm APU before Fuel On Board."
+            )
 
     assignment.fuel_on_board_at_utc = now_utc
     assignment.fuel_on_board_by_user_id = user.id
@@ -2812,9 +2827,86 @@ def confirm_assignment_tail(gateway, user, assignment_id, *, now_utc=None):
     ):
         raise ValueError("END EARLY the prior-tail fuel work before confirming the new tail.")
 
+    source_measurement = _latest_trusted_completed_tail_measurement(
+        operation,
+        current_tail,
+    )
     assignment.confirmed_tail_number = current_tail
+    # T/F belongs to the prior physical tail segment. The historical event keeps
+    # that movement; the replacement tail starts with no current-segment T/F.
+    assignment.transfer_fuel_gallons = None
+
     current_work_state = _locked_fuel_work_state_for_tail(assignment, current_tail)
-    audit = _new_fuel_audit(
+    current_tank_states = _locked_tank_states(current_work_state)
+    inherited_measurement = None
+    if (
+        source_measurement is not None
+        and _work_state_accepts_tail_swap_inheritance(
+            current_work_state,
+            current_tank_states,
+        )
+    ):
+        if current_work_state is None:
+            current_work_state = NeoScorpionFuelWorkState(
+                fuel_assignment_id=assignment.id,
+                tail_number=current_tail,
+            )
+            db.session.add(current_work_state)
+            current_tank_states = []
+
+        tank_states_by_code = {
+            state.tank_code: state for state in current_tank_states
+        }
+        for tank_code, _tank_label in tank_layout_for_tail(current_tail):
+            tank_state = tank_states_by_code.get(tank_code)
+            if tank_state is None:
+                tank_state = NeoScorpionFuelTankState(tank_code=tank_code)
+                current_work_state.tank_states.append(tank_state)
+                tank_states_by_code[tank_code] = tank_state
+            tank_state.remaining_lbs = source_measurement["actual_by_tank"][tank_code]
+            tank_state.actual_lbs = None
+
+        tail_fuel_state = (
+            NeoScorpionTailFuelState.query.filter_by(
+                sort_date_operation_id=operation.id,
+                tail_number=current_tail,
+            )
+            .with_for_update()
+            .first()
+        )
+        if tail_fuel_state is None:
+            sort_tail_state = SortDateTailState.query.filter_by(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number=current_tail,
+            ).first()
+            tail_fuel_state = NeoScorpionTailFuelState(
+                sort_date_operation_id=operation.id,
+                sort_date_tail_state_id=(
+                    sort_tail_state.id if sort_tail_state else None
+                ),
+                tail_number=current_tail,
+            )
+            db.session.add(tail_fuel_state)
+        tail_fuel_state.fob_lbs = source_measurement["total_lbs"]
+        tail_fuel_state.actual_fuel_lbs = None
+        tail_fuel_state.center_fuel_lbs = None
+        tail_fuel_state.apu_lbs = None
+        db.session.flush()
+        inherited_measurement = source_measurement
+
+    audits = []
+    confirmation_reason = "Dispatcher confirmed the current mission tail."
+    if source_measurement is None:
+        confirmation_reason += (
+            " No trustworthy completed fuel event was available for the replacement tail."
+        )
+    elif inherited_measurement is None:
+        confirmation_reason += (
+            " Existing replacement-tail work was preserved instead of overwriting it."
+        )
+    confirmation_audit = _new_fuel_audit(
         operation,
         assignment,
         user,
@@ -2822,10 +2914,38 @@ def confirm_assignment_tail(gateway, user, assignment_id, *, now_utc=None):
         "confirmed_tail_number",
         old_tail,
         current_tail,
-        "Dispatcher confirmed the current mission tail.",
+        confirmation_reason,
         fuel_work_state=old_work_state,
         now_utc=now_utc,
     )
+    audits.append(confirmation_audit)
+
+    if inherited_measurement is not None:
+        required_fuel_lbs = mission.planned_fuel_load
+        result_label = (
+            "FOB READY"
+            if required_fuel_lbs is not None
+            and inherited_measurement["total_lbs"] >= required_fuel_lbs
+            else "NEEDS FUEL"
+        )
+        inheritance_audit = _new_fuel_audit(
+            operation,
+            assignment,
+            user,
+            "confirm_tail",
+            TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,
+            current_tail,
+            inherited_measurement["event"].id,
+            (
+                f"Inherited {inherited_measurement['total_lbs']} lbs measured fuel "
+                f"from completed tail event {inherited_measurement['event'].id}. "
+                f"Result: {result_label}."
+            ),
+            fuel_work_state=current_work_state,
+            now_utc=now_utc,
+        )
+        audits.append(inheritance_audit)
+
     _clear_hold_after_explicit_resolution(
         gateway,
         operation,
@@ -2840,7 +2960,7 @@ def confirm_assignment_tail(gateway, user, assignment_id, *, now_utc=None):
         int(asset_state.revision),
         assignment,
         current_work_state,
-        audit_entries=(audit,),
+        audit_entries=tuple(audits),
     )
 
 
@@ -3159,6 +3279,190 @@ def _new_fuel_audit(
     )
     db.session.add(entry)
     return entry
+
+
+def _fueling_event_actual_measurement(event, tail_number):
+    tail_number = _normalize_tail(tail_number)
+    tank_layout = tank_layout_for_tail(tail_number)
+    if not tail_number or not tank_layout or event is None:
+        return None
+    snapshots_by_code = {
+        snapshot.tank_code: snapshot for snapshot in event.tank_snapshots
+    }
+    actual_by_tank = {}
+    for tank_code, _tank_label in tank_layout:
+        snapshot = snapshots_by_code.get(tank_code)
+        if snapshot is None or snapshot.actual_lbs is None:
+            return None
+        actual_by_tank[tank_code] = int(snapshot.actual_lbs)
+    return {
+        "event": event,
+        "actual_by_tank": actual_by_tank,
+        "total_lbs": sum(actual_by_tank.values()),
+    }
+
+
+def _latest_trusted_completed_tail_measurement(operation, tail_number):
+    tail_number = _normalize_tail(tail_number)
+    if not operation or not tail_number:
+        return None
+    source_row = (
+        db.session.query(
+            NeoScorpionFuelingEvent,
+            NeoScorpionFuelAssignment,
+        )
+        .join(
+            NeoScorpionFuelAssignment,
+            NeoScorpionFuelAssignment.id
+            == NeoScorpionFuelingEvent.fuel_assignment_id,
+        )
+        .filter(
+            NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
+            NeoScorpionFuelingEvent.tail_number == tail_number,
+            NeoScorpionFuelingEvent.ended_at_utc.isnot(None),
+        )
+        .options(selectinload(NeoScorpionFuelingEvent.tank_snapshots))
+        .order_by(
+            NeoScorpionFuelingEvent.ended_at_utc.desc(),
+            NeoScorpionFuelingEvent.id.desc(),
+        )
+        .first()
+    )
+    if source_row is None:
+        return None
+    source_event, source_assignment = source_row
+    # Never fall back past a newer active/incomplete physical event. The latest
+    # event must itself belong to a canonically completed fuel assignment.
+    if (
+        source_assignment.completed_at_utc is None
+        or source_assignment.review_status != "complete"
+    ):
+        return None
+    return _fueling_event_actual_measurement(source_event, tail_number)
+
+
+def _work_state_accepts_tail_swap_inheritance(fuel_work_state, tank_states=None):
+    if fuel_work_state is None:
+        return True
+    if any(
+        value is not None
+        for value in (
+            fuel_work_state.on_at_utc,
+            fuel_work_state.apu_running,
+            fuel_work_state.apu_confirmed_at_utc,
+            fuel_work_state.apu_allowance_lbs,
+            fuel_work_state.automatic_apu_allowance_lbs,
+            fuel_work_state.apu_override_allowance_lbs,
+            fuel_work_state.applied_apu_rate_thousand_lbs_per_hour,
+            fuel_work_state.apu_source_tank_code,
+            fuel_work_state.off_at_utc,
+            fuel_work_state.truck_segment_started_at_utc,
+            fuel_work_state.ended_early_at_utc,
+        )
+    ):
+        return False
+    if fuel_work_state.apu_override_enabled:
+        return False
+    states = fuel_work_state.tank_states if tank_states is None else tank_states
+    return all(
+        state.remaining_lbs is None and state.actual_lbs is None
+        for state in states
+    )
+
+
+def _validated_tail_swap_inherited_measurement(
+    operation,
+    assignment,
+    mission,
+    fuel_work_state,
+    *,
+    tank_states=None,
+):
+    if not operation or not assignment or not mission or fuel_work_state is None:
+        return None
+    current_tail = _normalize_tail(mission.assigned_tail_number)
+    if (
+        not current_tail
+        or _effective_confirmed_tail(assignment, mission) != current_tail
+        or _normalize_tail(fuel_work_state.tail_number) != current_tail
+        or assignment.transfer_fuel_gallons not in (None, 0)
+        or fuel_work_state.on_at_utc is not None
+        or fuel_work_state.off_at_utc is not None
+        or fuel_work_state.ended_early_at_utc is not None
+        or fuel_work_state.apu_running is not None
+        or fuel_work_state.apu_confirmed_at_utc is not None
+        or fuel_work_state.apu_allowance_lbs is not None
+        or fuel_work_state.automatic_apu_allowance_lbs is not None
+        or fuel_work_state.apu_override_enabled
+        or fuel_work_state.apu_override_allowance_lbs is not None
+        or fuel_work_state.applied_apu_rate_thousand_lbs_per_hour is not None
+        or fuel_work_state.apu_source_tank_code is not None
+        or fuel_work_state.truck_segment_started_at_utc is not None
+    ):
+        return None
+
+    inheritance_audit = (
+        NeoScorpionFuelAuditEntry.query.filter_by(
+            sort_date_operation_id=operation.id,
+            fuel_assignment_id=assignment.id,
+            action="confirm_tail",
+            field_name=TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,
+            old_value=current_tail,
+        )
+        .order_by(
+            NeoScorpionFuelAuditEntry.created_at.desc(),
+            NeoScorpionFuelAuditEntry.id.desc(),
+        )
+        .first()
+    )
+    if inheritance_audit is None:
+        return None
+    try:
+        source_event_id = int(inheritance_audit.new_value)
+    except (TypeError, ValueError):
+        return None
+
+    source_row = (
+        db.session.query(
+            NeoScorpionFuelingEvent,
+            NeoScorpionFuelAssignment,
+        )
+        .join(
+            NeoScorpionFuelAssignment,
+            NeoScorpionFuelAssignment.id
+            == NeoScorpionFuelingEvent.fuel_assignment_id,
+        )
+        .filter(
+            NeoScorpionFuelingEvent.id == source_event_id,
+            NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
+            NeoScorpionFuelingEvent.tail_number == current_tail,
+        )
+        .options(selectinload(NeoScorpionFuelingEvent.tank_snapshots))
+        .first()
+    )
+    if source_row is None:
+        return None
+    source_event, source_assignment = source_row
+    if (
+        source_assignment.completed_at_utc is None
+        or source_assignment.review_status != "complete"
+    ):
+        return None
+    measurement = _fueling_event_actual_measurement(source_event, current_tail)
+    if measurement is None:
+        return None
+
+    states = list(fuel_work_state.tank_states) if tank_states is None else list(tank_states)
+    states_by_code = {state.tank_code: state for state in states}
+    for tank_code, _tank_label in tank_layout_for_tail(current_tail):
+        state = states_by_code.get(tank_code)
+        if (
+            state is None
+            or state.remaining_lbs != measurement["actual_by_tank"][tank_code]
+            or state.actual_lbs is not None
+        ):
+            return None
+    return measurement
 
 
 def _segment_movement_status(assignment, fuel_work_state, tank_states):
@@ -3859,7 +4163,25 @@ def _fuel_rows(
         aircraft_type = _aircraft_type_for_mission(mission, tail_state)
         detailed_aircraft_type = detailed_aircraft_type_for_tail(work_tail_number)
         tank_layout = tank_layout_for_tail(work_tail_number)
-        work_has_begun = _fuel_work_has_begun(fuel_work_state, assignment)
+        tank_states_by_code = {
+            state.tank_code: state
+            for state in (fuel_work_state.tank_states if fuel_work_state else ())
+        }
+        inherited_measurement = (
+            _validated_tail_swap_inherited_measurement(
+                operation,
+                assignment,
+                mission,
+                fuel_work_state,
+                tank_states=tuple(tank_states_by_code.values()),
+            )
+            if assignment and not tail_mismatch
+            else None
+        )
+        work_has_begun = bool(
+            _fuel_work_has_begun(fuel_work_state, assignment)
+            and inherited_measurement is None
+        )
         work_ended_early = bool(
             fuel_work_state and fuel_work_state.ended_early_at_utc
         )
@@ -3877,10 +4199,6 @@ def _fuel_rows(
             if tail_mismatch
             else ""
         )
-        tank_states_by_code = {
-            state.tank_code: state
-            for state in (fuel_work_state.tank_states if fuel_work_state else ())
-        }
         direction_evidence = _cycle_direction_evidence(
             assignment,
             fuel_work_state,
@@ -4047,17 +4365,30 @@ def _fuel_rows(
             if nightly_truck_states_by_truck_id is not None and assignment
             else None
         )
-        fuel_on_board_ready = bool(
+        inherited_fob_ready = bool(
             assignment
+            and inherited_measurement is not None
+            and mission.planned_fuel_load is not None
+            and inherited_measurement["total_lbs"] >= mission.planned_fuel_load
             and not fuel_on_board_complete
             and not effective_hold
             and not tail_mismatch
             and not work_ended_early
-            and assignment.assigned_fueler_user_id is not None
-            and assignment.assigned_truck_id is None
-            and assignment.transfer_fuel_gallons in (None, 0)
-            and apu_source_valid
-            and neo_fuel_lbs is not None
+        )
+        fuel_on_board_ready = bool(
+            inherited_fob_ready
+            or (
+                assignment
+                and not fuel_on_board_complete
+                and not effective_hold
+                and not tail_mismatch
+                and not work_ended_early
+                and assignment.assigned_fueler_user_id is not None
+                and assignment.assigned_truck_id is None
+                and assignment.transfer_fuel_gallons in (None, 0)
+                and apu_source_valid
+                and neo_fuel_lbs is not None
+            )
         )
         physical_off_ready = bool(
             fuel_work_state
@@ -4097,6 +4428,8 @@ def _fuel_rows(
             fuel_on_board_reason = tail_safety_label
         elif work_ended_early:
             fuel_on_board_reason = "ENDED EARLY"
+        elif inherited_fob_ready:
+            fuel_on_board_reason = ""
         elif not assignment or assignment.assigned_fueler_user_id is None:
             fuel_on_board_reason = "Assign fueler first."
         elif assignment.assigned_truck_id is not None:
@@ -4202,6 +4535,13 @@ def _fuel_rows(
                 if assignment and assignment.hold_reason
                 else tail_safety_label
                 or "Dispatcher review required"
+            )
+        elif inherited_fob_ready:
+            dispatch_status_key = "fob-ready"
+            dispatch_status_label = "FOB READY"
+            dispatch_status_detail = (
+                f"{format_display_thousands(inherited_measurement['total_lbs'])}K measured "
+                f"on {tail_number}"
             )
         elif assignment and assignment.review_status == "review":
             dispatch_status_key = "review"
@@ -4398,6 +4738,16 @@ def _fuel_rows(
                 "fuel_on_board_complete": fuel_on_board_complete,
                 "fuel_on_board_ready": fuel_on_board_ready,
                 "fuel_on_board_reason": fuel_on_board_reason,
+                "tail_swap_inherited_fuel_lbs": (
+                    inherited_measurement["total_lbs"]
+                    if inherited_measurement is not None
+                    else None
+                ),
+                "tail_swap_inherited_event_id": (
+                    inherited_measurement["event"].id
+                    if inherited_measurement is not None
+                    else None
+                ),
                 "movement_status": movement_status,
                 "cycle_type": cycle_type,
                 "cycle_type_label": cycle_type.upper(),

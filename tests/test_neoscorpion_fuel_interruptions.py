@@ -13,7 +13,9 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelingEvent,
+    NeoScorpionFuelingEventTankSnapshot,
     NeoScorpionFuelTankState,
+    NeoScorpionTailFuelState,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
     NeoScorpionSettings,
@@ -28,6 +30,7 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
+    complete_fuel_on_board,
     complete_fueled_assignment,
     confirm_assignment_tail,
     end_fuel_work_early,
@@ -446,6 +449,171 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         self.assertIn(b"CONFIRM TAIL SWAP", response.data)
         self.assertNotIn(b"END OLD TAIL FIRST", response.data)
 
+    def test_confirm_tail_inherits_latest_completed_same_sort_measurement(self):
+        operation, mission, assignment = self._assignment()
+        source_event = self._completed_tail_event(
+            operation,
+            "N413UP",
+            (12000, 10000, 10000),
+            "UPS1399",
+        )
+        assignment.transfer_fuel_gallons = 17
+        mission.assigned_tail_number = "N413UP"
+        db.session.commit()
+
+        result = confirm_assignment_tail(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+            now_utc=datetime(2026, 8, 19, 4, 10),
+        )
+        self.assertTrue(result.changed)
+        db.session.commit()
+
+        work = NeoScorpionFuelWorkState.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            tail_number="N413UP",
+        ).one()
+        tanks = {
+            state.tank_code: state
+            for state in NeoScorpionFuelTankState.query.filter_by(
+                fuel_work_state_id=work.id,
+            ).all()
+        }
+        self.assertEqual(
+            {code: state.remaining_lbs for code, state in tanks.items()},
+            {"left": 12000, "ctr": 10000, "right": 10000},
+        )
+        self.assertTrue(all(state.actual_lbs is None for state in tanks.values()))
+        self.assertIsNone(work.on_at_utc)
+        self.assertIsNone(work.apu_running)
+        self.assertIsNone(work.apu_allowance_lbs)
+        self.assertIsNone(assignment.transfer_fuel_gallons)
+
+        tail_state = NeoScorpionTailFuelState.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number="N413UP",
+        ).one()
+        self.assertEqual(tail_state.fob_lbs, 32000)
+        self.assertIsNone(tail_state.actual_fuel_lbs)
+
+        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        self.assertEqual(row["measured_inbound_fuel_lbs"], 32000)
+        self.assertFalse(row["fuel_on_board_ready"])
+        self.assertEqual(row["tail_swap_inherited_event_id"], source_event.id)
+        self.assertEqual(row["tail_swap_inherited_fuel_lbs"], 32000)
+
+        inheritance_audits = NeoScorpionFuelAuditEntry.query.filter_by(
+            fuel_assignment_id=assignment.id,
+            action="confirm_tail",
+            field_name="tail_swap_inherited_event_id",
+        ).all()
+        self.assertEqual(len(inheritance_audits), 1)
+        self.assertEqual(inheritance_audits[0].old_value, "N413UP")
+        self.assertEqual(inheritance_audits[0].new_value, str(source_event.id))
+
+        repeated = confirm_assignment_tail(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+        )
+        self.assertFalse(repeated.changed)
+        db.session.commit()
+        self.assertEqual(
+            NeoScorpionFuelAuditEntry.query.filter_by(
+                fuel_assignment_id=assignment.id,
+                action="confirm_tail",
+                field_name="tail_swap_inherited_event_id",
+            ).count(),
+            1,
+        )
+
+    def test_confirm_tail_measured_fuel_can_be_fob_ready_without_fake_resources(self):
+        operation, mission, assignment = self._assignment()
+        source_event = self._completed_tail_event(
+            operation,
+            "N413UP",
+            (20000, 17000, 16000),
+            "UPS1398",
+        )
+        assignment.assigned_fueler_user_id = None
+        assignment.assigned_truck_id = None
+        mission.assigned_tail_number = "N413UP"
+        db.session.commit()
+
+        confirm_assignment_tail(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+            now_utc=datetime(2026, 8, 19, 4, 10),
+        )
+        db.session.commit()
+
+        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        self.assertTrue(row["fuel_on_board_ready"])
+        self.assertEqual(row["dispatch_status_label"], "FOB READY")
+        self.assertEqual(row["tail_swap_inherited_fuel_lbs"], 53000)
+        self.assertEqual(row["tail_swap_inherited_event_id"], source_event.id)
+
+        completed = complete_fuel_on_board(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+            now_utc=datetime(2026, 8, 19, 4, 12),
+        )
+        self.assertTrue(completed.changed)
+        db.session.commit()
+        self.assertIsNotNone(assignment.fuel_on_board_at_utc)
+        self.assertEqual(assignment.fuel_on_board_by_user_id, self.dispatcher.id)
+        self.assertEqual(assignment.review_status, "complete")
+        self.assertEqual(mission.fuel_status, "complete")
+        self.assertEqual(
+            NeoScorpionFuelingEvent.query.filter_by(
+                fuel_assignment_id=assignment.id,
+            ).count(),
+            0,
+        )
+
+    def test_tail_fuel_state_without_completed_event_is_not_fob_proof(self):
+        operation, mission, assignment = self._assignment()
+        db.session.add_all(
+            [
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=operation.gateway_code,
+                    sort_name=operation.sort_name,
+                    tail_number="N413UP",
+                    aircraft_type="757",
+                    aircraft_type_source="derived",
+                ),
+                NeoScorpionTailFuelState(
+                    sort_date_operation_id=operation.id,
+                    tail_number="N413UP",
+                    inbound_fuel_lbs=60000,
+                    fob_lbs=60000,
+                ),
+            ]
+        )
+        assignment.assigned_fueler_user_id = None
+        mission.assigned_tail_number = "N413UP"
+        db.session.commit()
+
+        confirm_assignment_tail(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+        )
+        db.session.commit()
+        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        self.assertFalse(row["fuel_on_board_ready"])
+        self.assertIsNone(row["tail_swap_inherited_event_id"])
+        self.assertIsNone(
+            NeoScorpionFuelWorkState.query.filter_by(
+                fuel_assignment_id=assignment.id,
+                tail_number="N413UP",
+            ).first()
+        )
+
     def test_midfuel_tail_change_end_early_then_new_tail_uses_new_work_state(self):
         operation, mission, assignment = self._assignment()
         self._select_fueler(operation, self.fueler)
@@ -674,6 +842,116 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         )
         db.session.commit()
         return operation, mission, assignment
+
+    def _completed_tail_event(
+        self,
+        operation,
+        tail_number,
+        actual_by_tank,
+        flight_number,
+    ):
+        tail_state = SortDateTailState.query.filter_by(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            tail_number=tail_number,
+        ).first()
+        if tail_state is None:
+            tail_state = SortDateTailState(
+                sort_date=operation.sort_date,
+                gateway_code=operation.gateway_code,
+                sort_name=operation.sort_name,
+                tail_number=tail_number,
+                aircraft_type="757",
+                aircraft_type_source="derived",
+            )
+            db.session.add(tail_state)
+
+        source_mission = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code=operation.gateway_code,
+            sort_name=operation.sort_name,
+            sort_date_operation_id=operation.id,
+            mission_type="departure",
+            mission_source="manual",
+            flight_number=flight_number,
+            origin=operation.gateway_code,
+            destination="SDF",
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 8, 17, 22, 30),
+            planned_datetime_utc=datetime(2026, 8, 18, 3, 30),
+            planned_source="manual",
+            planned_fuel_load=sum(actual_by_tank),
+            assigned_tail_number=tail_number,
+            tail_source="manual",
+            fuel_status="complete",
+            fuel_completed_at_utc=datetime(2026, 8, 19, 3, 50),
+            departure_status="loading",
+        )
+        db.session.add(source_mission)
+        db.session.flush()
+
+        source_assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=source_mission.id,
+            assigned_fueler_user_id=self.fueler.id,
+            confirmed_tail_number=tail_number,
+            review_status="complete",
+            completed_at_utc=datetime(2026, 8, 19, 3, 50),
+        )
+        db.session.add(source_assignment)
+        db.session.flush()
+
+        source_work = NeoScorpionFuelWorkState(
+            fuel_assignment_id=source_assignment.id,
+            tail_number=tail_number,
+            on_at_utc=datetime(2026, 8, 19, 3, 20),
+            off_at_utc=datetime(2026, 8, 19, 3, 45),
+            apu_running=False,
+            apu_confirmed_at_utc=datetime(2026, 8, 19, 3, 20),
+            apu_allowance_lbs=0,
+            automatic_apu_allowance_lbs=0,
+        )
+        db.session.add(source_work)
+        db.session.flush()
+
+        truck, _nightly = self._truck(
+            operation,
+            f"SRC-{flight_number[-2:]}",
+            900,
+        )
+        db.session.flush()
+        source_event = NeoScorpionFuelingEvent(
+            sort_date_operation_id=operation.id,
+            fuel_assignment_id=source_assignment.id,
+            fuel_work_state_id=source_work.id,
+            tail_number=tail_number,
+            fuel_truck_id=truck.id,
+            sequence_number=1,
+            event_type="fuel",
+            cycle_number=1,
+            started_at_utc=datetime(2026, 8, 19, 3, 20),
+            ended_at_utc=datetime(2026, 8, 19, 3, 45),
+            transfer_fuel_gallons=100,
+        )
+        db.session.add(source_event)
+        db.session.flush()
+
+        for tank_code, actual_lbs in zip(
+            ("left", "ctr", "right"),
+            actual_by_tank,
+        ):
+            db.session.add(
+                NeoScorpionFuelingEventTankSnapshot(
+                    fueling_event_id=source_event.id,
+                    tank_code=tank_code,
+                    remaining_lbs=actual_lbs - 1000,
+                    planned_lbs=actual_lbs,
+                    actual_lbs=actual_lbs,
+                )
+            )
+        db.session.commit()
+        return source_event
 
     def _select_fueler(self, operation, user):
         selection = NeoScorpionSortFueler(
