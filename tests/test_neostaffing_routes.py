@@ -2902,7 +2902,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"No matching assignments", page.data)
         self.assertIn(b'name="ft_supervisor_selection"', page.data)
         self.assertIn(b"data-ft-supervisor-selection", page.data)
-        self.assertIn(b"Reports To â FT Supervisor â Optional", page.data)
+        self.assertIn("Reports To — FT Supervisor — Optional".encode(), page.data)
 
     def test_people_creation_drawers_separate_management_and_employees(self):
         simulator = self._user("staffing_people_split_drawers")
