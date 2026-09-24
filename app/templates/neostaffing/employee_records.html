@@ -1,12 +1,12 @@
 {% extends "neostaffing/_record_shell.html" %}
 {% block records_content %}
 <h1>Employee Records</h1><p>By-exception documentation. No automatic discipline is created.</p>
-<form method="get"><label>Employee name or ID<input name="search" value="{{ request.args.get('search','') }}" maxlength="100"></label><button>SEARCH</button></form>
-<ul class="record-list">{% for person in people.items %}<li><a href="{{ url_for('neostaffing.employee_record_person', person_id=person.id) }}">{{ person.full_name }} · {{ person.employee_id or '' }}{% if not person.active %} · INACTIVE{% endif %}</a></li>{% else %}<li>No employees in your current scope.</li>{% endfor %}</ul>
-<nav>{% if people.has_prev %}<a href="{{ url_for('neostaffing.employee_records', page=people.prev_num, search=request.args.get('search','')) }}">PREVIOUS</a>{% endif %}{% if people.has_next %}<a href="{{ url_for('neostaffing.employee_records', page=people.next_num, search=request.args.get('search','')) }}">NEXT</a>{% endif %}</nav>
-{% if master %}<details><summary>Operation / Department configuration</summary><p>Default OFF. Turning OFF blocks new records only, not existing drafts or history.</p>
+{% if master %}<details class="staffing-configure" data-staffing-configure><summary>CONFIGURE</summary><h2>Operation / Department configuration</h2><p>Default OFF. Turning OFF blocks new records only, not existing drafts or history.</p>
 {% for unit in units %}{% set setting=settings.get(unit.id) %}{% set inherited=unit.unit_type=='department' and settings.get(unit.parent_id) and settings[unit.parent_id].enabled %}
 <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="unit_id" value="{{ unit.id }}"><input type="hidden" name="version" value="{{ setting.version if setting else 0 }}">
 <label><input type="checkbox" name="enabled" {% if inherited or setting and setting.enabled %}checked{% endif %} {% if inherited %}disabled{% endif %}>{{ unit.name }} · {{ unit.unit_type }}{% if inherited %} · ON BY OPERATION{% endif %}</label><button {% if inherited %}disabled{% endif %}>SAVE</button></form>
 {% endfor %}</details>{% endif %}
+<form data-staffing-filter method="get"><label>Employee name or ID<input name="search" value="{{ request.args.get('search','') }}" maxlength="100"></label><button>SEARCH</button></form>
+<ul class="record-list">{% for person in people.items %}<li><a href="{{ url_for('neostaffing.employee_record_person', person_id=person.id) }}">{{ person.full_name }} · {{ person.employee_id or '' }}{% if not person.active %} · INACTIVE{% endif %}</a></li>{% else %}<li>No employees in your current scope.</li>{% endfor %}</ul>
+<nav>{% if people.has_prev %}<a href="{{ url_for('neostaffing.employee_records', page=people.prev_num, search=request.args.get('search','')) }}">PREVIOUS</a>{% endif %}{% if people.has_next %}<a href="{{ url_for('neostaffing.employee_records', page=people.next_num, search=request.args.get('search','')) }}">NEXT</a>{% endif %}</nav>
 {% endblock %}

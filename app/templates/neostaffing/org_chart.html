@@ -43,7 +43,7 @@
     <main class="neostaffing-org-workspace">
         <header class="neostaffing-org-header">
             <div><h1 id="staffing-org-title">ORG CHART</h1><span>Operational hierarchy</span></div>
-            <nav class="neostaffing-org-view-tabs" aria-label="Org Chart view"><a href="{{ url_for('neostaffing.org_chart', unit_id=selected.id if selected else none) }}" aria-current="page">Operational</a><a href="{{ url_for('neostaffing.org_chart', view='management') }}">Management / Reports To</a></nav>
+            <nav data-staffing-secondary-source class="neostaffing-org-view-tabs" aria-label="Org Chart view"><a href="{{ url_for('neostaffing.org_chart', unit_id=selected.id if selected else none) }}" aria-current="page">Operational</a><a href="{{ url_for('neostaffing.org_chart', view='management') }}">Management / Reports To</a></nav>
             {% if selected %}<p class="neostaffing-org-breadcrumb">{% for unit in org_chart.breadcrumb %}<span>{{ unit.name }}</span>{% endfor %}</p>{% endif %}
         </header>
         <section class="neostaffing-org-tree-surface" aria-label="Operational organization hierarchy">

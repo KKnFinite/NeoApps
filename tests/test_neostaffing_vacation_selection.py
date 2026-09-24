@@ -305,8 +305,9 @@ class NeoStaffingVacationSelectionTest(unittest.TestCase):
         self._login(user)
         page = self.client.get("/neostaffing/settings")
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"Back to NeoPortal", page.data)
-        self.assertIn(b'class="neostaffing-mobile-portal-link"', page.data)
+        self.assertIn(b'href="/portal"', page.data)
+        self.assertIn(b'data-mobile-navigation', page.data)
+        self.assertNotIn(b'class="neostaffing-mobile-portal-link"', page.data)
 
     def test_management_context_is_dynamic_and_primary_assignment_owns_pool(self):
         primary = self._person("M100", "Alpha", "Supervisor", "2000-01-01", "full_time_supervisor")

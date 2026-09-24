@@ -10,6 +10,12 @@ from app.services.page_assets import page_stylesheets
 
 
 NODE_IDENTITIES = {
+    "staffing": {
+        "name": "NeoStaffing", "word": "Staffing", "home_endpoint": "neostaffing.index",
+        "locked_icon": "images/icons/neostaffing/inapp/neostaffing-inapp-128.png",
+        "desktop_icon": "images/icons/neostaffing/inapp/neostaffing-inapp-128.png",
+        "icon_alt": "NeoStaffing logo",
+    },
     "motherbrain": {
         "name": "NeoMotherBrain",
         "word": "MotherBrain",
@@ -240,7 +246,8 @@ def resolve_shell_metadata(
     )
 
     uses_operational_shell = (
-        is_motherbrain_page
+        is_neostaffing_page
+        or is_motherbrain_page
         or is_neoermac_page
         or is_neoscorpion_page
         or is_neosektor_page
@@ -262,6 +269,8 @@ def resolve_shell_metadata(
         is_neosubzero_page=is_neosubzero_page,
         is_neorain_page=is_neorain_page,
     )
+    if is_neostaffing_page:
+        node_key = "staffing"
     node_identity = NODE_IDENTITIES[node_key]
     header_identity_key = node_key if uses_operational_shell else (
         "motherbrain" if uses_motherbrain_header else None
@@ -305,6 +314,8 @@ def resolve_shell_metadata(
         or is_neorain_page
     )
     neostaffing_current_label = _neostaffing_label(endpoint)
+    if is_neostaffing_page:
+        node_current_label = neostaffing_current_label
     mobile_shell_key = (
         node_key
         if has_node_shell_identity
@@ -378,7 +389,7 @@ def resolve_shell_metadata(
         else mobile_shell_word
     )
     uses_gateway_mobile_shell = is_rfd_hub_page or has_node_shell_identity
-    operational_shell_supports_board_view = uses_operational_shell and not any(
+    operational_shell_supports_board_view = uses_operational_shell and not is_neostaffing_page and not any(
         marker in path
         for marker in (
             "/settings",
@@ -605,6 +616,15 @@ def _neosektor_labels(
 
 
 def _neostaffing_label(endpoint):
+    if endpoint and endpoint.startswith("neostaffing.vacation"):
+        return "Vacation"
+    if endpoint and endpoint.startswith("neostaffing.employee_record"):
+        return "Employee Records"
+    labels = {"neostaffing.timecards": "Timecards", "neostaffing.shift_flow": "Shift Flow",
+              "neostaffing.accountability": "Accountability", "neostaffing.settings": "Settings",
+              "neostaffing.staffing_groups": "Staffing Groups", "neostaffing.bulk_change": "Bulk Change"}
+    if endpoint in labels:
+        return labels[endpoint]
     if endpoint in ("neostaffing.attendance", "neostaffing.people_attendance"):
         return "Attendance"
     if endpoint == "neostaffing.people":

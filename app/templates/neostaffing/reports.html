@@ -23,7 +23,7 @@
         </nav>
 
         {% if reports.report_type == "vacation_calendars" %}
-        <form class="neostaffing-reports-toolbar" method="get" aria-label="Vacation report year">
+        <form data-staffing-filter class="neostaffing-reports-toolbar" method="get" aria-label="Vacation report year">
             <input type="hidden" name="report_type" value="vacation_calendars">
             <label><span>VACATION YEAR</span><input type="number" min="2000" max="2200" name="year" value="{{ reports.vacation.vacation_year }}"></label>
             <button type="submit">LOAD CALENDARS</button>
@@ -43,7 +43,7 @@
         </form>
         <section class="neostaffing-reports-results"><header class="neostaffing-reports-results-head"><div><h2>UNION SENIORITY LIST</h2><span>UNION / HOURLY ONLY</span></div></header><p class="neostaffing-reports-empty">Choose an Org Chart scope and PT Union, FT Union, or both. Management classifications are excluded.</p></section>
         {% else %}
-        <form class="neostaffing-reports-toolbar" method="get" aria-label="Report controls">
+        <form data-staffing-filter class="neostaffing-reports-toolbar" method="get" aria-label="Report controls">
             <label class="neostaffing-reports-report-type"><span>REPORT</span>
                 <select name="report_type">
                     <option value="staffing" {% if filters.report_type == "staffing" %}selected{% endif %}>Staffing Report</option>

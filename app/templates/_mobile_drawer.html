@@ -24,9 +24,11 @@
             <strong>{{ drawer_name }}</strong>
             {% if uses_operational_shell %}<img src="{{ url_for('static', filename=node_header_logo) }}" alt="" width="48" height="48"><span>{{ node_current_label }}</span>{% endif %}
         </header>
-        {% if uses_operational_shell and request.endpoint != node_home_endpoint %}
+        {% if uses_operational_shell and (is_neostaffing_page or request.endpoint != node_home_endpoint) %}
         <nav class="neo-drawer-links" aria-label="{{ node_header_name }} screens">
-        {% if is_neoermac_page %}
+        {% if is_neostaffing_page %}
+        {% include "neostaffing/_navigation_items.html" %}
+        {% elif is_neoermac_page %}
         <a href="{{ url_for('neoermac.door_view') }}">Door View</a><a href="{{ url_for('neoermac.building_lineup') }}">Building Lineup</a><a href="{{ url_for('neoermac.view_outbound') }}">View Outbound</a><a href="{{ url_for('neoermac.upcoming_pulls') }}">Upcoming Pulls</a><a href="{{ url_for('neoermac.tug_assignments') }}">Tug Assignments</a>{% if user_can('neoermac.settings.view') %}<a href="{{ url_for('neoermac.settings') }}">Settings</a>{% endif %}
         {% elif is_neosektor_page %}
         {% for item in neosektor_internal_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
@@ -40,12 +42,6 @@
         {% set motherbrain_mobile_item_class = "" %}{% set hide_mobile_manage_sort = true %}{% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
         {% endif %}
 
-        </nav>
-        {% elif is_neostaffing_page and request.endpoint != 'neostaffing.index' %}
-        <nav class="neo-drawer-links" aria-label="NeoStaffing screens">
-          {% for label,endpoint in [('People','people'),('Org Chart','org_chart'),('Reports','reports'),('Attendance','attendance'),('Shift Flow','shift_flow'),('Accountability','accountability'),('Employee Records','employee_records'),('Timecards','timecards'),('Vacation','vacation_selection')] %}
-          <a href="{{ url_for('neostaffing.' ~ endpoint) }}">{{ label }}</a>
-          {% endfor %}
         </nav>
         {% elif is_rfd_hub_page %}
         <section class="neo-drawer-links" aria-label="Operational context">{{ sort_control() }}</section>

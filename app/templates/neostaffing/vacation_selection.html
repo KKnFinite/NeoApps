@@ -8,7 +8,7 @@
     <main class="neostaffing-vacation-workspace">
         <header class="neostaffing-vacation-header">
             <div><h1 id="vacation-selection-title">VACATION SELECTION</h1><span>{{ vacation_year }} VACATION YEAR · {{ week_count }} SATURDAY WE WEEKS</span></div>
-            <form method="get" class="neostaffing-vacation-year"><label for="vacation-year">YEAR</label><select id="vacation-year" name="year" onchange="this.form.submit()">{% for year in vacation_years %}<option value="{{ year }}"{% if year == vacation_year %} selected{% endif %}>{{ year }}</option>{% endfor %}</select></form>
+            <form data-staffing-filter method="get" class="neostaffing-vacation-year"><label for="vacation-year">YEAR</label><select id="vacation-year" name="year">{% for year in vacation_years %}<option value="{{ year }}"{% if year == vacation_year %} selected{% endif %}>{{ year }}</option>{% endfor %}</select></form>
         </header>
         <section class="neostaffing-vacation-entry-grid" aria-label="Vacation Selection workspaces">
             <a href="{{ url_for('neostaffing.vacation_management', year=vacation_year) }}" class="neostaffing-vacation-entry is-management"><span>MANAGEMENT</span><strong>MANAGEMENT VACATION</strong><p>Dynamic Org Chart ownership, seniority rosters, and yearly whole-week limits.</p><em>OPEN WORKSPACE →</em></a>

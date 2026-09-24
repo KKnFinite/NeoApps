@@ -91,6 +91,8 @@
     <script src="{{ url_for('static', filename='js/live_updates.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if is_neostaffing_page %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='1') }}">
+    <script defer src="{{ url_for('static', filename='js/neostaffing_filters.js', v='1') }}"></script>
     <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -483,6 +485,7 @@
             {% set flight_api_auto_poll_visible = is_flight_api_test_page %}
             {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
             {% endif %}
+            {% if is_neostaffing_page %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
             {% block content %}{% endblock %}
         </main>
         {% block page_overlay %}{% endblock %}

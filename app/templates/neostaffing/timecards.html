@@ -5,7 +5,7 @@
 <section class="theme-staffing timecards" data-timecards>
 <h1>TIMECARDS</h1>
 <a href="{{ url_for('neostaffing.index') }}">NEOSTAFFING</a>
-<form method="get">
+<form data-staffing-filter method="get">
   <label>Date <input type="date" name="date" value="{{ day }}" required></label>
   <label>Period <select name="period"><option value="day" {% if period == 'day' %}selected{% endif %}>DAY</option><option value="week" {% if period == 'week' %}selected{% endif %}>WEEK</option></select></label>
   <label>Report <select name="view">{% for value,label in [('sort','SORT LABOR'),('employee','EMPLOYEE HOURS'),('exceptions','EXCEPTIONS'),('times','TIMES')] %}<option value="{{ value }}" {% if view == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>

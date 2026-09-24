@@ -9,7 +9,10 @@
         <small>{{ default_gateway.code if default_gateway is defined else "RFD" }} OPERATIONS</small>
     </div>
     <nav class="motherbrain-desktop-side-menu node-desktop-side-menu" aria-label="{{ node_header_name }} menu">
-        {% if is_neoermac_page %}
+        {% if is_neostaffing_page %}
+        {% set staffing_nav_class = 'motherbrain-desktop-side-link' %}
+        {% include "neostaffing/_navigation_items.html" %}
+        {% elif is_neoermac_page %}
         <a class="motherbrain-desktop-side-link{% if request.endpoint == 'neoermac.index' %} is-active{% endif %}" href="{{ url_for('neoermac.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
         <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/door-view') %} is-active{% endif %}" href="{{ url_for('neoermac.door_view') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Door View</span></a>
         <a class="motherbrain-desktop-side-link{% if request.path.startswith('/neoermac/building-lineup') %} is-active{% endif %}" href="{{ url_for('neoermac.building_lineup') }}"><span class="operational-side-link-icon">B</span><span class="operational-side-link-label">Building Lineup</span></a>

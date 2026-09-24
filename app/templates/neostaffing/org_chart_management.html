@@ -48,7 +48,7 @@
     <main class="neostaffing-org-workspace">
         <header class="neostaffing-org-header">
             <div><h1 id="staffing-management-org-title">ORG CHART</h1><span>Management / Reports To</span></div>
-            <nav class="neostaffing-org-view-tabs" aria-label="Org Chart view"><a href="{{ url_for('neostaffing.org_chart') }}">Operational</a><a href="{{ url_for('neostaffing.org_chart', view='management', person_id=selected.id if selected else none) }}" aria-current="page">Management / Reports To</a></nav>
+            <nav data-staffing-secondary-source class="neostaffing-org-view-tabs" aria-label="Org Chart view"><a href="{{ url_for('neostaffing.org_chart') }}">Operational</a><a href="{{ url_for('neostaffing.org_chart', view='management', person_id=selected.id if selected else none) }}" aria-current="page">Management / Reports To</a></nav>
         </header>
         <section class="org-focus-canvas" aria-label="Reporting explorer">
             {% if selected %}

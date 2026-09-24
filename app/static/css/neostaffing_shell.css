@@ -1,0 +1,43 @@
+/* Shared shell owns primary navigation; page grids only own their content. */
+body.blueprint-neostaffing.operational-shell-page { --node-primary:#39b8af; --node-primary-rgb:57,184,175; }
+.blueprint-neostaffing .operational-desktop-sidebar a[aria-current="page"] { border-color:#55bcb6; background:#173330; }
+.blueprint-neostaffing .staffing-secondary { margin:0 0 16px; padding:12px; background:#10171d; border:1px solid #33434d; border-radius:6px; min-width:0; }
+.staffing-secondary-context { color:#b8cbd1; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
+.staffing-secondary :is(nav,form,[data-staffing-secondary-nav]) { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; margin:0; }
+.staffing-filter-controls { display:flex; flex-wrap:wrap; align-items:start; gap:12px; margin-top:8px; }
+.staffing-secondary label { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:.8rem; }
+.staffing-secondary :is(input:not([type="checkbox"]):not([type="hidden"]),select,button,summary) { box-sizing:border-box; min-height:40px; max-width:100%; color:#dfebef; background:#17232b; border:1px solid #49616a; border-radius:4px; padding:8px; font:inherit; }
+.staffing-secondary :is(button,summary) { cursor:pointer; }
+.staffing-secondary :is(a,input,select,button,summary):focus-visible { outline:2px solid #75d9ce; outline-offset:2px; }
+.staffing-secondary [hidden] { display:none !important; }
+.staffing-filter-panel > summary { background:transparent; border:0; font-size:.8rem; }
+[data-staffing-filter-summary] { display:inline-flex; flex-wrap:wrap; gap:5px; margin-left:8px; }
+.staffing-filter-chip { font-size:.75rem; padding:3px 7px; background:#20363b; border-radius:4px; overflow-wrap:anywhere; }
+.staffing-secondary [data-staffing-scope] { position:static; width:100%; height:auto; max-height:55vh; overflow:auto; margin:0; padding:8px; }
+.staffing-secondary a { color:#c4e4e2; }
+.staffing-secondary nav a { padding:8px; border:1px solid #49616a; border-radius:4px; }
+.staffing-secondary nav a[aria-current="page"] { background:#214541; border-color:#75d9ce; }
+.staffing-configure { margin-top:8px; }
+.staffing-configure form { padding:8px 0; border-bottom:1px solid #33434d; }
+body.blueprint-neostaffing .container > section { max-width:100%; min-width:0; }
+body.blueprint-neostaffing :is(.neostaffing-attendance-console,.neostaffing-shift-flow,.neostaffing-vacation-console,.neostaffing-reports-console) { width:100%; margin:0; grid-template-columns:minmax(0,1fr); }
+body.blueprint-neostaffing.staffing-controls-ready .neostaffing-people-console { width:100%; margin:0; grid-template-columns:minmax(0,1fr); }
+body.blueprint-neostaffing.staffing-controls-ready .neostaffing-people-detail-empty { display:none; }
+body.blueprint-neostaffing .neostaffing-org-console.org-explorer-operational { width:100%; margin:0; grid-template-columns:minmax(0,1fr); }
+body.blueprint-neostaffing .neostaffing-org-console:not(.org-explorer-operational) { width:100%; margin:0; min-width:0; grid-template-columns:180px minmax(0,1fr) 240px; }
+@media(max-width:900px) {
+  .staffing-secondary { padding:8px; }
+  .staffing-filter-controls,.staffing-secondary form { display:grid; grid-template-columns:minmax(0,1fr); width:100%; }
+  .staffing-secondary :is(input,select) { width:100%; min-height:44px; }
+  .staffing-secondary input[type="checkbox"] { width:auto; }
+  .staffing-filter-panel[open] { padding-bottom:8px; }
+  .staffing-secondary [data-staffing-scope] { max-height:45vh; }
+  body.blueprint-neostaffing .neostaffing-org-console:not(.org-explorer-operational) { grid-template-columns:minmax(0,1fr); }
+}
+
+.blueprint-neostaffing [data-neostaffing-drawer]:not([open]) { display:none; }
+.blueprint-neostaffing [data-people-open-add] { min-height:40px; padding:8px 12px; color:#c4e4e2; border:1px solid #49616a; border-radius:4px; background:#17232b; }
+
+@media(min-width:901px) and (max-width:1200px) {
+  body.blueprint-neostaffing .neostaffing-org-console:not(.org-explorer-operational) { grid-template-columns:minmax(0,1fr); }
+}
