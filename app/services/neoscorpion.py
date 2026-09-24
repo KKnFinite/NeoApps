@@ -4152,14 +4152,16 @@ def _fuel_rows(
             and confirmed_tail_number
             and tail_number != confirmed_tail_number
         )
-        fuel_work_state = (
+        safety_fuel_work_state = (
             confirmed_fuel_work_state
-            if tail_mismatch and confirmed_fuel_work_state is not None
+            if tail_mismatch
             else current_fuel_work_state
         )
-        work_tail_number = (
-            fuel_work_state.tail_number if fuel_work_state else tail_number
-        )
+        # Never render prior-tail physical fuel facts on a row whose canonical
+        # mission tail has changed. The old state remains available only for
+        # interruption/safety decisions until the dispatcher resolves the swap.
+        fuel_work_state = current_fuel_work_state
+        work_tail_number = tail_number
         aircraft_type = _aircraft_type_for_mission(mission, tail_state)
         detailed_aircraft_type = detailed_aircraft_type_for_tail(work_tail_number)
         tank_layout = tank_layout_for_tail(work_tail_number)
@@ -4179,11 +4181,12 @@ def _fuel_rows(
             else None
         )
         work_has_begun = bool(
-            _fuel_work_has_begun(fuel_work_state, assignment)
-            and inherited_measurement is None
+            _fuel_work_has_begun(safety_fuel_work_state, assignment)
+            and (tail_mismatch or inherited_measurement is None)
         )
         work_ended_early = bool(
-            fuel_work_state and fuel_work_state.ended_early_at_utc
+            safety_fuel_work_state
+            and safety_fuel_work_state.ended_early_at_utc
         )
         effective_hold = bool(
             assignment
@@ -4339,8 +4342,22 @@ def _fuel_rows(
             else None
         )
         load_planning_output = None
-        if neo_fuel_lbs is not None and (
-            detailed_aircraft_type != "A300" or center_actual_lbs is not None
+        load_planning_complete = bool(
+            assignment
+            and not tail_mismatch
+            and (
+                (fuel_work_state and fuel_work_state.off_at_utc)
+                or assignment.fuel_on_board_at_utc
+                or assignment.completed_at_utc
+            )
+        )
+        if (
+            load_planning_complete
+            and neo_fuel_lbs is not None
+            and (
+                detailed_aircraft_type != "A300"
+                or center_actual_lbs is not None
+            )
         ):
             load_planning_output = (
                 f"{mission.flight_number or '-'} {mission.destination or '-'} "

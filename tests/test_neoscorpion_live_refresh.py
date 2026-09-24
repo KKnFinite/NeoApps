@@ -345,10 +345,13 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn('root.dataset.liveDirty = "true"', script)
         self.assertIn("window.location.reload()", script)
         self.assertIn("data-dispatch-mission-id", body)
-        self.assertIn("missionOffset", script)
+        self.assertIn("tableMissionOffset", script)
+        self.assertIn("tableScrollTop", script)
         self.assertIn("tableScrollLeft", script)
         self.assertIn("openDetails", script)
-        self.assertIn("fuel-dispatch.scroll.v2", script)
+        self.assertIn("fuel-dispatch.scroll.v3", script)
+        self.assertIn("focusNextAutosaveField", script)
+        self.assertIn('event.key !== "Enter"', script)
         self.assertNotIn("setMonitorMode", script)
 
     def _add_operation(self, *, revision):

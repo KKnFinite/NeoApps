@@ -502,6 +502,8 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         self.assertFalse(row["fuel_on_board_ready"])
         self.assertEqual(row["tail_swap_inherited_event_id"], source_event.id)
         self.assertEqual(row["tail_swap_inherited_fuel_lbs"], 32000)
+        self.assertFalse(row["load_planning_ready"])
+        self.assertEqual(row["load_planning_placeholder"], "-")
 
         inheritance_audits = NeoScorpionFuelAuditEntry.query.filter_by(
             fuel_assignment_id=assignment.id,
@@ -630,7 +632,12 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
 
         row = fuel_dispatch_context(self.gateway)["rows"][0]
         self.assertEqual(row["tail_safety_label"], "HOLD / STOP & REVIEW")
-        self.assertEqual(row["fuel_work_state"].id, old_work.id)
+        self.assertIsNone(row["fuel_work_state"])
+        self.assertEqual(row["work_tail_number"], "N413UP")
+        self.assertEqual(row["actual_total_display"], "INCOMPLETE")
+        self.assertFalse(row["neo_fuel_available"])
+        self.assertFalse(row["load_planning_ready"])
+        self.assertTrue(row["end_early_available"])
         with self.assertRaisesRegex(ValueError, "END EARLY"):
             confirm_assignment_tail(
                 self.gateway,

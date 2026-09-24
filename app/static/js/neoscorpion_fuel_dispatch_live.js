@@ -58,7 +58,7 @@
     }
 
     function initializeDispatchScroll(scope) {
-        const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v2";
+        const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v3";
         const tableWrap = scope.querySelector(".neoscorpion-table-wrap--sticky");
 
         const restoreDetailRows = (detailIds) => {
@@ -75,38 +75,61 @@
             });
         };
 
+        const applyRestore = (saved) => {
+            restoreDetailRows(saved.openDetails);
+
+            if (Number.isFinite(saved.y) || Number.isFinite(saved.x)) {
+                window.scrollTo({
+                    top: Number.isFinite(saved.y) ? saved.y : window.scrollY,
+                    left: Number.isFinite(saved.x) ? saved.x : window.scrollX,
+                    behavior: "auto",
+                });
+            }
+
+            const anchor = saved.missionId
+                ? scope.querySelector(
+                    `.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="${saved.missionId}"]`
+                )
+                : null;
+
+            if (tableWrap) {
+                if (Number.isFinite(saved.tableScrollTop)) {
+                    tableWrap.scrollTop = saved.tableScrollTop;
+                }
+                if (Number.isFinite(saved.tableScrollLeft)) {
+                    tableWrap.scrollLeft = saved.tableScrollLeft;
+                }
+                if (anchor && Number.isFinite(saved.tableMissionOffset)) {
+                    const wrapTop = tableWrap.getBoundingClientRect().top;
+                    const anchorTop = anchor.getBoundingClientRect().top;
+                    tableWrap.scrollTop += (
+                        anchorTop - wrapTop - saved.tableMissionOffset
+                    );
+                }
+            } else if (anchor && Number.isFinite(saved.windowMissionOffset)) {
+                const anchorTop = anchor.getBoundingClientRect().top;
+                window.scrollTo({
+                    top: Math.max(
+                        0,
+                        window.scrollY + anchorTop - saved.windowMissionOffset
+                    ),
+                    left: Number.isFinite(saved.x) ? saved.x : 0,
+                    behavior: "auto",
+                });
+            }
+        };
+
         const restore = () => {
             try {
                 const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
                 if (!saved || saved.path !== window.location.pathname) return;
                 window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-                    restoreDetailRows(saved.openDetails);
-                    const anchor = saved.missionId
-                        ? scope.querySelector(
-                            `.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="${saved.missionId}"]`
-                        )
-                        : null;
-                    if (anchor && Number.isFinite(saved.missionOffset)) {
-                        const anchorTop = anchor.getBoundingClientRect().top;
-                        window.scrollTo({
-                            top: Math.max(
-                                0,
-                                window.scrollY + anchorTop - saved.missionOffset
-                            ),
-                            left: Number.isFinite(saved.x) ? saved.x : 0,
-                            behavior: "auto",
-                        });
-                    } else if (Number.isFinite(saved.y)) {
-                        window.scrollTo({
-                            top: saved.y,
-                            left: Number.isFinite(saved.x) ? saved.x : 0,
-                            behavior: "auto",
-                        });
-                    }
-                    if (tableWrap && Number.isFinite(saved.tableScrollLeft)) {
-                        tableWrap.scrollLeft = saved.tableScrollLeft;
-                    }
-                    window.sessionStorage.removeItem(storageKey);
+                    applyRestore(saved);
+                    // A second pass wins over late browser/layout restoration.
+                    window.setTimeout(() => {
+                        applyRestore(saved);
+                        window.sessionStorage.removeItem(storageKey);
+                    }, 80);
                 }));
             } catch (_error) {
                 // Scroll restoration must never interfere with Dispatch actions.
@@ -119,20 +142,29 @@
                 const rows = Array.from(scope.querySelectorAll(
                     ".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]"
                 ));
-                const anchor = rows.find(
-                    (row) => row.getBoundingClientRect().bottom > 0
-                ) || rows[0] || null;
+                const wrapRect = tableWrap?.getBoundingClientRect() || null;
+                const anchor = rows.find((row) => {
+                    const rect = row.getBoundingClientRect();
+                    if (!wrapRect) return rect.bottom > 0;
+                    return rect.bottom > wrapRect.top && rect.top < wrapRect.bottom;
+                }) || rows[0] || null;
+                const anchorRect = anchor?.getBoundingClientRect() || null;
                 const openDetails = Array.from(scope.querySelectorAll(
                     "[data-neoscorpion-dispatch-details][aria-expanded='true']"
                 )).map((toggle) => toggle.getAttribute("aria-controls")).filter(Boolean);
+
                 window.sessionStorage.setItem(storageKey, JSON.stringify({
                     path: window.location.pathname,
                     y: window.scrollY,
                     x: window.scrollX,
                     missionId: anchor?.dataset.dispatchMissionId || null,
-                    missionOffset: anchor
-                        ? anchor.getBoundingClientRect().top
-                        : null,
+                    windowMissionOffset: anchorRect?.top ?? null,
+                    tableMissionOffset: (
+                        anchorRect && wrapRect
+                            ? anchorRect.top - wrapRect.top
+                            : null
+                    ),
+                    tableScrollTop: tableWrap?.scrollTop || 0,
                     tableScrollLeft: tableWrap?.scrollLeft || 0,
                     openDetails,
                 }));
@@ -357,14 +389,14 @@
 
     const autosaveField = async (input) => {
         if (!autosaveUrl || input.dataset.autosaveSaving === "true") {
-            return;
+            return false;
         }
         const submittedValue = input.value.trim();
         const savedValue = input.dataset.savedValue || "";
         if (submittedValue === savedValue) {
             input.dataset.autosaveFailed = "false";
             syncDirtyState();
-            return;
+            return true;
         }
         const status = input.parentElement?.querySelector("[data-autosave-status]");
         const missionId = input.dataset.missionId || "";
@@ -397,6 +429,7 @@
             }
             adoptFingerprint(payload);
             setStatus(status, payload.changed ? "Saved" : "No change");
+            return true;
         } catch (error) {
             input.dataset.autosaveFailed = "true";
             setStatus(
@@ -404,6 +437,7 @@
                 `Save Failed: ${error.message || "Unable to save this field."}`,
                 "error"
             );
+            return false;
         } finally {
             input.dataset.autosaveSaving = "false";
             syncDirtyState();
@@ -568,6 +602,29 @@
             setStatus(status, `Save Failed: ${error.message || "Unable to update this truck."}`, "error");
         }
     };
+
+    const focusNextAutosaveField = (input) => {
+        const fieldName = input.dataset.autosaveField || "";
+        if (!fieldName) return false;
+        const fields = Array.from(root.querySelectorAll(
+            `[data-dispatch-autosave][data-autosave-field="${fieldName}"]`
+        )).filter((field) => !field.disabled);
+        const index = fields.indexOf(input);
+        if (index < 0 || index + 1 >= fields.length) return false;
+        const next = fields[index + 1];
+        next.focus({preventScroll: true});
+        if (typeof next.select === "function") next.select();
+        next.scrollIntoView({block: "nearest", inline: "nearest"});
+        return true;
+    };
+
+    root.addEventListener("keydown", async (event) => {
+        const input = event.target.closest?.("[data-dispatch-autosave]");
+        if (!input || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+        event.preventDefault();
+        const saved = await autosaveField(input);
+        if (saved) focusNextAutosaveField(input);
+    });
 
     root.addEventListener("input", (event) => {
         if (isEditableControl(event.target) && !event.target.matches("[data-dispatch-autosave]")) {
