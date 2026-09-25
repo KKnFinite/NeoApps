@@ -1,6 +1,6 @@
 {% set fuel_data_url = url_for('neoscorpion.dispatch_fueler_data' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_data', assignment_id=row.assignment.id) %}
 {% set fuel_off_url = url_for('neoscorpion.dispatch_fueler_off' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_off', assignment_id=row.assignment.id) %}
-            <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}" data-fuel-data-card data-edit-baseline='{{ row.edit_baseline|tojson }}'>
+            <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}" data-fuel-data-card data-dispatcher-panel="{{ 'true' if dispatcher_panel|default(false) else 'false' }}" data-edit-baseline='{{ row.edit_baseline|tojson }}'>
                 {% if dispatcher_panel|default(false) %}
                 <header class="neoscorpion-fuel-data-heading"><h2>FUELER DATA · {{ row.mission.flight_number }} · {{ row.tail_number }}</h2>
                     <p>Assigned: {{ row.assigned_fueler.display_name }}</p></header>
@@ -88,8 +88,8 @@
                         <dd data-apu-source-output>{{ row.apu_source_tank_label }}</dd>
                     </div>
                     <div class="neoscorpion-fuel-total-primary">
-                        <dt>Fueling Target</dt>
-                        <dd data-fueling-target-output>{{ row.fueling_target_display }}{% if row.fueling_target_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dt>Fuel Load</dt>
+                        <dd data-fuel-load-output>{{ row.fuel_load_display }}{% if row.fuel_load_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
                     </div>
                     <div>
                         <dt>Remaining Total</dt>

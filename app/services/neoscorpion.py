@@ -4539,7 +4539,7 @@ def _fuel_rows(
             apu_running,
             apu_allowance_lbs,
         )
-        fueling_target_lbs = (
+        fuel_load_lbs = (
             mission.planned_fuel_load + apu_allowance_lbs
             if mission.planned_fuel_load is not None
             and apu_allowance_lbs is not None
@@ -4971,9 +4971,9 @@ def _fuel_rows(
                     if planned_by_tank is not None
                     else "INCOMPLETE"
                 ),
-                "fueling_target_display": (
-                    format_display_thousands(fueling_target_lbs)
-                    if fueling_target_lbs is not None
+                "fuel_load_display": (
+                    format_display_thousands(fuel_load_lbs)
+                    if fuel_load_lbs is not None
                     else "INCOMPLETE"
                 ),
                 "neo_fuel_display": (

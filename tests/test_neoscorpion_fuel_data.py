@@ -63,6 +63,10 @@ class FuelerDataTest(unittest.TestCase):
         self.assertNotIn('<html', panel)
         self.assertRegex(panel, rf'<form\s+action="{self.dispatch_url}"\s+method="post"')
         self.assertIn('data-fuel-planning-form', panel)
+        self.assertIn('data-dispatcher-panel="true"', panel)
+        self.assertIn('Fuel Load', panel)
+        self.assertNotIn('Fueling Target', panel)
+        self.assertIn('data-fuel-load-output', panel)
         self.assertIn('data-fuel-data-card', self.fueler.get('/neoscorpion/fueler').get_data(as_text=True))
         self.assignment.assigned_fueler_user_id = None
         db.session.commit()

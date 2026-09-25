@@ -366,7 +366,7 @@
             if (calculatedReference) {
                 calculatedReference.textContent = `Calculated: ${displayApuAllowance(automaticAllowance).replace("APU ", "")}`;
             }
-            const targetOutput = card.querySelector("[data-fueling-target-output]");
+            const targetOutput = card.querySelector("[data-fuel-load-output]");
             if (targetOutput) targetOutput.textContent = displayFuel(
                 required !== null && allowance !== null ? required + allowance : null
             );

@@ -50,6 +50,21 @@
     ));
     const initialize = (scope) => {
         scope.querySelectorAll("[data-fuel-data-card]").forEach(card => {
+            if (card.dataset.dispatcherPanel === "true") {
+                const form = card.querySelector("[data-fuel-planning-form]");
+                const totals = card.querySelector(".neoscorpion-fuel-totals");
+                if (form && totals) {
+                    let label = card.querySelector("[data-fuel-data-edit-label]");
+                    if (!label) {
+                        label = document.createElement("p");
+                        label.className = "neoscorpion-status-pill";
+                        label.dataset.fuelDataEditLabel = "true";
+                        label.textContent = "EDIT FUELER DATA";
+                        card.insertBefore(label, totals);
+                    }
+                    card.insertBefore(form, totals);
+                }
+            }
             window.NeoScorpionFuelPlanning?.initialize(card);
         });
         controls(scope).forEach(control => baselines.set(control, control.value));
