@@ -120,19 +120,28 @@
             }
         };
 
+        const releaseRestorePaint = () => {
+            document.documentElement.classList.remove("neoscorpion-dispatch-restoring");
+        };
         const restore = () => {
             try {
                 const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
-                if (!saved || saved.path !== window.location.pathname) return;
+                if (!saved || saved.path !== window.location.pathname) {
+                    releaseRestorePaint();
+                    return;
+                }
                 window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
                     applyRestore(saved);
-                    // A second pass wins over late browser/layout restoration.
+                    // Keep the board hidden until the late layout pass has also
+                    // landed, so users never see the top/old table position.
                     window.setTimeout(() => {
                         applyRestore(saved);
                         window.sessionStorage.removeItem(storageKey);
+                        releaseRestorePaint();
                     }, 80);
                 }));
             } catch (_error) {
+                releaseRestorePaint();
                 // Scroll restoration must never interfere with Dispatch actions.
             }
         };

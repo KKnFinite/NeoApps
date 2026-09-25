@@ -42,3 +42,26 @@
 }
 /* TV mode retains only the routing board and Exit TV Mode, at every width. */
 #sektor-tv .operational-node-topbar { display: none; }
+
+/* Pre-paint state restoration.
+   The persisted Board View class is known in <head>, before deferred shell JS
+   can apply the equivalent body class. Hide chrome until that handoff occurs.
+   Dispatch full reloads also keep only the board content invisible until its
+   saved table/row position has been restored. */
+@media (min-width: 901px) {
+    html.operational-board-view-boot body.operational-shell-page .operational-node-topbar,
+    html.operational-board-view-boot body.operational-shell-page .operational-topbar,
+    html.operational-board-view-boot body.operational-shell-page .operational-desktop-sidebar {
+        display: none !important;
+    }
+
+    html.operational-board-view-boot body.operational-shell-page .operational-board-exit[hidden] {
+        display: grid;
+    }
+}
+
+html.operational-board-view-boot body.neoscorpion-node-page .neoscorpion-screen[data-fuel-dispatch-live],
+html.neoscorpion-dispatch-restoring body.neoscorpion-node-page .neoscorpion-screen[data-fuel-dispatch-live] {
+    visibility: hidden;
+}
+

@@ -62,5 +62,8 @@
             storage.set(boardKey, enabled ? "on" : "off");
         }));
     }
+    // The <head> boot class prevents Board View chrome from flashing before
+    // this deferred shell script can restore the persisted preference.
+    document.documentElement.classList.remove("operational-board-view-boot");
 
 })();

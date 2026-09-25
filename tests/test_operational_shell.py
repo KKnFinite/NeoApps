@@ -172,6 +172,8 @@ class OperationalShellTest(unittest.TestCase):
         self.assertIn(b"images/logos/newlogo_scorpion.png", response.data)
         self.assertIn(b"data-operational-board-toggle", response.data)
         self.assertIn(b"js/operational_shell.js", response.data)
+        self.assertIn(b"operational-board-view-boot", response.data)
+        self.assertIn(b"neoapps.operational-shell.board.v1:", response.data)
         self.assertNotIn(b"data-dispatch-board-toggle", response.data)
         drawer = response.data.split(b'data-mobile-drawer', 1)[1].split(b'</aside>', 1)[0]
         self.assertNotIn(b'data-operational-board-toggle', drawer)
@@ -181,6 +183,7 @@ class OperationalShellTest(unittest.TestCase):
         settings = self.client.get("/neoscorpion/settings")
         self.assertEqual(settings.status_code, 200)
         self.assertNotIn(b"data-operational-board-toggle", settings.data)
+        self.assertNotIn(b"operational-board-view-boot", settings.data)
 
     def test_shared_mobile_shell_uses_safe_area_for_header_content_and_drawer(self):
         css = stylesheet_source()

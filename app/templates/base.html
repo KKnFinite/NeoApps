@@ -84,6 +84,42 @@
     {% if request.endpoint == 'neoermac.view_outbound' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neoermac_view_outbound.css', v=config.STATIC_ASSET_VERSION, ui='20260910-dense-v2') }}">
     {% endif %}
+    {% if uses_operational_shell and operational_shell_supports_board_view %}
+    <script>
+    (() => {
+        if (!window.matchMedia("(min-width: 901px)").matches) return;
+        try {
+            const key = `neoapps.operational-shell.board.v1:${window.location.pathname}`;
+            if (window.localStorage.getItem(key) === "on") {
+                document.documentElement.classList.add("operational-board-view-boot");
+            }
+        } catch (_error) {
+            // Board View preference is optional; normal rendering remains safe.
+        }
+    })();
+    </script>
+    {% endif %}
+    {% if request.endpoint == 'neoscorpion.fuel_dispatch' %}
+    <script>
+    (() => {
+        try {
+            if ("scrollRestoration" in window.history) {
+                window.history.scrollRestoration = "manual";
+            }
+            const key = "neoapps.neoscorpion.fuel-dispatch.scroll.v3";
+            const saved = JSON.parse(window.sessionStorage.getItem(key) || "null");
+            if (saved && saved.path === window.location.pathname) {
+                document.documentElement.classList.add("neoscorpion-dispatch-restoring");
+                window.setTimeout(() => {
+                    document.documentElement.classList.remove("neoscorpion-dispatch-restoring");
+                }, 1500);
+            }
+        } catch (_error) {
+            document.documentElement.classList.remove("neoscorpion-dispatch-restoring");
+        }
+    })();
+    </script>
+    {% endif %}
     {% if is_authenticated_app %}
     <script src="{{ url_for('static', filename='js/shared_alerts.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}

@@ -40,7 +40,7 @@ class Config:
     EMPLOYEE_RECORD_SIGNATURE_STORAGE = None
     SECRET_KEY = os.getenv("SECRET_KEY")
     NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
-    STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260925-neoscorpion-fuel-load-editor")
+    STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260925-neoscorpion-paint-stable")
     DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
     DEFAULT_GATEWAY_CODE = os.getenv("DEFAULT_GATEWAY_CODE", "RFD").upper()
     DEFAULT_GATEWAY_NAME = os.getenv("DEFAULT_GATEWAY_NAME", "NeoGateway")
