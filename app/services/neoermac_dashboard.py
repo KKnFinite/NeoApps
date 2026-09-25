@@ -91,6 +91,8 @@ def neoermac_dashboard_context(
                     continue
                 rows[side].append(
                     {
+                        "mission_id": mission.id,
+                        "pull_key": pull_field["key"],
                         "planned_time": _time_value(planned_time),
                         "planned_sort": planned_time,
                         "pull_type": pull_field["label"],
@@ -241,7 +243,6 @@ def _lineup_assignments_by_destination(
             assignment = {
                 "door": "",
                 "location": "",
-                "locations": [],
                 "side": side,
                 "required_doors": [],
             }
@@ -249,21 +250,14 @@ def _lineup_assignments_by_destination(
             assignments_by_destination.setdefault(destination, []).append(assignment)
         if primary_door not in assignment["required_doors"]:
             assignment["required_doors"].append(primary_door)
-        location = _dashboard_belt_label(slot["display_label"])
-        if location not in assignment["locations"]:
-            assignment["locations"].append(location)
 
     for assignments in assignments_by_destination.values():
         for assignment in assignments:
-            assignment["required_doors"] = tuple(assignment["required_doors"])
+            assignment["required_doors"] = tuple(sorted(assignment["required_doors"], key=_door_number))
             assignment["door"] = "/".join(assignment["required_doors"])
-            assignment["location"] = " / ".join(assignment.pop("locations"))
+            assignment["location"] = " · ".join(assignment["required_doors"])
 
     return assignments_by_destination
-
-
-def _dashboard_belt_label(slot_label):
-    return str(slot_label or "").strip().upper()
 
 
 def _door_pulls_by_mission(gateway, operation, missions):
@@ -280,7 +274,9 @@ def _door_pulls_by_mission(gateway, operation, missions):
         if destination:
             missions_by_destination.setdefault(destination, []).append(mission)
     door_pulls_by_mission = {}
-    for row in rows:
+    # Match Door View: canonical records win over unambiguous legacy rows,
+    # with the newest row first within either kind.
+    for row in sorted(rows, key=lambda row: row.sort_date_mission_id is None):
         mission_id = getattr(row, "sort_date_mission_id", None)
         if mission_id:
             door_pulls_by_mission.setdefault(mission_id, []).append(row)
@@ -334,7 +330,9 @@ def _pull_is_complete(mission, door_pulls, pull_field, required_doors=()):
     actual_attr = pull_field["actual_attr"]
     no_attr = pull_field["no_attr"]
     if required_doors:
-        pulls_by_door = {door_pull.door: door_pull for door_pull in door_pulls}
+        pulls_by_door = {}
+        for door_pull in door_pulls:
+            pulls_by_door.setdefault(door_pull.door, door_pull)
         for door in required_doors:
             door_pull = pulls_by_door.get(door)
             if not door_pull:

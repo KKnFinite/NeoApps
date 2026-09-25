@@ -230,6 +230,7 @@ class DoorViewOperationalStateBundle:
         lineup_load = load_building_lineup_rows(
             gateway,
             initialize=initialize_lineup,
+            for_update=for_update,
         )
         assignments = get_building_lineup_assignments(
             gateway,

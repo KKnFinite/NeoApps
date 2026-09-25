@@ -8,46 +8,44 @@
     <p class="neoermac-upcoming-empty">No current sort operation</p>
     {% else %}
     <div class="neoermac-upcoming-sides">
-        <div class="neoermac-upcoming-side" aria-label="West upcoming pulls">
+        {% for side in ("west", "east") %}
+        <div class="neoermac-upcoming-side" aria-label="{{ side|title }} upcoming pulls" data-upcoming-side="{{ side }}" {% if side == "east" %}hidden{% endif %}>
             <div class="neoermac-upcoming-side-header">
-                <span>WEST</span>
-                <strong>NEXT {{ dashboard_context.west|length }}</strong>
+                <span>{{ side|upper }}</span>
+                <strong>NEXT {{ dashboard_context[side]|length }}</strong>
             </div>
-            {% if dashboard_context.west %}
+            {% if dashboard_context[side] %}
             <ol class="neoermac-upcoming-list">
-                {% for pull in dashboard_context.west %}
+                {% for pull in dashboard_context[side] %}
                 <li class="neoermac-upcoming-row">
                     <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
                     <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
                     <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
                     <span class="neoermac-upcoming-location">{{ pull.location }}</span>
+                    {% if can_edit_upcoming_pulls %}
+                    <form class="neoermac-upcoming-actual" data-upcoming-pull-form>
+                        {{ csrf_field() }}
+                        <input type="hidden" name="operation_id" value="{{ dashboard_context.operation.id }}">
+                        <input type="hidden" name="mission_id" value="{{ pull.mission_id }}">
+                        <input type="hidden" name="destination" value="{{ pull.destination }}">
+                        <input type="hidden" name="pull_key" value="{{ pull.pull_key }}">
+                        <label>ACTUAL
+                            <input type="text" name="actual_pull" data-upcoming-actual
+                                placeholder="HH:MM" maxlength="5" autocomplete="off"
+                                aria-label="{{ pull.destination }} {{ pull.pull_type }} actual time"
+                                title="Fill missing {{ pull.pull_type }} times across all assigned doors, East and West">
+                        </label>
+                        <span data-upcoming-save-status role="status" aria-live="polite"></span>
+                    </form>
+                    {% endif %}
                 </li>
                 {% endfor %}
             </ol>
             {% else %}
-            <p class="neoermac-upcoming-side-empty">No upcoming west pulls</p>
+            <p class="neoermac-upcoming-side-empty">No upcoming {{ side }} pulls</p>
             {% endif %}
         </div>
-        <div class="neoermac-upcoming-side" aria-label="East upcoming pulls">
-            <div class="neoermac-upcoming-side-header">
-                <span>EAST</span>
-                <strong>NEXT {{ dashboard_context.east|length }}</strong>
-            </div>
-            {% if dashboard_context.east %}
-            <ol class="neoermac-upcoming-list">
-                {% for pull in dashboard_context.east %}
-                <li class="neoermac-upcoming-row">
-                    <span class="neoermac-upcoming-time">{{ pull.planned_time }}</span>
-                    <span class="neoermac-upcoming-type">{{ pull.pull_type }}</span>
-                    <span class="neoermac-upcoming-detail">{{ pull.destination }} / {{ pull.tail }} / {{ pull.parking }}</span>
-                    <span class="neoermac-upcoming-location">{{ pull.location }}</span>
-                </li>
-                {% endfor %}
-            </ol>
-            {% else %}
-            <p class="neoermac-upcoming-side-empty">No upcoming east pulls</p>
-            {% endif %}
-        </div>
+        {% endfor %}
     </div>
     {% endif %}
 </section>

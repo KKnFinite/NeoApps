@@ -249,12 +249,12 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'css/neoermac_upcoming_pulls.css', page.data)
         for hook in (b'data-neoermac-upcoming-live', b'data-state-url=',
                      b'data-upcoming-revision=', b'data-upcoming-pulls-board-host',
-                     b'data-upcoming-pulls-board', b'boardHost.replaceChildren(nextBoard)',
-                     b'payload.changed === false'):
+                     b'data-upcoming-pulls-board', b'js/neoermac_upcoming_pulls.js',
+                     b'data-upcoming-side-button'):
             self.assertIn(hook, page.data)
         self.assertNotIn(b'css/neoermac_upcoming_pulls.css', self.client.get('/neoermac').data)
         css = (Path(__file__).resolve().parents[1] / 'app/static/css/neoermac_upcoming_pulls.css').read_text()
-        self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr))', css)
+        self.assertIn('[data-upcoming-side][hidden] { display: none; }', css)
         self.assertIn('grid-template-columns: minmax(0, 1fr)', css)
         self.assertIn('white-space: normal', css)
         self.assertNotIn('text-overflow: ellipsis', css)
@@ -916,11 +916,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertLess(response.data.index(b"West upcoming pulls"), response.data.index(b"East upcoming pulls"))
         self.assertIn(b"SDF / N702UP / D32", west_html)
         self.assertNotIn(b"UPS702 / SDF", west_html)
-        self.assertIn(b"D32-D34 BELT 2 WEST SLOT 1", west_html)
+        self.assertIn(b">D34</span>", west_html)
         self.assertNotIn(b"BOS / N701UP / D13", west_html)
         self.assertIn(b"BOS / N701UP / D13", east_html)
         self.assertNotIn(b"UPS701 / BOS", east_html)
-        self.assertIn(b"D13-D17 BELT 1 EAST SLOT 1", east_html)
+        self.assertIn(b">D13</span>", east_html)
         self.assertNotIn(b"SDF / N702UP / D32", east_html)
 
     def test_neoermac_upcoming_pulls_combines_duplicate_belt_side_entries(self):
@@ -941,8 +941,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(east_html.count(b"DEN / - / -"), 2)
         self.assertNotIn(b"UPS810 / DEN", east_html)
-        self.assertEqual(east_html.count(b"D9-D13 BELT 2 EAST SLOT 1"), 2)
-        self.assertEqual(east_html.count(b"D9-D13 BELT 2 WEST SLOT 1"), 2)
+        self.assertNotIn(b"BELT", east_html)
+        self.assertIn(b"D9", east_html)
+        self.assertIn(b"D13", east_html)
 
     def test_neoermac_upcoming_pulls_keeps_different_destinations_on_same_belt(self):
         self._assign_lineup_destination("runout_3", "east_destination_2", "DEN")
@@ -960,8 +961,9 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"OMA / - / -", east_html)
         self.assertNotIn(b"UPS811 / DEN", east_html)
         self.assertNotIn(b"UPS812 / OMA", east_html)
-        self.assertEqual(east_html.count(b"D9-D13 BELT 2 EAST SLOT 1"), 2)
-        self.assertEqual(east_html.count(b"D9-D13 BELT 2 WEST SLOT 1"), 2)
+        self.assertNotIn(b"BELT", east_html)
+        self.assertIn(b"D9", east_html)
+        self.assertIn(b"D13", east_html)
 
     def test_neoermac_upcoming_pulls_removes_actual_and_no_pull_items(self):
         self._assign_lineup_destination("runout_10", "east_destination_1", "SDF")

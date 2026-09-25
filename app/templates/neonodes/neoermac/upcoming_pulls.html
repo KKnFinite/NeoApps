@@ -8,6 +8,9 @@
     class="neoermac-shell neoermac-dashboard-shell neoermac-upcoming-shell"
     aria-label="NeoErmac upcoming pulls"
     data-neoermac-upcoming-live
+    data-save-url="{{ url_for('neoermac.upcoming_pulls_actual') }}"
+    data-refresh-status='{{ dashboard_context.refresh_status|tojson }}'
+    data-refresh-interval-ms="{{ dashboard_context.refresh_status.live_screen_refresh_interval_ms }}"
     data-state-url="{{ url_for('neoermac.upcoming_pulls_state') }}"
     data-upcoming-revision="{{ upcoming_pulls_revision }}"
     data-refresh-active="{{ 'true' if dashboard_context.refresh_status.auto_refresh_enabled else 'false' }}"
@@ -21,6 +24,10 @@
     {% set operation_refresh_hook = "neoermac-upcoming-refresh-paused" %}
     {% include "neonodes/_operation_refresh_banner.html" %}
 
+    <div class="neoermac-upcoming-toggle" role="group" aria-label="Upcoming Pulls side">
+        <button type="button" data-upcoming-side-button="east" aria-pressed="false">EAST</button>
+        <button type="button" data-upcoming-side-button="west" aria-pressed="true">WEST</button>
+    </div>
     <section
         class="neoermac-dashboard-panel neoermac-upcoming-panel"
         aria-label="NeoErmac current sort dashboard"
@@ -29,77 +36,5 @@
         {% include "neonodes/neoermac/_upcoming_pulls_board.html" %}
     </section>
 </section>
-<script data-upcoming-pulls-live-updates>
-(() => {
-    const root = document.querySelector("[data-neoermac-upcoming-live]");
-    if (!root) {
-        return;
-    }
-    const boardHost = root.querySelector("[data-upcoming-pulls-board-host]");
-    if (!boardHost) {
-        return;
-    }
-
-    let currentRevision = root.dataset.upcomingRevision || "";
-    let controller = null;
-    const initialStatus = {{ dashboard_context.refresh_status|tojson }};
-
-    const applyRefreshStatus = (status) => {
-        const refresh = status || {};
-        const enabled = refresh.auto_refresh_enabled !== false;
-        const banner = root.querySelector("[data-operation-refresh-banner]");
-        if (banner) {
-            if (!enabled && refresh.message) {
-                banner.replaceChildren(document.createTextNode(refresh.message));
-                if (refresh.operation_label && refresh.window_label) {
-                    const detail = document.createElement("span");
-                    detail.textContent = `${refresh.operation_label} \u00b7 ${refresh.window_label}`;
-                    banner.appendChild(detail);
-                }
-            }
-            banner.hidden = enabled;
-        }
-        root.dataset.refreshActive = enabled ? "true" : "false";
-        controller.setServerStatus(refresh);
-    };
-
-    const poll = async () => {
-        const pollUrl = new URL(root.dataset.stateUrl, window.location.origin);
-        pollUrl.searchParams.set("revision", currentRevision);
-        const response = await fetch(pollUrl, {
-            cache: "no-store",
-            credentials: "same-origin",
-            headers: {"Accept": "application/json"},
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (payload.reload_required) {
-            throw new Error(payload.error || "Reload Upcoming Pulls to resume live updates.");
-        }
-        if (!response.ok || !payload.ok) {
-            throw new Error(payload.error || "Upcoming Pulls live refresh failed.");
-        }
-
-        currentRevision = payload.revision || currentRevision;
-        applyRefreshStatus(payload.refresh);
-        if (payload.changed === false) {
-            return;
-        }
-
-        const parsed = new DOMParser().parseFromString(payload.board_html || "", "text/html");
-        const nextBoard = parsed.querySelector("[data-upcoming-pulls-board]");
-        if (!nextBoard) {
-            throw new Error("Upcoming Pulls board response was incomplete.");
-        }
-        boardHost.replaceChildren(nextBoard);
-    };
-
-    controller = window.NeoLiveUpdates.create({
-        intervalMs: {{ dashboard_context.refresh_status.live_screen_refresh_interval_ms }},
-        statusElement: root.querySelector("[data-live-update-status]"),
-        poll,
-        continuousWhileVisible: true,
-    });
-    controller.setServerStatus(initialStatus);
-})();
-</script>
+<script src="{{ url_for('static', filename='js/neoermac_upcoming_pulls.js') }}" defer data-upcoming-pulls-live-updates></script>
 {% endblock %}

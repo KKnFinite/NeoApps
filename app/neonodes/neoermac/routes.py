@@ -74,6 +74,7 @@ from app.services.neoermac_view_outbound import (
 )
 from app.services.permission_rules import permission_access
 from app.services.neoermac_transport import lineup_common, outbound_snapshot, outbound_response
+from app.services.neoermac_upcoming_pulls import fill_upcoming_pull
 from app.services.permission_rules import user_can
 from app.services import neostaffing as staffing_service
 from app.services.neoermac_live_refresh import (
@@ -169,6 +170,7 @@ def upcoming_pulls():
         gateway=gateway,
         dashboard_context=dashboard_context,
         upcoming_pulls_revision=revision,
+        can_edit_upcoming_pulls=user_can(DOOR_VIEW_EDIT_PERMISSION),
         menu_items=NEOERMAC_PAGES,
     )
 
@@ -227,11 +229,37 @@ def upcoming_pulls_state():
                 "neonodes/neoermac/_upcoming_pulls_board.html"
             ).render(
                 dashboard_context=dashboard_context,
+                can_edit_upcoming_pulls=user_can(DOOR_VIEW_EDIT_PERMISSION),
             ),
         }
     )
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@bp.route("/upcoming-pulls/actual", methods=["POST"])
+@gateway_node_required("ermac")
+def upcoming_pulls_actual():
+    if not (user_can(UPCOMING_PULLS_VIEW_PERMISSION) and user_can(DOOR_VIEW_EDIT_PERMISSION)):
+        return jsonify(ok=False, error="Access denied."), 403
+    try:
+        filled = fill_upcoming_pull(
+            get_current_gateway(), operation_id=request.form.get("operation_id"),
+            mission_id=request.form.get("mission_id"), destination=request.form.get("destination"),
+            pull_key=request.form.get("pull_key"), actual_pull=request.form.get("actual_pull"),
+        )
+        if filled:
+            db.session.commit()
+        else:
+            db.session.rollback()  # Release the shared lock without a no-op commit.
+        return jsonify(ok=True, filled=filled)
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(exc)), 409 if isinstance(exc, DoorPullConflict) else 400
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Upcoming Pulls actual save failed")
+        return jsonify(ok=False, error="Unable to save. Try again."), 500
 
 
 @bp.route("/building-lineup", methods=["GET", "POST"])
