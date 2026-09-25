@@ -155,7 +155,6 @@
                     <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                     <input type="hidden" name="apu_override_present" value="1">
                     <input type="hidden" name="apu_override_enabled" value="{{ '1' if row.apu_override_enabled else '0' }}" data-apu-override-enabled>
-                    <input type="hidden" name="apu_override_allowance" value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}" data-apu-override-persisted-value>
                     <div class="neoscorpion-apu-controls">
                         <label>APU Running
                             <select name="apu_running" data-apu-running>
@@ -176,6 +175,30 @@
                                 {% endfor %}
                             </select>
                         </label>
+                        <div data-apu-override-wrap {% if row.apu_running is not sameas true %}hidden{% endif %}>
+                            <span>RECOMMENDED APU <strong data-apu-automatic-output>{{ row.automatic_apu_allowance_display }} K LBS</strong></span>
+                            <div>
+                                <button class="action-button" type="button" data-apu-use-recommended>USE RECOMMENDED</button>
+                                <button class="action-button" type="button" data-apu-use-manual>MANUAL APU</button>
+                            </div>
+                            <label data-apu-override-value-wrap {% if not row.apu_override_enabled %}hidden{% endif %}>Manual APU, K lbs
+                                <input
+                                    class="neoscorpion-inline-input"
+                                    name="apu_override_allowance"
+                                    value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}"
+                                    inputmode="decimal"
+                                    min="0"
+                                    aria-label="Manual APU allowance for {{ row.mission.flight_number }}"
+                                    data-apu-override-value
+                                    placeholder="K LBS"
+                                >
+                            </label>
+                            <small data-apu-choice-output>
+                                {% if row.apu_running is sameas true %}
+                                USING {{ row.apu_allowance_display }}K {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}
+                                {% endif %}
+                            </small>
+                        </div>
                     </div>
                     {% if row.tank_rows %}
                     <p class="neoscorpion-helper" data-planned-entry-cue {% if row.planned_ready %}hidden{% endif %}>Enter all Remaining readings to calculate Planned fuel.</p>

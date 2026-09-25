@@ -107,6 +107,15 @@ class CycleLinesTest(unittest.TestCase):
             service.start_follow_up_fuel_cycle(self.gateway, self.dispatcher, assignment.id,
                 'uplift', '60', None, None, expected_cycle=1)
 
+    def test_fueler_apu_choice_is_available_before_first_save(self):
+        _, _, assignment = self._assignment()
+        self._login(self.fueler)
+        html = self.client.get('/neoscorpion/fueler').get_data(as_text=True)
+        self.assertIn('data-apu-use-recommended', html)
+        self.assertIn('data-apu-use-manual', html)
+        self.assertIn('data-apu-automatic-output', html)
+        self.assertIn('name="apu_override_allowance"', html)
+
     def test_fueler_manual_apu_keeps_recommendation_and_can_switch_back(self):
         _, mission, assignment = self._assignment()
         form = {'assignment_id':str(assignment.id), 'apu_running':'yes', 'apu_source_tank_code':'left',

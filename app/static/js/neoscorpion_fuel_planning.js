@@ -240,8 +240,11 @@
         const apuSourceWrap = form.querySelector("[data-apu-source-wrap]");
         const apuOverrideEnabled = form.querySelector("[data-apu-override-enabled]");
         const apuOverrideWrap = form.querySelector("[data-apu-override-wrap]");
-        const apuOverrideValueWrap = card.querySelector("[data-apu-override-value-wrap]");
-        const apuOverrideValue = card.querySelector("[data-apu-override-value]");
+        const apuOverrideValueWrap = form.querySelector("[data-apu-override-value-wrap]");
+        const apuOverrideValue = form.querySelector("[data-apu-override-value]");
+        const apuUseRecommended = form.querySelector("[data-apu-use-recommended]");
+        const apuUseManual = form.querySelector("[data-apu-use-manual]");
+        const apuChoiceOutput = form.querySelector("[data-apu-choice-output]");
         const plannedEntryCue = form.querySelector("[data-planned-entry-cue]");
         if (!card || !apuRunningInput || !apuSourceInput) return;
 
@@ -335,14 +338,25 @@
                 : null;
             if (plannedEntryCue) plannedEntryCue.hidden = remainingComplete;
 
-            const automaticOutput = card.querySelector("[data-apu-automatic-output]");
+            const automaticOutput = form.querySelector("[data-apu-automatic-output]");
             if (automaticOutput) automaticOutput.textContent = displayFuel(automaticAllowance);
             const overrideOutput = card.querySelector("[data-apu-override-output]");
             if (overrideOutput) overrideOutput.textContent = (
                 overrideAllowance === null ? "-" : displayFuel(overrideAllowance)
             );
             const allowanceOutput = card.querySelector("[data-apu-allowance-output]");
-            if (allowanceOutput) allowanceOutput.textContent = displayApuAllowance(allowance);
+            if (allowanceOutput) allowanceOutput.textContent = (
+                apuRunning === true && allowance !== null
+                    ? `USING ${displayApuAllowance(allowance).replace("APU ", "")} ${overrideEnabled ? "MANUAL" : "RECOMMENDED"}`
+                    : displayApuAllowance(allowance)
+            );
+            if (apuChoiceOutput) {
+                apuChoiceOutput.textContent = (
+                    apuRunning === true && allowance !== null
+                        ? `USING ${displayApuAllowance(allowance).replace("APU ", "")} ${overrideEnabled ? "MANUAL" : "RECOMMENDED"}`
+                        : ""
+                );
+            }
             const calculatedReference = card.querySelector("[data-apu-calculated-reference]");
             if (calculatedReference) {
                 calculatedReference.textContent = `Calculated: ${displayApuAllowance(automaticAllowance).replace("APU ", "")}`;
@@ -366,6 +380,18 @@
             });
         };
 
+        apuUseRecommended?.addEventListener("click", () => {
+            if (apuOverrideEnabled) apuOverrideEnabled.value = "0";
+            if (apuOverrideValue) apuOverrideValue.value = "";
+            update();
+        });
+        apuUseManual?.addEventListener("click", () => {
+            if (apuOverrideEnabled) apuOverrideEnabled.value = "1";
+            if (apuOverrideValueWrap) apuOverrideValueWrap.hidden = false;
+            update();
+            apuOverrideValue?.focus();
+            apuOverrideValue?.select();
+        });
         form.addEventListener("input", update);
         form.addEventListener("change", update);
         update();
