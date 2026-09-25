@@ -73,7 +73,7 @@
                 mainForm.dataset.persistedApuAllowanceLbs = effectiveLbs ?? "";
                 mainForm.dataset.persistedAutomaticApuAllowanceLbs = payload.automatic_apu_allowance_lbs ?? "";
                 mainForm.querySelector("[data-apu-override-persisted-value]").value = allowance.value;
-                card.querySelector("[data-apu-allowance-output]").textContent = displayAllowance(effectiveLbs);
+                card.querySelector("[data-apu-allowance-output]").textContent = `USING ${displayAllowance(effectiveLbs).replace("APU ", "")} ${payload.apu_override_enabled ? "MANUAL" : "RECOMMENDED"}`;
                 details.open = false;
                 details.querySelector("summary")?.focus();
                 mainForm.dispatchEvent(new Event("input", {bubbles: true}));

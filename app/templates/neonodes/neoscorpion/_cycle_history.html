@@ -1,0 +1,20 @@
+{% set frozen = history.snapshot %}
+{% set history_key = history.mission_id ~ '-' ~ history.cycle_number %}
+<tr class="neoscorpion-dispatch-primary-row" data-dispatch-row-key="{{ history_key }}" data-cycle-history>
+  <td class="neoscorpion-dispatch-tail"><strong>{{ frozen.tail_number }}</strong><small>HISTORY · {{ history.label }}</small></td>
+  <td>{{ frozen.arrival_eta }}</td><td class="neoscorpion-dispatch-flight">{{ frozen.destination }}<small>{{ frozen.flight_number }}</small></td>
+  <td class="neoscorpion-dispatch-etd-parking">{{ frozen.departure_time }}<small>{{ frozen.parking_position }}</small></td>
+  <td>{{ frozen.inbound_fuel_display or '-' }}</td><td>{{ frozen.required_fuel_display or '-' }}</td>
+  <td class="neoscorpion-dispatch-arrival">{{ frozen.actual_total_display }}<small>APU {{ frozen.apu_allowance_display }}</small></td>
+  <td>{{ frozen.neo_fuel_display }}</td><td>{{ frozen.fueler }}</td><td>{{ frozen.truck }}</td>
+  <td>{{ frozen.transfer_fuel_gallons if frozen.transfer_fuel_gallons is not none else '-' }}</td>
+  <td>{{ frozen.dispatch_status_label }}</td><td>READ ONLY</td>
+  <td><button type="button" class="neoscorpion-dispatch-details-toggle" data-neoscorpion-dispatch-details aria-expanded="false" aria-controls="neoscorpion-dispatch-detail-{{ history_key }}">DETAILS</button></td>
+</tr>
+<tr id="neoscorpion-dispatch-detail-{{ history_key }}" class="neoscorpion-dispatch-detail-row" data-neoscorpion-dispatch-detail-row hidden>
+  <td colspan="14"><strong>HISTORY · {{ history.label }}</strong>
+    <p>Load Planning: {{ frozen.load_planning_output or '-' }}</p>
+    <p>APU {{ frozen.apu_running_label }} · RECOMMENDED {{ frozen.automatic_apu_allowance_display }}K · USING {{ frozen.apu_allowance_display }}K</p>
+    {% for tank in frozen.tank_rows %}<p>{{ tank.label }} · Remaining {{ tank.remaining_display or '-' }} · Actual {{ tank.actual_display or '-' }}</p>{% endfor %}
+  </td>
+</tr>

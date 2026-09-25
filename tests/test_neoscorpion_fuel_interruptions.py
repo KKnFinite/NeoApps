@@ -429,6 +429,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             self.gateway,
             self.dispatcher,
             assignment.id,
+            required_fuel=str(mission.planned_fuel_load / 1000),
         )
         self.assertTrue(result.changed)
         db.session.commit()
@@ -465,6 +466,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             self.gateway,
             self.dispatcher,
             assignment.id,
+            required_fuel=str(mission.planned_fuel_load / 1000),
             now_utc=datetime(2026, 8, 19, 4, 10),
         )
         self.assertTrue(result.changed)
@@ -497,7 +499,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         self.assertEqual(tail_state.fob_lbs, 32000)
         self.assertIsNone(tail_state.actual_fuel_lbs)
 
-        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        row = next(row for row in fuel_dispatch_context(self.gateway)["rows"] if row["mission"].id == mission.id)
         self.assertEqual(row["measured_inbound_fuel_lbs"], 32000)
         self.assertFalse(row["fuel_on_board_ready"])
         self.assertEqual(row["tail_swap_inherited_event_id"], source_event.id)
@@ -518,6 +520,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             self.gateway,
             self.dispatcher,
             assignment.id,
+            required_fuel=str(mission.planned_fuel_load / 1000),
         )
         self.assertFalse(repeated.changed)
         db.session.commit()
@@ -547,11 +550,12 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             self.gateway,
             self.dispatcher,
             assignment.id,
+            required_fuel=str(mission.planned_fuel_load / 1000),
             now_utc=datetime(2026, 8, 19, 4, 10),
         )
         db.session.commit()
 
-        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        row = next(row for row in fuel_dispatch_context(self.gateway)["rows"] if row["mission"].id == mission.id)
         self.assertTrue(row["fuel_on_board_ready"])
         self.assertEqual(row["dispatch_status_label"], "FOB READY")
         self.assertEqual(row["tail_swap_inherited_fuel_lbs"], 53000)
@@ -604,9 +608,10 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             self.gateway,
             self.dispatcher,
             assignment.id,
+            required_fuel=str(mission.planned_fuel_load / 1000),
         )
         db.session.commit()
-        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        row = next(row for row in fuel_dispatch_context(self.gateway)["rows"] if row["mission"].id == mission.id)
         self.assertFalse(row["fuel_on_board_ready"])
         self.assertIsNone(row["tail_swap_inherited_event_id"])
         self.assertIsNone(
@@ -630,7 +635,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         mission.assigned_tail_number = "N413UP"
         db.session.commit()
 
-        row = fuel_dispatch_context(self.gateway)["rows"][0]
+        row = next(row for row in fuel_dispatch_context(self.gateway)["rows"] if row["mission"].id == mission.id)
         self.assertEqual(row["tail_safety_label"], "HOLD / STOP & REVIEW")
         self.assertIsNone(row["fuel_work_state"])
         self.assertEqual(row["work_tail_number"], "N413UP")
@@ -643,6 +648,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
                 self.gateway,
                 self.dispatcher,
                 assignment.id,
+                required_fuel=str(mission.planned_fuel_load / 1000),
             )
         db.session.rollback()
 
@@ -664,7 +670,10 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
             self.gateway,
             self.dispatcher,
             assignment.id,
+            required_fuel=str(mission.planned_fuel_load / 1000),
         )
+        db.session.commit()
+        save_dispatch_row(self.gateway, self._dispatch_form(mission, assignment, assigned_fueler_user_id=self.fueler.id))
         db.session.commit()
         new_work = self._save_work(assignment)
         db.session.commit()

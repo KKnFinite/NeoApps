@@ -393,6 +393,8 @@ def fuel_dispatch_start_follow_up():
             request.form.get("required_fuel"),
             request.form.get("assigned_fueler_user_id"),
             request.form.get("assigned_truck_id"),
+            expected_cycle=request.form.get("expected_cycle", ""),
+            expected_tail=request.form.get("expected_tail", ""),
         )
     except (IntegrityError, ValueError) as exc:
         db.session.rollback()
@@ -531,6 +533,9 @@ def fuel_dispatch_confirm_tail():
             gateway,
             current_user,
             request.form.get("assignment_id"),
+            required_fuel=request.form.get("new_required_fuel"),
+            expected_cycle=request.form.get("expected_cycle", ""),
+            expected_tail=request.form.get("expected_tail", ""),
         ),
         "CURRENT MISSION TAIL CONFIRMED.",
         "MISSION TAIL WAS ALREADY CONFIRMED.",

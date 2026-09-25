@@ -10,6 +10,7 @@
     initializeDispatchDetails(root);
     initializeDispatchSelects(root);
     const preserveDispatchScroll = initializeDispatchScroll(root);
+    window.addEventListener("pagehide", preserveDispatchScroll);
     if (!window.NeoLiveUpdates) {
         return;
     }
@@ -86,9 +87,9 @@
                 });
             }
 
-            const anchor = saved.missionId
+            const anchor = saved.rowKey
                 ? scope.querySelector(
-                    `.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="${saved.missionId}"]`
+                    `.neoscorpion-dispatch-primary-row[data-dispatch-row-key="${saved.rowKey}"]`
                 )
                 : null;
 
@@ -140,7 +141,7 @@
         return () => {
             try {
                 const rows = Array.from(scope.querySelectorAll(
-                    ".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]"
+                    ".neoscorpion-dispatch-primary-row[data-dispatch-row-key]"
                 ));
                 const wrapRect = tableWrap?.getBoundingClientRect() || null;
                 const anchor = rows.find((row) => {
@@ -157,7 +158,7 @@
                     path: window.location.pathname,
                     y: window.scrollY,
                     x: window.scrollX,
-                    missionId: anchor?.dataset.dispatchMissionId || null,
+                    rowKey: anchor?.dataset.dispatchRowKey || null,
                     windowMissionOffset: anchorRect?.top ?? null,
                     tableMissionOffset: (
                         anchorRect && wrapRect
@@ -308,7 +309,7 @@
 
     const protectedControls = () => Array.from(root.querySelectorAll(
         "select[name='assigned_fueler_user_id']:not([disabled]), "
-        + "select[name='assigned_truck_id']:not([disabled])"
+        + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden])"
     ));
 
     protectedControls().forEach((control) => {

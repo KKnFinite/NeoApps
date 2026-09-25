@@ -35,6 +35,8 @@ from app.services.neoscorpion import (
     fuel_dispatch_context,
     mark_fueler_off,
     save_fueler_entry,
+    save_dispatch_assignment,
+    confirm_assignment_tail,
     start_follow_up_fuel_cycle,
 )
 from app.services.neoscorpion_assets import mark_nightly_truck_sumped
@@ -209,6 +211,9 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             {"left": 11000, "ctr": 10000, "right": 10000},
         )
         self.assertTrue(all(state.actual_lbs is None for state in started.fuel_work_state.tank_states))
+        self.assertIsNone(assignment.assigned_fueler_user_id)
+        self.assertIsNone(assignment.assigned_truck_id)
+        self._reassign_cycle(assignment, nightly.fuel_truck_id)
         self._login(self.fueler)
         fueler_page = self.client.get("/neoscorpion/fueler")
         self.assertEqual(fueler_page.status_code, 200)
@@ -282,6 +287,8 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
                 data={
                     "assignment_id": str(assignment.id),
                     "cycle_type": "uplift",
+                    "expected_cycle": "1",
+                    "expected_tail": mission.assigned_tail_number,
                     "required_fuel": "55.25",
                     "assigned_fueler_user_id": str(self.other_fueler.id),
                     "assigned_truck_id": str(truck.id),
@@ -296,8 +303,8 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         saved_assignment = db.session.get(NeoScorpionFuelAssignment, assignment.id)
         saved_mission = db.session.get(SortDateMission, mission.id)
         self.assertEqual(saved_assignment.current_cycle_type, "uplift")
-        self.assertEqual(saved_assignment.assigned_fueler_user_id, self.other_fueler.id)
-        self.assertEqual(saved_assignment.assigned_truck_id, nightly.fuel_truck_id)
+        self.assertIsNone(saved_assignment.assigned_fueler_user_id)
+        self.assertIsNone(saved_assignment.assigned_truck_id)
         self.assertEqual(saved_mission.planned_fuel_load, 55_250)
         self.assertEqual(saved_mission.fuel_status, "assigned")
         event_queries = [
@@ -312,7 +319,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             or "FROM neoscorpion_fueling_event_tank_snapshots" in statement
         ]
         self.assertTrue(event_queries)
-        self.assertLessEqual(len(event_and_snapshot_queries), 3)
+        self.assertLessEqual(len(event_and_snapshot_queries), 4)
         self.assertTrue(
             any(
                 "neoscorpion_fueling_event_tank_snapshots" not in statement
@@ -423,17 +430,12 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         mission.assigned_tail_number = "N422UP"
         db.session.commit()
 
-        started = start_follow_up_fuel_cycle(
-            self.gateway,
-            self.dispatcher,
-            assignment.id,
-            "uplift",
-            "55.0",
-            self.fueler.id,
-            nightly.fuel_truck_id,
-        )
-        self.assertEqual(started.fuel_work_state.tail_number, "N422UP")
-        self.assertEqual(tuple(started.fuel_work_state.tank_states), ())
+        with self.assertRaisesRegex(ValueError, "Confirm the tail swap"):
+            start_follow_up_fuel_cycle(self.gateway, self.dispatcher, assignment.id,
+                "uplift", "55.0", None, None)
+        started = confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id,
+            required_fuel="55.0", expected_cycle=1, expected_tail="N422UP")
+        self.assertTrue(started.fuel_work_state is None or not started.fuel_work_state.tank_states)
 
     def test_defuel_adds_gallons_sets_sump_and_holds_other_assignment(self):
         operation = self._operation()
@@ -574,6 +576,8 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
                 truck.id,
             )
             db.session.commit()
+            if cycle_type == "uplift":
+                self._reassign_cycle(assignment, truck.id)
             self._save_cycle(
                 assignment,
                 remaining=(10, 10, 10),
@@ -786,6 +790,15 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         db.session.add(nightly)
         db.session.commit()
         return truck, nightly
+
+    def _reassign_cycle(self, assignment, truck_id):
+        save_dispatch_assignment(self.gateway, {
+            "mission_id": str(assignment.sort_date_mission_id),
+            "assigned_fueler_user_id": str(self.fueler.id),
+            "assigned_truck_id": str(truck_id),
+            "expected_assigned_fueler_user_id": "", "expected_assigned_truck_id": "",
+        })
+        db.session.commit()
 
     def _save_cycle(self, assignment, *, remaining, actual, transfer):
         return save_fueler_entry(

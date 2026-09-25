@@ -344,7 +344,7 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn("continuousWhileVisible: true", script)
         self.assertIn('root.dataset.liveDirty = "true"', script)
         self.assertIn("window.location.reload()", script)
-        self.assertIn("data-dispatch-mission-id", body)
+        self.assertIn("data-dispatch-row-key", script)
         self.assertIn("tableMissionOffset", script)
         self.assertIn("tableScrollTop", script)
         self.assertIn("tableScrollLeft", script)

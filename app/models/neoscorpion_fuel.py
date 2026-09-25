@@ -458,6 +458,31 @@ class NeoScorpionFuelAssignment(db.Model):
         return normalized or None
 
 
+class NeoScorpionFuelCycleHistory(db.Model):
+    """Immutable display snapshot; the assignment remains the sole active cycle."""
+
+    __tablename__ = "neoscorpion_fuel_cycle_history"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "fuel_assignment_id", "cycle_number", name="uq_scorpion_cycle_history"
+        ),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(
+        db.Integer, db.ForeignKey("sort_date_operations.id"), nullable=False, index=True
+    )
+    fuel_assignment_id = db.Column(
+        db.Integer, db.ForeignKey("neoscorpion_fuel_assignments.id"), nullable=False
+    )
+    mission_id = db.Column(
+        db.Integer, db.ForeignKey("sort_date_missions.id"), nullable=False
+    )
+    cycle_number = db.Column(db.Integer, nullable=False)
+    label = db.Column(db.String(32), nullable=False)
+    snapshot = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class NeoScorpionFuelingEvent(db.Model):
     __tablename__ = "neoscorpion_fueling_events"
     __table_args__ = (

@@ -230,7 +230,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
             )
             self.assertNotIn('name="review_status"', page)
             return page.split(
-                '<tr class="neoscorpion-dispatch-primary-row">',
+                '<tr class="neoscorpion-dispatch-primary-row"',
                 1,
             )[1].split("</tr>", 1)[0]
 
@@ -309,7 +309,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
 
         page = self.client.get("/neoscorpion/fuel-dispatch").get_data(as_text=True)
         primary_row = page.split(
-            '<tr class="neoscorpion-dispatch-primary-row">',
+            '<tr class="neoscorpion-dispatch-primary-row"',
             1,
         )[1].split("</tr>", 1)[0]
         self.assertIn(

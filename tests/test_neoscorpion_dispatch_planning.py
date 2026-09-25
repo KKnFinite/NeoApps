@@ -337,6 +337,12 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             )
         db.session.commit()
 
+        self.assertTrue(all(
+            not row["load_planning_ready"]
+            for row in fuel_dispatch_context(self.gateway)["rows"]
+        ))
+        work.off_at_utc = non_a300_work.off_at_utc = datetime(2026, 8, 18, 4, 30)
+        db.session.commit()
         rows = {
             row["mission"].flight_number: row
             for row in fuel_dispatch_context(self.gateway)["rows"]
@@ -420,8 +426,10 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
 
         self.assertEqual(len(context["rows"]), 150)
         # Includes current/prior-date scope selection and the current SPEAR
-        # calibration/history contract. These remain batch reads for 150 rows.
-        self.assertEqual(len(statements), 26)
+        # calibration/history contract plus one display-cycle history query.
+        # These remain batch reads for 150 rows.
+        self.assertEqual(len(statements), 27)
+        self.assertEqual(sum("FROM neoscorpion_fuel_cycle_history " in sql for sql in statements), 1)
         for table in ("neoscorpion_fuel_assignments", "neoscorpion_fuel_work_states",
                       "neoscorpion_spear_calibration_resets"):
             self.assertEqual(sum(f"FROM {table} " in sql for sql in statements), 1)

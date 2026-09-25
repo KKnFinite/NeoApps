@@ -2,12 +2,58 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 
 const readScript = (name) => fs.readFileSync(
     path.join(__dirname, "..", "..", "app", "static", "js", name),
     "utf8"
 );
+
+test("refresh restores the specific cycle row and its details for a shared mission", () => {
+    const script = readScript("neoscorpion_fuel_dispatch_live.js");
+    const source = script.slice(script.indexOf("function initializeDispatchScroll"),
+        script.indexOf("function initializeDispatchSelects"));
+    const stored = new Map();
+    const wrap = {scrollTop: 120, scrollLeft: 90,
+        getBoundingClientRect: () => ({top: 100, bottom: 500})};
+    const rows = [
+        {dataset: {dispatchRowKey: "7-1"}, getBoundingClientRect: () => ({top: 20, bottom: 60})},
+        {dataset: {dispatchRowKey: "7-2"}, getBoundingClientRect: () => ({top: 110, bottom: 150})},
+    ];
+    const detail = {hidden: false, setAttribute() {}};
+    const toggle = {getAttribute: () => "detail-7-2", setAttribute() {}};
+    const scope = {
+        querySelector(selector) {
+            if (selector === ".neoscorpion-table-wrap--sticky") return wrap;
+            if (selector.includes("aria-controls")) return toggle;
+            return rows.find(row => selector.includes(`"${row.dataset.dispatchRowKey}"`));
+        },
+        querySelectorAll: selector => selector.includes("aria-expanded") ? [toggle] : rows,
+    };
+    const window = {
+        location: {pathname: "/neoscorpion/fuel-dispatch"}, scrollX: 4, scrollY: 60,
+        scrollTo({top, left}) { this.scrollY = top; this.scrollX = left; },
+        requestAnimationFrame: fn => fn(), setTimeout: fn => fn(),
+        sessionStorage: {getItem: key => stored.get(key), setItem: (key, val) => stored.set(key, val),
+            removeItem: key => stored.delete(key)},
+    };
+    const initialize = vm.runInNewContext(`(${source.trim()})`, {
+        window, document: {getElementById: () => detail},
+    });
+    initialize(scope)();
+    const saved = JSON.parse([...stored.values()][0]);
+    assert.equal(saved.rowKey, "7-2");
+    assert.deepEqual(saved.openDetails, ["detail-7-2"]);
+    wrap.scrollTop = 0;
+    wrap.scrollLeft = 0;
+    detail.hidden = true;
+    initialize(scope);
+    assert.equal(wrap.scrollTop, 120);
+    assert.equal(wrap.scrollLeft, 90);
+    assert.equal(detail.hidden, false);
+    assert.equal(window.scrollY, 60);
+});
 
 
 test("dispatch autosave adopts its own revision and excludes autosave fields from dirty controls", () => {
@@ -23,12 +69,13 @@ test("dispatch autosave adopts its own revision and excludes autosave fields fro
     assert.doesNotMatch(script, /input\.closest\("form"\)/);
     assert.match(template, /data-autosave-field="required_fuel" data-mission-id="\{\{ row\.mission\.id \}\}"/);
     assert.match(template, /data-autosave-field="inbound_fuel" data-mission-id="\{\{ row\.mission\.id \}\}"/);
-    // Dirty protection now explicitly selects only the two resource selects;
+    // Dirty protection selects resource controls and explicit cycle forms;
     // autosaved Required/Inbound inputs never enter that collection.
     const protectedControls = script.split("const protectedControls =")[1].split("protectedControls().forEach")[0];
     assert.match(protectedControls, /select\[name='assigned_fueler_user_id'\]:not\(\[disabled\]\)/);
     assert.match(protectedControls, /select\[name='assigned_truck_id'\]:not\(\[disabled\]\)/);
-    assert.doesNotMatch(protectedControls, /input|textarea|data-dispatch-autosave/);
+    assert.doesNotMatch(protectedControls, /textarea|data-dispatch-autosave/);
+    assert.match(protectedControls, /data-cycle-start/);
     assert.match(script, /input\.dataset\.autosaveFailed = "true"/);
     assert.match(script, /input\.dataset\.autosaveFailed = "false"/);
     assert.match(script, /event\.preventDefault\(\)/);

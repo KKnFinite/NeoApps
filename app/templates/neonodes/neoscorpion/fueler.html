@@ -83,8 +83,9 @@
                     <div>
                         <dt>APU</dt>
                         <dd>
-                            <span class="neoscorpion-apu-collapsed"><strong data-apu-allowance-output>APU {{ row.apu_allowance_display }}K</strong>
+                            <span class="neoscorpion-apu-collapsed"><strong data-apu-allowance-output>{% if row.apu_running is none %}NOT CONFIRMED{% elif row.apu_running is sameas false %}USING 0.0K · APU OFF{% else %}USING {{ row.apu_allowance_display }}K {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}{% endif %}</strong>
                             {% if row.apu_running is sameas true %}
+                            <small>RECOMMENDED {{ row.automatic_apu_allowance_display }}K</small>
                             <form class="neoscorpion-apu-editor-form" method="post" action="{{ url_for('neoscorpion.fueler') }}" data-apu-editor-form>
                                 <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                                 <input type="hidden" name="apu_running" value="yes" data-apu-editor-running>
@@ -94,12 +95,12 @@
                             <details class="neoscorpion-apu-editor" data-apu-editor>
                                 <summary>EDIT</summary>
                                 <div>
-                                    <label data-apu-override-value-wrap>Allowance, K lbs
+                                    <label data-apu-override-value-wrap>MANUAL APU, K lbs
                                         <input class="neoscorpion-inline-input" name="apu_override_allowance" value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}" inputmode="decimal" aria-label="APU allowance for {{ row.mission.flight_number }}" data-apu-override-value placeholder="K LBS">
                                     </label>
-                                    <small data-apu-calculated-reference>Calculated: {{ row.automatic_apu_allowance_display }}K</small>
+                                    <small data-apu-calculated-reference>RECOMMENDED {{ row.automatic_apu_allowance_display }}K</small>
                                     <button class="action-button" type="submit" data-apu-editor-save>SAVE</button>
-                                    {% if row.apu_override_enabled %}<button class="action-button" type="submit" data-apu-editor-save data-apu-reset>USE CALCULATED</button>{% endif %}
+                                    <button class="action-button" type="submit" data-apu-editor-save data-apu-reset>USE RECOMMENDED</button>
                                     <button class="action-button" type="button" data-apu-editor-cancel>CANCEL</button>
                                 </div>
                             </details>

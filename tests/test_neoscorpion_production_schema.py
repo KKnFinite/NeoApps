@@ -59,6 +59,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             "neoscorpion_aircraft_fuel_settings",
             "neoscorpion_fueling_events",
             "neoscorpion_fueling_event_tank_snapshots",
+            "neoscorpion_fuel_cycle_history",
             "neoscorpion_fuel_audit_entries",
         )
         self.assertEqual(

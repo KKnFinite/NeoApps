@@ -11,6 +11,7 @@ from app.models import (
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelingEvent,
     NeoScorpionFuelingEventTankSnapshot,
+    NeoScorpionFuelCycleHistory,
     NeoScorpionFuelTankState,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
@@ -42,6 +43,7 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelingEvent,
     NeoScorpionFuelingEventTankSnapshot,
+    NeoScorpionFuelCycleHistory,
     NeoScorpionFuelAuditEntry,
 )
 
