@@ -40,7 +40,7 @@ class Config:
     EMPLOYEE_RECORD_SIGNATURE_STORAGE = None
     SECRET_KEY = os.getenv("SECRET_KEY")
     NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
-    STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260924-neoermac-upcoming-actual")
+    STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260924-neoscorpion-board-fill")
     DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
     DEFAULT_GATEWAY_CODE = os.getenv("DEFAULT_GATEWAY_CODE", "RFD").upper()
     DEFAULT_GATEWAY_NAME = os.getenv("DEFAULT_GATEWAY_NAME", "NeoGateway")
