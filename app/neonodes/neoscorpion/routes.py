@@ -790,7 +790,20 @@ def _fueler_off_automation(gateway, result, assignment_id):
     return spear_completed, spear_completion_error
 
 
+def _fuel_data_permissions(dispatcher):
+    if dispatcher:
+        return (
+            user_can(FUEL_DISPATCH_VIEW_PERMISSION),
+            user_can(FUEL_DISPATCH_EDIT_PERMISSION),
+        )
+    return (
+        user_can(FUELER_VIEW_PERMISSION),
+        user_can(FUELER_EDIT_PERMISSION),
+    )
+
+
 def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status=200):
+    _can_view, can_edit = _fuel_data_permissions(dispatcher)
     context = fueler_context(gateway, current_user, assignment_id=assignment_id,
                              dispatcher=dispatcher)
     row = context["rows"][0] if context["rows"] else None
@@ -801,17 +814,16 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
         "operation_id": context["operation"].id if context["operation"] else None,
         "closed": row is None,
         "html": render_template("neonodes/neoscorpion/_fueler_card.html", row=row,
-                                can_edit=True, dispatcher_panel=dispatcher) if row else "",
+                                can_edit=can_edit, dispatcher_panel=dispatcher) if row else "",
     }, status)
 
 
 def _fuel_data_request(assignment_id, *, dispatcher=False, off=False):
     gateway = get_current_gateway()
-    permission = FUEL_DISPATCH_EDIT_PERMISSION if dispatcher else FUELER_EDIT_PERMISSION
-    if not user_can(permission):
-        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
-    # GET is narrowed to a current, assigned, incomplete mission in this gateway.
+    can_view, can_edit = _fuel_data_permissions(dispatcher)
     if request.method == "GET":
+        if not can_view:
+            return _json_no_store({"ok": False, "error": "Access denied."}, 403)
         context = fueler_context(gateway, current_user, assignment_id=assignment_id,
                                  dispatcher=dispatcher)
         if not context["rows"]:
@@ -820,7 +832,9 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False):
         return _json_no_store({"ok": True, "revision": context["fuel_assignments_revision"],
             "operation_id": context["operation"].id if context["operation"] else None,
             "html": render_template("neonodes/neoscorpion/_fueler_card.html", row=row,
-                                    can_edit=True, dispatcher_panel=dispatcher)})
+                                    can_edit=can_edit, dispatcher_panel=dispatcher)})
+    if not can_edit:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
     form = request.form.copy()
     form["assignment_id"] = str(assignment_id)
     try:
