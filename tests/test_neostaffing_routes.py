@@ -2879,7 +2879,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 data={
                     "employee_id": employee_id,
                     "first_name": "Created",
-                    "last_name": classification,
+                    "last_name": "Management",
                     "seniority_date": "01/01/2020",
                     "classification": classification,
                     "employee_status": "active",
@@ -2956,9 +2956,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"No matching assignments", page.data)
         self.assertIn(b'name="reports_to_person_id"', page.data)
         self.assertIn(b"data-reporting-selection", page.data)
-        self.assertIn("Reports To — FT Supervisor — Optional".encode(), page.data)
-        self.assertIn("Reports To — Manager — Optional".encode(), page.data)
-        self.assertIn("Reports To — Division Manager — Optional".encode(), page.data)
+        self.assertIn(b"part_time_supervisor:'full_time_supervisor'", page.data)
+        self.assertIn(b"full_time_supervisor:'manager'", page.data)
+        self.assertIn(b"manager:'division_manager'", page.data)
+        self.assertIn("Primary FT Supervisor — Optional".encode(), page.data)
         self.assertIn(b'name="twenty_c_primary"', page.data)
 
     def test_people_creation_drawers_separate_management_and_employees(self):
