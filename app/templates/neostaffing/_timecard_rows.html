@@ -7,8 +7,8 @@
   {% if item.slice.attendance_status == 'here' and item.editable|default(true) %}
   <div data-time-segments>
     {% for segment in item.edit_segments %}<div class="timecard-segment">
-      <label>Start <input data-start {% if workspace|default('') in ['sektor','ermac'] %}type="text" inputmode="numeric" placeholder="HHMM" autocomplete="off" value="{{ segment.start[11:19] }}" data-original="{{ segment.start }}"{% else %}value="{{ segment.start }}" placeholder="YYYY-MM-DDTHH:MM"{% endif %} aria-label="Start for {{ item.employee }}"></label>
-      <label>End <input data-end {% if workspace|default('') in ['sektor','ermac'] %}type="text" inputmode="numeric" placeholder="HHMM" autocomplete="off" value="{{ segment.end[11:19] }}" data-original="{{ segment.end }}"{% else %}value="{{ segment.end }}" placeholder="YYYY-MM-DDTHH:MM"{% endif %} aria-label="End for {{ item.employee }}"></label>
+      <label>Start <input data-start {% if workspace|default('') in ['sektor','ermac'] %}type="text" inputmode="numeric" placeholder="HHMM" autocomplete="off" value="{{ segment.start[11:16] }}" data-original="{{ segment.start }}"{% else %}value="{{ segment.start }}" placeholder="YYYY-MM-DDTHH:MM"{% endif %} aria-label="Start for {{ item.employee }}"></label>
+      <label>End <input data-end {% if workspace|default('') in ['sektor','ermac'] %}type="text" inputmode="numeric" placeholder="HHMM" autocomplete="off" value="{{ segment.end[11:16] }}" data-original="{{ segment.end }}"{% else %}value="{{ segment.end }}" placeholder="YYYY-MM-DDTHH:MM"{% endif %} aria-label="End for {{ item.employee }}"></label>
       <button type="button" data-remove-segment aria-label="Remove segment for {{ item.employee }}">REMOVE</button>
     </div>{% endfor %}
   </div>
@@ -17,7 +17,7 @@
   <p role="status" aria-live="polite" data-row-status></p>
   {% else %}<small>{{ item.timezone }}. Include the date for overnight times.</small>{% endif %}
   {% elif item.slice.attendance_status == 'here' %}
-  {% for segment in item.edit_segments %}<p>{{ segment.start }} – {{ segment.end }}</p>{% endfor %}
+  {% for segment in item.edit_segments %}<p>{% if workspace|default('') in ['sektor','ermac'] %}{{ segment.start[11:16] }} – {{ segment.end[11:16] }}{% else %}{{ segment.start }} – {{ segment.end }}{% endif %}</p>{% endfor %}
   {% endif %}
   {% for issue in item.issues %}<span class="timecard-exception">{{ issue }}</span>{% endfor %}
 </article>

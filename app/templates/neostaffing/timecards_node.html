@@ -31,5 +31,5 @@
   {% for item in missing %}<div class="timecard-row"><strong>{{ item.person.full_name }}</strong><span>No retained attendance for this Sort. Times unavailable.</span></div>{% endfor %}
   {% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_node_times.js') }}?v=1" defer></script>
+<script src="{{ url_for('static', filename='js/neostaffing_node_times.js') }}?v=2" defer></script>
 {% endblock %}

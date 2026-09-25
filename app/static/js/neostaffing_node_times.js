@@ -11,8 +11,8 @@
   function clock(value) {
     let text = value.trim();
     if (/^\d{3,4}$/.test(text)) { text = text.padStart(4, '0'); text = `${text.slice(0, 2)}:${text.slice(2)}`; }
-    const match = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(text);
-    return match && +match[1] < 24 && +match[2] < 60 && +(match[3] || 0) < 60 ? text : null;
+    const match = /^(\d{2}):(\d{2})$/.exec(text);
+    return match && +match[1] < 24 && +match[2] < 60 ? text : null;
   }
   for (const row of root.querySelectorAll('[data-timecard-id]')) {
     const container = row.querySelector('[data-time-segments]');
@@ -34,7 +34,7 @@
         if (inputs.every(input => !input.value.trim())) continue;
         const values = inputs.map(input => clock(input.value));
         if (values.some(value => !value)) return null;
-        const unchanged = inputs.map((input, index) => input.dataset.original && clock(input.dataset.original.slice(11, 19)) === clock(values[index].length === 5 ? values[index] + ':00' : values[index]));
+        const unchanged = inputs.map((input, index) => input.dataset.original && input.dataset.original.slice(11, 16) === values[index]);
         inputs.forEach((input, index) => { input.value = values[index]; });
         // Retain an unchanged start date/offset, including next-day combo segments.
         // A changed pair derives its end from that start through the shared service.
@@ -64,7 +64,7 @@
           const start = part.querySelector('[data-start]'), end = part.querySelector('[data-end]');
           if (!start.value.trim() && !end.value.trim()) return;
           const value = saved.segments[index++];
-          for (const [input, key] of [[start, 'start'], [end, 'end']]) { input.dataset.original = value[key]; input.value = value[key].slice(11, 19); }
+          for (const [input, key] of [[start, 'start'], [end, 'end']]) { input.dataset.original = value[key]; input.value = value[key].slice(11, 16); }
         });
         const hours = row.querySelector('[data-row-hours]'); if (hours) hours.textContent = `${saved.hours} hrs`;
         row.querySelectorAll('.timecard-exception').forEach(item => { item.hidden = true; });

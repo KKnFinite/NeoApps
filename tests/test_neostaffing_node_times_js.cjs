@@ -33,7 +33,7 @@ function setup(workspace='sektor', area='ebm') {
     assert.ok(f.controls.every(input=>input.disabled));
     f.events.change({target:f.end}); assert.equal(f.calls.length,1);
     await f.respond(true,{saved:true,rows:[{id:3,version:8,hours:'11.00',segments:[{start:'2026-09-12T22:30:00-05:00',end:'2026-09-13T09:30:00-05:00'}]}]});
-    assert.equal(f.row.dataset.version,'8'); assert.equal(f.start.value,'22:30:00');
+    assert.equal(f.row.dataset.version,'8'); assert.equal(f.start.value,'22:30');
     assert.ok(f.controls.every(input=>!input.disabled));
     assert.match(f.status.textContent,/Saved/);
     f.end.value='1000';f.events.change({target:f.end});
@@ -44,7 +44,7 @@ function setup(workspace='sektor', area='ebm') {
     assert.ok(f.controls.every(input=>input.disabled)); assert.match(f.status.textContent,/changed/);
   }
   const multiple=setup();
-  const secondStart={value:'01:00:00',dataset:{original:'2026-09-13T01:00:00-05:00'}};
+  const secondStart={value:'01:00',dataset:{original:'2026-09-13T01:00:00-05:00'}};
   const secondEnd={value:'0230',dataset:{original:'2026-09-13T02:00:00-05:00'}};
   multiple.parts.push({querySelector:key=>key==='[data-start]'?secondStart:secondEnd});
   multiple.events.input(); multiple.flush();
@@ -56,6 +56,8 @@ function setup(workspace='sektor', area='ebm') {
   assert.deepEqual(removed.calls[0].body.commands[0].segments,[]);
   const f=setup();f.end.value='9999';f.events.change({target:f.end});
   assert.equal(f.calls.length,0);assert.match(f.status.textContent,/valid/);
+  const seconds=setup();seconds.start.value='01:00:00';seconds.events.change({target:seconds.start});
+  assert.equal(seconds.calls.length,0);assert.match(seconds.status.textContent,/valid/);
   let warned=false;f.unload.beforeunload({preventDefault:()=>warned=true});assert.ok(warned);
   let change,submitted=0;
   vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_node_selection.js','utf8'),{
