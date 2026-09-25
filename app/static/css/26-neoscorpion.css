@@ -27,19 +27,20 @@
 .neoscorpion-dispatch-table--compact td { min-width: 0; padding: 7px 5px; overflow-wrap: anywhere; text-align:center; vertical-align:middle; }
 .neoscorpion-dispatch-table--compact th { text-align:center; }
 .neoscorpion-dispatch-table--compact th:nth-child(1) { width: 8%; }
-.neoscorpion-dispatch-table--compact th:nth-child(2) { width: 7%; }
-.neoscorpion-dispatch-table--compact th:nth-child(3) { width: 9%; }
+.neoscorpion-dispatch-table--compact th:nth-child(2) { width: 6%; }
+.neoscorpion-dispatch-table--compact th:nth-child(3) { width: 8%; }
 .neoscorpion-dispatch-table--compact th:nth-child(4) { width: 7%; }
-.neoscorpion-dispatch-table--compact th:nth-child(5),
+.neoscorpion-dispatch-table--compact th:nth-child(5) { width: 6%; }
 .neoscorpion-dispatch-table--compact th:nth-child(6) { width: 6%; }
 .neoscorpion-dispatch-table--compact th:nth-child(7) { width: 6%; }
-.neoscorpion-dispatch-table--compact th:nth-child(8) { width: 8%; }
-.neoscorpion-dispatch-table--compact th:nth-child(9),
-.neoscorpion-dispatch-table--compact th:nth-child(10) { width: 9%; }
-.neoscorpion-dispatch-table--compact th:nth-child(11) { width: 7%; }
-.neoscorpion-dispatch-table--compact th:nth-child(12) { width: 8%; }
+.neoscorpion-dispatch-table--compact th:nth-child(8) { width: 7%; }
+.neoscorpion-dispatch-table--compact th:nth-child(9) { width: 9%; }
+.neoscorpion-dispatch-table--compact th:nth-child(10) { width: 5%; }
+.neoscorpion-dispatch-table--compact th:nth-child(11) { width: 8%; }
+.neoscorpion-dispatch-table--compact th:nth-child(12) { width: 7%; }
 .neoscorpion-dispatch-table--compact th:nth-child(13) { width: 7%; }
-.neoscorpion-dispatch-table--compact th:nth-child(14) { width: 5%; }
+.neoscorpion-dispatch-table--compact th:nth-child(14) { width: 6%; }
+.neoscorpion-dispatch-table--compact th:nth-child(15) { width: 4%; }
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-input,
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-select { min-width: 0; width: 100%; font-size: .72rem; }
 .neoscorpion-dispatch-tail small,
@@ -160,3 +161,23 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact {
     width: 100%;
 }
+
+/* Shared Fueler card in a native in-page modal; above Board View as well. */
+.neoscorpion-fuel-data-dialog {
+    width: min(1100px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 32px);
+    box-sizing: border-box;
+    overflow: auto;
+    padding: 16px;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.5);
+    border-radius: 12px;
+    background: #0b0d10;
+    color: #e8f3f4;
+}
+.neoscorpion-fuel-data-dialog::backdrop { background: rgb(0 0 0 / 75%); }
+.neoscorpion-fuel-data-close { position: sticky; top: 0; z-index: 2; display: block; margin: 0 0 10px auto; }
+.neoscorpion-fuel-data-heading h2 { margin: 0; font-size: clamp(1rem, 2.5vw, 1.5rem); }
+.neoscorpion-fuel-data-heading p { margin: 6px 0; }
+.neoscorpion-fuel-data-cell .action-button { padding: 5px 7px; font-size: .7rem; }
+.neoscorpion-fuel-data-dialog .neoscorpion-fueler-card { min-width: 0; }

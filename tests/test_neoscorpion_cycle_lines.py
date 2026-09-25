@@ -62,6 +62,9 @@ class CycleLinesTest(unittest.TestCase):
         historical = html.split('data-cycle-history>', 1)[1].split('</tr>', 1)[0]
         self.assertNotIn('<input', historical)
         self.assertNotIn('<form', historical)
+        self.assertNotIn('data-fuel-data-open', historical)
+        self.assertEqual(historical.count('<td'), 15)
+        self.assertIn('colspan="15"', html)
         self.assertIn('HISTORY · TAIL SWAP', historical)
         self.assertEqual(len(service.fuel_dispatch_context(self.gateway)['rows']), 1)
         self.assertEqual(service.fueler_context(self.gateway, self.fueler)['rows'], [])

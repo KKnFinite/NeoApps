@@ -212,13 +212,13 @@ test("Hanzo live refresh uses the shared revision endpoint only while visible", 
 
 test("APU allowance UI is collapsed to the effective value and keeps inline edit controls", () => {
     const dispatch = readScript("neoscorpion_fuel_dispatch_live.js");
-    const editor = readScript("neoscorpion_apu_editor.js");
+    const editor = readScript("neoscorpion_fuel_data.js");
     const dispatchTemplate = fs.readFileSync(
         path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
         "utf8"
     );
     const fuelerTemplate = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fueler.html"),
+        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "_fueler_card.html"),
         "utf8"
     );
 
@@ -232,10 +232,10 @@ test("APU allowance UI is collapsed to the effective value and keeps inline edit
     assert.doesNotMatch(fuelerTemplate, /Override Allowance/);
     assert.match(dispatch, /data-dispatch-apu-reset/);
     assert.match(dispatch, /updateApuAllowanceDisplay/);
-    assert.match(editor, /editorForm\.addEventListener\("submit", async/);
+    assert.match(editor, /document\.addEventListener\("submit", async/);
     assert.match(editor, /event\.preventDefault\(\)/);
-    assert.match(editor, /fetch\(editorForm\.action/);
-    assert.match(editor, /body: new FormData\(editorForm\)/);
+    assert.match(editor, /fetch\(form\.getAttribute\("action"\)/);
+    assert.match(editor, /body\.set\("expected", card\.dataset\.editBaseline\)/);
     assert.match(editor, /data-apu-reset/);
     assert.match(editor, /data-apu-editor-cancel/);
 });

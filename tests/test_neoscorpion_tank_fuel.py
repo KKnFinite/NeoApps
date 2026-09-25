@@ -1,3 +1,4 @@
+import json
 import unittest
 from datetime import date, datetime
 from unittest.mock import patch
@@ -27,6 +28,7 @@ from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
     detailed_aircraft_type_for_tail,
     save_fueler_entry,
+    fueler_context,
     tank_layout_for_tail,
 )
 from app.services.password_policy import set_user_password
@@ -244,7 +246,8 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
             response = self.client.post(
                 "/neoscorpion/fueler",
-                data=self._form(assignment, remaining_left="11.0"),
+                data=self._form(assignment, remaining_left="11.0", expected=json.dumps(
+                    fueler_context(self.gateway, self.user)["rows"][0]["edit_baseline"])),
             )
             self.assertEqual(response.status_code, 302)
             self.assertEqual(commit.call_count, 0)

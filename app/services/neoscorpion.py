@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
@@ -613,7 +614,7 @@ def hanzo_context(gateway):
     }
 
 
-def fueler_context(gateway, user):
+def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
     operation = current_sort_operation(gateway)
     refresh_setting = live_screen_refresh_value(
         gateway,
@@ -640,7 +641,9 @@ def fueler_context(gateway, user):
         )
         .filter(
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
-            NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id,
+            (NeoScorpionFuelAssignment.assigned_fueler_user_id.isnot(None)
+             if dispatcher else NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id),
+            (NeoScorpionFuelAssignment.id == assignment_id if assignment_id is not None else db.true()),
             NeoScorpionFuelAssignment.review_status != "complete",
             SortDateMission.mission_type == "departure",
             db.or_(
@@ -657,16 +660,23 @@ def fueler_context(gateway, user):
     }
     fuel_work_states = _fuel_work_states_by_assignment_tail(assignments)
     apu_rates_by_aircraft_type = _effective_apu_rates(gateway.id)
+    rows = _fuel_rows(
+        operation,
+        missions,
+        estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
+        assignments_by_mission=assignments_by_mission,
+        fuel_work_states_by_assignment_tail=fuel_work_states,
+        apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
+    )
+    for row in rows:
+        work = row["fuel_work_state"]
+        row["edit_baseline"] = fueler_edit_state(
+            row["assignment"], row["mission"], work, row["tail_fuel_state"],
+            work.tank_states if work else [],
+        )
     return {
         "operation": operation,
-        "rows": _fuel_rows(
-            operation,
-            missions,
-            estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
-            assignments_by_mission=assignments_by_mission,
-            fuel_work_states_by_assignment_tail=fuel_work_states,
-            apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
-        ),
+        "rows": rows,
         "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
         "fuel_assignments_refresh": refresh_setting,
         "settings": NeoScorpionSettings.query.filter_by(
@@ -1424,7 +1434,59 @@ def _resource_change_label(value):
     return f"Truck #{value}" if value is not None else "Unassigned"
 
 
-def save_fueler_entry(gateway, user, form, *, now_utc=None):
+class FuelerDataConflict(ValueError):
+    def __init__(self):
+        super().__init__("DATA CHANGED · REVIEW CURRENT VALUES")
+
+
+def fueler_edit_state(assignment, mission, work, tail, tanks):
+    state = {
+        "operation_id": assignment.sort_date_operation_id,
+        "mission_id": mission.id,
+        "cycle": int(assignment.current_cycle_number or 1),
+        "tail": _normalize_tail(mission.assigned_tail_number),
+        "assigned_fueler_user_id": assignment.assigned_fueler_user_id,
+        "apu_running": work.apu_running if work else None,
+        "apu_source_tank_code": work.apu_source_tank_code if work else None,
+        "apu_override_enabled": bool(work and work.apu_override_enabled),
+        "apu_override_allowance": work.apu_override_allowance_lbs if work else None,
+        "transfer_fuel_gallons": assignment.transfer_fuel_gallons,
+        "notes": (tail.notes or "") if tail else "",
+    }
+    by_code = {tank.tank_code: tank for tank in tanks}
+    for code, _label in tank_layout_for_tail(state["tail"]):
+        tank = by_code.get(code)
+        state[f"remaining_{code}"] = tank.remaining_lbs if tank else None
+        state[f"actual_{code}"] = tank.actual_lbs if tank else None
+    return state
+
+
+def _fueler_expected(form, *, required=False):
+    raw = form.get("expected")
+    if raw is None and not required:
+        return None  # Trusted service callers may perform a locked, current-state write.
+    try:
+        expected = json.loads(raw or "")
+    except (ValueError, TypeError):
+        raise ValueError("Reload Fueler Data before saving.") from None
+    if not isinstance(expected, dict):
+        raise ValueError("Reload Fueler Data before saving.")
+    return expected
+
+
+def _check_fueler_expected(expected, current, requested):
+    if expected is None:
+        return
+    for key in ("operation_id", "mission_id", "cycle", "tail", "assigned_fueler_user_id"):
+        if key not in expected or expected[key] != current[key]:
+            raise FuelerDataConflict()
+    for key, value in requested.items():
+        if key not in expected or (current[key] != expected[key] and current[key] != value):
+            raise FuelerDataConflict()
+
+
+def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, require_expected=False):
+    expected = _fueler_expected(form, required=require_expected)
     operation = current_sort_operation(gateway)
     if not operation:
         raise ValueError("No current sort operation is available for NeoScorpion fueler entry.")
@@ -1441,7 +1503,8 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         .filter(
             NeoScorpionFuelAssignment.id == assignment_id,
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
-            NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id,
+            (NeoScorpionFuelAssignment.assigned_fueler_user_id.isnot(None)
+             if dispatcher else NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id),
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
         )
@@ -1452,6 +1515,12 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         raise ValueError("Fuel assignment was not found for this fueler.")
 
     assignment, mission = assignment_row
+    _check_fueler_expected(expected, {
+        "operation_id": operation.id, "mission_id": mission.id,
+        "cycle": int(assignment.current_cycle_number or 1),
+        "tail": _normalize_tail(mission.assigned_tail_number),
+        "assigned_fueler_user_id": assignment.assigned_fueler_user_id,
+    }, {})
     tail_number = _normalize_tail(mission.assigned_tail_number if mission else "")
     if not tail_number:
         raise ValueError("Fuel assignment does not have a tail number.")
@@ -1490,6 +1559,36 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
 
+    tail_fuel_state = (
+        NeoScorpionTailFuelState.query.filter_by(
+            sort_date_operation_id=operation.id,
+            tail_number=tail_number,
+        )
+        .with_for_update()
+        .first()
+    )
+    current = fueler_edit_state(assignment, mission, fuel_work_state, tail_fuel_state, tank_states)
+    submitted = {}
+    for key in current:
+        if key not in form:
+            continue
+        if key.startswith(("remaining_", "actual_")) or key == "apu_override_allowance":
+            submitted[key] = display_thousands_to_lbs(form.get(key))
+        elif key == "apu_running":
+            choices = {"not_confirmed": None, "no": False, "yes": True}
+            if form.get(key) not in choices:
+                raise ValueError("Select a valid APU Running status.")
+            submitted[key] = choices[form.get(key)]
+        elif key == "apu_override_enabled":
+            submitted[key] = form.get(key) == "1"
+        elif key == "transfer_fuel_gallons":
+            submitted[key] = _int_or_none(form.get(key))
+        elif key == "notes":
+            submitted[key] = (form.get(key) or "").strip()
+        elif key == "apu_source_tank_code":
+            submitted[key] = (form.get(key) or "").strip() or None
+    _check_fueler_expected(expected, current, submitted)
+
     final_tank_values = {}
     tank_changed = False
     submitted_nonnull_remaining = False
@@ -1517,14 +1616,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         ):
             tank_changed = True
 
-    tail_fuel_state = (
-        NeoScorpionTailFuelState.query.filter_by(
-            sort_date_operation_id=operation.id,
-            tail_number=tail_number,
-        )
-        .with_for_update()
-        .first()
-    )
     current_apu_running = fuel_work_state.apu_running if fuel_work_state else None
     target_apu_running = current_apu_running
     apu_changed = False
@@ -1610,11 +1701,13 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         )
 
     if target_apu_running is True and "apu_override_present" in form:
-        target_apu_override_enabled = form.get("apu_override_enabled") == "1"
+        target_apu_override_enabled = (form.get("apu_override_enabled") == "1"
+                                       if "apu_override_enabled" in form or expected is None else target_apu_override_enabled)
         if target_apu_override_enabled:
-            target_apu_override_allowance_lbs = display_thousands_to_lbs(
-                form.get("apu_override_allowance")
-            )
+            if "apu_override_allowance" in form:
+                target_apu_override_allowance_lbs = display_thousands_to_lbs(
+                    form.get("apu_override_allowance")
+                )
             if target_apu_override_allowance_lbs is None:
                 raise ValueError("Enter a nonnegative APU override allowance.")
         else:
@@ -1653,8 +1746,29 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None):
         )
     )
     target_apu_lbs = target_apu_allowance_lbs
-    target_notes = (form.get("notes") or "").strip()
-    target_transfer_gallons = _int_or_none(form.get("transfer_fuel_gallons"))
+    target_notes = ((form.get("notes") or "").strip() if "notes" in form
+                    else ((tail_fuel_state.notes or "") if tail_fuel_state else ""))
+    target_transfer_gallons = (_int_or_none(form.get("transfer_fuel_gallons"))
+                               if "transfer_fuel_gallons" in form else assignment.transfer_fuel_gallons)
+
+    targets = {
+        "apu_running": target_apu_running,
+        "apu_source_tank_code": target_apu_source_tank_code,
+        "apu_override_enabled": target_apu_override_enabled,
+        "apu_override_allowance": target_apu_override_allowance_lbs,
+        "notes": target_notes,
+        "transfer_fuel_gallons": target_transfer_gallons,
+    }
+    for code, (remaining, actual) in final_tank_values.items():
+        targets[f"remaining_{code}"] = remaining
+        targets[f"actual_{code}"] = actual
+    # Include implicit APU resets as well as explicitly submitted fields.
+    requested = {key: value for key, value in targets.items()
+                 if key in form or value != current[key]}
+    if "apu_override_present" in form:
+        requested.update({key: targets[key] for key in
+                          ("apu_override_enabled", "apu_override_allowance")})
+    _check_fueler_expected(expected, current, requested)
 
     remaining_values = [values[0] for values in final_tank_values.values()]
     actual_values = [values[1] for values in final_tank_values.values()]
@@ -1799,7 +1913,7 @@ def mark_ready_for_fuel(gateway, user, assignment_id, *, now_utc=None):
     return FuelInterruptionResult(True, int(asset_state.revision), assignment, None)
 
 
-def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
+def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=False, expected=None):
     operation = current_sort_operation(gateway)
     if not operation:
         raise ValueError("No current sort operation is available for NeoScorpion OFF.")
@@ -1815,7 +1929,8 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
         .filter(
             NeoScorpionFuelAssignment.id == _int_or_none(assignment_id),
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
-            NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id,
+            (NeoScorpionFuelAssignment.assigned_fueler_user_id.isnot(None)
+             if dispatcher else NeoScorpionFuelAssignment.assigned_fueler_user_id == user.id),
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
         )
@@ -1855,6 +1970,13 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None):
         .with_for_update()
         .all()
     )
+    if expected is not None:
+        tail = NeoScorpionTailFuelState.query.filter_by(
+            sort_date_operation_id=operation.id, tail_number=tail_number,
+        ).with_for_update().first()
+        current = fueler_edit_state(assignment, mission, fuel_work_state, tail, tank_states)
+        if expected != current:
+            raise FuelerDataConflict()
     tank_states_by_code = {state.tank_code: state for state in tank_states}
     tank_layout = tank_layout_for_tail(tail_number)
     if not tank_layout:

@@ -347,7 +347,15 @@
         root.dataset.revision = String(revision);
     };
 
+    let pendingFuelDataRefresh = false;
+    document.addEventListener("neoscorpion:fuel-data-closed", () => {
+        if (pendingFuelDataRefresh && !hasUnsavedControls()) reloadPage();
+    });
     const reloadPage = () => {
+        if (window.NeoScorpionFuelData?.isOpen()) {
+            pendingFuelDataRefresh = true;
+            return;
+        }
         if (reloading) {
             return;
         }
@@ -378,6 +386,7 @@
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
         if (nextOperationId !== operationId || nextRevision !== revision) {
+            window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
             handleChangedFingerprint();
         } else if (
             root.dataset.spearRecommendationsEnabled === "true"

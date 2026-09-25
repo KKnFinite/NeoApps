@@ -206,12 +206,13 @@
         const match = raw.match(/(?:\d+(?:\.\d{0,2})?|\.\d{0,2})/);
         return match ? match[0] : "";
     };
-    document.querySelectorAll([
+    const initializeReadings = (scope) => scope.querySelectorAll([
         'input[name="required_fuel"]', 'input[name="inbound_fuel"]',
         'input[name="apu_override_allowance"]',
         'input[name^="remaining_"]', 'input[name^="actual_"]',
         'input[name^="correct_actual_"]',
     ].join(",")).forEach((input) => {
+        if (input.hasAttribute("data-k-lb-input")) return;
         input.setAttribute("data-k-lb-input", "");
         input.inputMode = "decimal";
         input.addEventListener("input", () => { input.value = sanitizeKlb(input.value); });
@@ -233,7 +234,11 @@
         return text === "INCOMPLETE" ? "APU INCOMPLETE" : `APU ${text.replace(" K LBS", "K")}`;
     };
 
-    document.querySelectorAll("[data-fuel-planning-form]").forEach((form) => {
+    const initialize = (scope = document) => {
+    initializeReadings(scope);
+    scope.querySelectorAll("[data-fuel-planning-form]").forEach((form) => {
+        if (form.dataset.planningReady) return;
+        form.dataset.planningReady = "true";
         const card = form.closest("[data-fuel-assignment-id]");
         const apuRunningInput = form.querySelector("[data-apu-running]");
         const apuSourceInput = form.querySelector("[data-apu-source]");
@@ -396,4 +401,9 @@
         form.addEventListener("change", update);
         update();
     });
+    };
+    api.initialize = initialize;
+    // Dispatch loads this library for its shared modal only. Leave its existing
+    // inline field handling to the Dispatch controller.
+    if (!document.querySelector("[data-fuel-dispatch-live]")) initialize();
 })();

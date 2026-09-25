@@ -21,6 +21,8 @@ from app.services.neoscorpion import (
     fuel_assignments_live_revision,
     hanzo_context,
     fueler_context,
+    FuelerDataConflict,
+    _fueler_expected,
     history_context,
     mark_ready_for_fuel,
     mark_fueler_off,
@@ -664,7 +666,11 @@ def fueler():
             flash("Access denied.", "error")
             return _fueler_response(gateway, access, status_code=403)
         try:
-            result = save_fueler_entry(gateway, current_user, request.form)
+            result = save_fueler_entry(gateway, current_user, request.form, require_expected=True)
+        except FuelerDataConflict as exc:
+            db.session.rollback()
+            return _fuel_data_payload(gateway, int(request.form.get("assignment_id", 0)), False,
+                                      error=str(exc), status=409)
         except ValueError as exc:
             db.session.rollback()
             if json_response:
@@ -730,6 +736,27 @@ def fueler_off():
         flash(str(exc), "error")
         return _fueler_response(gateway, access, status_code=400)
 
+    spear_completed, spear_completion_error = _fueler_off_automation(
+        gateway, result, request.form.get("assignment_id"))
+    if result.changed:
+        db.session.commit()
+        flash(
+            "FUELER MARKED OFF · SPEAR COMPLETED ASSIGNMENT."
+            if spear_completed
+            else "FUELER MARKED OFF.",
+            "success",
+        )
+        if spear_completion_error:
+            flash(
+                f"SPEAR COULD NOT AUTO-COMPLETE: {spear_completion_error}",
+                "warning",
+            )
+    else:
+        flash("FUELER WAS ALREADY OFF.", "info")
+    return redirect(url_for("neoscorpion.fueler"))
+
+
+def _fueler_off_automation(gateway, result, assignment_id):
     spear_completed = False
     spear_completion_error = None
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
@@ -741,7 +768,7 @@ def fueler_off():
                 completion = complete_fueled_assignment(
                     gateway,
                     current_user,
-                    request.form.get("assignment_id"),
+                    assignment_id,
                 )
                 spear_completed = completion.changed
                 if completion.changed:
@@ -760,22 +787,85 @@ def fueler_off():
             spear_completion_error = (
                 "Automation failed safely. Dispatcher COMPLETE remains available."
             )
-    if result.changed:
-        db.session.commit()
-        flash(
-            "FUELER MARKED OFF · SPEAR COMPLETED ASSIGNMENT."
-            if spear_completed
-            else "FUELER MARKED OFF.",
-            "success",
-        )
-        if spear_completion_error:
-            flash(
-                f"SPEAR COULD NOT AUTO-COMPLETE: {spear_completion_error}",
-                "warning",
-            )
-    else:
-        flash("FUELER WAS ALREADY OFF.", "info")
-    return redirect(url_for("neoscorpion.fueler"))
+    return spear_completed, spear_completion_error
+
+
+def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status=200):
+    context = fueler_context(gateway, current_user, assignment_id=assignment_id,
+                             dispatcher=dispatcher)
+    row = context["rows"][0] if context["rows"] else None
+    return _json_no_store({
+        "ok": error is None,
+        "error": error,
+        "revision": context["fuel_assignments_revision"],
+        "operation_id": context["operation"].id if context["operation"] else None,
+        "closed": row is None,
+        "html": render_template("neonodes/neoscorpion/_fueler_card.html", row=row,
+                                can_edit=True, dispatcher_panel=dispatcher) if row else "",
+    }, status)
+
+
+def _fuel_data_request(assignment_id, *, dispatcher=False, off=False):
+    gateway = get_current_gateway()
+    permission = FUEL_DISPATCH_EDIT_PERMISSION if dispatcher else FUELER_EDIT_PERMISSION
+    if not user_can(permission):
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    # GET is narrowed to a current, assigned, incomplete mission in this gateway.
+    if request.method == "GET":
+        context = fueler_context(gateway, current_user, assignment_id=assignment_id,
+                                 dispatcher=dispatcher)
+        if not context["rows"]:
+            return _json_no_store({"ok": False, "error": "Active assignment not found."}, 404)
+        row = context["rows"][0]
+        return _json_no_store({"ok": True, "revision": context["fuel_assignments_revision"],
+            "operation_id": context["operation"].id if context["operation"] else None,
+            "html": render_template("neonodes/neoscorpion/_fueler_card.html", row=row,
+                                    can_edit=True, dispatcher_panel=dispatcher)})
+    form = request.form.copy()
+    form["assignment_id"] = str(assignment_id)
+    try:
+        if off:
+            result = mark_fueler_off(gateway, current_user, assignment_id,
+                dispatcher=dispatcher, expected=_fueler_expected(form, required=True))
+            _fueler_off_automation(gateway, result, assignment_id)
+        else:
+            result = save_fueler_entry(gateway, current_user, form,
+                                      dispatcher=dispatcher, require_expected=True)
+        if result.changed:
+            db.session.commit()
+        else:
+            db.session.rollback()
+    except FuelerDataConflict as exc:
+        db.session.rollback()
+        return _fuel_data_payload(gateway, assignment_id, dispatcher, error=str(exc), status=409)
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc)}, 400)
+    return _fuel_data_payload(gateway, assignment_id, dispatcher)
+
+
+@bp.route("/fueler/assignments/<int:assignment_id>", methods=["GET", "POST"])
+@gateway_node_required("scorpion")
+def fueler_assignment_data(assignment_id):
+    return _fuel_data_request(assignment_id)
+
+
+@bp.post("/fueler/assignments/<int:assignment_id>/off")
+@gateway_node_required("scorpion")
+def fueler_assignment_off(assignment_id):
+    return _fuel_data_request(assignment_id, off=True)
+
+
+@bp.route("/fuel-dispatch/fueler-data/<int:assignment_id>", methods=["GET", "POST"])
+@gateway_node_required("scorpion")
+def dispatch_fueler_data(assignment_id):
+    return _fuel_data_request(assignment_id, dispatcher=True)
+
+
+@bp.post("/fuel-dispatch/fueler-data/<int:assignment_id>/off")
+@gateway_node_required("scorpion")
+def dispatch_fueler_off(assignment_id):
+    return _fuel_data_request(assignment_id, dispatcher=True, off=True)
 
 
 @bp.get("/fuel-assignments/revision")

@@ -129,7 +129,9 @@
 
     fuelerControls().forEach((control) => initialControlValues.set(control, control.value));
 
-    const hasUnsavedFuelEntry = () => fuelerControls().some(
+    const hasUnsavedFuelEntry = () => window.NeoScorpionFuelData
+        ? window.NeoScorpionFuelData.hasDirty(root)
+        : fuelerControls().some(
         (control) => initialControlValues.get(control) !== control.value
     );
 
