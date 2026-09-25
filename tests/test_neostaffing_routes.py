@@ -2841,6 +2841,60 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(pt.status_code, 302)
         self.assertEqual(twenty_c.status_code, 302)
 
+    def test_add_management_create_sets_classification_aware_reports_to(self):
+        admin = self._user("staffing_create_reports_to_admin")
+        self._grant_app_access(admin, "neostaffing", "grandmaster")
+        sort, operation, department, work_area = self._staffing_hierarchy()
+
+        ft_target = staffing_service.create_person({
+            "employee_id": "REPORTS-FT", "first_name": "Full", "last_name": "Supervisor",
+            "seniority_date": "2010-01-01", "classification": "full_time_supervisor",
+        })
+        manager_target = staffing_service.create_person({
+            "employee_id": "REPORTS-MGR", "first_name": "Area", "last_name": "Manager",
+            "seniority_date": "2008-01-01", "classification": "manager",
+        })
+        division_target = staffing_service.create_person({
+            "employee_id": "REPORTS-DM", "first_name": "Division", "last_name": "Manager",
+            "seniority_date": "2005-01-01", "classification": "division_manager",
+        })
+        staffing_service.create_leadership_assignment(ft_target, department)
+        staffing_service.create_leadership_assignment(manager_target, operation)
+        staffing_service.create_leadership_assignment(division_target, sort)
+        db.session.commit()
+        client = self._logged_in_client(admin.username)
+
+        page = client.get("/neostaffing/people")
+        self.assertIn(b"REPORTS-MGR", page.data)
+        self.assertIn(b"REPORTS-DM", page.data)
+
+        cases = (
+            ("CREATE-PT", "part_time_supervisor", work_area.id, ft_target.id),
+            ("CREATE-FT", "full_time_supervisor", department.id, manager_target.id),
+            ("CREATE-MGR", "manager", operation.id, division_target.id),
+        )
+        for employee_id, classification, unit_id, reports_to_id in cases:
+            response = client.post(
+                "/neostaffing/app-management/people",
+                data={
+                    "employee_id": employee_id,
+                    "first_name": "Created",
+                    "last_name": classification,
+                    "seniority_date": "01/01/2020",
+                    "classification": classification,
+                    "employee_status": "active",
+                    "creation_flow": "management",
+                    "initial_assignment_unit_ids": str(unit_id),
+                    "reports_to_person_id": str(reports_to_id),
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+            person = StaffingPerson.query.filter_by(employee_id=employee_id).one()
+            relationship = StaffingReportingRelationship.query.filter_by(
+                person_id=person.id, active=True
+            ).one()
+            self.assertEqual(relationship.reports_to_person_id, reports_to_id)
+
     def test_people_interaction_script_contracts_remain_parse_separated(self):
         simulator = self._user("staffing_people_script_contract")
         self._grant_app_access(simulator, "neostaffing", "simulator")
@@ -2900,9 +2954,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"selected.filter(item=>allowed", page.data)
         self.assertIn(b"rank(a,query)-rank(b,query)", page.data)
         self.assertIn(b"No matching assignments", page.data)
-        self.assertIn(b'name="ft_supervisor_selection"', page.data)
-        self.assertIn(b"data-ft-supervisor-selection", page.data)
+        self.assertIn(b'name="reports_to_person_id"', page.data)
+        self.assertIn(b"data-reporting-selection", page.data)
         self.assertIn("Reports To — FT Supervisor — Optional".encode(), page.data)
+        self.assertIn("Reports To — Manager — Optional".encode(), page.data)
+        self.assertIn("Reports To — Division Manager — Optional".encode(), page.data)
+        self.assertIn(b'name="twenty_c_primary"', page.data)
 
     def test_people_creation_drawers_separate_management_and_employees(self):
         simulator = self._user("staffing_people_split_drawers")
@@ -2966,7 +3023,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             'data-person-field="classification"',
             "data-assignment-picker",
             'data-person-field="phone"',
-            "data-ft-supervisor-selection",
+            "data-reporting-selection",
+            "data-twenty-c-primary",
             "SAVE MANAGEMENT",
         ]
         positions = [management.index(marker) for marker in field_order]

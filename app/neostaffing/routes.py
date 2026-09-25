@@ -2218,41 +2218,56 @@ def create_person():
                 raise ValueError("You do not have permission to assign management.")
         staffing_service.create_initial_person_assignments(person, units)
 
-        # The legacy twenty_c_primary name is accepted for already-rendered/cached
-        # forms, but new People pages post the classification-aware selector.
-        supervisor_value = (
-            request.form.get("ft_supervisor_selection", "").strip()
-            or request.form.get("twenty_c_primary", "").strip()
-        )
-        if supervisor_value:
-            if creation_flow != "management":
-                raise ValueError("FT Supervisor selection applies only to Add Management.")
-            if person.classification not in {
-                "part_time_supervisor",
-                "full_time_specialist",
-                "twenty_c_full_time_supervisor",
-            }:
-                raise ValueError(
-                    "FT Supervisor selection applies only to a Part Time Supervisor, "
-                    "Full Time Specialist, or 20C Full-Time Supervisor."
-                )
-            try:
-                sort_id, ft_supervisor_id = (
-                    int(value) for value in supervisor_value.split(":", 1)
-                )
-            except (TypeError, ValueError):
-                raise ValueError("Select a valid Full-Time Supervisor.")
-            ft_supervisor = db.session.get(StaffingPerson, ft_supervisor_id)
-            if not ft_supervisor:
-                raise ValueError("Select a valid Full-Time Supervisor.")
+        if creation_flow == "management":
+            # 20C keeps its special Primary affiliation contract. The legacy
+            # ft_supervisor_selection field is accepted for already-rendered forms.
             if person.classification == "twenty_c_full_time_supervisor":
-                sort_unit = db.session.get(StaffingUnit, sort_id)
-                staffing_service.create_twenty_c_affiliation(
-                    person, ft_supervisor, sort_unit, "primary"
+                primary_value = (
+                    request.form.get("twenty_c_primary", "").strip()
+                    or request.form.get("ft_supervisor_selection", "").strip()
                 )
-            staffing_service.update_reporting_relationship(
-                person.id, ft_supervisor.id, "none"
-            )
+                if primary_value:
+                    try:
+                        sort_id, ft_supervisor_id = (
+                            int(value) for value in primary_value.split(":", 1)
+                        )
+                    except (TypeError, ValueError):
+                        raise ValueError("Select a valid Primary FT Supervisor.")
+                    sort_unit = db.session.get(StaffingUnit, sort_id)
+                    ft_supervisor = db.session.get(StaffingPerson, ft_supervisor_id)
+                    staffing_service.create_twenty_c_affiliation(
+                        person, ft_supervisor, sort_unit, "primary"
+                    )
+                    staffing_service.update_reporting_relationship(
+                        person.id, ft_supervisor.id, "none"
+                    )
+            else:
+                reports_to_value = request.form.get(
+                    "reports_to_person_id", ""
+                ).strip()
+                if not reports_to_value and person.classification in {
+                    "part_time_supervisor",
+                    "full_time_specialist",
+                }:
+                    legacy_value = (
+                        request.form.get("ft_supervisor_selection", "").strip()
+                        or request.form.get("twenty_c_primary", "").strip()
+                    )
+                    if legacy_value:
+                        reports_to_value = legacy_value.rsplit(":", 1)[-1]
+                if reports_to_value:
+                    try:
+                        reports_to_person_id = int(reports_to_value)
+                    except (TypeError, ValueError):
+                        raise ValueError("Select a valid Reports To person.")
+                    reports_to_person = db.session.get(
+                        StaffingPerson, reports_to_person_id
+                    )
+                    staffing_service.update_reporting_relationship(
+                        person.id,
+                        getattr(reports_to_person, "id", None),
+                        "none",
+                    )
 
         if creation_flow == "employee":
             staffing_service.create_shift_flow_plan(person, request.form, units[0])

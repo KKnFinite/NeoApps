@@ -4147,6 +4147,29 @@ def people_creation_context(selected_unit=None):
         )
     )
 
+    reporting_people = (
+        StaffingPerson.query.filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(
+                set(REPORTING_TARGET_CLASSIFICATION.values())
+            ),
+        )
+        .order_by(
+            StaffingPerson.classification,
+            StaffingPerson.last_name,
+            StaffingPerson.first_name,
+            StaffingPerson.id,
+        )
+        .all()
+    )
+    reporting_options = [
+        {
+            "person": person,
+            "target_classification": person.classification,
+        }
+        for person in reporting_people
+    ]
+
     ft_rows = (
         db.session.query(StaffingPerson, StaffingLeadershipAssignment)
         .join(
@@ -4182,6 +4205,7 @@ def people_creation_context(selected_unit=None):
     return {
         "units": unit_rows,
         "selected_unit_id": getattr(selected_unit, "id", None),
+        "reporting_options": reporting_options,
         "twenty_c_primary_options": primary_options,
     }
 
