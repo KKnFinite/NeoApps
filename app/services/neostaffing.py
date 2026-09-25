@@ -2112,6 +2112,49 @@ def delete_leadership_assignment(assignment):
     reconcile_management_person_state(person)
 
 
+def create_initial_twenty_c_affiliations(person, primary_value, secondary_value=""):
+    """Validate Add Management's two supervisors before creating canonical links."""
+    if not primary_value:
+        raise ValueError("Primary FT Supervisor is required for 20C.")
+    selections = []
+    for role, value in (("primary", primary_value), ("secondary", secondary_value)):
+        if not value:
+            continue
+        try:
+            sort_id, person_id = (int(part) for part in value.split(":", 1))
+        except (TypeError, ValueError):
+            raise ValueError(f"Select a valid {role.title()} FT Supervisor.")
+        selections.append((role, sort_id, person_id))
+    if len(selections) == 2:
+        if selections[0][2] == selections[1][2]:
+            raise ValueError("Primary and Secondary must be different FT Supervisors.")
+        if selections[0][1] != selections[1][1]:
+            raise ValueError("Secondary FT Supervisor must be in the same Sort as Primary.")
+    units = {unit.id: unit for unit in StaffingUnit.query.filter_by(active=True).all()}
+    supervisors = {row.id: row for row in StaffingPerson.query.filter(
+        StaffingPerson.id.in_([selection[2] for selection in selections]),
+        StaffingPerson.active.is_(True), StaffingPerson.classification == "full_time_supervisor",
+    ).all()}
+    assignments = StaffingLeadershipAssignment.query.filter(
+        StaffingLeadershipAssignment.person_id.in_(supervisors),
+        StaffingLeadershipAssignment.active.is_(True),
+        StaffingLeadershipAssignment.leadership_level == "department",
+    ).all()
+    valid_scopes = set()
+    for assignment in assignments:
+        department = units.get(assignment.unit_id)
+        operation = units.get(department.parent_id) if department else None
+        sort_unit = units.get(operation.parent_id) if operation else None
+        if sort_unit and sort_unit.unit_type == "sort":
+            valid_scopes.add((sort_unit.id, assignment.person_id))
+    for role, sort_id, supervisor_id in selections:
+        if (sort_id, supervisor_id) not in valid_scopes:
+            raise ValueError(f"Select an active {role.title()} FT Supervisor assigned to that Sort.")
+    for role, sort_id, supervisor_id in selections:
+        create_twenty_c_affiliation(person, supervisors[supervisor_id], units[sort_id], role)
+    update_reporting_relationship(person.id, selections[0][2], "none")
+
+
 def create_twenty_c_affiliation(
     twenty_c_person,
     ft_supervisor_person,
@@ -3302,20 +3345,27 @@ def work_area_ids_under(unit):
     return ids
 
 
-def _management_work_area_labels(assignments, units_by_id):
-    """Read-only card labels from active canonical leadership assignments."""
+def _management_scope_labels(assignments, units_by_id):
+    """Describe actual leadership scope in hierarchy order without lazy queries."""
     labels = {}
     for assignment in assignments:
-        area = units_by_id.get(assignment.unit_id)
-        if not assignment.active or not area or not area.active or area.unit_type != "work_area":
+        unit = units_by_id.get(assignment.unit_id)
+        if not assignment.active or not unit or not unit.active:
             continue
-        cursor, seen = area, set()
-        while cursor and cursor.unit_type != "sort" and cursor.id not in seen:
+        path, seen, cursor = [], set(), unit
+        while cursor and cursor.id not in seen:
             seen.add(cursor.id)
+            path.append(cursor)
             cursor = units_by_id.get(cursor.parent_id)
-        label = f"{cursor.name} · {area.name}" if cursor and cursor.unit_type == "sort" else area.name
-        labels.setdefault(assignment.person_id, set()).add(label)
-    return {person_id: sorted(values) for person_id, values in labels.items()}
+        ancestor_type = "department" if unit.unit_type == "work_area" else "sort"
+        ancestor = next((item for item in path[1:] if item.unit_type == ancestor_type), None)
+        label = f"{ancestor.name} · {unit.name}" if ancestor else unit.name
+        order = tuple((item.display_order or 0, item.name.lower(), item.id) for item in reversed(path))
+        labels.setdefault(assignment.person_id, []).append((order, label))
+    return {
+        person_id: list(dict.fromkeys(label for _, label in sorted(values)))
+        for person_id, values in labels.items()
+    }
 
 
 def org_chart_context(selected_unit_id=None):
@@ -3340,7 +3390,7 @@ def org_chart_context(selected_unit_id=None):
         StaffingUnit.name,
     ).all()
     unit_card_meta = _org_chart_unit_meta()
-    work_area_labels = _management_work_area_labels(
+    management_scope_labels = _management_scope_labels(
         [assignment for meta in unit_card_meta.values() for assignment in meta["leadership"]],
         {unit.id: unit for unit in units},
     )
@@ -3370,7 +3420,7 @@ def org_chart_context(selected_unit_id=None):
         "breadcrumb": unit_breadcrumb(selected_unit),
         "current_children": current_children,
         "unit_card_meta": unit_card_meta,
-        "work_area_labels": work_area_labels,
+        "management_scope_labels": management_scope_labels,
         "selected_detail": selected_detail,
         "work_area_detail": work_area_detail,
         "units": units,
@@ -3653,7 +3703,7 @@ def management_org_chart_context(selected_person_id=None, selected_unit_id=None)
         cursor = people_by_id.get(relationship.reports_to_person_id) if relationship else None
     return {
         "tree": tree,
-        "work_area_labels": _management_work_area_labels(leadership_assignments, units_by_id),
+        "management_scope_labels": _management_scope_labels(leadership_assignments, units_by_id),
         "unassigned_tree": unassigned_tree,
         "navigator": [{"unit": unit, "path": unit_paths[unit.id]} for unit in units],
         "selected_unit": selected_unit,

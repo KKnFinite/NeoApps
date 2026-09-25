@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}NeoStaffing Management Org Chart{% endblock %}
 {% macro assignment_labels(person) %}
-{% for label in management.work_area_labels.get(person.id, []) %}<span class="org-person-assignment">{{ label }}</span>{% else %}<span class="org-person-assignment">No active Work Area assignment</span>{% endfor %}
+{% for label in management.management_scope_labels.get(person.id, []) %}<span class="org-person-assignment">{{ label }}</span>{% else %}<span class="org-person-assignment">No active management assignment</span>{% endfor %}
 {% endmacro %}
 {% macro person_card(person, selected=none, muted=false) %}
 <a class="org-person{% if selected and person.id == selected.id %} is-selected{% elif muted %} is-peer{% endif %}" href="{{ url_for('neostaffing.org_chart', view='management', person_id=person.id, unit_id=management.selected_unit.id if management.selected_unit else none) }}" {% if selected and person.id == selected.id %}aria-current="page"{% endif %} data-org-person="{{ person.id }}">

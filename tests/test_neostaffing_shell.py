@@ -49,15 +49,15 @@ class StaffingShellTest(unittest.TestCase):
         self.assertEqual([p.id for p in context['direct_reports']], [self.manager.id])
         self.assertNotIn(self.peer.id, [p.id for p in context['visible_people']])
         self.assertIsNone(staffing.management_org_chart_context(self.peer.id)['selected_person'])
-        self.assertEqual(context['work_area_labels'][self.manager.id], ['Night · East Ballmat'])
+        self.assertEqual(context['management_scope_labels'][self.manager.id], ['Shift · East Ballmat'])
         operational = staffing.org_chart_context(self.areas['ebm'].id)
         self.assertEqual([a.person_id for a in operational['selected_detail']['leadership']], [self.manager.id])
         self.leadership.active = False
         stale.active = True
         db.session.commit()
         html = self.client.get(f'/neostaffing/org-chart?view=management&person_id={self.manager.id}').get_data(as_text=True)
-        self.assertIn('Night · West Ballmat', html)
-        self.assertNotIn('Night · East Ballmat', html)
+        self.assertIn('Shift · West Ballmat', html)
+        self.assertNotIn('Shift · East Ballmat', html)
         self.assertIn('DIRECT REPORTS · 0', html)
 
     def test_major_surfaces_share_one_shell_and_opt_in_only_read_forms(self):

@@ -2219,28 +2219,16 @@ def create_person():
         staffing_service.create_initial_person_assignments(person, units)
 
         if creation_flow == "management":
-            # 20C keeps its special Primary affiliation contract. The legacy
+            # 20C creates affiliations and formally reports only to Primary. The legacy
             # ft_supervisor_selection field is accepted for already-rendered forms.
             if person.classification == "twenty_c_full_time_supervisor":
                 primary_value = (
                     request.form.get("twenty_c_primary", "").strip()
                     or request.form.get("ft_supervisor_selection", "").strip()
                 )
-                if primary_value:
-                    try:
-                        sort_id, ft_supervisor_id = (
-                            int(value) for value in primary_value.split(":", 1)
-                        )
-                    except (TypeError, ValueError):
-                        raise ValueError("Select a valid Primary FT Supervisor.")
-                    sort_unit = db.session.get(StaffingUnit, sort_id)
-                    ft_supervisor = db.session.get(StaffingPerson, ft_supervisor_id)
-                    staffing_service.create_twenty_c_affiliation(
-                        person, ft_supervisor, sort_unit, "primary"
-                    )
-                    staffing_service.update_reporting_relationship(
-                        person.id, ft_supervisor.id, "none"
-                    )
+                staffing_service.create_initial_twenty_c_affiliations(
+                    person, primary_value, request.form.get("twenty_c_secondary", "").strip()
+                )
             else:
                 reports_to_value = request.form.get(
                     "reports_to_person_id", ""
@@ -2279,7 +2267,7 @@ def create_person():
         flash(f"Person was not created: {message}", "error")
     else:
         flash("Person added.", "success")
-    return redirect(_people_return_url(person.id if person else None))
+    return redirect(_people_return_url(creation_flow=creation_flow if person else None))
 
 
 @bp.route("/app-management/people/bulk-create", methods=["POST"])
@@ -2731,7 +2719,7 @@ def _selected_scope_unit():
     return None
 
 
-def _people_return_url(person_id=None):
+def _people_return_url(person_id=None, *, creation_flow=None):
     query = {
         key: request.form.get(key, "").strip()
         for key in (
@@ -2749,6 +2737,22 @@ def _people_return_url(person_id=None):
         )
         if request.form.get(key, "").strip()
     }
+    if creation_flow:
+        # Creation fields share names with filters. Read the separately carried
+        # filter state, never the newly submitted person's classification/status.
+        for key in ("sort_id", "operation_id", "department_id", "work_area_id",
+                    "classification", "employee_status", "active", "assignment_status",
+                    "search", "page", "per_page", "leadership_only"):
+            value = request.form.get(f"people_filter_{key}")
+            if value is not None:
+                query.pop(key, None)
+                if value.strip():
+                    query[key] = value.strip()
+            elif key in {"classification", "employee_status", "active"}:
+                query.pop(key, None)
+        if creation_flow == "employee":
+            query["work_area_id"] = request.form.get("initial_work_area_unit_id", "").strip()
+        query["add"] = creation_flow
     if person_id:
         query["person_id"] = person_id
     return url_for("neostaffing.people", **query)

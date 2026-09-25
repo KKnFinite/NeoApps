@@ -641,8 +641,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"neostaffing-tree-stats", work_area_response.data)
         self.assertNotIn(b"neostaffing-detail-section", work_area_response.data)
         self.assertLess(
-            work_area_response.data.index(b"neostaffing-tree-detail-title"),
             work_area_response.data.index(b"neostaffing-tree-management-summary"),
+            work_area_response.data.index(b'aria-label="Selected hierarchy level"'),
         )
         self.assertLess(
             work_area_response.data.index(b"neostaffing-tree-management-summary"),
@@ -1267,7 +1267,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Default Area", defaulted.data)
         self.assertIn(b"Required HC", defaulted.data)
 
-    def test_org_chart_detail_shows_management_summary_beneath_unit_header(self):
+    def test_org_chart_detail_shows_management_summary_above_child_units(self):
         user = self._user("staffing_org_detail")
         self._grant_app_access(user, "neostaffing", "master")
         _sort, _operation, _department, work_area = self._staffing_hierarchy()
@@ -1305,8 +1305,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Assigned Count", response.data)
         self.assertNotIn(b"No active management assigned.", response.data)
         self.assertLess(
-            response.data.index(b"neostaffing-tree-detail-title"),
             response.data.index(b"neostaffing-tree-management-summary"),
+            response.data.index(b'aria-label="Selected hierarchy level"'),
         )
         self.assertLess(
             response.data.index(b"neostaffing-tree-management-summary"),
@@ -2682,6 +2682,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "twenty_c_full_time_supervisor",
                 "employee_status": "active",
                 "creation_flow": "management",
+                "twenty_c_primary": f"{sort.id}:{ft_supervisor.id}",
             },
             follow_redirects=True,
         )
@@ -2722,6 +2723,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 "classification": "twenty_c_full_time_supervisor",
                 "employee_status": "active",
                 "creation_flow": "management",
+                "twenty_c_primary": f"{sort.id}:{ft_supervisor.id}",
                 "initial_assignment_unit_ids": str(work_area.id),
             },
         )
@@ -2959,7 +2961,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"part_time_supervisor:'full_time_supervisor'", page.data)
         self.assertIn(b"full_time_supervisor:'manager'", page.data)
         self.assertIn(b"manager:'division_manager'", page.data)
-        self.assertIn("Primary FT Supervisor — Optional".encode(), page.data)
+        self.assertIn("Primary FT Supervisor — Required".encode(), page.data)
         self.assertIn(b'name="twenty_c_primary"', page.data)
 
     def test_people_creation_drawers_separate_management_and_employees(self):
@@ -3002,7 +3004,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn('option value="full_time_combo"', management)
         management_classification = management.index('data-person-field="classification"')
         self.assertIn(
-            '<select name="classification" required data-person-classification><option value="part_time_supervisor"',
+            '<select name="classification" required data-person-classification><option value="">Select classification</option><option value="part_time_supervisor"',
             management[management_classification:],
         )
         self.assertIn('option value="part_time"', employee)
