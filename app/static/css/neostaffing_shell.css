@@ -67,3 +67,9 @@ body.blueprint-neostaffing .neostaffing-launch-workspace { grid-template-rows:au
 body.blueprint-neostaffing .neostaffing-menu-tile em { white-space:normal; overflow:visible; text-overflow:clip; font-size:.8rem; }
 
 body.blueprint-neostaffing .org-explorer .neostaffing-org-workspace { width:100%; box-sizing:border-box; }
+
+/* Visual grouping only: all links retain the shared shell's normal behavior. */
+.blueprint-neostaffing .operational-desktop-sidebar .staffing-nav-section {
+  margin-top:4px; padding:8px 10px 2px; border-top:1px solid #33434d;
+  color:#b8cbd1; font-size:.65rem; line-height:1.4; letter-spacing:.06em;
+}
