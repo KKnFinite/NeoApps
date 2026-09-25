@@ -65,6 +65,7 @@
     border-bottom: 0;
 }
 .neoscorpion-dispatch-transfer-estimate { white-space: nowrap; }
+.neoscorpion-dispatch-transfer-estimate small { color: var(--node-scorpion-primary); font-size: inherit; font-weight: bolder; }
 .neoscorpion-dispatch-action-cell { min-width: 0; }
 .neoscorpion-dispatch-action-cell .action-button { min-height: 24px; margin: 1px; padding: 3px 5px; font-size: .57rem; }
 .neoscorpion-dispatch-details-toggle { width: 100%; min-height: 27px; padding: 4px; font-size: .53rem; white-space: nowrap; }
