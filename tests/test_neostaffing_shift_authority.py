@@ -202,15 +202,16 @@ class ShiftAuthorityTest(unittest.TestCase):
         self.assertIsNone(row['plan'].final_door_work_area_id)
         self.assertIsNone(row['plan'].ballmat_transition)
 
-    def test_flow_map_presentation_keeps_one_responsive_journey(self):
+    def test_staffing_matrix_preserves_geometry_on_mobile(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]
         css = (root/'app/static/css/neostaffing_shift_map.css').read_text(encoding='utf-8')
         template = (root/'app/templates/neostaffing/_shift_flow_map.html').read_text(encoding='utf-8')
         self.assertIn('@media(max-width:900px)', css)
         self.assertIn('position:sticky; left:0', css)
-        self.assertIn('grid-template-columns:repeat(6,118px)', css)
-        self.assertIn('overflow-x:auto; max-width:100%', css)
+        self.assertIn('table-layout:fixed', css)
+        self.assertIn('shift-staffing-door-head th { top:28px', css)
+        self.assertIn('overflow:auto; max-width:100%', css)
         self.assertIn('scrollbar-color:', css)
         self.assertIn('min-height:44px', css)
         self.assertIn('data-route-picker', template)

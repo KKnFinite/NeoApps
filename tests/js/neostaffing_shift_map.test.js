@@ -82,12 +82,34 @@ test('stale phase movement does not replay or reload',async()=>{
     await tick(); assert.equal(h.reloads(),0);assert.equal(h.requests.length,1);assert.match(h.status.textContent,/Data changed/);
 });
 
-test('side controls filter the same employee rows and keep shared employees visible',()=>{
-    const rows=['west','east','shared'].map(side=>({dataset:{journeyHomeSide:side},hidden:false}));
-    const buttons=['all','west','east'].map(side=>({dataset:{journeySide:side},setAttribute(name,value){this[name]=value;},addEventListener(_,fn){this.click=fn;}}));
-    const root={querySelector:()=>null,querySelectorAll:s=>s==='[data-journey-side]'?buttons:s==='[data-journey-home-side]'?rows:[]};
-    vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_shift_map.js','utf8'),{document:{querySelector:s=>s==='[data-shift-map]'?root:null}});
-    buttons[2].click(); assert.deepEqual(rows.map(r=>r.hidden),[true,false,false]); assert.equal(buttons[2]['aria-pressed'],'true');
-    buttons[1].click(); assert.deepEqual(rows.map(r=>r.hidden),[false,true,false]);
-    buttons[0].click(); assert.deepEqual(rows.map(r=>r.hidden),[false,false,false]);
+
+function boardHarness(storage={}) {
+    const events={}, search={value:'',addEventListener:(name,fn)=>events[name]=fn}, status={};
+    const scroller={scrollLeft:0,scrollTop:0};
+    const columns=['west','east'].map(side=>({dataset:{finalSide:side},hidden:false}));
+    const buttons=['all','west','east'].map(side=>({dataset:{staffingSide:side},setAttribute(name,value){this[name]=value;},addEventListener(_,fn){this.click=fn;}}));
+    const people=[['west','Alex Smith 101'],['east','Alex Smith 202'],['','Unset Person 303']].map(([side,name])=>({dataset:{personSide:side,personSearch:name},classList:{toggle(_name,value){this.match=value;}},scrollIntoView(){this.reached=true;},focus(){}}));
+    const root={querySelector:s=>({'[data-staffing-scroll]':scroller,'[data-staffing-search]':search,'[data-staffing-search-status]':status,'[data-staffing-next]':{addEventListener:(_,fn)=>events.next=fn}}[s]),
+        querySelectorAll:s=>s==='[data-staffing-side]'?buttons:s==='[data-final-side]'?columns:s==='[data-staffing-person]'?people:[]};
+    vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_shift_map.js','utf8'),{
+        document:{querySelector:s=>s==='[data-shift-map]'?root:null},window:{sessionStorage:{getItem:k=>storage[k],setItem:(k,v)=>storage[k]=v},scrollY:75,scrollTo(){},addEventListener:(name,fn)=>events[name]=fn}});
+    return {events,search,status,scroller,columns,buttons,people,storage};
+}
+test('side filter applies to final-door columns, with all as default',()=>{
+    const h=boardHarness(); assert.deepEqual(h.columns.map(c=>c.hidden),[false,false]);
+    h.buttons[2].click();assert.deepEqual(h.columns.map(c=>c.hidden),[true,false]);
+    h.buttons[1].click();assert.deepEqual(h.columns.map(c=>c.hidden),[false,true]);
+    h.buttons[0].click();assert.deepEqual(h.columns.map(c=>c.hidden),[false,false]);
+});
+test('search highlights existing entries and reaches hidden-side and unassigned matches',()=>{
+    const h=boardHarness();h.buttons[1].click();h.search.value='202';h.events.input();h.events.next();
+    assert.equal(h.people[1].classList.match,true);assert.equal(h.people[1].reached,true);
+    assert.deepEqual(h.columns.map(c=>c.hidden),[false,false]);assert.equal(h.people.length,3);
+    h.search.value='Alex';h.events.input();assert.match(h.status.textContent,/2 matches/);
+    h.search.value='303';h.events.input();h.events.next();assert.equal(h.people[2].reached,true);
+});
+test('side, search and matrix scroll survive a canonical page refresh',()=>{
+    const h=boardHarness();h.buttons[2].click();h.search.value='Smith';h.scroller.scrollLeft=350;h.scroller.scrollTop=210;h.events.pagehide();
+    const next=boardHarness(h.storage);assert.deepEqual(next.columns.map(c=>c.hidden),[true,false]);
+    assert.equal(next.search.value,'Smith');assert.equal(next.scroller.scrollLeft,350);assert.equal(next.scroller.scrollTop,210);
 });

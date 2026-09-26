@@ -5,7 +5,7 @@
   {% include "neostaffing/_section_nav.html" %}
   <main class="neostaffing-shift-flow-workspace">
     <header class="neostaffing-shift-flow-head">
-      <div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift · Employee journeys</p></div>
+      <div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift · Final-door staffing</p></div>
       <strong>{{ shift_flow.flow_map.count }} employees · {{ shift_flow.planned_count }} planned</strong>
     </header>
     {% include "neostaffing/_shift_flow_map.html" %}
@@ -21,5 +21,5 @@
     </aside>
   {% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_shift_map.js', v='20260925-journey') }}"></script>
+<script src="{{ url_for('static', filename='js/neostaffing_shift_map.js', v='20260925-final-door-matrix') }}"></script>
 {% endblock %}

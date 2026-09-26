@@ -1,35 +1,59 @@
-<section class="shift-map" data-shift-map data-route-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}" aria-label="Employee journey matrix">
-  <nav class="shift-journey-sides neo-segmented-control" aria-label="Home side">
-    {% for side in ['all', 'west', 'east'] %}<button type="button" data-journey-side="{{ side }}" aria-pressed="{{ 'true' if side == 'all' else 'false' }}">{{ side|upper }}</button>{% endfor %}
-  </nav>
-  <div class="shift-journey-scroll" tabindex="0" role="region" aria-label="Shift stages">
-    <div class="shift-journey-heading" aria-hidden="true"><strong>EMPLOYEE</strong><div>{% for phase, label in shift_flow.phases %}<strong>{{ 'HOME' if phase == 'sort_start' else label }}</strong>{% endfor %}</div></div>
-    {% for row in shift_flow.flow_map.journey_rows %}
-    <article class="shift-journey-row{% if row.attention_reason %} needs-attention{% endif %}" data-journey-person="{{ row.person.id }}" data-journey-home-side="{{ row.side }}">
-      <a class="shift-journey-person" href="{{ url_for('neostaffing.shift_flow', person_id=row.person.id, side=request.args.get('side', 'west')) }}" {% if can_edit_shift_flow %}draggable="true" data-route-person="{{ row.person.id }}"{% endif %}>
-        <strong>{{ row.person.full_name }}</strong><small>{{ row.shorthand or 'FLOW NOT SET' }}{% if row.custom %} · CUSTOM{% endif %}</small>
-        {% if row.attention_reason %}<em title="{{ row.attention_reason }}">NEEDS ATTENTION · {{ row.attention_reason|replace('Sort Start', 'Home') }}</em>{% endif %}
-      </a>
-      <div class="shift-journey-stages" tabindex="0" aria-label="{{ row.person.full_name }} stages">
-      {% for phase, label in shift_flow.phases %}
-        {% set area = row.locations[phase] %}
-        <a class="shift-journey-cell location-{{ shift_work_area_type(area)|lower if area else 'unset' }}" data-journey-stage="{{ phase }}" aria-label="{{ 'HOME' if phase == 'sort_start' else label }}: {{ area.name if area else 'Flow Not Set' }}" href="{{ url_for('neostaffing.shift_flow', person_id=row.person.id, phase=phase, side=request.args.get('side', 'west')) }}">
-          <small>{{ 'HOME' if phase == 'sort_start' else label }}</small><span>{{ 'No Setup' if area and area.name == 'NO SETUP' else area.name if area else 'Flow Not Set' }}</span>
-        </a>
-      {% endfor %}
-      </div>
-    </article>
-    {% else %}<p>No active employees in this Shift scope.</p>{% endfor %}
+{% macro employee(entry, can_edit) -%}
+<a class="shift-staffing-person" data-staffing-person="{{ entry.person.id }}" data-person-search="{{ entry.person.full_name }} {{ entry.person.employee_id }}" data-person-side="{{ entry.final_side }}" href="{{ url_for('neostaffing.shift_flow', person_id=entry.person.id) }}"{% if can_edit %} draggable="true" data-route-person="{{ entry.person.id }}"{% endif %}>
+  <strong>{{ entry.person.full_name }}</strong><small class="shift-staffing-id">{{ entry.person.employee_id }}</small>
+  <span>{{ 'No Setup' if entry.setup_label == 'No Setup' else 'Setup: ' ~ entry.setup_label }}</span>
+  <span>Sort Start: {{ entry.start_label }}</span>
+  {% if entry.reason %}<em>{{ entry.reason }}</em>{% endif %}
+</a>
+{%- endmacro %}
+{% set matrix = shift_flow.flow_map.staffing_matrix %}
+<section class="shift-map" data-shift-map data-route-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}" aria-label="Final-door staffing matrix">
+  <div class="shift-staffing-controls">
+    <nav class="shift-staffing-sides neo-segmented-control" aria-label="Final Door side">
+      {% for side in ['all', 'west', 'east'] %}<button type="button" data-staffing-side="{{ side }}" aria-pressed="{{ 'true' if side == 'all' else 'false' }}">{{ side|upper }}</button>{% endfor %}
+    </nav>
+    <label>Find employee<input type="search" data-staffing-search placeholder="Name or employee ID" autocomplete="off"></label>
+    <button type="button" data-staffing-next>FIND NEXT</button><span data-staffing-search-status role="status"></span>
+    <a href="#shift-needs-assignment">Needs Assignment · {{ matrix.needs_assignment|length }}</a>
   </div>
+  {% if matrix.warnings %}<details class="shift-staffing-warnings"><summary>SHIFT CONFIGURATION · {{ matrix.warnings|length }} issues</summary>{% for warning in matrix.warnings %}<p role="alert">{{ warning }}</p>{% endfor %}</details>{% endif %}
+  <p class="shift-staffing-legend">PLANNED · Assigned = final-door roster. At door = projected location across the full Shift roster.</p>
+  <div class="shift-staffing-scroll" data-staffing-scroll tabindex="0" role="region" aria-label="Final Door columns">
+    <table class="shift-staffing-table">
+      <caption class="sr-only">Employees grouped by final door and route. Counts are planned, not attendance.</caption>
+      <thead>
+        <tr class="shift-staffing-side-head"><th scope="col">FINAL DOOR</th><th colspan="6" scope="colgroup" data-final-side="west">WEST</th><th colspan="6" scope="colgroup" data-final-side="east">EAST</th></tr>
+        <tr class="shift-staffing-door-head"><th scope="col">ROUTE<br><small>PLANNED COUNTS</small></th>
+          {% for door in matrix.columns %}<th scope="col" data-final-side="{{ door.side }}" data-door-column="{{ door.label }}">
+            <strong>{{ door.label }}</strong>
+            {% if door.area %}<span>Assigned <b data-planned-total>{{ door.total }}</b></span><span>At Sort Start <b>{{ door.counts.sort_start }}</b></span>
+            <details><summary>At door by phase</summary><span>After 1st Wave <b>{{ door.counts.after_w1 }}</b></span><span>After 2nd Wave <b>{{ door.counts.after_w2 }}</b></span><span>After Cleanup <b>{{ door.counts.after_cleanup }}</b></span></details>
+            {% else %}<em>Configuration missing / ambiguous</em>{% endif %}
+          </th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>{% for band in matrix.bands %}
+        <tr data-route-band="{{ band.key }}"><th scope="row">{{ band.label }}</th>
+          {% for entries in band.cells %}<td data-final-side="{{ matrix.columns[loop.index0].side }}" data-final-door="{{ matrix.columns[loop.index0].label }}">
+            {% for entry in entries %}{{ employee(entry, can_edit_shift_flow) }}{% else %}<span class="shift-staffing-empty" aria-label="No employees">—</span>{% endfor %}
+          </td>{% endfor %}
+        </tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <section class="shift-staffing-needs" id="shift-needs-assignment" aria-label="Needs Assignment"><h2>NEEDS ASSIGNMENT <small>{{ matrix.needs_assignment|length }}</small></h2>
+    <div>{% for entry in matrix.needs_assignment %}{{ employee(entry, can_edit_shift_flow) }}{% else %}<p>All employees have a configured Final Door.</p>{% endfor %}</div>
+  </section>
   {% if can_edit_shift_flow %}
+  {% set valid_door_ids = matrix.columns|selectattr('area')|map(attribute='id')|list %}
   <details class="shift-route-picker" data-route-picker><summary>APPLY STANDARD ROUTE</summary>
-    <label>Employee<select data-route-employee><option value="">Select employee</option>{% for row in shift_flow.flow_map.journey_rows %}<option value="{{ row.person.id }}" data-version="{{ row.version }}">{{ row.person.full_name }}</option>{% endfor %}</select></label>
+    <label>Employee<select data-route-employee><option value="">Select employee</option>{% for row in matrix.rows %}<option value="{{ row.person.id }}" data-version="{{ row.version }}">{{ row.person.full_name }} · {{ row.person.employee_id }}</option>{% endfor %}</select></label>
     <label>Setup<select data-route-setup><option value="none">None</option><option value="door">Final Door</option><option value="ballmat">Same-side Ballmat</option></select></label>
     <p class="shift-route-preview" data-route-preview aria-live="polite"></p>
     <div class="shift-route-targets">
     {% for side, config in shift_flow.flow_map.configurations.items() %}
       <section data-route-side="{{ side }}"><h3>{{ side|upper }}</h3>{% for issue in config.issues %}<p role="alert">{{ issue }}</p>{% endfor %}
-      {% for door in config.doors %}<div><strong>{{ door.name }}</strong>
+      {% for door in config.doors if door.id in valid_door_ids %}<div><strong>{{ door.name }}</strong>
         {% for band, label in [('at_door','HOME DOOR'),('bm1','BALLMAT → 1ST WAVE'),('bm2','BALLMAT → 2ND WAVE'),('bm3','BALLMAT → CLEANUP'),('discharge','DISCHARGE')] %}
         <button type="button" data-route-target data-door="{{ door.id }}" data-band="{{ band }}" data-preview="NO SETUP → {{ config.ballmat.name if band.startswith('bm') and config.ballmat else 'Discharge' if band == 'discharge' else door.name }} → {{ label }} → {{ door.name }}">{{ label }}</button>
         {% endfor %}

@@ -27,7 +27,7 @@
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
     {% if request.endpoint == 'neostaffing.shift_flow' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20260925-journey') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20260925-final-door-matrix') }}">
     {% endif %}
     {% if request.endpoint in ['neostaffing.org_chart', 'neostaffing.hierarchy'] %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_org_explorer.css', v='20260914-explorer-1') }}">

@@ -991,20 +991,89 @@ def _shift_flow_map(rows, areas):
         locations.sort(key=lambda location: (location["area"].id in door_order,
                                             door_order.get(location["area"].id, 0)))
         phases.append({"key": phase, "label": label, "locations": locations})
-    # Presentation only: reuse phase locations and the existing attention rules.
-    door_sides = {door.id: side for side, config in configurations.items() for door in config["doors"]}
-    setup_ids = {area.id for area in areas if shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}}
-    journey_rows = []
-    seen = set()
-    for row in sorted(rows, key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold(), row["person"].id, row["assignment"].id)):
-        if row["person"].id in seen:
+    matrix = _shift_flow_staffing_matrix(rows, areas, configurations)
+    return {"phases": phases, "configurations": configurations, "staffing_matrix": matrix,
+            "count": len(matrix["rows"])}
+
+
+def _shift_flow_staffing_matrix(rows, areas, configurations):
+    """Read-only final-door grouping of already-loaded canonical phase projections."""
+    unique = {}
+    for row in sorted(rows, key=lambda row: (row["person"].last_name.casefold(),
+            row["person"].first_name.casefold(), row["person"].id, row["assignment"].id)):
+        unique.setdefault(row["person"].id, row)
+    names = {}
+    for area in areas:
+        if shift_work_area_type(area) == SHIFT_FLOW_DOOR:
+            names.setdefault(_shift_flow_normalized_name(area.name), []).append(area)
+    warnings = list(dict.fromkeys(issue for config in configurations.values() for issue in config["issues"]))
+    columns = []
+    for side, _, door_names in SHIFT_FLOW_COMPOSITE_SIDES:
+        for name in door_names:
+            matches = names.get(_shift_flow_normalized_name(name), [])
+            area = matches[0] if len(matches) == 1 else None
+            if len(matches) > 1:
+                warnings.append(f"Configured {side.upper()} final door {name} is ambiguous in Night / Ramp / Shift.")
+            columns.append({"label": name.replace("Door ", "D"), "side": side, "area": area,
+                            "id": area.id if area else None, "total": 0,
+                            "counts": {phase: 0 for phase, _ in SHIFT_FLOW_PHASES}})
+    by_id = {column["id"]: column for column in columns if column["id"] is not None}
+    bands = [{"key": key, "label": label, "cells": [[] for _ in columns]} for key, label in (
+        ("at_door", "DOOR AT SORT START"), ("bm1", "BALLMAT → 1ST WAVE"),
+        ("bm2", "BALLMAT → 2ND WAVE"), ("bm3", "BALLMAT → CLEANUP"),
+        ("discharge", "DISCHARGE"), ("custom", "OTHER / CUSTOM"))]
+    by_band = {band["key"]: band for band in bands}
+    column_index = {column["id"]: index for index, column in enumerate(columns) if column["id"] is not None}
+    entries, needs_assignment = [], []
+    for row in unique.values():
+        plan, home = row["plan"], row["home"]
+        final_id = getattr(plan, "final_door_work_area_id", None)
+        column = by_id.get(final_id)
+        entry = {**row, "setup_label": ("Not set" if not plan else
+            "No Setup" if plan.setup_work_area_id is None else
+            plan.setup_work_area.name if plan.setup_work_area else "Not set"),
+            "start_label": home.name if home else "Not set", "final_side": column["side"] if column else "",
+            "reason": None}
+        entries.append(entry)
+        # Physical planned counts include every eligible employee, even custom
+        # routes whose current location differs from their eventual final door.
+        for phase, location in row["locations"].items():
+            located_column = by_id.get(getattr(location, "id", None))
+            if located_column is not None:
+                located_column["counts"][phase] += 1
+        if column is None:
+            final = plan.final_door_work_area if plan else None
+            if not plan:
+                entry["reason"] = "Final Door not set — flow plan required."
+            elif not final_id:
+                entry["reason"] = "Final Door not set."
+            elif final is None:
+                entry["reason"] = "Final Door work area no longer exists."
+            elif not final.active:
+                entry["reason"] = f"Final Door {final.name} is inactive."
+            elif len(names.get(_shift_flow_normalized_name(final.name), [])) > 1:
+                entry["reason"] = f"Final Door {final.name} is ambiguous in Shift configuration."
+            else:
+                entry["reason"] = f"Final Door {final.name} is outside the configured East/West doors."
+            needs_assignment.append(entry)
             continue
-        seen.add(row["person"].id)
-        _, reason = _shift_flow_composite_placement(row["plan"], configurations, door_sides, setup_ids)
-        journey_rows.append({**row, "attention_reason": reason,
-            "side": side_by_area.get(row["home"].id) or door_sides.get(getattr(row["plan"], "final_door_work_area_id", None), "shared")})
-    return {"phases": phases, "configurations": configurations, "journey_rows": journey_rows,
-            "count": len(journey_rows)}
+        column["total"] += 1
+        start_type = shift_work_area_type(home)
+        transition = plan.ballmat_transition
+        if home.id == final_id and transition is None:
+            band = "at_door"
+        elif start_type == SHIFT_FLOW_BALLMAT and transition in {1, 2, 3}:
+            band = f"bm{transition}"
+        elif start_type == SHIFT_FLOW_DISCHARGE and transition is None:
+            band = "discharge"
+        else:
+            band = "custom"
+            if start_type == SHIFT_FLOW_BALLMAT and transition is None:
+                entry["reason"] = "Ballmat transition not set."
+        by_band[band]["cells"][column_index[final_id]].append(entry)
+    bands = [band for band in bands if band["key"] not in {"discharge", "custom"} or any(band["cells"])]
+    return {"columns": columns, "bands": bands, "rows": entries,
+            "needs_assignment": needs_assignment, "warnings": warnings}
 
 
 def _shift_flow_phase_area(plan, phase):

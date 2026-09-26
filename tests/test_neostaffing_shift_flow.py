@@ -23,7 +23,7 @@ class ShiftFlowTest(unittest.TestCase):
                           if location['side'] == side and location['area'].id in expected]
                 self.assertEqual(actual, expected)
 
-    def test_journey_projects_six_stages_once_for_every_active_employee(self):
+    def test_staffing_matrix_reuses_phases_and_renders_each_active_employee_once(self):
         import re
         from flask import render_template
         areas = self._configure_final_composite()
@@ -39,8 +39,11 @@ class ShiftFlowTest(unittest.TestCase):
         inactive = self._person('700006'); self._assignment(inactive, areas['Door 34']); inactive.active = False
         db.session.commit()
         context = staffing_service.shift_flow_context()
-        rows = context['flow_map']['journey_rows']
+        rows = context['flow_map']['staffing_matrix']['rows']
         self.assertEqual(len(rows), 5)
+        door = context['flow_map']['staffing_matrix']['columns'][0]
+        self.assertEqual(door['total'], 4)
+        self.assertEqual([door['counts'][phase] for phase in ('sort_start','after_w1','after_w2','after_cleanup','final_door')], [1,1,2,3,4])
         self.assertEqual([r['person'].id for r in rows], [p.id for p in people])
         for row in rows:
             self.assertEqual(row['locations']['sort_start'].id, row['assignment'].work_area_unit_id)
@@ -54,16 +57,85 @@ class ShiftFlowTest(unittest.TestCase):
             self.assertEqual([row['locations'][phase].name for phase in ('after_w1','after_w2','after_cleanup')],
                              ['Door 34' if stage >= n else 'West Ballmat' for stage in (1,2,3)])
         self.assertEqual([rows[3]['locations'][phase].name for phase in ('after_w1','after_w2','after_cleanup')], ['Discharge']*3)
-        self.assertIsNotNone(rows[-1]['attention_reason'])
+        self.assertIsNotNone(rows[-1]['reason'])
         with self.app.test_request_context('/neostaffing/shift-flow'):
             html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context, can_edit_shift_flow=True, shift_work_area_type=staffing_service.shift_work_area_type)
-        self.assertEqual(re.findall(r'data-journey-person="(\d+)"', html), [str(p.id) for p in people])
-        self.assertEqual(html.count('data-journey-stage='), 30)
+        self.assertEqual(sorted(re.findall(r'data-staffing-person="(\d+)"', html)), sorted(str(p.id) for p in people))
+        self.assertEqual(html.count('data-door-column='), 12)
+        self.assertNotIn('data-journey-stage', html)
         self.assertIn('No Setup', html)
-        self.assertIn('Flow Not Set', html)
-        self.assertIn('NEEDS ATTENTION', html)
+        self.assertIn('Setup: Not set', html)
+        self.assertIn('NEEDS ASSIGNMENT', html)
         self.assertNotIn('shift-map-phase', html)
-        self.assertNotIn('SORT START', html)
+        self.assertIn('Sort Start:', html)
+
+    def test_final_door_groups_counts_cross_side_custom_and_missing_configuration(self):
+        areas = self._configure_final_composite()
+        cross = self._person('720001')
+        self._plan(cross, self._values(start=areas['East Ballmat'], setup=areas['Door 34'], transition='1', final=areas['Door 32']), areas['East Ballmat'])
+        custom = self._person('720002')
+        plan = self._plan(custom, self._values(start=areas['Door 34'], final=areas['Door 34']), areas['Door 34'])
+        plan.final_door_work_area = areas['Door 32']
+        discharge = self._person('720003')
+        self._plan(discharge, self._values(start=self.discharge, final=areas['Door 32']), self.discharge)
+        missing = self._person('720004'); self._assignment(missing, areas['Door 34'])
+        # Identical display names must never collapse distinct people.
+        db.session.commit()
+        matrix = staffing_service.shift_flow_context()['flow_map']['staffing_matrix']
+        self.assertEqual([c['label'] for c in matrix['columns']], ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'])
+        self.assertEqual([c['side'] for c in matrix['columns']], ['west']*6+['east']*6)
+        bands = {b['key']: b for b in matrix['bands']}
+        self.assertEqual(bands['bm1']['cells'][1][0]['person'].id, cross.id)
+        self.assertEqual(bands['bm1']['cells'][1][0]['final_side'], 'west')
+        self.assertEqual(bands['bm1']['cells'][1][0]['start_label'], 'East Ballmat')
+        self.assertEqual(bands['bm1']['cells'][1][0]['setup_label'], 'Door 34')
+        self.assertEqual(bands['custom']['cells'][1][0]['person'].id, custom.id)
+        self.assertEqual(bands['discharge']['cells'][1][0]['person'].id, discharge.id)
+        self.assertEqual(matrix['columns'][1]['total'], 3)
+        self.assertEqual(matrix['columns'][1]['counts']['sort_start'], 0)
+        self.assertEqual(matrix['columns'][1]['counts']['after_cleanup'], 1)
+        self.assertEqual(matrix['columns'][0]['counts']['sort_start'], 2)
+        self.assertEqual(matrix['needs_assignment'][0]['person'].id, missing.id)
+        self.assertEqual(matrix['needs_assignment'][0]['setup_label'], 'Not set')
+        self.assertEqual(matrix['columns'][2]['total'], 0)
+        # Missing/inactive configuration retains the column and its employees.
+        areas['Door 32'].active = False; db.session.commit()
+        matrix = staffing_service.shift_flow_context()['flow_map']['staffing_matrix']
+        self.assertIsNone(matrix['columns'][1]['area'])
+        self.assertEqual(len(matrix['needs_assignment']), 4)
+        self.assertTrue(any('Door 32' in warning for warning in matrix['warnings']))
+        self.assertIn('inactive', matrix['needs_assignment'][0]['reason'])
+
+    def test_ambiguous_final_door_is_not_guessed(self):
+        areas = self._configure_final_composite()
+        person = self._person('730001')
+        self._plan(person, self._values(start=areas['Door 34'], final=areas['Door 34']), areas['Door 34'])
+        db.session.add(StaffingUnit(unit_type='work_area', name='DOOR 34', parent=self.shift)); db.session.commit()
+        matrix = staffing_service.shift_flow_context()['flow_map']['staffing_matrix']
+        self.assertIsNone(matrix['columns'][0]['area'])
+        self.assertEqual(matrix['needs_assignment'][0]['person'].id, person.id)
+        self.assertIn('ambiguous', matrix['needs_assignment'][0]['reason'])
+
+    def test_staffing_matrix_projection_reads_are_bounded_and_has_no_writes(self):
+        areas = self._configure_final_composite()
+        def measure():
+            db.session.expire_all()
+            statements = []
+            def capture(conn, cursor, statement, parameters, context, many):
+                statements.append(statement.lstrip().split()[0].upper())
+            event.listen(db.engine, 'before_cursor_execute', capture)
+            try:
+                staffing_service.shift_flow_context()['flow_map']['staffing_matrix']
+            finally:
+                event.remove(db.engine, 'before_cursor_execute', capture)
+            self.assertFalse(set(statements) & {'INSERT','UPDATE','DELETE'})
+            return statements.count('SELECT')
+        person = self._person('740000'); self._plan(person, self._values(start=areas['Door 34']), areas['Door 34']); db.session.commit()
+        baseline = measure()
+        for n in range(1, 12):
+            person = self._person(str(740000+n)); self._plan(person, self._values(start=areas['West Ballmat'], transition='2', final=areas['Door 34']), areas['West Ballmat'])
+        db.session.commit()
+        self.assertEqual(measure(), baseline)
 
     def setUp(self):
         config = type("TestConfig", (), {"SECRET_KEY": "test", "TESTING": True,
@@ -633,11 +705,11 @@ class ShiftFlowTest(unittest.TestCase):
         db.session.flush()
         self.assertEqual(staffing_service.shift_flow_setup_assignment_label(plan), "NO SETUP")
 
-    def test_journey_keeps_attention_in_employee_row(self):
+    def test_staffing_matrix_keeps_needs_assignment_visible(self):
         template = (Path(__file__).resolve().parents[1] / 'app/templates/neostaffing/_shift_flow_map.html').read_text(encoding='utf-8')
-        self.assertIn('NEEDS ATTENTION', template)
-        self.assertIn('row.attention_reason', template)
-        self.assertIn('data-journey-person', template)
+        self.assertIn('NEEDS ASSIGNMENT', template)
+        self.assertIn('entry.reason', template)
+        self.assertIn('data-staffing-person', template)
         self.assertNotIn('data-shift-flow-composite-cell', template)
 
     def test_journey_reloads_canonical_projection_only_after_success(self):
