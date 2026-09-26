@@ -23,6 +23,48 @@ class ShiftFlowTest(unittest.TestCase):
                           if location['side'] == side and location['area'].id in expected]
                 self.assertEqual(actual, expected)
 
+    def test_journey_projects_six_stages_once_for_every_active_employee(self):
+        import re
+        from flask import render_template
+        areas = self._configure_final_composite()
+        people = []
+        for n in (1, 2, 3):
+            person = self._person(str(700000+n))
+            self._plan(person, self._values(start=areas['West Ballmat'], transition=str(n), final=areas['Door 34']), areas['West Ballmat'])
+            people.append(person)
+        discharge = self._person('700004')
+        self._plan(discharge, self._values(start=self.discharge, setup=areas['Door 34'], final=areas['Door 34']), self.discharge)
+        people.append(discharge)
+        unset = self._person('700005'); self._assignment(unset, areas['Door 34']); people.append(unset)
+        inactive = self._person('700006'); self._assignment(inactive, areas['Door 34']); inactive.active = False
+        db.session.commit()
+        context = staffing_service.shift_flow_context()
+        rows = context['flow_map']['journey_rows']
+        self.assertEqual(len(rows), 5)
+        self.assertEqual([r['person'].id for r in rows], [p.id for p in people])
+        for row in rows:
+            self.assertEqual(row['locations']['sort_start'].id, row['assignment'].work_area_unit_id)
+            for phase, _ in context['phases']:
+                if row['plan'] and phase != 'sort_start':
+                    actual = row['locations'][phase]
+                    expected = staffing_service._shift_flow_phase_area(row['plan'], phase)
+                    self.assertEqual(getattr(actual, 'id', None), getattr(expected, 'id', None))
+        for n, row in enumerate(rows[:3], 1):
+            self.assertEqual(row['locations']['setup'].name, 'NO SETUP')
+            self.assertEqual([row['locations'][phase].name for phase in ('after_w1','after_w2','after_cleanup')],
+                             ['Door 34' if stage >= n else 'West Ballmat' for stage in (1,2,3)])
+        self.assertEqual([rows[3]['locations'][phase].name for phase in ('after_w1','after_w2','after_cleanup')], ['Discharge']*3)
+        self.assertIsNotNone(rows[-1]['attention_reason'])
+        with self.app.test_request_context('/neostaffing/shift-flow'):
+            html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context, can_edit_shift_flow=True, shift_work_area_type=staffing_service.shift_work_area_type)
+        self.assertEqual(re.findall(r'data-journey-person="(\d+)"', html), [str(p.id) for p in people])
+        self.assertEqual(html.count('data-journey-stage='), 30)
+        self.assertIn('No Setup', html)
+        self.assertIn('Flow Not Set', html)
+        self.assertIn('NEEDS ATTENTION', html)
+        self.assertNotIn('shift-map-phase', html)
+        self.assertNotIn('SORT START', html)
+
     def setUp(self):
         config = type("TestConfig", (), {"SECRET_KEY": "test", "TESTING": True,
             "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:", "SQLALCHEMY_TRACK_MODIFICATIONS": False})
@@ -205,31 +247,14 @@ class ShiftFlowTest(unittest.TestCase):
         finally:
             event.remove(db.engine, "before_execute", record_sql)
 
-    def test_workspace_markup_keeps_navigation_and_board_as_separate_desktop_surfaces(self):
+    def test_workspace_uses_one_journey_surface_and_retains_editor(self):
         root = Path(__file__).resolve().parents[1]
-        template = (root / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
-        css = stylesheet_source()
-        self.assertIn('<main class="neostaffing-shift-flow-workspace">', template)
-        self.assertIn('neostaffing-shift-flow-board-scroll', template)
-        self.assertNotIn('style=', template)
-        self.assertIn('grid-template-columns: clamp(144px, 10vw, 184px) minmax(0, 1fr)', css)
-        self.assertIn('grid-auto-columns: clamp(220px, 15vw, 300px)', css)
-        self.assertIn('width: max-content', css)
-        self.assertIn('grid-column: 1 / -1', css)
-        self.assertIn('overflow: auto; overscroll-behavior: contain', css)
-        self.assertIn('top: 142px', css)
-        self.assertIn('data-shift-flow-drag-board', template)
-        self.assertIn('data-shift-flow-destination-id', template)
-        self.assertIn('draggable="true"', template)
-        self.assertIn('neostaffing_shift_flow_drag.js', template)
-        self.assertEqual(
-            staffing_service.SHIFT_FLOW_PHASES,
-            (("setup", "SETUP"), ("sort_start", "SORT START"),
-             ("after_w1", "1ST WAVE"), ("after_w2", "2ND WAVE"),
-             ("after_cleanup", "BALLMAT CLEANUP"),
-             ("final_door", "FINAL DOOR")),
-        )
-        self.assertNotIn("AFTER CLEANUP", template)
+        template = (root / 'app/templates/neostaffing/shift_flow.html').read_text(encoding='utf-8')
+        self.assertIn('neostaffing-shift-flow-workspace', template)
+        self.assertIn('neostaffing/_shift_flow_map.html', template)
+        self.assertIn('neostaffing/_shift_flow_editor.html', template)
+        self.assertNotIn('data-shift-flow-drag-board', template)
+        self.assertNotIn('neostaffing_shift_flow_drag.js', template)
 
     def test_phase_lane_backbone_is_complete_and_stably_ordered(self):
         expected = {
@@ -608,41 +633,18 @@ class ShiftFlowTest(unittest.TestCase):
         db.session.flush()
         self.assertEqual(staffing_service.shift_flow_setup_assignment_label(plan), "NO SETUP")
 
-    def test_final_composite_markup_keeps_persistent_attention_column_and_reasons(self):
-        template = (Path(__file__).resolve().parents[1] / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
-        self.assertIn("UNASSIGNED / NEEDS ATTENTION", template)
-        self.assertIn("row.attention_reason", template)
-        self.assertIn("row.setup_assignment", template)
-        self.assertIn("data-shift-flow-needs-attention", template)
-        self.assertIn("data-shift-flow-composite-cell", template)
-        self.assertIn("composite.opposite_side_count", template)
-        self.assertNotIn("composite.unplaced", template)
-        self.assertNotIn("data-setup-section", template)
-        self.assertNotIn("data-shift-flow-setup-section", template)
-        self.assertNotIn("cell.sections", template)
-        self.assertNotIn("NON-SETUP", template)
+    def test_journey_keeps_attention_in_employee_row(self):
+        template = (Path(__file__).resolve().parents[1] / 'app/templates/neostaffing/_shift_flow_map.html').read_text(encoding='utf-8')
+        self.assertIn('NEEDS ATTENTION', template)
+        self.assertIn('row.attention_reason', template)
+        self.assertIn('data-journey-person', template)
+        self.assertNotIn('data-shift-flow-composite-cell', template)
 
-    def test_final_composite_dynamic_row_markup_and_committed_reflow_contract(self):
-        root = Path(__file__).resolve().parents[1]
-        template = (root / "app/templates/neostaffing/shift_flow.html").read_text(encoding="utf-8")
-        javascript = (root / "app/static/js/neostaffing_shift_flow_drag.js").read_text(encoding="utf-8")
-        css = stylesheet_source()
-
-        self.assertIn("composite.display_bands", template)
-        self.assertIn("data-shift-flow-display-row", template)
-        self.assertIn("data-shift-flow-empty-row", template)
-        self.assertIn("data-shift-flow-composite-band", template)
-        self.assertIn("normalizeBandRows", javascript)
-        self.assertIn("rowIndex <= occupiedRowCount", javascript)
-        self.assertIn("container.replaceChildren(fragment)", javascript)
-        self.assertIn("normalizeBands(sourceBand, targetBand)", javascript)
-        self.assertIn("[data-shift-flow-empty-row]", css)
-
-        commit_check = javascript.index("if (!response.ok || !payload.ok)")
-        dom_move = javascript.index('targetCell.querySelector("ul")?.append(row)')
-        row_reflow = javascript.index("normalizeBands(sourceBand, targetBand)")
-        self.assertLess(commit_check, dom_move)
-        self.assertLess(dom_move, row_reflow)
+    def test_journey_reloads_canonical_projection_only_after_success(self):
+        javascript = (Path(__file__).resolve().parents[1] / 'app/static/js/neostaffing_shift_map.js').read_text(encoding='utf-8')
+        self.assertLess(javascript.index('if (!response.ok)'), javascript.index('window.location.reload()'))
+        self.assertIn('expected_version: select.selectedOptions[0].dataset.version', javascript)
+        self.assertIn('expected_version:editor.dataset.version', javascript)
 
     def test_wave_drag_moves_use_side_ballmat_and_preserve_setup(self):
         areas = self._configure_final_composite()

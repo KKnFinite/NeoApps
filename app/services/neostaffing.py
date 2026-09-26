@@ -991,8 +991,20 @@ def _shift_flow_map(rows, areas):
         locations.sort(key=lambda location: (location["area"].id in door_order,
                                             door_order.get(location["area"].id, 0)))
         phases.append({"key": phase, "label": label, "locations": locations})
-    return {"phases": phases, "configurations": configurations,
-            "count": len({row["person"].id for row in rows})}
+    # Presentation only: reuse phase locations and the existing attention rules.
+    door_sides = {door.id: side for side, config in configurations.items() for door in config["doors"]}
+    setup_ids = {area.id for area in areas if shift_work_area_type(area) in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}}
+    journey_rows = []
+    seen = set()
+    for row in sorted(rows, key=lambda row: (row["person"].last_name.casefold(), row["person"].first_name.casefold(), row["person"].id, row["assignment"].id)):
+        if row["person"].id in seen:
+            continue
+        seen.add(row["person"].id)
+        _, reason = _shift_flow_composite_placement(row["plan"], configurations, door_sides, setup_ids)
+        journey_rows.append({**row, "attention_reason": reason,
+            "side": side_by_area.get(row["home"].id) or door_sides.get(getattr(row["plan"], "final_door_work_area_id", None), "shared")})
+    return {"phases": phases, "configurations": configurations, "journey_rows": journey_rows,
+            "count": len(journey_rows)}
 
 
 def _shift_flow_phase_area(plan, phase):

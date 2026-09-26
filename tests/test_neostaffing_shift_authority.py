@@ -202,19 +202,20 @@ class ShiftAuthorityTest(unittest.TestCase):
         self.assertIsNone(row['plan'].final_door_work_area_id)
         self.assertIsNone(row['plan'].ballmat_transition)
 
-    def test_flow_map_presentation_keeps_separate_mobile_and_desktop_contracts(self):
+    def test_flow_map_presentation_keeps_one_responsive_journey(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]
-        css = (root/'app/static/css/neostaffing_shift_map.css').read_text()
-        template = (root/'app/templates/neostaffing/_shift_flow_map.html').read_text()
+        css = (root/'app/static/css/neostaffing_shift_map.css').read_text(encoding='utf-8')
+        template = (root/'app/templates/neostaffing/_shift_flow_map.html').read_text(encoding='utf-8')
         self.assertIn('@media(max-width:900px)', css)
-        self.assertIn('grid-template-columns:repeat(7,minmax(0,1fr))', css)
-        self.assertIn('grid-template-columns:repeat(2,minmax(0,1fr))', css)
+        self.assertIn('position:sticky; left:0', css)
+        self.assertIn('grid-template-columns:repeat(6,118px)', css)
+        self.assertIn('overflow-x:auto; max-width:100%', css)
+        self.assertIn('scrollbar-color:', css)
         self.assertIn('min-height:44px', css)
-        self.assertIn("phase.key == 'sort_start' and can_edit_shift_flow", template)
-        self.assertIn("phase.key != 'sort_start'", template)
         self.assertIn('data-route-picker', template)
-        self.assertIn('data-flow-lines', template)
+        self.assertNotIn('data-flow-lines', template)
+        self.assertNotIn('shift-map-phase', template)
 
     def test_bootstrap_preserves_ids_and_reconciles_legacy_home_idempotently(self):
         person = self.person()

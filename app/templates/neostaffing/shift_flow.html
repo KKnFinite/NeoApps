@@ -1,87 +1,14 @@
 {% extends "base.html" %}
-{% macro final_door_employee(row, composite, can_edit, attention=false) -%}
-<li{% if can_edit %} draggable="true" data-shift-flow-person-id="{{ row.person.id }}" data-shift-flow-plan-version="{{ row.version }}" class="is-shift-flow-draggable{% if attention %} is-needs-attention-source{% endif %}" title="Drag to a Final Door cell"{% endif %}>
-  <a href="{{ url_for('neostaffing.shift_flow', phase='final_door', side=composite.side, person_id=row.person.id) }}">
-    <span>{{ row.person.full_name }}</span>
-    <small data-shift-flow-setup-assignment>{{ row.setup_assignment }}</small>
-    {% if attention %}<em>{{ row.attention_reason }}</em>{% endif %}
-  </a>
-</li>
-{%- endmacro %}
 {% block title %}NeoStaffing Shift Flow{% endblock %}
 {% block content %}
 <section class="neostaffing-shift-flow theme-staffing" aria-labelledby="shift-flow-title">
   {% include "neostaffing/_section_nav.html" %}
   <main class="neostaffing-shift-flow-workspace">
     <header class="neostaffing-shift-flow-head">
-      <div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift</p></div>
-      <strong><span data-shift-flow-planned-count>{{ shift_flow.planned_count }}</span> planned</strong>
-      {% if shift_flow.phase == 'final_door' %}
-        {% set header_composite = shift_flow.final_composite %}
-        <nav class="neo-segmented-control neostaffing-shift-flow-sides" aria-label="Final Door side">
-          {% for value,label in header_composite.sides %}<a href="{{ url_for('neostaffing.shift_flow', phase='final_door', side=value) }}" {% if header_composite.side == value %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
-        </nav>
-      {% endif %}
-      <nav class="neostaffing-shift-flow-tabs" aria-label="Shift Flow phase">
-        {% for value,label in shift_flow.phases %}<a href="{{ url_for('neostaffing.shift_flow', phase=value, side=shift_flow.final_composite.side if shift_flow.final_composite else request.args.get('side', 'east')) }}" {% if shift_flow.phase==value %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
-      </nav>
+      <div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift · Employee journeys</p></div>
+      <strong>{{ shift_flow.flow_map.count }} employees · {{ shift_flow.planned_count }} planned</strong>
     </header>
     {% include "neostaffing/_shift_flow_map.html" %}
-    {% if shift_flow.phase == 'final_door' %}
-      {% set composite = shift_flow.final_composite %}
-      {% if composite.issues %}
-        <section class="neostaffing-shift-flow-config" role="alert"><strong>SHIFT FLOW CONFIGURATION</strong>{% for issue in composite.issues %}<span>{{ issue }}</span>{% endfor %}</section>
-      {% endif %}
-      <section class="neostaffing-shift-flow-composite"{% if can_edit_shift_flow and not composite.issues %} data-shift-flow-composite-board data-shift-flow-composite-url="{{ url_for('neostaffing.move_shift_flow_final_composite', person_id=0) }}"{% endif %}>
-        <div class="neostaffing-shift-flow-composite-main">
-          <div class="neostaffing-shift-flow-composite-doors" aria-hidden="true">
-            {% for column in composite.columns %}<strong>{{ column.door.name }}</strong>{% endfor %}
-          </div>
-          {% for band in composite.display_bands %}
-            <section class="neostaffing-shift-flow-composite-band" data-shift-flow-composite-band data-band="{{ band.key }}">
-              <header>{{ band.label }}</header>
-              <div class="neostaffing-shift-flow-composite-cells">
-                {% for display_row in band.rows %}
-                  {% for cell in display_row.cells %}
-                    <article class="neostaffing-shift-flow-composite-cell{% if can_edit_shift_flow and not composite.issues %} is-final-door-target{% endif %}" data-shift-flow-display-row="{{ display_row.index }}" data-door-label="{{ cell.door.name }}" data-band-label="{{ band.label }}"{% if display_row.trailing %} data-shift-flow-empty-row{% endif %}{% if can_edit_shift_flow and not composite.issues %} data-shift-flow-composite-cell data-final-door-id="{{ cell.door.id }}" data-band="{{ band.key }}"{% endif %} aria-label="{{ cell.door.name }} {{ band.label }} row {{ display_row.index + 1 }}{% if display_row.trailing %}, empty drop row{% endif %}">
-                      <ul>{% if cell.row %}{{ final_door_employee(cell.row, composite, can_edit_shift_flow) }}{% endif %}</ul>
-                    </article>
-                  {% endfor %}
-                {% endfor %}
-              </div>
-            </section>
-          {% endfor %}
-        </div>
-        <aside class="neostaffing-shift-flow-needs-attention" data-shift-flow-needs-attention>
-          <header><strong>UNASSIGNED / NEEDS ATTENTION</strong><span data-shift-flow-attention-count>{{ composite.needs_attention|count }}</span></header>
-          <p><span data-shift-flow-active-count>{{ composite.active_shift_count }}</span> active · <span data-shift-flow-placed-count>{{ composite.placed_count }}</span> placed · <span data-shift-flow-accounted-count>{{ composite.accounted_count }}</span> accounted{% if composite.opposite_side_count %} · {{ composite.opposite_side_count }} on {{ 'WEST' if composite.side == 'east' else 'EAST' }}{% endif %}</p>
-          <ul data-shift-flow-attention-list>
-            {% for row in composite.needs_attention %}{{ final_door_employee(row, composite, can_edit_shift_flow, true) }}{% else %}<li class="is-clear" data-shift-flow-attention-empty>No active Shift employees need attention.</li>{% endfor %}
-          </ul>
-        </aside>
-        <p class="neostaffing-shift-flow-drag-feedback" data-shift-flow-drag-feedback aria-live="polite"></p>
-      </section>
-    {% else %}
-      {% set editable_phase = shift_flow.phase in ['setup', 'sort_start', 'after_w1', 'after_w2'] %}
-      <div class="neostaffing-shift-flow-board-scroll" tabindex="0"{% if editable_phase and can_edit_shift_flow %} data-shift-flow-drag-board data-shift-flow-phase="{{ shift_flow.phase }}" data-shift-flow-move-url="{{ url_for('neostaffing.move_shift_flow_lane', person_id=0) }}"{% endif %}>
-        <section class="neostaffing-shift-flow-groups">
-          {% for group in shift_flow.groups %}
-            {% set wave_phase = shift_flow.phase in ['after_w1', 'after_w2'] %}
-            {% set drop_target = editable_phase and can_edit_shift_flow and ((shift_flow.phase == 'setup' and group.lane_type in ['No Setup', 'Door', 'Ballmat']) or (shift_flow.phase == 'sort_start' and group.lane_type in ['Door', 'Ballmat', 'Discharge']) or (wave_phase and group.lane_type in ['Door', 'Ballmat'])) %}
-            <article class="neostaffing-shift-flow-group{% if drop_target %} is-final-door-target{% endif %}"{% if drop_target %} data-shift-flow-destination-id="{{ group.id }}" data-shift-flow-lane-type="{{ group.lane_type }}"{% endif %}>
-              <header><strong>{{ group.area.name }}</strong><span data-shift-flow-count>{{ group.rows|count }}</span></header>
-              <ul>
-                {% for row in group.rows %}
-                  {% set wave_discharge = wave_phase and group.lane_type == 'Discharge' %}
-                  <li{% if editable_phase and can_edit_shift_flow and row.plan and not wave_discharge %} draggable="true" data-shift-flow-person-id="{{ row.person.id }}" data-shift-flow-plan-version="{{ row.version }}" data-shift-flow-source-id="{{ group.id }}" data-shift-flow-source-type="{{ group.lane_type }}" class="is-shift-flow-draggable" title="Drag to another lane"{% endif %}><a href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, person_id=row.person.id) }}"><span>{{ row.person.full_name }}</span><small data-shift-flow-shorthand>{{ row.shorthand }}</small></a></li>
-                {% endfor %}
-              </ul>
-            </article>
-          {% endfor %}
-        </section>
-        <p class="neostaffing-shift-flow-drag-feedback" data-shift-flow-drag-feedback aria-live="polite"></p>
-      </div>
-    {% endif %}
   </main>
   {% if selected %}
     <aside class="neostaffing-shift-flow-drawer">
@@ -89,11 +16,10 @@
       {% if can_edit_shift_flow %}
         {% include "neostaffing/_shift_flow_editor.html" %}
       {% else %}
-        <dl>{% if selected.plan %}<dt>Setup</dt><dd>{{ selected.plan.setup_work_area.name if selected.plan.setup_work_area else 'NO SETUP' }}</dd><dt>Sort Start</dt><dd>{{ selected.plan.sort_start_work_area.name if selected.plan.sort_start_work_area else 'NOT SET' }}</dd><dt>Final Door</dt><dd>{{ selected.plan.final_door_work_area.name if selected.plan.final_door_work_area else 'NOT SET' }}</dd>{% else %}<dd>FLOW NOT SET</dd>{% endif %}</dl>
+        <dl>{% if selected.plan %}<dt>Setup</dt><dd>{{ selected.plan.setup_work_area.name if selected.plan.setup_work_area else 'NO SETUP' }}</dd><dt>Home</dt><dd>{{ selected.assignment.work_area.name }}</dd><dt>Final Door</dt><dd>{{ selected.plan.final_door_work_area.name if selected.plan.final_door_work_area else 'NOT SET' }}</dd>{% else %}<dd>FLOW NOT SET</dd>{% endif %}</dl>
       {% endif %}
     </aside>
   {% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_shift_flow_drag.js', v='20260912-shift-home-3') }}"></script>
-<script src="{{ url_for('static', filename='js/neostaffing_shift_map.js', v='20260912-shift-home-3') }}"></script>
+<script src="{{ url_for('static', filename='js/neostaffing_shift_map.js', v='20260925-journey') }}"></script>
 {% endblock %}

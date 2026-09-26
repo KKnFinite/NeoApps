@@ -44,22 +44,35 @@
         target.addEventListener("drop", event => { event.preventDefault(); target.classList.remove("is-target"); apply(target); });
         target.addEventListener("click", () => apply(target));
     });
-    const draw = () => {
-        const svg = root.querySelector("[data-flow-lines]");
-        const origin = root.getBoundingClientRect();
-        svg.replaceChildren();
-        if (window.innerWidth <= 900) return;
-        const ids = new Set([...root.querySelectorAll('[data-map-custom="true"]')].map(node => node.dataset.mapPerson));
-        ids.forEach(id => {
-            const points = [...root.querySelectorAll(`[data-map-person="${id}"]`)].map(node => {
-                const box = node.getBoundingClientRect();
-                return `${box.left-origin.left+box.width/2},${box.top-origin.top+box.height/2}`;
-            });
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("d", `M ${points.join(" L ")}`); svg.append(path);
+    const sideButtons = root.querySelectorAll('[data-journey-side]');
+    sideButtons.forEach(button => button.addEventListener('click', () => {
+        sideButtons.forEach(other => other.setAttribute('aria-pressed', String(other === button)));
+        root.querySelectorAll('[data-journey-home-side]').forEach(row => {
+            row.hidden = button.dataset.journeySide !== 'all' && row.dataset.journeyHomeSide !== 'shared' && row.dataset.journeyHomeSide !== button.dataset.journeySide;
         });
-    };
-    window.addEventListener("resize", draw);
-    document.fonts?.ready.then(draw);
-    draw();
+    }));
+    const editor = document.querySelector('[data-phase-editor]');
+    if (editor) {
+        const phase = editor.querySelector('[data-phase-choice]');
+        const location = editor.querySelector('[data-phase-location]');
+        const status = editor.querySelector('[data-phase-feedback]');
+        const updateOptions = () => {
+            const allowed = phase.value === 'setup' ? ['No Setup', 'Door', 'Ballmat'] : phase.value === 'sort_start' ? ['Door', 'Ballmat', 'Discharge'] : ['Door', 'Ballmat'];
+            Array.from(location.options).forEach(option => { option.hidden = option.disabled = !allowed.includes(option.dataset.kind); });
+            if (location.selectedOptions[0]?.disabled) location.value = Array.from(location.options).find(option => !option.disabled)?.value || '';
+        };
+        phase.addEventListener('change', updateOptions); updateOptions();
+        editor.querySelector('[data-phase-save]').addEventListener('click', async () => {
+            if (saving) return;
+            saving = true; status.textContent = 'Saving…';
+            try {
+                const response = await fetch(editor.dataset.url, {method:'POST', headers:{'Content-Type':'application/json', 'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content || ''},
+                    body:JSON.stringify({phase:phase.value, destination_id:location.value, ballmat_transition:editor.querySelector('[data-phase-transition]').value, expected_version:editor.dataset.version})});
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) throw new Error(payload.conflict?.message || payload.error || 'Move not saved.');
+                window.location.reload();
+            } catch (error) { status.textContent = error.message; }
+            finally { saving = false; }
+        });
+    }
 })();

@@ -1,7 +1,7 @@
 <form method="post" action="{{ url_for('neostaffing.save_shift_flow', person_id=selected.person.id) }}" class="neostaffing-people-form">
   <input type="hidden" name="phase" value="sort_start">
   <input type="hidden" name="expected_version" value="{{ selected.version }}">
-  <label>Home / Sort Start<select name="shift_flow_sort_start_work_area_id">
+  <label>Home<select name="shift_flow_sort_start_work_area_id">
     {% for area in shift_flow_areas %}{% if shift_work_area_type(area) in ['Door','Ballmat','Discharge'] %}
     <option value="{{ area.id }}" {% if selected.assignment.work_area_unit_id == area.id %}selected{% endif %}>{{ area.name }}</option>
     {% endif %}{% endfor %}
@@ -21,3 +21,13 @@
   </select></label>
   <button>SAVE FLOW</button>
 </form>
+
+{% if selected.plan and shift_flow is defined %}
+<details class="shift-phase-editor" data-phase-editor data-person="{{ selected.person.id }}" data-version="{{ selected.version }}" data-url="{{ url_for('neostaffing.move_shift_flow_lane', person_id=selected.person.id) }}">
+  <summary>MOVE ONE STAGE</summary>
+  <label>Stage<select data-phase-choice>{% for phase,label in [('setup','Setup'),('sort_start','Home'),('after_w1','1st Wave'),('after_w2','2nd Wave')] %}<option value="{{ phase }}" {% if shift_flow.phase == phase %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>Location<select data-phase-location><option value="NO SETUP" data-kind="No Setup">No Setup</option>{% for area in shift_flow_areas if shift_work_area_type(area) in ['Door','Ballmat','Discharge'] %}<option value="{{ area.id }}" data-kind="{{ shift_work_area_type(area) }}">{{ area.name }}</option>{% endfor %}</select></label>
+  <label>Ballmat transition (when moving Home to Ballmat)<select data-phase-transition><option value="">Keep current</option><option value="1">1st Wave</option><option value="2">2nd Wave</option><option value="3">Ballmat Cleanup</option></select></label>
+  <button type="button" data-phase-save>MOVE STAGE</button><p data-phase-feedback role="status"></p>
+</details>
+{% endif %}

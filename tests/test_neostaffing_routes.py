@@ -233,7 +233,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"FLOW NOT SET", response.data)
         self.assertIn(b"Shift Employee", response.data)
         self.assertIn(
-            b'class="neo-segmented-control neostaffing-shift-flow-sides"',
+            b'class="shift-journey-sides neo-segmented-control"',
             response.data,
         )
 
@@ -309,7 +309,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self._login(watcher.username)
         read_only_page = self.client.get("/neostaffing/shift-flow?phase=final_door&side=east")
-        self.assertNotIn(b'data-shift-flow-composite-board', read_only_page.data)
+        self.assertNotIn(b'data-route-picker', read_only_page.data)
         blocked = self.client.post(
             f"/neostaffing/shift-flow/{person.id}/final-composite",
             json={"final_door_id": areas["Door 24"].id, "band": "bm1", "expected_version": ""},
@@ -320,8 +320,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         client = self._logged_in_client(simulator.username)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = client.get("/neostaffing/shift-flow?phase=final_door&side=east")
-        self.assertIn(b'data-shift-flow-composite-board', page.data)
-        self.assertIn(b'is-needs-attention-source', page.data)
+        self.assertIn(b'data-route-picker', page.data)
+        self.assertIn(b'needs-attention', page.data)
         token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
         missing_csrf = client.post(
             f"/neostaffing/shift-flow/{person.id}/final-composite",
