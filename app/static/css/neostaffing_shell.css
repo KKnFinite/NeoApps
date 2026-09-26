@@ -53,7 +53,10 @@ body.blueprint-neostaffing .neostaffing-launch-grid .neostaffing-menu-tile > spa
 .org-person-assignment { display:block; color:#abd6d1; font-size:.8rem; white-space:normal; overflow-wrap:anywhere; }
 @media(min-width:901px) {
   body.blueprint-neostaffing.operational-shell-page:not(.staffing-dashboard) .content { padding-left:calc(var(--operational-sidebar-width) + 24px); padding-right:24px; max-width:none; }
-  body.blueprint-neostaffing .operational-desktop-sidebar { display:flex; flex-direction:column; overflow-y:auto; }
+  body.blueprint-neostaffing .operational-desktop-sidebar { display:flex; flex-direction:column; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#36534f #0a161c; }
+  body.blueprint-neostaffing .operational-desktop-sidebar::-webkit-scrollbar { width:6px; }
+  body.blueprint-neostaffing .operational-desktop-sidebar::-webkit-scrollbar-track { background:#0a161c; }
+  body.blueprint-neostaffing .operational-desktop-sidebar::-webkit-scrollbar-thumb { background:#36534f; border-radius:6px; }
   body.blueprint-neostaffing .operational-desktop-sidebar > * { flex:0 0 auto; }
   body.blueprint-neostaffing .operational-desktop-sidebar .motherbrain-desktop-side-menu { overflow:visible; max-height:none; }
   body.blueprint-neostaffing.staffing-dashboard .content { padding-left:24px; padding-right:24px; }

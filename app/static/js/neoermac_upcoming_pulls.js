@@ -102,11 +102,13 @@
             refreshAfterEdit();
             return;
         }
-        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.value)) {
-            feedback(input, "Use HH:MM");
+        const value = /^\d{4}$/.test(input.value)
+            ? `${input.value.slice(0, 2)}:${input.value.slice(2)}` : input.value;
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+            feedback(input, "Use HHMM (0000–2359)");
             return;
         }
-        const value = input.value;
+        input.value = value;
         const form = input.closest("form");
         input.dataset.saving = "true";
         input.readOnly = true;

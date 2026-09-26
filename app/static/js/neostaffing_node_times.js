@@ -84,7 +84,7 @@
       if (event.target.closest('[data-add-segment]')) {
         const part = document.createElement('div'); part.className = 'timecard-segment';
         // Constant markup only; employee/server values never enter innerHTML.
-        part.innerHTML = '<label>Start <input data-start type="text" inputmode="numeric" placeholder="HHMM" autocomplete="off"></label><label>End <input data-end type="text" inputmode="numeric" placeholder="HHMM" autocomplete="off"></label><button type="button" data-remove-segment>REMOVE</button>';
+        part.innerHTML = '<label>Start <input data-start type="text" inputmode="numeric" maxlength="5" placeholder="HHMM" autocomplete="off"></label><label>End <input data-end type="text" inputmode="numeric" maxlength="5" placeholder="HHMM" autocomplete="off"></label><button type="button" data-remove-segment>REMOVE</button>';
         container.append(part); part.querySelector('input').focus();
       }
       if (event.target.closest('[data-remove-segment]')) {

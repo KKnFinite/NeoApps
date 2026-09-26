@@ -53,7 +53,7 @@ class TimecardsTest(unittest.TestCase):
         self.assertEqual(saved['segments'][0]['end'][:10], '2026-09-13')
         self.assertGreater(saved['version'], payload['commands'][0]['version'])
         page = self.client.get('/neosektor/manage-employees?area=ebm&mode=times')
-        self.assertIn(b'value="22:30:00"', page.data)
+        self.assertIn(b'value="22:30"', page.data)
         for forbidden in (b'data-save-times', b'data-bulk-start', b'>OPEN</button>', b'>ACCOUNTABILITY</a>'):
             self.assertNotIn(forbidden, page.data)
         self.assertIn(b'data-node-selection', page.data)

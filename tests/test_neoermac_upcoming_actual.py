@@ -134,7 +134,10 @@ class UpcomingActualTest(unittest.TestCase):
             self.assertNotIn(b'data-upcoming-actual', page.data)
             state = self.client.get('/neoermac/upcoming-pulls/state?revision=old')
             self.assertNotIn('data-upcoming-actual', state.json['board_html'])
-        self.assertIn(b'data-upcoming-actual', self.client.get('/neoermac/upcoming-pulls').data)
+        html = self.client.get('/neoermac/upcoming-pulls').data
+        self.assertIn(b'data-upcoming-actual', html)
+        self.assertIn(b'inputmode="numeric"', html)
+        self.assertIn(b'placeholder="HHMM"', html)
 
     def test_csrf_enforced_and_refreshed_fragment_contains_token(self):
         self.app.config['CSRF_PROTECT_TESTING'] = True

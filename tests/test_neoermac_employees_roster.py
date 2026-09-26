@@ -130,7 +130,7 @@ class NeoErmacEmployeesRosterTest(unittest.TestCase):
         payload['node_area'] = 'D9'
         self.assertEqual(self.client.post('/neostaffing/timecards/save', json=payload).status_code, 409)
         self.assertEqual(self.client.get(base.replace('D6','D9') + '&mode=times').status_code, 403)
-        self.assertIn(b'value="22:30:00"', self.client.get(base + '&mode=times').data)
+        self.assertIn(b'value="22:30"', self.client.get(base + '&mode=times').data)
         self.client.post('/neoermac/door-view/supervision', data={'doors':['D6','D9'], 'active_door':'D6'})
         self._post(self.outside, self.operation.id)
         for mode in ('times','reports'):

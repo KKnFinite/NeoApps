@@ -9,8 +9,16 @@
   root.addEventListener('input', event => mark(event.target));
   root.addEventListener('click', async event => {
     if (event.target.closest('[data-bulk-times]')) {
-      const start = root.querySelector('[data-bulk-start]').value;
-      const end = root.querySelector('[data-bulk-end]').value;
+      const clock = input => {
+        let value = input.value.trim();
+        if (/^\d{4}$/.test(value)) value = `${value.slice(0, 2)}:${value.slice(2)}`;
+        return !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null;
+      };
+      const startInput = root.querySelector('[data-bulk-start]');
+      const endInput = root.querySelector('[data-bulk-end]');
+      const start = clock(startInput), end = clock(endInput);
+      if (start === null || end === null) { status.textContent = 'Use HHMM (0000–2359).'; return; }
+      startInput.value = start; endInput.value = end;
       for (const row of root.querySelectorAll('[data-timecard-id]')) {
         const host = row.querySelector('[data-time-segments]');
         if (!host || host.children.length) continue;

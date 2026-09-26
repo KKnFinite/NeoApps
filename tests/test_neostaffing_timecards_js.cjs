@@ -54,3 +54,19 @@ async function archive(complete = true, interrupted = false) {
 }
 
 (async()=>{await mutation(); await mutation('22:00', '2026-09-12T22:00:00-05:00', '2026-09-12T22:00:00-05:00'); await mutation('', '2026-09-12T22:00:00-05:00', ''); await archive(); await archive(false); await archive(true,true); console.log('6 Timecards JS workflow checks passed');})().catch(error=>{console.error(error);process.exitCode=1;});
+
+function bulkClock(typed, expected) {
+  const events = {}, status = {}, start = {value:typed}, end = {value:'0030'};
+  const startRow = {}, endRow = {};
+  const host = {children:[], querySelector:key => key === '[data-start]' ? startRow : endRow};
+  const row = {querySelector:key => key === '[data-time-segments]' ? host : {click(){}}};
+  const root = {dataset:{}, addEventListener:(name, fn)=>events[name]=fn,
+    querySelector:key=>key === '[data-bulk-start]' ? start : key === '[data-bulk-end]' ? end : status,
+    querySelectorAll:()=>[row]};
+  vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_timecards.js','utf8'), {document:{querySelector:()=>root}});
+  events.click({target:{closest:key=>key === '[data-bulk-times]' ? {} : null}});
+  assert.equal(startRow.value, expected);
+  if (expected !== undefined) { assert.equal(endRow.value,'00:30'); assert.equal(start.value,expected); }
+  else assert.match(status.textContent,/Use HHMM/);
+}
+bulkClock('2315', '23:15'); bulkClock('0712', '07:12'); bulkClock('2401'); bulkClock('1267');

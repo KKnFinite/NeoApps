@@ -31,7 +31,7 @@
                         <input type="hidden" name="pull_key" value="{{ pull.pull_key }}">
                         <label>ACTUAL
                             <input type="text" name="actual_pull" data-upcoming-actual
-                                placeholder="HH:MM" maxlength="5" autocomplete="off"
+                                inputmode="numeric" pattern="([01][0-9]|2[0-3]):?[0-5][0-9]" placeholder="HHMM" maxlength="5" autocomplete="off"
                                 aria-label="{{ pull.destination }} {{ pull.pull_type }} actual time"
                                 title="Fill missing {{ pull.pull_type }} times across all assigned doors, East and West">
                         </label>

@@ -85,7 +85,7 @@ test('successful no-op Enter save refreshes too; late pre-save poll is ignored',
 });
 
 test('invalid and failed saves retain typed value until retry or abandonment', async () => {
-    const h=setup();h.change('24:00');assert.equal(h.pending.length,0);assert.equal(h.status.textContent,'Use HH:MM');
+    const h=setup();h.change('24:00');assert.equal(h.pending.length,0);assert.equal(h.status.textContent,'Use HHMM (0000–2359)');
     h.change('12:18');h.pending[0].resolve({ok:false,error:'Current sort changed'},false);await tick();
     assert.equal(h.input.value,'12:18');assert.equal(h.status.textContent,'Current sort changed');
     await h.poll();assert.equal(h.pending.length,1);h.key('Enter');assert.equal(h.pending.length,2);
@@ -95,3 +95,20 @@ test('blank blur abandons an edit and resumes normal polling', async () => {
     const h=setup();h.doc.activeElement=h.input;h.blur();assert.equal(h.pending.length,1);
     h.pending[0].resolve(state('r1'));await tick();assert.equal(h.board.replacements.length,1);
 });
+
+for (const [typed, saved] of [['2315', '23:15'], ['0030', '00:30'], ['0712', '07:12']]) {
+    test(`HHMM ${typed} normalizes before the existing save and refresh`, async () => {
+        const h = setup(); h.change(typed);
+        assert.equal(h.pending[0].options.body.value, saved);
+        h.pending[0].resolve({ok:true, filled:2}); await tick();
+        h.pending[1].resolve(state('saved')); await tick();
+        assert.equal(h.board.replacements.length, 1);
+    });
+}
+for (const typed of ['2401', '2965', '1267', '712', 'abcd']) {
+    test(`invalid HHMM ${typed} does not save`, () => {
+        const h = setup(); h.change(typed);
+        assert.equal(h.pending.length, 0);
+        assert.equal(h.status.textContent, 'Use HHMM (0000–2359)');
+    });
+}
