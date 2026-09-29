@@ -342,10 +342,18 @@
     };
     resetProtectedBaselines();
 
+    const hasUnsavedAutosave = () => Array.from(
+        root.querySelectorAll("[data-dispatch-autosave]")
+    ).some((input) => (
+        input.dataset.autosaveSaving === "true"
+        || input.value.trim() !== (input.dataset.savedValue || "")
+    ));
+
     const hasUnsavedControls = () => (
         protectedControls().some(
             (control) => initialControlValues.get(control) !== controlValue(control)
         )
+        || hasUnsavedAutosave()
     );
 
     const syncDirtyState = () => {
@@ -392,6 +400,12 @@
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true || !payload.html) {
                 throw new Error(payload.error || "Fuel Dispatch refresh failed.");
+            }
+            // Input may have become dirty while the network request was in
+            // flight. Never replace live operator typing with fetched markup.
+            if (hasUnsavedControls()) {
+                pendingFuelDataRefresh = true;
+                return false;
             }
             const holder = document.createElement("template");
             holder.innerHTML = payload.html.trim();

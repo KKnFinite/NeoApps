@@ -336,6 +336,15 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn("neoscorpion_fuel_dispatch_live.js", body)
         self.assertNotIn("KEEP LIVE / MONITOR MODE", body)
 
+        panel = self.client.get("/neoscorpion/fuel-dispatch/live-panel")
+        self.assertEqual(panel.status_code, 200)
+        panel_payload = panel.get_json()
+        self.assertTrue(panel_payload["ok"])
+        self.assertEqual(panel_payload["operation_id"], operation.id)
+        self.assertEqual(panel_payload["revision"], 3)
+        self.assertIn('<section class="neoscorpion-panel">', panel_payload["html"])
+        self.assertNotIn("<html", panel_payload["html"])
+
         with open(
             "app/static/js/neoscorpion_fuel_dispatch_live.js",
             encoding="utf-8",
@@ -347,6 +356,8 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn("data-panel-url=", body)
         self.assertIn("currentPanel.replaceWith(nextPanel)", script)
         self.assertIn("dispatchScroll.restoreSnapshot(saved)", script)
+        self.assertIn("hasUnsavedAutosave", script)
+        self.assertIn("Never replace live operator typing", script)
         self.assertIn("data-dispatch-row-key", script)
         self.assertIn("tableMissionOffset", script)
         self.assertIn("tableScrollTop", script)
