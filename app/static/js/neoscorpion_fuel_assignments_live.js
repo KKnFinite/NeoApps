@@ -109,14 +109,6 @@
             : new Set();
 
         if (newIds.size) {
-            root.querySelectorAll("[data-fuel-assignment-id]").forEach((card) => {
-                if (newIds.has(String(card.dataset.fuelAssignmentId))) {
-                    const marker = card.querySelector("[data-new-assignment-marker]");
-                    if (marker) {
-                        marker.hidden = false;
-                    }
-                }
-            });
             playAssignmentAlert();
         }
         writeStoredIds(currentIds);

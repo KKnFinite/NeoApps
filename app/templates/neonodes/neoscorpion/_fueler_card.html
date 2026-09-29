@@ -6,9 +6,6 @@
                     <p>Assigned: {{ row.assigned_fueler.display_name }}</p></header>
                 {% endif %}
                 <p class="neoscorpion-save-status" data-fuel-data-status role="status" aria-live="polite"></p>
-                <span class="neoscorpion-status-pill">{{ row.dispatch_status_label }}</span>
-                {% if not dispatcher_panel|default(false) %}<span class="neoscorpion-status-pill" data-new-assignment-marker role="status" hidden>NEW ASSIGNMENT</span>{% endif %}
-                <span class="neoscorpion-status-pill">{{ row.cycle_type_label }}</span>
                 {% if row.assignment_update_pending and not dispatcher_panel|default(false) %}
                 <div class="neoscorpion-assignment-update" data-assignment-update-notice role="status">
                     <strong>ASSIGNMENT UPDATED</strong>
@@ -27,6 +24,10 @@
                     <div>
                         <span>{{ row.destination }}</span>
                         <strong>{{ row.tail_number }}</strong>
+                        <div class="neoscorpion-fueler-state-row">
+                            <span class="neoscorpion-status-pill" data-fueler-status-chip>{{ row.dispatch_status_label }}</span>
+                            {% if row.cycle_type_label|lower != "fuel" %}<span class="neoscorpion-status-pill" data-fueler-cycle-chip>{{ row.cycle_type_label }}</span>{% endif %}
+                        </div>
                     </div>
                     <div>
                         <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>

@@ -221,3 +221,84 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     font-size: inherit;
     font-weight: 800;
 }
+
+
+/* Fueler mobile density: compact assignment state, wrap APU readouts inside
+   their own tile, and keep APU choice controls operationally sized. */
+.neoscorpion-fueler-state-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+}
+.neoscorpion-fueler-state-row .neoscorpion-status-pill {
+    width: auto;
+    max-width: 100%;
+    padding: 3px 6px;
+    font-size: .58rem;
+    line-height: 1.1;
+}
+
+.neoscorpion-fueler-screen .neoscorpion-fuel-totals .neoscorpion-apu-collapsed {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 7px;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+}
+.neoscorpion-fueler-screen .neoscorpion-fuel-totals .neoscorpion-apu-collapsed > strong {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+}
+.neoscorpion-fueler-screen .neoscorpion-fuel-totals .neoscorpion-apu-collapsed > small {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+}
+.neoscorpion-fueler-screen .neoscorpion-fuel-totals .neoscorpion-apu-editor-form {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.neoscorpion-fueler-screen [data-apu-override-wrap] {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+.neoscorpion-fueler-screen [data-apu-override-wrap] > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.neoscorpion-fueler-screen [data-apu-override-wrap] > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+.neoscorpion-fueler-screen [data-apu-override-wrap] > div > .action-button {
+    width: auto;
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 8px;
+    font-size: .62rem;
+    line-height: 1.08;
+    white-space: nowrap;
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-editor > div {
+    max-width: min(240px, calc(100vw - 48px));
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-editor > div .action-button {
+    width: auto;
+    min-width: 0;
+    min-height: 30px;
+    padding: 5px 7px;
+    font-size: .6rem;
+    line-height: 1.08;
+}
