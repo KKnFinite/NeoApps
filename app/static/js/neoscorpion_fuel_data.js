@@ -106,6 +106,7 @@
     window.NeoScorpionFuelData = {
         isOpen: () => Boolean(dialog?.open),
         hasDirty,
+        initialize,
         revisionChanged: (revision, operationId) => refreshGate.changed(`${operationId}:${revision}`).catch(error => status(content, error.message)),
     };
     initialize(document);

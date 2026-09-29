@@ -220,6 +220,8 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertIn(f'data-current-user-id="{operator.id}"', body)
         self.assertIn('data-refresh-interval-ms="15000"', body)
         self.assertIn('data-refresh-source="override"', body)
+        self.assertIn('data-panel-url="/neoscorpion/fueler/live-panel"', body)
+        self.assertIn('data-fuel-assignments-panel', body)
         self.assertIn(f'data-fuel-assignment-id="{assignment.id}"', body)
         self.assertNotIn("NEW ASSIGNMENT", body)
         self.assertIn("data-fueler-status-chip", body)
@@ -234,6 +236,41 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertEqual(revision["operation_id"], operation.id)
         self.assertEqual(revision["revision"], 8)
 
+    def test_live_panel_renders_fragment_without_page_reload(self):
+        operator = self._add_user("panel_operator", "operator")
+        self._configure_active_night_sort()
+        operation, mission = self._add_operation_with_mission()
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id,
+            assigned_fueler_user_id=operator.id,
+        )
+        db.session.add_all(
+            [
+                assignment,
+                NeoScorpionSortAssetState(
+                    sort_date_operation_id=operation.id,
+                    revision=9,
+                ),
+            ]
+        )
+        db.session.commit()
+        self._login(operator)
+
+        with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
+            response = self.client.get("/neoscorpion/fueler/live-panel")
+            self.assertEqual(commit.call_count, 0)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["operation_id"], operation.id)
+        self.assertEqual(payload["revision"], 9)
+        self.assertIn('data-fuel-assignments-panel', payload["html"])
+        self.assertIn(f'data-fuel-assignment-id="{assignment.id}"', payload["html"])
+        self.assertNotIn("<html", payload["html"].lower())
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+
     def test_live_script_uses_effective_visible_polling_and_session_alert_state(self):
         with open(
             "app/static/js/neoscorpion_fuel_assignments_live.js",
@@ -247,8 +284,13 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertIn("sessionStorage", script)
         self.assertNotIn("data-new-assignment-marker", script)
         self.assertIn("AudioContext", script)
+        self.assertIn("root.dataset.panelUrl", script)
+        self.assertIn("[data-fuel-assignments-panel]", script)
+        self.assertIn("window.scrollTo", script)
+        self.assertIn("NeoScorpionFuelData?.initialize?.(nextPanel)", script)
+        self.assertIn("neoscorpion:fuel-data-saved", script)
         self.assertIn('window.addEventListener("pagehide"', script)
-        self.assertIn("window.location.reload()", script)
+        self.assertNotIn("window.location.reload()", script)
 
     def _add_operation_with_mission(self):
         operation = SortDateOperation(

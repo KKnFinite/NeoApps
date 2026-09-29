@@ -7,15 +7,15 @@
     }
 
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);
-    const operationId = root.dataset.operationId || "none";
     const currentUserId = root.dataset.currentUserId;
     const revisionUrl = root.dataset.revisionUrl;
+    const panelUrl = root.dataset.panelUrl;
     const acknowledgeUrl = root.dataset.acknowledgeUpdateUrl;
-    const initialControlValues = new WeakMap();
+    let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
     let pendingOperationId = operationId;
     let pendingRevision = revision;
-    let reloading = false;
+    let refreshing = false;
     let audioContext = null;
     let controller = null;
 
@@ -36,12 +36,12 @@
         try {
             sessionStorage.setItem(storageKey("seen"), JSON.stringify(Array.from(ids)));
         } catch (_error) {
-            // Session storage is an enhancement; live refresh remains functional without it.
+            // Session storage only supports the assignment alert experience.
         }
     };
 
-    const currentAssignmentIds = () => new Set(
-        Array.from(root.querySelectorAll("[data-fuel-assignment-id]"))
+    const currentAssignmentIds = (scope = root) => new Set(
+        Array.from(scope.querySelectorAll("[data-fuel-assignment-id]"))
             .map((card) => String(card.dataset.fuelAssignmentId))
             .filter(Boolean)
     );
@@ -65,7 +65,7 @@
                 context.resume().catch(() => {});
             }
         } catch (_error) {
-            // Visual alerts remain available when browser audio cannot be unlocked.
+            // Visual updates remain available when browser audio cannot be unlocked.
         }
     };
 
@@ -89,80 +89,159 @@
             tone.start(start);
             tone.stop(start + 0.2);
         } catch (_error) {
-            // Autoplay restrictions must never suppress the visual assignment alert.
+            // Autoplay restrictions must never suppress the visual assignment update.
         }
     };
 
-    const presentNewAssignments = () => {
+    const rememberAssignments = (alertForNew = false) => {
         const currentIds = currentAssignmentIds();
-        let liveReloadPending = false;
-        try {
-            liveReloadPending = sessionStorage.getItem(storageKey("pending")) === "1";
-            sessionStorage.removeItem(storageKey("pending"));
-        } catch (_error) {
-            liveReloadPending = false;
-        }
-
         const seenIds = readStoredIds();
-        const newIds = liveReloadPending
-            ? new Set(Array.from(currentIds).filter((id) => !seenIds.has(id)))
-            : new Set();
-
-        if (newIds.size) {
+        if (
+            alertForNew
+            && Array.from(currentIds).some((id) => !seenIds.has(id))
+        ) {
             playAssignmentAlert();
         }
         writeStoredIds(currentIds);
     };
 
-    const fuelerControls = () => Array.from(root.querySelectorAll(
+    const fuelerControls = (scope = root) => Array.from(scope.querySelectorAll(
         ".neoscorpion-fueler-form input:not([type='hidden']), "
         + ".neoscorpion-fueler-form select, .neoscorpion-fueler-form textarea"
     ));
 
-    fuelerControls().forEach((control) => initialControlValues.set(control, control.value));
+    const markFallbackBaselines = (scope = root) => {
+        fuelerControls(scope).forEach((control) => {
+            control.dataset.fuelerLiveBaseline = control.value;
+        });
+    };
 
     const hasUnsavedFuelEntry = () => window.NeoScorpionFuelData
         ? window.NeoScorpionFuelData.hasDirty(root)
         : fuelerControls().some(
-        (control) => initialControlValues.get(control) !== control.value
-    );
+            (control) => control.dataset.fuelerLiveBaseline !== control.value
+        );
 
-    const prepareReload = (nextOperationId, nextRevision) => {
-        if (nextOperationId === operationId && nextRevision !== revision) {
-            try {
-                sessionStorage.setItem(storageKey("pending"), "1");
-            } catch (_error) {
-                // The reload remains correct; only browser-local alert detection is unavailable.
-            }
+    const capturePanelState = () => {
+        const state = {
+            scrollX: window.scrollX,
+            scrollY: window.scrollY,
+            openDetails: {},
+            focusAssignmentId: null,
+            focusName: null,
+        };
+        root.querySelectorAll("[data-fuel-assignment-id]").forEach((card) => {
+            const id = String(card.dataset.fuelAssignmentId || "");
+            if (!id) return;
+            state.openDetails[id] = Array.from(card.querySelectorAll("details"))
+                .map((details, index) => details.open ? index : -1)
+                .filter((index) => index >= 0);
+        });
+        const active = document.activeElement;
+        const activeCard = active?.closest?.("[data-fuel-assignment-id]");
+        if (activeCard && active?.name) {
+            state.focusAssignmentId = String(activeCard.dataset.fuelAssignmentId || "");
+            state.focusName = active.name;
         }
+        return state;
     };
 
-    const reloadForChange = (nextOperationId, nextRevision) => {
-        if (reloading) {
-            return;
+    const restorePanelState = (state) => {
+        Object.entries(state.openDetails).forEach(([id, indexes]) => {
+            const card = Array.from(root.querySelectorAll("[data-fuel-assignment-id]"))
+                .find((candidate) => String(candidate.dataset.fuelAssignmentId) === id);
+            if (!card) return;
+            const details = Array.from(card.querySelectorAll("details"));
+            indexes.forEach((index) => {
+                if (details[index]) details[index].open = true;
+            });
+        });
+        if (state.focusAssignmentId && state.focusName) {
+            const card = Array.from(root.querySelectorAll("[data-fuel-assignment-id]"))
+                .find((candidate) => (
+                    String(candidate.dataset.fuelAssignmentId) === state.focusAssignmentId
+                ));
+            const control = card
+                ? Array.from(card.querySelectorAll("[name]"))
+                    .find((candidate) => candidate.name === state.focusName)
+                : null;
+            control?.focus({preventScroll: true});
         }
+        window.requestAnimationFrame(() => {
+            window.scrollTo(state.scrollX, state.scrollY);
+        });
+    };
+
+    const adoptFingerprint = (payload) => {
+        operationId = payload.operation_id === null
+            ? "none"
+            : String(payload.operation_id);
+        revision = Number(payload.revision || 0);
+        pendingOperationId = operationId;
+        pendingRevision = revision;
+        root.dataset.operationId = operationId === "none" ? "" : operationId;
+        root.dataset.revision = String(revision);
+    };
+
+    const applyPanel = (payload) => {
+        const currentPanel = root.querySelector("[data-fuel-assignments-panel]");
+        const template = document.createElement("template");
+        template.innerHTML = String(payload.html || "").trim();
+        const nextPanel = template.content.querySelector("[data-fuel-assignments-panel]");
+        if (!currentPanel || !nextPanel) {
+            throw new Error("Fuel Assignments live panel is unavailable.");
+        }
+
+        const priorOperationId = operationId;
+        const state = capturePanelState();
+        currentPanel.replaceWith(nextPanel);
+        window.NeoScorpionFuelData?.initialize?.(nextPanel);
+        markFallbackBaselines(nextPanel);
+        adoptFingerprint(payload);
+        rememberAssignments(priorOperationId === operationId);
+        restorePanelState(state);
+    };
+
+    const refreshForChange = async (nextOperationId, nextRevision) => {
         pendingOperationId = nextOperationId;
         pendingRevision = nextRevision;
-        if (hasUnsavedFuelEntry()) {
-            return;
+        if (refreshing || hasUnsavedFuelEntry()) {
+            return false;
         }
-        reloading = true;
-        controller?.setEnabled(false);
-        prepareReload(nextOperationId, nextRevision);
-        window.location.reload();
+
+        refreshing = true;
+        try {
+            const response = await fetch(panelUrl, {
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {"Accept": "application/json"},
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true) {
+                throw new Error(payload.error || "Fuel Assignments live panel is unavailable.");
+            }
+            if (hasUnsavedFuelEntry()) {
+                pendingOperationId = payload.operation_id === null
+                    ? "none"
+                    : String(payload.operation_id);
+                pendingRevision = Number(payload.revision || 0);
+                return false;
+            }
+            applyPanel(payload);
+            return true;
+        } finally {
+            refreshing = false;
+        }
     };
 
     const reconcileWhenClean = () => {
-        if (!hasUnsavedFuelEntry() && (
-            pendingOperationId !== operationId || pendingRevision !== revision
-        )) {
-            reloadForChange(pendingOperationId, pendingRevision);
+        if (
+            !hasUnsavedFuelEntry()
+            && (pendingOperationId !== operationId || pendingRevision !== revision)
+        ) {
+            refreshForChange(pendingOperationId, pendingRevision).catch(() => {});
         }
     };
-    fuelerControls().forEach((control) => {
-        control.addEventListener("input", reconcileWhenClean);
-        control.addEventListener("change", reconcileWhenClean);
-    });
 
     const poll = async () => {
         const response = await fetch(revisionUrl, {
@@ -180,7 +259,7 @@
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
         if (nextOperationId !== operationId || nextRevision !== revision) {
-            reloadForChange(nextOperationId, nextRevision);
+            await refreshForChange(nextOperationId, nextRevision);
         }
     };
 
@@ -227,15 +306,36 @@
     ["pointerdown", "keydown", "touchstart"].forEach((eventName) => {
         document.addEventListener(eventName, primeAudio, {once: true, passive: true});
     });
+
     root.addEventListener("click", (event) => {
         const button = event.target.closest("[data-acknowledge-assignment-update]");
         if (button) {
             acknowledgeUpdate(button);
         }
     });
-    presentNewAssignments();
+    root.addEventListener("input", reconcileWhenClean);
+    root.addEventListener("change", reconcileWhenClean);
 
-    if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000) {
+    document.addEventListener("neoscorpion:fuel-data-saved", (event) => {
+        const payload = event.detail || {};
+        if (payload.operation_id === undefined || payload.revision === undefined) {
+            return;
+        }
+        if (payload.closed) {
+            const nextOperationId = payload.operation_id === null
+                ? "none"
+                : String(payload.operation_id);
+            refreshForChange(nextOperationId, Number(payload.revision || 0)).catch(() => {});
+            return;
+        }
+        adoptFingerprint(payload);
+        rememberAssignments(false);
+    });
+
+    markFallbackBaselines(root);
+    rememberAssignments(false);
+
+    if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000 && panelUrl) {
         controller = window.NeoLiveUpdates.create({
             continuousWhileVisible: true,
             immediate: false,

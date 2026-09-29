@@ -1,0 +1,17 @@
+<section class="neoscorpion-panel" data-fuel-assignments-panel>
+        <div class="neoscorpion-panel-head">
+            <span>My Fuel Assignments</span>
+            <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>
+        </div>
+        {% if not operation %}
+        <p class="neoscorpion-empty">No current SortDateOperation is available for fueler assignments.</p>
+        {% elif not rows %}
+        <p class="neoscorpion-empty">No fuel assignments are currently assigned to you.</p>
+        {% else %}
+        <div class="neoscorpion-fueler-cards">
+            {% for row in rows %}
+            {% include "neonodes/neoscorpion/_fueler_card.html" %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>

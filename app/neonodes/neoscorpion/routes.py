@@ -921,6 +921,30 @@ def dispatch_fueler_off(assignment_id):
     return _fuel_data_request(assignment_id, dispatcher=True, off=True)
 
 
+@bp.get("/fueler/live-panel")
+@gateway_node_required("scorpion")
+def fuel_assignments_live_panel():
+    gateway = get_current_gateway()
+    access = permission_access(FUELER_VIEW_PERMISSION, FUELER_EDIT_PERMISSION)
+    if not access["can_view"]:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+
+    context = fueler_context(gateway, current_user)
+    operation = context["operation"]
+    return _json_no_store(
+        {
+            "ok": True,
+            "operation_id": operation.id if operation else None,
+            "revision": int(context.get("fuel_assignments_revision") or 0),
+            "html": render_template(
+                "neonodes/neoscorpion/_fueler_panel.html",
+                can_edit=access["can_edit"],
+                **context,
+            ),
+        }
+    )
+
+
 @bp.get("/fuel-assignments/revision")
 @gateway_node_required("scorpion")
 def fuel_assignments_revision():

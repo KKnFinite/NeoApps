@@ -8,6 +8,7 @@
     aria-label="NeoScorpion Fueler"
     data-fuel-assignments-live
     data-revision-url="{{ url_for('neoscorpion.fuel_assignments_revision') }}"
+    data-panel-url="{{ url_for('neoscorpion.fuel_assignments_live_panel') }}"
     data-acknowledge-update-url="{{ url_for('neoscorpion.fuel_assignments_acknowledge_update') }}"
     data-operation-id="{{ operation.id if operation else '' }}"
     data-revision="{{ fuel_assignments_revision }}"
@@ -23,23 +24,8 @@
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
 
-    <section class="neoscorpion-panel">
-        <div class="neoscorpion-panel-head">
-            <span>My Fuel Assignments</span>
-            <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>
-        </div>
-        {% if not operation %}
-        <p class="neoscorpion-empty">No current SortDateOperation is available for fueler assignments.</p>
-        {% elif not rows %}
-        <p class="neoscorpion-empty">No fuel assignments are currently assigned to you.</p>
-        {% else %}
-        <div class="neoscorpion-fueler-cards">
-            {% for row in rows %}
-            {% include "neonodes/neoscorpion/_fueler_card.html" %}
-            {% endfor %}
-        </div>
-        {% endif %}
-    </section>
+    {% include "neonodes/neoscorpion/_fueler_panel.html" %}
+
 </section>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION) }}"></script>
