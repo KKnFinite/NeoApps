@@ -255,6 +255,22 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertNotIn(b"<th>Truck Fuel</th>", rendered.data)
         self.assertNotIn(b"NOW 8,000 gal", rendered.data)
 
+    def test_live_panel_renders_assigned_truck_visuals(self):
+        truck = self._nightly_truck(current_gallons=10_000)
+        mission = self._mission("UPS515", "N451UP", 25_400, 1)
+        self._tail_fuel(mission, inbound_lbs=12_000)
+        self._assignment(mission, truck)
+        db.session.commit()
+
+        self._login_user("live_panel_dispatcher", "simulator")
+        response = self.client.get("/neoscorpion/fuel-dispatch/live-panel")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("neoscorpion-mission-truck-bars", payload["html"])
+        self.assertIn("TRUCK FUEL STATUS", payload["html"])
+
     def test_truck_visuals_preserve_status_short_and_incomplete_states(self):
         short_truck = self._nightly_truck("21", 1_000)
         incomplete_truck = self._nightly_truck("22", 5_000)

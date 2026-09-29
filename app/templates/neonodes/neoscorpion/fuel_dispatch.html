@@ -3,18 +3,6 @@
 {% block title %}Fuel Dispatch | NeoScorpion{% endblock %}
 
 {% block content %}
-{% macro mission_truck_bars(truck_visual) -%}
-{% if truck_visual %}
-<div
-    class="neoscorpion-mission-truck-bars{% if truck_visual.projected_short %} is-short{% endif %}"
-    aria-label="Truck {{ truck_visual.truck_number }}: current {{ truck_visual.current_display }}{% if truck_visual.current_percent is not none %}, {{ truck_visual.current_percent }} percent{% endif %}; projected after this mission {% if truck_visual.projected_incomplete or truck_visual.projected_display == '-' %}unknown{% else %}{{ truck_visual.projected_display }}{% if truck_visual.projected_percent is not none %}, {{ truck_visual.projected_percent }} percent{% endif %}{% endif %}{% if truck_visual.projected_short %}; short{% endif %}"
->
-    <progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini" max="100" value="{{ truck_visual.current_gauge_percent if truck_visual.current_gauge_percent is not none else 0 }}"></progress>
-    <progress class="neoscorpion-truck-gauge neoscorpion-truck-gauge--mini neoscorpion-truck-gauge--projected{% if truck_visual.projected_short %} is-short{% endif %}" max="100" value="{{ truck_visual.projected_gauge_percent if truck_visual.projected_gauge_percent is not none else 0 }}"></progress>
-    {% if truck_visual.projected_short %}<span class="neoscorpion-mission-truck-short">SHORT</span>{% endif %}
-</div>
-{% endif %}
-{%- endmacro %}
 <section
     class="neoscorpion-shell neoscorpion-screen"
     aria-label="NeoScorpion Fuel Dispatch"
