@@ -187,3 +187,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     font-size: .82rem !important;
     font-weight: 900 !important;
 }
+.neoscorpion-dispatch-arrival-status.is-arrived {
+    color: #8fffa8;
+    font-weight: 900;
+}
