@@ -311,6 +311,8 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self.assertIn(b"NEO FUEL", response.data.upper())
         self.assertNotIn(b"data-copy-neo-fuel", response.data)
         self.assertIn(b">FOB</button>", response.data)
+        self.assertIn(b"FOB 60.0K", response.data)
+        self.assertIn(b"neoscorpion-dispatch-secondary", response.data)
         self.assertIsNone(assignment.fuel_on_board_at_utc)
 
     def _save_complete(self, assignment):
