@@ -7,7 +7,7 @@ from flask import g
 from flask.testing import FlaskClient
 
 from app.extensions import db
-from app.models import NeoScorpionFuelWorkState
+from app.models import NeoScorpionFuelTruck, NeoScorpionFuelWorkState
 from app.services.neoscorpion import fueler_context
 from tests import test_neoscorpion_fueler_off as fixtures
 
@@ -79,6 +79,24 @@ class FuelerDataTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual(self.dispatch.get(self.dispatch_url).status_code, 404)
         self.assertNotIn('data-fuel-data-open=', self.dispatch.get('/neoscorpion/fuel-dispatch').get_data(as_text=True))
+
+    def test_fueler_truck_header_includes_vendor_driver(self):
+        self.setup_assignment()
+        truck = NeoScorpionFuelTruck(
+            gateway_id=self.gateway.id,
+            truck_number="708",
+            vendor_driver_name="Vendor Driver",
+        )
+        db.session.add(truck)
+        db.session.flush()
+        self.assignment.assigned_truck_id = truck.id
+        db.session.commit()
+
+        fueler_page = self.fueler.get('/neoscorpion/fueler').get_data(as_text=True)
+
+        self.assertIn('TRUCK 708', fueler_page)
+        self.assertIn('neoscorpion-fueler-truck-vendor', fueler_page)
+        self.assertIn('Vendor Driver', fueler_page)
 
     def test_both_actors_share_canonical_data_without_owner_change(self):
         self.setup_assignment()
