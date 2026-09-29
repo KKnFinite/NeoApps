@@ -158,6 +158,45 @@ def fuel_dispatch():
     return _dispatch_response(gateway, access)
 
 
+@bp.get("/fuel-dispatch/live-panel")
+@gateway_node_required("scorpion")
+def fuel_dispatch_live_panel():
+    gateway = get_current_gateway()
+    access = permission_access(
+        FUEL_DISPATCH_VIEW_PERMISSION,
+        FUEL_DISPATCH_EDIT_PERMISSION,
+    )
+    if not access["can_view"]:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    context = fuel_dispatch_context(
+        gateway,
+        include_asset_choices=access["can_edit"],
+    )
+    operation = context["operation"]
+    spear_plan = context["spear_plan"]
+    return _json_no_store(
+        {
+            "ok": True,
+            "operation_id": operation.id if operation else None,
+            "revision": int(context.get("nightly_asset_revision") or 0),
+            "spear_plan_token": spear_plan.token if spear_plan else "",
+            "spear_automation_enabled": bool(
+                context["spear_settings"].automation_enabled
+                and context["spear_automatic_available"]
+            ),
+            "html": render_template(
+                "neonodes/neoscorpion/_fuel_dispatch_panel.html",
+                gateway=gateway,
+                can_view=access["can_view"],
+                can_edit=access["can_edit"],
+                can_manage_assets=access["can_edit"],
+                can_view_spear_settings=user_can(SETTINGS_VIEW_PERMISSION),
+                **context,
+            ),
+        }
+    )
+
+
 @bp.get("/hanzo")
 @gateway_node_required("scorpion")
 def hanzo():

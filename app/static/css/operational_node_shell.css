@@ -60,8 +60,4 @@
     }
 }
 
-html.operational-board-view-boot body.neoscorpion-node-page .neoscorpion-screen[data-fuel-dispatch-live],
-html.neoscorpion-dispatch-restoring body.neoscorpion-node-page .neoscorpion-screen[data-fuel-dispatch-live] {
-    visibility: hidden;
-}
 

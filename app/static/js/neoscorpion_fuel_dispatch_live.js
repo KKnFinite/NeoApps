@@ -9,7 +9,9 @@
     initializeSpearSplash(root);
     initializeDispatchDetails(root);
     initializeDispatchSelects(root);
-    const preserveDispatchScroll = initializeDispatchScroll(root);
+    initializeDispatchApuEditors(root);
+    const dispatchScroll = initializeDispatchScroll(root);
+    const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
     if (!window.NeoLiveUpdates) {
         return;
@@ -60,7 +62,7 @@
 
     function initializeDispatchScroll(scope) {
         const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v3";
-        const tableWrap = scope.querySelector(".neoscorpion-table-wrap--sticky");
+        const tableWrap = () => scope.querySelector(".neoscorpion-table-wrap--sticky");
 
         const restoreDetailRows = (detailIds) => {
             if (!Array.isArray(detailIds)) return;
@@ -76,9 +78,41 @@
             });
         };
 
-        const applyRestore = (saved) => {
-            restoreDetailRows(saved.openDetails);
+        const snapshot = () => {
+            const wrap = tableWrap();
+            const rows = Array.from(scope.querySelectorAll(
+                ".neoscorpion-dispatch-primary-row[data-dispatch-row-key]"
+            ));
+            const wrapRect = wrap?.getBoundingClientRect() || null;
+            const anchor = rows.find((row) => {
+                const rect = row.getBoundingClientRect();
+                if (!wrapRect) return rect.bottom > 0;
+                return rect.bottom > wrapRect.top && rect.top < wrapRect.bottom;
+            }) || rows[0] || null;
+            const anchorRect = anchor?.getBoundingClientRect() || null;
+            const openDetails = Array.from(scope.querySelectorAll(
+                "[data-neoscorpion-dispatch-details][aria-expanded='true']"
+            )).map((toggle) => toggle.getAttribute("aria-controls")).filter(Boolean);
+            return {
+                path: window.location.pathname,
+                y: window.scrollY,
+                x: window.scrollX,
+                rowKey: anchor?.dataset.dispatchRowKey || null,
+                windowMissionOffset: anchorRect?.top ?? null,
+                tableMissionOffset: (
+                    anchorRect && wrapRect
+                        ? anchorRect.top - wrapRect.top
+                        : null
+                ),
+                tableScrollTop: wrap?.scrollTop || 0,
+                tableScrollLeft: wrap?.scrollLeft || 0,
+                openDetails,
+            };
+        };
 
+        const applyRestore = (saved) => {
+            if (!saved) return;
+            restoreDetailRows(saved.openDetails);
             if (Number.isFinite(saved.y) || Number.isFinite(saved.x)) {
                 window.scrollTo({
                     top: Number.isFinite(saved.y) ? saved.y : window.scrollY,
@@ -86,101 +120,60 @@
                     behavior: "auto",
                 });
             }
-
+            const wrap = tableWrap();
             const anchor = saved.rowKey
                 ? scope.querySelector(
                     `.neoscorpion-dispatch-primary-row[data-dispatch-row-key="${saved.rowKey}"]`
                 )
                 : null;
-
-            if (tableWrap) {
-                if (Number.isFinite(saved.tableScrollTop)) {
-                    tableWrap.scrollTop = saved.tableScrollTop;
-                }
-                if (Number.isFinite(saved.tableScrollLeft)) {
-                    tableWrap.scrollLeft = saved.tableScrollLeft;
-                }
+            if (wrap) {
+                if (Number.isFinite(saved.tableScrollTop)) wrap.scrollTop = saved.tableScrollTop;
+                if (Number.isFinite(saved.tableScrollLeft)) wrap.scrollLeft = saved.tableScrollLeft;
                 if (anchor && Number.isFinite(saved.tableMissionOffset)) {
-                    const wrapTop = tableWrap.getBoundingClientRect().top;
+                    const wrapTop = wrap.getBoundingClientRect().top;
                     const anchorTop = anchor.getBoundingClientRect().top;
-                    tableWrap.scrollTop += (
-                        anchorTop - wrapTop - saved.tableMissionOffset
-                    );
+                    wrap.scrollTop += anchorTop - wrapTop - saved.tableMissionOffset;
                 }
             } else if (anchor && Number.isFinite(saved.windowMissionOffset)) {
                 const anchorTop = anchor.getBoundingClientRect().top;
                 window.scrollTo({
-                    top: Math.max(
-                        0,
-                        window.scrollY + anchorTop - saved.windowMissionOffset
-                    ),
+                    top: Math.max(0, window.scrollY + anchorTop - saved.windowMissionOffset),
                     left: Number.isFinite(saved.x) ? saved.x : 0,
                     behavior: "auto",
                 });
             }
         };
 
-        const releaseRestorePaint = () => {
-            document.documentElement.classList.remove("neoscorpion-dispatch-restoring");
-        };
-        const restore = () => {
+        const restoreSession = () => {
             try {
                 const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
-                if (!saved || saved.path !== window.location.pathname) {
-                    releaseRestorePaint();
-                    return;
-                }
-                window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+                if (!saved || saved.path !== window.location.pathname) return;
+                // Browser restoration is manual on Dispatch. Restore immediately
+                // before paint, then once more on the next frame for final layout.
+                applyRestore(saved);
+                window.requestAnimationFrame(() => {
                     applyRestore(saved);
-                    // Keep the board hidden until the late layout pass has also
-                    // landed, so users never see the top/old table position.
-                    window.setTimeout(() => {
-                        applyRestore(saved);
-                        window.sessionStorage.removeItem(storageKey);
-                        releaseRestorePaint();
-                    }, 80);
-                }));
+                    window.sessionStorage.removeItem(storageKey);
+                });
             } catch (_error) {
-                releaseRestorePaint();
                 // Scroll restoration must never interfere with Dispatch actions.
             }
         };
 
-        restore();
-        return () => {
-            try {
-                const rows = Array.from(scope.querySelectorAll(
-                    ".neoscorpion-dispatch-primary-row[data-dispatch-row-key]"
-                ));
-                const wrapRect = tableWrap?.getBoundingClientRect() || null;
-                const anchor = rows.find((row) => {
-                    const rect = row.getBoundingClientRect();
-                    if (!wrapRect) return rect.bottom > 0;
-                    return rect.bottom > wrapRect.top && rect.top < wrapRect.bottom;
-                }) || rows[0] || null;
-                const anchorRect = anchor?.getBoundingClientRect() || null;
-                const openDetails = Array.from(scope.querySelectorAll(
-                    "[data-neoscorpion-dispatch-details][aria-expanded='true']"
-                )).map((toggle) => toggle.getAttribute("aria-controls")).filter(Boolean);
-
-                window.sessionStorage.setItem(storageKey, JSON.stringify({
-                    path: window.location.pathname,
-                    y: window.scrollY,
-                    x: window.scrollX,
-                    rowKey: anchor?.dataset.dispatchRowKey || null,
-                    windowMissionOffset: anchorRect?.top ?? null,
-                    tableMissionOffset: (
-                        anchorRect && wrapRect
-                            ? anchorRect.top - wrapRect.top
-                            : null
-                    ),
-                    tableScrollTop: tableWrap?.scrollTop || 0,
-                    tableScrollLeft: tableWrap?.scrollLeft || 0,
-                    openDetails,
-                }));
-            } catch (_error) {
-                // Browser storage is an enhancement only.
-            }
+        restoreSession();
+        return {
+            snapshot,
+            restoreSnapshot(saved) {
+                applyRestore(saved);
+                window.requestAnimationFrame(() => applyRestore(saved));
+            },
+            preserve() {
+                try {
+                    window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot()));
+                } catch (_error) {
+                    // Browser storage is an enhancement only.
+                }
+            },
         };
     }
 
@@ -188,19 +181,19 @@
         const selects = Array.from(scope.querySelectorAll(
             ".neoscorpion-dispatch-primary-row select.neoscorpion-inline-select"
         ));
-        let openCombobox = null;
         const close = (combobox, returnFocus = false) => {
             if (!combobox) return;
             combobox.classList.remove("is-open");
             combobox.trigger.setAttribute("aria-expanded", "false");
             if (returnFocus) combobox.trigger.focus();
-            if (openCombobox === combobox) openCombobox = null;
+            if (scope._dispatchOpenCombobox === combobox) scope._dispatchOpenCombobox = null;
         };
         const open = (combobox) => {
-            if (openCombobox && openCombobox !== combobox) close(openCombobox);
+            const current = scope._dispatchOpenCombobox || null;
+            if (current && current !== combobox) close(current);
             combobox.classList.add("is-open");
             combobox.trigger.setAttribute("aria-expanded", "true");
-            openCombobox = combobox;
+            scope._dispatchOpenCombobox = combobox;
         };
 
         selects.forEach((select, index) => {
@@ -278,26 +271,47 @@
             });
             sync();
         });
-        document.addEventListener("click", (event) => {
-            if (openCombobox && !openCombobox.contains(event.target)) close(openCombobox);
-        });
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" && openCombobox) {
-                event.preventDefault();
-                close(openCombobox, true);
-            }
+        if (scope.dataset.dispatchComboboxGlobalReady !== "true") {
+            scope.dataset.dispatchComboboxGlobalReady = "true";
+            document.addEventListener("click", (event) => {
+                const current = scope._dispatchOpenCombobox || null;
+                if (current && !current.contains(event.target)) close(current);
+            });
+            document.addEventListener("keydown", (event) => {
+                const current = scope._dispatchOpenCombobox || null;
+                if (event.key === "Escape" && current) {
+                    event.preventDefault();
+                    close(current, true);
+                }
+            });
+        }
+    }
+
+
+    function initializeDispatchApuEditors(scope) {
+        scope.querySelectorAll("[data-dispatch-apu-editor]").forEach((editor) => {
+            if (editor.dataset.dispatchApuReady === "true") return;
+            editor.dataset.dispatchApuReady = "true";
+            const allowance = editor.querySelector("[data-dispatch-apu-override-value]");
+            const enabled = editor.querySelector("[data-dispatch-apu-override-enabled]");
+            editor.addEventListener("toggle", () => {
+                if (!editor.open) return;
+                if (allowance) allowance.dataset.originalValue = allowance.value;
+                if (enabled) enabled.dataset.originalValue = enabled.value;
+            });
         });
     }
 
     const pollIntervalMs = Number(root.dataset.refreshIntervalMs || 0);
     const revisionUrl = root.dataset.revisionUrl;
+    const panelUrl = root.dataset.panelUrl;
     const autosaveUrl = root.dataset.autosaveUrl;
     const spearActionUrl = root.dataset.spearActionUrl;
     const spearRecalculationMs = Math.max(
         60000,
         Number(root.dataset.spearRecalculationMs || 120000)
     );
-    const spearRenderedAt = Date.now();
+    let spearRenderedAt = Date.now();
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
     const initialControlValues = new WeakMap();
@@ -321,9 +335,12 @@
         + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden])"
     ));
 
-    protectedControls().forEach((control) => {
-        initialControlValues.set(control, controlValue(control));
-    });
+    const resetProtectedBaselines = () => {
+        protectedControls().forEach((control) => {
+            initialControlValues.set(control, controlValue(control));
+        });
+    };
+    resetProtectedBaselines();
 
     const hasUnsavedControls = () => (
         protectedControls().some(
@@ -357,27 +374,61 @@
     };
 
     let pendingFuelDataRefresh = false;
+
+    const reloadPage = async () => {
+        if (window.NeoScorpionFuelData?.isOpen()) {
+            pendingFuelDataRefresh = true;
+            return false;
+        }
+        if (reloading || hasUnsavedControls() || !panelUrl) return false;
+        reloading = true;
+        const saved = dispatchScroll.snapshot();
+        try {
+            const response = await fetch(panelUrl, {
+                cache: "no-store",
+                credentials: "same-origin",
+                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true || !payload.html) {
+                throw new Error(payload.error || "Fuel Dispatch refresh failed.");
+            }
+            const holder = document.createElement("template");
+            holder.innerHTML = payload.html.trim();
+            const nextPanel = holder.content.firstElementChild;
+            const currentPanel = root.querySelector(":scope > .neoscorpion-panel");
+            if (!nextPanel?.matches(".neoscorpion-panel") || !currentPanel) {
+                throw new Error("Fuel Dispatch refresh returned invalid content.");
+            }
+            currentPanel.replaceWith(nextPanel);
+            adoptFingerprint(payload);
+            root.dataset.spearPlanToken = payload.spear_plan_token || "";
+            root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? "true" : "false";
+            spearRenderedAt = Date.now();
+            initializeDispatchSelects(root);
+            initializeDispatchApuEditors(root);
+            resetProtectedBaselines();
+            syncDirtyState();
+            dispatchScroll.restoreSnapshot(saved);
+            pendingFuelDataRefresh = false;
+            scheduleSpearAutomation();
+            return true;
+        } catch (error) {
+            const status = root.querySelector("[data-spear-fleet-status]");
+            setStatus(status, `LIVE REFRESH: ${error.message || "Unable to refresh Dispatch."}`, "error");
+            return false;
+        } finally {
+            reloading = false;
+        }
+    };
+
     document.addEventListener("neoscorpion:fuel-data-closed", () => {
         if (pendingFuelDataRefresh && !hasUnsavedControls()) reloadPage();
     });
-    const reloadPage = () => {
-        if (window.NeoScorpionFuelData?.isOpen()) {
-            pendingFuelDataRefresh = true;
-            return;
-        }
-        if (reloading) {
-            return;
-        }
-        reloading = true;
-        controller?.setEnabled(false);
-        preserveDispatchScroll();
-        window.location.reload();
-    };
 
     const handleChangedFingerprint = () => {
-        if (!hasUnsavedControls()) {
-            reloadPage();
-        }
+        if (!hasUnsavedControls()) return reloadPage();
+        return Promise.resolve(false);
     };
 
     const poll = async () => {
@@ -396,13 +447,13 @@
         const nextRevision = Number(payload.revision || 0);
         if (nextOperationId !== operationId || nextRevision !== revision) {
             window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
-            handleChangedFingerprint();
+            await handleChangedFingerprint();
         } else if (
             root.dataset.spearRecommendationsEnabled === "true"
             && Date.now() - spearRenderedAt >= spearRecalculationMs
             && !hasUnsavedControls()
         ) {
-            reloadPage();
+            await reloadPage();
         }
     };
 
@@ -569,8 +620,7 @@
             button.textContent = payload.button_label || "UPDATE ASSIGNMENT";
             setStatus(status, payload.changed ? "Saved" : "No change");
             if (payload.changed && resourceChangeRequested) {
-                preserveDispatchScroll();
-                window.location.reload();
+                await reloadPage();
                 return;
             }
         } catch (error) {
@@ -614,7 +664,7 @@
                 throw new Error(payload.error || "Truck update failed.");
             }
             adoptFingerprint(payload);
-            reloadPage();
+            await reloadPage();
         } catch (error) {
             form.dataset.truckCardBusy = "false";
             if (button) button.disabled = false;
@@ -698,23 +748,21 @@
         if (enabled) enabled.value = enabled.dataset.originalValue || enabled.value;
         editor.open = false;
     });
-    root.querySelectorAll("[data-dispatch-apu-editor]").forEach((editor) => {
-        const allowance = editor.querySelector("[data-dispatch-apu-override-value]");
-        const enabled = editor.querySelector("[data-dispatch-apu-override-enabled]");
-        editor.addEventListener("toggle", () => {
-            if (!editor.open) return;
-            if (allowance) allowance.dataset.originalValue = allowance.value;
-            if (enabled) enabled.dataset.originalValue = enabled.value;
-        });
-    });
     syncDirtyState();
-    if (
-        root.dataset.spearAutomationEnabled === "true"
-        && spearActionUrl
-        && root.dataset.spearPlanToken
-    ) {
+    let spearAutomationTimer = null;
+    function scheduleSpearAutomation() {
+        if (spearAutomationTimer !== null) {
+            window.clearTimeout(spearAutomationTimer);
+            spearAutomationTimer = null;
+        }
+        if (
+            root.dataset.spearAutomationEnabled !== "true"
+            || !spearActionUrl
+            || !root.dataset.spearPlanToken
+        ) return;
         const delay = Math.max(1000, Number(root.dataset.spearStabilityDelayMs || 5000));
-        window.setTimeout(async () => {
+        spearAutomationTimer = window.setTimeout(async () => {
+            spearAutomationTimer = null;
             if (reloading || hasUnsavedControls() || root.dataset.liveDirty === "true") return;
             root.dataset.liveDirty = "true";
             const body = new FormData();
@@ -732,7 +780,8 @@
                 if (!response.ok || payload.ok !== true) {
                     throw new Error(payload.error || "Automation action failed.");
                 }
-                reloadPage();
+                root.dataset.liveDirty = "false";
+                await reloadPage();
             } catch (error) {
                 root.dataset.liveDirty = "false";
                 const status = root.querySelector("[data-spear-fleet-status]");
@@ -740,6 +789,7 @@
             }
         }, delay);
     }
+    scheduleSpearAutomation();
     if (Number.isFinite(pollIntervalMs) && pollIntervalMs >= 5000) {
         controller = window.NeoLiveUpdates.create({
             continuousWhileVisible: true,

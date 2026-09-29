@@ -102,20 +102,8 @@
     {% if request.endpoint == 'neoscorpion.fuel_dispatch' %}
     <script>
     (() => {
-        try {
-            if ("scrollRestoration" in window.history) {
-                window.history.scrollRestoration = "manual";
-            }
-            const key = "neoapps.neoscorpion.fuel-dispatch.scroll.v3";
-            const saved = JSON.parse(window.sessionStorage.getItem(key) || "null");
-            if (saved && saved.path === window.location.pathname) {
-                document.documentElement.classList.add("neoscorpion-dispatch-restoring");
-                window.setTimeout(() => {
-                    document.documentElement.classList.remove("neoscorpion-dispatch-restoring");
-                }, 1500);
-            }
-        } catch (_error) {
-            document.documentElement.classList.remove("neoscorpion-dispatch-restoring");
+        if ("scrollRestoration" in window.history) {
+            window.history.scrollRestoration = "manual";
         }
     })();
     </script>
