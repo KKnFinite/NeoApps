@@ -30,6 +30,7 @@
                     </div>
                     <div>
                         <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
+                        <small class="neoscorpion-fueler-truck">TRUCK {{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}</small>
                         <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
                     </div>
                 </header>
