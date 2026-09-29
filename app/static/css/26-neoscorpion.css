@@ -43,8 +43,19 @@
 .neoscorpion-dispatch-table--compact th:nth-child(15) { width: 4%; }
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-input,
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-select { min-width: 0; width: 100%; font-size: .72rem; }
-.neoscorpion-dispatch-tail small,
-.neoscorpion-dispatch-arrival small { display: block; margin-top: 2px; color: var(--muted); font-size: .61rem; line-height: 1.15; }
+.neoscorpion-dispatch-tail small { display: block; margin-top: 2px; color: var(--muted); font-size: .61rem; line-height: 1.15; }
+.neoscorpion-dispatch-arrival-secondary {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: .72rem;
+    font-weight: 850;
+    line-height: 1.15;
+}
+.neoscorpion-dispatch-primary-row.is-arrived .neoscorpion-dispatch-arrival-secondary {
+    color: #8fffa8;
+    font-weight: 900;
+}
 .neoscorpion-dispatch-secondary {
     display: block;
     margin-top: 4px;
@@ -52,10 +63,6 @@
     font-size: inherit !important;
     font-weight: 850 !important;
     line-height: 1.15;
-}
-.neoscorpion-dispatch-flight .neoscorpion-dispatch-secondary,
-.neoscorpion-dispatch-etd-parking .neoscorpion-dispatch-secondary {
-    font-size: .72rem !important;
 }
 .neoscorpion-dispatch-status-detail {
     font-size: .68rem !important;
@@ -213,8 +220,4 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     color: #e8f3f4;
     font-size: inherit;
     font-weight: 800;
-}
-.neoscorpion-dispatch-arrival-status.is-arrived {
-    color: #8fffa8;
-    font-weight: 900;
 }
