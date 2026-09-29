@@ -69,7 +69,7 @@ class FuelerDataTest(unittest.TestCase):
         self.assertIn('data-fuel-load-output', panel)
         fueler_page = self.fueler.get('/neoscorpion/fueler').get_data(as_text=True)
         self.assertIn('data-fuel-data-card', fueler_page)
-        self.assertIn('TRUCK 14', fueler_page)
+        self.assertIn('TRUCK UNASSIGNED', fueler_page)
         self.assignment.assigned_fueler_user_id = None
         db.session.commit()
         self.assertEqual(self.dispatch.get(self.dispatch_url).status_code, 404)
