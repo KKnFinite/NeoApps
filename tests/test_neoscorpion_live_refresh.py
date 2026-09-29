@@ -369,6 +369,12 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertIn('data-panel-url="', body)
         self.assertIn("focusNextAutosaveField", script)
         self.assertIn('event.key !== "Enter"', script)
+        self.assertIn(
+            'const editingApu = Boolean(button.closest("[data-dispatch-apu-editor]"));',
+            script,
+        )
+        self.assertIn("else if (apuEnabled && editingApu)", script)
+        self.assertNotIn("else if (apuEnabled) {", script)
         self.assertNotIn("setMonitorMode", script)
 
     def _add_operation(self, *, revision):

@@ -585,12 +585,13 @@
         }
         const status = form.querySelector("[data-assignment-save-status]");
         const resetApu = button.matches("[data-dispatch-apu-reset]");
+        const editingApu = Boolean(button.closest("[data-dispatch-apu-editor]"));
         const apuEnabled = form.elements.namedItem("apu_override_enabled");
         const apuAllowance = form.elements.namedItem("apu_override_allowance");
         if (resetApu) {
             if (apuEnabled) apuEnabled.value = "0";
             if (apuAllowance) apuAllowance.value = "";
-        } else if (apuEnabled) {
+        } else if (apuEnabled && editingApu) {
             apuEnabled.value = "1";
         }
         const expectedFuelerBefore = String(
