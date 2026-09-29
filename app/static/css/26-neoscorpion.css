@@ -104,7 +104,24 @@
 .neoscorpion-dispatch-transfer-estimate { white-space: nowrap; }
 .neoscorpion-dispatch-transfer-estimate small { white-space: nowrap; }
 .neoscorpion-dispatch-action-cell { min-width: 0; }
-.neoscorpion-dispatch-action-cell .action-button { min-height: 24px; margin: 1px; padding: 3px 5px; font-size: .57rem; }
+.neoscorpion-dispatch-action-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-width: 0;
+}
+.neoscorpion-dispatch-action-stack > * {
+    margin: 0;
+}
+.neoscorpion-dispatch-action-cell .action-button {
+    min-height: 24px;
+    margin: 0;
+    padding: 3px 5px;
+    font-size: .57rem;
+}
 .neoscorpion-dispatch-details-toggle { width: 100%; min-height: 27px; padding: 4px; font-size: .53rem; white-space: nowrap; }
 .neoscorpion-dispatch-details-toggle[aria-expanded="true"] span { transform: rotate(180deg); }
 .neoscorpion-dispatch-detail-row > td { padding:0 5px 10px !important; background:rgba(0,0,0,.18); text-align:left; }

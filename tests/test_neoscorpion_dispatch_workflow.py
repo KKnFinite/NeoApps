@@ -238,6 +238,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertIn(">Assigned</span>", row)
         self.assertIn("DERIVED STATUS TRUCK", row)
         self.assertNotIn('name="assigned_truck_id"', row)
+        self.assertIn('class="neoscorpion-dispatch-action-stack"', row)
         self.assertIn('class="neoscorpion-dispatch-ready-text">READY</span>', row)
         self.assertNotIn(">READY</button>", row)
         self.assertNotIn("fuel-dispatch/ready-for-fuel", row)
