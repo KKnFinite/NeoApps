@@ -219,12 +219,12 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 
 /* Shared Fueler card in a native in-page modal; above Board View as well. */
 .neoscorpion-fuel-data-dialog {
-    width: min(1100px, calc(100vw - 24px));
-    max-width: calc(100vw - 24px);
+    width: min(430px, calc(100vw - 24px));
+    max-width: min(430px, calc(100vw - 24px));
     max-height: calc(100dvh - 32px);
     box-sizing: border-box;
     overflow: auto;
-    padding: 16px;
+    padding: 12px;
     border: 1px solid rgba(var(--node-scorpion-primary-rgb), 0.5);
     border-radius: 12px;
     background: #0b0d10;
@@ -232,8 +232,6 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 }
 .neoscorpion-fuel-data-dialog::backdrop { background: rgb(0 0 0 / 75%); }
 .neoscorpion-fuel-data-close { position: sticky; top: 0; z-index: 2; display: block; margin: 0 0 10px auto; }
-.neoscorpion-fuel-data-heading h2 { margin: 0; font-size: clamp(1rem, 2.5vw, 1.5rem); }
-.neoscorpion-fuel-data-heading p { margin: 6px 0; }
 .neoscorpion-fuel-data-cell .action-button {
     width: auto;
     min-width: 0;
@@ -243,7 +241,11 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     font-size: .64rem;
     line-height: 1;
 }
-.neoscorpion-fuel-data-dialog .neoscorpion-fueler-card { min-width: 0; }
+.neoscorpion-fuel-data-dialog .neoscorpion-fueler-card {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
 .neoscorpion-fueler-truck {
     color: #ffd21a !important;
     font-size: .82rem !important;
