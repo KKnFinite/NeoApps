@@ -280,7 +280,7 @@
             if (apuOverrideWrap) apuOverrideWrap.hidden = !sourceRequired;
             const overrideEnabled = apuOverrideEnabled?.value === "1";
             if (apuOverrideValueWrap) {
-                apuOverrideValueWrap.hidden = !sourceRequired || !overrideEnabled;
+                apuOverrideValueWrap.hidden = !sourceRequired;
             }
             if (!sourceRequired && apuOverrideEnabled) {
                 apuOverrideEnabled.value = "0";
@@ -391,11 +391,13 @@
             update();
         });
         apuUseManual?.addEventListener("click", () => {
+            const manualAllowance = numberOrNull(apuOverrideValue?.value);
+            if (manualAllowance === null || manualAllowance < 0) {
+                apuOverrideValue?.focus();
+                return;
+            }
             if (apuOverrideEnabled) apuOverrideEnabled.value = "1";
-            if (apuOverrideValueWrap) apuOverrideValueWrap.hidden = false;
             update();
-            apuOverrideValue?.focus();
-            apuOverrideValue?.select();
         });
         form.addEventListener("input", update);
         form.addEventListener("change", update);

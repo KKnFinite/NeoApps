@@ -351,8 +351,11 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 
 .neoscorpion-fueler-screen [data-apu-override-wrap] {
     display: grid;
-    gap: 5px;
+    gap: 7px;
     min-width: 0;
+    padding-bottom: 11px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(var(--node-scorpion-primary-rgb), .28);
 }
 .neoscorpion-fueler-screen [data-apu-override-wrap] > span {
     display: flex;
@@ -374,19 +377,46 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     line-height: 1;
     white-space: nowrap;
 }
-.neoscorpion-fueler-screen [data-apu-override-wrap] > div {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 5px;
-}
-.neoscorpion-fueler-screen [data-apu-override-wrap] > div > .action-button {
+.neoscorpion-fueler-screen .neoscorpion-apu-use-recommended {
+    justify-self: start;
     width: auto;
     min-width: 0;
-    min-height: 32px;
+    min-height: 30px;
     padding: 5px 8px;
+    font-size: .6rem;
+    line-height: 1.05;
+    white-space: nowrap;
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-manual {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-manual > label {
+    color: #ffe79a;
     font-size: .62rem;
-    line-height: 1.08;
+    font-weight: 850;
+    letter-spacing: .03em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-manual-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    align-items: stretch;
+    min-width: 0;
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-manual-row > input {
+    min-width: 0;
+}
+.neoscorpion-fueler-screen .neoscorpion-apu-manual-row > .action-button {
+    width: auto;
+    min-width: 70px;
+    min-height: 0;
+    padding: 5px 9px;
+    font-size: .62rem;
+    line-height: 1;
     white-space: nowrap;
 }
 .neoscorpion-fueler-screen .neoscorpion-apu-editor > div {
