@@ -246,6 +246,16 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     min-width: 0;
     box-sizing: border-box;
 }
+.neoscorpion-fuel-tank-total {
+    margin-top: 3px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(var(--node-scorpion-primary-rgb), .46);
+}
+.neoscorpion-fuel-tank-total > strong {
+    color: #ffd21a;
+    font-weight: 950;
+}
+
 .neoscorpion-fueler-truck {
     color: #ffd21a !important;
     font-size: .82rem !important;

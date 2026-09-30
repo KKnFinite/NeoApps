@@ -1,3 +1,12 @@
+{% macro fuel_tank_total_row(row) -%}
+<div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row">
+    <strong role="rowheader">TOTAL</strong>
+    <strong role="cell">{{ row.remaining_total_display if row.remaining_total_display != "INCOMPLETE" else "-" }}</strong>
+    <strong role="cell">{{ row.planned_total_display if row.planned_total_display != "INCOMPLETE" else "-" }}</strong>
+    <strong role="cell">{{ row.actual_total_display if row.actual_total_display != "INCOMPLETE" else "-" }}</strong>
+</div>
+{%- endmacro %}
+
 {% set fuel_data_url = url_for('neoscorpion.dispatch_fueler_data' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_data', assignment_id=row.assignment.id) %}
 {% set fuel_off_url = url_for('neoscorpion.dispatch_fueler_off' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_off', assignment_id=row.assignment.id) %}
             <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}" data-fuel-data-card data-dispatcher-panel="{{ 'true' if dispatcher_panel|default(false) else 'false' }}" data-edit-baseline='{{ row.edit_baseline|tojson }}'>
@@ -195,6 +204,7 @@
                             </label>
                         </div>
                         {% endfor %}
+                        {{ fuel_tank_total_row(row) }}
                     </div>
                     {% else %}
                     <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
@@ -225,6 +235,7 @@
                         <span role="cell">{{ tank.actual_display or '-' }}</span>
                     </div>
                     {% endfor %}
+                    {{ fuel_tank_total_row(row) }}
                 </div>
                 {% else %}
                 <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>

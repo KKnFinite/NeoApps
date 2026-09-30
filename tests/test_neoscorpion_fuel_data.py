@@ -70,6 +70,8 @@ class FuelerDataTest(unittest.TestCase):
         self.assertIn('Fuel Load', panel)
         self.assertNotIn('Fueling Target', panel)
         self.assertIn('data-fuel-load-output', panel)
+        self.assertIn('neoscorpion-fuel-tank-total', panel)
+        self.assertIn('>TOTAL</strong>', panel)
         fueler_page = self.fueler.get('/neoscorpion/fueler').get_data(as_text=True)
         self.assertIn('data-fuel-data-card', fueler_page)
         self.assertIn('TRUCK UNASSIGNED', fueler_page)
