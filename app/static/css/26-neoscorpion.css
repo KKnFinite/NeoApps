@@ -246,6 +246,42 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     min-width: 0;
     box-sizing: border-box;
 }
+/* Keep headers, tank readings and totals on the same tracks in both shared
+   card contexts. Only the label spans a mobile row, never the TOTAL values. */
+.neoscorpion-fuel-tank-grid {
+    --fuel-tank-columns: minmax(68px, .8fr) minmax(80px, 1fr) minmax(64px, .85fr) minmax(80px, 1fr);
+    --fuel-tank-gap: 7px;
+    margin-bottom: 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(var(--node-scorpion-primary-rgb), .24);
+}
+.neoscorpion-fuel-tank-grid > .neoscorpion-fuel-tank-row {
+    display: grid;
+    grid-template-columns: var(--fuel-tank-columns);
+    gap: var(--fuel-tank-gap);
+    align-items: center;
+}
+.neoscorpion-fuel-tank-grid > .neoscorpion-fuel-tank-row > * {
+    grid-column: auto;
+    min-width: 0;
+    text-align: center;
+}
+.neoscorpion-fuel-tank-grid > .neoscorpion-fuel-tank-row > :first-child {
+    text-align: left;
+}
+.neoscorpion-fuel-tank-grid .neoscorpion-fuel-tank-row input {
+    box-sizing: border-box;
+    text-align: center;
+}
+@media (max-width: 520px) {
+    .neoscorpion-fuel-tank-grid {
+        --fuel-tank-columns: repeat(3, minmax(0, 1fr));
+        --fuel-tank-gap: 5px;
+    }
+    .neoscorpion-fuel-tank-grid > .neoscorpion-fuel-tank-row > :first-child {
+        grid-column: 1 / -1;
+    }
+}
 .neoscorpion-fuel-tank-total {
     margin-top: 3px;
     padding-top: 7px;

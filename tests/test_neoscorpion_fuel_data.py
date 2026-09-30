@@ -1,5 +1,6 @@
 import json
 import unittest
+from datetime import datetime
 from html import unescape
 import re
 from unittest.mock import patch
@@ -102,6 +103,33 @@ class FuelerDataTest(unittest.TestCase):
         self.assertIn('TRUCK 708', fueler_page)
         self.assertIn('neoscorpion-fueler-truck-vendor', fueler_page)
         self.assertIn('Vendor Driver', fueler_page)
+
+    def test_shared_tank_grid_headers_and_totals_in_editable_and_readonly_cards(self):
+        self.setup_assignment()
+        self._save_complete(self.assignment)
+        db.session.commit()
+        for readonly in (False, True):
+            if readonly:
+                NeoScorpionFuelWorkState.query.one().off_at_utc = datetime.utcnow()
+                db.session.commit()
+            row = fueler_context(self.gateway, self.user)['rows'][0]
+            pages = (
+                self.fueler.get('/neoscorpion/fueler').get_data(as_text=True),
+                self.dispatch.get(self.dispatch_url).json['html'],
+            )
+            for page in pages:
+                with self.subTest(readonly=readonly, dispatcher='data-dispatcher-panel="true"' in page):
+                    headers = re.findall(r'<span role="columnheader">([^<]+)</span>', page)
+                    self.assertEqual(headers, ['Tank', 'Remaining', 'Planned', 'Actual'])
+                    total = re.search(r'class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row">(.*?)</div>', page, re.S)
+                    self.assertIsNotNone(total)
+                    cells = re.findall(r'<strong role="(?:rowheader|cell)">([^<]+)</strong>', total.group(1))
+                    self.assertEqual(cells, ['TOTAL', row['remaining_total_display'], row['planned_total_display'], row['actual_total_display']])
+                    self.assertEqual(page.count('neoscorpion-fuel-tank-total'), 1)
+                    self.assertLess(total.end(), page.index('<dt>T/F</dt>' if readonly else '<label>T/F'))
+                    self.assertEqual('name="remaining_left"' in page, not readonly)
+                    if '<html' in page:
+                        self.assertIn('scorpion=20260930-fueler-grid-alignment-v1', page)
 
     def test_both_actors_share_canonical_data_without_owner_change(self):
         self.setup_assignment()
