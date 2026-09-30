@@ -355,8 +355,24 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     min-width: 0;
 }
 .neoscorpion-fueler-screen [data-apu-override-wrap] > span {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     min-width: 0;
-    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: .64rem;
+    font-weight: 850;
+    line-height: 1.1;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.neoscorpion-fueler-screen [data-apu-override-wrap] > span > strong {
+    color: #ffe79a;
+    font-size: .72rem;
+    font-weight: 950;
+    line-height: 1;
+    white-space: nowrap;
 }
 .neoscorpion-fueler-screen [data-apu-override-wrap] > div {
     display: flex;
@@ -383,4 +399,51 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     padding: 5px 7px;
     font-size: .6rem;
     line-height: 1.08;
+}
+
+/* Keep desktop NeoScorpion scroll surfaces dark and unobtrusive. */
+@media (min-width: 761px) {
+    body.neoscorpion-node-page,
+    body.neoscorpion-node-page .neoscorpion-fuel-data-dialog,
+    body.neoscorpion-node-page .neoscorpion-table-wrap--sticky,
+    body.neoscorpion-node-page .neoscorpion-screen-menu,
+    body.neoscorpion-node-page .neoscorpion-dispatch-combobox-options {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(var(--node-scorpion-primary-rgb), .58) #08090b;
+    }
+
+    body.neoscorpion-node-page::-webkit-scrollbar,
+    body.neoscorpion-node-page .neoscorpion-fuel-data-dialog::-webkit-scrollbar,
+    body.neoscorpion-node-page .neoscorpion-table-wrap--sticky::-webkit-scrollbar,
+    body.neoscorpion-node-page .neoscorpion-screen-menu::-webkit-scrollbar,
+    body.neoscorpion-node-page .neoscorpion-dispatch-combobox-options::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    body.neoscorpion-node-page::-webkit-scrollbar-track,
+    body.neoscorpion-node-page .neoscorpion-fuel-data-dialog::-webkit-scrollbar-track,
+    body.neoscorpion-node-page .neoscorpion-table-wrap--sticky::-webkit-scrollbar-track,
+    body.neoscorpion-node-page .neoscorpion-screen-menu::-webkit-scrollbar-track,
+    body.neoscorpion-node-page .neoscorpion-dispatch-combobox-options::-webkit-scrollbar-track {
+        background: #08090b;
+    }
+
+    body.neoscorpion-node-page::-webkit-scrollbar-thumb,
+    body.neoscorpion-node-page .neoscorpion-fuel-data-dialog::-webkit-scrollbar-thumb,
+    body.neoscorpion-node-page .neoscorpion-table-wrap--sticky::-webkit-scrollbar-thumb,
+    body.neoscorpion-node-page .neoscorpion-screen-menu::-webkit-scrollbar-thumb,
+    body.neoscorpion-node-page .neoscorpion-dispatch-combobox-options::-webkit-scrollbar-thumb {
+        border: 2px solid #08090b;
+        border-radius: 999px;
+        background: rgba(var(--node-scorpion-primary-rgb), .58);
+    }
+
+    body.neoscorpion-node-page::-webkit-scrollbar-thumb:hover,
+    body.neoscorpion-node-page .neoscorpion-fuel-data-dialog::-webkit-scrollbar-thumb:hover,
+    body.neoscorpion-node-page .neoscorpion-table-wrap--sticky::-webkit-scrollbar-thumb:hover,
+    body.neoscorpion-node-page .neoscorpion-screen-menu::-webkit-scrollbar-thumb:hover,
+    body.neoscorpion-node-page .neoscorpion-dispatch-combobox-options::-webkit-scrollbar-thumb:hover {
+        background: rgba(var(--node-scorpion-primary-rgb), .82);
+    }
 }
