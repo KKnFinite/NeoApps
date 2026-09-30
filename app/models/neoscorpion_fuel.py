@@ -629,7 +629,7 @@ class NeoScorpionFuelAuditEntry(db.Model):
         db.CheckConstraint(
             "action IN ('reopen_off', 'correct_actual', 'auto_hold', "
             "'resume_hold', 'swap_fueler', 'swap_truck', 'confirm_tail', "
-            "'end_early')",
+            "'end_early', 'cancel_uplift', 'unassign_truck')",
             name="ck_neoscorpion_fuel_audit_entry_action",
         ),
     )

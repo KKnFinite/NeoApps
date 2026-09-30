@@ -64,13 +64,28 @@
         const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v3";
         const tableWrap = () => scope.querySelector(".neoscorpion-table-wrap--sticky");
 
+        // A cancelled uplift restores an earlier cycle key. Resolve only a
+        // missing key to this mission's active row; existing history stays exact.
+        const activeRowForKey = (key) => {
+            const missionId = String(key || "").split("-")[0];
+            if (!/^\d+$/.test(missionId)) return null;
+            return Array.from(scope.querySelectorAll(
+                ".neoscorpion-dispatch-primary-row[data-dispatch-row-key]:not([data-cycle-history])"
+            )).find(row => row.dataset.dispatchRowKey.startsWith(`${missionId}-`)) || null;
+        };
+
         const restoreDetailRows = (detailIds) => {
             if (!Array.isArray(detailIds)) return;
             detailIds.forEach((detailId) => {
-                const detail = document.getElementById(detailId);
-                const toggle = scope.querySelector(
+                let detail = document.getElementById(detailId);
+                let toggle = scope.querySelector(
                     `[data-neoscorpion-dispatch-details][aria-controls="${detailId}"]`
                 );
+                if (!detail || !toggle) {
+                    const row = activeRowForKey(detailId.replace("neoscorpion-dispatch-detail-", ""));
+                    toggle = row?.querySelector("[data-neoscorpion-dispatch-details]");
+                    detail = toggle ? document.getElementById(toggle.getAttribute("aria-controls")) : null;
+                }
                 if (!detail || !toggle) return;
                 detail.hidden = false;
                 detail.setAttribute("aria-hidden", "false");
@@ -124,7 +139,7 @@
             const anchor = saved.rowKey
                 ? scope.querySelector(
                     `.neoscorpion-dispatch-primary-row[data-dispatch-row-key="${saved.rowKey}"]`
-                )
+                ) || activeRowForKey(saved.rowKey)
                 : null;
             if (wrap) {
                 if (Number.isFinite(saved.tableScrollTop)) wrap.scrollTop = saved.tableScrollTop;
@@ -316,6 +331,7 @@
     let revision = Number(root.dataset.revision || 0);
     const initialControlValues = new WeakMap();
     let reloading = false;
+    let lifecycleSaving = false;
     let controller = null;
 
     const isEditableControl = (element) => element?.matches(
@@ -350,6 +366,7 @@
     ));
 
     const hasUnsavedControls = () => (
+        lifecycleSaving ||
         protectedControls().some(
             (control) => initialControlValues.get(control) !== controlValue(control)
         )
@@ -651,6 +668,36 @@
         }
     };
 
+    const submitLifecycleAction = async (form, button) => {
+        if (lifecycleSaving) return;
+        const status = form.querySelector("[data-lifecycle-status]");
+        if (!window.confirm(form.dataset.confirm)) return;
+        lifecycleSaving = true;
+        if (button) button.disabled = true;
+        setStatus(status, "Saving...");
+        syncDirtyState();
+        try {
+            const response = await fetch(form.getAttribute("action"), {
+                method: "POST", body: new FormData(form), cache: "no-store", credentials: "same-origin",
+                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Action failed.");
+            lifecycleSaving = false;
+            setStatus(status, payload.changed ? "Saved" : "No change");
+            // The existing panel refresh preserves row/details/scroll and defers
+            // while another field or the shared Fueler Data modal is in use.
+            pendingFuelDataRefresh = true;
+            await reloadPage();
+        } catch (error) {
+            setStatus(status, `Save Failed: ${error.message || "Unable to save."}`, "error");
+        } finally {
+            lifecycleSaving = false;
+            if (button) button.disabled = false;
+            syncDirtyState();
+        }
+    };
+
     const submitTruckCardAction = async (form, button) => {
         if (form.dataset.truckCardBusy === "true") {
             return;
@@ -728,6 +775,12 @@
         }
     });
     root.addEventListener("submit", (event) => {
+        const lifecycleForm = event.target.closest("[data-dispatch-lifecycle-form]");
+        if (lifecycleForm) {
+            event.preventDefault();
+            submitLifecycleAction(lifecycleForm, event.submitter || lifecycleForm.querySelector("button[type='submit']"));
+            return;
+        }
         const isAsyncAssignment = event.submitter?.matches("[data-dispatch-assignment-submit]");
         const truckCardForm = event.target.closest("[data-dispatch-truck-card-form]");
         if (truckCardForm) {

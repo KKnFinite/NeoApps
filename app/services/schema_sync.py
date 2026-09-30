@@ -1148,7 +1148,7 @@ def _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names):
             "WHERE type = 'table' AND name = 'neoscorpion_fuel_audit_entries'"
         )
     ).scalar() or ""
-    if "'end_early'" in create_sql and "'auto_hold'" in create_sql:
+    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "unassign_truck")):
         return False
 
     all_tables = set(inspector.get_table_names())
@@ -1378,6 +1378,8 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
         constraint_definition
         and "auto_hold" in constraint_definition
         and "end_early" in constraint_definition
+        and "cancel_uplift" in constraint_definition
+        and "unassign_truck" in constraint_definition
     ):
         return
     db.session.execute(
@@ -1400,7 +1402,9 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
                     'swap_fueler',
                     'swap_truck',
                     'confirm_tail',
-                    'end_early'
+                    'end_early',
+                    'cancel_uplift',
+                    'unassign_truck'
                 )
             )
             """

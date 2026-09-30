@@ -193,6 +193,8 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                     "swap_truck",
                     "confirm_tail",
                     "end_early",
+                    "cancel_uplift",
+                    "unassign_truck",
                 )
             ),
         )

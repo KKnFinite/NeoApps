@@ -38,6 +38,8 @@ from app.services.neoscorpion import (
     save_truck,
     settings_context,
     start_follow_up_fuel_cycle,
+    cancel_uplift,
+    unassign_assignment_truck,
     swap_assignment_fueler,
     swap_assignment_truck,
     truck_manager_context,
@@ -449,6 +451,27 @@ def fuel_dispatch_start_follow_up():
     db.session.commit()
     flash(f"{result.assignment.current_cycle_type.upper()} STARTED.", "success")
     return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.post("/fuel-dispatch/cancel-uplift")
+@gateway_node_required("scorpion")
+def fuel_dispatch_cancel_uplift():
+    return _run_dispatch_lifecycle_action(lambda gateway: cancel_uplift(
+        gateway, current_user, request.form.get("assignment_id"),
+        expected_cycle=request.form.get("expected_cycle", ""),
+        expected_tail=request.form.get("expected_tail", ""),
+    ), "UPLIFT CANCELLED.")
+
+
+@bp.post("/fuel-dispatch/unassign-truck")
+@gateway_node_required("scorpion")
+def fuel_dispatch_unassign_truck():
+    return _run_dispatch_lifecycle_action(lambda gateway: unassign_assignment_truck(
+        gateway, current_user, request.form.get("assignment_id"),
+        expected_truck_id=request.form.get("expected_truck_id", ""),
+        expected_cycle=request.form.get("expected_cycle", ""),
+        expected_tail=request.form.get("expected_tail", ""),
+    ), "TRUCK UNASSIGNED.")
 
 
 @bp.post("/fuel-dispatch/reopen-off")
@@ -1484,6 +1507,36 @@ def _spear_calibration_response(gateway, access, status_code=200):
         **settings_context(gateway),
     )
     return response, status_code
+
+
+def _run_dispatch_lifecycle_action(action, success_message):
+    gateway = get_current_gateway()
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    json_response = request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.accept_mimetypes.best == "application/json"
+    status_code, message, result = 200, success_message, None
+    if not access["can_edit"]:
+        status_code, message = 403, "Access denied."
+    else:
+        try:
+            result = action(gateway)
+        except (IntegrityError, ValueError) as exc:
+            status_code = 400
+            message = str(exc) if isinstance(exc, ValueError) else "Fuel assignment changed. Refresh and review the current state."
+    if status_code != 200:
+        db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False, "error": message}, status_code)
+        flash(message, "error")
+        return _dispatch_response(gateway, access, status_code=status_code)
+    if result.changed:
+        db.session.commit()
+    else:
+        db.session.rollback()
+    if json_response:
+        return _json_no_store({"ok": True, "changed": result.changed,
+            "operation_id": result.assignment.sort_date_operation_id, "revision": result.revision})
+    flash(message if result.changed else "NO CHANGES.", "success" if result.changed else "info")
+    return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
 def _run_fuel_interruption_action(action, success_message, no_change_message):
