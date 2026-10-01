@@ -4,7 +4,7 @@
          url("../fonts/neofontlite/NeoFontLite.ttf") format("truetype");
     font-weight: 300;
     font-style: normal;
-    font-display: swap;
+    font-display: block;
 }
 
 /* First use only: product identity in the mobile Gateway header. */
