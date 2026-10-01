@@ -1010,7 +1010,49 @@ def _shift_flow_map(rows, areas):
         phases.append({"key": phase, "label": label, "locations": locations})
     matrix = _shift_flow_staffing_matrix(rows, areas, configurations)
     return {"phases": phases, "configurations": configurations, "staffing_matrix": matrix,
+            "route_grid": _shift_flow_route_grid(matrix, configurations),
             "count": len(matrix["rows"])}
+
+
+def _shift_flow_route_grid(matrix, configurations):
+    """Presentation only: bundle identical canonical journeys, without reprojecting plans."""
+    columns = [{"key": "none", "label": "NO SETUP", "side": "shared"},
+               {"key": "unset", "label": "NOT SET", "side": "shared"}]
+    seen = set()
+    def add(area, side, label=None):
+        if area and area.id not in seen:
+            seen.add(area.id)
+            columns.append({"key": str(area.id), "label": label or area.name, "side": side})
+    for side, config in configurations.items():
+        add(config.get("ballmat"), side, "BALLMAT")
+        for door in matrix["columns"]:
+            if door["side"] == side:
+                if door["area"]:
+                    add(door["area"], side, door["label"])
+                else:
+                    columns.append({"key": "missing-" + door["label"], "label": door["label"], "side": side})
+        add(config.get("discharge"), "shared", "DISCHARGE")
+    paths = {}
+    for entry in matrix["rows"]:
+        points = []
+        for phase, _ in SHIFT_FLOW_PHASES:
+            area = entry["locations"][phase]
+            key = str(area.id) if area and isinstance(area.id, int) else "none" if area else "unset"
+            if key not in ("none", "unset"):
+                add(area, "shared")
+            points.append({"column": key, "label": area.name if area else "Not set"})
+        signature = tuple(point["column"] for point in points)
+        paths.setdefault(signature, {"points": points, "people": []})["people"].append(entry)
+    order = {column["key"]: index for index, column in enumerate(columns)}
+    routes = []
+    for index, signature in enumerate(sorted(paths, key=lambda keys: tuple(order[key] for key in reversed(keys))), 1):
+        path = paths[signature]
+        for entry in path["people"]:
+            entry["route_key"] = str(index)
+        routes.append({"key": str(index), "points": path["points"], "count": len(path["people"])})
+    return {"columns": columns, "routes": routes,
+            "phases": [{"key": key, "label": "SORT START / HOME" if key == "sort_start" else label}
+                       for key, label in SHIFT_FLOW_PHASES]}
 
 
 def _shift_flow_staffing_matrix(rows, areas, configurations):

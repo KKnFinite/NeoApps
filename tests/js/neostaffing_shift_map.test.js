@@ -113,3 +113,61 @@ test('side, search and matrix scroll survive a canonical page refresh',()=>{
     const next=boardHarness(h.storage);assert.deepEqual(next.columns.map(c=>c.hidden),[true,false]);
     assert.equal(next.search.value,'Smith');assert.equal(next.scroller.scrollLeft,350);assert.equal(next.scroller.scrollTop,210);
 });
+
+function routeHarness({mobile=false, storage={}}={}) {
+    const events={}, make=tag=>({tag,children:[],dataset:{},style:{setProperty(){}},
+        classList:{values:new Set(),toggle(key,value){if(value)this.values.add(key);else this.values.delete(key);}},
+        setAttribute(key,value){this[key]=String(value);if(key.startsWith('data-'))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(value);},
+        append(...children){this.children.push(...children);},replaceChildren(){this.children=[];},
+        addEventListener(key,fn){this[key]=fn;},
+        querySelectorAll(selector){return this.children.filter(child=>selector==='[data-flow-route]' && child.dataset.flowRoute);}
+    });
+    const svg=make('svg'), focus=make('section'), stages=make('div'), edit=make('a'), clear=make('button');
+    const gridData={columns:[{key:'none',side:'shared'},{key:'west',side:'west'},{key:'east',side:'east'}],
+        phases:['SETUP','HOME','1ST WAVE','2ND WAVE','CLEANUP','FINAL'].map(label=>({label})),
+        routes:[{key:'1',count:2,points:['none','east','west','west','west','west'].map(column=>({column,label:column}))},
+                {key:'2',count:1,points:Array.from({length:6},()=>({column:'east',label:'East door'}))}]};
+    const headers=['none','west','east','offside'].map((key,index)=>{
+        const cell=make('span');cell.dataset={gridColumn:key,finalSide:key==='none'?'shared':key};cell.hidden=key==='offside';
+        cell.getBoundingClientRect=()=>({left:80+index*40,width:40});cell.closest=()=>true;return cell;
+    });
+    const grid=make('div');grid.querySelectorAll=()=>headers;
+    const body={getBoundingClientRect:()=>({left:0,width:320})};
+    const search={value:'',addEventListener:(key,fn)=>events[key]=fn},status={};
+    const people=['1','1','2'].map((routeKey,index)=>{
+        const person=make('a');person.dataset={staffingPerson:String(index+1),routeKey,personSide:index===2?'east':'west',personSearch:'Employee '+index};
+        person.href='/neostaffing/shift-flow?person_id='+person.dataset.staffingPerson;person.focus=()=>{};person.scrollIntoView=()=>{};return person;
+    });
+    const buttons=['all','west','east'].map(side=>{const button=make('button');button.dataset={staffingSide:side};return button;});
+    const root=make('section');root.querySelector=key=>({'[data-route-grid-data]':{textContent:JSON.stringify(gridData)},'[data-flow-lines]':svg,'[data-route-grid]':grid,'[data-route-stage-body]':body,
+        '[data-staffing-scroll]':{},'[data-staffing-search]':search,'[data-staffing-search-status]':status,'[data-staffing-next]':{addEventListener:(key,fn)=>events.next=fn},
+        '[data-route-focus]':focus,'[data-route-stages]':stages,'[data-route-edit]':edit,'[data-route-clear]':clear}[key]);
+    root.querySelectorAll=key=>({'[data-staffing-person]':people,'[data-staffing-side]':buttons,'[data-final-side]':headers.filter(h=>h.dataset.gridColumn!=='offside'),'[data-route-offside]':[headers[3]]}[key]||[]);
+    vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_shift_map.js','utf8'),{
+        document:{querySelector:key=>key==='[data-shift-map]'?root:null,createElementNS:(_ns,tag)=>make(tag),createElement:make},
+        window:{matchMedia:()=>({matches:mobile}),sessionStorage:{getItem:key=>storage[key],setItem:(key,value)=>storage[key]=value},addEventListener:(key,fn)=>events[key]=fn,scrollY:0}
+    });
+    return {root,svg,focus,stages,edit,people,buttons,headers,clear,storage};
+}
+test('numbered continuous routes have six markers, names select whole route without navigation',()=>{
+    const h=routeHarness();assert.equal(h.svg.children.length,2);
+    for(const route of h.svg.children){assert.equal(route.children.length,7);assert.match(route.children[0].d,/^M .* C /);assert.doesNotMatch(route.children[0].d,/NaN|undefined/);}
+    let prevented=false;h.people[0].click({preventDefault(){prevented=true;}});
+    assert.ok(prevented);assert.ok(h.root.classList.values.has('has-route-selection'));
+    assert.ok(h.svg.children[0].classList.values.has('is-route-selected'));
+    assert.equal(h.stages.children.length,6);assert.equal(h.edit.href,h.people[0].href);
+    h.people[1].click({preventDefault(){}});assert.equal(h.people[0]['aria-pressed'],'false');assert.equal(h.people[1]['aria-pressed'],'true');
+    h.clear.click();assert.equal(h.focus.hidden,true);assert.ok(!h.root.classList.values.has('has-route-selection'));
+});
+test('mobile side switching keeps cross-side route continuous and retains highlight after refresh',()=>{
+    const h=routeHarness({mobile:true});assert.equal(h.buttons[0].hidden,true);assert.equal(h.headers[2].hidden,true);assert.equal(h.headers[3].hidden,false);
+    assert.equal(h.svg.children[0].children.length,7);
+    h.people[0].click({preventDefault(){}});h.buttons[2].click();assert.equal(h.headers[1].hidden,true);assert.equal(h.headers[2].hidden,false);
+    assert.ok(h.svg.children[0].classList.values.has('is-route-selected'));
+    const fresh=routeHarness({mobile:true,storage:h.storage});assert.equal(fresh.people[0]['aria-pressed'],'true');assert.equal(fresh.headers[1].hidden,true);
+    assert.equal(fresh.stages.children[1].children[1].textContent,'east');
+    h.buttons[1].click();h.people[2].click({preventDefault(){}});
+    const selected=h.svg.children.find(route=>route.dataset.flowRoute==='2');
+    assert.equal(selected.children.length,7);assert.ok(selected.classList.values.has('is-route-selected'));
+    assert.doesNotMatch(selected.children[0].d,/NaN|undefined/);
+});

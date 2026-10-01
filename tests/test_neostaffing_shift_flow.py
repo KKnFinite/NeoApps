@@ -61,13 +61,34 @@ class ShiftFlowTest(unittest.TestCase):
         with self.app.test_request_context('/neostaffing/shift-flow'):
             html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context, can_edit_shift_flow=True, shift_work_area_type=staffing_service.shift_work_area_type)
         self.assertEqual(sorted(re.findall(r'data-staffing-person="(\d+)"', html)), sorted(str(p.id) for p in people))
-        self.assertEqual(html.count('data-door-column='), 12)
-        self.assertNotIn('data-journey-stage', html)
+        self.assertEqual(re.findall(r'data-journey-stage="([^"]+)"', html), [phase for phase, _ in context['phases']])
+        self.assertIn('data-flow-lines', html)
+        self.assertIn('data-route-grid-data', html)
         self.assertIn('No Setup', html)
-        self.assertIn('Setup: Not set', html)
+        self.assertIn('Not set', html)
         self.assertIn('NEEDS ASSIGNMENT', html)
-        self.assertNotIn('shift-map-phase', html)
+        self.assertNotIn('shift-staffing-table', html)
         self.assertIn('Sort Start:', html)
+
+    def test_route_grid_bundles_identical_paths_and_preserves_custom_cross_side_locations(self):
+        areas = self._configure_final_composite()
+        for index in (1, 2):
+            person = self._person(f'ROUTE{index}')
+            self._plan(person, self._values(start=areas['West Ballmat'], transition='2', final=areas['Door 34']), areas['West Ballmat'])
+        custom = self._person('ROUTE3')
+        self._plan(custom, self._values(start=areas['East Ballmat'], setup=areas['Door 32'], transition='1', final=areas['Door 34']), areas['East Ballmat'])
+        db.session.commit()
+        board = staffing_service.shift_flow_context()['flow_map']
+        grid = board['route_grid']
+        self.assertEqual(len(grid['routes']), 2)
+        self.assertEqual(sorted(route['count'] for route in grid['routes']), [1, 2])
+        columns = {column['key']: column for column in grid['columns']}
+        self.assertEqual(len(columns), len(grid['columns']))
+        self.assertEqual([column['label'] for column in grid['columns'] if column['side'] == 'west'], ['BALLMAT', 'D34', 'D32', 'D29', 'D26', 'D24', 'D21'])
+        self.assertEqual(columns[str(areas['East Ballmat'].id)]['side'], 'east')
+        for entry in board['staffing_matrix']['rows']:
+            route = next(route for route in grid['routes'] if route['key'] == entry['route_key'])
+            self.assertEqual([point['label'] for point in route['points']], [entry['locations'][phase].name for phase, _ in staffing_service.SHIFT_FLOW_PHASES])
 
     def test_final_door_groups_counts_cross_side_custom_and_missing_configuration(self):
         areas = self._configure_final_composite()
