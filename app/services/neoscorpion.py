@@ -43,6 +43,10 @@ from app.services.neoscorpion_assets import (
     record_nightly_operational_change,
 )
 from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
+from app.services.neoermac_tail_presence import (
+    arrival_presence_by_tail,
+    departure_tail_presence,
+)
 from app.services.neoscorpion_spear import (
     SPEAR_HARD_CONSTRAINTS,
     SPEAR_READINESS_REASON_LABELS,
@@ -4546,6 +4550,7 @@ def _fuel_rows(
         else assignments_by_mission
     )
     arrivals = _arrivals_by_tail(operation)
+    arrival_presence = arrival_presence_by_tail(operation)
     if fuel_trucks is None:
         fuel_trucks = _fuel_trucks(operation.gateway or _gateway_stub(operation))
     trucks = {truck.id: truck for truck in fuel_trucks}
@@ -4560,6 +4565,7 @@ def _fuel_rows(
         tail_fuel_state = tail_fuel_states.get(tail_number)
         assignment = assignments.get(mission.id)
         arrival = arrivals.get(tail_number)
+        tail_presence = departure_tail_presence(mission, arrival_presence)
         truck = trucks.get(assignment.assigned_truck_id) if assignment else None
         if truck is None and assignment is not None:
             truck = assignment.assigned_truck
@@ -5243,9 +5249,12 @@ def _fuel_rows(
                 "arrival_eta": _arrival_eta_display(arrival),
                 "arrival_status": (
                     "Arrived"
-                    if str(
-                        getattr(tail_state, "operational_status", "") or ""
-                    ).strip().lower() == "hot"
+                    if (
+                        str(
+                            getattr(tail_state, "operational_status", "") or ""
+                        ).strip().lower() == "hot"
+                        and tail_presence["is_present"]
+                    )
                     else _arrival_status_display(arrival)
                 ),
                 "departure_time": format_local_hhmm(

@@ -146,6 +146,26 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         mission.planned_datetime_utc = None
         mission.planned_source = "unknown"
         mission.departure_status = "scheduled"
+        arrival = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code=self.gateway.code,
+            sort_name=operation.sort_name,
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+            mission_source="manual",
+            flight_number="UPS9519",
+            origin="SDF",
+            destination=self.gateway.code,
+            timezone="America/Chicago",
+            planned_source="manual",
+            assigned_tail_number=mission.assigned_tail_number,
+            tail_source="manual",
+            fuel_status="waiting",
+            arrival_status="scheduled",
+            actual_block_in_datetime_utc=datetime(2026, 8, 20, 2, 0),
+            actual_block_in_source="manual",
+        )
+        db.session.add(arrival)
         fueler = self._add_user("hot_fueler", "operator")
         truck = self._truck("HOT TRUCK")
         db.session.add_all(
@@ -194,6 +214,64 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertIn(mission.flight_number, fueler_page)
         self.assertIn("HOT", fueler_page)
         self.assertIn("HOT TRUCK", fueler_page)
+
+    @patch("app.services.neoscorpion.current_sort_operation")
+    def test_hot_still_inbound_does_not_render_arrived(
+        self,
+        current_sort_operation,
+    ):
+        operation, mission = self._operation_and_mission()
+        mission.destination = "HOT"
+        mission.planned_datetime_local = None
+        mission.planned_datetime_utc = None
+        mission.planned_source = "unknown"
+        mission.departure_status = "scheduled"
+        arrival = SortDateMission(
+            sort_date=operation.sort_date,
+            gateway_code=self.gateway.code,
+            sort_name=operation.sort_name,
+            sort_date_operation_id=operation.id,
+            mission_type="arrival",
+            mission_source="manual",
+            flight_number="UPS9518",
+            origin="SDF",
+            destination=self.gateway.code,
+            timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 8, 19, 23, 0),
+            planned_datetime_utc=datetime(2026, 8, 20, 4, 0),
+            planned_source="manual",
+            eta_datetime_utc=datetime(2026, 8, 20, 4, 10),
+            eta_source="manual",
+            assigned_tail_number=mission.assigned_tail_number,
+            tail_source="manual",
+            fuel_status="waiting",
+            arrival_status="en_route",
+        )
+        db.session.add_all(
+            [
+                arrival,
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=self.gateway.code,
+                    sort_name=operation.sort_name,
+                    tail_number=mission.assigned_tail_number,
+                    operational_status="hot",
+                ),
+            ]
+        )
+        db.session.commit()
+        current_sort_operation.return_value = operation
+
+        dispatch_page = self.client.get(
+            "/neoscorpion/fuel-dispatch"
+        ).get_data(as_text=True)
+        self.assertIn(mission.flight_number, dispatch_page)
+        self.assertIn(">HOT<", dispatch_page)
+        self.assertIn(">En Route</", dispatch_page)
+        self.assertNotIn(
+            'neoscorpion-dispatch-primary-row is-arrived',
+            dispatch_page,
+        )
 
     @patch("app.services.neoscorpion.current_sort_operation")
     def test_assign_and_update_assignment_use_json_without_navigation(
