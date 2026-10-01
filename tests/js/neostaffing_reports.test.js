@@ -32,6 +32,10 @@ test('extra filter changes retain the scope rail; invalid values do not submit',
   assert.deepEqual(f.fields.map(x=>x.value),['1','2','3','4']); assert.equal(f.submits(),1);
   const invalid=setup({valid:false}); invalid.events.change({target:{}}); assert.equal(invalid.submits(),0);
 });
+test('Attendance date changes auto-apply without clearing scope',()=>{
+  const f=setup(); f.events.change({target:{name:'attendance_date',value:'2026-07-02'}});
+  assert.deepEqual(f.fields.map(x=>x.value),['1','2','3','4']); assert.equal(f.submits(),1);
+});
 test('mobile panel opens and closes without rebuilding controls',()=>{
   const f=setup({mobile:true}); assert.equal(f.more.open,true);
   f.toggleEvents.click(); assert.equal(f.toggle.expanded,'true'); assert.ok(f.panel.classList.contains('is-open'));

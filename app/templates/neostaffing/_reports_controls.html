@@ -1,9 +1,9 @@
 <form class="neostaffing-report-controls" data-report-auto method="get" aria-label="Report controls">
     <input type="hidden" name="report_type" value="{{ reports.report_type }}">
-    <button type="button" class="neostaffing-report-mobile-toggle" data-report-filter-toggle aria-expanded="false" aria-controls="report-filter-panel">FILTERS</button>
+    <button type="button" class="neostaffing-report-mobile-toggle" data-report-filter-toggle aria-expanded="false" aria-controls="report-filter-panel">FILTERS{% if reports.report_type == 'attendance' %} · {{ filters.attendance_date }}{% endif %}</button>
     <div class="neostaffing-report-filter-panel" id="report-filter-panel" data-report-filter-panel>
         <button type="button" class="neostaffing-report-filter-close" data-report-filter-close>CLOSE FILTERS</button>
-        <div class="neostaffing-report-scope-rail" aria-label="Scope">
+        <div class="neostaffing-report-scope-rail{% if reports.report_type == 'attendance' %} has-date{% endif %}" aria-label="Scope">
             <span class="neostaffing-report-scope-title">SCOPE</span>
             {% for kind, label in [('sort', 'Sort'), ('operation', 'Operation'), ('department', 'Department'), ('work_area', 'Work Area')] %}
             <label><span>{{ label }}</span><select name="{{ kind }}_id" data-report-scope="{{ kind }}">
@@ -13,6 +13,9 @@
                 {% endfor %}
             </select></label>
             {% endfor %}
+            {% if reports.report_type == 'attendance' %}
+            <label><span>Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}" required></label>
+            {% endif %}
         </div>
         <div class="neostaffing-report-scope-summary">
             <span class="neostaffing-report-breadcrumb" data-report-breadcrumb>{{ reports.scope.breadcrumb }}</span>
@@ -20,7 +23,6 @@
                 <summary>MORE FILTERS</summary>
                 <div class="neostaffing-report-extra-panel">
                     {% if reports.report_type == 'attendance' %}
-                    <label><span>Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
                     <label><span>Attendance Status</span><select name="attendance_status"><option value="">All</option>{% for value, label in reports.attendance_status_choices %}<option value="{{ value }}"{% if filters.attendance_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
                     {% endif %}
                     <label><span>Classification</span><select name="classification"><option value="">All</option>{% for value, label in reports.classification_choices %}<option value="{{ value }}"{% if filters.classification == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>

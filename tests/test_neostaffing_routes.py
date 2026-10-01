@@ -885,6 +885,48 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Call In", attendance.data)
         self.assertNotIn(b"RF101", attendance.data)
 
+    def test_reports_attendance_date_is_visible_and_limits_results_to_one_day(self):
+        user = self._user("reports_date_admin")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, area = self._staffing_hierarchy()
+        self._current_night_operation()
+        for index, recorded_date in enumerate((date(2026, 7, 3), date(2026, 7, 2))):
+            person = staffing_service.create_person(dict(
+                employee_id=f"REPORTDAY{index}", first_name="Report", last_name=f"Day{index}",
+                seniority_date="2020-01-01", classification="part_time",
+            ))
+            db.session.add(StaffingDailyAttendance(
+                person_id=person.id, attendance_date=recorded_date, sort_unit_id=sort.id,
+                operation_unit_id=operation.id, department_unit_id=department.id,
+                work_area_unit_id=area.id, status="here",
+            ))
+        db.session.commit()
+        self._login(user.username)
+        url = f"/neostaffing/reports?report_type=attendance&work_area_id={area.id}"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("REPORTDAY0", html)
+        self.assertNotIn("REPORTDAY1", html)
+        self.assertEqual(html.count('name="attendance_date"'), 1)
+        rail = html.split('aria-label="Scope">', 1)[1].split('</div>', 1)[0]
+        self.assertIn('name="attendance_date" value="2026-07-03" required', rail)
+        self.assertIn("FILTERS · 2026-07-03", html)
+        response = self.client.get(url + "&attendance_date=2026-07-02")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"REPORTDAY1", response.data)
+        self.assertNotIn(b"REPORTDAY0", response.data)
+        for hour, minute, expected in ((0, 0, "2026-07-02"), (4, 59, "2026-07-02"), (5, 0, "2026-07-03")):
+            with self.subTest(hour=hour, minute=minute):
+                self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 7, 3, hour, minute)
+                context = staffing_service.reports_context(dict(report_type="attendance", sort_id=str(sort.id)))
+                self.assertEqual(context["filters"]["attendance_date"], expected)
+                self.assertEqual(len(context["attendance_rows"]), 1)
+        self.app.config["CURRENT_GATEWAY_LOCAL_DATETIME_OVERRIDE"] = datetime(2026, 7, 10, 12)
+        context = staffing_service.reports_context(dict(report_type="attendance", sort_id=str(sort.id)))
+        self.assertEqual(context["filters"]["attendance_date"], "2026-07-10")
+        self.assertEqual(context["attendance_rows"], [])
+
     def test_reports_console_families_retained_filters_and_access(self):
         user = self._user("console_admin")
         self._grant_app_access(user, "neostaffing", "master")

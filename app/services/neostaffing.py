@@ -5619,12 +5619,16 @@ def reports_context(filters=None, user=None):
         )
     else:
         attendance_date = _parse_optional_date(filters.get("attendance_date"))
+        if not attendance_date:
+            from app.services.gateway_matrix import current_gateway_local_datetime
+            local_now = current_gateway_local_datetime()
+            attendance_date = local_now.date() - timedelta(days=1 if local_now.hour < 5 else 0)
+        filters["attendance_date"] = attendance_date.isoformat()
         query = StaffingDailyAttendance.query.join(StaffingPerson).options(
             joinedload(StaffingDailyAttendance.person),
             joinedload(StaffingDailyAttendance.work_area),
         )
-        if attendance_date:
-            query = query.filter(StaffingDailyAttendance.attendance_date == attendance_date)
+        query = query.filter(StaffingDailyAttendance.attendance_date == attendance_date)
         attendance_status = str(filters.get("attendance_status") or "").strip()
         if attendance_status in STAFFING_DAILY_ATTENDANCE_STATUSES:
             query = query.filter(StaffingDailyAttendance.status == attendance_status)

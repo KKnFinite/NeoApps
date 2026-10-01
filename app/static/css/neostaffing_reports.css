@@ -8,6 +8,7 @@
 .neostaffing-reports-mode-tabs a[aria-current] { background:#16483f; border-color:#45cdbb; color:#efffff; }
 .neostaffing-report-controls { position:relative; margin:0; padding:10px 12px; border-bottom:1px solid #285057; background:#0a171b; min-width:0; box-sizing:border-box; }
 .neostaffing-report-scope-rail { display:grid; grid-template-columns:60px repeat(4,minmax(0,1fr)); align-items:end; gap:8px; }
+.neostaffing-report-scope-rail.has-date { grid-template-columns:60px repeat(4,minmax(0,1fr)) minmax(140px,.8fr); }
 .neostaffing-report-scope-title { padding-bottom:8px; color:#8cb2b3; font-size:.7rem; letter-spacing:.07em; }
 .neostaffing-report-controls label { display:grid; gap:4px; min-width:0; color:#8cb2b3; font-size:.65rem; text-transform:uppercase; }
 .neostaffing-report-controls :is(select,input,button,summary) { box-sizing:border-box; max-width:100%; min-height:32px; padding:5px 8px; border:1px solid #285057; border-radius:3px; background:#102329; color:#d8eeee; font-size:.78rem; }
@@ -42,7 +43,7 @@
   .neostaffing-reports-toolbar .neostaffing-report-filter-panel label { margin-bottom:14px; }
   .neostaffing-report-filter-panel.is-open { display:block; position:fixed; inset:68px 10px 78px; z-index:160; overflow:auto; padding:12px; border:1px solid #45cdbb; border-radius:6px; background:#101b21; box-shadow:0 0 0 100vmax #0009; }
   .neostaffing-report-filter-close { display:block; width:100%; min-height:44px !important; margin-bottom:12px; }
-  .neostaffing-report-scope-rail { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .neostaffing-report-scope-rail,.neostaffing-report-scope-rail.has-date { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
   .neostaffing-report-scope-title { grid-column:1/-1; padding:0; }
   .neostaffing-report-controls :is(input,select) { min-height:44px; }
   .neostaffing-report-scope-summary { display:block; height:auto; margin:14px 0; }
