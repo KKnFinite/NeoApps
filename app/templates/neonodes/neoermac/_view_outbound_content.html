@@ -3,6 +3,11 @@
 <div class="neoermac-outbound-table-wrap" data-neoermac-outbound-layout="pull-table">
     <table class="neoermac-outbound-table" data-neoermac-outbound-table>
         <caption class="visually-hidden">Outbound flights with planned and actual pull times.</caption>
+        <colgroup>
+            <col style="width:9%"><col style="width:9%"><col style="width:5%"><col style="width:5%">
+            <col style="width:8%"><col style="width:6%"><col style="width:14%">
+            <col class="neoermac-outbound-pull-column" span="4">
+        </colgroup>
         <thead>
             <tr>
                 <th scope="col" rowspan="2">Flight</th>
@@ -12,7 +17,6 @@
                 <th scope="col" rowspan="2">Doors</th>
                 <th scope="col" rowspan="2">ETD</th>
                 <th scope="col" rowspan="2">Status</th>
-                <th scope="col" rowspan="2">Location</th>
                 <th scope="colgroup" colspan="2">PURE</th>
                 <th scope="colgroup" colspan="2">MIX</th>
             </tr>
@@ -32,12 +36,11 @@
 </div>
 <div class="neoermac-outbound-mobile-list" data-neoermac-outbound-mobile-list aria-label="Outbound flights">
     <div class="neoermac-outbound-mobile-header" data-neoermac-outbound-mobile-header aria-hidden="true">
-        <span>Flight</span>
-        <span>Tail</span>
-        <span>Dest</span>
-        <span>Pos</span>
-        <span>Doors</span>
-        <span>Pull Times</span>
+        <span>DEST / FLIGHT</span>
+        <span>TAIL / POS</span>
+        <span>DOORS</span>
+        <span>PURE</span>
+        <span>MIX</span>
         <span>ETD</span>
     </div>
     {% for row in rows %}

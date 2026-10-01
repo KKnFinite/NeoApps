@@ -4528,7 +4528,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"A14", response.data)
         self.assertIn(b"02:35", response.data)
         self.assertIn(b"D34", response.data)
-        self.assertIn(b"D32-D34 BELT 1 WEST SLOT 1", response.data)
+        self.assertNotIn(b'data-outbound-field="location"', response.data)
         self.assertNotIn(b"EAST BLU/BLU BELT", response.data)
         self.assertIn(b"PURE PLAN", response.data)
         self.assertIn(b"PURE ACT", response.data)
@@ -4567,12 +4567,11 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"data-neoermac-outbound-mobile-row", response.data)
         self.assertIn(b'data-neoermac-outbound-layout="pull-table"', response.data)
         mobile_fields = (
-            b'data-neoermac-outbound-mobile-field="flight"',
-            b'data-neoermac-outbound-mobile-field="tail"',
             b'data-neoermac-outbound-mobile-field="destination"',
-            b'data-neoermac-outbound-mobile-field="position"',
+            b'data-neoermac-outbound-mobile-field="tail"',
             b'data-neoermac-outbound-mobile-field="doors"',
-            b'data-neoermac-outbound-mobile-field="pull-times"',
+            b'data-neoermac-outbound-mobile-field="pure"',
+            b'data-neoermac-outbound-mobile-field="mix"',
             b'data-neoermac-outbound-mobile-field="etd"',
         )
         positions = [response.data.index(field) for field in mobile_fields]
@@ -4581,20 +4580,19 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b'data-neoermac-outbound-mobile-field="delay"', response.data)
         self.assertIn(b"data-neoermac-outbound-mobile-header", response.data)
         self.assertNotIn(b"neoermac-outbound-mobile-fields", response.data)
-        self.assertIn(b'<b>P</b>', response.data)
-        self.assertIn(b'<b>M</b>', response.data)
         mobile_row = response.data.split(b'data-neoermac-outbound-mobile-row', 1)[1].split(b'</article>', 1)[0]
-        self.assertEqual(mobile_row.count(b'data-neoermac-outbound-mobile-field='), 7)
+        self.assertEqual(mobile_row.count(b'data-neoermac-outbound-mobile-field='), 6)
         self.assertNotIn(b'<small>', mobile_row)
         self.assertNotIn(b'<b>1</b>', response.data)
         self.assertIn(".neoermac-outbound-table-wrap { display: none;", css)
-        self.assertIn('grid-template-columns: 82px 80px 52px 50px 90px 174px 64px', css)
+        self.assertNotIn('692px', css)
+        self.assertIn('width: 100%; min-width: 0; box-sizing: border-box;', css)
         self.assertNotIn('grid-template-areas:', css)
-        self.assertIn('white-space: nowrap', css)
-        self.assertIn('overflow-x: auto', css)
+        self.assertIn('minmax(0, 1.2fr)', css)
+        self.assertIn('min-width: 0; overflow-x: clip;', css)
         self.assertIn("body.mobile-app-chrome .neoermac-shell.neoermac-outbound-shell {", css)
         self.assertIn("padding: 0;", css)
-        self.assertIn("height: 40px;", css)
+        self.assertIn("min-height: 40px; height: auto;", css)
         self.assertIn(b'css/neoermac_view_outbound.css', response.data)
         self.assertNotIn(b'css/neoermac_view_outbound.css', self.client.get('/neoermac').data)
         self.assertIn('height: 32px;', css)

@@ -1,9 +1,11 @@
 {% macro actual_pull(row, key, label) -%}
+    <span class="neoermac-outbound-actual{% if row.pull_timing[key] %} is-pull-{{ row.pull_timing[key] }}{% endif %}">
     {%- if row.no_pulls[key] -%}
         NO {{ label|upper }}
     {%- else -%}
         {{ row.actual_pulls[key] or "-" }}
     {%- endif -%}
+    </span>
 {%- endmacro %}
 
 {% macro desktop(row) -%}
@@ -20,7 +22,6 @@
                     <span class="neoermac-outbound-missing">NO CURRENT SORT MISSION FOR {{ row.destination }}.</span>
                     {% endif %}
                 </td>
-                <td data-label="Location" data-outbound-field="location">{{ row.assignment_locations|join(" / ") if row.assignment_locations else "-" }}</td>
                 <td data-label="PURE PLAN" data-outbound-pull-cell="pure-plan">{{ row.adjusted_pulls.pure or "-" }}</td>
                 <td data-label="PURE ACT" data-outbound-pull-cell="pure-actual"><strong>{{ actual_pull(row, "pure", "Pure") }}</strong></td>
                 <td data-label="MIX PLAN" data-outbound-pull-cell="mix-plan">{{ row.adjusted_pulls.mix or "-" }}</td>
@@ -30,15 +31,25 @@
 
 {% macro mobile(row) -%}
     <article class="neoermac-outbound-mobile-row{% if not row.has_mission %} is-missing-mission{% endif %}" data-neoermac-outbound-mobile-row data-outbound-key="{{ row.transport_key }}" data-tail-presence="{{ row.tail_presence.state if row.tail_presence else '' }}" aria-label="{{ row.flight_number or row.destination or 'Outbound' }} outbound mission">
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="flight">{{ row.flight_number or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="tail">{{ row.tail or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-destination" data-neoermac-outbound-mobile-field="destination">{{ row.destination or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="position">{{ row.parking or "-" }}</span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="doors">{{ row.assigned_doors|join(", ") if row.assigned_doors else "-" }}</span>
-        <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-pulls" data-neoermac-outbound-mobile-field="pull-times">
-            <span><b>P</b> {{ row.adjusted_pulls.pure or "-" }} / {{ actual_pull(row, "pure", "Pure") }}</span>
-            <span><b>M</b> {{ row.adjusted_pulls.mix or "-" }} / {{ actual_pull(row, "mix", "Mix Pull") }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="destination">
+            <span class="neoermac-outbound-top">{{ row.destination or "-" }}</span>
+            <span class="neoermac-outbound-bottom">{{ row.flight_number or "-" }}</span>
         </span>
-        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="etd">{{ row.etd or "-" }}</span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="tail">
+            <span class="neoermac-outbound-top">{{ row.tail or "-" }}</span>
+            <span class="neoermac-outbound-bottom">{{ row.parking or "-" }}</span>
+        </span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="doors">
+            {% for door in row.assigned_doors %}<span class="{{ 'neoermac-outbound-top' if loop.first else 'neoermac-outbound-bottom' }}">{{ door }}</span>{% else %}<span class="neoermac-outbound-top">-</span>{% endfor %}
+        </span>
+        <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-pulls" data-neoermac-outbound-mobile-field="pure">
+            <span class="neoermac-outbound-top">{{ row.adjusted_pulls.pure or "-" }}</span>
+            {{ actual_pull(row, "pure", "Pure") }}
+        </span>
+        <span class="neoermac-outbound-mobile-field neoermac-outbound-mobile-pulls" data-neoermac-outbound-mobile-field="mix">
+            <span class="neoermac-outbound-top">{{ row.adjusted_pulls.mix or "-" }}</span>
+            {{ actual_pull(row, "mix", "Mix Pull") }}
+        </span>
+        <span class="neoermac-outbound-mobile-field" data-neoermac-outbound-mobile-field="etd"><span class="neoermac-outbound-top">{{ row.etd or "-" }}</span></span>
     </article>
 {%- endmacro %}

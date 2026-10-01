@@ -250,6 +250,7 @@ def _row_for_destination(
     adjusted_pulls = {}
     actual_pulls = {}
     no_pulls = {}
+    pull_timing = {}
     sort_pull = None
     assigned_doors = _unique(
         assignment["door"] for assignment in assignments if assignment.get("door")
@@ -280,6 +281,7 @@ def _row_for_destination(
         adjusted_pulls[key] = _time_value(adjusted_value)
         actual_pulls[key] = _time_value(actual_value)
         no_pulls[key] = no_pull
+        pull_timing[key] = _pull_timing_state(adjusted_value, actual_value, key, no_pull=no_pull)
         if sort_pull is None:
             sort_pull = adjusted_value or base_value
 
@@ -308,6 +310,7 @@ def _row_for_destination(
         "adjusted_pulls": adjusted_pulls,
         "actual_pulls": actual_pulls,
         "no_pulls": no_pulls,
+        "pull_timing": pull_timing,
         "window_minutes": row_window,
         "has_window_adjustment": bool(row_window),
         "has_mission": bool(mission),
@@ -317,6 +320,18 @@ def _row_for_destination(
             or getattr(mission, "planned_datetime_local", None)
         ),
     }
+
+
+def _pull_timing_state(planned, actual, pull_key, *, no_pull=False):
+    """Color the displayed HH:MM values using the nearest signed day offset."""
+    if planned is None or actual is None or no_pull:
+        return ""
+    planned_minutes = planned.hour * 60 + planned.minute
+    actual_minutes = actual.hour * 60 + actual.minute
+    # Nearest-day comparison handles both late and early midnight crossings.
+    lateness = (actual_minutes - planned_minutes + 720) % 1440 - 720
+    allowance = 5 if pull_key == "pure" else 1
+    return "late" if lateness > allowance else "on-time"
 
 
 def _lineup_assignments_by_destination(gateway, *, initialize=True):
