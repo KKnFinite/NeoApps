@@ -59,3 +59,40 @@
 }
 
 
+
+/* Shared operational selects must never fall back to bright native controls. */
+body.operational-shell-page select {
+    color-scheme: dark;
+    background-color: #0d171c !important;
+    color: #e7f0f2 !important;
+    border-color: rgba(var(--node-primary-rgb, 57, 184, 175), .46) !important;
+}
+body.operational-shell-page select:not([multiple]) {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 32px;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #9fb7b8 50%),
+        linear-gradient(135deg, #9fb7b8 50%, transparent 50%) !important;
+    background-position:
+        calc(100% - 15px) 50%,
+        calc(100% - 10px) 50% !important;
+    background-size: 5px 5px, 5px 5px !important;
+    background-repeat: no-repeat !important;
+}
+body.operational-shell-page select:focus,
+body.operational-shell-page select:focus-visible {
+    outline: none;
+    border-color: var(--node-primary, #39b8af) !important;
+    box-shadow: 0 0 0 1px rgba(var(--node-primary-rgb, 57, 184, 175), .32);
+}
+body.operational-shell-page select:disabled {
+    color: #74878c !important;
+    background-color: #10171b !important;
+    opacity: .75;
+}
+body.operational-shell-page select option,
+body.operational-shell-page select optgroup {
+    background: #0d171c;
+    color: #e7f0f2;
+}
