@@ -100,6 +100,7 @@ NEOERMAC_PAGES = (
     ("VIEW OUTBOUND", "neoermac.view_outbound"),
     ("DOOR VIEW", "neoermac.door_view"),
     ("TUG ASSIGNMENTS", "neoermac.tug_assignments"),
+    ("STATS", "neoermac.staffing_stats"),
     ("SETTINGS", "neoermac.settings"),
 )
 
@@ -139,6 +140,25 @@ def settings():
     return render_template(
         "neonodes/neoermac/settings.html",
         gateway=gateway,
+    )
+
+
+@bp.route("/stats")
+@gateway_node_required("ermac")
+def staffing_stats():
+    access = permission_access(NEOERMAC_DASHBOARD_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoermac.index"))
+    stats = staffing_service.shift_staffing_stats_context(
+        request.args.get("operation_id")
+    )
+    return render_template(
+        "neostaffing/node_shift_stats.html",
+        workspace="ermac",
+        stats=stats,
+        back_url=url_for("neoermac.index"),
+        menu_items=NEOERMAC_PAGES,
     )
 
 

@@ -704,6 +704,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard-tile="wbm"', response.data)
         self.assertIn(b'data-node-dashboard-tile="discharge"', response.data)
         self.assertIn(b'data-node-dashboard-tile="driver-routing"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="stats"', response.data)
         self.assertNotIn(b"data-live-counts", response.data)
         self.assertNotIn(b"sektor-command-heading", response.data)
         self.assertIn(b"sektor-command-art", response.data)
@@ -714,6 +715,16 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard="sektor"', response.data)
         self.assertNotIn(b"motherbrain-header-nav", response.data)
         self.assertNotIn(b"data-neosektor-internal-menu", response.data)
+
+    def test_shift_stats_page_renders_shared_shift_total(self):
+        self._login_approved_user(role="operator")
+        response = self.client.get("/neosektor/stats")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SHIFT STAFFING", response.data)
+        self.assertIn(b"SHIFT TOTAL", response.data)
+        self.assertIn(b"SEKTOR", response.data)
+        self.assertIn(b"ERMAC", response.data)
+        self.assertIn(b"css/neostaffing_shift_stats.css", response.data)
 
     def test_discharge_live_state_skips_global_lifecycle_and_does_not_commit(self):
         self._login_approved_user(role="operator")
@@ -748,7 +759,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertNotIn(b"images/neosektor/dashboard_mobile.png", response.data)
         tiles = document(response).findall(**{'data-node-dashboard-tile':None})
         self.assertEqual([t.attrs['data-node-dashboard-tile'] for t in tiles],
-                         ['ebm','wbm','tunnel','driver-routing','discharge','settings','live-counts'])
+                         ['ebm','wbm','tunnel','driver-routing','discharge','stats','live-counts','settings'])
 
     def test_sektor_desktop_shell_keeps_portal_return_and_character_switcher(self):
         self._login_approved_user(role='operator')
@@ -1011,12 +1022,14 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self.assertIn(b'data-neosektor-mobile-tile="wbm"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="discharge"', response.data)
         self.assertIn(b'data-neosektor-mobile-tile="driver-routing"', response.data)
+        self.assertIn(b'data-neosektor-mobile-tile="stats"', response.data)
         self.assertIn(b'href="/neosektor/live-counts"', response.data)
         self.assertIn(b'href="/neosektor/tunnel-conductor"', response.data)
         self.assertIn(b'href="/neosektor/ebm"', response.data)
         self.assertIn(b'href="/neosektor/wbm"', response.data)
         self.assertIn(b'href="/neosektor/discharge"', response.data)
         self.assertIn(b'href="/neosektor/driver-routing"', response.data)
+        self.assertIn(b'href="/neosektor/stats"', response.data)
         self.assertNotIn(b"System Status", response.data)
         self.assertNotIn(b"data-live-counts", response.data)
         self.assertNotIn(b"class=\"readonly-count\"", response.data)
@@ -1031,7 +1044,7 @@ class NeoSektorRoutesTest(unittest.TestCase):
         self._login_approved_user(role='simulator')
         root,drawer,dock=assert_mobile_drawer(self,self.client.get('/neosektor/live-counts'))
         menu=drawer.one(**{'data-drawer-view':'menu'})
-        for label in ('Live Counts','Tunnel Conductor','East Ballmat','West Ballmat','Driver Routing','Discharge'):
+        for label in ('Live Counts','Tunnel Conductor','East Ballmat','West Ballmat','Driver Routing','Discharge','Stats'):
             self.assertIn(label,menu.text)
         self.assertFalse(menu.findall(cls='neo-drawer-node-link'))
         self.assertNotIn('Inbound operations',menu.text)

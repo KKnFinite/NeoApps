@@ -56,6 +56,12 @@
                     <strong>TUG ASSIGNMENTS</strong>
                 </span>
             </a>
+            <a class="ermac-command-tile ermac-command-tile-stats" href="{{ url_for('neoermac.staffing_stats') }}" data-neoermac-mobile-tile="stats" data-node-dashboard-tile="stats">
+                <span class="ermac-command-tile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 18h16v2H4v-2Zm1-2V9h3v7H5Zm5 0V4h3v12h-3Zm5 0v-5h4v5h-4Z"/></svg>
+                </span>
+                <span class="ermac-command-tile-copy"><strong>STATS</strong></span>
+            </a>
             {% if user_can('neoermac.settings.view') %}
             <a class="ermac-command-tile" href="{{ url_for('neoermac.settings') }}">
                 <span class="ermac-command-tile-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m10 2-.6 3-2 .9-2.7-1.1-2 3.4 2.2 2-.2 2.3L2.5 15l2 3.4 2.8-.9 2 1.2.7 3.3h4l.7-3.3 2-1.2 2.8.9 2-3.4-2.2-2.5-.2-2.3 2.2-2-2-3.4-2.7 1.1-2-.9L14 2h-4Zm2 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg></span>

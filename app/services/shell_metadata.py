@@ -558,6 +558,8 @@ def _neoermac_labels(path, is_view_outbound):
         return "UPCOMING PULLS", "PULLS"
     if path.startswith("/neoermac/tug-assignments"):
         return "TUG ASSIGNMENTS", "TUGS"
+    if path.startswith("/neoermac/stats"):
+        return "SHIFT STATS", "STATS"
     return "DASHBOARD", "DASHBOARD"
 
 
@@ -610,6 +612,8 @@ def _neosektor_labels(
         return "LIVE COUNTS", "COUNTS"
     if path.startswith("/neosektor/driver-routing"):
         return "DRIVER ROUTING", "ROUTING"
+    if path.startswith("/neosektor/stats"):
+        return "SHIFT STATS", "STATS"
     if path.startswith("/neosektor/settings"):
         return "SETTINGS", "DASHBOARD"
     return "DASHBOARD", "DASHBOARD"

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Shift Staffing Stats | {{ "NeoErmac" if workspace == "ermac" else "NeoSektor" }}{% endblock %}
+{% macro attendance_summary(counts, status_items, compact=false) -%}
+<div class="node-shift-stats-summary{% if compact %} is-compact{% endif %}">
+  <div class="node-shift-stats-core">
+    <article><span>ON PAYROLL</span><strong>{{ counts.on_payroll }}</strong></article>
+    <article><span>WORKING</span><strong>{{ counts.working }}</strong></article>
+    <article><span>UNMARKED</span><strong>{{ counts.unmarked }}</strong></article>
+  </div>
+  <div class="node-shift-stats-statuses">
+    {% for key, label in status_items %}{% if counts[key] %}<span>{{ label }} <strong>{{ counts[key] }}</strong></span>{% endif %}{% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_stats.css') }}?v=1">
+{% set local_key = workspace %}
+{% set other_key = "sektor" if workspace == "ermac" else "ermac" %}
+<section class="node-shift-stats theme-{{ workspace }}" data-shift-staffing-stats data-stats-workspace="{{ workspace }}">
+  <header class="node-shift-stats-head">
+    <a href="{{ back_url }}">BACK</a>
+    <div><h1>SHIFT STAFFING</h1><p>Night / Ramp / Shift · Canonical NeoStaffing attendance</p></div>
+  </header>
+  {% set attendance = stats %}
+  {% include "neostaffing/_node_sort_selector.html" %}
+  {% if stats.operation %}
+  <main class="node-shift-stats-workspace">
+    <section class="node-shift-stats-total" data-shift-stats-total>
+      <header><div><span>ALL SEKTOR + ERMAC AREAS</span><h2>SHIFT TOTAL</h2></div><strong>{{ stats.operation.sort_date }} · {{ stats.operation.sort_name|upper }}</strong></header>
+      {{ attendance_summary(stats.total, stats.status_items) }}
+    </section>
+    <div class="node-shift-stats-nodes">
+      {% for node_key in [local_key, other_key] %}{% set node = stats.nodes[node_key] %}
+      <section class="node-shift-stats-node{% if node_key == local_key %} is-local{% endif %}" data-shift-stats-node="{{ node_key }}">
+        <header><div><span>{{ "THIS NODE" if node_key == local_key else "OTHER SHIFT NODE" }}</span><h2>{{ node.label }}</h2></div><strong>{{ node.counts.on_payroll }} ON PAYROLL</strong></header>
+        {{ attendance_summary(node.counts, stats.status_items) }}
+        <div class="node-shift-stats-areas">
+          {% for area in node.areas %}
+          <article class="node-shift-stats-area" data-shift-stats-area="{{ area.id }}"><header><h3>{{ area.label }}</h3></header>{{ attendance_summary(area.counts, stats.status_items, true) }}</article>
+          {% else %}<p class="node-shift-stats-empty">No configured staffing areas.</p>{% endfor %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+  </main>
+  {% else %}
+  <div class="node-shift-stats-empty-state"><h2>NO NIGHT SORT AVAILABLE</h2><p>No active or completed Night Sort is available in the current week.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

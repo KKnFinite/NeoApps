@@ -129,6 +129,12 @@ NEOSEKTOR_PAGE_DEFINITIONS = (
         label="Employees", endpoint="neosektor.manage_employees",
         view_permission=None, edit_permission=None,
         dashboard_key="employees", dashboard_description="",
+        menu_order=8,
+    ),
+    _NeoSektorPage(
+        label="Stats", endpoint="neosektor.staffing_stats",
+        view_permission=NEOSEKTOR_DASHBOARD_VIEW_PERMISSION, edit_permission=None,
+        dashboard_key="stats", dashboard_description="Shift staffing totals.",
         menu_order=7,
     ),
     _NeoSektorPage(
@@ -222,6 +228,23 @@ def index():
 @gateway_node_required("sektor")
 def index_slash():
     return redirect(url_for("neosektor.index"))
+
+
+@bp.route("/stats")
+@gateway_node_required("sektor")
+def staffing_stats():
+    if not user_can(NEOSEKTOR_DASHBOARD_VIEW_PERMISSION):
+        flash("Access denied.", "error")
+        return redirect(url_for("neosektor.index"))
+    stats = staffing_service.shift_staffing_stats_context(
+        request.args.get("operation_id")
+    )
+    return render_template(
+        "neostaffing/node_shift_stats.html",
+        workspace="sektor",
+        stats=stats,
+        back_url=url_for("neosektor.index"),
+    )
 
 
 @bp.route("/tunnel-conductor")

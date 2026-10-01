@@ -156,12 +156,14 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard-tile="view-outbound"', response.data)
         self.assertIn(b'data-node-dashboard-tile="upcoming-pulls"', response.data)
         self.assertIn(b'data-node-dashboard-tile="tug-assignments"', response.data)
+        self.assertIn(b'data-node-dashboard-tile="stats"', response.data)
         self.assertIn(b"data-neoermac-mobile-dashboard", response.data)
         self.assertIn(b'data-neoermac-mobile-tile="door-view"', response.data)
         self.assertIn(b'data-neoermac-mobile-tile="building-lineup"', response.data)
         self.assertIn(b'data-neoermac-mobile-tile="view-outbound"', response.data)
         self.assertIn(b'data-neoermac-mobile-tile="upcoming-pulls"', response.data)
         self.assertIn(b'data-neoermac-mobile-tile="tug-assignments"', response.data)
+        self.assertIn(b'data-neoermac-mobile-tile="stats"', response.data)
         self.assertIn(b"UPCOMING PULLS", response.data)
         self.assertNotIn(b"UPCOMING OUTBOUND PULLS", response.data)
         self.assertNotIn(b"neoermac-upcoming-board", response.data)
@@ -170,6 +172,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertIn(b"VIEW OUTBOUND", response.data)
         self.assertIn(b"DOOR VIEW", response.data)
         self.assertIn(b"TUG ASSIGNMENTS", response.data)
+        self.assertIn(b"STATS", response.data)
         self.assertNotIn(b"Door pulls, ULD requests, and on-the-way state.", response.data)
         self.assertNotIn(b"Assign destinations across doors and belts.", response.data)
         self.assertNotIn(b"Outbound flight, pull, and door context.", response.data)
@@ -186,6 +189,16 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertNotIn(b"RFD NEONODE", response.data)
         self.assertNotIn(b'<nav class="neoermac-menu"', response.data)
 
+    def test_shift_stats_page_renders_shared_shift_total(self):
+        self._login_approved_user()
+        response = self.client.get("/neoermac/stats")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"SHIFT STAFFING", response.data)
+        self.assertIn(b"SHIFT TOTAL", response.data)
+        self.assertIn(b"ERMAC", response.data)
+        self.assertIn(b"SEKTOR", response.data)
+        self.assertIn(b"css/neostaffing_shift_stats.css", response.data)
+
     def test_neoermac_menu_links_work(self):
         self._login_approved_user()
 
@@ -197,6 +210,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/door-view"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/upcoming-pulls"'), 1)
         self.assertGreaterEqual(response.data.count(b'href="/neoermac/tug-assignments"'), 1)
+        self.assertGreaterEqual(response.data.count(b'href="/neoermac/stats"'), 1)
         self.assertNotIn(b"BACK TO NeoGateway", response.data)
 
     def test_neoermac_mobile_dashboard_css_hides_duplicate_body_title(self):
@@ -696,6 +710,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         non_refresh_pages = (
             "/neoermac",
             "/neoermac/tug-assignments",
+            "/neoermac/stats",
         )
         for path in non_refresh_pages:
             with self.subTest(path=path):

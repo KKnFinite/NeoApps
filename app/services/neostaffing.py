@@ -111,6 +111,23 @@ ATTENDANCE_STAFFING_COUNT_STATUS_BY_KEY = {
     "personal_leave": "personal_leave",
 }
 
+SHIFT_STAFFING_STATS_STATUS_ITEMS = (
+    ("called_in", "Called In"),
+    ("no_call", "No Call"),
+    ("scheduled_off", "Scheduled Off"),
+    ("anniversary_day", "Anniversary Day"),
+    ("vacation", "Vacation"),
+    ("opt_day", "Opt Day"),
+    ("disability", "Disability"),
+    ("work_comp", "Work Comp"),
+    ("funeral", "Funeral"),
+    ("jury", "Jury"),
+    ("fmla", "FMLA"),
+    ("military", "Military"),
+    ("personal_leave", "Personal Leave"),
+    ("cleared", "Cleared"),
+)
+
 SEASONAL_CLASSIFICATION = "seasonal"
 PT_UNION_CLASSIFICATIONS = frozenset({"part_time"})
 LEGACY_FT_UNION_CLASSIFICATIONS = frozenset({"full_time_combo"})
@@ -1241,6 +1258,141 @@ def attendance_staffing_counts(scope, operation, *, group_by_person_id=None):
         "scope": selected_scope,
         "staffing_sort": staffing_sort,
         "groups": groups,
+    }
+
+
+def shift_staffing_stats_context(selected_operation_id=None):
+    """One canonical Night / Ramp / Shift attendance rollup for Sektor + Ermac."""
+    current = current_night_attendance_operation()
+    operation_choices = node_attendance_operations(current=current)
+    operation = current
+    if selected_operation_id:
+        operation = next(
+            (
+                item
+                for item in operation_choices
+                if str(item.id) == str(selected_operation_id)
+            ),
+            None,
+        )
+        if operation is None:
+            from werkzeug.exceptions import BadRequest
+
+            raise BadRequest(
+                "Choose an active or completed Night Sort in the current week."
+            )
+    elif operation is None:
+        operation = next(iter(operation_choices), None)
+
+    empty_counts = _attendance_staffing_count_totals()
+    empty_nodes = {
+        "sektor": {"key": "sektor", "label": "SEKTOR", "counts": empty_counts, "areas": ()},
+        "ermac": {"key": "ermac", "label": "ERMAC", "counts": empty_counts, "areas": ()},
+    }
+    if operation is None:
+        return {
+            "operation": None,
+            "operation_choices": operation_choices,
+            "staffing_sort": None,
+            "status_items": SHIFT_STAFFING_STATS_STATUS_ITEMS,
+            "total": empty_counts,
+            "nodes": empty_nodes,
+        }
+
+    hierarchy = _daily_attendance_hierarchy()
+    staffing_sort = _staffing_sort_for_operation(operation, hierarchy)
+    area_node = {}
+    shift_areas = []
+    for area in hierarchy["units"]:
+        if not _is_shift_work_area(area, hierarchy["by_id"]):
+            continue
+        area_type = shift_work_area_type(area)
+        if area_type in {SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
+            node_key = "sektor"
+        elif area_type == SHIFT_FLOW_DOOR:
+            node_key = "ermac"
+        else:
+            continue
+        area_node[area.id] = node_key
+        shift_areas.append(area)
+
+    shift_areas.sort(
+        key=lambda area: (
+            0 if area_node[area.id] == "sektor" else 1,
+            area.display_order,
+            area.name.casefold(),
+            area.id,
+        )
+    )
+    shift_area_ids = set(area_node)
+    assignments = []
+    if shift_area_ids:
+        assignments = (
+            StaffingWorkAssignment.query.options(
+                joinedload(StaffingWorkAssignment.person),
+                joinedload(StaffingWorkAssignment.work_area),
+            )
+            .join(StaffingPerson)
+            .filter(
+                StaffingWorkAssignment.active.is_(True),
+                StaffingWorkAssignment.work_area_unit_id.in_(shift_area_ids),
+                StaffingPerson.active.is_(True),
+            )
+            .order_by(
+                StaffingPerson.last_name,
+                StaffingPerson.first_name,
+                StaffingPerson.id,
+                StaffingWorkAssignment.id,
+            )
+            .all()
+        )
+
+    unique_assignments = {}
+    for assignment in assignments:
+        unique_assignments.setdefault(assignment.person_id, assignment)
+    assignments = list(unique_assignments.values())
+
+    records = _daily_attendance_records(
+        [assignment.person_id for assignment in assignments],
+        operation,
+        staffing_sort,
+    )
+    assignments_by_area = {area.id: [] for area in shift_areas}
+    assignments_by_node = {"sektor": [], "ermac": []}
+    for assignment in assignments:
+        if assignment.work_area_unit_id not in assignments_by_area:
+            continue
+        assignments_by_area[assignment.work_area_unit_id].append(assignment)
+        assignments_by_node[area_node[assignment.work_area_unit_id]].append(assignment)
+
+    nodes = {}
+    for node_key, label in (("sektor", "SEKTOR"), ("ermac", "ERMAC")):
+        nodes[node_key] = {
+            "key": node_key,
+            "label": label,
+            "counts": _attendance_staffing_count_totals(
+                assignments_by_node[node_key], records
+            ),
+            "areas": tuple(
+                {
+                    "id": area.id,
+                    "label": area.name,
+                    "counts": _attendance_staffing_count_totals(
+                        assignments_by_area[area.id], records
+                    ),
+                }
+                for area in shift_areas
+                if area_node[area.id] == node_key
+            ),
+        }
+
+    return {
+        "operation": operation,
+        "operation_choices": operation_choices,
+        "staffing_sort": staffing_sort,
+        "status_items": SHIFT_STAFFING_STATS_STATUS_ITEMS,
+        "total": _attendance_staffing_count_totals(assignments, records),
+        "nodes": nodes,
     }
 
 

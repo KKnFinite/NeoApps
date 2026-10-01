@@ -407,6 +407,43 @@ class NeoStaffingAttendanceCountsTest(unittest.TestCase):
             event.remove(db.engine, "before_cursor_execute", capture)
         self.assertLessEqual(len(statements), 4)
 
+    def test_shift_staffing_stats_sum_sektor_ermac_and_shift_once(self):
+        second_door = StaffingUnit(unit_type="work_area", name="Door 4", parent=self.shift)
+        db.session.add(second_door)
+        db.session.flush()
+        east = self._person("STAT-E", self.east_ballmat)
+        discharge = self._person("STAT-DIS", self.discharge)
+        door = self._person("STAT-D1", self.door)
+        self._person("STAT-D4", second_door)
+        db.session.add_all([
+            StaffingDailyAttendance(attendance_date=self.operation.sort_date, sort_unit_id=self.night.id, sort_date_operation_id=self.operation.id, person_id=east.id, work_area_unit_id=self.east_ballmat.id, status="here"),
+            StaffingDailyAttendance(attendance_date=self.operation.sort_date, sort_unit_id=self.night.id, sort_date_operation_id=self.operation.id, person_id=discharge.id, work_area_unit_id=self.discharge.id, status="vacation"),
+            StaffingDailyAttendance(attendance_date=self.operation.sort_date, sort_unit_id=self.night.id, sort_date_operation_id=self.operation.id, person_id=door.id, work_area_unit_id=self.door.id, status="call_in"),
+        ])
+        db.session.commit()
+        statements = []
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+        event.listen(db.engine, "before_cursor_execute", capture)
+        try:
+            with patch.object(staffing_service, "current_night_attendance_operation", return_value=self.operation):
+                stats = staffing_service.shift_staffing_stats_context()
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture)
+        self.assertEqual(stats["total"]["on_payroll"], 4)
+        self.assertEqual(stats["total"]["working"], 1)
+        self.assertEqual(stats["total"]["vacation"], 1)
+        self.assertEqual(stats["total"]["called_in"], 1)
+        self.assertEqual(stats["total"]["unmarked"], 1)
+        sektor, ermac = stats["nodes"]["sektor"], stats["nodes"]["ermac"]
+        self.assertEqual(sektor["counts"]["on_payroll"], 2)
+        self.assertEqual(ermac["counts"]["on_payroll"], 2)
+        self.assertEqual(stats["total"]["on_payroll"], sektor["counts"]["on_payroll"] + ermac["counts"]["on_payroll"])
+        self.assertEqual({row["label"] for row in sektor["areas"] if row["counts"]["on_payroll"]}, {"East Ballmat", "Discharge"})
+        self.assertEqual({row["label"] for row in ermac["areas"] if row["counts"]["on_payroll"]}, {"Door 1", "Door 4"})
+        self.assertLessEqual(len(statements), 8)
+
     def _person(self, employee_id, work_area):
         person = staffing_service.create_person(
             {
