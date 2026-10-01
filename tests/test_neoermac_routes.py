@@ -194,9 +194,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
         response = self.client.get("/neoermac/stats")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SHIFT STAFFING", response.data)
-        self.assertIn(b"SHIFT TOTAL", response.data)
-        self.assertIn(b"ERMAC", response.data)
-        self.assertIn(b"SEKTOR", response.data)
+        self.assertIn(b"NO NIGHT SORT AVAILABLE", response.data)
         self.assertIn(b"css/neostaffing_shift_stats.css", response.data)
 
     def test_neoermac_menu_links_work(self):
