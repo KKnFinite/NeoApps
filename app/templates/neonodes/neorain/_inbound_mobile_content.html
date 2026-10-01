@@ -78,15 +78,23 @@
 
 <section class="neorain-mobile-board" data-neorain-mobile-board="inbound" aria-label="Compact inbound list">
     <div class="neorain-mobile-mission-list">
+        <div class="neorain-mobile-column-head" role="row" aria-label="Inbound columns">
+            <span role="columnheader">FLIGHT</span>
+            <span role="columnheader">ORIGIN</span>
+            <span role="columnheader">BLOCK-IN</span>
+            <span role="columnheader">STATUS</span>
+            <span role="columnheader">+/-</span>
+            <span role="columnheader">INCLUDE</span>
+        </div>
         {% for row in rows %}
         {% set row_state = 'neorain-inbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-inbound-row--blocked-in' if row.block_in else '') %}
         <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
             <div class="neorain-mobile-mission-grid">
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong><small>FLIGHT</small></button>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.origin or '-' }}</span><small>ORIGIN</small></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.origin or '-' }}</span></button>
                 {{ block_in_control(row) }}
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="status">{{ row.status }}</span><small>STATUS</small></button>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span><small>+/-</small></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="status">{{ row.status }}</span></button>
+                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span></button>
                 {{ inclusion_control(row) }}
             </div>
             <div id="mobile-flight-detail-{{ row.mission_id }}" class="neorain-mobile-inline-detail" data-neorain-mobile-inline-detail hidden>
