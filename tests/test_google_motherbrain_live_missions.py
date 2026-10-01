@@ -557,6 +557,64 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         mission = db.session.get(SortDateMission, mission_id)
         self.assertEqual((mission.destination, SortDateMission.query.count()), ("ONT", 1))
 
+    def test_inbound_hot_creates_pending_hot_departure_for_fueling(self):
+        result = self._apply_arrivals(
+            self._inbound(4, "947", "N457UP", status="HOT")
+        )
+        db.session.commit()
+
+        self.assertEqual(result["applied_count"], 1)
+        self.assertEqual(self._tail_state("N457UP").operational_status, "hot")
+        hot = SortDateMission.query.filter_by(
+            sort_date_operation_id=self.operation.id,
+            mission_type="departure",
+            assigned_tail_number="N457UP",
+        ).one()
+        self.assertTrue(hot.flight_number.startswith("HOT-"))
+        self.assertEqual(hot.destination, "HOT")
+        self.assertEqual(hot.mission_source, GOOGLE_MOTHERBRAIN_MISSION_SOURCE)
+        self.assertIsNone(hot.planned_datetime_local)
+        self.assertIsNone(hot.planned_datetime_utc)
+        self.assertEqual(hot.fuel_status, "waiting")
+        self.assertEqual(hot.departure_status, "scheduled")
+
+    def test_real_outbound_claims_inbound_hot_departure_without_duplication(self):
+        self._apply_arrivals(
+            self._inbound(4, "947", "N457UP", status="HOT")
+        )
+        db.session.commit()
+        hot = SortDateMission.query.filter_by(
+            sort_date_operation_id=self.operation.id,
+            mission_type="departure",
+            assigned_tail_number="N457UP",
+        ).one()
+        hot_id = hot.id
+
+        result = self._apply_departures(
+            self._outbound(
+                5,
+                "755",
+                "N457UP",
+                destination="SDF",
+                planned="01:10",
+            )
+        )
+        db.session.commit()
+
+        self.assertEqual(result["results"][0]["mission_id"], hot_id)
+        departure = db.session.get(SortDateMission, hot_id)
+        self.assertEqual(departure.flight_number, "UPS0755")
+        self.assertEqual(departure.destination, "SDF")
+        self.assertEqual(
+            SortDateMission.query.filter_by(
+                sort_date_operation_id=self.operation.id,
+                mission_type="departure",
+                assigned_tail_number="N457UP",
+            ).count(),
+            1,
+        )
+        self.assertEqual(self._tail_state("N457UP").operational_status, "normal")
+
     def test_hot_to_destination_and_back_uses_same_pending_mission(self):
         first = self._apply_departures(
             self._outbound(4, "755", "N457UP", destination="HOT", planned="")

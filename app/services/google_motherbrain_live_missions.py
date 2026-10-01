@@ -30,6 +30,7 @@ from app.services.night_sorting import sort_datetime_for_local_time
 from app.services.parking_plan import (
     ParkingPlanError,
     TAIL_STATUS_SPARE,
+    is_hot_placeholder_mission,
     mark_arrival_tail_spare,
     set_tail_hot,
 )
@@ -222,6 +223,23 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
             )
         mission = matches[0] if matches else None
 
+    if (
+        mission is None
+        and mission_type == "departure"
+        and row["destination_mode"] != "spare"
+    ):
+        hot_matches = [
+            candidate
+            for candidate in missions.values()
+            if is_hot_placeholder_mission(candidate)
+            and _normalize_tail(candidate.assigned_tail_number) == row["effective_tail"]
+        ]
+        if len(hot_matches) > 1:
+            raise GoogleMotherBrainMissionError(
+                "Multiple pending HOT departures exist for this tail."
+            )
+        mission = hot_matches[0] if hot_matches else None
+
     if mission_type == "departure" and row["destination_mode"] == "spare":
         link = link or _new_link(operation, mission_type, row)
         result = _apply_spare_row(
@@ -255,6 +273,8 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
             planned_utc,
         )
     else:
+        if is_hot_placeholder_mission(mission):
+            mission.mission_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
         mission.flight_number = row["flight_number"]
 
     link = link or _new_link(operation, mission_type, row)
@@ -430,7 +450,13 @@ def _apply_inbound_state(
     raw_status = row["status_raw"]
     if raw_status in GOOGLE_SPECIAL_ARRIVAL_STATUSES:
         if raw_status == "HOT":
-            set_tail_hot(operation, row["effective_tail"], True, user=user)
+            set_tail_hot(
+                operation,
+                row["effective_tail"],
+                True,
+                user=user,
+                mission_source=GOOGLE_MOTHERBRAIN_MISSION_SOURCE,
+            )
         elif raw_status == "SPARE":
             try:
                 mark_arrival_tail_spare(operation, row["effective_tail"], user=user)
@@ -484,7 +510,13 @@ def _apply_outbound_state(
 
     if row["destination_mode"] == "hot":
         mission.destination = "HOT"
-        set_tail_hot(operation, new_tail, True, user=user)
+        set_tail_hot(
+            operation,
+            new_tail,
+            True,
+            user=user,
+            mission_source=GOOGLE_MOTHERBRAIN_MISSION_SOURCE,
+        )
     else:
         mission.destination = row["destination"] or mission.destination
         set_tail_hot(operation, new_tail, False, user=user)

@@ -808,6 +808,7 @@ def set_tail_hot(
     note=None,
     *,
     bundle=None,
+    mission_source="manual",
 ):
     tail_number = _normalize_tail(tail_number)
     bundle = bundle or ParkingPlanOperationalStateBundle.load(
@@ -826,6 +827,13 @@ def set_tail_hot(
             user=user,
             bundle=bundle,
         )
+        if is_hot:
+            ensure_hot_departure_mission(
+                operation,
+                tail_number,
+                bundle=bundle,
+                mission_source=mission_source,
+            )
         if assignment:
             assignment.is_hot = False
     if note is not None:
@@ -836,6 +844,80 @@ def set_tail_hot(
         assignment.assigned_at = _utc_now()
     db.session.flush()
     return bundle.tail_state_for_tail(tail_number, create=True)
+
+
+def ensure_hot_departure_mission(
+    operation,
+    tail_number,
+    *,
+    bundle=None,
+    mission_source="manual",
+):
+    """Guarantee a HOT tail has the pending departure Fuel Dispatch consumes."""
+    tail_number = _normalize_tail(tail_number)
+    if not operation or not tail_number:
+        raise ParkingPlanError("A current-sort tail is required to mark HOT.")
+    bundle = bundle or ParkingPlanOperationalStateBundle.load(
+        operation.gateway,
+        operation,
+        include_timeline=False,
+    )
+    existing = bundle.active_mission_for_tail(tail_number, "departure")
+    if existing is not None:
+        return existing
+
+    source = (
+        "google_motherbrain"
+        if str(mission_source or "").strip().lower() == "google_motherbrain"
+        else "manual"
+    )
+    mission = SortDateMission(
+        sort_date_operation=operation,
+        sort_date=operation.sort_date,
+        gateway_code=operation.gateway_code,
+        sort_name=operation.sort_name,
+        mission_type="departure",
+        mission_source=source,
+        flight_number=_hot_placeholder_flight_number(tail_number),
+        origin=str(operation.gateway_code or "").strip().upper(),
+        destination="HOT",
+        timezone=gateway_timezone(operation.gateway),
+        planned_datetime_local=None,
+        planned_datetime_utc=None,
+        planned_source="unknown",
+        assigned_tail_number=tail_number,
+        tail_source=source,
+        fuel_status="waiting",
+        departure_status="scheduled",
+    )
+    db.session.add(mission)
+    db.session.flush()
+
+    from app.services.sort_date_operations import create_default_crew_assignments_for_mission
+
+    aircraft_type = derive_aircraft_type_from_tail_number(tail_number)
+    create_default_crew_assignments_for_mission(mission, aircraft_type)
+    bundle.missions.append(mission)
+    bundle.reindex()
+    db.session.flush()
+    return mission
+
+
+def is_hot_placeholder_mission(mission):
+    return bool(
+        mission
+        and mission.mission_type == "departure"
+        and str(mission.destination or "").strip().upper() == "HOT"
+        and str(mission.flight_number or "").strip().upper().startswith("HOT-")
+        and mission.planned_datetime_local is None
+        and mission.planned_datetime_utc is None
+        and not _mission_is_cancelled(mission)
+    )
+
+
+def _hot_placeholder_flight_number(tail_number):
+    tail_number = _normalize_tail(tail_number)
+    return f"HOT-{tail_number[-28:]}"
 
 
 def set_tail_out_of_service(
