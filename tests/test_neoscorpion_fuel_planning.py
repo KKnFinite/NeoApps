@@ -170,6 +170,120 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         self.assertEqual(sum(center_source.values()), Decimal("50500"))
         self.assertEqual(sum(left_source.values()), Decimal("50500"))
 
+    def test_remaining_above_wing_plan_rebalances_opposite_wing(self):
+        planned = plan_fuel_by_tank(
+            "B757",
+            25_500,
+            remaining_lbs_by_tank={
+                "left": 11_800,
+                "ctr": 0,
+                "right": 13_100,
+            },
+            apu_running=True,
+            apu_allowance_lbs=500,
+            apu_source_tank_code="left",
+            max_lateral_imbalance_lbs=1_000,
+        )
+        self.assertEqual(planned["right"], Decimal("13100"))
+        self.assertEqual(planned["left"], Decimal("12900"))
+        self.assertEqual(planned["ctr"], Decimal("0"))
+        self.assertEqual(sum(planned.values()), Decimal("26000"))
+
+    def test_remaining_rebalance_stays_original_when_limit_would_be_exceeded(self):
+        planned = plan_fuel_by_tank(
+            "B757",
+            25_500,
+            remaining_lbs_by_tank={
+                "left": 11_800,
+                "ctr": 0,
+                "right": 13_100,
+            },
+            apu_running=True,
+            apu_allowance_lbs=500,
+            apu_source_tank_code="left",
+            max_lateral_imbalance_lbs=100,
+        )
+        self.assertEqual(planned["left"], Decimal("13300"))
+        self.assertEqual(planned["right"], Decimal("12700"))
+        self.assertEqual(sum(planned.values()), Decimal("26000"))
+
+    def test_blank_lateral_limit_only_accepts_balance_improvements(self):
+        improved = plan_fuel_by_tank(
+            "B757",
+            25_500,
+            remaining_lbs_by_tank={
+                "left": 11_800,
+                "ctr": 0,
+                "right": 13_100,
+            },
+            apu_running=True,
+            apu_allowance_lbs=500,
+            apu_source_tank_code="left",
+        )
+        self.assertEqual(
+            (improved["left"], improved["right"]),
+            (Decimal("12900"), Decimal("13100")),
+        )
+
+        blocked = plan_fuel_by_tank(
+            "B757",
+            26_000,
+            remaining_lbs_by_tank={
+                "left": 13_500,
+                "ctr": 0,
+                "right": 10_000,
+            },
+            apu_running=False,
+            apu_allowance_lbs=0,
+        )
+        self.assertEqual(
+            (blocked["left"], blocked["right"]),
+            (Decimal("13000"), Decimal("13000")),
+        )
+
+    def test_center_remaining_displaces_both_sides_equally(self):
+        planned = plan_fuel_by_tank(
+            "A300",
+            80_000,
+            remaining_lbs_by_tank={
+                "l_out": 0,
+                "l_in": 0,
+                "ctr": 5_000,
+                "r_in": 0,
+                "r_out": 0,
+                "tt": 0,
+            },
+            apu_running=False,
+            apu_allowance_lbs=0,
+            max_lateral_imbalance_lbs=0,
+        )
+        left_total = planned["l_out"] + planned["l_in"]
+        right_total = planned["r_out"] + planned["r_in"]
+        self.assertEqual(planned["ctr"], Decimal("5000"))
+        self.assertEqual(left_total, Decimal("37500"))
+        self.assertEqual(right_total, Decimal("37500"))
+        self.assertEqual(sum(planned.values()), Decimal("80000"))
+
+    def test_defuel_can_plan_below_remaining_without_floor_rebalance(self):
+        planned = plan_fuel_by_tank(
+            "B757",
+            25_500,
+            remaining_lbs_by_tank={
+                "left": 11_800,
+                "ctr": 0,
+                "right": 13_100,
+            },
+            apu_running=True,
+            apu_allowance_lbs=500,
+            apu_source_tank_code="left",
+            max_lateral_imbalance_lbs=1_000,
+            rebalance_remaining_floors=False,
+        )
+        self.assertEqual(
+            (planned["left"], planned["right"]),
+            (Decimal("13300"), Decimal("12700")),
+        )
+
     def test_mirrored_base_rounding_is_left_biased_to_tenths(self):
         planned = plan_fuel_by_tank(
             "B757",

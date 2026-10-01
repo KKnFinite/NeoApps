@@ -714,6 +714,11 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             "assignment_pump_rate_b767er": "122",
             "assignment_pump_rate_b747_400": "123",
             "assignment_pump_rate_b747_8": "124",
+            "max_lateral_imbalance_b757_lbs": "1000",
+            "max_lateral_imbalance_a300_lbs": "1100",
+            "max_lateral_imbalance_b767er_lbs": "1200",
+            "max_lateral_imbalance_b747_400_lbs": "1300",
+            "max_lateral_imbalance_b747_8_lbs": "1400",
         }
         response = self.client.post("/neoscorpion/settings", data=valid_data)
         self.assertEqual(response.status_code, 302)
@@ -725,6 +730,20 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(NeoScorpionAircraftFuelSetting.query.count(), 5)
         configured = assignment_planning_settings(self.gateway)
         self.assertEqual(configured.pump_rate_for("B757"), Decimal("120.50"))
+        aircraft_rows = {
+            row.aircraft_type: row
+            for row in NeoScorpionAircraftFuelSetting.query.filter_by(
+                gateway_id=self.gateway.id
+            ).all()
+        }
+        self.assertEqual(
+            aircraft_rows["B757"].max_lateral_imbalance_lbs,
+            1000,
+        )
+        self.assertEqual(
+            aircraft_rows["A300"].max_lateral_imbalance_lbs,
+            1100,
+        )
         self.assertTrue(configured.is_complete_for("B757"))
         self.assertTrue(configured.is_complete_for("B747-8"))
 
@@ -733,6 +752,11 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             ("assignment_finishing_minutes", "-1", "Finishing Time cannot be negative"),
             ("assignment_pump_rate_b757", "0", "B757 pump rate must be greater than zero"),
             ("assignment_pump_rate_a300", "-1", "A300 pump rate must be greater than zero"),
+            (
+                "max_lateral_imbalance_b757_lbs",
+                "-1",
+                "B757 lateral imbalance must be a whole number of pounds",
+            ),
         ):
             invalid = self.client.post(
                 "/neoscorpion/settings",
