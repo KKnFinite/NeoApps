@@ -2,8 +2,9 @@
  * Move live elements, never clone forms or change mutation handlers/authority. */
 (() => {
   'use strict';
-  const bar = document.querySelector('[data-staffing-secondary]');
+  const bar = document.querySelector('[data-staffing-secondary]') || document.querySelector('[data-staffing-report-console]');
   if (!bar) return;
+  if (!bar.dataset.reportConsole) {
   const panel = bar.querySelector('[data-staffing-filter-panel]');
   const controls = bar.querySelector('[data-staffing-filter-controls]');
   const summary = bar.querySelector('[data-staffing-filter-summary]');
@@ -52,6 +53,8 @@
   panel.addEventListener('keydown', event => { if (event.key === 'Escape' && mobile.matches) { panel.open = false; panel.querySelector('summary').focus(); } });
   document.body.classList.add('staffing-controls-ready');
 
+  }
+
   // Per-tab URL state only. No automatic redirects, cross-user storage, or DB writes.
   // Org-unit IDs mean the same thing on People and Attendance; other filters stay page-local.
   const scopeKeys = ['sort_id','operation_id','department_id','work_area_id','work_area_ids'];
@@ -65,7 +68,7 @@
     '/neostaffing/vacation-selection': ['year'],
     '/neostaffing/vacation-selection/management': ['year','area_id'],
     '/neostaffing/vacation-selection/union': ['year'],
-    '/neostaffing/reports': [...scopeKeys,'report_type','classification','employee_status','assignment_status','attendance_date','attendance_status','year']
+    '/neostaffing/reports': [...scopeKeys,'report_type','classification','employee_status','assignment_status','attendance_date','attendance_status','year','active','include_management','scope_id','union_classification']
   };
   const current = new URL(window.location.href), key = 'neostaffing.filters.v1.' + bar.dataset.filterUser;
   try {

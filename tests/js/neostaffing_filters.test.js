@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function setup({invalid=false, denied=false, mobile=false}={}) {
+function setup({invalid=false, denied=false, mobile=false, reports=false}={}) {
   const events={}, timers=new Map(), moved=[], summary=[], actions=[];
   let submits=0, stored;
   const field={name:'search',value:'Worker',tagName:'INPUT',labels:[],
@@ -18,7 +18,7 @@ function setup({invalid=false, denied=false, mobile=false}={}) {
   const destinations=[{href:'http://local/neostaffing/attendance'},
     {href:'http://local/neostaffing/timecards'}, {href:'http://local/neostaffing/people?sort_id=9'},
     {href:'https://other/neostaffing/attendance'}];
-  const bar={dataset:{filterUser:'42'},querySelector:s=>({
+  const bar={dataset:{filterUser:'42', ...(reports ? {reportConsole:'true'} : {})},querySelector:s=>({
     '[data-staffing-filter-panel]':panel,'[data-staffing-filter-controls]':{append:x=>moved.push(x)},
     '[data-staffing-filter-summary]':{append:x=>summary.push(x)},
     '[data-staffing-secondary-nav]':{append:x=>moved.push(x)},
@@ -26,9 +26,9 @@ function setup({invalid=false, denied=false, mobile=false}={}) {
   }[s])};
   vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_filters.js','utf8'),{
     URL, setTimeout:fn=>{timers.set(1,fn);return 1;},clearTimeout:id=>timers.delete(id),
-    window:{location:{href:'http://local/neostaffing/people?sort_id=2&work_area_ids=4&work_area_ids=5&page=8&person_id=99'},
+    window:{location:{href:reports ? 'http://local/neostaffing/reports?sort_id=2&report_type=staffing&active=inactive' : 'http://local/neostaffing/people?sort_id=2&work_area_ids=4&work_area_ids=5&page=8&person_id=99'},
       matchMedia:()=>({matches:mobile,addEventListener(){}})},
-    document:{querySelector:()=>bar,body:{classList:{add(){}}},
+    document:{querySelector:s=>reports && s === '[data-staffing-secondary]' ? null : bar,body:{classList:{add(){}}},
       createElement:()=>({append(){}}),querySelectorAll:s=>({
         'form[data-staffing-filter]':[form,mutation],'[data-staffing-scope]':[scope],
         '[data-staffing-secondary-source]':[source],'[data-staffing-configure]':[configure],
@@ -62,4 +62,8 @@ test('scope follows nav only on compatible pages with allowlisted state',()=>{
 test('storage denial leaves ordinary links usable',()=>{
   const f=setup({denied:true});assert.equal(f.destinations[0].href,'http://local/neostaffing/attendance');
   f.events.change();assert.equal(f.submits(),1);
+});
+test('Reports retains shared URL state without moving its fixed console controls',()=>{
+  const f=setup({reports:true}); assert.equal(f.moved.length,0);
+  assert.deepEqual(f.stored['/neostaffing/reports'],[['sort_id','2'],['report_type','staffing'],['active','inactive']]);
 });

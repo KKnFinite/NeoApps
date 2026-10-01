@@ -1,0 +1,57 @@
+/* Reports owns one fixed console; shared Staffing navigation remains unchanged. */
+.neostaffing-reports-console { height:calc(100dvh - 122px); min-height:500px; }
+.neostaffing-reports-workspace { grid-template-rows:55px 46px 114px minmax(0,1fr); overflow:visible; }
+.neostaffing-reports-header { box-sizing:border-box; min-height:0; }
+.neostaffing-reports-mode-tabs { display:flex; align-items:center; gap:6px; padding:6px 12px; margin:0; border-bottom:1px solid #285057; min-width:0; }
+.neostaffing-reports-mode-tabs a { padding:7px 10px; border:1px solid #285057; border-radius:3px; background:#102329; color:#a6c9c7; font-size:.7rem; font-weight:700; white-space:nowrap; text-decoration:none; }
+.neostaffing-reports-mode-tabs a:nth-child(4) { margin-left:auto; }
+.neostaffing-reports-mode-tabs a[aria-current] { background:#16483f; border-color:#45cdbb; color:#efffff; }
+.neostaffing-report-controls { position:relative; margin:0; padding:10px 12px; border-bottom:1px solid #285057; background:#0a171b; min-width:0; box-sizing:border-box; }
+.neostaffing-report-scope-rail { display:grid; grid-template-columns:60px repeat(4,minmax(0,1fr)); align-items:end; gap:8px; }
+.neostaffing-report-scope-title { padding-bottom:8px; color:#8cb2b3; font-size:.7rem; letter-spacing:.07em; }
+.neostaffing-report-controls label { display:grid; gap:4px; min-width:0; color:#8cb2b3; font-size:.65rem; text-transform:uppercase; }
+.neostaffing-report-controls :is(select,input,button,summary) { box-sizing:border-box; max-width:100%; min-height:32px; padding:5px 8px; border:1px solid #285057; border-radius:3px; background:#102329; color:#d8eeee; font-size:.78rem; }
+.neostaffing-report-controls :is(select,input) { width:100%; }
+.neostaffing-reports-workspace :is(a,select,input,button,summary):focus-visible { outline:2px solid #45cdbb; outline-offset:2px; }
+.neostaffing-report-scope-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; height:38px; margin-top:7px; }
+.neostaffing-report-breadcrumb { color:#b9d6d4; font-size:.78rem; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.neostaffing-report-more summary { cursor:pointer; list-style:none; white-space:nowrap; font-size:.65rem; font-weight:700; color:#8ad6cd; }
+.neostaffing-report-more summary::-webkit-details-marker { display:none; }
+.neostaffing-report-extra-panel { position:absolute; top:100%; right:12px; left:12px; z-index:5; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; padding:14px; border:1px solid #285057; background:#101b21; box-shadow:0 8px 18px #0008; border-radius:4px; }
+.neostaffing-report-mobile-toggle,.neostaffing-report-filter-close { display:none; }
+.neostaffing-reports-results { display:flex; flex-direction:column; min-height:0; }
+.neostaffing-reports-results-head { min-height:48px; box-sizing:border-box; flex:none; }
+.neostaffing-reports-table-wrap { flex:1; }
+.neostaffing-reports-toolbar { box-sizing:border-box; align-content:center; grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) auto; margin:0; }
+.neostaffing-reports-toolbar > .neostaffing-report-filter-panel { display:flex; align-items:end; gap:10px; grid-column:1/-1; }
+.neostaffing-reports-toolbar .neostaffing-report-filter-panel label { flex:1; }
+@media(max-width:900px) {
+  .neostaffing-reports-console { display:block; height:auto; min-height:0; overflow:visible; }
+  .neostaffing-reports-workspace { grid-template-rows:55px 74px 54px auto; }
+  .neostaffing-reports-header { padding:8px 10px; }
+  .neostaffing-reports-header > div:first-child > span,.neostaffing-reports-header-status { display:none; }
+  .neostaffing-reports-mode-tabs { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:4px; padding:4px 8px; }
+  .neostaffing-reports-mode-tabs a { grid-column:span 2; padding:7px 3px; font-size:.63rem; text-align:center; }
+  .neostaffing-reports-mode-tabs a:nth-child(n+4) { grid-column:span 3; margin:0; }
+  .neostaffing-report-controls { padding:7px 10px; }
+  .neostaffing-report-mobile-toggle { display:block; width:100%; min-height:40px !important; cursor:pointer; }
+  .neostaffing-report-filter-panel { display:none; }
+  .neostaffing-reports-toolbar { display:block; }
+  .neostaffing-reports-toolbar > .neostaffing-report-filter-panel { display:none; }
+  .neostaffing-reports-toolbar > .neostaffing-report-filter-panel.is-open { display:block; }
+  .neostaffing-reports-toolbar .neostaffing-report-filter-panel label { margin-bottom:14px; }
+  .neostaffing-report-filter-panel.is-open { display:block; position:fixed; inset:68px 10px 78px; z-index:160; overflow:auto; padding:12px; border:1px solid #45cdbb; border-radius:6px; background:#101b21; box-shadow:0 0 0 100vmax #0009; }
+  .neostaffing-report-filter-close { display:block; width:100%; min-height:44px !important; margin-bottom:12px; }
+  .neostaffing-report-scope-rail { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .neostaffing-report-scope-title { grid-column:1/-1; padding:0; }
+  .neostaffing-report-controls :is(input,select) { min-height:44px; }
+  .neostaffing-report-scope-summary { display:block; height:auto; margin:14px 0; }
+  .neostaffing-report-breadcrumb { display:block; white-space:normal; margin-bottom:12px; }
+  .neostaffing-report-more summary { display:none; }
+  .neostaffing-report-extra-panel { position:static; grid-template-columns:repeat(2,minmax(0,1fr)); border:0; padding:0; box-shadow:none; }
+  .neostaffing-reports-results { min-height:0; }
+  .neostaffing-reports-count-strip { gap:4px; padding:6px; }
+  .neostaffing-reports-table { min-width:0; table-layout:fixed; font-size:.67rem; }
+  .neostaffing-reports-table :is(th,td) { padding:6px 3px; overflow-wrap:anywhere; }
+  .neostaffing-reports-table td > strong { font-size:.7rem; }
+}

@@ -5546,90 +5546,123 @@ def _resolve_attendance_sort(filters, selected_scope):
     return sorts[0] if len(sorts) == 1 else None
 
 
+def _reports_scope(filters):
+    """Normalize the cascading rail from one hierarchy read, without roster queries."""
+    units = StaffingUnit.query.order_by(
+        StaffingUnit.display_order, StaffingUnit.name, StaffingUnit.id
+    ).all()
+    by_id = {unit.id: unit for unit in units}
+    kinds = ("sort", "operation", "department", "work_area")
+    selected = {}
+    for kind in kinds:
+        unit = by_id.get(_parse_positive_int(filters.get(kind + "_id"), default=0))
+        selected[kind] = unit if unit and unit.unit_type == kind else None
+    # A deep link supplies its ancestors; an explicit incompatible ancestor wins.
+    for kind in reversed(kinds):
+        unit = selected[kind]
+        current = by_id.get(unit.parent_id) if unit else None
+        ancestors = {}
+        while current:
+            ancestors[current.unit_type] = current
+            current = by_id.get(current.parent_id)
+        if any(
+            selected.get(key) and selected[key].id != ancestor.id
+            for key, ancestor in ancestors.items()
+        ):
+            selected[kind] = None
+        else:
+            for key, ancestor in ancestors.items():
+                selected[key] = selected[key] or ancestor
+    normalized = dict(filters)
+    normalized.update({
+        kind + "_id": str(unit.id) if unit else ""
+        for kind, unit in selected.items()
+    })
+    options = {kind + "s": [] for kind in kinds}
+    for unit in units:
+        ancestors = {}
+        current = by_id.get(unit.parent_id)
+        while current:
+            ancestors[current.unit_type] = str(current.id)
+            current = by_id.get(current.parent_id)
+        options[unit.unit_type + "s"].append({"id": unit.id, "name": unit.name, "ancestors": ancestors})
+    labels = [selected[kind].name for kind in kinds if selected[kind]]
+    if not selected["work_area"]:
+        labels.append("All Work Areas")
+    return normalized, {"options": options, "breadcrumb": " › ".join(labels)}
+
+
 def reports_context(filters=None, user=None):
-    filters = filters or {}
-    filters = _with_default_management_scope(filters, user)
+    filters = _with_default_management_scope(filters or {}, user)
     report_type = str(filters.get("report_type") or "staffing").strip().lower()
     if report_type not in {"staffing", "seniority", "attendance"}:
         report_type = "staffing"
-    staffing = people_context(
-        {
-            "sort_id": filters.get("sort_id", ""),
-            "operation_id": filters.get("operation_id", ""),
-            "department_id": filters.get("department_id", ""),
-            "work_area_id": filters.get("work_area_id", ""),
-            "classification": filters.get("classification", ""),
-            "employee_status": filters.get("employee_status", ""),
-            "active": filters.get("active", "active"),
-            "search": filters.get("search", ""),
-            "include_management": filters.get("include_management", ""),
-            "search": filters.get("search", ""),
-            "assignment_status": filters.get("assignment_status", ""),
-            "per_page": "all",
-        }
-    )
-    seniority = seniority_context(
-        {
-            "sort_id": filters.get("sort_id", ""),
-            "operation_id": filters.get("operation_id", ""),
-            "department_id": filters.get("department_id", ""),
-            "work_area_id": filters.get("work_area_id", ""),
-            "classification": filters.get("classification", ""),
-            "employee_status": filters.get("employee_status", ""),
-            "active": filters.get("active", "active"),
-        }
-    )
-    attendance_date = _parse_optional_date(filters.get("attendance_date"))
-    attendance_query = StaffingDailyAttendance.query.join(StaffingPerson)
-    if attendance_date:
-        attendance_query = attendance_query.filter(
-            StaffingDailyAttendance.attendance_date == attendance_date
-        )
-    attendance_status = str(filters.get("attendance_status") or "").strip()
-    if attendance_status in STAFFING_DAILY_ATTENDANCE_STATUSES:
-        attendance_query = attendance_query.filter(
-            StaffingDailyAttendance.status == attendance_status
-        )
-    selected_scope = _resolve_attendance_scope(filters)
-    if selected_scope:
-        work_area_ids = work_area_ids_under(selected_scope)
-        attendance_query = attendance_query.filter(
-            StaffingDailyAttendance.work_area_unit_id.in_(work_area_ids or {-1})
-        )
-    attendance_rows = attendance_query.order_by(
-        StaffingDailyAttendance.attendance_date.desc(),
-        StaffingPerson.last_name,
-        StaffingPerson.first_name,
-    ).all()
+    filters, scope = _reports_scope(filters)
+    staffing = seniority = None
+    attendance_rows = []
     attendance_counts = {}
-    for record in attendance_rows:
-        attendance_counts[record.status] = attendance_counts.get(record.status, 0) + 1
+    if report_type == "staffing":
+        staffing = people_context(dict(filters, per_page="all"))
+    elif report_type == "seniority":
+        seniority = seniority_context({key: filters.get(key, "active" if key == "active" else "") for key in (
+            "sort_id", "operation_id", "department_id", "work_area_id",
+            "classification", "employee_status", "active",
+        )})
+        # Preserve the existing single-operation auto-selection in Seniority.
+        filters.update({key: seniority["filters"][key] for key in ("sort_id", "operation_id")})
+        labels = [seniority.get("selected_" + kind) for kind in (
+            "sort", "operation", "department", "work_area"
+        )]
+        scope["breadcrumb"] = " › ".join(
+            [unit.name for unit in labels if unit]
+            + ([] if labels[-1] else ["All Work Areas"])
+        )
+    else:
+        attendance_date = _parse_optional_date(filters.get("attendance_date"))
+        query = StaffingDailyAttendance.query.join(StaffingPerson).options(
+            joinedload(StaffingDailyAttendance.person),
+            joinedload(StaffingDailyAttendance.work_area),
+        )
+        if attendance_date:
+            query = query.filter(StaffingDailyAttendance.attendance_date == attendance_date)
+        attendance_status = str(filters.get("attendance_status") or "").strip()
+        if attendance_status in STAFFING_DAILY_ATTENDANCE_STATUSES:
+            query = query.filter(StaffingDailyAttendance.status == attendance_status)
+        selected_scope = _resolve_attendance_scope(filters)
+        if selected_scope:
+            query = query.filter(StaffingDailyAttendance.work_area_unit_id.in_(
+                work_area_ids_under(selected_scope) or {-1}
+            ))
+        # Employee filters operate on recorded outcomes, never reconstruct a roster.
+        classification = filters.get("classification", "")
+        if classification in STAFFING_CLASSIFICATIONS:
+            query = query.filter(StaffingPerson.classification == classification)
+        if filters.get("active") in {"active", "inactive"}:
+            query = query.filter(StaffingPerson.active.is_(filters["active"] == "active"))
+        attendance_rows = query.order_by(
+            StaffingDailyAttendance.attendance_date.desc(),
+            StaffingPerson.last_name, StaffingPerson.first_name,
+        ).all()
+        for record in attendance_rows:
+            attendance_counts[record.status] = attendance_counts.get(record.status, 0) + 1
+    filter_keys = (
+        "sort_id", "operation_id", "department_id", "work_area_id", "classification",
+        "employee_status", "assignment_status", "attendance_date", "attendance_status",
+        "active", "search", "include_management",
+    )
     return {
         "report_type": report_type,
+        "scope": scope,
         "staffing": staffing,
         "seniority": seniority,
         "attendance_rows": attendance_rows,
         "attendance_counts": attendance_counts,
-        "staffing_classification_counts": _people_count_by(staffing["all_rows"], "classification"),
-        "staffing_employee_status_counts": _people_count_by(staffing["all_rows"], "employee_status"),
+        "staffing_classification_counts": _people_count_by(staffing["all_rows"], "classification") if staffing else {},
+        "staffing_employee_status_counts": _people_count_by(staffing["all_rows"], "employee_status") if staffing else {},
         "attendance_status_choices": attendance_status_choices(),
         "classification_choices": classification_choices(),
         "employee_status_choices": employee_status_choices(),
-        "filters": {
-            "report_type": report_type,
-            "sort_id": filters.get("sort_id", ""),
-            "operation_id": filters.get("operation_id", ""),
-            "department_id": filters.get("department_id", ""),
-            "work_area_id": filters.get("work_area_id", ""),
-            "classification": filters.get("classification", ""),
-            "employee_status": filters.get("employee_status", ""),
-            "assignment_status": filters.get("assignment_status", ""),
-            "attendance_date": filters.get("attendance_date", ""),
-            "attendance_status": filters.get("attendance_status", ""),
-            "active": filters.get("active", ""),
-            "search": filters.get("search", ""),
-            "include_management": filters.get("include_management", ""),
-        },
+        "filters": dict({key: filters.get(key, "") for key in filter_keys}, report_type=report_type),
     }
 
 
@@ -5947,6 +5980,7 @@ def _seniority_work_assignment_rows(operation, allowed_work_area_ids, filters):
     query = (
         StaffingWorkAssignment.query.join(StaffingPerson)
         .join(StaffingUnit, StaffingWorkAssignment.work_area)
+        .options(joinedload(StaffingWorkAssignment.person), joinedload(StaffingWorkAssignment.work_area))
         .filter(
             StaffingWorkAssignment.active.is_(True),
             StaffingWorkAssignment.work_area_unit_id.in_(allowed_work_area_ids or {-1}),
@@ -5981,6 +6015,7 @@ def _seniority_management_rows(operation, filters):
     query = (
         StaffingLeadershipAssignment.query.join(StaffingPerson)
         .join(StaffingUnit)
+        .options(joinedload(StaffingLeadershipAssignment.person), joinedload(StaffingLeadershipAssignment.unit))
         .filter(
             StaffingLeadershipAssignment.active.is_(True),
             StaffingLeadershipAssignment.unit_id.in_(allowed_unit_ids or {-1}),

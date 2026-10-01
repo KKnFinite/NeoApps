@@ -990,6 +990,11 @@ def reports():
         )
     return render_template(
         "neostaffing/reports.html",
+        report_tab_filters={key: request.args[key] for key in (
+            "sort_id", "operation_id", "department_id", "work_area_id", "classification",
+            "employee_status", "assignment_status", "active", "attendance_date", "attendance_status",
+            "search", "include_management", "year", "scope_id", "union_classification",
+        ) if key in request.args},
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=can_manage,
         reports=context,

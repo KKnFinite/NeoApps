@@ -1,0 +1,43 @@
+<form class="neostaffing-report-controls" data-report-auto method="get" aria-label="Report controls">
+    <input type="hidden" name="report_type" value="{{ reports.report_type }}">
+    <button type="button" class="neostaffing-report-mobile-toggle" data-report-filter-toggle aria-expanded="false" aria-controls="report-filter-panel">FILTERS</button>
+    <div class="neostaffing-report-filter-panel" id="report-filter-panel" data-report-filter-panel>
+        <button type="button" class="neostaffing-report-filter-close" data-report-filter-close>CLOSE FILTERS</button>
+        <div class="neostaffing-report-scope-rail" aria-label="Scope">
+            <span class="neostaffing-report-scope-title">SCOPE</span>
+            {% for kind, label in [('sort', 'Sort'), ('operation', 'Operation'), ('department', 'Department'), ('work_area', 'Work Area')] %}
+            <label><span>{{ label }}</span><select name="{{ kind }}_id" data-report-scope="{{ kind }}">
+                <option value="">{{ 'All / Auto' if kind in ('sort', 'operation') else 'All' }}</option>
+                {% for unit in reports.scope.options[kind + 's'] %}
+                <option value="{{ unit.id }}"{% if filters[kind + '_id']|string == unit.id|string %} selected{% endif %}{% for ancestor, id in unit.ancestors.items() %} data-{{ ancestor }}="{{ id }}"{% endfor %}>{{ unit.name }}</option>
+                {% endfor %}
+            </select></label>
+            {% endfor %}
+        </div>
+        <div class="neostaffing-report-scope-summary">
+            <span class="neostaffing-report-breadcrumb" data-report-breadcrumb>{{ reports.scope.breadcrumb }}</span>
+            <details class="neostaffing-report-more" data-report-more>
+                <summary>MORE FILTERS</summary>
+                <div class="neostaffing-report-extra-panel">
+                    {% if reports.report_type == 'attendance' %}
+                    <label><span>Date</span><input type="date" name="attendance_date" value="{{ filters.attendance_date }}"></label>
+                    <label><span>Attendance Status</span><select name="attendance_status"><option value="">All</option>{% for value, label in reports.attendance_status_choices %}<option value="{{ value }}"{% if filters.attendance_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    {% endif %}
+                    <label><span>Classification</span><select name="classification"><option value="">All</option>{% for value, label in reports.classification_choices %}<option value="{{ value }}"{% if filters.classification == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    {% if reports.report_type == 'staffing' %}
+                    <label><span>Employee Status</span><select name="employee_status"><option value="">All</option>{% for value, label in reports.employee_status_choices %}<option value="{{ value }}"{% if filters.employee_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label><span>Assignment</span><select name="assignment_status"><option value="">All</option><option value="assigned"{% if filters.assignment_status == 'assigned' %} selected{% endif %}>Assigned</option><option value="unassigned"{% if filters.assignment_status == 'unassigned' %} selected{% endif %}>Unassigned</option></select></label>
+                    {% endif %}
+                    <label><span>Active / Inactive</span><select name="active"><option value="">All</option><option value="active"{% if filters.active == 'active' %} selected{% endif %}>Active</option><option value="inactive"{% if filters.active == 'inactive' %} selected{% endif %}>Inactive</option></select></label>
+                </div>
+            </details>
+        </div>
+    </div>
+    {# Preserve compatible link/filter state without expanding the visible panel. #}
+    {% for key in ['search', 'include_management', 'employee_status', 'assignment_status', 'attendance_date', 'attendance_status'] %}
+    {% if filters[key] and (key in ('search', 'include_management') or (key in ('employee_status', 'assignment_status') and reports.report_type != 'staffing') or (key in ('attendance_date', 'attendance_status') and reports.report_type != 'attendance')) %}
+    <input type="hidden" name="{{ key }}" value="{{ filters[key] }}">
+    {% endif %}
+    {% endfor %}
+    <noscript><button type="submit">UPDATE FILTERS</button></noscript>
+</form>

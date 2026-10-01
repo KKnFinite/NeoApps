@@ -816,7 +816,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
 
         self.assertEqual(staffing.status_code, 200)
         self.assertIn(b"neostaffing-reports-console", staffing.data)
-        self.assertIn(b"SCOPE / FILTERS", staffing.data)
+        self.assertIn(b"MORE FILTERS", staffing.data)
         self.assertIn(b"DEDUPLICATED EMPLOYEE ROSTER", staffing.data)
         self.assertIn(b"neostaffing-reports-table-wrap", staffing.data)
         self.assertIn(b"STAFFING REPORT", staffing.data)
@@ -884,6 +884,105 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"RF100", attendance.data)
         self.assertIn(b"Call In", attendance.data)
         self.assertNotIn(b"RF101", attendance.data)
+
+    def test_reports_console_families_retained_filters_and_access(self):
+        user = self._user("console_admin")
+        self._grant_app_access(user, "neostaffing", "master")
+        sort, operation, department, area = self._staffing_hierarchy()
+        db.session.commit()
+        self._login(user.username)
+        for family in ('staffing', 'seniority', 'attendance', 'vacation_calendars', 'union_seniority'):
+            with self.subTest(family=family):
+                response = self.client.get(f'/neostaffing/reports?report_type={family}&work_area_id={area.id}&classification=part_time&active=inactive')
+                self.assertEqual(response.status_code, 200)
+                html = response.get_data(as_text=True)
+                self.assertNotIn('data-staffing-secondary ', html)
+                self.assertNotIn('name="report_type">', html)
+                self.assertNotIn('RUN REPORT', html)
+                self.assertEqual(html.count('aria-label="Report families"'), 1)
+                tabs = html.split('aria-label="Report families"', 1)[1].split('</nav>', 1)[0]
+                self.assertEqual(tabs.count('<a '), 5)
+                for label in ('STAFFING', 'SENIORITY', 'ATTENDANCE', 'VACATION CALENDARS', 'UNION SENIORITY'):
+                    self.assertIn(label, tabs)
+                self.assertIn('classification=part_time', tabs)
+                self.assertIn('active=inactive', tabs)
+                self.assertIn('data-report-filter-toggle', html)
+                if family in ('staffing','seniority','attendance'):
+                    self.assertIn('data-report-scope="work_area"', html)
+                    self.assertIn('Night Sort › Shift Operation › East Shift Department › EBM', html)
+                    self.assertIn('value="inactive" selected', html)
+        self.client.get('/logout')
+        stranger = self._user('console_stranger')
+        db.session.commit()
+        self._login(stranger.username)
+        for family in ('staffing','seniority','attendance','vacation_calendars','union_seniority'):
+            self.assertEqual(self.client.get('/neostaffing/reports?report_type=' + family).status_code, 302)
+
+    def test_reports_scope_cascades_and_only_selected_family_loads(self):
+        sort, operation, department, area = self._staffing_hierarchy()
+        other_sort = staffing_service.create_unit({'unit_type':'sort','name':'Day'})
+        db.session.commit()
+        filters = {'work_area_id':str(area.id), 'classification':'part_time', 'active':'active'}
+        context = staffing_service.reports_context(filters)
+        for key, unit in (('sort_id',sort),('operation_id',operation),('department_id',department),('work_area_id',area)):
+            self.assertEqual(context['filters'][key], str(unit.id))
+        incompatible = staffing_service.reports_context(dict(filters, sort_id=str(other_sort.id)))
+        self.assertEqual(incompatible['filters']['work_area_id'], '')
+        self.assertEqual(incompatible['filters']['sort_id'], str(other_sort.id))
+        with patch.object(staffing_service, 'people_context', side_effect=AssertionError('unused roster')):
+            attendance = staffing_service.reports_context(dict(filters,report_type='attendance'))
+            seniority = staffing_service.reports_context(dict(filters,report_type='seniority'))
+        self.assertIsNone(attendance['staffing'])
+        self.assertIsNone(attendance['seniority'])
+        self.assertIsNone(seniority['staffing'])
+        # An unused attendance filter must not be parsed or queried on Staffing.
+        with patch.object(staffing_service, 'seniority_context', side_effect=AssertionError('unused seniority')):
+            staffing_service.reports_context(dict(filters, attendance_date='not-a-date'))
+        manager_user = self._user('console_scoped_manager')
+        self._grant_app_access(manager_user, 'neostaffing', 'operator')
+        manager = staffing_service.create_person(dict(
+            employee_id=manager_user.employee_id, first_name='Scope', last_name='Supervisor',
+            seniority_date='2020-01-01', classification='full_time_supervisor',
+        ))
+        db.session.add(StaffingLeadershipAssignment(person=manager, unit=department, leadership_level='department', active=True))
+        db.session.commit()
+        self._login(manager_user.username)
+        for family in ('staffing', 'seniority', 'attendance'):
+            page = self.client.get('/neostaffing/reports?report_type=' + family)
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(f'<option value="{department.id}" selected'.encode(), page.data)
+
+    def test_reports_query_budgets_do_not_grow_per_employee(self):
+        from sqlalchemy import event
+        sort, operation, department, area = self._staffing_hierarchy()
+        ids = sort.id, operation.id, department.id, area.id
+        def add_person(index):
+            person = staffing_service.create_person(dict(employee_id=f'CONSOLE{index}',first_name='Query',last_name=f'Person{index}',seniority_date='2020-01-01',classification='part_time'))
+            staffing_service.assign_work_area(person, db.session.get(StaffingUnit, ids[3]))
+            db.session.add(StaffingDailyAttendance(person_id=person.id, attendance_date=date(2026,7,3), sort_unit_id=ids[0], operation_unit_id=ids[1], department_unit_id=ids[2], work_area_unit_id=ids[3], status='here'))
+        def measure(family):
+            db.session.remove()
+            statements = []
+            def record(_conn, _cursor, statement, _params, _context, _many): statements.append(statement)
+            event.listen(db.engine, 'before_cursor_execute', record)
+            try:
+                context = staffing_service.reports_context(dict(report_type=family, operation_id=str(ids[1])))
+                if family == 'attendance':
+                    for row in context['attendance_rows']: _ = row.person.full_name, row.work_area.name
+            finally:
+                event.remove(db.engine, 'before_cursor_execute', record)
+            self.assertFalse(any(sql.lstrip().upper().startswith(('INSERT','UPDATE','DELETE')) for sql in statements))
+            if family != 'attendance':
+                self.assertFalse(any('FROM staffing_daily_attendance' in sql for sql in statements))
+            return len(statements)
+        add_person(0); db.session.commit()
+        before = {family:measure(family) for family in ('staffing','seniority','attendance')}
+        for index in range(1,20): add_person(index)
+        db.session.commit()
+        after = {family:measure(family) for family in before}
+        self.assertEqual(before, after)
+        for family, budget in (('staffing',13),('seniority',8),('attendance',5)):
+            self.assertLessEqual(after[family], budget)
 
     def test_user_without_neostaffing_access_cannot_open_dashboard(self):
         user = self._user("no_staffing")
