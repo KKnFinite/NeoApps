@@ -226,6 +226,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
+        "max_lateral_imbalance_lbs": "INTEGER",
     },
     "neoscorpion_fuel_assignments": {
         "ready_for_fuel_at_utc": "DATETIME",
@@ -449,6 +450,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
+        "max_lateral_imbalance_lbs": "INTEGER",
     },
     "neoscorpion_fuel_assignments": {
         "ready_for_fuel_at_utc": "TIMESTAMP",

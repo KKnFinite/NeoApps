@@ -69,6 +69,13 @@
                 <input name="{{ item.field_name }}" value="{{ item.rate if item.rate is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
             </label>
             {% endfor %}
+            <p class="neoscorpion-helper">Maximum Lateral Fuel Imbalance, pounds</p>
+            <p class="neoscorpion-helper">Used when Remaining fuel forces a wing-plan adjustment. Blank is conservative: Neo may reduce imbalance, but will not increase it beyond the base plan until a type-specific limit is entered.</p>
+            {% for item in lateral_imbalance_settings %}
+            <label>{{ item.aircraft_type }}, max lateral imbalance
+                <input name="{{ item.field_name }}" value="{{ item.value }}" inputmode="numeric" min="0" step="1" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            {% endfor %}
             {% if can_edit %}
             <button class="action-button neoscorpion-save-button" type="submit">Save Assignment Planning</button>
             {% endif %}

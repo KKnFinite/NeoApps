@@ -1,6 +1,59 @@
 from decimal import Decimal, ROUND_HALF_UP
 
 
+_LATERAL_TANK_LAYOUTS = {
+    "B757": {
+        "left": ("left",),
+        "right": ("right",),
+        "neutral": ("ctr",),
+        "mirrors": {"left": "right", "right": "left"},
+    },
+    "B767ER": {
+        "left": ("left",),
+        "right": ("right",),
+        "neutral": ("ctr",),
+        "mirrors": {"left": "right", "right": "left"},
+    },
+    "A300": {
+        "left": ("l_out", "l_in"),
+        "right": ("r_out", "r_in"),
+        "neutral": ("ctr", "tt"),
+        "mirrors": {
+            "l_out": "r_out",
+            "r_out": "l_out",
+            "l_in": "r_in",
+            "r_in": "l_in",
+        },
+    },
+    "B747-400": {
+        "left": ("main_l_out", "main_l_in", "reserve_2_l"),
+        "right": ("main_r_out", "main_r_in", "reserve_3_r"),
+        "neutral": ("center_wing",),
+        "mirrors": {
+            "main_l_out": "main_r_out",
+            "main_r_out": "main_l_out",
+            "main_l_in": "main_r_in",
+            "main_r_in": "main_l_in",
+            "reserve_2_l": "reserve_3_r",
+            "reserve_3_r": "reserve_2_l",
+        },
+    },
+    "B747-8": {
+        "left": ("main_l_out", "main_l_in", "reserve_1_l"),
+        "right": ("main_r_out", "main_r_in", "reserve_4_r"),
+        "neutral": ("center_wing",),
+        "mirrors": {
+            "main_l_out": "main_r_out",
+            "main_r_out": "main_l_out",
+            "main_l_in": "main_r_in",
+            "main_r_in": "main_l_in",
+            "reserve_1_l": "reserve_4_r",
+            "reserve_4_r": "reserve_1_l",
+        },
+    },
+}
+
+
 def plan_fuel_by_tank(
     aircraft_type,
     required_lbs,
@@ -10,6 +63,8 @@ def plan_fuel_by_tank(
     apu_running=None,
     apu_allowance_lbs=None,
     apu_source_tank_code=None,
+    max_lateral_imbalance_lbs=None,
+    rebalance_remaining_floors=True,
 ):
     """Return the Hanzo-equivalent planned pounds by tank, or None if incomplete."""
     if required_lbs is None or apu_running is None:
@@ -41,13 +96,159 @@ def plan_fuel_by_tank(
         required,
     )
     if apu_running:
-        if (
-            apu_allowance_lbs is None
-            or apu_source_tank_code not in planned
-        ):
+        if apu_allowance_lbs is None or apu_source_tank_code not in planned:
             return None
         planned[apu_source_tank_code] += _decimal(apu_allowance_lbs)
+
+    if rebalance_remaining_floors:
+        planned = _rebalance_remaining_floors(
+            aircraft_type,
+            planned,
+            remaining,
+            max_lateral_imbalance_lbs=max_lateral_imbalance_lbs,
+        )
     return planned
+
+
+def _rebalance_remaining_floors(
+    aircraft_type,
+    planned,
+    remaining,
+    *,
+    max_lateral_imbalance_lbs,
+):
+    """Respect measured Remaining fuel without changing the planned total."""
+    layout = _LATERAL_TANK_LAYOUTS.get(aircraft_type)
+    if layout is None:
+        return planned
+
+    original = dict(planned)
+    result = dict(planned)
+    floors = {
+        code: max(Decimal("0"), remaining.get(code, Decimal("0")))
+        for code in result
+    }
+
+    baseline_imbalance = _lateral_imbalance(original, layout)
+    if max_lateral_imbalance_lbs is None:
+        # Until a type-specific operational limit is configured, only accept a
+        # correction that does not make the original plan less balanced.
+        allowed_imbalance = baseline_imbalance
+    else:
+        allowed_imbalance = max(
+            Decimal("0"),
+            _decimal(max_lateral_imbalance_lbs),
+        )
+
+    # Fuel already present in a center/neutral tank displaces both sides
+    # equally. Never reduce another tank below its measured Remaining value.
+    for tank_code in layout["neutral"]:
+        if tank_code not in result:
+            continue
+        floor = floors.get(tank_code, Decimal("0"))
+        if floor <= result[tank_code]:
+            continue
+        delta = floor - result[tank_code]
+        candidate = dict(result)
+        candidate[tank_code] = floor
+        per_side = delta / Decimal("2")
+        if not _reduce_group(candidate, floors, layout["left"], per_side):
+            continue
+        if not _reduce_group(candidate, floors, layout["right"], per_side):
+            continue
+        result = candidate
+
+    # A wing tank whose measured Remaining exceeds plan becomes a hard floor.
+    # Offset those pounds from the opposite wing, then enforce the configured
+    # lateral side-to-side limit.
+    side_codes = tuple(layout["left"]) + tuple(layout["right"])
+    excesses = sorted(
+        (
+            (
+                floors.get(code, Decimal("0"))
+                - result.get(code, Decimal("0")),
+                code,
+            )
+            for code in side_codes
+        ),
+        reverse=True,
+    )
+    for excess, tank_code in excesses:
+        if excess <= 0:
+            continue
+
+        current = result.get(tank_code, Decimal("0"))
+        floor = floors.get(tank_code, Decimal("0"))
+        if floor <= current:
+            continue
+
+        candidate = dict(result)
+        delta = floor - current
+        candidate[tank_code] = floor
+        on_left = tank_code in layout["left"]
+        opposite_group = layout["right"] if on_left else layout["left"]
+        if not _reduce_group(
+            candidate,
+            floors,
+            opposite_group,
+            delta,
+            preferred=layout["mirrors"].get(tank_code),
+        ):
+            continue
+        if _lateral_imbalance(candidate, layout) > allowed_imbalance:
+            continue
+        result = candidate
+
+    return result
+
+
+def _reduce_group(planned, floors, tank_codes, amount, *, preferred=None):
+    amount = _decimal(amount)
+    if amount <= 0:
+        return True
+
+    ordered = []
+    if preferred in tank_codes:
+        ordered.append(preferred)
+    ordered.extend(
+        code
+        for code in sorted(
+            (code for code in tank_codes if code != preferred),
+            key=lambda code: (
+                planned.get(code, Decimal("0"))
+                - floors.get(code, Decimal("0"))
+            ),
+            reverse=True,
+        )
+    )
+
+    remaining_amount = amount
+    for code in ordered:
+        headroom = max(
+            Decimal("0"),
+            planned.get(code, Decimal("0"))
+            - floors.get(code, Decimal("0")),
+        )
+        if headroom <= 0:
+            continue
+        reduction = min(headroom, remaining_amount)
+        planned[code] -= reduction
+        remaining_amount -= reduction
+        if remaining_amount == 0:
+            return True
+    return remaining_amount == 0
+
+
+def _lateral_imbalance(planned, layout):
+    left = sum(
+        (planned.get(code, Decimal("0")) for code in layout["left"]),
+        Decimal("0"),
+    )
+    right = sum(
+        (planned.get(code, Decimal("0")) for code in layout["right"]),
+        Decimal("0"),
+    )
+    return abs(left - right)
 
 
 def _round_base_distribution(aircraft_type, planned, required):

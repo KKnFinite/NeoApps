@@ -467,6 +467,10 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         }
 
     missions = _departure_missions(operation)
+    (
+        apu_rates_by_aircraft_type,
+        lateral_imbalance_limits_by_aircraft_type,
+    ) = _effective_aircraft_fuel_configuration(gateway.id)
     assignments_by_mission = _assignments_by_mission(operation)
     fuel_work_states = _fuel_work_states_by_assignment_tail(
         assignments_by_mission.values()
@@ -496,6 +500,10 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         fuel_work_states_by_assignment_tail=fuel_work_states,
         nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
         fueling_event_cycle_keys=fueling_event_cycle_keys,
+        apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
+        lateral_imbalance_limits_by_aircraft_type=(
+            lateral_imbalance_limits_by_aircraft_type
+        ),
         fuel_density_lbs_per_gallon=fuel_density,
         planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
     )
@@ -611,11 +619,19 @@ def hanzo_context(gateway):
     fuel_work_states = _fuel_work_states_by_assignment_tail(
         assignments_by_mission.values()
     )
+    (
+        apu_rates_by_aircraft_type,
+        lateral_imbalance_limits_by_aircraft_type,
+    ) = _effective_aircraft_fuel_configuration(gateway.id)
     rows = _fuel_rows(
         operation,
         missions,
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
+        apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
+        lateral_imbalance_limits_by_aircraft_type=(
+            lateral_imbalance_limits_by_aircraft_type
+        ),
     )
     for row in rows:
         row["hanzo_status"] = _hanzo_planning_status(row)
@@ -672,7 +688,10 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         assignment.sort_date_mission_id: assignment for assignment in assignments
     }
     fuel_work_states = _fuel_work_states_by_assignment_tail(assignments)
-    apu_rates_by_aircraft_type = _effective_apu_rates(gateway.id)
+    (
+        apu_rates_by_aircraft_type,
+        lateral_imbalance_limits_by_aircraft_type,
+    ) = _effective_aircraft_fuel_configuration(gateway.id)
     rows = _fuel_rows(
         operation,
         missions,
@@ -680,6 +699,9 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
         apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
+        lateral_imbalance_limits_by_aircraft_type=(
+            lateral_imbalance_limits_by_aircraft_type
+        ),
     )
     for row in rows:
         work = row["fuel_work_state"]
@@ -775,6 +797,19 @@ def settings_context(gateway):
                 "aircraft_type": aircraft_type,
                 "field_name": _assignment_pump_rate_field_name(aircraft_type),
                 "rate": assignment_planning.pump_rate_for(aircraft_type),
+            }
+            for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
+        ],
+        "lateral_imbalance_settings": [
+            {
+                "aircraft_type": aircraft_type,
+                "field_name": _max_lateral_imbalance_field_name(aircraft_type),
+                "value": (
+                    overrides[aircraft_type].max_lateral_imbalance_lbs
+                    if aircraft_type in overrides
+                    and overrides[aircraft_type].max_lateral_imbalance_lbs is not None
+                    else ""
+                ),
             }
             for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES
         ],
@@ -3996,6 +4031,7 @@ def _close_current_truck_segment(
     )
     _populate_fueling_event_snapshot(
         fueling_event,
+        operation,
         assignment,
         mission,
         fuel_work_state,
@@ -4018,6 +4054,7 @@ def _close_current_truck_segment(
 
 def _populate_fueling_event_snapshot(
     fueling_event,
+    operation,
     assignment,
     mission,
     fuel_work_state,
@@ -4064,6 +4101,13 @@ def _populate_fueling_event_snapshot(
         apu_running=fuel_work_state.apu_running,
         apu_allowance_lbs=fuel_work_state.apu_allowance_lbs,
         apu_source_tank_code=fuel_work_state.apu_source_tank_code,
+        max_lateral_imbalance_lbs=_effective_lateral_imbalance_limit(
+            operation.gateway_id,
+            detailed_aircraft_type,
+        ),
+        rebalance_remaining_floors=(
+            _assignment_cycle_type(assignment) != "defuel"
+        ),
     )
     for tank_code, _tank_label in tank_layout:
         tank_state = tank_states_by_code.get(tank_code)
@@ -4221,8 +4265,17 @@ def save_aircraft_fuel_settings(gateway, user, form):
         setting = existing.get(aircraft_type)
         if target_rate == DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR:
             if setting is not None:
-                db.session.delete(setting)
-                changed = True
+                has_other_aircraft_settings = bool(
+                    setting.assignment_pump_rate_gallons_per_minute is not None
+                    or setting.max_lateral_imbalance_lbs is not None
+                )
+                if not has_other_aircraft_settings:
+                    db.session.delete(setting)
+                    changed = True
+                elif Decimal(setting.apu_rate_thousand_lbs_per_hour) != target_rate:
+                    setting.apu_rate_thousand_lbs_per_hour = target_rate
+                    setting.updated_by_user_id = user.id
+                    changed = True
             continue
         row_changed = False
         if setting is None:
@@ -4284,12 +4337,25 @@ def save_assignment_planning_settings(gateway, user, form):
         .all()
     }
     for aircraft_type in NEOSCORPION_ASSIGNMENT_PLANNING_AIRCRAFT_TYPES:
-        field_name = _assignment_pump_rate_field_name(aircraft_type)
-        if field_name not in form:
+        pump_field = _assignment_pump_rate_field_name(aircraft_type)
+        imbalance_field = _max_lateral_imbalance_field_name(aircraft_type)
+        if pump_field not in form and imbalance_field not in form:
             continue
-        target_rate = _parse_optional_pump_rate(form.get(field_name), aircraft_type)
+        target_rate = (
+            _parse_optional_pump_rate(form.get(pump_field), aircraft_type)
+            if pump_field in form
+            else None
+        )
+        target_imbalance = (
+            _parse_optional_lateral_imbalance(
+                form.get(imbalance_field),
+                aircraft_type,
+            )
+            if imbalance_field in form
+            else None
+        )
         setting = existing.get(aircraft_type)
-        if setting is None and target_rate is None:
+        if setting is None and target_rate is None and target_imbalance is None:
             continue
         if setting is None:
             setting = NeoScorpionAircraftFuelSetting(
@@ -4297,12 +4363,28 @@ def save_assignment_planning_settings(gateway, user, form):
                 aircraft_type=aircraft_type,
                 apu_rate_thousand_lbs_per_hour=DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR,
                 assignment_pump_rate_gallons_per_minute=target_rate,
+                max_lateral_imbalance_lbs=target_imbalance,
                 updated_by_user_id=user.id,
             )
             db.session.add(setting)
+            existing[aircraft_type] = setting
             changed = True
-        elif setting.assignment_pump_rate_gallons_per_minute != target_rate:
+            continue
+
+        row_changed = False
+        if (
+            pump_field in form
+            and setting.assignment_pump_rate_gallons_per_minute != target_rate
+        ):
             setting.assignment_pump_rate_gallons_per_minute = target_rate
+            row_changed = True
+        if (
+            imbalance_field in form
+            and setting.max_lateral_imbalance_lbs != target_imbalance
+        ):
+            setting.max_lateral_imbalance_lbs = target_imbalance
+            row_changed = True
+        if row_changed:
             setting.updated_by_user_id = user.id
             changed = True
 
@@ -4538,6 +4620,7 @@ def _fuel_rows(
     nightly_truck_states_by_truck_id=None,
     fueling_event_cycle_keys=None,
     apu_rates_by_aircraft_type=None,
+    lateral_imbalance_limits_by_aircraft_type=None,
     fuel_density_lbs_per_gallon=None,
     planning_inbound_fallback_lbs=None,
 ):
@@ -4557,6 +4640,7 @@ def _fuel_rows(
     fuel_work_states = fuel_work_states_by_assignment_tail or {}
     event_cycle_keys = fueling_event_cycle_keys or set()
     effective_apu_rates = apu_rates_by_aircraft_type or {}
+    effective_lateral_limits = lateral_imbalance_limits_by_aircraft_type or {}
 
     rows = []
     for mission in missions:
@@ -4707,6 +4791,12 @@ def _fuel_rows(
                 apu_running=apu_running,
                 apu_allowance_lbs=apu_allowance_lbs,
                 apu_source_tank_code=apu_source_tank_code,
+                max_lateral_imbalance_lbs=effective_lateral_limits.get(
+                    detailed_aircraft_type
+                ),
+                rebalance_remaining_floors=(
+                    _assignment_cycle_type(assignment) != "defuel"
+                ),
             )
             if remaining_readings_complete
             else None
@@ -5983,11 +6073,12 @@ def _effective_apu_rate(gateway_id, aircraft_type):
     return Decimal(setting.apu_rate_thousand_lbs_per_hour)
 
 
-def _effective_apu_rates(gateway_id):
+def _effective_aircraft_fuel_configuration(gateway_id):
     rates = {
         aircraft_type: DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
         for aircraft_type in NEOSCORPION_APU_AIRCRAFT_TYPES
     }
+    lateral_limits = {}
     overrides = NeoScorpionAircraftFuelSetting.query.filter(
         NeoScorpionAircraftFuelSetting.gateway_id == gateway_id,
         NeoScorpionAircraftFuelSetting.aircraft_type.in_(
@@ -5998,7 +6089,26 @@ def _effective_apu_rates(gateway_id):
         rates[override.aircraft_type] = Decimal(
             override.apu_rate_thousand_lbs_per_hour
         )
+        if override.max_lateral_imbalance_lbs is not None:
+            lateral_limits[override.aircraft_type] = Decimal(
+                override.max_lateral_imbalance_lbs
+            )
+    return rates, lateral_limits
+
+
+def _effective_apu_rates(gateway_id):
+    rates, _limits = _effective_aircraft_fuel_configuration(gateway_id)
     return rates
+
+
+def _effective_lateral_imbalance_limit(gateway_id, aircraft_type):
+    setting = NeoScorpionAircraftFuelSetting.query.filter_by(
+        gateway_id=gateway_id,
+        aircraft_type=aircraft_type,
+    ).first()
+    if setting is None or setting.max_lateral_imbalance_lbs is None:
+        return None
+    return Decimal(setting.max_lateral_imbalance_lbs)
 
 
 def _apu_rate_field_name(aircraft_type):
@@ -6007,6 +6117,21 @@ def _apu_rate_field_name(aircraft_type):
 
 def _assignment_pump_rate_field_name(aircraft_type):
     return f"assignment_pump_rate_{aircraft_type.lower().replace('-', '_')}"
+
+
+def _max_lateral_imbalance_field_name(aircraft_type):
+    return f"max_lateral_imbalance_{aircraft_type.lower().replace('-', '_')}_lbs"
+
+
+def _parse_optional_lateral_imbalance(value, aircraft_type):
+    submitted = (value or "").strip()
+    if not submitted:
+        return None
+    if not re.fullmatch(r"\d+", submitted):
+        raise ValueError(
+            f"{aircraft_type} lateral imbalance must be a whole number of pounds."
+        )
+    return int(submitted)
 
 
 def _parse_optional_minutes(value, label):

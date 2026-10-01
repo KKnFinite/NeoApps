@@ -859,6 +859,7 @@ class NeoScorpionAircraftFuelSetting(db.Model):
         db.Numeric(10, 2),
         nullable=True,
     )
+    max_lateral_imbalance_lbs = db.Column(db.Integer, nullable=True)
     updated_by_user_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
