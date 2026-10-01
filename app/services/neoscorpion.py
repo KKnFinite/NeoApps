@@ -5241,7 +5241,13 @@ def _fuel_rows(
                 ),
                 "destination": mission.destination or "-",
                 "arrival_eta": _arrival_eta_display(arrival),
-                "arrival_status": _arrival_status_display(arrival),
+                "arrival_status": (
+                    "Arrived"
+                    if str(
+                        getattr(tail_state, "operational_status", "") or ""
+                    ).strip().lower() == "hot"
+                    else _arrival_status_display(arrival)
+                ),
                 "departure_time": format_local_hhmm(
                     mission.eta_datetime_utc or mission.planned_datetime_utc,
                     mission.timezone,

@@ -22,6 +22,7 @@ from app.models import (
     PortalAppAccess,
     SortDateMission,
     SortDateOperation,
+    SortDateTailState,
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
@@ -149,6 +150,13 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         truck = self._truck("HOT TRUCK")
         db.session.add_all(
             [
+                SortDateTailState(
+                    sort_date=operation.sort_date,
+                    gateway_code=self.gateway.code,
+                    sort_name=operation.sort_name,
+                    tail_number=mission.assigned_tail_number,
+                    operational_status="hot",
+                ),
                 NeoScorpionSortFueler(
                     sort_date_operation_id=operation.id,
                     user_id=fueler.id,
@@ -164,6 +172,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         ).get_data(as_text=True)
         self.assertIn(mission.flight_number, dispatch_page)
         self.assertIn(">HOT<", dispatch_page)
+        self.assertIn(">Arrived</", dispatch_page)
         self.assertIn(">ASSIGN</button>", dispatch_page)
 
         assigned = self._save_assignment(
