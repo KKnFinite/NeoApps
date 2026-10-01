@@ -79,6 +79,20 @@ def clear_login_failures(client_ip, identifier):
     _clear_states(LOGIN_ACTION, client_ip, identifier)
 
 
+def clear_login_identifier_failures(*identifiers):
+    """Clear only supplied LOGIN identifiers in the caller's transaction.
+
+    Recovery must not release IP protection or other authentication actions.
+    """
+    if not current_app.config.get("AUTH_RATE_LIMIT_ENABLED", True):
+        return
+    normalized = {_normalize_identifier(value) for value in identifiers}
+    for identifier in sorted(normalized - {""}):
+        state = _get_state(LOGIN_ACTION, IDENTIFIER_SUBJECT, identifier, lock=True)
+        if state is not None:
+            db.session.delete(state)
+
+
 def password_reset_is_limited(client_ip, identifier):
     return _is_limited(PASSWORD_RESET_ACTION, client_ip, identifier)
 

@@ -39,6 +39,7 @@ from app.services.auth_session_security import (
 )
 from app.services.auth_rate_limits import (
     clear_login_failures,
+    clear_login_identifier_failures,
     client_ip_for_request,
     login_is_limited,
     password_reset_is_limited,
@@ -938,6 +939,7 @@ def emergency_reset_user_password(user_id):
         target_user.last_password_reset_by_user_id = current_user.id
         target_user.last_password_reset_at = datetime.utcnow()
         target_user.last_password_reset_reason = reason
+        clear_login_identifier_failures(target_user.email, target_user.username)
         db.session.commit()
         flash("Temporary password set. User must change it on next login.", "info")
         return redirect(url_for("auth.user_detail", user_id=target_user.id))
@@ -1081,6 +1083,8 @@ def _approval_notes_with_verification_bypass(notes, bypass):
 def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
     for app in portal_app_definitions():
         app_code = app["code"]
+        if f"app_status_{app_code}" not in request.form:
+            continue
         status = request.form.get(f"app_status_{app_code}", "none").strip().lower()
         is_active = request.form.get(f"app_active_{app_code}") == "1"
         if status not in {"none", "pending", "approved", "denied"}:
@@ -1103,10 +1107,8 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
             continue
 
         access = ensure_user_app_access(target_user, app_code)
-        access.status = status
-        access.role = role
-        access.is_active = is_active
-        if status == "approved":
+        previous_status = access.status
+        if status == "approved" and previous_status != "approved":
             _approve_portal_app_access(
                 access,
                 role,
@@ -1114,8 +1116,12 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
                 is_active=is_active,
                 bypass_email_verification=bypass_email_verification,
             )
-        elif status == "denied":
+        elif status == "denied" and previous_status != "denied":
             _deny_portal_app_access(access, request.form.get(f"app_notes_{app_code}", "").strip() or None)
+        else:
+            access.status = status
+        access.role = role
+        access.is_active = is_active
 
 
 def _approve_portal_app_access(
@@ -1335,6 +1341,15 @@ def _apply_user_edit_form(user, form):
 
     _raise_for_duplicate_identity(email, employee_id, user_id=user.id)
 
+    old_email = _normalize_email(user.email)
+    old_username = user.username
+    if email != old_email:
+        if old_email and _normalize_email(old_username) == old_email:
+            user.username = email
+        user.email_verified_at = None
+        revoke_unused_email_verification_tokens(user)
+        clear_login_identifier_failures(old_email, email, old_username, user.username)
+
     user.first_name = first_name
     user.last_name = last_name
     user.full_name = _combined_name(first_name, last_name)
@@ -1403,21 +1418,24 @@ def _apply_gateway_membership_edit_form(
         if membership.is_active:
             _restore_approved_membership_operational_state(membership)
     elif status == "denied":
-        _deny_membership(
-            membership,
-            request.form.get("denial_notes", "").strip() or None,
-        )
+        if membership.status != "denied":
+            _deny_membership(
+                membership,
+                request.form.get("denial_notes", "").strip() or None,
+            )
         membership.is_active = is_active
     else:
+        changed = membership.status != "pending"
         membership.status = "pending"
         membership.is_active = is_active
-        membership.approved_by_user_id = None
-        membership.approved_at = None
-        membership.approval_notes = None
-        membership.denied_by_user_id = None
-        membership.denied_at = None
-        membership.denial_notes = None
-        membership.approval_email_sent_at = None
+        if changed:
+            membership.approved_by_user_id = None
+            membership.approved_at = None
+            membership.approval_notes = None
+            membership.denied_by_user_id = None
+            membership.denied_at = None
+            membership.denial_notes = None
+            membership.approval_email_sent_at = None
 
     return membership
 

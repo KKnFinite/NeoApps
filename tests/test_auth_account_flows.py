@@ -44,6 +44,156 @@ from app.services.user_tokens import (
 
 
 class AuthAccountFlowsTest(unittest.TestCase):
+    def test_recovery_emergency_reset_clears_only_target_login_identifiers(self):
+        from app.services import auth_rate_limits as limits
+        admin = self._admin("recovery_admin", "grandmaster")
+        target = self._user("recovery_legacy", verified=True)
+        db.session.commit()
+        self._configure_rate_limits(login_ip_max_failures=10, login_identifier_max_failures=2)
+        self._login(admin.username)
+        for identifier in (target.email, target.username):
+            for address in ("198.51.100.10", "198.51.100.11"):
+                self.assertEqual(self._login_attempt(identifier, "wrong password", remote_addr=address).status_code, 401)
+            self.assertTrue(limits.login_is_limited("198.51.100.12", identifier))
+        self.app.config['AUTH_LOGIN_IP_MAX_FAILURES'] = 1
+        limits.record_login_failure("198.51.100.13", "unrelated@example.com")
+        limits.record_password_reset_request("198.51.100.14", target.email)
+        db.session.commit()
+        protected = [(row.id, row.attempt_count, row.blocked_until) for row in AuthRateLimitState.query.all()
+                     if row.subject_type == 'ip' or row.action != 'login' or row.subject_digest == limits._subject_digest('login','identifier','unrelated@example.com')]
+        response = self.client.post(f"/portal/manage/users/{target.id}/emergency-reset", data={
+            "reason":"Recovery regression", "password":"twilight harbor signal", "confirm_password":"twilight harbor signal",
+        })
+        self.assertEqual(response.status_code, 302)
+        for identifier in (target.email, target.username):
+            self.assertFalse(limits.login_is_limited("198.51.100.12", identifier))
+        for row_id, count, blocked in protected:
+            row = db.session.get(AuthRateLimitState, row_id)
+            self.assertIsNotNone(row)
+            self.assertEqual((row.attempt_count, row.blocked_until), (count, blocked))
+        self.assertTrue(limits.login_is_limited('198.51.100.13', target.email))
+        self.client.post('/logout')
+        g.pop('_login_user', None)
+        login = self._login_attempt(target.email, 'twilight harbor signal', remote_addr='198.51.100.12')
+        self.assertEqual(login.status_code, 302)
+        self.assertEqual(login.location, '/change-password')
+
+    def test_recovery_email_correction_preserves_approved_access_and_mirrors_username(self):
+        from app.services import auth_rate_limits as limits
+        admin = self._admin('email_recovery_admin','grandmaster')
+        target, membership = self._approved_user('bad@example.com','bad@example.com')
+        target.email_verified_at = None
+        stamp = datetime(2026,8,1)
+        membership.approved_by_user_id = admin.id
+        membership.approved_at = stamp
+        membership.approval_notes = 'Original approval'
+        access = PortalAppAccess(user_id=target.id, app_code='neostaffing', status='approved', role='operator', is_active=False,
+                                 approved_by_user_id=admin.id, approved_at=stamp, approval_notes='Original app audit')
+        gateway_access = PortalAppAccess(user_id=target.id, app_code='neogateway',status='approved',role='operator',is_active=True,
+                                        approved_by_user_id=admin.id,approved_at=stamp,approval_notes='Gateway audit')
+        db.session.add_all([access, gateway_access]); db.session.commit()
+        self._configure_rate_limits(login_ip_max_failures=10,login_identifier_max_failures=2)
+        for email in ('bad@example.com','correct@example.com'):
+            for _ in range(2): limits.record_login_failure('198.51.100.21',email)
+        db.session.commit()
+        self._login(admin.username)
+        form = self._recovery_identity_form(target, ' Correct@Example.com ')
+        form.update(membership_status='approved', membership_is_active='1',
+                    app_status_neostaffing='approved', app_role_neostaffing='operator', app_notes_neostaffing='',
+                    app_status_neogateway='approved', app_active_neogateway='1', app_notes_neogateway='')
+        with patch('app.auth.routes.email_service.send_email_verification') as send:
+            response = self.client.post(f'/portal/manage/users/{target.id}/edit',data=form)
+            send.assert_not_called()
+        self.assertEqual(response.status_code,302)
+        db.session.expire_all()
+        self.assertEqual((target.email,target.username),('correct@example.com','correct@example.com'))
+        self.assertIsNone(target.email_verified_at)
+        self.assertEqual((access.status,access.role,access.is_active,access.approved_at,access.approval_notes),('approved','operator',False,stamp,'Original app audit'))
+        self.assertEqual((membership.status,membership.is_active,membership.approved_at,membership.approval_notes),('approved',True,stamp,'Original approval'))
+        self.assertEqual((gateway_access.status,gateway_access.role,gateway_access.approved_at,gateway_access.approval_notes),('approved','operator',stamp,'Gateway audit'))
+        for identifier in ('bad@example.com','correct@example.com'):
+            self.assertFalse(limits.login_is_limited('198.51.100.22',identifier))
+        self.assertIsNotNone(limits._get_state('login','ip','198.51.100.21',lock=False))
+        self.client.post('/logout'); g.pop('_login_user',None)
+        self.assertEqual(self._login_attempt('bad@example.com','TestPassword123!',remote_addr='198.51.100.22').status_code,401)
+        login = self._login_attempt('correct@example.com','TestPassword123!',remote_addr='198.51.100.22')
+        self.assertEqual(login.status_code,302)
+        self.assertEqual(login.location,'/portal')
+
+    def test_recovery_verified_email_change_revokes_tokens_and_resends_corrected_address(self):
+        admin = self._admin('verify_recovery_admin','grandmaster')
+        target = self._user('verify_recovery_target',verified=True)
+        raw, token = create_user_token(target,EMAIL_VERIFICATION)
+        _, reset = create_user_token(target,PASSWORD_RESET)
+        db.session.commit(); self._login(admin.username)
+        response = self.client.post(f'/portal/manage/users/{target.id}/edit',data=self._recovery_identity_form(target,'verified-correction@example.com'))
+        self.assertEqual(response.status_code,302)
+        db.session.expire_all()
+        self.assertIsNone(target.email_verified_at)
+        self.assertIsNotNone(token.used_at)
+        self.assertIsNone(reset.used_at)
+        self.assertIsNone(get_valid_token_record(raw,EMAIL_VERIFICATION))
+        with patch('app.auth.routes.email_service.send_email_verification',return_value={'sent':True}) as send:
+            response = self.client.post(f'/portal/manage/users/{target.id}/resend-verification')
+            self.assertEqual(response.status_code,302)
+            send.assert_called_once()
+            self.assertEqual(send.call_args.args[0].email,'verified-correction@example.com')
+        self.assertEqual(UserToken.query.filter_by(user_id=target.id,token_type=EMAIL_VERIFICATION,used_at=None).count(),1)
+
+    def test_recovery_identity_edit_keeps_independent_legacy_username(self):
+        admin = self._admin('legacy_recovery_admin','grandmaster')
+        target = self._user('independent_legacy',verified=True)
+        db.session.commit(); self._login(admin.username)
+        response = self.client.post(f'/portal/manage/users/{target.id}/edit',data=self._recovery_identity_form(target,'legacy-corrected@example.com'))
+        self.assertEqual(response.status_code,302)
+        db.session.expire_all(); self.assertEqual(target.username,'independent_legacy')
+        self.client.post('/logout'); g.pop('_login_user',None)
+        self.assertEqual(self._login_attempt('independent_legacy','TestPassword123!',remote_addr='198.51.100.30').status_code,302)
+
+    def test_recovery_unchanged_denied_access_keeps_denial_audit(self):
+        admin = self._admin('denied_recovery_admin','grandmaster')
+        target, membership = self._pending_user('denied_recovery_target','denied@example.com',False)
+        stamp = datetime(2026,8,1)
+        membership.status='denied'; membership.denied_at=stamp; membership.denial_notes='Original gateway denial'; membership.denied_by_user_id=admin.id
+        access=PortalAppAccess(user_id=target.id,app_code='neostaffing',status='denied',role='watcher',is_active=False,
+                              denied_at=stamp,denial_notes='Original denial',denied_by_user_id=admin.id)
+        db.session.add(access); db.session.commit(); self._login(admin.username)
+        form=self._recovery_identity_form(target,target.email)
+        form.update(app_status_neostaffing='denied',app_role_neostaffing='watcher',app_notes_neostaffing='',membership_status='denied')
+        self.assertEqual(self.client.post(f'/portal/manage/users/{target.id}/edit',data=form).status_code,302)
+        db.session.expire_all()
+        self.assertEqual((access.denied_at,access.denial_notes,access.is_active),(stamp,'Original denial',False))
+        self.assertEqual((membership.denied_at,membership.denial_notes),(stamp,'Original gateway denial'))
+
+    def _recovery_identity_form(self, target, email):
+        return dict(first_name=target.first_name,last_name=target.last_name,employee_id=target.employee_id,email=email,
+                    supervisor_name=target.supervisor_name or '',work_area=target.work_area or '',access_reason=target.access_reason or '')
+
+    def test_recovery_failed_identity_edit_rolls_back_verification_and_throttle_changes(self):
+        from app.services import auth_rate_limits as limits
+        admin = self._admin('rollback_recovery_admin', 'grandmaster')
+        target = self._user('rollback@example.com', email='rollback@example.com', verified=True)
+        verified_at = target.email_verified_at
+        _, token = create_user_token(target, EMAIL_VERIFICATION)
+        self._configure_rate_limits(login_ip_max_failures=10, login_identifier_max_failures=2)
+        for _ in range(2):
+            limits.record_login_failure('198.51.100.40', target.email)
+            limits.record_login_failure('198.51.100.41', 'rollback-corrected@example.com')
+        db.session.commit()
+        self._login(admin.username)
+        form = self._recovery_identity_form(target, 'rollback-corrected@example.com')
+        # A genuinely new approval still requires verification/bypass after email changes.
+        form.update(app_status_neostaffing='approved', app_active_neostaffing='1', app_role_neostaffing='watcher')
+        response = self.client.post(f'/portal/manage/users/{target.id}/edit', data=form)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b'Email not verified yet.', response.data)
+        db.session.expire_all()
+        self.assertEqual((target.email, target.username), ('rollback@example.com', 'rollback@example.com'))
+        self.assertEqual(target.email_verified_at, verified_at)
+        self.assertIsNone(token.used_at)
+        for email in (target.email, 'rollback-corrected@example.com'):
+            self.assertTrue(limits.login_is_limited('198.51.100.42', email))
+
     def test_account_identifier_password_autocomplete_semantics(self):
         for path, password_hint in (('/login', 'current-password'), ('/create-account', 'new-password')):
             with self.subTest(path=path):
