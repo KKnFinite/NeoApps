@@ -495,6 +495,13 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         fuel_density_lbs_per_gallon=fuel_density,
         planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
     )
+    rows.sort(
+        key=lambda row: (
+            0
+            if str(row["mission"].destination or "").strip().upper() == "HOT"
+            else 1,
+        )
+    )
     history_by_mission = {}
     histories = (
         NeoScorpionFuelCycleHistory.query.filter_by(sort_date_operation_id=operation.id)

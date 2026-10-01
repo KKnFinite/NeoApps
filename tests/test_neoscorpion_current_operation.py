@@ -127,6 +127,36 @@ class NeoScorpionCurrentOperationTest(unittest.TestCase):
         self.assertIsNotNone(db.session.get(SortDateOperation, self.operation.id))
         self.assertEqual(NeoScorpionSortTruck.query.count(), 1)
 
+    def test_fuel_dispatch_puts_hot_mission_first(self):
+        self._set_local_now(datetime(2026, 6, 19, 20, 0))
+        self.mission.assigned_tail_number = "N100UP"
+        self.mission.planned_datetime_local = datetime(2026, 6, 19, 21, 0)
+        self.mission.planned_datetime_utc = datetime(2026, 6, 20, 2, 0)
+        hot = SortDateMission(
+            sort_date=self.friday,
+            gateway_code="RFD",
+            sort_name="night",
+            sort_date_operation=self.operation,
+            mission_type="departure",
+            mission_source="google_motherbrain",
+            flight_number="HOT-N200UP",
+            origin="RFD",
+            destination="HOT",
+            timezone="America/Chicago",
+            planned_source="unknown",
+            assigned_tail_number="N200UP",
+            fuel_status="waiting",
+            departure_status="scheduled",
+        )
+        db.session.add(hot)
+        db.session.commit()
+
+        rows = fuel_dispatch_context(self.gateway)["rows"]
+        self.assertGreaterEqual(len(rows), 2)
+        self.assertEqual(rows[0]["mission"].id, hot.id)
+        self.assertEqual(rows[0]["mission"].destination, "HOT")
+        self.assertEqual(rows[1]["mission"].id, self.mission.id)
+
     def test_active_lifecycle_operation_resolves_read_only_with_bounded_queries(self):
         self._set_local_now(datetime(2026, 6, 19, 20, 0))
         statements = []
