@@ -7,9 +7,9 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function setup() {
     const pending = [], rootEvents = {}, boardEvents = {}, timers = [];
     const doc = {activeElement: null};
-    const buttons = ['east', 'west'].map(side => ({dataset: {upcomingSideButton: side},
+    const buttons = ['east', 'west', 'both'].map(side => ({dataset: {upcomingSideButton: side},
         setAttribute(name, value) { this[name] = value; }, closest() {return this;}}));
-    const panels = ['west', 'east'].map(side => ({dataset: {upcomingSide: side}, hidden: side === 'east'}));
+    const panels = ['west', 'east', 'both'].map(side => ({dataset: {upcomingSide: side}, hidden: side !== 'west'}));
     const status = {textContent: ''};
     const input = {value: '', dataset: {}, matches: s => s === '[data-upcoming-actual]',
         closest: () => form, blur() {if(doc.activeElement === this) doc.activeElement = null;}};
@@ -42,13 +42,28 @@ function setup() {
 }
 const state = revision => ({ok:true,changed:true,revision,board_html:'board-'+revision,refresh:{}});
 
-test('WEST defaults; EAST toggle survives replacement and can switch back', async () => {
-    const h=setup(); assert.equal(h.panels[0].hidden,false); assert.equal(h.panels[1].hidden,true);
-    h.side('east'); assert.equal(h.buttons[0]['aria-pressed'],'true');
+test('WEST defaults; EAST and BOTH toggles survive replacement and can switch back', async () => {
+    const h=setup();
+    assert.equal(h.panels[0].hidden,false);
+    assert.equal(h.panels[1].hidden,true);
+    assert.equal(h.panels[2].hidden,true);
+
+    h.side('both');
+    assert.equal(h.buttons[2]['aria-pressed'],'true');
+    assert.equal(h.panels[0].hidden,true);
+    assert.equal(h.panels[1].hidden,true);
+    assert.equal(h.panels[2].hidden,false);
+
     const p=h.poll();h.pending[0].resolve(state('r1'));await p;
     assert.equal(h.board.replacements.length,1);
-    assert.equal(h.panels[0].hidden,true);assert.equal(h.panels[1].hidden,false);
-    h.side('west');assert.equal(h.panels[0].hidden,false);
+    assert.equal(h.panels[2].hidden,false);
+
+    h.side('east');
+    assert.equal(h.buttons[0]['aria-pressed'],'true');
+    assert.equal(h.panels[1].hidden,false);
+
+    h.side('west');
+    assert.equal(h.panels[0].hidden,false);
 });
 
 test('focused or dirty inputs suppress polling, including hidden-side edits', async () => {

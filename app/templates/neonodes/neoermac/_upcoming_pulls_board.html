@@ -8,10 +8,10 @@
     <p class="neoermac-upcoming-empty">No current sort operation</p>
     {% else %}
     <div class="neoermac-upcoming-sides">
-        {% for side in ("west", "east") %}
-        <div class="neoermac-upcoming-side" aria-label="{{ side|title }} upcoming pulls" data-upcoming-side="{{ side }}" {% if side == "east" %}hidden{% endif %}>
+        {% for side in ("west", "east", "both") %}
+        <div class="neoermac-upcoming-side" aria-label="{{ 'All' if side == 'both' else side|title }} upcoming pulls" data-upcoming-side="{{ side }}" {% if side != "west" %}hidden{% endif %}>
             <div class="neoermac-upcoming-side-header">
-                <span>{{ side|upper }}</span>
+                {% if side != "both" %}<span>{{ side|upper }}</span>{% endif %}
                 <strong>NEXT {{ dashboard_context[side]|length }}</strong>
             </div>
             {% if dashboard_context[side] %}
@@ -42,7 +42,7 @@
                 {% endfor %}
             </ol>
             {% else %}
-            <p class="neoermac-upcoming-side-empty">No upcoming {{ side }} pulls</p>
+            <p class="neoermac-upcoming-side-empty">{% if side == "both" %}No upcoming pulls{% else %}No upcoming {{ side }} pulls{% endif %}</p>
             {% endif %}
         </div>
         {% endfor %}

@@ -49,6 +49,7 @@ def neoermac_dashboard_context(
             or neoermac_live_refresh_status(gateway, NEOERMAC_UPCOMING_PULLS_REFRESH_KEY),
             "east": [],
             "west": [],
+            "both": [],
         }
 
     lineup_load = load_building_lineup_rows(
@@ -114,6 +115,13 @@ def neoermac_dashboard_context(
 
     for side in rows:
         rows[side].sort(key=_pull_sort_key)
+
+    both_rows = sorted(
+        rows["east"] + rows["west"],
+        key=_pull_sort_key,
+    )[:SIDE_LIMIT]
+
+    for side in rows:
         rows[side] = rows[side][:SIDE_LIMIT]
 
     return {
@@ -123,6 +131,7 @@ def neoermac_dashboard_context(
         or neoermac_live_refresh_status(gateway, NEOERMAC_UPCOMING_PULLS_REFRESH_KEY),
         "east": rows["east"],
         "west": rows["west"],
+        "both": both_rows,
         "_initialization_changed": lineup_load.persistent_state_changed,
     }
 
