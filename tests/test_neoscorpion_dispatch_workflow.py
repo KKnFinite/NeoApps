@@ -135,6 +135,58 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertIn("Inbound Fuel: 12.0 K LBS -> 13.0 K LBS", assignment.fueler_update_message)
 
     @patch("app.services.neoscorpion.current_sort_operation")
+    def test_hot_without_etd_stays_dispatchable_and_routes_to_fueler(
+        self,
+        current_sort_operation,
+    ):
+        operation, mission = self._operation_and_mission()
+        mission.destination = "HOT"
+        mission.planned_datetime_local = None
+        mission.planned_datetime_utc = None
+        mission.planned_source = "unknown"
+        mission.departure_status = "scheduled"
+        fueler = self._add_user("hot_fueler", "operator")
+        truck = self._truck("HOT TRUCK")
+        db.session.add_all(
+            [
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=operation.id,
+                    user_id=fueler.id,
+                ),
+                self._nightly_truck(operation, truck),
+            ]
+        )
+        db.session.commit()
+        current_sort_operation.return_value = operation
+
+        dispatch_page = self.client.get(
+            "/neoscorpion/fuel-dispatch"
+        ).get_data(as_text=True)
+        self.assertIn(mission.flight_number, dispatch_page)
+        self.assertIn(">HOT<", dispatch_page)
+        self.assertIn(">ASSIGN</button>", dispatch_page)
+
+        assigned = self._save_assignment(
+            mission,
+            fueler_id=fueler.id,
+            truck_id=truck.id,
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.data)
+        assignment = NeoScorpionFuelAssignment.query.filter_by(
+            sort_date_mission_id=mission.id
+        ).one()
+        self.assertEqual(assignment.assigned_fueler_user_id, fueler.id)
+        self.assertEqual(assignment.assigned_truck_id, truck.id)
+
+        self._login(fueler)
+        fueler_page = self.client.get(
+            "/neoscorpion/fueler"
+        ).get_data(as_text=True)
+        self.assertIn(mission.flight_number, fueler_page)
+        self.assertIn("HOT", fueler_page)
+        self.assertIn("HOT TRUCK", fueler_page)
+
+    @patch("app.services.neoscorpion.current_sort_operation")
     def test_assign_and_update_assignment_use_json_without_navigation(
         self,
         current_sort_operation,
