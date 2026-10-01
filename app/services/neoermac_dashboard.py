@@ -17,7 +17,7 @@ from app.services.neoermac_building_lineup import (
     load_building_lineup_rows,
     normalize_destination,
 )
-from app.services.neoermac_door_view import PULL_FIELDS
+from app.services.neoermac_door_view import PULL_FIELDS, _active_departure_mission
 from app.services.neoermac_live_refresh import (
     NEOERMAC_UPCOMING_PULLS_REFRESH_KEY,
     neoermac_live_refresh_status,
@@ -65,10 +65,16 @@ def neoermac_dashboard_context(
     parking_by_tail = _parking_assignments_by_tail(operation)
     rows = {"east": [], "west": []}
 
+    # Keep the full mission set for unambiguous legacy pull matching above,
+    # but display only Door View's active chronological mission per destination.
+    candidates_by_destination = {}
     for mission in missions:
         destination = normalize_destination(mission.destination)
-        if not destination:
-            continue
+        if destination:
+            candidates_by_destination.setdefault(destination, []).append(mission)
+
+    for destination, candidates in candidates_by_destination.items():
+        mission = _active_departure_mission(candidates)
         tail = _text_value(mission.assigned_tail_number)
         parking = _parking_for_tail(parking_by_tail, tail)
 
