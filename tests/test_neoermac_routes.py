@@ -4881,6 +4881,7 @@ class NeoErmacRoutesTest(unittest.TestCase):
             "/neoermac/view-outbound",
             "/neoermac/view-outbound/state",
             "/neoermac/door-view",
+            "/neoermac/stats",
             "/neoermac/tug-assignments",
         )
 
