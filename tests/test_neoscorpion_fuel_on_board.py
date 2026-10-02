@@ -28,6 +28,7 @@ from app.services.neoscorpion import (
     fueler_context,
     mark_fueler_off,
     save_fueler_entry,
+    unassign_assignment_truck,
 )
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
@@ -215,6 +216,85 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
             ).one().revision,
             1,
         )
+
+    def test_real_truck_then_unassigned_allows_fob_off_without_tf(self):
+        operation, mission, assignment = self._assignment()
+        truck = NeoScorpionFuelTruck(
+            gateway_id=self.gateway.id,
+            truck_number="FOB-UNASSIGN",
+        )
+        db.session.add(truck)
+        db.session.flush()
+        assignment.assigned_truck_id = truck.id
+        db.session.commit()
+
+        save_fueler_entry(
+            self.gateway,
+            self.fueler,
+            self._fueler_form(
+                assignment,
+                apu_running="no",
+                remaining_left="10.0",
+                actual_left="10.0",
+                remaining_ctr="20.0",
+                actual_ctr="20.0",
+                remaining_right="30.0",
+                actual_right="30.0",
+            ),
+        )
+        db.session.commit()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "positive T/F before OFF",
+        ):
+            mark_fueler_off(
+                self.gateway,
+                self.fueler,
+                assignment.id,
+            )
+        db.session.rollback()
+
+        unassigned = unassign_assignment_truck(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+            expected_truck_id=truck.id,
+            expected_cycle=assignment.current_cycle_number,
+            expected_tail=mission.assigned_tail_number,
+        )
+        self.assertTrue(unassigned.changed)
+        db.session.commit()
+
+        db.session.refresh(assignment)
+        self.assertIsNone(assignment.assigned_truck_id)
+        self.assertIsNone(assignment.transfer_fuel_gallons)
+
+        rows = fueler_context(self.gateway, self.fueler)["rows"]
+        row = next(row for row in rows if row["assignment"].id == assignment.id)
+        self.assertTrue(row["off_ready"])
+        self.assertEqual(row["off_reason"], "")
+
+        off = mark_fueler_off(
+            self.gateway,
+            self.fueler,
+            assignment.id,
+        )
+        self.assertTrue(off.changed)
+        db.session.commit()
+        self.assertIsNotNone(off.fuel_work_state.off_at_utc)
+
+        completed = complete_fuel_on_board(
+            self.gateway,
+            self.dispatcher,
+            assignment.id,
+        )
+        self.assertTrue(completed.changed)
+        db.session.commit()
+        db.session.refresh(assignment)
+        self.assertIsNone(assignment.assigned_truck_id)
+        self.assertEqual(assignment.transfer_fuel_gallons, 0)
+        self.assertIsNotNone(assignment.fuel_on_board_at_utc)
 
     def test_success_completes_mission_without_requiring_off_and_repeat_is_noop(self):
         operation, mission, assignment = self._assignment()
