@@ -2060,11 +2060,16 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
         raise ValueError("Complete Remaining fuel before OFF.")
     if not actual_complete or neo_fuel_lbs is None:
         raise ValueError("Complete Actual fuel before OFF.")
-    if (
-        assignment.transfer_fuel_gallons is None
-        or assignment.transfer_fuel_gallons <= 0
-    ):
-        raise ValueError("Enter positive T/F before OFF.")
+    transfer_gallons = assignment.transfer_fuel_gallons
+    if assignment.assigned_truck_id is None:
+        if transfer_gallons not in (None, 0):
+            raise ValueError(
+                "Assign the truck used for positive T/F before OFF."
+            )
+    elif transfer_gallons is None or transfer_gallons <= 0:
+        raise ValueError(
+            "Enter positive T/F before OFF, or unassign the unused truck for FOB."
+        )
 
     fuel_work_state.off_at_utc = now_utc
     fuel_work_state.off_by_user_id = user.id
@@ -4939,6 +4944,20 @@ def _fuel_rows(
                 and neo_fuel_lbs is not None
             )
         )
+        off_transfer_ready = bool(
+            assignment
+            and (
+                (
+                    assignment.assigned_truck_id is not None
+                    and assignment.transfer_fuel_gallons is not None
+                    and assignment.transfer_fuel_gallons > 0
+                )
+                or (
+                    assignment.assigned_truck_id is None
+                    and assignment.transfer_fuel_gallons in (None, 0)
+                )
+            )
+        )
         physical_off_ready = bool(
             fuel_work_state
             and fuel_work_state.off_at_utc is None
@@ -4946,9 +4965,7 @@ def _fuel_rows(
             and actual_complete
             and apu_running is not None
             and apu_source_valid
-            and assignment is not None
-            and assignment.transfer_fuel_gallons is not None
-            and assignment.transfer_fuel_gallons > 0
+            and off_transfer_ready
             and not effective_hold
             and not tail_mismatch
             and not work_ended_early
@@ -4963,8 +4980,21 @@ def _fuel_rows(
             off_reason = "Confirm APU Running before OFF."
         elif not apu_source_valid:
             off_reason = "Select a valid APU source tank before OFF."
-        elif assignment is None or assignment.transfer_fuel_gallons is None or assignment.transfer_fuel_gallons <= 0:
-            off_reason = "Enter positive T/F before OFF."
+        elif assignment is None:
+            off_reason = "Fuel assignment is required before OFF."
+        elif (
+            assignment.assigned_truck_id is None
+            and assignment.transfer_fuel_gallons not in (None, 0)
+        ):
+            off_reason = "Assign the truck used for positive T/F before OFF."
+        elif (
+            assignment.assigned_truck_id is not None
+            and (
+                assignment.transfer_fuel_gallons is None
+                or assignment.transfer_fuel_gallons <= 0
+            )
+        ):
+            off_reason = "Enter positive T/F before OFF, or unassign the unused truck for FOB."
         elif effective_hold or tail_mismatch or work_ended_early:
             off_reason = "Dispatcher review is required before OFF."
         else:
