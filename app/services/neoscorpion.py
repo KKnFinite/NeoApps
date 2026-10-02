@@ -281,6 +281,7 @@ NEOSCORPION_MENU = (
         "trucks",
     ),
     NeoScorpionMenuItem("Fueler", "neoscorpion.fueler", "neoscorpion.fuel_assignments.view", "fueler"),
+    NeoScorpionMenuItem("Reports", "neoscorpion.reports", "neoscorpion.history.view", "reports"),
     NeoScorpionMenuItem("Fuel History", "neoscorpion.history", "neoscorpion.history.view", "history"),
     NeoScorpionMenuItem("Hanzo", "neoscorpion.hanzo", "neoscorpion.hanzo.view", "hanzo"),
     NeoScorpionMenuItem("Settings", "neoscorpion.settings", "neoscorpion.settings.view", "settings"),
@@ -298,7 +299,13 @@ def visible_neoscorpion_menu_items(user_can_func, current_endpoint=None):
                 item.endpoint,
                 item.permission,
                 item.key,
-                active=item.endpoint == current_endpoint,
+                active=(
+                    item.endpoint == current_endpoint
+                    or (
+                        item.endpoint == "neoscorpion.reports"
+                        and current_endpoint == "neoscorpion.fuel_report"
+                    )
+                ),
             )
         )
     return items
@@ -894,6 +901,98 @@ def history_context(gateway):
             ),
         )
     return {"operation": operation, "completed_rows": completed}
+
+
+def fuel_report_context(gateway):
+    """Return one immutable report row per persisted physical fueling event."""
+    operation = current_sort_operation(gateway)
+    rows = []
+    counts = {"fuel": 0, "uplift": 0, "defuel": 0}
+    total_transfer_gallons = 0
+    if operation:
+        events = (
+            NeoScorpionFuelingEvent.query.options(
+                joinedload(NeoScorpionFuelingEvent.fuel_assignment).joinedload(
+                    NeoScorpionFuelAssignment.sort_date_mission
+                ),
+                joinedload(NeoScorpionFuelingEvent.fueler_user),
+                joinedload(NeoScorpionFuelingEvent.fuel_truck),
+            )
+            .filter(
+                NeoScorpionFuelingEvent.sort_date_operation_id == operation.id
+            )
+            .all()
+        )
+        events.sort(
+            key=lambda event: (
+                event.ended_at_utc
+                or event.started_at_utc
+                or event.created_at
+                or datetime.min,
+                event.id,
+            )
+        )
+        for index, event in enumerate(events, start=1):
+            assignment = event.fuel_assignment
+            mission = assignment.sort_date_mission if assignment else None
+            timezone = mission.timezone if mission and mission.timezone else "UTC"
+            event_type = str(event.event_type or "fuel").strip().lower()
+            if event_type in counts:
+                counts[event_type] += 1
+            total_transfer_gallons += int(event.transfer_fuel_gallons or 0)
+            rows.append(
+                {
+                    "number": index,
+                    "event_id": event.id,
+                    "event_type": event_type,
+                    "event_type_label": event_type.upper(),
+                    "cycle_number": int(event.cycle_number or 1),
+                    "sequence_number": int(event.sequence_number or 1),
+                    "flight_number": (
+                        mission.flight_number if mission else "-"
+                    ),
+                    "destination": mission.destination if mission else "-",
+                    "tail_number": event.tail_number,
+                    "fueler_name": (
+                        event.fueler_user.display_name
+                        if event.fueler_user
+                        else "UNASSIGNED"
+                    ),
+                    "truck_number": (
+                        event.fuel_truck.truck_number
+                        if event.fuel_truck
+                        else "UNASSIGNED"
+                    ),
+                    "started_time": (
+                        format_local_hhmm(event.started_at_utc, timezone)
+                        if event.started_at_utc
+                        else "-"
+                    ),
+                    "ended_time": (
+                        format_local_hhmm(event.ended_at_utc, timezone)
+                        if event.ended_at_utc
+                        else "-"
+                    ),
+                    "transfer_fuel_gallons": event.transfer_fuel_gallons,
+                    "required_fuel_display": (
+                        format_display_thousands(event.required_fuel_lbs) or "-"
+                    ),
+                    "neo_fuel_display": (
+                        format_display_thousands(event.neo_fuel_lbs) or "-"
+                    ),
+                }
+            )
+    return {
+        "operation": operation,
+        "fuel_report_rows": rows,
+        "fuel_report_summary": {
+            "event_count": len(rows),
+            "fuel_count": counts["fuel"],
+            "uplift_count": counts["uplift"],
+            "defuel_count": counts["defuel"],
+            "total_transfer_gallons": total_transfer_gallons,
+        },
+    }
 
 
 @dataclass(frozen=True)
