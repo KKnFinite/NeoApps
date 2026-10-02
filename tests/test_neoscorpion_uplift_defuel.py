@@ -502,7 +502,11 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         asset_page = self.client.get("/neoscorpion/fuel-dispatch?assets=open")
         self.assertEqual(asset_page.status_code, 200)
         self.assertIn(b"NEEDS SUMP", asset_page.data)
-        self.assertIn(b"MARK SUMPED", asset_page.data)
+        self.assertIn(b"TRUCK HAS BEEN SUMPED", asset_page.data)
+        self.assertIn(
+            f'name="current_gallons" value="{nightly.current_gallons}"'.encode(),
+            asset_page.data,
+        )
 
     def test_mark_sumped_requires_confirmed_gallons_and_does_not_auto_resume(self):
         operation = self._operation()

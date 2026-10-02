@@ -148,11 +148,8 @@
                         <form class="neoscorpion-assets-complete-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
                             <input type="hidden" name="action" value="mark_sumped">
                             <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
-                            <label>
-                                Confirmed Current Gallons
-                                <input name="current_gallons" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %} required>
-                            </label>
-                            <button class="action-button" type="submit">MARK SUMPED</button>
+                            <input type="hidden" name="current_gallons" value="{{ row.selection.current_gallons if row.selection.current_gallons is not none else '' }}">
+                            <button class="action-button" type="submit">TRUCK HAS BEEN SUMPED</button>
                         </form>
                         {% endif %}
                         <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
