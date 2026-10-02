@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Reports | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Reports">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Reports</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>REPORTS</span>
+            <strong>{{ gateway.code }}</strong>
+        </div>
+        <nav class="neoscorpion-report-grid" aria-label="NeoScorpion reports">
+            <a class="neoscorpion-report-card" href="{{ url_for('neoscorpion.fuel_report') }}">
+                <strong>Fuel Report</strong>
+                <span>Every physical fueling event for the current night: fuel, uplift and defuel.</span>
+            </a>
+            <a class="neoscorpion-report-card" href="{{ url_for('neoscorpion.history') }}">
+                <strong>Fuel History</strong>
+                <span>Completed mission-level fuel history.</span>
+            </a>
+        </nav>
+    </section>
+</section>
+{% endblock %}
