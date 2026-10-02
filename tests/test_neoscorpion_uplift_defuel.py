@@ -507,6 +507,35 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             f'name="current_gallons" value="{nightly.current_gallons}"'.encode(),
             asset_page.data,
         )
+        self.assertIn(b"VERIFY READY", asset_page.data)
+
+        verify_ready = self.client.post(
+            "/neoscorpion/fuel-dispatch/assets",
+            data={
+                "action": "mark_sumped",
+                "dispatch_truck_card": "1",
+                "fuel_truck_id": truck.id,
+                "current_gallons": str(nightly.current_gallons),
+            },
+            headers={
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        )
+        self.assertEqual(verify_ready.status_code, 200)
+        self.assertTrue(verify_ready.get_json()["ok"])
+        db.session.expire_all()
+        nightly = db.session.get(NeoScorpionSortTruck, nightly.id)
+        other_assignment = db.session.get(
+            NeoScorpionFuelAssignment, other_assignment.id
+        )
+        self.assertEqual(nightly.status, "available")
+        self.assertEqual(nightly.current_gallons, 315)
+        self.assertEqual(other_assignment.operational_status, "hold_review")
+        self.assertEqual(
+            NeoScorpionFuelingEvent.query.filter_by(event_type="defuel").count(),
+            1,
+        )
 
     def test_mark_sumped_requires_confirmed_gallons_and_does_not_auto_resume(self):
         operation = self._operation()
