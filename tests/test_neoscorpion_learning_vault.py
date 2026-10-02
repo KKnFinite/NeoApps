@@ -11,9 +11,12 @@ from unittest.mock import patch
 from app.services.neoscorpion_learning_vault import (
     LearningVaultUnavailable,
     archive_calibration_review,
+    export_learning_record,
     learning_vault_status,
     list_calibration_reviews,
+    list_learning_records,
     read_calibration_review,
+    read_learning_record,
     test_learning_vault_connection as check_vault_connection,
 )
 from app.services import neoscorpion_learning_vault as vault
@@ -50,6 +53,95 @@ class SpearVaultR2Test(unittest.TestCase):
         self.user = SimpleNamespace(id=12)
         self.review = {"schema_version": "v1", "capture_mode": "live_calibration_review", "training_eligible": False, "calibrations": []}
 
+    def _learning_record(self, *, eligible=True, reasons=None):
+        return {
+            "schema_version": "spear-learning/v1",
+            "record_type": "completed_fuel_outcome",
+            "captured_at_utc": "2026-09-03T05:30:00.000000Z",
+            "training_eligible": eligible,
+            "exclusion_reasons": list(reasons or ()),
+            "gateway": {"id": 4, "code": "RFD"},
+            "sort": {
+                "operation_id": 9,
+                "sort_date": "2026-09-03",
+                "sort_name": "night",
+            },
+            "assignment": {
+                "id": 21,
+                "cycle_type": "fuel",
+                "cycle_number": 1,
+                "assigned_fueler_user_id": 12,
+                "assigned_truck_id": 31,
+                "transfer_fuel_gallons": 1200,
+                "ready_for_fuel_at_utc": "2026-09-03T04:30:00.000000Z",
+                "fuel_on_board_at_utc": None,
+                "completed_at_utc": "2026-09-03T05:30:00.000000Z",
+                "review_status": "complete",
+                "operational_status": "active",
+            },
+            "mission": {
+                "id": 41,
+                "flight_number": "UPS100",
+                "origin": "RFD",
+                "destination": "SDF",
+                "tail_number": "N412UP",
+                "confirmed_tail_number": "N412UP",
+                "planned_departure_utc": "2026-09-03T06:00:00.000000Z",
+                "required_fuel_lbs": 50000,
+                "fuel_status": "complete",
+                "departure_status": "loading",
+                "api_aircraft_model": "B757",
+            },
+            "arrival": None,
+            "parking": {"ramp": "A", "position": "A1", "lane": 1},
+            "work_states": [
+                {
+                    "id": 51,
+                    "tail_number": "N412UP",
+                    "on_at_utc": "2026-09-03T04:40:00.000000Z",
+                    "off_at_utc": "2026-09-03T05:20:00.000000Z",
+                    "ended_early_at_utc": None,
+                    "apu_running": False,
+                    "apu_allowance_lbs": 0,
+                    "apu_source_tank_code": None,
+                    "tanks": [
+                        {"code": "left", "remaining_lbs": 10000, "actual_lbs": 14000},
+                        {"code": "ctr", "remaining_lbs": 0, "actual_lbs": 20000},
+                        {"code": "right", "remaining_lbs": 10000, "actual_lbs": 14000},
+                    ],
+                }
+            ],
+            "fuel_events": [
+                {
+                    "id": 61,
+                    "work_state_id": 51,
+                    "event_type": "fuel",
+                    "cycle_number": 1,
+                    "sequence_number": 1,
+                    "tail_number": "N412UP",
+                    "truck_id": 31,
+                    "fueler_user_id": 12,
+                    "started_at_utc": "2026-09-03T04:40:00.000000Z",
+                    "ended_at_utc": "2026-09-03T05:20:00.000000Z",
+                    "transfer_fuel_gallons": 1200,
+                    "required_fuel_lbs": 50000,
+                    "neo_fuel_lbs": 48000,
+                    "apu_running": False,
+                    "apu_allowance_lbs": 0,
+                    "apu_source_tank_code": None,
+                    "tanks": [
+                        {
+                            "code": "left",
+                            "remaining_lbs": 10000,
+                            "planned_lbs": 15000,
+                            "actual_lbs": 14000,
+                        }
+                    ],
+                }
+            ],
+            "audit_actions": [],
+        }
+
     def test_safe_status_never_exposes_credentials(self):
         status = learning_vault_status(CONFIG)
         self.assertTrue(status.configured)
@@ -81,6 +173,39 @@ class SpearVaultR2Test(unittest.TestCase):
         self.assertEqual(read_calibration_review(saved["key"], CONFIG)["capture_mode"], "manual_calibration_review")
         with self.assertRaisesRegex(ValueError, "Invalid"):
             read_calibration_review("../../secret", CONFIG)
+
+    @patch("app.services.neoscorpion_learning_vault._r2_client")
+    def test_automatic_learning_record_is_private_idempotent_and_readable(self, client):
+        client.return_value = self.client
+        record = self._learning_record()
+        saved = export_learning_record(record, CONFIG)
+        duplicate = export_learning_record(record, CONFIG)
+
+        self.assertFalse(saved["already_saved"])
+        self.assertTrue(duplicate["already_saved"])
+        self.assertTrue(saved["key"].startswith("learning-record/2026/09/03/"))
+        self.assertEqual(len(list_learning_records(_config=CONFIG)), 1)
+
+        payload = read_learning_record(saved["key"], CONFIG)
+        self.assertTrue(payload["training_eligible"])
+        self.assertEqual(payload["record_type"], "completed_fuel_outcome")
+        self.assertEqual(payload["assignment"]["id"], 21)
+        self.assertEqual(payload["checksum"], saved["checksum"])
+
+    @patch("app.services.neoscorpion_learning_vault._r2_client")
+    def test_ineligible_learning_record_is_retained_with_reason(self, client):
+        client.return_value = self.client
+        record = self._learning_record(
+            eligible=False,
+            reasons=["correction_or_interruption_history"],
+        )
+        saved = export_learning_record(record, CONFIG)
+        payload = read_learning_record(saved["key"], CONFIG)
+        self.assertFalse(payload["training_eligible"])
+        self.assertEqual(
+            payload["exclusion_reasons"],
+            ["correction_or_interruption_history"],
+        )
 
     @patch("app.services.neoscorpion_learning_vault._r2_client", side_effect=RuntimeError("secret endpoint failed"))
     def test_provider_failure_is_sanitized(self, _client):
