@@ -407,7 +407,10 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         assignment.review_status = "complete"
         mission.fuel_status = "complete"
         db.session.commit()
-        self.assertIn(">Complete</span>", primary_row())
+        completed_row = primary_row()
+        self.assertIn(">Complete</span>", completed_row)
+        self.assertIn("is-complete", completed_row)
+        self.assertIn("data-neoscorpion-dispatch-details", completed_row)
 
     @patch("app.services.neoscorpion.current_sort_operation")
     def test_work_started_with_missing_truck_allows_initial_truck_only(

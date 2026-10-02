@@ -101,6 +101,19 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > td {
     border-bottom: 0;
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete > td {
+    opacity: .46;
+    filter: saturate(.42) brightness(.82);
+    transition: opacity .14s ease, filter .14s ease;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete:hover > td {
+    opacity: .66;
+    filter: saturate(.62) brightness(.94);
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete > td:last-child {
+    opacity: .72;
+    filter: saturate(.72) brightness(.96);
+}
 .neoscorpion-dispatch-transfer-estimate { white-space: nowrap; }
 .neoscorpion-dispatch-transfer-estimate small { white-space: nowrap; }
 .neoscorpion-dispatch-action-cell { min-width: 0; }
