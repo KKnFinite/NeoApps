@@ -17,7 +17,9 @@ from app.models import (
     NeoNode,
     NeoScorpionFuelAssignment,
     NeoScorpionAircraftFuelSetting,
+    NeoScorpionFuelingEvent,
     NeoScorpionFuelTruck,
+    NeoScorpionFuelWorkState,
     NeoScorpionSettings,
     NeoScorpionSortTruck,
     NeoScorpionTailFuelState,
@@ -37,6 +39,7 @@ from app.services.neoscorpion import (
     format_dispatch_parking_position,
     format_dispatch_thousands,
     history_context,
+    fuel_report_context,
     lbs_to_display_thousands,
     lbs_to_gallons,
     visible_neoscorpion_menu_items,
@@ -88,6 +91,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             "/neoscorpion/fueler",
             "/neoscorpion/truck-manager",
             "/neoscorpion/settings",
+            "/neoscorpion/reports",
+            "/neoscorpion/reports/fuel",
             "/neoscorpion/history",
         ):
             with self.subTest(path=path):
@@ -117,12 +122,14 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b'data-node-dashboard-tile="fueler"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="trucks"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="settings"', dashboard.data)
+        self.assertIn(b'data-node-dashboard-tile="reports"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="history"', dashboard.data)
         self.assertIn(b'href="/neoscorpion/fuel-dispatch"', dashboard.data)
         self.assertIn(b"Fuel Dispatch", dashboard.data)
         self.assertIn(b"Fueler", dashboard.data)
         self.assertIn(b"Truck Manager", dashboard.data)
         self.assertIn(b"Settings", dashboard.data)
+        self.assertIn(b"Reports", dashboard.data)
         self.assertIn(b"Fuel History", dashboard.data)
 
     def test_neoscorpion_menu_order_is_operational_and_permission_filtered(self):
@@ -137,6 +144,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
                 "Fuel Dispatch",
                 "Truck Manager",
                 "Fueler",
+                "Reports",
                 "Fuel History",
                 "Hanzo",
                 "Settings",
@@ -158,6 +166,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             "/neoscorpion/fueler": "FUELER",
             "/neoscorpion/truck-manager": "TRUCK MANAGER",
             "/neoscorpion/settings": "SETTINGS",
+            "/neoscorpion/reports": "REPORTS",
+            "/neoscorpion/reports/fuel": "REPORTS",
             "/neoscorpion/history": "FUEL HISTORY",
         }
 
@@ -784,6 +794,116 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Completed fuel history is ready", response.data)
+
+    def test_reports_menu_and_fuel_report_keep_each_persisted_event(self):
+        user = self._login_approved_user(role="master")
+        operation, mission = self._add_current_departure(
+            flight_number="UPS777",
+            tail_number="N700UP",
+            destination="SDF",
+            planned_fuel_load=50000,
+        )
+        truck = NeoScorpionFuelTruck(
+            gateway_id=self.gateway.id,
+            truck_number="REPORT-1",
+        )
+        db.session.add(truck)
+        db.session.flush()
+        assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission.id,
+            assigned_fueler_user_id=user.id,
+            assigned_truck_id=truck.id,
+            confirmed_tail_number="N701UP",
+        )
+        db.session.add(assignment)
+        db.session.flush()
+        old_tail_work = NeoScorpionFuelWorkState(
+            fuel_assignment_id=assignment.id,
+            tail_number="N700UP",
+        )
+        new_tail_work = NeoScorpionFuelWorkState(
+            fuel_assignment_id=assignment.id,
+            tail_number="N701UP",
+        )
+        db.session.add_all([old_tail_work, new_tail_work])
+        db.session.flush()
+        db.session.add_all(
+            [
+                NeoScorpionFuelingEvent(
+                    sort_date_operation_id=operation.id,
+                    fuel_assignment_id=assignment.id,
+                    fuel_work_state_id=old_tail_work.id,
+                    tail_number="N700UP",
+                    fuel_truck_id=truck.id,
+                    sequence_number=1,
+                    event_type="fuel",
+                    cycle_number=1,
+                    started_at_utc=datetime(2026, 6, 26, 1, 0),
+                    ended_at_utc=datetime(2026, 6, 26, 1, 10),
+                    transfer_fuel_gallons=100,
+                    fueler_user_id=user.id,
+                    required_fuel_lbs=50000,
+                    neo_fuel_lbs=49000,
+                ),
+                NeoScorpionFuelingEvent(
+                    sort_date_operation_id=operation.id,
+                    fuel_assignment_id=assignment.id,
+                    fuel_work_state_id=old_tail_work.id,
+                    tail_number="N700UP",
+                    fuel_truck_id=truck.id,
+                    sequence_number=2,
+                    event_type="uplift",
+                    cycle_number=2,
+                    started_at_utc=datetime(2026, 6, 26, 1, 30),
+                    ended_at_utc=datetime(2026, 6, 26, 1, 35),
+                    transfer_fuel_gallons=20,
+                    fueler_user_id=user.id,
+                    required_fuel_lbs=52000,
+                    neo_fuel_lbs=51500,
+                ),
+                NeoScorpionFuelingEvent(
+                    sort_date_operation_id=operation.id,
+                    fuel_assignment_id=assignment.id,
+                    fuel_work_state_id=new_tail_work.id,
+                    tail_number="N701UP",
+                    fuel_truck_id=truck.id,
+                    sequence_number=1,
+                    event_type="fuel",
+                    cycle_number=3,
+                    started_at_utc=datetime(2026, 6, 26, 2, 0),
+                    ended_at_utc=datetime(2026, 6, 26, 2, 12),
+                    transfer_fuel_gallons=80,
+                    fueler_user_id=user.id,
+                    required_fuel_lbs=50000,
+                    neo_fuel_lbs=50000,
+                ),
+            ]
+        )
+        mission.assigned_tail_number = "N701UP"
+        db.session.commit()
+
+        context = fuel_report_context(self.gateway)
+        self.assertEqual(context["fuel_report_summary"]["event_count"], 3)
+        self.assertEqual(context["fuel_report_summary"]["fuel_count"], 2)
+        self.assertEqual(context["fuel_report_summary"]["uplift_count"], 1)
+        self.assertEqual(context["fuel_report_summary"]["total_transfer_gallons"], 200)
+        self.assertEqual(
+            [row["tail_number"] for row in context["fuel_report_rows"]],
+            ["N700UP", "N700UP", "N701UP"],
+        )
+
+        reports = self.client.get("/neoscorpion/reports")
+        self.assertEqual(reports.status_code, 200)
+        self.assertIn(b"Fuel Report", reports.data)
+        fuel_report = self.client.get("/neoscorpion/reports/fuel")
+        self.assertEqual(fuel_report.status_code, 200)
+        self.assertEqual(fuel_report.data.count(b"UPS777"), 3)
+        self.assertEqual(fuel_report.data.count(b"N700UP"), 2)
+        self.assertEqual(fuel_report.data.count(b"N701UP"), 1)
+        self.assertIn(b"UPLIFT", fuel_report.data)
+        self.assertIn(b"REPORT-1", fuel_report.data)
+        self.assertIn(b"200 GAL", fuel_report.data)
 
     def test_history_context_query_count_is_bounded_for_many_assignments(self):
         operation, first_mission = self._add_current_departure(
