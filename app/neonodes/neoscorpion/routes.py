@@ -636,7 +636,7 @@ def manage_nightly_assets():
     action = (request.form.get("action") or "").strip()
     compact_truck_card = (
         request.form.get("dispatch_truck_card") == "1"
-        and action in {"mark_topping_off", "complete_top_off"}
+        and action in {"mark_topping_off", "complete_top_off", "mark_sumped"}
     )
     # The compact Fuel Dispatch cards explicitly opt into the JSON contract.
     # Do not depend on optional fetch headers here: a missing or altered header
