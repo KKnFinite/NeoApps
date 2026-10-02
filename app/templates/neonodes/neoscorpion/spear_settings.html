@@ -49,7 +49,7 @@
                 <span>Enable SPEAR Learning Capture</span>
                 <strong>{% if spear_settings.learning_capture_enabled %}ON{% else %}OFF{% endif %}</strong>
             </label>
-            <p><strong>{% if spear_learning_vault.configured %}LEARNING STANDBY{% else %}LEARNING VAULT NOT CONFIGURED{% endif %}</strong><br>Enable only when NeoScorpion is the full operational source and the external Learning Vault is configured.</p>
+            <p><strong>{% if spear_settings.learning_capture_enabled %}CAPTURING COMPLETED OUTCOMES{% elif spear_learning_vault.configured %}LEARNING READY{% else %}LEARNING VAULT NOT CONFIGURED{% endif %}</strong><br>{% if spear_settings.learning_capture_enabled %}Committed Neo fuel outcomes are archived automatically. Clean outcomes are marked training eligible; corrected or interrupted work is retained but excluded from training.{% else %}Enable now that NeoScorpion is the full Fueler operational source. Automation remains a separate control.{% endif %}</p>
         </section>
 
         <section class="neoscorpion-panel neoscorpion-spear-learning-panel">

@@ -79,8 +79,14 @@ from app.services.neoscorpion_learning_vault import (
     archive_calibration_review,
     learning_vault_status,
     list_calibration_reviews,
+    list_learning_records,
     read_calibration_review,
+    read_learning_record,
     test_learning_vault_connection,
+)
+from app.services.neoscorpion_spear_learning_capture import (
+    capture_completed_learning_outcome,
+    capture_current_sort_learning_outcomes,
 )
 
 
@@ -351,6 +357,7 @@ def fuel_on_board():
 
     if result.changed:
         db.session.commit()
+        _capture_learning_after_commit(gateway, result.assignment.id)
         flash("FUEL ON BOARD COMPLETED.", "success")
     else:
         flash("FUEL ON BOARD WAS ALREADY COMPLETED.", "info")
@@ -388,6 +395,7 @@ def fuel_dispatch_complete():
 
     if result.changed:
         db.session.commit()
+        _capture_learning_after_commit(gateway, result.assignment.id)
         flash("FUELING COMPLETE.", "success")
     else:
         flash("FUELING WAS ALREADY COMPLETE.", "info")
@@ -802,6 +810,10 @@ def fueler_off():
         gateway, result, request.form.get("assignment_id"))
     if result.changed:
         db.session.commit()
+        _capture_learning_after_commit(
+            gateway,
+            request.form.get("assignment_id"),
+        )
         flash(
             "FUELER MARKED OFF · SPEAR COMPLETED ASSIGNMENT."
             if spear_completed
@@ -816,6 +828,41 @@ def fueler_off():
     else:
         flash("FUELER WAS ALREADY OFF.", "info")
     return redirect(url_for("neoscorpion.fueler"))
+
+
+def _capture_learning_after_commit(gateway, assignment_id):
+    try:
+        result = capture_completed_learning_outcome(gateway, assignment_id)
+        if result.captured:
+            current_app.logger.info(
+                "SPEAR learning outcome archived: assignment_id=%s eligible=%s duplicate=%s",
+                assignment_id,
+                result.training_eligible,
+                result.already_saved,
+            )
+    except Exception:
+        # Fuel operations are canonical and already committed. Learning storage
+        # is deliberately fail-open so Vault availability can never undo work.
+        current_app.logger.exception(
+            "SPEAR learning capture failed after committed fuel operation: assignment_id=%s",
+            assignment_id,
+        )
+
+
+def _backfill_learning_after_enable(gateway, operation_id):
+    try:
+        results = capture_current_sort_learning_outcomes(gateway, operation_id)
+        captured = sum(1 for item in results if item.captured)
+        current_app.logger.info(
+            "SPEAR learning capture enabled: operation_id=%s archived=%s",
+            operation_id,
+            captured,
+        )
+    except Exception:
+        current_app.logger.exception(
+            "SPEAR current-sort learning backfill failed safely: operation_id=%s",
+            operation_id,
+        )
 
 
 def _fueler_off_automation(gateway, result, assignment_id):
@@ -1171,6 +1218,9 @@ def spear_settings():
             db.session.rollback()
             flash("Access denied.", "error")
             return _spear_settings_response(gateway, access, status_code=403)
+        previous_learning_capture = effective_spear_settings(
+            NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+        ).learning_capture_enabled
         try:
             result = save_spear_settings(gateway, current_user, request.form)
         except (IntegrityError, ValueError) as exc:
@@ -1181,6 +1231,11 @@ def spear_settings():
             )
             return _spear_settings_response(gateway, access, status_code=400)
         db.session.commit()
+        learning_capture_now = request.form.get("learning_capture_enabled") == "1"
+        if learning_capture_now and not previous_learning_capture:
+            operation = current_sort_operation(gateway)
+            if operation is not None:
+                _backfill_learning_after_enable(gateway, operation.id)
         flash("SPEAR SETTINGS SAVED." if result.changed else "NO SPEAR SETTING CHANGES.", "success" if result.changed else "info")
         if result.automation_just_enabled:
             return redirect(url_for("neoscorpion.fuel_dispatch"))
@@ -1275,15 +1330,34 @@ def spear_vault():
         return redirect(url_for("neoscorpion.spear_settings"))
     status = learning_vault_status()
     reviews = ()
+    learning_records = ()
     payload = None
+    payload_kind = None
     try:
         if status.configured:
-            key = request.args.get("review", "")
-            payload = read_calibration_review(key) if key else None
-            reviews = list_calibration_reviews() if not key else ()
+            learning_key = request.args.get("learning", "")
+            review_key = request.args.get("review", "")
+            if learning_key:
+                payload = read_learning_record(learning_key)
+                payload_kind = "learning"
+            elif review_key:
+                payload = read_calibration_review(review_key)
+                payload_kind = "review"
+            else:
+                learning_records = list_learning_records()
+                reviews = list_calibration_reviews()
     except (LearningVaultUnavailable, ValueError):
         flash("SPEAR Vault connection failed. Check the R2 bucket, credentials, and Render configuration.", "error")
-    return render_template("neonodes/neoscorpion/spear_vault.html", gateway=gateway, can_edit=user_can(SETTINGS_EDIT_PERMISSION), spear_learning_vault=status, reviews=reviews, review_payload=payload)
+    return render_template(
+        "neonodes/neoscorpion/spear_vault.html",
+        gateway=gateway,
+        can_edit=user_can(SETTINGS_EDIT_PERMISSION),
+        spear_learning_vault=status,
+        reviews=reviews,
+        learning_records=learning_records,
+        review_payload=payload if payload_kind == "review" else None,
+        learning_payload=payload if payload_kind == "learning" else None,
+    )
 
 
 @bp.post("/fuel-dispatch/spear-action")

@@ -3,7 +3,13 @@
 {% block content %}
 <section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Vault">
  <header class="neoscorpion-screen-head"><h1>SPEAR Vault</h1><p>{{ spear_learning_vault.label }}{% if spear_learning_vault.bucket %} · Bucket: {{ spear_learning_vault.bucket }}{% endif %}</p></header>
- {% if review_payload %}<section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Calibration Review</span><strong>TRAINING ELIGIBLE: NO</strong></div><pre>{{ review_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
- {% else %}<section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Recent Calibration Reviews</span><strong>MAX 50</strong></div>{% for review in reviews %}<p><a href="{{ url_for('neoscorpion.spear_vault', review=review.key) }}">{{ review.key }}</a> · {{ review.saved_at }} · {{ review.checksum }} · TRAINING ELIGIBLE: NO</p>{% else %}<p>No saved calibration reviews.</p>{% endfor %}</section>{% endif %}
+ {% if learning_payload %}
+ <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Operational Learning Record</span><strong>TRAINING ELIGIBLE: {{ "YES" if learning_payload.training_eligible else "NO" }}</strong></div><pre>{{ learning_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
+ {% elif review_payload %}
+ <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Calibration Review</span><strong>TRAINING ELIGIBLE: NO</strong></div><pre>{{ review_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
+ {% else %}
+ <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Recent Operational Learning Records</span><strong>MAX 50</strong></div>{% for record in learning_records %}<p><a href="{{ url_for('neoscorpion.spear_vault', learning=record.key) }}">{{ record.key }}</a> · {{ record.saved_at }} · {{ record.checksum }}</p>{% else %}<p>No automatic learning records yet.</p>{% endfor %}</section>
+ <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Recent Calibration Reviews</span><strong>MAX 50</strong></div>{% for review in reviews %}<p><a href="{{ url_for('neoscorpion.spear_vault', review=review.key) }}">{{ review.key }}</a> · {{ review.saved_at }} · {{ review.checksum }} · TRAINING ELIGIBLE: NO</p>{% else %}<p>No saved calibration reviews.</p>{% endfor %}</section>
+ {% endif %}
 </section>
 {% endblock %}

@@ -20,6 +20,7 @@ MAX_DECOMPRESSED_REVIEW_BYTES = 4_000_000
 VAULT_CONNECT_TIMEOUT_SECONDS = 5
 VAULT_READ_TIMEOUT_SECONDS = 10
 CALIBRATION_PREFIX = "calibration-review/"
+LEARNING_PREFIX = "learning-record/"
 ARCHIVE_FIELDS = frozenset({"learning_capture_enabled", "saved_at", "saved_by_user_id", "gateway", "sort", "checksum"})
 REVIEW_FIELDS = frozenset({"schema_version", "spear_algorithm_version", "capture_mode", "operation_id", "training_eligible", "calibrations"})
 
@@ -55,9 +56,127 @@ def require_learning_vault(_config=None):
 
 
 def export_learning_record(record, _config=None):
-    """Automatic learning capture remains intentionally unimplemented."""
-    require_learning_vault(_config)
-    raise NotImplementedError("Automatic SPEAR Learning Capture is not enabled.")
+    """Persist one immutable, idempotent completed-operation learning record."""
+    config = _require_r2_config(_config)
+    _validate_learning_record(record)
+    canonical_record = _canonical_json(record)
+    checksum = hashlib.sha256(canonical_record).hexdigest()
+    key = _learning_key(record, checksum)
+    client = _r2_client(config)
+    try:
+        client.head_object(Bucket=config["bucket"], Key=key)
+        return {"key": key, "checksum": checksum, "already_saved": True}
+    except Exception as exc:
+        response = getattr(exc, "response", {})
+        metadata = response.get("ResponseMetadata") if isinstance(response, dict) else None
+        if not isinstance(metadata, dict) or metadata.get("HTTPStatusCode") != 404:
+            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+
+    payload = dict(record)
+    payload.update({
+        "checksum": checksum,
+        "saved_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+    })
+    serialized = _canonical_json(payload)
+    if len(serialized) > MAX_DECOMPRESSED_REVIEW_BYTES:
+        raise LearningVaultUnavailable("SPEAR learning record is too large.")
+    compressed = gzip.compress(serialized)
+    if len(compressed) > MAX_REVIEW_BYTES:
+        raise LearningVaultUnavailable("SPEAR learning record is too large.")
+    try:
+        client.put_object(
+            Bucket=config["bucket"],
+            Key=key,
+            Body=compressed,
+            ContentType="application/json",
+            ContentEncoding="gzip",
+            Metadata={
+                "schema-version": str(record.get("schema_version", "spear-learning/v1")),
+                "record-type": str(record.get("record_type", "completed_fuel_outcome")),
+                "checksum": checksum,
+                "training-eligible": "true" if record.get("training_eligible") else "false",
+            },
+        )
+    except Exception as exc:
+        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    return {"key": key, "checksum": checksum, "already_saved": False}
+
+
+def list_learning_records(*, limit=50, _config=None):
+    config = _require_r2_config(_config)
+    try:
+        response = _r2_client(config).list_objects_v2(
+            Bucket=config["bucket"],
+            Prefix=LEARNING_PREFIX,
+            MaxKeys=max(1, min(int(limit), 50)),
+        )
+    except Exception as exc:
+        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    records = []
+    for item in response.get("Contents", ()):
+        key = item.get("Key", "")
+        if _valid_learning_key(key):
+            records.append({
+                "key": key,
+                "saved_at": item.get("LastModified"),
+                "size": item.get("Size", 0),
+                "checksum": key.rsplit("/", 1)[-1].split("-", 1)[0][:12],
+            })
+    return tuple(
+        sorted(records, key=lambda item: str(item["saved_at"]), reverse=True)[:50]
+    )
+
+
+def read_learning_record(key, _config=None):
+    if not _valid_learning_key(key):
+        raise ValueError("Invalid SPEAR learning record.")
+    config = _require_r2_config(_config)
+    try:
+        response = _r2_client(config).get_object(Bucket=config["bucket"], Key=key)
+        stream = response["Body"]
+        try:
+            body = stream.read(MAX_REVIEW_BYTES + 1)
+        finally:
+            stream.close()
+    except Exception as exc:
+        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    if len(body) > MAX_REVIEW_BYTES:
+        raise ValueError("Stored SPEAR learning record is too large.")
+    raw = _inflate_bounded(body, "Stored SPEAR learning record")
+    try:
+        payload = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_json_constant,
+        )
+        checksum = payload.pop("checksum")
+        saved_at = payload.pop("saved_at")
+        _validate_learning_record(payload)
+        require_saved_at = bool(
+            re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", str(saved_at or ""))
+        )
+        if not require_saved_at:
+            raise ValueError
+        datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+        expected = hashlib.sha256(_canonical_json(payload)).hexdigest()
+        if not hmac.compare_digest(expected, checksum):
+            raise ValueError
+        if key != _learning_key(payload, checksum):
+            raise ValueError
+        metadata = response.get("Metadata", {})
+        if metadata:
+            if metadata.get("checksum", checksum) != checksum:
+                raise ValueError
+            if metadata.get("training-eligible") not in (
+                None,
+                "true" if payload["training_eligible"] else "false",
+            ):
+                raise ValueError
+        payload["checksum"] = checksum
+        payload["saved_at"] = saved_at
+        return payload
+    except (ValueError, TypeError, KeyError, RecursionError, OverflowError):
+        raise ValueError("Stored SPEAR learning record is malformed.") from None
 
 
 def test_learning_vault_connection(_config=None):
@@ -238,6 +357,212 @@ def _validate_review(payload, key, metadata=None):
         require(metadata.get("checksum", checksum) == checksum)
         require(metadata.get("schema-version", "v1") == "v1")
         require(metadata.get("training-eligible", "false") == "false")
+
+
+def _validate_learning_record(record):
+    def require(condition):
+        if not condition:
+            raise ValueError("Invalid SPEAR learning record.")
+
+    def positive_id(value):
+        return type(value) is int and value > 0
+
+    def optional_id(value):
+        return value is None or positive_id(value)
+
+    def timestamp(value):
+        if value is None:
+            return True
+        if not isinstance(value, str) or len(value) > 40:
+            return False
+        try:
+            datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return True
+        except ValueError:
+            return False
+
+    require(isinstance(record, dict))
+    require(set(record) == {
+        "schema_version", "record_type", "captured_at_utc",
+        "training_eligible", "exclusion_reasons", "gateway", "sort",
+        "assignment", "mission", "arrival", "parking", "work_states",
+        "fuel_events", "audit_actions",
+    })
+    require(record["schema_version"] == "spear-learning/v1")
+    require(record["record_type"] == "completed_fuel_outcome")
+    require(timestamp(record["captured_at_utc"]))
+    require(type(record["training_eligible"]) is bool)
+    require(
+        isinstance(record["exclusion_reasons"], list)
+        and all(
+            isinstance(value, str) and 0 < len(value) <= 96
+            for value in record["exclusion_reasons"]
+        )
+    )
+
+    gateway = record["gateway"]
+    require(
+        isinstance(gateway, dict)
+        and set(gateway) == {"id", "code"}
+        and positive_id(gateway["id"])
+        and isinstance(gateway["code"], str)
+        and bool(re.fullmatch(r"[A-Za-z0-9_-]{1,64}", gateway["code"]))
+    )
+    sort = record["sort"]
+    require(
+        isinstance(sort, dict)
+        and set(sort) == {"operation_id", "sort_date", "sort_name"}
+        and positive_id(sort["operation_id"])
+        and isinstance(sort["sort_date"], str)
+        and isinstance(sort["sort_name"], str)
+    )
+    datetime.strptime(sort["sort_date"], "%Y-%m-%d")
+
+    assignment = record["assignment"]
+    require(isinstance(assignment, dict))
+    require(
+        set(assignment) == {
+            "id", "cycle_type", "cycle_number", "assigned_fueler_user_id",
+            "assigned_truck_id", "transfer_fuel_gallons",
+            "ready_for_fuel_at_utc", "fuel_on_board_at_utc",
+            "completed_at_utc", "review_status", "operational_status",
+        }
+    )
+    require(positive_id(assignment["id"]))
+    require(assignment["cycle_type"] in ("fuel", "uplift", "defuel"))
+    require(type(assignment["cycle_number"]) is int and assignment["cycle_number"] >= 1)
+    require(optional_id(assignment["assigned_fueler_user_id"]))
+    require(optional_id(assignment["assigned_truck_id"]))
+    require(
+        assignment["transfer_fuel_gallons"] is None
+        or (
+            type(assignment["transfer_fuel_gallons"]) is int
+            and assignment["transfer_fuel_gallons"] >= 0
+        )
+    )
+    for field in ("ready_for_fuel_at_utc", "fuel_on_board_at_utc", "completed_at_utc"):
+        require(timestamp(assignment[field]))
+
+    mission = record["mission"]
+    require(isinstance(mission, dict))
+    require(
+        set(mission) == {
+            "id", "flight_number", "origin", "destination", "tail_number",
+            "confirmed_tail_number", "planned_departure_utc",
+            "required_fuel_lbs", "fuel_status", "departure_status",
+            "api_aircraft_model",
+        }
+    )
+    require(positive_id(mission["id"]))
+    require(
+        mission["required_fuel_lbs"] is None
+        or (type(mission["required_fuel_lbs"]) is int and mission["required_fuel_lbs"] >= 0)
+    )
+    require(timestamp(mission["planned_departure_utc"]))
+
+    arrival = record["arrival"]
+    require(arrival is None or isinstance(arrival, dict))
+    if arrival is not None:
+        require(
+            set(arrival) == {
+                "mission_id", "flight_number", "status", "eta_utc",
+                "actual_block_in_utc", "api_assumed_arrived_utc",
+            }
+        )
+        require(positive_id(arrival["mission_id"]))
+        for field in ("eta_utc", "actual_block_in_utc", "api_assumed_arrived_utc"):
+            require(timestamp(arrival[field]))
+
+    parking = record["parking"]
+    require(parking is None or isinstance(parking, dict))
+    if parking is not None:
+        require(set(parking) == {"ramp", "position", "lane"})
+
+    require(isinstance(record["work_states"], list))
+    for work in record["work_states"]:
+        require(
+            isinstance(work, dict)
+            and set(work) == {
+                "id", "tail_number", "on_at_utc", "off_at_utc",
+                "ended_early_at_utc", "apu_running", "apu_allowance_lbs",
+                "apu_source_tank_code", "tanks",
+            }
+        )
+        require(positive_id(work["id"]))
+        for field in ("on_at_utc", "off_at_utc", "ended_early_at_utc"):
+            require(timestamp(work[field]))
+        require(work["apu_running"] is None or type(work["apu_running"]) is bool)
+        require(
+            work["apu_allowance_lbs"] is None
+            or (type(work["apu_allowance_lbs"]) is int and work["apu_allowance_lbs"] >= 0)
+        )
+        require(isinstance(work["tanks"], list))
+        for tank in work["tanks"]:
+            require(
+                isinstance(tank, dict)
+                and set(tank) == {"code", "remaining_lbs", "actual_lbs"}
+            )
+
+    require(isinstance(record["fuel_events"], list))
+    for event in record["fuel_events"]:
+        require(
+            isinstance(event, dict)
+            and set(event) == {
+                "id", "work_state_id", "event_type", "cycle_number",
+                "sequence_number", "tail_number", "truck_id", "fueler_user_id",
+                "started_at_utc", "ended_at_utc", "transfer_fuel_gallons",
+                "required_fuel_lbs", "neo_fuel_lbs", "apu_running",
+                "apu_allowance_lbs", "apu_source_tank_code", "tanks",
+            }
+        )
+        require(positive_id(event["id"]) and positive_id(event["work_state_id"]))
+        require(event["event_type"] in ("fuel", "uplift", "defuel"))
+        require(type(event["cycle_number"]) is int and event["cycle_number"] >= 1)
+        require(type(event["sequence_number"]) is int and event["sequence_number"] >= 1)
+        require(positive_id(event["truck_id"]))
+        require(optional_id(event["fueler_user_id"]))
+        require(timestamp(event["started_at_utc"]) and timestamp(event["ended_at_utc"]))
+        require(isinstance(event["tanks"], list))
+
+    require(
+        isinstance(record["audit_actions"], list)
+        and all(isinstance(value, str) and len(value) <= 64 for value in record["audit_actions"])
+    )
+
+
+def _learning_key(record, checksum):
+    sort = record["sort"]
+    date = datetime.strptime(sort["sort_date"], "%Y-%m-%d")
+    assignment_id = record["assignment"]["id"]
+    return (
+        f"{LEARNING_PREFIX}{date:%Y/%m/%d}/"
+        f"gateway-{_safe_component(record['gateway']['id'])}/"
+        f"sort-{_safe_component(sort['operation_id'])}/"
+        f"assignment-{_safe_component(assignment_id)}/"
+        f"{checksum}-completed-fuel-outcome-v1.json.gz"
+    )
+
+
+def _valid_learning_key(key):
+    return bool(re.fullmatch(
+        r"learning-record/\d{4}/\d{2}/\d{2}/gateway-[A-Za-z0-9_-]+/"
+        r"sort-[A-Za-z0-9_-]+/assignment-[A-Za-z0-9_-]+/"
+        r"[0-9a-f]{64}-completed-fuel-outcome-v1\.json\.gz",
+        str(key or ""),
+    ))
+
+
+def _inflate_bounded(body, label):
+    try:
+        inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        raw = inflater.decompress(body, MAX_DECOMPRESSED_REVIEW_BYTES + 1)
+        if len(raw) > MAX_DECOMPRESSED_REVIEW_BYTES:
+            raise ValueError(f"{label} is too large.")
+        if not inflater.eof or inflater.unused_data or inflater.unconsumed_tail:
+            raise ValueError(f"{label} is malformed.")
+        return raw
+    except zlib.error:
+        raise ValueError(f"{label} is malformed.") from None
 
 
 def _vault_config(source=None):
