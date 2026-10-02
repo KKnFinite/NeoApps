@@ -24,6 +24,7 @@ from app.services.neoscorpion import (
     FuelerDataConflict,
     _fueler_expected,
     history_context,
+    fuel_report_context,
     mark_ready_for_fuel,
     mark_fueler_off,
     end_fuel_work_early,
@@ -1466,6 +1467,37 @@ def fuel_dispatch_spear_action():
             return _json_no_store({"ok": False, "error": message}, 409 if "changed" in message.lower() else 400)
         flash(message, "error")
         return redirect(url_for("neoscorpion.fuel_dispatch"))
+
+
+@bp.route("/reports")
+@gateway_node_required("scorpion")
+def reports():
+    gateway = get_current_gateway()
+    access = permission_access(HISTORY_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.index"))
+    return render_template(
+        "neonodes/neoscorpion/reports.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+    )
+
+
+@bp.route("/reports/fuel")
+@gateway_node_required("scorpion")
+def fuel_report():
+    gateway = get_current_gateway()
+    access = permission_access(HISTORY_VIEW_PERMISSION)
+    if not access["can_view"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("neoscorpion.index"))
+    return render_template(
+        "neonodes/neoscorpion/fuel_report.html",
+        gateway=gateway,
+        can_view=access["can_view"],
+        **fuel_report_context(gateway),
+    )
 
 
 @bp.route("/history")
