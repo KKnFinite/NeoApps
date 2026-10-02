@@ -92,6 +92,15 @@
                     <button class="action-button neoscorpion-truck-card-action" type="submit">RETURN</button>
                     <span class="neoscorpion-truck-card-save-status" data-dispatch-truck-card-status aria-live="polite"></span>
                 </form>
+                {% elif can_manage_assets and truck.status == "needs_sump" %}
+                <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>
+                    <input type="hidden" name="action" value="mark_sumped">
+                    <input type="hidden" name="dispatch_truck_card" value="1">
+                    <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
+                    <input type="hidden" name="current_gallons" value="{{ truck.current_gallons if truck.current_gallons is not none else '' }}">
+                    <button class="action-button neoscorpion-truck-card-action" type="submit">VERIFY READY</button>
+                    <span class="neoscorpion-truck-card-save-status" data-dispatch-truck-card-status aria-live="polite"></span>
+                </form>
                 {% endif %}
             </article>
             {% endfor %}
