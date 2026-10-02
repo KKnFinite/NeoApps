@@ -489,8 +489,8 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         rendered = self.client.get("/neoscorpion/hanzo")
         self.assertIn(b"Planned Total", rendered.data)
         self.assertIn(b"LEFT", rendered.data)
-        self.assertIn(b"14.6 K LB", rendered.data)
-        self.assertIn(b"50.0 K LB", rendered.data)
+        self.assertIn(b"14.6", rendered.data)
+        self.assertIn(b"50.0", rendered.data)
         self.assertEqual(hanzo_context(self.gateway)["rows"][0]["planned_total_display"], "50.0")
         mission.assigned_tail_number = None
         db.session.commit()

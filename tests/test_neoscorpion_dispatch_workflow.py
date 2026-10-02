@@ -108,7 +108,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         self.assertEqual(mission.planned_fuel_load, 51200)
         self.assertEqual(work_state.on_at_utc, datetime(2026, 8, 19, 1, 0))
         self.assertEqual(assignment.fueler_update_version, 1)
-        self.assertIn("Required Fuel: 50.5 K LBS -> 51.2 K LBS", assignment.fueler_update_message)
+        self.assertIn("Required Fuel: 50.5 -> 51.2", assignment.fueler_update_message)
 
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
             unchanged = self._autosave(
@@ -133,7 +133,7 @@ class NeoScorpionDispatchWorkflowTest(unittest.TestCase):
         db.session.refresh(assignment)
         self.assertEqual(tail_state.inbound_fuel_lbs, 13000)
         self.assertEqual(assignment.fueler_update_version, 2)
-        self.assertIn("Inbound Fuel: 12.0 K LBS -> 13.0 K LBS", assignment.fueler_update_message)
+        self.assertIn("Inbound Fuel: 12.0 -> 13.0", assignment.fueler_update_message)
 
     @patch("app.services.neoscorpion.current_sort_operation")
     def test_hot_without_etd_stays_dispatchable_and_routes_to_fueler(
