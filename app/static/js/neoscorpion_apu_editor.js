@@ -9,7 +9,7 @@
         const text = Number.isInteger(thousands * 10)
             ? thousands.toFixed(1)
             : thousands.toFixed(2);
-        return `APU ${text}K`;
+        return `APU ${text}`;
     };
 
     document.querySelectorAll("[data-apu-editor-form]").forEach((editorForm) => {

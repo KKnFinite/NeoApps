@@ -43,21 +43,21 @@
                     <div><dt>Aircraft Type</dt><dd>{{ row.aircraft_type }}</dd></div>
                     <div><dt>Parking Position</dt><dd>{{ row.parking_position }}</dd></div>
                     <div><dt>ETD</dt><dd>{{ row.departure_time or '-' }}</dd></div>
-                    <div><dt>Required Fuel</dt><dd>{{ row.required_fuel_display or '-' }}{% if row.required_fuel_display %} K LB{% endif %}</dd></div>
+                    <div><dt>Required Fuel</dt><dd>{{ row.required_fuel_display or '-' }}</dd></div>
                 </dl>
                 {% if row.hanzo_status %}
                 <p class="neoscorpion-hanzo-status">{{ row.hanzo_status }}</p>
                 {% else %}
                 <dl class="neoscorpion-fuel-totals neoscorpion-hanzo-totals">
-                    <div class="neoscorpion-fuel-total-primary"><dt>Planned Total</dt><dd>{{ row.planned_total_display }} K LB</dd></div>
+                    <div class="neoscorpion-fuel-total-primary"><dt>Planned Total</dt><dd>{{ row.planned_total_display }}</dd></div>
                     {% if row.apu_running is sameas true %}
-                    <div><dt>Effective APU Allowance</dt><dd>{{ row.apu_allowance_display }} K LB</dd></div>
+                    <div><dt>Effective APU Allowance</dt><dd>{{ row.apu_allowance_display }}</dd></div>
                     <div><dt>APU Source Tank</dt><dd>{{ row.apu_source_tank_label }}</dd></div>
                     {% endif %}
                 </dl>
                 <div class="neoscorpion-hanzo-tanks" aria-label="Planned fuel by tank">
                     {% for tank in row.tank_rows %}
-                    <div><span>{{ tank.label }}</span><strong>{{ tank.planned_display }} K LB</strong></div>
+                    <div><span>{{ tank.label }}</span><strong>{{ tank.planned_display }}</strong></div>
                     {% endfor %}
                 </div>
                 {% endif %}

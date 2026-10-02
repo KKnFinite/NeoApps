@@ -52,7 +52,7 @@
                 <dl class="neoscorpion-fuel-totals">
                     <div>
                         <dt>Required</dt>
-                        <dd>{{ row.required_display }}{% if row.required_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dd>{{ row.required_display }}</dd>
                     </div>
                     <div>
                         <dt>APU Running</dt>
@@ -61,9 +61,9 @@
                     <div>
                         <dt>APU</dt>
                         <dd>
-                            <span class="neoscorpion-apu-collapsed"><strong data-apu-allowance-output>{% if row.apu_running is none %}NOT CONFIRMED{% elif row.apu_running is sameas false %}USING 0.0K · APU OFF{% else %}USING {{ row.apu_allowance_display }}K {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}{% endif %}</strong>
+                            <span class="neoscorpion-apu-collapsed"><strong data-apu-allowance-output>{% if row.apu_running is none %}NOT CONFIRMED{% elif row.apu_running is sameas false %}USING 0.0 · APU OFF{% else %}USING {{ row.apu_allowance_display }} {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}{% endif %}</strong>
                             {% if row.apu_running is sameas true %}
-                            <small>RECOMMENDED {{ row.automatic_apu_allowance_display }}K</small>
+                            <small>RECOMMENDED {{ row.automatic_apu_allowance_display }}</small>
                             {% if can_edit and not row.is_off and not row.fueler_work_blocked %}
                             <form class="neoscorpion-apu-editor-form" method="post" action="{{ fuel_data_url }}" data-apu-editor-form>
                                 {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
@@ -78,7 +78,7 @@
                                     <label data-apu-override-value-wrap>MANUAL APU, K lbs
                                         <input class="neoscorpion-inline-input" name="apu_override_allowance" value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}" inputmode="decimal" aria-label="APU allowance for {{ row.mission.flight_number }}" data-apu-override-value placeholder="K LBS">
                                     </label>
-                                    <small data-apu-calculated-reference>RECOMMENDED {{ row.automatic_apu_allowance_display }}K</small>
+                                    <small data-apu-calculated-reference>RECOMMENDED {{ row.automatic_apu_allowance_display }}</small>
                                     <button class="action-button" type="submit" data-apu-editor-save>SAVE</button>
                                     <button class="action-button" type="submit" data-apu-editor-save data-apu-reset>USE RECOMMENDED</button>
                                     <button class="action-button" type="button" data-apu-editor-cancel>CANCEL</button>
@@ -96,19 +96,19 @@
                     </div>
                     <div class="neoscorpion-fuel-total-primary">
                         <dt>Fuel Load</dt>
-                        <dd data-fuel-load-output>{{ row.fuel_load_display }}{% if row.fuel_load_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dd data-fuel-load-output>{{ row.fuel_load_display }}</dd>
                     </div>
                     <div>
                         <dt>Remaining Total</dt>
-                        <dd>{{ row.remaining_total_display }}{% if row.remaining_total_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dd>{{ row.remaining_total_display }}</dd>
                     </div>
                     <div>
                         <dt>Actual Total</dt>
-                        <dd>{{ row.actual_total_display }}{% if row.actual_total_display != "INCOMPLETE" %} K LBS{% endif %}</dd>
+                        <dd>{{ row.actual_total_display }}</dd>
                     </div>
                     <div class="neoscorpion-fuel-total-primary">
                         <dt>Neo Fuel</dt>
-                        <dd>{{ row.neo_fuel_display }}{% if row.neo_fuel_available %} K LBS{% endif %}</dd>
+                        <dd>{{ row.neo_fuel_display }}</dd>
                     </div>
                     <div>
                         <dt>ON</dt>
@@ -159,7 +159,7 @@
                             </select>
                         </label>
                         <div data-apu-override-wrap {% if row.apu_running is not sameas true %}hidden{% endif %}>
-                            <span>RECOMMENDED APU <strong data-apu-automatic-output>{{ row.automatic_apu_allowance_display }} K LBS</strong></span>
+                            <span>RECOMMENDED APU <strong data-apu-automatic-output>{{ row.automatic_apu_allowance_display }}</strong></span>
                             <button class="action-button neoscorpion-apu-use-recommended" type="button" data-apu-use-recommended>USE RECOMMENDED</button>
                             <div class="neoscorpion-apu-manual" data-apu-override-value-wrap>
                                 <label for="apu-manual-{{ row.assignment.id }}">MANUAL APU, K LBS</label>
@@ -180,7 +180,7 @@
                             </div>
                             <small data-apu-choice-output>
                                 {% if row.apu_running is sameas true %}
-                                USING {{ row.apu_allowance_display }}K {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}
+                                USING {{ row.apu_allowance_display }} {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}
                                 {% endif %}
                             </small>
                         </div>

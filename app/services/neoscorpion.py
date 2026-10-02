@@ -1470,7 +1470,7 @@ def _clear_assignment_update_notice(assignment):
 def _fuel_change_message(label, old_lbs, new_lbs):
     old_value = format_display_thousands(old_lbs) or "blank"
     new_value = format_display_thousands(new_lbs) or "blank"
-    return f"{label}: {old_value} K LBS -> {new_value} K LBS"
+    return f"{label}: {old_value} -> {new_value}"
 
 
 def _apu_override_change_message(
@@ -1482,7 +1482,7 @@ def _apu_override_change_message(
     old_value = format_apu_display_thousands(old_effective_lbs) or "blank"
     new_value = format_apu_display_thousands(new_effective_lbs) or "blank"
     label = "APU Override" if new_enabled else "APU Override Cleared"
-    return f"{label}: {old_value} K LBS -> {new_value} K LBS"
+    return f"{label}: {old_value} -> {new_value}"
 
 
 def _resource_change_label(value):
@@ -5089,7 +5089,7 @@ def _fuel_rows(
             dispatch_status_key = "fob-ready"
             dispatch_status_label = "FOB READY"
             dispatch_status_detail = (
-                f"{format_display_thousands(inherited_measurement['total_lbs'])}K measured "
+                f"{format_display_thousands(inherited_measurement['total_lbs'])} measured "
                 f"on {tail_number}"
             )
         elif assignment and assignment.review_status == "review":

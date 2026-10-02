@@ -225,13 +225,13 @@
     };
     const displayFuel = (value) => {
         if (!Number.isFinite(value)) return "INCOMPLETE";
-        return `${Math.abs(value * 10 - Math.round(value * 10)) > 1e-9
+        return Math.abs(value * 10 - Math.round(value * 10)) > 1e-9
             ? value.toFixed(2)
-            : value.toFixed(1)} K LBS`;
+            : value.toFixed(1);
     };
     const displayApuAllowance = (value) => {
         const text = displayFuel(value);
-        return text === "INCOMPLETE" ? "APU INCOMPLETE" : `APU ${text.replace(" K LBS", "K")}`;
+        return text === "INCOMPLETE" ? "APU INCOMPLETE" : `APU ${text}`;
     };
 
     const initialize = (scope = document) => {

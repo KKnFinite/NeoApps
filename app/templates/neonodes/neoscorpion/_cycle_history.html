@@ -14,7 +14,7 @@
 <tr id="neoscorpion-dispatch-detail-{{ history_key }}" class="neoscorpion-dispatch-detail-row" data-neoscorpion-dispatch-detail-row hidden>
   <td colspan="15"><strong>HISTORY · {{ history.label }}</strong>
     <p>Load Planning: {{ frozen.load_planning_output or '-' }}</p>
-    <p>APU {{ frozen.apu_running_label }} · RECOMMENDED {{ frozen.automatic_apu_allowance_display }}K · USING {{ frozen.apu_allowance_display }}K</p>
+    <p>APU {{ frozen.apu_running_label }} · RECOMMENDED {{ frozen.automatic_apu_allowance_display }} · USING {{ frozen.apu_allowance_display }}</p>
     {% for tank in frozen.tank_rows %}<p>{{ tank.label }} · Remaining {{ tank.remaining_display or '-' }} · Actual {{ tank.actual_display or '-' }}</p>{% endfor %}
   </td>
 </tr>
