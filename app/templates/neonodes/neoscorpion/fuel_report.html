@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Fuel Report | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Fuel Report">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Fuel Report</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+
+    <section class="neoscorpion-panel">
+        <div class="neoscorpion-panel-head">
+            <span>FUELING EVENTS</span>
+            <strong>
+                {% if operation %}
+                {{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}
+                {% else %}
+                No current sort
+                {% endif %}
+            </strong>
+        </div>
+
+        <div class="neoscorpion-report-summary" aria-label="Fuel report summary">
+            <div><span>Events</span><strong>{{ fuel_report_summary.event_count }}</strong></div>
+            <div><span>Fuel</span><strong>{{ fuel_report_summary.fuel_count }}</strong></div>
+            <div><span>Uplift</span><strong>{{ fuel_report_summary.uplift_count }}</strong></div>
+            <div><span>Defuel</span><strong>{{ fuel_report_summary.defuel_count }}</strong></div>
+            <div><span>Total T/F</span><strong>{{ '{:,}'.format(fuel_report_summary.total_transfer_gallons) }} GAL</strong></div>
+        </div>
+
+        {% if fuel_report_rows %}
+        <div class="neoscorpion-report-table-wrap">
+            <table class="neoscorpion-report-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Type</th>
+                        <th>Flight / Dest</th>
+                        <th>Tail</th>
+                        <th>Fueler</th>
+                        <th>Truck</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>T/F</th>
+                        <th>Required</th>
+                        <th>Neo Fuel</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in fuel_report_rows %}
+                    <tr data-fueling-event-id="{{ row.event_id }}">
+                        <td>{{ row.number }}</td>
+                        <td><span class="neoscorpion-report-event-type is-{{ row.event_type }}">{{ row.event_type_label }}</span></td>
+                        <td><strong>{{ row.flight_number }}</strong><small>{{ row.destination }}</small></td>
+                        <td><strong>{{ row.tail_number }}</strong></td>
+                        <td>{{ row.fueler_name }}</td>
+                        <td>{{ row.truck_number }}</td>
+                        <td>{{ row.started_time }}</td>
+                        <td>{{ row.ended_time }}</td>
+                        <td>{{ '{:,}'.format(row.transfer_fuel_gallons) if row.transfer_fuel_gallons is not none else '-' }} GAL</td>
+                        <td>{{ row.required_fuel_display }}</td>
+                        <td>{{ row.neo_fuel_display }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="neoscorpion-empty">No physical fueling events have been completed for this night yet.</p>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}
