@@ -1,6 +1,6 @@
 /* Solid working surface for Fuel Dispatch only, including Board View. */
 .neoscorpion-screen[data-fuel-dispatch-live] > .neoscorpion-panel {
-    background: #332e0c;
+    background: #171405;
 }
 
 
@@ -263,7 +263,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] {
     margin: 0;
     padding: 4px 4px 4px 40px;
     overflow: hidden;
-    background: #332e0c;
+    background: #171405;
 }
 
 body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > [data-dispatch-board-banner],
