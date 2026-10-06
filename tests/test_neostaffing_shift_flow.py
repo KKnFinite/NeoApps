@@ -60,15 +60,36 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIsNotNone(rows[-1]['reason'])
         with self.app.test_request_context('/neostaffing/shift-flow'):
             html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context, can_edit_shift_flow=True, shift_work_area_type=staffing_service.shift_work_area_type)
-        self.assertEqual(sorted(re.findall(r'data-staffing-person="(\d+)"', html)), sorted(str(p.id) for p in people))
-        self.assertEqual(re.findall(r'data-journey-stage="([^"]+)"', html), [phase for phase, _ in context['phases']])
-        self.assertIn('data-flow-lines', html)
-        self.assertIn('data-route-grid-data', html)
-        self.assertIn('No Setup', html)
-        self.assertIn('Not set', html)
+        self.assertEqual(sorted(re.findall(r'data-roster-person="(\d+)"', html)), sorted(str(p.id) for p in people))
+        self.assertEqual(sorted(re.findall(r'data-ballmat-person="(\d+)"', html)), sorted(str(p.id) for p in people[:3]))
+        self.assertIn('BALLMAT START', html)
+        self.assertIn('READ ONLY', html)
+        self.assertNotIn('data-journey-stage', html)
+        self.assertNotIn('data-flow-lines', html)
+        self.assertNotIn('data-route-grid-data', html)
         self.assertIn('NEEDS ASSIGNMENT', html)
-        self.assertNotIn('shift-staffing-table', html)
-        self.assertIn('Sort Start:', html)
+        lower = html.split('id="ballmat-roster-title"', 1)[1]
+        self.assertNotIn('<a ', lower)
+        self.assertNotIn('<input', lower)
+        self.assertNotIn('<select', lower)
+
+    def test_door_roster_uses_active_home_not_plan_transition(self):
+        areas = self._configure_final_composite()
+        ballmat = self._person('HOME1')
+        ballmat.last_name = 'ZULU'
+        plan = self._plan(ballmat, self._values(start=areas['West Ballmat'], transition='1', final=areas['Door 32']), areas['West Ballmat'])
+        plan.sort_start_work_area = areas['Door 34']
+        plan.ballmat_transition = None
+        door = self._person('HOME2')
+        door.last_name = 'ALPHA'
+        plan = self._plan(door, self._values(start=areas['Door 34'], final=areas['Door 32']), areas['Door 34'])
+        plan.sort_start_work_area = areas['West Ballmat']
+        db.session.commit()
+        roster = staffing_service.shift_flow_context()['flow_map']['door_roster']
+        self.assertEqual([c['label'] for c in roster['columns']], ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'])
+        self.assertEqual([r['person'].id for r in roster['columns'][1]['rows']], [door.id, ballmat.id])
+        self.assertEqual([r['person'].id for r in roster['columns'][1]['ballmat_rows']], [ballmat.id])
+        self.assertEqual((roster['count'], roster['ballmat_count']), (2, 1))
 
     def test_route_grid_bundles_identical_paths_and_preserves_custom_cross_side_locations(self):
         areas = self._configure_final_composite()
@@ -730,7 +751,7 @@ class ShiftFlowTest(unittest.TestCase):
         template = (Path(__file__).resolve().parents[1] / 'app/templates/neostaffing/_shift_flow_map.html').read_text(encoding='utf-8')
         self.assertIn('NEEDS ASSIGNMENT', template)
         self.assertIn('entry.reason', template)
-        self.assertIn('data-staffing-person', template)
+        self.assertIn('data-roster-person', template)
         self.assertNotIn('data-shift-flow-composite-cell', template)
 
     def test_journey_reloads_canonical_projection_only_after_success(self):

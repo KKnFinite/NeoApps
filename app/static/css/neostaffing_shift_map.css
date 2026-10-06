@@ -85,3 +85,38 @@
   .shift-route-focus a { display:block; }
   .shift-route-targets { grid-template-columns:1fr; }
 }
+
+/* Shared tracks keep Final Door and read-only Ballmat Home rosters aligned. */
+.shift-door-roster { --roster-columns:12; min-width:0; }
+.shift-door-controls { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.shift-door-controls button { background:#10272b; color:#b8eeee; border:1px solid #286064; border-radius:4px; padding:8px 12px; cursor:pointer; }
+.shift-door-controls button[aria-pressed="true"] { background:#155049; border-color:#36c6b5; color:#fff; }
+.shift-door-roster h2 { margin:14px 0 8px; font-size:16px; letter-spacing:.06em; }
+.shift-door-roster h2 small { font-size:11px; font-weight:400; color:#82a9ad; margin-left:8px; }
+.shift-door-columns { display:grid; grid-template-columns:repeat(var(--roster-columns),minmax(0,1fr)); border:1px solid #285054; border-radius:5px; overflow:hidden; }
+.shift-door-column { min-width:0; border-right:1px solid #285054; background:#0b1b20; padding-bottom:8px; }
+.shift-door-column:last-child { border-right:0; }
+.shift-door-column header { display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 7px; background:#143036; border-bottom:1px solid #285054; }
+.shift-door-column header strong { color:#e7ffff; font-size:16px; }
+.shift-door-column header span { color:#5ee1cd; font-size:12px; }
+.shift-door-person { display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
+a.shift-door-person:hover, a.shift-door-person:focus-visible { background:#18413e; color:#fff; }
+.shift-door-empty { padding:4px 7px; color:#66888b; }
+.shift-ballmat-roster { margin-top:24px; padding-top:14px; border-top:2px solid #507079; }
+.shift-ballmat-roster .shift-door-column { background:#131e27; }
+.shift-ballmat-roster .shift-door-column header { background:#23333f; }
+.shift-ballmat-roster h2 { color:#b6cbdc; }
+.shift-door-missing { margin-top:12px; color:#c5a66a; }
+.shift-door-missing .shift-door-person { display:inline-block; }
+.shift-door-paging { display:flex; align-items:center; gap:8px; font-size:11px; color:#8fb9b9; }
+.shift-door-roster [hidden] { display:none !important; }
+@media(max-width:700px) {
+ .shift-door-roster { --roster-columns:3; }
+ .shift-door-controls { flex-wrap:wrap; gap:8px; }
+ .shift-door-controls .neo-segmented-control { display:flex; }
+ .shift-door-controls button { min-height:40px; padding:8px 12px; }
+ .shift-door-paging { width:100%; justify-content:space-between; }
+ .shift-door-person { padding:9px 6px; }
+ .shift-door-roster h2 small { display:block; margin:5px 0 0; }
+ .neostaffing-shift-flow-head { display:flex; flex-wrap:wrap; gap:10px; }
+}

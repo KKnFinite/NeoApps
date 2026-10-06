@@ -233,7 +233,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"Final Door not set", response.data)
         self.assertIn(b"Shift Employee", response.data)
         self.assertIn(
-            b'class="shift-staffing-sides neo-segmented-control"',
+            b'data-roster-side="east"',
             response.data,
         )
 
@@ -320,7 +320,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         client = self._logged_in_client(simulator.username)
         self.app.config["CSRF_PROTECT_TESTING"] = True
         page = client.get("/neostaffing/shift-flow?phase=final_door&side=east")
-        self.assertIn(b'data-route-picker', page.data)
+        self.assertNotIn(b'data-route-picker', page.data)
+        self.assertIn(f'data-roster-person="{person.id}"'.encode(), page.data)
+        self.assertIn(f'/neostaffing/shift-flow?person_id={person.id}'.encode(), page.data)
         self.assertIn(b'NEEDS ASSIGNMENT', page.data)
         token = re.search(r'<meta name="csrf-token" content="([^"]+)">', page.get_data(as_text=True)).group(1)
         missing_csrf = client.post(

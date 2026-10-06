@@ -1010,8 +1010,28 @@ def _shift_flow_map(rows, areas):
         phases.append({"key": phase, "label": label, "locations": locations})
     matrix = _shift_flow_staffing_matrix(rows, areas, configurations)
     return {"phases": phases, "configurations": configurations, "staffing_matrix": matrix,
+            "door_roster": _shift_flow_door_roster(matrix),
             "route_grid": _shift_flow_route_grid(matrix, configurations),
             "count": len(matrix["rows"])}
+
+
+def _shift_flow_door_roster(matrix):
+    """Group final plans; Ballmat membership comes only from active Home assignments."""
+    columns = [{"id": column["id"], "label": column["label"], "side": column["side"],
+                "rows": [], "ballmat_rows": []} for column in matrix["columns"]]
+    by_id = {column["id"]: column for column in columns if column["id"] is not None}
+    missing = []
+    for row in matrix["rows"]:
+        column = by_id.get(getattr(row["plan"], "final_door_work_area_id", None))
+        if column is None:
+            missing.append(row)
+            continue
+        column["rows"].append(row)
+        if shift_work_area_type(row["assignment"].work_area) == SHIFT_FLOW_BALLMAT:
+            column["ballmat_rows"].append(row)
+    return {"columns": columns, "missing": missing, "warnings": matrix["warnings"],
+            "count": sum(len(column["rows"]) for column in columns),
+            "ballmat_count": sum(len(column["ballmat_rows"]) for column in columns)}
 
 
 def _shift_flow_route_grid(matrix, configurations):
