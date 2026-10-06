@@ -1,6 +1,6 @@
 /* Solid working surface for Fuel Dispatch only, including Board View. */
 .neoscorpion-screen[data-fuel-dispatch-live] > .neoscorpion-panel {
-    background: #221e08;
+    background: #332e0c;
 }
 
 
@@ -119,14 +119,22 @@
     line-height: 1.1;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row {
-    border-bottom: 1px solid rgba(221, 196, 119, .28);
+    border-bottom: 1px solid rgba(240, 211, 122, .40);
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) {
+    background: rgba(8, 8, 3, .18);
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) > td {
-    color: #f7f4e8;
+    color: #fffdf5;
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) strong,
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) .neoscorpion-inline-input,
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) .neoscorpion-assigned-resource {
-    color: #fbf9f0;
+    color: #fffdf5;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) .neoscorpion-dispatch-arrival-secondary:not(.neoscorpion-dispatch-secondary),
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) small:not(.neoscorpion-dispatch-secondary):not(.neoscorpion-spear-risk) {
+    color: #d9d5c4;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > td {
     border-bottom: 0;
@@ -154,18 +162,21 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
     font-size: .57rem;
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete {
+    background: rgba(0, 0, 0, .10);
+}
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete > td {
-    opacity: .64;
-    filter: saturate(.58) brightness(.92);
+    opacity: .80;
+    filter: saturate(.72) brightness(.98);
     transition: opacity .14s ease, filter .14s ease;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete:hover > td {
-    opacity: .76;
-    filter: saturate(.72) brightness(.98);
+    opacity: .90;
+    filter: saturate(.84) brightness(1.02);
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete > td:last-child {
-    opacity: .78;
-    filter: saturate(.78) brightness(.99);
+    opacity: .88;
+    filter: saturate(.86) brightness(1.02);
 }
 .neoscorpion-dispatch-transfer-estimate { white-space: nowrap; }
 .neoscorpion-dispatch-transfer-estimate small { white-space: nowrap; }
@@ -220,7 +231,7 @@
     color: #fbf9f0;
 }
 .neoscorpion-dispatch-combobox-trigger::after { content:""; position:absolute; top:50%; right:8px; width:5px; height:5px; border-right:1px solid #e7bd5c; border-bottom:1px solid #e7bd5c; transform:translateY(-70%) rotate(45deg); }
-.neoscorpion-dispatch-combobox-trigger.is-unassigned { color:#9d9290; }
+.neoscorpion-dispatch-combobox-trigger.is-unassigned { color:#c9c2b0; }
 .neoscorpion-dispatch-combobox-trigger:hover,.neoscorpion-dispatch-combobox-trigger:focus-visible { border-color:var(--node-scorpion-primary); outline:0; box-shadow:0 0 0 2px rgba(var(--node-scorpion-primary-rgb),.14); }
 .neoscorpion-dispatch-combobox-options { display:none; position:absolute; z-index:40; top:calc(100% + 4px); right:0; width:max-content; min-width:100%; max-width:min(250px,calc(100vw - 24px)); max-height:220px; overflow-y:auto; border:1px solid rgba(var(--node-scorpion-primary-rgb),.56); border-radius:9px; background:#111014; box-shadow:0 11px 24px rgba(0,0,0,.52),0 0 13px rgba(var(--node-scorpion-primary-rgb),.14); padding:4px; }
 .neoscorpion-dispatch-combobox.is-open .neoscorpion-dispatch-combobox-options { display:grid; gap:2px; }
@@ -252,7 +263,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] {
     margin: 0;
     padding: 4px 4px 4px 40px;
     overflow: hidden;
-    background: #221e08;
+    background: #332e0c;
 }
 
 body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > [data-dispatch-board-banner],
