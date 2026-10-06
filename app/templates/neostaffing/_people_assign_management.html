@@ -1,0 +1,13 @@
+<details class="neostaffing-people-drawer" data-neostaffing-drawer data-people-add-drawer="assign-management">
+  <div class="neostaffing-people-drawer-panel">
+    <div class="neostaffing-people-drawer-head"><strong>ASSIGN MANAGEMENT</strong><button type="button" data-neostaffing-close-drawer>CLOSE</button></div>
+    <form class="neostaffing-people-form neostaffing-people-management-assignment-form" method="post" action="{{ url_for('neostaffing.create_management_assignment') }}" data-management-assignment-form>
+      {{ management_return(f) }}
+      <label><span>MANAGEMENT PERSON</span><select name="person_id" required data-management-person><option value="">Select management person</option>{% for person in creation_context.management_people %}<option value="{{ person.id }}" data-classification="{{ person.classification }}">{{ person.employee_id }} — {{ person.full_name }} / {{ classification_labels[person.classification] }}</option>{% endfor %}</select></label>
+      <label><span>ASSIGN TO</span><select name="unit_id" required data-management-unit><option value="">Select organization scope</option>{% for row in creation_context.units %}{% set unit=row.unit %}<option value="{{ unit.id }}" data-unit-type="{{ unit.unit_type }}" {% if scope and scope.id == unit.id %}data-current-scope="1"{% endif %}>{{ row.path }} / {{ unit_type_labels[unit.unit_type] }}</option>{% endfor %}</select></label>
+      <input type="hidden" name="leadership_level" value="" data-management-level>
+      <p class="neostaffing-people-assignment-guidance" data-management-assignment-guidance>Select a management person. Valid assignment scopes will be shown automatically.</p>
+      <button type="submit" data-management-assignment-submit disabled>ASSIGN MANAGEMENT</button>
+    </form>
+  </div>
+</details>

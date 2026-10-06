@@ -306,6 +306,7 @@ def seniority():
 def people():
     can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
     can_edit_people = user_can(PEOPLE_EDIT_PERMISSION)
+    can_assign_management = user_can(MANAGEMENT_ASSIGN_PERMISSION)
     can_bulk_people = user_can(PEOPLE_BULK_ACTIONS_PERMISSION)
     classification = request.args.get("classification", "").strip()
     if classification not in {choice[0] for choice in staffing_service.classification_choices()}:
@@ -343,13 +344,16 @@ def people():
             profile_flow = {"person": profile_person, "assignment": profile_home,
                             "plan": profile_person.shift_flow_plan,
                             "version": staffing_service.shift_flow_revision(profile_person, profile_person.shift_flow_plan, profile_home)}
-    creation_context = staffing_service.people_creation_context(context.get("selected_unit")) if can_edit_people else None
+    creation_context = staffing_service.people_creation_context(
+        context.get("selected_unit")
+    ) if (can_edit_people or can_assign_management) else None
     all_classification_choices = staffing_service.classification_choices()
     return render_template(
         "neostaffing/people.html",
         app_role=get_user_app_role(current_user, "neostaffing"),
         can_manage_app=can_manage,
         can_edit_people=can_edit_people,
+        can_assign_management=can_assign_management,
         can_bulk_people=can_bulk_people,
         shift_flow_areas=shift_flow_areas,
         profile_flow=profile_flow,

@@ -4612,6 +4612,19 @@ def people_creation_context(selected_unit=None):
         }
         for person in reporting_people
     ]
+    management_people = (
+        StaffingPerson.query.filter(
+            StaffingPerson.active.is_(True),
+            StaffingPerson.classification.in_(MANAGEMENT_CLASSIFICATIONS),
+        )
+        .order_by(
+            StaffingPerson.last_name,
+            StaffingPerson.first_name,
+            StaffingPerson.employee_id,
+            StaffingPerson.id,
+        )
+        .all()
+    )
 
     ft_rows = (
         db.session.query(StaffingPerson, StaffingLeadershipAssignment)
@@ -4648,6 +4661,7 @@ def people_creation_context(selected_unit=None):
     return {
         "units": unit_rows,
         "selected_unit_id": getattr(selected_unit, "id", None),
+        "management_people": management_people,
         "reporting_options": reporting_options,
         "twenty_c_primary_options": primary_options,
     }
