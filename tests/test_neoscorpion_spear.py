@@ -18,11 +18,12 @@ from app.services.neoscorpion_spear import (
     save_spear_settings,
     spear_dispatch_status,
 )
+from app.services.neoscorpion_spear_calibration import LiveCalibration
 from app.services.neoscorpion_spear_learning import (
     SPEAR_LEARNING_PAYLOAD_VERSION,
     build_learning_recommendation_payload,
 )
-from app.services.neoscorpion_learning_vault import export_learning_record
+from app.services.neoscorpion_learning_vault import LearningVaultNotConfigured, export_learning_record
 
 
 NOW = datetime(2026, 9, 3, 1, 0)
@@ -32,6 +33,7 @@ class _PlanningSettings:
     setup_minutes = Decimal("5")
     finishing_minutes = Decimal("5")
     eta_safety_buffer_minutes = Decimal("5")
+    pump_rates_gallons_per_minute = {"B757": Decimal("100")}
 
     @staticmethod
     def pump_rate_for(_aircraft_type):
@@ -313,8 +315,11 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertIn("Selected", explanation["alternatives"][0]["reason"])
 
     def test_why_spear_identifies_the_same_active_calibration_used_by_planning(self):
-        calibration = SimpleNamespace(
-            active=True, configured=Decimal("100"), effective=Decimal("120"), samples=3
+        calibration = LiveCalibration(
+            metric="pump_rate", scope_key="B757", configured=Decimal("100"),
+            observed=Decimal("140"), effective=Decimal("120"), samples=3,
+            excluded_samples=0, first_observation_utc=None, most_recent_observation_utc=None,
+            observations=(), excluded_observations=(),
         )
         plan = build_spear_plan(
             [_row()], operation=SimpleNamespace(id=1), planning_settings=_PlanningSettings(),
@@ -323,6 +328,9 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
             calibrations={("pump_rate", "B757"): calibration},
         )
         self.assertEqual(plan.steps[0].explanation["live_calibration"][0]["samples"], 3)
+        self.assertEqual(plan.steps[0].explanation["live_calibration"][0]["candidate"], "120 gal/min")
+        self.assertEqual(plan.steps[0].explanation["live_calibration"][0]["using"], "100 gal/min")
+        self.assertEqual(plan.steps[0].explanation["live_calibration"][0]["mode"], "OBSERVE")
 
     def test_top_off_explanation_identifies_reserve_protection(self):
         plan = _plan([_row(demand=100)], trucks=(_truck(current=550, capacity=2000),))
@@ -354,7 +362,7 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         payload = build_learning_recommendation_payload(**kwargs)
         self.assertEqual(payload["schema_version"], SPEAR_LEARNING_PAYLOAD_VERSION)
         self.assertEqual(payload["record_type"], "recommendation_snapshot")
-        with self.assertRaisesRegex(ValueError, "durable Learning Vault"):
+        with self.assertRaises(LearningVaultNotConfigured):
             export_learning_record(payload)
 
     def test_reserve_shortfall_recommends_existing_top_off_workflow(self):
@@ -402,7 +410,7 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
     def test_dispatch_rows_show_spear_recommendation_for_each_unassigned_resource(self):
         root = Path(__file__).resolve().parents[1]
         template = (
-            root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html"
+            root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html"
         ).read_text(encoding="utf-8")
 
         self.assertIn(
@@ -546,7 +554,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
 
     def test_teach_spear_is_visible_but_disabled_while_learning_is_off(self):
         root = Path(__file__).resolve().parents[1]
-        template = (root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html").read_text(encoding="utf-8")
+        template = (root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html").read_text(encoding="utf-8")
         settings_template = (root / "app/templates/neonodes/neoscorpion/spear_settings.html").read_text(encoding="utf-8")
 
         self.assertIn("TEACH SPEAR", template)
@@ -589,7 +597,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
 
     def test_dispatch_renders_compact_readiness_and_collapsed_why_hook(self):
         root = Path(__file__).resolve().parents[1]
-        template = (root / "app/templates/neonodes/neoscorpion/fuel_dispatch.html").read_text(encoding="utf-8")
+        template = (root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html").read_text(encoding="utf-8")
 
         self.assertIn("SPEAR DATA READINESS", template)
         self.assertIn("WAITING FOR DATA", template)
@@ -625,6 +633,7 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
         }
         self.assertIn("spear_automation_enabled", columns)
         self.assertIn("spear_learning_capture_enabled", columns)
+        self.assertIn("spear_live_calibration_mode", columns)
         self.assertIn("spear_priority_order_json", columns)
         assignment_columns = {
             column["name"] for column in inspector.get_columns("neoscorpion_fuel_assignments")

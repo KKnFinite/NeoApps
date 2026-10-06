@@ -11,6 +11,7 @@ from app.extensions import db
 from app.models import NeoScorpionSettings, NeoScorpionSpearAuditEntry
 from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
 from app.services.neoscorpion_learning_vault import require_learning_vault
+from app.services.neoscorpion_spear_calibration import calibrated_planning_settings
 from app.services.time_display import format_local_hhmm
 
 
@@ -45,6 +46,7 @@ class SpearSettings:
     recommendations_enabled: bool = True
     automation_enabled: bool = False
     learning_capture_enabled: bool = False
+    live_calibration_mode: str = "observe"
     minimum_truck_reserve_gallons: int = 500
     do_not_top_off_above_percent: int = 70
     truck_minutes_per_ramp_move: Decimal = Decimal("2")
@@ -168,6 +170,10 @@ def effective_spear_settings(settings):
         learning_capture_enabled=bool(
             getattr(settings, "spear_learning_capture_enabled", False)
         ),
+        live_calibration_mode=(
+            "apply" if getattr(settings, "spear_live_calibration_mode", None) == "apply"
+            else "observe"
+        ),
         minimum_truck_reserve_gallons=int(
             settings.spear_minimum_truck_reserve_gallons or 500
         ),
@@ -204,6 +210,11 @@ def save_spear_settings(gateway, user, form):
         db.session.flush()
 
     previous_automation = bool(settings.spear_automation_enabled)
+    calibration_mode = form.get(
+        "live_calibration_mode", effective_spear_settings(settings).live_calibration_mode
+    )
+    if calibration_mode not in ("observe", "apply"):
+        raise ValueError("Live Calibration Mode must be OBSERVE or APPLY.")
     enabled = _form_bool(form, "recommendations_enabled")
     automation = _form_bool(form, "automation_enabled")
     learning_capture = requested_learning_capture
@@ -213,6 +224,7 @@ def save_spear_settings(gateway, user, form):
         "spear_recommendations_enabled": enabled,
         "spear_automation_enabled": automation,
         "spear_learning_capture_enabled": learning_capture,
+        "spear_live_calibration_mode": calibration_mode,
         "spear_minimum_truck_reserve_gallons": _whole_number(
             form.get("minimum_truck_reserve_gallons"), "Minimum Truck Reserve Gallons", 0
         ),
@@ -267,6 +279,10 @@ def build_spear_plan(
     now_utc = _utc_naive(now_utc) or datetime.utcnow()
     if not spear_settings.recommendations_enabled:
         return _plan((), {}, {}, status_text="SPEAR: RECOMMENDATIONS OFF")
+
+    planning_settings = calibrated_planning_settings(
+        planning_settings, calibrations or {}, mode=spear_settings.live_calibration_mode
+    )
 
     fuelers = {
         item.id: item for item in sorted(nightly_fuelers, key=_fueler_sort_key)
@@ -527,6 +543,7 @@ def build_spear_plan(
         waiting_for_data=waiting_for_data,
         relevant_count=len(ordered_rows),
         readiness_by_mission_id=readiness,
+        live_calibration_mode=spear_settings.live_calibration_mode,
     )
 
 
@@ -589,6 +606,7 @@ def _plan(
     waiting_for_data=None,
     relevant_count=None,
     readiness_by_mission_id=None,
+    live_calibration_mode="observe",
 ):
     waiting_for_data = dict(waiting_for_data or {})
     covered = sum(value == "COVERED" for value in risks.values())
@@ -627,7 +645,10 @@ def _plan(
         )
         for step in steps
     ]
-    token = hashlib.sha256(json.dumps(token_payload, sort_keys=True).encode()).hexdigest()[:24]
+    token = hashlib.sha256(json.dumps(
+        {"steps": token_payload, "live_calibration_mode": live_calibration_mode},
+        sort_keys=True,
+    ).encode()).hexdigest()[:24]
     return SpearPlan(
         tuple(steps), dict(risks), dict(unavailable), covered, at_risk, late,
         unplanned, status_text, token, waiting_for_data, evaluated,
@@ -748,13 +769,14 @@ def _assignment_explanation(
             if timing.planning_demand_gallons is None
             else ()
         ),
+        "live_calibration_mode": settings.live_calibration_mode,
         "live_calibration": _live_calibration_notes(
-            calibrations, row.get("detailed_aircraft_type")
+            calibrations, row.get("detailed_aircraft_type"), settings.live_calibration_mode
         ),
     }
 
 
-def _live_calibration_notes(calibrations, aircraft_type):
+def _live_calibration_notes(calibrations, aircraft_type, mode):
     """Presentation metadata comes from the same calibration objects as planning."""
     notes = []
     for metric, scope in (
@@ -763,15 +785,26 @@ def _live_calibration_notes(calibrations, aircraft_type):
         ("pump_rate", aircraft_type),
     ):
         item = calibrations.get((metric, scope))
-        if item is not None and getattr(item, "active", False):
+        if item is not None:
             notes.append({
                 "metric": metric.replace("_", " ").title(),
                 "scope": scope,
-                "configured": _minutes_display(getattr(item, "configured", None)),
-                "using": _minutes_display(getattr(item, "effective", None)),
+                "configured": _calibration_value_display(item.configured, metric),
+                "observed": _calibration_value_display(item.observed, metric),
+                "candidate": _calibration_value_display(item.effective, metric),
+                "using": _calibration_value_display(item.recommendation_using(mode), metric),
+                "mode": mode.upper(),
                 "samples": item.samples,
+                "excluded_samples": item.excluded_samples,
+                "confidence": item.confidence,
             })
     return notes
+
+
+def _calibration_value_display(value, metric):
+    if metric == "pump_rate":
+        return f"{float(value):g} gal/min" if value is not None else "-"
+    return _minutes_display(value)
 
 
 def _top_off_explanation(*, row, truck, current_gallons, demand, settings):

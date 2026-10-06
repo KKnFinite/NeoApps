@@ -674,6 +674,10 @@ class NeoScorpionSettings(db.Model):
     __tablename__ = "neoscorpion_settings"
     __table_args__ = (
         db.UniqueConstraint("gateway_id", name="uq_neoscorpion_settings_gateway"),
+        db.CheckConstraint(
+            "spear_live_calibration_mode IN ('observe', 'apply')",
+            name="ck_neoscorpion_live_calibration_mode",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -700,6 +704,9 @@ class NeoScorpionSettings(db.Model):
     # explicitly configured.
     spear_learning_capture_enabled = db.Column(
         db.Boolean, nullable=False, default=False, server_default=db.false()
+    )
+    spear_live_calibration_mode = db.Column(
+        db.String(8), nullable=False, default="observe", server_default="observe"
     )
     spear_minimum_truck_reserve_gallons = db.Column(
         db.Integer, nullable=False, default=500, server_default="500"

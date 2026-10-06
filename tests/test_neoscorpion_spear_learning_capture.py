@@ -45,6 +45,7 @@ class SpearLearningCaptureTest(unittest.TestCase):
         self.user = User(
             username="learning_fueler",
             email="learning_fueler@example.test",
+            password_hash="test-only",
             role="watcher",
             is_active=True,
         )

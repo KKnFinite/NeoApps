@@ -45,6 +45,7 @@ from app.services.neoscorpion import (
     visible_neoscorpion_menu_items,
 )
 from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
+from app.services.neoscorpion_spear_calibration import LiveCalibration
 from app.services.parking_plan import set_tail_hot
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.password_policy import set_user_password
@@ -464,6 +465,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             self.assertIn(b"SPEAR \xc2\xb7 UNAVAILABLE", response.data)
 
     def test_fuel_dispatch_renders_populated_spear_calibration(self):
+        from tests import test_neoscorpion_spear as spear_fixtures
+        from app.services.neoscorpion_spear import SpearSettings, build_spear_plan
         self._login_approved_user(role="simulator")
         operation, _mission = self._add_current_departure(
             flight_number="UPS901",
@@ -481,25 +484,47 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             "collecting_count": 0,
             "label": "SPEAR CALIBRATION · 1 ACTIVE",
             "items": (
-                SimpleNamespace(
+                LiveCalibration(
                     metric="setup_minutes",
                     scope_key="B757",
-                    configured="5.0",
-                    effective="6.0",
+                    configured=Decimal("5"), observed=Decimal("7"),
+                    effective=Decimal("6"),
                     samples=3,
-                    confidence="LOW",
+                    excluded_samples=0, first_observation_utc=None,
+                    most_recent_observation_utc=None, observations=(), excluded_observations=(),
                 ),
             ),
         }
-        with (
-            patch("app.services.neoscorpion.current_sort_operation", return_value=operation),
-            patch("app.services.neoscorpion.calibration_summary", return_value=summary),
-        ):
-            response = self.client.get("/neoscorpion/fuel-dispatch")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"SPEAR CALIBRATION \xc2\xb7 1 ACTIVE", response.data)
-        self.assertIn(b"Setup Minutes \xc2\xb7 B757", response.data)
+        settings = NeoScorpionSettings(gateway_id=self.gateway.id)
+        db.session.add(settings)
+        for mode, using in (("observe", "5"), ("apply", "6")):
+            settings.spear_live_calibration_mode = mode
+            db.session.commit()
+            plan = build_spear_plan(
+                [spear_fixtures._row(_mission.id)], operation=operation,
+                planning_settings=spear_fixtures._PlanningSettings(),
+                spear_settings=SpearSettings(live_calibration_mode=mode),
+                nightly_fuelers=(spear_fixtures._fueler(),),
+                nightly_trucks=(spear_fixtures._truck(),), now_utc=spear_fixtures.NOW,
+                calibrations={("setup_minutes", "B757"): summary["items"][0]},
+            )
+            with (
+                self.subTest(mode=mode),
+                patch("app.services.neoscorpion.current_sort_operation", return_value=operation),
+                patch("app.services.neoscorpion.calibration_summary", return_value=summary),
+                patch("app.services.neoscorpion.build_spear_plan", return_value=plan),
+            ):
+                response = self.client.get("/neoscorpion/fuel-dispatch")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"SPEAR CALIBRATION \xc2\xb7 1 ACTIVE", response.data)
+            self.assertIn(b"Setup Minutes \xc2\xb7 B757", response.data)
+            self.assertIn(f"LIVE CALIBRATION · {mode.upper()}".encode(), response.data)
+            self.assertIn(b"WHY SPEAR?", response.data)
+            self.assertIn(b"Observed 7 min", response.data)
+            self.assertIn(b"Calibration Candidate 6 min", response.data)
+            self.assertIn(f"Recommendation Using {using} min".encode(), response.data)
+            if mode == 'observe':
+                self.assertIn(b"recommendations use configured baselines", response.data)
 
     def test_standalone_spear_calibration_renders_empty_items(self):
         self._login_approved_user(role="master")
@@ -512,7 +537,6 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"Collecting qualifying completed current-sort work.", response.data)
 
     def test_standalone_spear_calibration_renders_populated_items(self):
-        from app.services.neoscorpion_spear_calibration import LiveCalibration
         self._login_approved_user(role="master")
         item = LiveCalibration(
             metric="setup_minutes", scope_key="B757", configured=Decimal("5"),
@@ -520,16 +544,28 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             first_observation_utc=None, most_recent_observation_utc=None,
             observations=(), excluded_observations=(),
         )
-        with patch("app.neonodes.neoscorpion.routes.fuel_dispatch_context", return_value={
-            "operation": None,
-            "spear_calibration": {"label": "SPEAR CALIBRATION · 1 ACTIVE", "items": [item]},
-        }):
-            response = self.client.get("/neoscorpion/settings/spear/calibration")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Setup Minutes · B757".encode(), response.data)
-        self.assertIn(b"Configured 5", response.data)
-        self.assertIn(b"SPEAR Using 6", response.data)
-        self.assertIn(b"3 qualifying", response.data)
+        settings = NeoScorpionSettings(gateway_id=self.gateway.id)
+        db.session.add(settings)
+        db.session.commit()
+        for mode, using in (("observe", "5"), ("apply", "6")):
+            settings.spear_live_calibration_mode = mode
+            db.session.commit()
+            with self.subTest(mode=mode), patch("app.neonodes.neoscorpion.routes.fuel_dispatch_context", return_value={
+                "operation": None,
+                "spear_calibration": {"label": "SPEAR CALIBRATION · 1 ACTIVE", "items": [item]},
+            }):
+                response = self.client.get("/neoscorpion/settings/spear/calibration")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Setup Minutes · B757".encode(), response.data)
+            self.assertIn(b"Configured 5", response.data)
+            self.assertIn(b"Observed 7", response.data)
+            self.assertIn(b"Calibration Candidate 6", response.data)
+            self.assertIn(f"Recommendation Using {using}".encode(), response.data)
+            self.assertIn(f"LIVE CALIBRATION · {mode.upper()}".encode(), response.data)
+            self.assertIn(b"3 qualifying", response.data)
+            settings_page = self.client.get('/neoscorpion/settings/spear')
+            self.assertIn(f'<option value="{mode}" selected>'.encode(), settings_page.data)
+            self.assertIn(b'name="learning_capture_enabled"', settings_page.data)
 
     def test_vault_test_posts_to_test_route_without_saving_settings(self):
         self._login_approved_user(role="master")

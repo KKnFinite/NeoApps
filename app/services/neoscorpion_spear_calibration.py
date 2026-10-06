@@ -79,6 +79,9 @@ class LiveCalibration:
             return "Collecting current-sort operational observations."
         return "Configured baseline blended with current-sort qualifying work."
 
+    def recommendation_using(self, mode):
+        return self.effective if mode == "apply" and self.active else self.configured
+
 
 def blended_estimate(configured, observations):
     """Return the transparent baseline-as-three-observations blend."""
@@ -138,8 +141,10 @@ def build_live_calibration(operation, planning_settings, rows):
     return calibrations
 
 
-def calibrated_planning_settings(planning_settings, calibrations):
-    """Use calibration only for active scopes; configured values remain fallback."""
+def calibrated_planning_settings(planning_settings, calibrations, *, mode="observe"):
+    """Observe keeps configured planning; apply uses only qualifying active scopes."""
+    if mode != "apply" or not calibrations:
+        return planning_settings
     pump_rates = dict(planning_settings.pump_rates_gallons_per_minute)
     setup = planning_settings.setup_minutes
     finishing = planning_settings.finishing_minutes

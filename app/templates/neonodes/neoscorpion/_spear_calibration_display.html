@@ -1,0 +1,9 @@
+{% macro calibration_mode(mode) -%}
+<strong>LIVE CALIBRATION · {{ mode|upper }}</strong>
+{% if mode == 'apply' %}Qualifying live calibration is applied to recommendation timing.
+{% else %}Calibration is collected and displayed; recommendations use configured baselines.{% endif %}
+{%- endmacro %}
+
+{% macro calibration_values(item, mode) -%}
+Configured {{ item.configured if item.configured is not none else '-' }} · Observed {{ item.observed if item.observed is not none else '-' }} · Calibration Candidate {{ item.effective if item.effective is not none else '-' }} · Recommendation Using {{ item.recommendation_using(mode) if item.recommendation_using(mode) is not none else '-' }}{% if mode == 'observe' %} configured baseline{% endif %}
+{%- endmacro %}

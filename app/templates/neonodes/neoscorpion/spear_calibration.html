@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "neonodes/neoscorpion/_spear_calibration_display.html" import calibration_mode, calibration_values %}
 {% block title %}SPEAR Live Calibration | NeoScorpion{% endblock %}
 {% block content %}
 <section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Live Calibration">
@@ -9,12 +10,13 @@
     {% include "neonodes/neoscorpion/_menu.html" %}
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head"><span>Current Sort</span><strong>{{ spear_calibration.label }}</strong></div>
+        <p>{{ calibration_mode(spear_settings.live_calibration_mode) }}</p>
         {% if not operation %}<p class="neoscorpion-empty">No current sort is available.</p>{% endif %}
         <div class="neoscorpion-spear-calibration-list">
         {% for item in spear_calibration["items"] %}
             <article>
                 <strong>{{ item.metric|replace('_', ' ')|title }} · {{ item.scope_key }}</strong>
-                <span>Configured {{ item.configured if item.configured is not none else '-' }} · Observed {{ item.observed if item.observed is not none else '-' }} · SPEAR Using {{ item.effective if item.effective is not none else '-' }}</span>
+                <span>{{ calibration_values(item, spear_settings.live_calibration_mode) }}</span>
                 <span>{{ item.samples }} qualifying · {{ item.excluded_samples }} excluded · {{ item.confidence }}</span>
                 <small>{{ item.explanation }}</small>
                 {% if can_edit and operation %}<form method="post"><input type="hidden" name="metric" value="{{ item.metric }}"><input type="hidden" name="scope_key" value="{{ item.scope_key }}"><button class="action-button" type="submit">RESET</button></form>{% endif %}

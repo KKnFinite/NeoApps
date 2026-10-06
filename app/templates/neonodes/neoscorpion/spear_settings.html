@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "neonodes/neoscorpion/_spear_calibration_display.html" import calibration_mode %}
 
 {% block title %}SPEAR Fleet Optimizer | NeoScorpion{% endblock %}
 
@@ -17,6 +18,13 @@
             <div class="neoscorpion-spear-setting-grid">
                 <label><input type="checkbox" name="recommendations_enabled" value="1" {% if spear_settings.recommendations_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Enable SPEAR Recommendations</label>
                 <label><input type="checkbox" name="automation_enabled" value="1" {% if spear_settings.automation_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %} data-spear-automation-toggle> SPEAR Automation</label>
+                <label>LIVE CALIBRATION MODE
+                    <select name="live_calibration_mode" {% if not can_edit %}disabled{% endif %}>
+                        <option value="observe" {% if spear_settings.live_calibration_mode == 'observe' %}selected{% endif %}>OBSERVE</option>
+                        <option value="apply" {% if spear_settings.live_calibration_mode == 'apply' %}selected{% endif %}>APPLY</option>
+                    </select>
+                    <small>OBSERVE: collect and display calibration; use configured baselines for recommendations. APPLY: use qualifying live calibration in recommendation timing. Learning Capture and Automation are separate controls.</small>
+                </label>
                 <label>Minimum Truck Reserve Gallons<input name="minimum_truck_reserve_gallons" value="{{ spear_settings.minimum_truck_reserve_gallons }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
                 <label>Do Not Top Off Above, %<input name="do_not_top_off_above_percent" value="{{ spear_settings.do_not_top_off_above_percent }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
                 <label>Truck Minutes Per Ramp Move<input name="truck_minutes_per_ramp_move" value="{{ spear_settings.truck_minutes_per_ramp_move }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}></label>
@@ -61,7 +69,8 @@
 
         <section class="neoscorpion-panel">
             <div class="neoscorpion-panel-head"><span>Live Calibration</span><strong>CURRENT SORT</strong></div>
-            <p>See the transparent configured, observed, and active SPEAR timing estimates. This does not enable Learning Capture.</p>
+            <p>{{ calibration_mode(spear_settings.live_calibration_mode) }}</p>
+            <p>Compare configured, observed, calibration candidate, and recommendation-used values. This does not enable Learning Capture.</p>
             <a class="action-button" href="{{ url_for('neoscorpion.spear_calibration') }}">VIEW LIVE CALIBRATION</a>
         </section>
 

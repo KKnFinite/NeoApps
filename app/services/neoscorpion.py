@@ -59,7 +59,6 @@ from app.services.neoscorpion_spear import (
 from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services.neoscorpion_spear_calibration import (
     build_live_calibration,
-    calibrated_planning_settings,
     calibration_summary,
 )
 from app.services.neoscorpion_dispatch_planning import (
@@ -390,9 +389,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             spear_plan = build_spear_plan(
                 context["rows"],
                 operation=context["operation"],
-                planning_settings=calibrated_planning_settings(
-                    configured_planning_settings, live_calibrations
-                ),
+                planning_settings=configured_planning_settings,
                 spear_settings=context["spear_settings"],
                 nightly_fuelers=context["nightly_assignment_fuelers"],
                 nightly_trucks=context["nightly_trucks"],
