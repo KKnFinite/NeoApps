@@ -1,3 +1,7 @@
+/* Solid working surface for Fuel Dispatch only, including Board View. */
+.neoscorpion-screen[data-fuel-dispatch-live] > .neoscorpion-panel {
+    background: #2b260b;
+}
 
 
 /* NeoScorpion keeps its node navigation available without sacrificing dispatch width. */
@@ -215,7 +219,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] {
     margin: 0;
     padding: 4px 4px 4px 40px;
     overflow: hidden;
-    background: #07090d;
+    background: #2b260b;
 }
 
 body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > [data-dispatch-board-banner],
