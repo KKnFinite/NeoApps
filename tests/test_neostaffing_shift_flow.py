@@ -96,6 +96,10 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual((roster['count'], roster['ballmat_count']), (2, 1))
         self.assertEqual(roster['ballmat_side_counts'], {'west': 1, 'east': 0})
         self.assertEqual(roster['discharge_count'], 0)
+        self.assertEqual(
+            [row['person'].last_name for row in roster['columns'][1]['rows']],
+            ['ALPHA', 'ZULU'],
+        )
 
     def test_route_grid_bundles_identical_paths_and_preserves_custom_cross_side_locations(self):
         areas = self._configure_final_composite()

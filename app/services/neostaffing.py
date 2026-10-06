@@ -1040,6 +1040,16 @@ def _shift_flow_door_roster(matrix):
                 ballmat_side_counts["west"] += 1
             elif home_label == "EBM":
                 ballmat_side_counts["east"] += 1
+    name_key = lambda row: (
+        row["person"].last_name.casefold(),
+        row["person"].first_name.casefold(),
+        row["person"].id,
+    )
+    for column in columns:
+        column["rows"].sort(key=name_key)
+        column["ballmat_rows"].sort(key=name_key)
+    discharge_rows.sort(key=name_key)
+    missing.sort(key=name_key)
     return {"columns": columns, "missing": missing, "warnings": matrix["warnings"],
             "count": sum(len(column["rows"]) for column in columns),
             "ballmat_count": sum(len(column["ballmat_rows"]) for column in columns),
