@@ -1,14 +1,14 @@
 /* Gateway workhorse only. No font geometry or display-font overrides. */
 @font-face {
     font-family: NeoFontPlain;
-    src: url('../fonts/neofontplain/NeoFontPlain-Regular.woff2') format('woff2');
+    src: url('../fonts/neofontplain/NeoFontPlain-Regular.woff2?zero=20261006-open-v1') format('woff2');
     font-weight: 400;
     font-style: normal;
     font-display: block;
 }
 @font-face {
     font-family: NeoFontPlain;
-    src: url('../fonts/neofontplain/NeoFontPlain-SemiBold.woff2') format('woff2');
+    src: url('../fonts/neofontplain/NeoFontPlain-SemiBold.woff2?zero=20261006-open-v1') format('woff2');
     font-weight: 600;
     font-style: normal;
     font-display: block;

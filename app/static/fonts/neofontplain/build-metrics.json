@@ -1,6 +1,6 @@
 {
   "family": "NeoFontPlain",
-  "source_sha256": "24ead6e566395780129116364ff00e133dc3e8589873f20a8b1cf1ccbc8eb2ac",
+  "source_sha256": "f7f210376b12703db99fa53441923e3f471294b60ad907e51a84609f805a986c",
   "western_sha256": "4ee976bcb3ad0c898da37abea40c781b02936ec1a0d008c7f621754d92da82ce",
   "weights": {
     "Regular": {
@@ -185,7 +185,7 @@
             547,
             720
           ],
-          "contours": 3
+          "contours": 2
         },
         "uni0031": {
           "advance": 620,
@@ -3111,7 +3111,7 @@
             559,
             720
           ],
-          "contours": 3
+          "contours": 2
         },
         "uni0031": {
           "advance": 620,

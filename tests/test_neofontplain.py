@@ -111,11 +111,17 @@ class NeoFontPlainTest(unittest.TestCase):
         regular, bold = self.fonts.values()
         self.assertNotEqual(regular.glyph(regular.cmap()[ord('H')]), bold.glyph(bold.cmap()[ord('H')]))
 
+    def test_zero_has_open_counter_without_internal_stroke(self):
+        for font in self.fonts.values():
+            glyph = font.glyph(font.cmap()[ord('0')])
+            self.assertEqual(struct.unpack_from('>h', glyph)[0], 2)
+
     def test_approved_base_geometry_and_advances_unchanged(self):
-        # Captured from ea74bdb's committed fonts, before Western extension.
-        expected = {'Regular': '7f939168c3b96abc06b5dacd599283e327f79723675e33f3088736f4be2119de',
-                    'SemiBold': 'c52f805dd127b09461605b792c8fd08a14bb47a542c306ebf7ebe211ebc5b80b'}
+        # Original geometry retained except the intentionally removed zero slash.
+        expected = {'Regular': 'd9e49ca10efb750ce5e598ede96fd248d8b2c6f029e55fbca2fc5cc48fd66e89',
+                    'SemiBold': '761d27cfa8b89feb45f1e4c91c85154672b29473739de16b5c97c1cb4b096c51'}
         codes = sorted(set(range(32, 127)) | set(map(ord, '\u00a0£°·×÷–—‘’“”•…€←↑→↓−✓')))
+        codes.remove(ord('0'))
         for style, font in self.fonts.items():
             cmap = font.cmap()
             data = b''.join(code.to_bytes(4, 'big')+font.advance(cmap[code]).to_bytes(2, 'big')+font.glyph(cmap[code]) for code in codes)
