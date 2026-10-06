@@ -104,3 +104,31 @@
   .neostaffing-management-rebuilt > .neostaffing-org-workspace,.neostaffing-management-rebuilt > .neostaffing-org-drawer { grid-column:1; }
   .neostaffing-org-main .neostaffing-org-header { align-items:flex-start; flex-direction:column; }
 }
+
+/* Reports-To is the chart; the shared People scope rail is navigation only. */
+body.blueprint-neostaffing section.neostaffing-org-console.staffing-reporting-console { display:grid; height:auto; min-height:calc(100vh - 122px); margin:0; border:0; overflow:visible; grid-template-columns:230px minmax(0,1fr); gap:12px; width:100%; max-width:none; padding:0; min-width:0; }
+.staffing-reporting-console .neostaffing-org-main { min-width:0; }
+.staffing-reporting-chart { min-width:0; padding:12px; border:1px solid #334b53; border-radius:6px; background:#0c161c; }
+.staffing-reporting-branches { list-style:none; padding:0; margin:0; min-width:0; }
+.staffing-reporting-chart > .staffing-reporting-branches { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr)); gap:24px; align-items:start; }
+.staffing-reporting-branch { position:relative; min-width:0; }
+.staffing-reporting-card { display:flex; flex-direction:column; gap:6px; padding:12px; border:1px solid #42646a; border-radius:6px; background:#14242c; color:#c6dcdc; text-decoration:none; overflow-wrap:anywhere; }
+.staffing-reporting-card strong { color:#f1ffff; font-size:1.05rem; }
+.staffing-reporting-card span { font-size:.8rem; }
+.staffing-reporting-card small { color:#8facb6; }
+.staffing-reporting-card:hover,.staffing-reporting-card[aria-current] { border-color:#63d1c8; background:#1b3639; }
+.staffing-reporting-card:focus-visible { outline:2px solid #63d1c8; outline-offset:3px; }
+.staffing-reporting-branch > .staffing-reporting-branches { margin-left:16px; padding:18px 0 0 18px; border-left:2px solid #63d1c8; }
+.staffing-reporting-branch > .staffing-reporting-branches > li { margin-bottom:16px; }
+.staffing-reporting-branch > .staffing-reporting-branches > li:last-child { margin-bottom:0; }
+.staffing-reporting-branch > .staffing-reporting-branches > li::before { content:''; position:absolute; left:-20px; top:24px; width:20px; border-top:2px solid #63d1c8; }
+.staffing-reporting-console #org-person-inspector { position:static; width:auto; max-height:none; overflow:visible; border:1px solid #334b53; border-radius:6px; padding:12px; }
+.staffing-structure-secondary { padding:10px; border-top:1px solid #334b53; color:#94b0b7; }
+.staffing-structure-secondary > summary { cursor:pointer; font-size:.75rem; }
+.staffing-reporting-console .neostaffing-org-form :is(input,select,button) { min-width:0; max-width:100%; background:#101e25; color:#e2eef0; border:1px solid #42626b; border-radius:4px; padding:8px; }
+@media(max-width:980px) {
+ body.blueprint-neostaffing section.neostaffing-org-console.staffing-reporting-console { grid-template-columns:minmax(0,1fr); }
+ .staffing-reporting-chart { padding:10px; }
+ .staffing-reporting-branch > .staffing-reporting-branches { margin-left:10px; padding-left:12px; }
+ .staffing-reporting-branch > .staffing-reporting-branches > li::before { left:-14px; width:14px; }
+}

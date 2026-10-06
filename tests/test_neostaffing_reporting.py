@@ -371,11 +371,11 @@ class NeoStaffingReportingTest(unittest.TestCase):
         self._login(viewer.username)
         response = self.client.get(f"/neostaffing/org-chart?view=management&person_id={manager.id}&unit_id={sort.id}")
         self.assertEqual(response.status_code, 200)
-        for hook in (b'Hierarchy navigator', b'Reporting explorer', b'Selected reporting path', b'neostaffing_org_explorer.css', b'DIRECT REPORTS'):
+        for hook in (b'data-people-scope', b'Management reporting hierarchy', b'neostaffing_scope_rail.js', b'neostaffing_org_explorer.css', b'DIRECT REPORTS'):
             self.assertIn(hook, response.data)
         self.assertNotIn(b'SAVE REPORTS TO', response.data)
 
-    def test_management_view_is_read_only_and_operational_view_remains_default(self):
+    def test_management_chart_is_default_and_read_only(self):
         viewer = self._user("reporting_viewer", "watcher")
         self._person("R600", "division_manager")
         db.session.commit()
@@ -397,14 +397,14 @@ class NeoStaffingReportingTest(unittest.TestCase):
         operational = self.client.get("/neostaffing/org-chart")
 
         self.assertEqual(management.status_code, 200)
-        self.assertIn(b"MANAGEMENT TREE", management.data)
-        self.assertIn(b"UNASSIGNED MANAGEMENT", management.data)
+        self.assertIn(b"Management reporting hierarchy", management.data)
+        self.assertIn(b"data-reporting-person", management.data)
         self.assertNotIn(b"SAVE REPORTS TO", management.data)
         self.assertEqual(dml, [])
         commit.assert_not_called()
         self.assertEqual(operational.status_code, 200)
-        self.assertIn(b"FULL TREE", operational.data)
-        self.assertIn(b"data-org-chart-tree", operational.data)
+        self.assertIn(b"Management reporting hierarchy", operational.data)
+        self.assertIn(b"data-people-tree", operational.data)
 
     def test_management_view_displays_allowed_operational_mismatch(self):
         first_sort, _first_operation, _first_department, _first_area = self._hierarchy(
@@ -506,6 +506,7 @@ class NeoStaffingReportingTest(unittest.TestCase):
         )
 
     def test_grandmaster_can_edit_without_linked_staffing_person(self):
+        sort, _, _, _ = self._hierarchy("ReturnScope")
         subject = self._person("R800", "full_time_supervisor")
         target = self._person("R801", "manager")
         grandmaster = self._user("reporting_grandmaster", "grandmaster")
@@ -518,13 +519,72 @@ class NeoStaffingReportingTest(unittest.TestCase):
             data={
                 "reports_to_person_id": str(target.id),
                 "expected_revision": "none",
+                "return_unit_id": str(sort.id),
             },
             follow_redirects=True,
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request.args.get("unit_id"), str(sort.id))
         self.assertIn(b"Reports To updated.", response.data)
         self.assertEqual(StaffingReportingRelationship.query.count(), 1)
+
+    def _scope_chart_fixture(self):
+        sort, operation, department, area = self._hierarchy("Night")
+        _, _, other_department, other_area = self._hierarchy("Other")
+        people = [self._person("SCOPE"+str(i), classification, first_name=name)
+            for i, (classification, name) in enumerate([
+                ("division_manager", "Division"), ("manager", "Manager"),
+                ("full_time_supervisor", "Supervisor"), ("part_time_supervisor", "Door"),
+                ("full_time_supervisor", "SecondRoot"), ("full_time_specialist", "Specialist"),
+                ("twenty_c_full_time_supervisor", "TwentyC"), ("part_time", "Hourly"),
+                ("part_time_supervisor", "NoReportingRelationship")])]
+        assignments = [(0,sort),(1,operation),(2,department),(3,other_area),
+                       (4,department),(5,other_department),(6,area),(8,area)]
+        for index, unit in assignments:
+            db.session.add(StaffingLeadershipAssignment(person=people[index], unit=unit,
+                leadership_level=unit.unit_type))
+        for child,parent in [(1,0),(2,1),(3,2),(5,2),(6,2)]:
+            db.session.add(StaffingReportingRelationship(person=people[child],reports_to_person=people[parent]))
+        db.session.commit()
+        return (sort,operation,department,area,other_area),people
+
+    def test_scope_chart_roots_are_direct_assignments_and_descendants_are_reports_to(self):
+        units, people = self._scope_chart_fixture()
+        def flatten(nodes):
+            return [row["person"].id for row in nodes] + [pid
+                for row in nodes for pid in flatten(row["children"])]
+        for unit, roots in [(units[0],[0]),(units[1],[1]),(units[2],[2,4]),(units[3],[6,8]),(units[4],[3])]:
+            with self.subTest(scope=unit.unit_type):
+                chart = staffing_service.management_org_chart_context(selected_unit_id=unit.id)
+                self.assertEqual({row["person"].id for row in chart["scope_tree"]}, {people[i].id for i in roots})
+        chart = staffing_service.management_org_chart_context(selected_unit_id=units[2].id)
+        self.assertEqual(set(flatten(chart["scope_tree"])), {people[i].id for i in (2,3,4,5,6)})
+        self.assertNotIn(people[7].id, flatten(chart["scope_tree"]))
+        db.session.query(StaffingReportingRelationship).filter_by(person_id=people[3].id).update({"active":False})
+        db.session.commit()
+        self.assertNotIn(people[3].id, flatten(staffing_service.management_org_chart_context(selected_unit_id=units[2].id)["scope_tree"]))
+
+    def test_reporting_chart_renders_scope_chain_and_readonly_cards(self):
+        units, people = self._scope_chart_fixture()
+        viewer = self._user("scope_chart_viewer", "watcher")
+        db.session.commit(); self._login(viewer.username)
+        response = self.client.get(f"/neostaffing/org-chart?department_id={units[2].id}")
+        self.assertEqual(response.status_code,200)
+        html=response.get_data(as_text=True)
+        chart=html.split('aria-label="Management reporting hierarchy"',1)[1].split('</section>',1)[0]
+        for i in (2,3,4,5,6):
+            self.assertEqual(chart.count(f'data-reporting-person="{people[i].id}"'),1)
+            self.assertIn(people[i].employee_id,chart)
+        self.assertNotIn('Hourly',chart)
+        self.assertIn('staffing-reporting-branches',chart)
+        self.assertNotIn('org-unit-canvas',html)
+        self.assertNotIn('SELECT A SCOPE',html)
+        self.assertNotIn('ASSIGN MANAGEMENT',html)
+        self.assertNotIn('STRUCTURE ACTIONS',html)
+        self.assertIn('neostaffing-people-organization',html)
+        self.assertIn('neostaffing_scope_rail.js',html)
+        self.assertIn(f'work_area_id={units[3].id}',html)
 
     def _person(
         self,

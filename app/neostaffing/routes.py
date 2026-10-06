@@ -2002,51 +2002,27 @@ def hierarchy():
 
 
 def _render_org_chart():
-    view = request.args.get("view", "").strip().lower()
-    if view == "management":
-        app_role = get_user_app_role(current_user, "neostaffing")
-        can_direct_edit = bool(
-            user_can(MANAGEMENT_ASSIGN_PERMISSION)
-            and staffing_service.can_user_directly_edit_reporting_relationship(
-                current_user,
-                app_role,
-            )
-        )
-        return render_template(
-            "neostaffing/org_chart_management.html",
-            app_role=app_role,
-            can_manage_app=user_can_access_app(
-                current_user,
-                "neostaffing",
-                minimum_role="master",
-            ),
-            can_direct_edit=can_direct_edit,
-            management=staffing_service.management_org_chart_context(
-                request.args.get("person_id", "").strip(),
-                request.args.get("unit_id", "").strip(),
-            ),
-            classification_labels=staffing_service.CLASSIFICATION_LABELS,
-            employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
-        )
-
-    context = staffing_service.org_chart_context(request.args.get("unit_id", "").strip())
+    app_role = get_user_app_role(current_user, "neostaffing")
+    selected_unit_id = next((request.args.get(key, "").strip() for key in
+        ("unit_id", "work_area_id", "department_id", "operation_id", "sort_id")
+        if request.args.get(key, "").strip()), "")
+    management = staffing_service.management_org_chart_context(
+        request.args.get("person_id", "").strip(), selected_unit_id)
+    units = management["units"]
     return render_template(
         "neostaffing/org_chart.html",
-        app_role=get_user_app_role(current_user, "neostaffing"),
-        can_manage_app=user_can_access_app(current_user, "neostaffing", minimum_role="master"),
+        app_role=app_role,
+        management=management,
+        can_direct_edit=bool(user_can(MANAGEMENT_ASSIGN_PERMISSION) and
+            staffing_service.can_user_directly_edit_reporting_relationship(current_user, app_role)),
         can_edit_structure=user_can(ORG_CHART_EDIT_STRUCTURE_PERMISSION),
-        can_assign_management=user_can(MANAGEMENT_ASSIGN_PERMISSION),
-        org_chart=context,
-        hierarchy=context["tree"],
-        units=context["units"],
-        sorts=staffing_service.selectable_parent_units("operation"),
-        operations=staffing_service.selectable_parent_units("department"),
-        departments=staffing_service.units_by_type("department"),
-        work_area_parents=staffing_service.selectable_parent_units("work_area"),
+        sorts=[unit for unit in units if unit.unit_type == "sort"],
+        operations=[unit for unit in units if unit.unit_type == "operation"],
+        work_area_parents=[unit for unit in units if unit.unit_type in {"department", "operation"}],
         unit_type_labels=staffing_service.UNIT_TYPE_LABELS,
         classification_labels=staffing_service.CLASSIFICATION_LABELS,
+        employee_status_labels=staffing_service.EMPLOYEE_STATUS_LABELS,
         unit_path=staffing_service.unit_path,
-        linked_user_for_person=staffing_service.linked_user_for_person,
     )
 
 
@@ -2070,6 +2046,7 @@ def update_reporting_relationship(person_id):
                 "neostaffing.org_chart",
                 view="management",
                 person_id=person_id,
+                unit_id=request.form.get("return_unit_id", type=int),
             )
         )
     try:
@@ -2089,6 +2066,7 @@ def update_reporting_relationship(person_id):
             "neostaffing.org_chart",
             view="management",
             person_id=person_id,
+            unit_id=request.form.get("return_unit_id", type=int),
         )
     )
 

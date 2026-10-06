@@ -4109,8 +4109,26 @@ def management_org_chart_context(selected_person_id=None, selected_unit_id=None)
         path.append(cursor)
         relationship = relationship_by_person.get(cursor.id)
         cursor = people_by_id.get(relationship.reports_to_person_id) if relationship else None
+    # Scope selects roots by direct leadership assignment; descendants use Reports To only.
+    root_people = [person for person in people if any(
+        assignment.unit_id == selected_unit.id and units_by_id[assignment.unit_id].active
+        for assignment in assignments_by_person.get(person.id, ())
+    )] if selected_unit else [person for person in people if person.id not in relationship_by_person]
+    root_people.sort(key=_management_person_sort_key)
+    scope_children = {}
+    for unit in units:
+        scope_children.setdefault(unit.parent_id, []).append(unit)
+    for siblings in scope_children.values():
+        siblings.sort(key=lambda unit: (unit.display_order, unit.name.casefold(), unit.id))
+    def scope_branch(unit, ancestors=()):
+        return {"unit": unit, "children": [scope_branch(child, ancestors + (unit.id,))
+            for child in scope_children.get(unit.id, ()) if child.id not in ancestors + (unit.id,)]}
+    scope_hierarchy = [scope_branch(unit) for unit in scope_children.get(None, ())]
     return {
         "tree": tree,
+        "scope_tree": [build_tree(person) for person in root_people],
+        "scope_hierarchy": scope_hierarchy,
+        "units": units,
         "management_scope_labels": _management_scope_labels(leadership_assignments, units_by_id),
         "unassigned_tree": unassigned_tree,
         "navigator": [{"unit": unit, "path": unit_paths[unit.id]} for unit in units],
