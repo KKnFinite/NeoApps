@@ -7,6 +7,10 @@
 </div>
 {%- endmacro %}
 
+{% macro estimated_gallons(row) -%}
+<p class="neoscorpion-helper neoscorpion-planned-value"><strong>ESTIMATED GALLONS: {{ row.estimated_fuel_display|upper }}</strong></p>
+{%- endmacro %}
+
 {% set fuel_data_url = url_for('neoscorpion.dispatch_fueler_data' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_data', assignment_id=row.assignment.id) %}
 {% set fuel_off_url = url_for('neoscorpion.dispatch_fueler_off' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_off', assignment_id=row.assignment.id) %}
             <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}" data-fuel-data-card data-dispatcher-panel="{{ 'true' if dispatcher_panel|default(false) else 'false' }}" data-edit-baseline='{{ row.edit_baseline|tojson }}'>
@@ -211,6 +215,7 @@
                     {% else %}
                     <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
                     {% endif %}
+                    {{ estimated_gallons(row) }}
                     <label>T/F
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" placeholder="Gallons">
                     </label>
@@ -242,6 +247,7 @@
                 {% else %}
                 <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
                 {% endif %}
+                {{ estimated_gallons(row) }}
                 <dl class="neoscorpion-fueler-readout">
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
                     <div><dt>Notes</dt><dd>{{ row.tail_fuel_state.notes if row.tail_fuel_state and row.tail_fuel_state.notes else '-' }}</dd></div>

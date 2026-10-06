@@ -8,8 +8,9 @@ from flask import g
 from flask.testing import FlaskClient
 
 from app.extensions import db
-from app.models import NeoScorpionFuelTruck, NeoScorpionFuelWorkState
-from app.services.neoscorpion import fueler_context
+from app.models import NeoScorpionFuelTruck, NeoScorpionFuelWorkState, NeoScorpionSettings
+from app.services.neoscorpion import fuel_dispatch_context, fueler_context
+from app.services.neoscorpion_dispatch_planning import estimate_fuel_demand_gallons
 from tests import test_neoscorpion_fueler_off as fixtures
 
 
@@ -103,6 +104,66 @@ class FuelerDataTest(unittest.TestCase):
         self.assertIn('TRUCK 708', fueler_page)
         self.assertIn('neoscorpion-fueler-truck-vendor', fueler_page)
         self.assertIn('Vendor Driver', fueler_page)
+
+    def test_estimated_gallons_uses_dispatch_calculation_in_both_shared_cards(self):
+        self.setup_assignment()
+        settings = NeoScorpionSettings.query.one()
+        settings.fuel_density_lbs_per_gallon = 8
+        settings.planning_inbound_fuel_fallback_lbs = 10000
+        self.mission.planned_fuel_load = 19920
+        db.session.commit()
+
+        with patch('app.services.neoscorpion.estimate_fuel_demand_gallons',
+                   wraps=estimate_fuel_demand_gallons) as calculate:
+            row = fueler_context(self.gateway, self.user)['rows'][0]
+            calculate.assert_called_once()
+            canonical_call = calculate.call_args
+        self.assertEqual(row['estimated_fuel_gallons'], 1240)
+        self.assertEqual(row['estimated_fuel_display'], '1,240 gal')
+
+        for readonly in (False, True):
+            if readonly:
+                self._save_complete(self.assignment)
+                NeoScorpionFuelWorkState.query.one().off_at_utc = datetime.utcnow()
+                db.session.commit()
+            with self.subTest(readonly=readonly):
+                row = fueler_context(self.gateway, self.user)['rows'][0]
+                with patch('app.services.neoscorpion.estimate_fuel_demand_gallons',
+                           wraps=estimate_fuel_demand_gallons) as calculate:
+                    dispatch_row = fuel_dispatch_context(self.gateway)['rows'][0]
+                    if not readonly:
+                        self.assertIn(canonical_call, calculate.call_args_list)
+                self.assertEqual(row['estimated_fuel_gallons'], dispatch_row['estimated_fuel_gallons'])
+                self.assertEqual(row['estimated_fuel_display'], dispatch_row['estimated_fuel_display'])
+                for page in (
+                    self.fueler.get('/neoscorpion/fueler').get_data(as_text=True),
+                    self.dispatch.get(self.dispatch_url).json['html'],
+                ):
+                    estimate = f'ESTIMATED GALLONS: {row["estimated_fuel_display"].upper()}'
+                    self.assertEqual(page.count(estimate), 1)
+                    self.assertLess(page.index('>TOTAL</strong>'), page.index(estimate))
+                    self.assertLess(page.index(estimate), page.index('<dt>T/F</dt>' if readonly else '<label>T/F'))
+                    self.assertNotIn('name="estimated_fuel', page)
+
+    def test_missing_estimated_gallons_does_not_block_fuel_entry(self):
+        self.setup_assignment()
+        for missing in ('required', 'density'):
+            with self.subTest(missing=missing):
+                self.mission.planned_fuel_load = None if missing == 'required' else 50000
+                NeoScorpionSettings.query.one().fuel_density_lbs_per_gallon = None if missing == 'density' else 6.7
+                db.session.commit()
+                row = fueler_context(self.gateway, self.user)['rows'][0]
+                self.assertIsNone(row['estimated_fuel_gallons'])
+                for page in (
+                    self.fueler.get('/neoscorpion/fueler').get_data(as_text=True),
+                    self.dispatch.get(self.dispatch_url).json['html'],
+                ):
+                    self.assertIn('ESTIMATED GALLONS: -', page)
+                    self.assertIn('name="transfer_fuel_gallons"', page)
+                    self.assertIn('Save Fuel Entry', page)
+                response = self.save(self.fueler, self.fueler_url,
+                                     self.baseline(self.fueler, self.fueler_url), notes=missing)
+                self.assertEqual(response.status_code, 200, response.data)
 
     def test_shared_tank_grid_headers_and_totals_in_editable_and_readonly_cards(self):
         self.setup_assignment()

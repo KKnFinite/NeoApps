@@ -652,6 +652,7 @@ def hanzo_context(gateway):
 
 def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
     operation = current_sort_operation(gateway)
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     refresh_setting = live_screen_refresh_value(
         gateway,
         NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY,
@@ -662,9 +663,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
             "rows": [],
             "fuel_assignments_revision": 0,
             "fuel_assignments_refresh": refresh_setting,
-            "settings": NeoScorpionSettings.query.filter_by(
-                gateway_id=gateway.id
-            ).first(),
+            "settings": settings,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         }
 
@@ -703,6 +702,16 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         operation,
         missions,
         estimated_fuel_status=CALCULATION_NOT_CONFIGURED_MESSAGE,
+        fuel_density_lbs_per_gallon=(
+            settings.fuel_density_lbs_per_gallon
+            if settings is not None else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON
+        ),
+        planning_inbound_fallback_lbs=(
+            settings.planning_inbound_fuel_fallback_lbs
+            if settings is not None
+            and settings.planning_inbound_fuel_fallback_lbs is not None
+            else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
+        ),
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
         apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
@@ -721,9 +730,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         "rows": rows,
         "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
         "fuel_assignments_refresh": refresh_setting,
-        "settings": NeoScorpionSettings.query.filter_by(
-            gateway_id=gateway.id
-        ).first(),
+        "settings": settings,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
 
