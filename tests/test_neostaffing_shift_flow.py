@@ -62,6 +62,7 @@ class ShiftFlowTest(unittest.TestCase):
             html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context, can_edit_shift_flow=True, shift_work_area_type=staffing_service.shift_work_area_type)
         self.assertEqual(sorted(re.findall(r'data-roster-person="(\d+)"', html)), sorted(str(p.id) for p in people))
         self.assertEqual(sorted(re.findall(r'data-ballmat-person="(\d+)"', html)), sorted(str(p.id) for p in people[:3]))
+        self.assertEqual(re.findall(r'data-discharge-person="(\d+)"', html), [str(discharge.id)])
         self.assertIn('BALLMAT START', html)
         self.assertIn('EAST BALLMAT', html)
         self.assertIn('WEST BALLMAT', html)
@@ -94,6 +95,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([r['person'].id for r in roster['columns'][1]['ballmat_rows']], [ballmat.id])
         self.assertEqual((roster['count'], roster['ballmat_count']), (2, 1))
         self.assertEqual(roster['ballmat_side_counts'], {'west': 1, 'east': 0})
+        self.assertEqual(roster['discharge_count'], 0)
 
     def test_route_grid_bundles_identical_paths_and_preserves_custom_cross_side_locations(self):
         areas = self._configure_final_composite()
@@ -137,6 +139,9 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(bands['bm1']['cells'][1][0]['setup_label'], 'Door 34')
         self.assertEqual(bands['custom']['cells'][1][0]['person'].id, custom.id)
         self.assertEqual(bands['discharge']['cells'][1][0]['person'].id, discharge.id)
+        roster = staffing_service.shift_flow_context()['flow_map']['door_roster']
+        self.assertEqual(roster['discharge_count'], 1)
+        self.assertEqual(roster['discharge_rows'][0]['person'].id, discharge.id)
         self.assertEqual(matrix['columns'][1]['total'], 3)
         self.assertEqual(matrix['columns'][1]['counts']['sort_start'], 0)
         self.assertEqual(matrix['columns'][1]['counts']['after_cleanup'], 1)

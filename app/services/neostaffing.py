@@ -1016,20 +1016,24 @@ def _shift_flow_map(rows, areas):
 
 
 def _shift_flow_door_roster(matrix):
-    """Group final plans; Ballmat membership comes only from active Home assignments."""
+    """Group final plans; start-area membership comes only from active Home assignments."""
     columns = [{"id": column["id"], "label": column["label"], "side": column["side"],
                 "rows": [], "ballmat_rows": []} for column in matrix["columns"]]
     by_id = {column["id"]: column for column in columns if column["id"] is not None}
     missing = []
+    discharge_rows = []
     ballmat_side_counts = {"west": 0, "east": 0}
     for row in matrix["rows"]:
+        home = row["assignment"].work_area
+        home_type = shift_work_area_type(home)
+        if home_type == SHIFT_FLOW_DISCHARGE:
+            discharge_rows.append(row)
         column = by_id.get(getattr(row["plan"], "final_door_work_area_id", None))
         if column is None:
             missing.append(row)
             continue
         column["rows"].append(row)
-        home = row["assignment"].work_area
-        if shift_work_area_type(home) == SHIFT_FLOW_BALLMAT:
+        if home_type == SHIFT_FLOW_BALLMAT:
             column["ballmat_rows"].append(row)
             home_label = _shift_flow_area_short_label(home)
             if home_label == "WBM":
@@ -1039,7 +1043,8 @@ def _shift_flow_door_roster(matrix):
     return {"columns": columns, "missing": missing, "warnings": matrix["warnings"],
             "count": sum(len(column["rows"]) for column in columns),
             "ballmat_count": sum(len(column["ballmat_rows"]) for column in columns),
-            "ballmat_side_counts": ballmat_side_counts}
+            "ballmat_side_counts": ballmat_side_counts,
+            "discharge_rows": discharge_rows, "discharge_count": len(discharge_rows)}
 
 
 def _shift_flow_route_grid(matrix, configurations):

@@ -28,10 +28,11 @@
     {% if roster.missing %}<details class="shift-door-missing"><summary>NEEDS ASSIGNMENT · {{ roster.missing|length }}</summary>{% for entry in roster.missing %}{{ employee(entry, can_edit_shift_flow) }}<small>{{ entry.reason }}</small>{% endfor %}</details>{% endif %}
   </section>
   <section class="shift-ballmat-roster" aria-labelledby="ballmat-roster-title">
-    <h2 id="ballmat-roster-title">BALLMAT START <small>EAST BALLMAT {{ roster.ballmat_side_counts.east }} · WEST BALLMAT {{ roster.ballmat_side_counts.west }} · READ ONLY</small></h2>
+    <h2 id="ballmat-roster-title">BALLMAT START <small>EAST BALLMAT {{ roster.ballmat_side_counts.east }} · WEST BALLMAT {{ roster.ballmat_side_counts.west }} · DISCHARGE {{ roster.discharge_count }} · READ ONLY</small></h2>
     <div class="shift-ballmat-side-bands" aria-hidden="true">
       <span class="is-west">WEST BALLMAT</span>
       <span class="is-east">EAST BALLMAT</span>
+      <span class="is-discharge">DISCHARGE</span>
     </div>
     <div class="shift-door-columns shift-ballmat-columns" data-roster-columns>
       {% for column in roster.columns %}
@@ -42,6 +43,12 @@
         </div>
       </article>
       {% endfor %}
+      <article class="shift-door-column shift-ballmat-column shift-ballmat-discharge" data-roster-discharge data-door-label="DISCHARGE">
+        <header><strong>DISCHARGE</strong><span>{{ roster.discharge_count }}</span></header>
+        <div class="shift-ballmat-names">
+          {% for entry in roster.discharge_rows %}<span class="shift-ballmat-person" data-discharge-person="{{ entry.person.id }}">{{ entry.person.full_name }}</span>{% else %}<span class="shift-ballmat-empty">—</span>{% endfor %}
+        </div>
+      </article>
     </div>
   </section>
 </section>
