@@ -3788,6 +3788,11 @@ def org_chart_context(selected_unit_id=None):
         {unit.id: unit for unit in units},
     )
     selected_detail = unit_card_meta.get(selected_unit.id) if selected_unit else None
+    breadcrumb = unit_breadcrumb(selected_unit)
+    selected_sort = next(
+        (unit for unit in breadcrumb if unit.unit_type == "sort"),
+        None,
+    )
     work_area_detail = None
     if selected_unit and selected_unit.unit_type == "work_area":
         assigned_count = StaffingWorkAssignment.query.filter_by(
@@ -3810,7 +3815,8 @@ def org_chart_context(selected_unit_id=None):
     return {
         "tree": staffing_hierarchy_tree(),
         "selected_unit": selected_unit,
-        "breadcrumb": unit_breadcrumb(selected_unit),
+        "selected_sort": selected_sort,
+        "breadcrumb": breadcrumb,
         "current_children": current_children,
         "unit_card_meta": unit_card_meta,
         "management_scope_labels": management_scope_labels,
@@ -4068,6 +4074,15 @@ def management_org_chart_context(selected_person_id=None, selected_unit_id=None)
         selected_unit = units_by_id.get(int(selected_unit_id))
     except (TypeError, ValueError):
         selected_unit = None
+    selected_sort = None
+    cursor = selected_unit
+    seen_unit_ids = set()
+    while cursor and cursor.id not in seen_unit_ids:
+        seen_unit_ids.add(cursor.id)
+        if cursor.unit_type == "sort":
+            selected_sort = cursor
+            break
+        cursor = units_by_id.get(cursor.parent_id)
     unit_ancestors = {}
     for unit in units:
         lineage = set()
@@ -4100,6 +4115,7 @@ def management_org_chart_context(selected_person_id=None, selected_unit_id=None)
         "unassigned_tree": unassigned_tree,
         "navigator": [{"unit": unit, "path": unit_paths[unit.id]} for unit in units],
         "selected_unit": selected_unit,
+        "selected_sort": selected_sort,
         "visible_people": visible_people,
         "peers": peers,
         "direct_reports": [people_by_id[pid] for pid in children_by_supervisor.get(
