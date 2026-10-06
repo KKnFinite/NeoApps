@@ -1909,6 +1909,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         leadership = self.client.get(
             f"/neostaffing/people?work_area_id={work_area.id}&leadership_only=1&person_id={supervisor.id}"
         )
+        supervisor_selected = self.client.get(
+            f"/neostaffing/people?work_area_id={work_area.id}&search=sam&person_id={supervisor.id}"
+        )
         unselected = self.client.get(
             f"/neostaffing/people?work_area_id={work_area.id}"
         )
@@ -1928,6 +1931,9 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Roster Status", response.data)
         self.assertNotIn(b"roster_status", response.data)
         self.assertNotIn(b"<span>Status</span>", response.data)
+        roster = response.data.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
+        self.assertNotIn(b"E812", roster)
+        self.assertIn(b"Sam Lead", response.data)
         self.assertEqual(searched.status_code, 200)
         self.assertIn(b"E810", searched.data)
         self.assertNotIn(b"E811", searched.data)
@@ -1935,6 +1941,11 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"E812", leadership.data)
         self.assertIn(b"Part Time Supervisor", leadership.data)
         self.assertNotIn(b"E810", leadership.data)
+        self.assertEqual(supervisor_selected.status_code, 200)
+        self.assertIn(b"neostaffing-people-detail-drawer", supervisor_selected.data)
+        self.assertIn(b'value="E812"', supervisor_selected.data)
+        supervisor_roster = supervisor_selected.data.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
+        self.assertNotIn(b"E812", supervisor_roster)
         self.assertIn(b"Select an employee to view details.", unselected.data)
         self.assertNotIn(
             f'/neostaffing/app-management/people/{avery.id}/update'.encode(),

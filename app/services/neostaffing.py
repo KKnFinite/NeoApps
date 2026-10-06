@@ -3496,7 +3496,16 @@ def people_context(filters=None, user=None):
         ]
 
     selected_unit = selected_work_area or selected_department or selected_operation or selected_sort
-    query = _filtered_people_query(filters, selected_unit)
+    detail_query = _filtered_people_query(filters, selected_unit)
+    query = detail_query
+    classification = str(filters.get("classification") or "").strip()
+    leadership_only = _parse_bool(filters.get("leadership_only"), default=False)
+    if selected_unit and not leadership_only and classification not in MANAGEMENT_CLASSIFICATIONS:
+        # Scoped People already renders canonical management separately. The roster below
+        # is the employee roster and must never duplicate supervisors/managers into it.
+        query = query.filter(
+            StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS)
+        )
     has_work = StaffingPerson.work_assignments.any(StaffingWorkAssignment.active.is_(True))
     count_fields = {
         "active": StaffingPerson.active.is_(True),
@@ -3524,11 +3533,12 @@ def people_context(filters=None, user=None):
         total_pages = 1
         displayed_people = ordered.all()
 
-    # An off-page drawer still obeys the exact same filters/scope as the roster.
+    # An off-page drawer still obeys the exact same filters/scope, but management
+    # remains selectable even though the default scoped roster is employee-only.
     selected_id = _parse_positive_int(filters.get("person_id"), default=0)
     detail_person = None
     if selected_id and selected_id not in {person.id for person in displayed_people}:
-        detail_person = query.filter(StaffingPerson.id == selected_id).first()
+        detail_person = detail_query.filter(StaffingPerson.id == selected_id).first()
     rows = _people_rows(displayed_people + ([detail_person] if detail_person else []), selected_unit)
     paginated_rows = rows[:len(displayed_people)]
     selected_person = _resolve_people_detail(filters.get("person_id"), rows)
