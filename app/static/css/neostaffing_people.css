@@ -156,3 +156,5 @@ body.blueprint-neostaffing .neostaffing-people-console {
 .neostaffing-people-management-list .neostaffing-org-assignment > a { flex:1 1 auto; min-width:0; }
 .neostaffing-people-management-list .neostaffing-org-assignment > form { flex:0 0 auto; margin:0; }
 .neostaffing-people-management-list .neostaffing-org-assignment > form button { min-height:32px; padding:5px 8px; border:1px solid #6a4b4b; border-radius:3px; background:#241516; color:#e5b8b8; font:inherit; font-size:.66rem; }
+
+.neostaffing-people-management-assignment-form [hidden] { display:none !important; }
