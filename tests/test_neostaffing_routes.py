@@ -1720,8 +1720,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"ASSIGN MANAGEMENT", people_page.data)
         self.assertIn(b'data-management-assignment-form', people_page.data)
         self.assertIn(b'data-management-unit-picker', people_page.data)
-        self.assertIn(b'data-management-current-scope hidden', people_page.data)
-        self.assertIn(f'value="{work_area.id}" data-unit-type="work_area" data-current-scope="1"'.encode(), people_page.data)
+        self.assertNotIn(b'data-management-current-scope hidden', people_page.data)
+        self.assertIn(f'value="{work_area.id}" data-unit-type="work_area" data-current-scope="1" selected'.encode(), people_page.data)
         self.assertNotIn(b">ASSIGN</button>", org_page.data)
         self.assertIn(b"Management / Reports To", org_page.data)
 
