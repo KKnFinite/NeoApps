@@ -687,3 +687,14 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         background: rgba(var(--node-scorpion-primary-rgb), .82);
     }
 }
+
+/* Fit DETAILS and its caret inside the compact dispatch column. */
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-details-toggle {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    padding: 4px 2px;
+    gap: 2px;
+    letter-spacing: 0;
+    font-size: min(var(--dispatch-font-medium), .68rem) !important;
+}

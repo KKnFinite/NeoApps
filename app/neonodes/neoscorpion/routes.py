@@ -1,4 +1,4 @@
-from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 
@@ -1492,11 +1492,16 @@ def fuel_report():
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neoscorpion.index"))
+    context = fuel_report_context(gateway)
+    if request.args.get("format") == "pdf":
+        from app.services.neoscorpion_fuel_report_pdf import fuel_report_pdf
+        return send_file(fuel_report_pdf(context), mimetype="application/pdf",
+                         as_attachment=True, download_name="fuel-report.pdf", max_age=0)
     return render_template(
         "neonodes/neoscorpion/fuel_report.html",
         gateway=gateway,
         can_view=access["can_view"],
-        **fuel_report_context(gateway),
+        **context,
     )
 
 

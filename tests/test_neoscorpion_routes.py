@@ -940,6 +940,13 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"UPLIFT", fuel_report.data)
         self.assertIn(b"REPORT-1", fuel_report.data)
         self.assertIn(b"200 GAL", fuel_report.data)
+        self.assertIn(b"DOWNLOAD PDF", fuel_report.data)
+        pdf = self.client.get("/neoscorpion/reports/fuel?format=pdf")
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf.mimetype, "application/pdf")
+        self.assertTrue(pdf.data.startswith(b"%PDF-"))
+        self.assertIn("attachment", pdf.headers["Content-Disposition"])
+
 
     def test_history_context_query_count_is_bounded_for_many_assignments(self):
         operation, first_mission = self._add_current_departure(
