@@ -593,7 +593,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(sort_response.status_code, 200)
         self.assertIn(b"FULL TREE", sort_response.data)
         self.assertIn(b"neostaffing-org-console", sort_response.data)
-        self.assertIn(b"neostaffing-org-tree-surface", sort_response.data)
+        self.assertIn(b"neostaffing-org-scope", sort_response.data)
         self.assertIn(b"neostaffing-org-drawer", sort_response.data)
         self.assertNotIn(b"neostaffing-dashboard-shell", sort_response.data)
         self.assertIn(b"neostaffing-org-tree-branch", sort_response.data)
@@ -601,7 +601,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"data-org-chart-tree", sort_response.data)
         self.assertIn(b"data-org-chart-branch", sort_response.data)
         self.assertIn(b"data-org-chart-state-form", sort_response.data)
-        self.assertIn(b"neostaffing.org-chart.operational.v2", sort_response.data)
+        self.assertIn(b"neostaffing.org-chart.operational.v3", sort_response.data)
         self.assertIn(b"localStorage", sort_response.data)
         self.assertIn(b"scrollTop", sort_response.data)
         self.assertIn(b"+ Operation", sort_response.data)
@@ -645,10 +645,6 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertLess(
             work_area_response.data.index(b"neostaffing-tree-management-summary"),
             work_area_response.data.index(b'aria-label="Selected hierarchy level"'),
-        )
-        self.assertLess(
-            work_area_response.data.index(b"neostaffing-tree-management-summary"),
-            work_area_response.data.index(b"Selected unit contextual actions"),
         )
         self.assertNotIn(b"+ People", work_area_response.data)
         self.assertNotIn(b"+ PT Sup", work_area_response.data)
@@ -1526,13 +1522,13 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"+ Sort", watcher_tree.data)
         self.assertEqual(simulator_page.status_code, 200)
         self.assertEqual(simulator_page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
-        self.assertIn(b'name="person_id"', simulator_page.data)
-        self.assertIn(b">ASSIGN</button>", simulator_page.data)
+        self.assertNotIn(b'name="person_id"', simulator_page.data)
+        self.assertNotIn(b">ASSIGN</button>", simulator_page.data)
         self.assertNotIn(b"#management-editor", simulator_page.data)
         self.assertNotIn(b"+ People", simulator_page.data)
         self.assertNotIn(b"+ PT Sup", simulator_page.data)
         self.assertNotIn(b"Add/Assign People", simulator_page.data)
-        self.assertIn(b"Select management person", simulator_page.data)
+        self.assertIn(b"ASSIGN / REMOVE IN PEOPLE", simulator_page.data)
         self.assertNotIn(b"STRUCTURE ACTIONS", simulator_page.data)
         self.assertNotIn(b"SAVE UNIT", simulator_page.data)
         self.assertEqual(assigned.status_code, 302)
@@ -1755,6 +1751,48 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             self.client.get("/neostaffing/people/search?search=d").get_json(),
             {"results": []},
         )
+
+    def test_people_owns_management_assignment_and_org_chart_links_back_to_people(self):
+        user = self._user("staffing_people_assign_management")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        supervisor = staffing_service.create_person(
+            {
+                "employee_id": "ASSIGN-MGMT-1",
+                "first_name": "Raven",
+                "last_name": "Sarles",
+                "seniority_date": "2018-01-01",
+                "classification": "part_time_supervisor",
+            }
+        )
+        db.session.commit()
+        self._login(user.username)
+
+        people_page = self.client.get(f"/neostaffing/people?work_area_id={work_area.id}")
+        org_page = self.client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
+        self.assertIn(b"ASSIGN MANAGEMENT", people_page.data)
+        self.assertIn(b'data-management-assignment-form', people_page.data)
+        self.assertNotIn(b">ASSIGN</button>", org_page.data)
+        self.assertIn(b"ASSIGN / REMOVE IN PEOPLE", org_page.data)
+        self.assertIn(b"neostaffing-org-scope", org_page.data)
+
+        assigned = self.client.post(
+            "/neostaffing/app-management/management-assignments",
+            data={
+                "person_id": str(supervisor.id),
+                "unit_id": str(work_area.id),
+                "leadership_level": "work_area",
+                "return_people": "1",
+                "work_area_id": str(work_area.id),
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(assigned.status_code, 302)
+        self.assertIn("/neostaffing/people", assigned.location)
+        after = self.client.get(assigned.location)
+        self.assertIn(b"Raven Sarles", after.data)
+        roster = after.data.split(b"<tbody>", 1)[1].split(b"</tbody>", 1)[0]
+        self.assertNotIn(b"ASSIGN-MGMT-1", roster)
 
     def test_people_drilldown_reveals_one_unit_level_at_a_time(self):
         user = self._user("staffing_people_drilldown")
@@ -2048,7 +2086,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         url = f"/neostaffing/org-chart?unit_id={work_area.id}"
         page = client.get(url)
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b">ASSIGN</button>", page.data)
+        self.assertNotIn(b">ASSIGN</button>", page.data)
         assigned = client.post("/neostaffing/app-management/management-assignments", data={
             "person_id": supervisor.id,
             "unit_id": work_area.id,
@@ -2061,7 +2099,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             person_id=supervisor.id, unit_id=work_area.id,
             leadership_level="work_area", active=True,
         ).one()
-        self.assertIn(b">REMOVE</button>", client.get(url).data)
+        self.assertNotIn(b">REMOVE</button>", client.get(url).data)
         removed = client.post(
             f"/neostaffing/app-management/management-assignments/{assignment.id}/delete",
             data={"return_unit_id": work_area.id},
@@ -2215,7 +2253,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"MANAGEMENT", page.data)
         self.assertEqual(page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
-        self.assertIn(b">ASSIGN</button>", page.data)
+        self.assertNotIn(b">ASSIGN</button>", page.data)
         self.assertNotIn(b"#management-editor", page.data)
         self.assertIn(b"PTC-100", page.data)
         self.assertNotIn(b"PTC-EDITOR", page.data)
@@ -2227,12 +2265,12 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertEqual(assigned.status_code, 302)
         self.assertEqual(assigned.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
         self.assertIn(b"Fueling Supervisor", assigned_page.data)
-        self.assertIn(b"REMOVE", assigned_page.data)
+        self.assertNotIn(b">REMOVE</button>", assigned_page.data)
         self.assertEqual(removed.status_code, 302)
         self.assertEqual(removed.location, f"/neostaffing/org-chart?unit_id={work_area.id}")
         self.assertIn(b"MANAGEMENT", people_page.data)
-        self.assertNotIn(b"ASSIGN MANAGEMENT", people_page.data)
-        self.assertNotIn(b"management-assignments", people_page.data)
+        self.assertIn(b"ASSIGN MANAGEMENT", people_page.data)
+        self.assertIn(b"management-assignments", people_page.data)
         self.assertFalse(db.session.get(StaffingLeadershipAssignment, assignment.id).active)
         self.assertIsNone(
             StaffingWorkAssignment.query.filter_by(
@@ -2241,18 +2279,18 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             ).first()
         )
 
-    def test_org_chart_management_candidates_follow_selected_hierarchy_level(self):
+    def test_people_management_assignment_catalog_carries_management_and_scope_types(self):
         admin = self._user("staffing_people_management_admin")
         self._grant_app_access(admin, "neostaffing", "grandmaster")
         sort, operation, department, work_area = self._staffing_hierarchy()
-        candidates = {}
         for employee_id, classification in (
             ("PEOPLE-PT-SUP", "part_time_supervisor"),
             ("PEOPLE-FT-SUP", "full_time_supervisor"),
             ("PEOPLE-MANAGER", "manager"),
             ("PEOPLE-DIVISION", "division_manager"),
+            ("PEOPLE-20C", "twenty_c_full_time_supervisor"),
         ):
-            person = staffing_service.create_person(
+            staffing_service.create_person(
                 {
                     "employee_id": employee_id,
                     "first_name": classification.split("_")[0].title(),
@@ -2261,117 +2299,48 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                     "classification": classification,
                 }
             )
-            candidates[classification] = employee_id.encode()
         db.session.commit()
         client = self._logged_in_client(admin.username)
 
-        pages = {
-            "part_time_supervisor": (
-                client.get(f"/neostaffing/org-chart?unit_id={work_area.id}"),
-                "work_area",
-            ),
-            "full_time_supervisor": (
-                client.get(f"/neostaffing/org-chart?unit_id={department.id}"),
-                "department",
-            ),
-            "manager": (
-                client.get(f"/neostaffing/org-chart?unit_id={operation.id}"),
-                "operation",
-            ),
-            "division_manager": (
-                client.get(f"/neostaffing/org-chart?unit_id={sort.id}"),
-                "sort",
-            ),
-        }
-
-        expected_labels = {
-            "part_time_supervisor": b"Part Time Supervisor",
-            "full_time_supervisor": b"Full Time Supervisor",
-            "manager": b"Manager",
-            "division_manager": b"Division Manager",
-        }
-        for classification, (response, expected_level) in pages.items():
-            with self.subTest(classification=classification):
-                self.assertEqual(response.status_code, 200)
-                self.assertIn(expected_labels[classification], response.data)
-                self.assertIn(candidates[classification], response.data)
-                self.assertIn(
-                    f'name="leadership_level" value="{expected_level}"'.encode(),
-                    response.data,
-                )
-                for other_classification, employee_id in candidates.items():
-                    if other_classification != classification:
-                        self.assertNotIn(employee_id, response.data)
-
-        for classification, unit, expected_level in (
-            ("full_time_supervisor", department, "department"),
-            ("manager", operation, "operation"),
+        page = client.get(f"/neostaffing/people?work_area_id={work_area.id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"ASSIGN MANAGEMENT", page.data)
+        self.assertIn(b"data-management-assignment-form", page.data)
+        for employee_id in (
+            b"PEOPLE-PT-SUP",
+            b"PEOPLE-FT-SUP",
+            b"PEOPLE-MANAGER",
+            b"PEOPLE-DIVISION",
+            b"PEOPLE-20C",
         ):
-            person = StaffingPerson.query.filter_by(
-                employee_id=candidates[classification].decode()
-            ).one()
-            response = client.post(
-                "/neostaffing/app-management/management-assignments",
-                data={
-                    "person_id": person.id,
-                    "unit_id": unit.id,
-                    "leadership_level": expected_level,
-                    "return_unit_id": unit.id,
-                },
+            self.assertIn(employee_id, page.data)
+        for unit, unit_type in (
+            (sort, "sort"),
+            (operation, "operation"),
+            (department, "department"),
+            (work_area, "work_area"),
+        ):
+            self.assertIn(
+                f'value="{unit.id}" data-unit-type="{unit_type}"'.encode(),
+                page.data,
             )
-            self.assertEqual(response.status_code, 302)
-            assignment = StaffingLeadershipAssignment.query.filter_by(
-                person_id=person.id,
-                unit_id=unit.id,
-                active=True,
-            ).one()
-            self.assertEqual(assignment.leadership_level, expected_level)
 
-    def test_org_chart_work_area_and_department_render_twenty_c_candidates(self):
-        admin = self._user("staffing_org_twenty_c_admin")
-        self._grant_app_access(admin, "neostaffing", "grandmaster")
-        _sort, _operation, department, work_area = self._staffing_hierarchy()
-        pt = staffing_service.create_person(
-            {
-                "employee_id": "ORG-PT-CAND",
-                "first_name": "Part Time",
-                "last_name": "Candidate",
-                "seniority_date": "2018-01-01",
-                "classification": "part_time_supervisor",
-            }
+        self.assertEqual(
+            [row["person"].employee_id for row in staffing_service.management_candidates_for_unit(work_area)],
+            ["PEOPLE-20C", "PEOPLE-PT-SUP"],
         )
-        twenty_c = staffing_service.create_person(
-            {
-                "employee_id": "ORG-20C-CAND",
-                "first_name": "Twenty C",
-                "last_name": "Candidate",
-                "seniority_date": "2017-01-01",
-                "classification": "twenty_c_full_time_supervisor",
-            }
+        self.assertEqual(
+            [row["person"].employee_id for row in staffing_service.management_candidates_for_unit(department)],
+            ["PEOPLE-20C", "PEOPLE-FT-SUP"],
         )
-        wrong = staffing_service.create_person(
-            {
-                "employee_id": "ORG-WRONG-CAND",
-                "first_name": "Wrong",
-                "last_name": "Candidate",
-                "seniority_date": "2019-01-01",
-                "classification": "manager",
-            }
+        self.assertEqual(
+            [row["person"].employee_id for row in staffing_service.management_candidates_for_unit(operation)],
+            ["PEOPLE-MANAGER"],
         )
-        self._link_user_for_person(wrong)
-        db.session.commit()
-        client = self._logged_in_client(admin.username)
-
-        work_area_page = client.get(f"/neostaffing/org-chart?unit_id={work_area.id}")
-        department_page = client.get(f"/neostaffing/org-chart?unit_id={department.id}")
-
-        self.assertEqual(work_area_page.data.count(b"<h3>MANAGEMENT</h3>"), 1)
-        self.assertIn(b"ORG-PT-CAND", work_area_page.data)
-        self.assertIn(b"ORG-20C-CAND", work_area_page.data)
-        self.assertNotIn(b"ORG-WRONG-CAND", work_area_page.data)
-        self.assertIn(b"ORG-20C-CAND", department_page.data)
-        self.assertNotIn(b"ORG-PT-CAND", department_page.data)
-        self.assertNotIn(b"#management-editor", work_area_page.data)
+        self.assertEqual(
+            [row["person"].employee_id for row in staffing_service.management_candidates_for_unit(sort)],
+            ["PEOPLE-DIVISION"],
+        )
 
     def test_people_view_is_work_area_roster_with_secondary_filters(self):
         user = self._user("staffing_people_filters")

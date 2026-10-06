@@ -2039,7 +2039,6 @@ def _render_org_chart():
         org_chart=context,
         hierarchy=context["tree"],
         units=context["units"],
-        management_candidates=staffing_service.management_candidates_for_unit(context["selected_unit"]),
         sorts=staffing_service.selectable_parent_units("operation"),
         operations=staffing_service.selectable_parent_units("department"),
         departments=staffing_service.units_by_type("department"),

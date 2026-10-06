@@ -72,7 +72,7 @@ class StaffingShellTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 html = response.get_data(as_text=True)
                 self.assertEqual(html.count('data-operational-sidebar '), 1)
-                self.assertEqual(html.count('data-staffing-secondary '), 0 if path in ('people', 'attendance', 'reports') else 1)
+                self.assertEqual(html.count('data-staffing-secondary '), 0 if path in ('people', 'attendance', 'org-chart', 'reports') else 1)
                 self.assertNotIn('class="neostaffing-rail"', html)
                 self.assertIn('data-mobile-navigation', html)
                 for form in Forms(html).forms:

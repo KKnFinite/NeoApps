@@ -62,7 +62,7 @@
         {% if selected %}
         <section class="neostaffing-org-drawer neostaffing-tree-detail neostaffing-org-selected-card" data-org-chart-workspace>
             <header class="neostaffing-tree-detail-title"><div><span>{{ unit_type_labels[selected.unit_type] }}</span><h2>{{ selected.name }}</h2><p>{{ unit_path(selected) }}</p>{% if selected.unit_type == "work_area" %}<p>Required HC: {{ selected.required_headcount if selected.required_headcount is not none else "-" }}</p>{% endif %}</div><em>{{ "ACTIVE" if selected.active else "INACTIVE" }}</em></header>
-            <nav class="neostaffing-org-drawer-actions" aria-label="Selected unit contextual actions"><a href="{{ people_scope_url(selected) }}">OPEN IN PEOPLE</a>{% if can_edit_structure %}<a href="#structure-editor">EDIT STRUCTURE</a>{% endif %}{% if can_edit_structure and selected.unit_type != "work_area" %}<a href="#structure-add">ADD UNDER {{ selected.name }}</a>{% endif %}</nav>
+            <nav class="neostaffing-org-drawer-actions" aria-label="Selected unit contextual actions"><a href="{{ people_scope_url(selected) }}">OPEN IN PEOPLE</a>{% if can_edit_structure %}<a href="#structure-editor">EDIT STRUCTURE</a>{% if selected.unit_type == "sort" %}<a href="#structure-add">Add Operation</a>{% elif selected.unit_type == "operation" %}<a href="#structure-add">Add Department</a><a href="#structure-add">Add Work Area</a>{% elif selected.unit_type == "department" %}<a href="#structure-add">Add Work Area</a>{% else %}<a href="#structure-editor">Set Headcount</a>{% endif %}{% endif %}</nav>
         </section>
 
         {% set selected_detail = org_chart.selected_detail %}
