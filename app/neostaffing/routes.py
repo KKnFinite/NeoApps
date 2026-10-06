@@ -386,10 +386,10 @@ def people_search():
         key: request.args.get(key, "").strip()
         for key in (
             "sort_id", "operation_id", "department_id", "work_area_id",
-            "classification", "employee_status", "assignment_status",
-            "active", "search",
+            "classification", "employee_status", "assignment_status", "search",
         )
     }
+    filters["active"] = request.args.get("active", "active").strip() or "active"
     return jsonify(
         results=staffing_service.people_search_suggestions(
             filters,
