@@ -46,7 +46,7 @@
             <nav data-staffing-secondary-source class="neostaffing-org-view-tabs" aria-label="Org Chart view"><a href="{{ url_for('neostaffing.org_chart', unit_id=selected.id if selected else none) }}" aria-current="page">Operational</a><a href="{{ url_for('neostaffing.org_chart', view='management') }}">Management / Reports To</a></nav>
             {% if selected %}<p class="neostaffing-org-breadcrumb">{% for unit in org_chart.breadcrumb %}<span>{{ unit.name }}</span>{% endfor %}</p>{% endif %}
         </header>
-        <section class="neostaffing-org-tree-surface" aria-label="Operational organization hierarchy">
+        <section class="neostaffing-org-tree-surface neostaffing-side-filter" aria-label="Operational organization hierarchy">
             <div class="neostaffing-org-tree-heading neostaffing-tree-editor"><strong>FULL TREE</strong>{% if can_edit_structure %}<details><summary>+ Sort</summary><form class="neostaffing-org-form" method="post" action="{{ url_for('neostaffing.create_unit') }}" data-org-chart-state-form><input type="hidden" name="unit_type" value="sort"><input type="hidden" name="parent_id" value=""><input type="hidden" name="return_unit_id" value="{{ selected.id if selected else '' }}"><label>Name<input name="name" required></label><input type="hidden" name="display_order" value="0"><button type="submit">SAVE</button></form></details>{% endif %}</div>
             <div class="neostaffing-org-tree-scroll" data-org-chart-tree data-org-chart-selected-unit="{{ selected.id if selected else '' }}">{% if hierarchy %}{{ render_tree(hierarchy, selected) }}{% else %}<p class="muted">No staffing units have been created yet.</p>{% endif %}</div>
         </section>

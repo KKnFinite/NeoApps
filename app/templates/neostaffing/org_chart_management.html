@@ -32,7 +32,7 @@
 {% set selected = management.selected_person %}{% set detail = management.selected_detail %}
 <section class="neostaffing-org-console theme-staffing org-explorer" aria-labelledby="staffing-management-org-title" data-org-chart-console>
     {% include "neostaffing/_section_nav.html" %}
-    <nav class="org-explorer-navigator" aria-label="Hierarchy navigator">
+    <nav class="org-explorer-navigator neostaffing-side-filter" aria-label="Hierarchy navigator">
         <details open data-org-navigator><summary>HIERARCHY</summary>
         <a href="{{ url_for('neostaffing.org_chart', view='management') }}">All management</a>
         {% for row in management.navigator if row.unit.unit_type == 'sort' %}

@@ -118,7 +118,7 @@
     <script src="{{ url_for('static', filename='js/live_updates.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if is_neostaffing_page %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20260925-staffing-scrollbar') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261006-side-filter-v1') }}">
     <script defer src="{{ url_for('static', filename='js/neostaffing_filters.js', v='20261001-report-state') }}"></script>
     <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% if request.endpoint == 'neostaffing.reports' %}
@@ -516,7 +516,7 @@
             {% set flight_api_auto_poll_visible = is_flight_api_test_page %}
             {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
             {% endif %}
-            {% if is_neostaffing_page and request.endpoint not in ('neostaffing.index', 'neostaffing.reports', 'neostaffing.people') %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
+            {% if is_neostaffing_page and request.endpoint not in ('neostaffing.index', 'neostaffing.reports', 'neostaffing.people', 'neostaffing.attendance') %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
             {% block content %}{% endblock %}
         </main>
         {% block page_overlay %}{% endblock %}

@@ -26,7 +26,7 @@
 {% set filters = attendance.filters %}
 <section class="neostaffing-attendance-console theme-staffing" aria-labelledby="staffing-attendance-title" data-attendance-console>
     {% include "neostaffing/_section_nav.html" %}
-    <aside data-staffing-scope class="neostaffing-attendance-scope" data-attendance-tree-scroll aria-label="Attendance organization scope">
+    <aside data-staffing-scope class="neostaffing-attendance-scope neostaffing-side-filter" data-attendance-tree-scroll aria-label="Attendance organization scope">
         <div class="neostaffing-attendance-scope-head"><span>ATTENDANCE SCOPE</span>{% if attendance.selected_work_area_ids|length > 1 %}<strong>{{ attendance.selected_work_area_ids|length }} AREAS</strong>{% endif %}</div>
         <form data-staffing-filter method="get"><label>Sort <select name="sort_id" aria-label="Attendance Sort">{% for sort in attendance.configured_sorts %}<option value="{{ sort.id }}" {% if filters.sort_id|string == sort.id|string %}selected{% endif %}>{{ sort.name }}</option>{% endfor %}</select></label><button type="submit">VIEW SORT</button></form>
         {% if attendance.ready %}

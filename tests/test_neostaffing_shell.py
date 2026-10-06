@@ -1,6 +1,7 @@
 """Shared shell rendering must leave page authority and mutation forms intact."""
 import unittest
 import re
+from pathlib import Path
 from types import SimpleNamespace
 from flask import render_template, url_for
 from html.parser import HTMLParser
@@ -71,13 +72,29 @@ class StaffingShellTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 html = response.get_data(as_text=True)
                 self.assertEqual(html.count('data-operational-sidebar '), 1)
-                self.assertEqual(html.count('data-staffing-secondary '), 0 if path in ('people', 'reports') else 1)
+                self.assertEqual(html.count('data-staffing-secondary '), 0 if path in ('people', 'attendance', 'reports') else 1)
                 self.assertNotIn('class="neostaffing-rail"', html)
                 self.assertIn('data-mobile-navigation', html)
                 for form in Forms(html).forms:
                     if 'data-staffing-filter' in form:
                         self.assertEqual(form.get('method', 'get').lower(), 'get')
                         self.assertNotIn('pdf', form.get('action', ''))
+
+    def test_side_filter_surfaces_share_dark_scrollbar_contract(self):
+        for url in (
+            '/neostaffing/people',
+            '/neostaffing/attendance',
+            '/neostaffing/org-chart',
+            '/neostaffing/org-chart?view=management',
+        ):
+            with self.subTest(url=url):
+                html = self.client.get(url).get_data(as_text=True)
+                self.assertIn('neostaffing-side-filter', html)
+
+        css = (Path(__file__).resolve().parents[1] / 'app/static/css/neostaffing_shell.css').read_text(encoding='utf-8')
+        self.assertIn('.neostaffing-side-filter::-webkit-scrollbar-track', css)
+        self.assertIn('.neostaffing-side-filter::-webkit-scrollbar-thumb', css)
+        self.assertIn('scrollbar-color:#36534f #081216', css)
 
     def test_configuration_precedes_list_and_keeps_write_protection(self):
         html = self.client.get('/neostaffing/employee-records').get_data(as_text=True)
