@@ -3587,6 +3587,71 @@ def people_context(filters=None, user=None):
     }
 
 
+def _people_search_selected_unit(filters):
+    """Resolve only the hierarchy scope needed for bounded People typeahead."""
+    work_area = _resolve_optional_unit(filters.get("work_area_id"), "work_area")
+    if work_area:
+        return work_area
+    department = _resolve_optional_unit(filters.get("department_id"), "department")
+    if department:
+        return department
+    operation = _resolve_optional_unit(filters.get("operation_id"), "operation")
+    if operation:
+        return operation
+    return _resolve_optional_unit(filters.get("sort_id"), "sort")
+
+
+def people_search_suggestions(filters=None, user=None, limit=8):
+    """Return a small read-only People search result set without loading the full console."""
+    filters = _with_default_management_scope(dict(filters or {}), user)
+    search = str(filters.get("search") or "").strip()
+    if len(search) < 2:
+        return []
+    selected_unit = _people_search_selected_unit(filters)
+    query = _filtered_people_query(filters, selected_unit)
+    people = (
+        query.order_by(
+            func.lower(StaffingPerson.last_name),
+            func.lower(StaffingPerson.first_name),
+            func.coalesce(StaffingPerson.employee_id, ""),
+            StaffingPerson.id,
+        )
+        .limit(max(1, min(int(limit or 8), 12)))
+        .all()
+    )
+    person_ids = [person.id for person in people]
+    area_labels = {}
+    if person_ids:
+        assignments = (
+            StaffingWorkAssignment.query
+            .filter(
+                StaffingWorkAssignment.active.is_(True),
+                StaffingWorkAssignment.person_id.in_(person_ids),
+            )
+            .options(joinedload(StaffingWorkAssignment.work_area))
+            .order_by(StaffingWorkAssignment.person_id, StaffingWorkAssignment.id)
+            .all()
+        )
+        for assignment in assignments:
+            if assignment.work_area:
+                area_labels.setdefault(assignment.person_id, []).append(
+                    assignment.work_area.name
+                )
+    return [
+        {
+            "id": person.id,
+            "name": f"{person.last_name}, {person.first_name}",
+            "employee_id": person.employee_id,
+            "classification": CLASSIFICATION_LABELS.get(
+                person.classification, person.classification
+            ),
+            "work_area": " / ".join(dict.fromkeys(area_labels.get(person.id, [])))
+            or ("Management" if person.classification in MANAGEMENT_CLASSIFICATIONS else "Unassigned"),
+        }
+        for person in people
+    ]
+
+
 def selectable_parent_units(unit_type):
     expected_parent_type = PARENT_TYPE_BY_UNIT_TYPE.get(unit_type)
     if expected_parent_type is None:

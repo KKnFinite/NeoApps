@@ -1704,7 +1704,10 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Step 1", response.data)
         self.assertNotIn(b"Step 2", response.data)
         self.assertNotIn(b"Select Operation", response.data)
-        self.assertIn(b"Select an organization node", response.data)
+        self.assertIn(b"All People", response.data)
+        self.assertIn(b"data-people-search-input", response.data)
+        self.assertIn(b"neostaffing-people-roster-table", response.data)
+        self.assertNotIn(b"Select an organization node", response.data)
         self.assertIn(b"mobile-bottom-nav", response.data)
         self.assertNotIn(b"neostaffing-mobile-tabs", response.data)
         self.assertNotIn(b'action-button action-button-secondary" href="/neostaffing/attendance"', response.data)
@@ -1717,6 +1720,40 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"<span>Status</span>", response.data)
         self.assertNotIn(b"Leadership Only", response.data)
         self.assertIn(b'href="/neostaffing/people"', dashboard.data)
+
+    def test_people_global_search_and_typeahead_work_without_scope(self):
+        user = self._user("staffing_people_search_admin")
+        self._grant_app_access(user, "neostaffing", "master")
+        _sort, _operation, _department, work_area = self._staffing_hierarchy()
+        match = staffing_service.create_person({
+            "employee_id": "SEARCH100", "first_name": "Derrick", "last_name": "Daniels",
+            "seniority_date": "2020-01-01", "classification": "part_time",
+        })
+        other = staffing_service.create_person({
+            "employee_id": "SEARCH200", "first_name": "Other", "last_name": "Worker",
+            "seniority_date": "2020-01-02", "classification": "part_time",
+        })
+        staffing_service.assign_work_area(match, work_area)
+        staffing_service.assign_work_area(other, work_area)
+        db.session.commit()
+        self._login(user.username)
+
+        page = self.client.get("/neostaffing/people?search=daniels")
+        suggestions = self.client.get("/neostaffing/people/search?search=dani")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"SEARCH100", page.data)
+        self.assertNotIn(b"SEARCH200", page.data)
+        self.assertNotIn(b"Select an organization node", page.data)
+        self.assertEqual(suggestions.status_code, 200)
+        payload = suggestions.get_json()
+        self.assertEqual([row["id"] for row in payload["results"]], [match.id])
+        self.assertEqual(payload["results"][0]["name"], "Daniels, Derrick")
+        self.assertEqual(payload["results"][0]["work_area"], work_area.name)
+        self.assertEqual(
+            self.client.get("/neostaffing/people/search?search=d").get_json(),
+            {"results": []},
+        )
 
     def test_people_drilldown_reveals_one_unit_level_at_a_time(self):
         user = self._user("staffing_people_drilldown")

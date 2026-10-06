@@ -378,6 +378,26 @@ def people():
     )
 
 
+@bp.get("/people/search")
+@neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
+def people_search():
+    can_manage = user_can_access_app(current_user, "neostaffing", minimum_role="master")
+    filters = {
+        key: request.args.get(key, "").strip()
+        for key in (
+            "sort_id", "operation_id", "department_id", "work_area_id",
+            "classification", "employee_status", "assignment_status",
+            "active", "search",
+        )
+    }
+    return jsonify(
+        results=staffing_service.people_search_suggestions(
+            filters,
+            current_user if not can_manage else None,
+        )
+    )
+
+
 @bp.route("/attendance", methods=["GET", "POST"])
 @neostaffing_app_required(permission_key=PEOPLE_VIEW_PERMISSION)
 def attendance():

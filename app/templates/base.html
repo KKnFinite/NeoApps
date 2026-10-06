@@ -516,7 +516,7 @@
             {% set flight_api_auto_poll_visible = is_flight_api_test_page %}
             {% include "neomotherbrain/_flight_api_auto_poll_timer.html" %}
             {% endif %}
-            {% if is_neostaffing_page and request.endpoint not in ('neostaffing.index', 'neostaffing.reports') %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
+            {% if is_neostaffing_page and request.endpoint not in ('neostaffing.index', 'neostaffing.reports', 'neostaffing.people') %}{% include "neostaffing/_secondary_controls.html" %}{% endif %}
             {% block content %}{% endblock %}
         </main>
         {% block page_overlay %}{% endblock %}
