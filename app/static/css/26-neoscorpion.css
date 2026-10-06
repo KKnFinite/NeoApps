@@ -100,6 +100,29 @@
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > td {
     border-bottom: 0;
+    font-size: 1.1em;
+}
+
+/* Live Dispatch readability hotfix: enlarge row data without growing headers. */
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-inline-input,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-inline-select {
+    font-size: .79rem;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-tail small {
+    font-size: .67rem;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-arrival-secondary {
+    font-size: .79rem;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-status-detail {
+    font-size: .75rem !important;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-actual-apu > strong,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed > strong {
+    font-size: .75rem;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
+    font-size: .57rem;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete > td {
     opacity: .46;
