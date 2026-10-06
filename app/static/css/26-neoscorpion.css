@@ -33,9 +33,9 @@
     --dispatch-font-medium: .945rem;
     --dispatch-font-small: .79rem;
 }
-.neoscorpion-dispatch-size-large { font-size: var(--dispatch-font-large) !important; }
-.neoscorpion-dispatch-size-medium { font-size: var(--dispatch-font-medium) !important; }
-.neoscorpion-dispatch-size-small { font-size: var(--dispatch-font-small) !important; }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-large { font-size: var(--dispatch-font-large) !important; }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-medium { font-size: var(--dispatch-font-medium) !important; }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-small { font-size: var(--dispatch-font-small) !important; }
 .neoscorpion-dispatch-action-cell .action-button.neoscorpion-dispatch-size-medium,
 .neoscorpion-fuel-data-cell .action-button.neoscorpion-dispatch-size-medium,
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-details-toggle.neoscorpion-dispatch-size-medium {
