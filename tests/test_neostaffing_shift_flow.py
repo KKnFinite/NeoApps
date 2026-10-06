@@ -63,6 +63,9 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(sorted(re.findall(r'data-roster-person="(\d+)"', html)), sorted(str(p.id) for p in people))
         self.assertEqual(sorted(re.findall(r'data-ballmat-person="(\d+)"', html)), sorted(str(p.id) for p in people[:3]))
         self.assertIn('BALLMAT START', html)
+        self.assertIn('EAST BALLMAT', html)
+        self.assertIn('WEST BALLMAT', html)
+        self.assertIn('shift-ballmat-side-bands', html)
         self.assertIn('READ ONLY', html)
         self.assertNotIn('data-journey-stage', html)
         self.assertNotIn('data-flow-lines', html)
@@ -90,6 +93,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([r['person'].id for r in roster['columns'][1]['rows']], [door.id, ballmat.id])
         self.assertEqual([r['person'].id for r in roster['columns'][1]['ballmat_rows']], [ballmat.id])
         self.assertEqual((roster['count'], roster['ballmat_count']), (2, 1))
+        self.assertEqual(roster['ballmat_side_counts'], {'west': 1, 'east': 0})
 
     def test_route_grid_bundles_identical_paths_and_preserves_custom_cross_side_locations(self):
         areas = self._configure_final_composite()

@@ -120,3 +120,67 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { background:#18413
  .shift-door-roster h2 small { display:block; margin:5px 0 0; }
  .neostaffing-shift-flow-head { display:flex; flex-wrap:wrap; gap:10px; }
 }
+
+/* Ballmat Start is a dense read-only roster, visually split into West/East halves. */
+.shift-ballmat-side-bands {
+  display:grid;
+  grid-template-columns:repeat(12,minmax(0,1fr));
+  margin-bottom:3px;
+}
+.shift-ballmat-side-bands span {
+  padding:5px 8px;
+  border:1px solid #365b60;
+  color:#a9c9cd;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-align:center;
+}
+.shift-ballmat-side-bands .is-west {
+  grid-column:1 / span 6;
+  background:#13272b;
+  border-radius:4px 0 0 0;
+}
+.shift-ballmat-side-bands .is-east {
+  grid-column:7 / span 6;
+  background:#17232d;
+  border-left-width:3px;
+  border-radius:0 4px 0 0;
+}
+.shift-ballmat-roster .shift-ballmat-column {
+  padding-bottom:3px;
+  background:#0f2025;
+}
+.shift-ballmat-roster .shift-ballmat-column.is-east {
+  background:#111d27;
+}
+.shift-ballmat-roster .shift-ballmat-column.is-side-start {
+  border-left:3px solid #5d7d83;
+}
+.shift-ballmat-roster .shift-ballmat-column header {
+  padding:5px 7px;
+}
+.shift-ballmat-roster .shift-ballmat-column header strong {
+  font-size:13px;
+}
+.shift-ballmat-roster .shift-ballmat-column header span {
+  font-size:10px;
+}
+.shift-ballmat-names {
+  padding:2px 0 3px;
+}
+.shift-ballmat-person,
+.shift-ballmat-empty {
+  display:block;
+  padding:2px 7px;
+  color:#d9eeee;
+  font-size:11px;
+  line-height:1.2;
+  overflow-wrap:anywhere;
+}
+.shift-ballmat-empty { color:#66888b; }
+@media(max-width:700px) {
+  .shift-ballmat-side-bands { display:none; }
+  .shift-ballmat-roster .shift-ballmat-column.is-side-start { border-left:0; }
+  .shift-ballmat-roster h2 small { line-height:1.45; }
+}
