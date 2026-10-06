@@ -1706,6 +1706,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertNotIn(b"Select Operation", response.data)
         self.assertIn(b"All People", response.data)
         self.assertIn(b"data-people-search-input", response.data)
+        self.assertIn(b"data-people-sort-picker", response.data)
         self.assertIn(b"neostaffing-people-roster-table", response.data)
         self.assertNotIn(b"Select an organization node", response.data)
         self.assertIn(b"mobile-bottom-nav", response.data)
