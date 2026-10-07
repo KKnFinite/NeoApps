@@ -3,40 +3,48 @@
     const root = document.querySelector('[data-shift-roster]');
     if (!root) return;
     const columns = [...root.querySelectorAll('[data-roster-column]')];
-    const sides = [...root.querySelectorAll('[data-roster-side]')];
+    const doors = columns.slice(0, columns.length / 2);
     const mobile = window.matchMedia('(max-width: 700px)');
+    const scroll = root.querySelector('[data-roster-scroll]');
     const paging = root.querySelector('[data-roster-paging]');
     const previous = root.querySelector('[data-roster-previous]');
     const next = root.querySelector('[data-roster-next]');
     const range = root.querySelector('[data-roster-range]');
-    let side = 'all', page = 0;
-    try { const stored = JSON.parse(sessionStorage.getItem('staffing-door-roster') || 'null');
-        if (stored && ['all', 'west', 'east'].includes(stored.side)) { side = stored.side; page = stored.page || 0; }
-    } catch (_) {}
+    let page = 0;
+    try { page = Math.max(0, Number(sessionStorage.getItem('staffing-door-page-v2')) || 0); } catch (_) {}
     const render = () => {
-        if (mobile.matches && side === 'all') side = 'west';
-        const available = columns.slice(0, columns.length / 2).filter(column => side === 'all' || column.dataset.rosterColumnSide === side);
-        const size = mobile.matches ? 3 : available.length;
-        page = Math.max(0, Math.min(page, Math.ceil(available.length / size) - 1));
-        const visible = available.slice(page * size, (page + 1) * size);
+        const size = mobile.matches ? (window.innerWidth >= 430 ? 4 : 3) : doors.length;
+        page = mobile.matches ? Math.max(0, Math.min(page, Math.ceil(doors.length / size) - 1)) : 0;
+        const visible = mobile.matches ? doors.slice(page * size, (page + 1) * size) : doors;
         const keys = new Set(visible.map(column => column.dataset.rosterColumn));
         columns.forEach(column => { column.hidden = !keys.has(column.dataset.rosterColumn); });
-        const lastPage = (page + 1) * size >= available.length;
-        root.dataset.rosterActiveSide = side;
+        const lastPage = (page + 1) * size >= doors.length;
         root.style.setProperty('--roster-columns', String(size));
-        sides.forEach(button => { button.hidden = mobile.matches && button.dataset.rosterSide === 'all';
-            button.setAttribute('aria-pressed', String(button.dataset.rosterSide === side)); });
         paging.hidden = !mobile.matches;
         previous.disabled = page === 0;
         next.disabled = lastPage;
-        const rangeLabels = visible.map(column => column.dataset.doorLabel);
-        range.textContent = rangeLabels.join(' · ');
-        try { sessionStorage.setItem('staffing-door-roster', JSON.stringify({side, page})); } catch (_) {}
+        range.textContent = visible.length ? `${visible[0].dataset.doorLabel}\u2013${visible.at(-1).dataset.doorLabel}` : '';
+        try { sessionStorage.setItem('staffing-door-page-v2', String(page)); } catch (_) {}
     };
-    sides.forEach(button => button.addEventListener('click', () => { side = button.dataset.rosterSide; page = 0; render(); }));
-    previous.addEventListener('click', () => { page--; render(); });
-    next.addEventListener('click', () => { page++; render(); });
+    const turn = delta => { const before = page; page += delta; render(); if (page !== before && scroll) scroll.scrollLeft = 0; return page !== before; };
+    previous.addEventListener('click', () => turn(-1));
+    next.addEventListener('click', () => turn(1));
     mobile.addEventListener('change', () => { page = 0; render(); });
+    window.addEventListener?.('resize', render);
+    let touchStart;
+    scroll?.addEventListener('touchstart', event => {
+        if (!mobile.matches) return;
+        const touch = event.touches[0];
+        touchStart = touch ? {x: touch.clientX, y: touch.clientY} : null;
+    }, {passive:true});
+    scroll?.addEventListener('touchend', event => {
+        if (!touchStart || !mobile.matches) return;
+        const touch = event.changedTouches[0];
+        const dx = touch.clientX - touchStart.x, dy = touch.clientY - touchStart.y;
+        touchStart = null;
+        if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2 || (dx > 0 && scroll.scrollLeft > 10)) return;
+        if (turn(dx < 0 ? 1 : -1)) event.preventDefault();
+    }, {passive:false});
     render();
 
     const feedback = root.querySelector('[data-roster-feedback]');

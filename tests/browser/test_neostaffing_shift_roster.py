@@ -167,17 +167,24 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         expect(card).to_have_class('shift-door-person is-wave-2')
         expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
         page.locator('.neostaffing-shift-flow-drawer header a').click()
-        for width in (1920, 1280, 900, 390):
+        for width in (1920, 1280, 900, 450, 390):
             page.set_viewport_size({'width':width, 'height':900})
+            if width in (450, 390):
+                expect(page.locator('[data-roster-range]')).to_have_text('D34–D26' if width == 450 else 'D34–D29')
+                visible = page.locator('[data-final-door-target]:visible')
+                self.assertEqual(visible.count(), 4 if width == 450 else 3)
+                last = visible.last.bounding_box()
+                roster = page.locator('[data-roster-scroll]').bounding_box()
+                self.assertLessEqual(last['x'] + last['width'], roster['x'] + roster['width'] + 1)
             if width == 390:
-                page.locator('[data-roster-side="east"]').click()
                 page.locator('[data-roster-next]').click()
+                expect(page.locator('[data-roster-range]')).to_have_text('D26–D21')
             page.screenshot(path=str(self.evidence / f'roster-{width}.png'), full_page=True)
             geometry = page.evaluate('''() => ({page:document.documentElement.scrollWidth,
                 viewport:innerWidth, roster:document.querySelector('[data-roster-scroll]').clientWidth,
                 scroll:document.querySelector('[data-roster-scroll]').scrollWidth})''')
             self.assertLessEqual(geometry['page'], geometry['viewport'], geometry)
-            if width in (1280, 900, 390):
+            if width in (1280, 900, 450, 390):
                 self.assertGreater(geometry['scroll'], geometry['roster'], geometry)
                 page.locator('[data-roster-scroll]').evaluate('el => { el.scrollLeft = el.scrollWidth; }')
                 rail = page.locator('.shift-roster-needs').bounding_box()
@@ -266,7 +273,6 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         expect(card.locator('[data-setup-strip]')).to_be_hidden()
         self.assertEqual(order(), [*expected[:2], edited, *[pid for pid in expected[2:] if pid != edited]])
         page.locator('.neostaffing-shift-flow-drawer header a').click()
-        page.locator('[data-roster-side="all"]').click()
         # A blue drop must slot between green and Wave 1 without affecting the
         # existing Setup strip or flow background.
         discharge = page.locator(f'[data-roster-person="{self.ids["DISCHARGE"]}"]')

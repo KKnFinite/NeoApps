@@ -7,9 +7,6 @@
 {% set roster = shift_flow.flow_map.door_roster %}
 <section class="shift-door-roster" data-shift-roster data-shift-map data-final-door-url="{{ url_for('neostaffing.move_shift_flow_final_door', person_id=0) }}" aria-label="Final Door staffing">
   <div class="shift-door-controls">
-    <nav class="neo-segmented-control" aria-label="Door side">
-      {% for side in ['all', 'west', 'east'] %}<button type="button" data-roster-side="{{ side }}" aria-pressed="{{ 'true' if side == 'all' else 'false' }}">{{ 'BOTH' if side == 'all' else side|upper }}</button>{% endfor %}
-    </nav>
     <div class="shift-door-paging" data-roster-paging hidden>
       <button type="button" data-roster-previous aria-label="Previous doors">‹</button>
       <span data-roster-range aria-live="polite"></span>
@@ -23,7 +20,7 @@
   <section aria-labelledby="final-door-roster-title">
     <div class="shift-door-columns" data-roster-columns>
       {% for column in roster.columns %}
-      <article class="shift-door-column" data-roster-column="{{ loop.index0 }}" data-roster-column-side="{{ column.side }}" data-door-label="{{ column.label }}"{% if can_edit_shift_flow and column.id %} data-final-door-target="{{ column.id }}"{% endif %}>
+      <article class="shift-door-column" data-roster-column="{{ loop.index0 }}" data-door-label="{{ column.label }}"{% if can_edit_shift_flow and column.id %} data-final-door-target="{{ column.id }}"{% endif %}>
         <header><strong>{{ column.label }}</strong><span data-roster-count>{{ column.rows|length }}</span></header>
         <div data-roster-people>{% for entry in column.rows %}{{ employee(entry, can_edit_shift_flow, true) }}{% endfor %}</div>
         <p class="shift-door-empty" data-roster-empty{% if column.rows %} hidden{% endif %}>—</p>
@@ -38,14 +35,11 @@
     </section>
   </aside>
   <section class="shift-ballmat-roster" aria-labelledby="ballmat-roster-title">
-    <h2 id="ballmat-roster-title">BALLMAT START <small>EAST BALLMAT <span data-ballmat-side-count="east">{{ roster.ballmat_side_counts.east }}</span> · WEST BALLMAT <span data-ballmat-side-count="west">{{ roster.ballmat_side_counts.west }}</span> · READ ONLY</small></h2>
-    <div class="shift-ballmat-side-bands" aria-hidden="true">
-      <span class="is-west">WEST BALLMAT</span>
-      <span class="is-east">EAST BALLMAT</span>
-    </div>
+    <h2 id="ballmat-roster-title">BALLMAT START <small>{{ roster.ballmat_count }} employees · READ ONLY</small></h2>
+    <span hidden data-ballmat-side-count="east">{{ roster.ballmat_side_counts.east }}</span><span hidden data-ballmat-side-count="west">{{ roster.ballmat_side_counts.west }}</span>
     <div class="shift-door-columns shift-ballmat-columns" data-roster-columns>
       {% for column in roster.columns %}
-      <article class="shift-door-column shift-ballmat-column is-{{ column.side }}{% if loop.index == 7 %} is-side-start{% endif %}" data-roster-column="{{ loop.index0 }}" data-roster-column-side="{{ column.side }}" data-door-label="{{ column.label }}" data-ballmat-door="{{ column.id }}">
+      <article class="shift-door-column shift-ballmat-column" data-roster-column="{{ loop.index0 }}" data-door-label="{{ column.label }}" data-ballmat-door="{{ column.id }}">
         <header><strong>{{ column.label }}</strong><span data-roster-count>{{ column.ballmat_rows|length }}</span></header>
         <div class="shift-ballmat-names" data-roster-people>
           {% for entry in column.ballmat_rows %}<span class="shift-ballmat-person" data-ballmat-person="{{ entry.person.id }}" data-person-last="{{ entry.person.last_name.casefold() }}" data-person-first="{{ entry.person.first_name.casefold() }}">{{ entry.person.full_name }}</span>{% endfor %}

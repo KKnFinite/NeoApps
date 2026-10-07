@@ -12,7 +12,7 @@
   </main>
   {% if selected %}
     <aside class="neostaffing-shift-flow-drawer">
-      <header><strong>{{ selected.person.full_name }}</strong><a href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase, side=shift_flow.final_composite.side if shift_flow.final_composite else request.args.get('side', 'east')) }}">CLOSE</a></header>
+      <header><strong>{{ selected.person.full_name }}</strong><a href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase) }}">CLOSE</a></header>
       {% if can_edit_shift_flow %}
         {% include "neostaffing/_shift_flow_editor.html" %}
       {% else %}
@@ -21,6 +21,6 @@
     </aside>
   {% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_shift_roster.js', v='20261007-roster-order') }}"></script>
+<script src="{{ url_for('static', filename='js/neostaffing_shift_roster.js', v='20261007-continuous-doors') }}"></script>
 {% if selected and can_edit_shift_flow %}<script src="{{ url_for('static', filename='js/neostaffing_shift_map.js', v='20261001-stage-routes') }}"></script>{% endif %}
 {% endblock %}

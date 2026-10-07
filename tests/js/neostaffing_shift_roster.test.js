@@ -3,40 +3,55 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const code = fs.readFileSync('app/static/js/neostaffing_shift_roster.js', 'utf8');
-function board(mobile = false, stored = null) {
+function board(width = 1920, stored = null) {
     const element = (dataset = {}) => ({dataset, hidden:false, disabled:false, handlers:{},
         addEventListener(key, fn) {this.handlers[key] = fn;},
         setAttribute(key, value) {this[key] = value;}, click() {this.handlers.click();}});
     const labels = ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'];
-    const columns = [0,1].flatMap(() => labels.map((label, index) => element({rosterColumn:String(index), rosterColumnSide:index < 6 ? 'west':'east', doorLabel:label})));
-    const sides = ['all','west','east'].map(side => element({rosterSide:side}));
+    const columns = [0,1].flatMap(() => labels.map((label, index) => element({rosterColumn:String(index), doorLabel:label})));
     const paging = element(), previous = element(), next = element(), range = element();
-    const media = element(); media.matches = mobile;
-    const root = {style:{setProperty(){}}, dataset:{}, querySelectorAll(selector) {return selector === '[data-roster-column]' ? columns:selector === '[data-roster-side]' ? sides:[];},
-        querySelector(selector) {return {'[data-roster-paging]':paging,'[data-roster-previous]':previous,'[data-roster-next]':next,'[data-roster-range]':range}[selector];}};
+    const media = element(); media.matches = width <= 700;
+    const scroll = element(); scroll.scrollLeft = 0;
+    const root = {style:{setProperty(){}}, dataset:{}, querySelectorAll(selector) {return selector === '[data-roster-column]' ? columns:[];},
+        querySelector(selector) {return {'[data-roster-paging]':paging,'[data-roster-previous]':previous,'[data-roster-next]':next,'[data-roster-range]':range,'[data-roster-scroll]':scroll}[selector];}};
     let saved = stored;
-    vm.runInNewContext(code, {document:{querySelector:() => root}, window:{matchMedia:() => media}, sessionStorage:{getItem:() => saved, setItem:(_,value) => {saved = value;}}});
-    return {columns,sides,next,previous,media,paging,range,saved:() => saved, visible:section => columns.slice(section*12,(section+1)*12).filter(c => !c.hidden).map(c => c.dataset.doorLabel)};
+    const window = {innerWidth:width,matchMedia:() => media,handlers:{},addEventListener(key,fn){this.handlers[key]=fn;}};
+    vm.runInNewContext(code, {document:{querySelector:() => root}, window, sessionStorage:{getItem:() => saved, setItem:(_,value) => {saved = value;}}});
+    return {columns,next,previous,media,paging,range,scroll,window,saved:() => saved, visible:section => columns.slice(section*12,(section+1)*12).filter(c => !c.hidden).map(c => c.dataset.doorLabel)};
 }
-test('desktop sides preserve configured order and align Final Door and Ballmat rosters', () => {
+test('desktop shows the full configured order and aligns Final Door and Ballmat rosters', () => {
     const b = board(); assert.equal(b.visible(0).length,12);
-    b.sides[2].click(); assert.deepEqual(b.visible(0),['D17','D13','D9','D6','D4','D1']);
+    assert.deepEqual(b.visible(0),['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1']);
     assert.deepEqual(b.visible(0),b.visible(1));
-    assert.deepEqual(board(false,b.saved()).visible(0),b.visible(0));
+    assert.deepEqual(board(1920,b.saved()).visible(0),b.visible(0));
 });
-test('mobile pages three doors with both sections aligned and retained side', () => {
-    const b = board(true); assert.deepEqual(b.visible(0),['D34','D32','D29']);
+test('narrow mobile pages continuously through three doors, retaining its page', () => {
+    const b = board(390); assert.deepEqual(b.visible(0),['D34','D32','D29']);
+    assert.equal(b.range.textContent,'D34–D29');
     b.next.click(); assert.deepEqual(b.visible(0),['D26','D24','D21']);
-    assert.deepEqual(b.visible(0),b.visible(1)); assert.equal(b.next.disabled,true);
-    b.sides[2].click(); assert.deepEqual(b.visible(0),['D17','D13','D9']);
-    assert.deepEqual(board(true,b.saved()).visible(0),b.visible(0));
-    b.media.matches = false; b.media.handlers.change(); assert.equal(b.visible(0).length,6);
+    assert.deepEqual(b.visible(0),b.visible(1)); assert.equal(b.next.disabled,false);
+    b.next.click(); assert.deepEqual(b.visible(0),['D17','D13','D9']);
+    assert.deepEqual(board(390,b.saved()).visible(0),b.visible(0));
+    b.next.click(); assert.deepEqual(b.visible(0),['D6','D4','D1']);assert.equal(b.next.disabled,true);
+    b.media.matches = false; b.media.handlers.change(); assert.equal(b.visible(0).length,12);
 });
 
-test('mobile final East page lists only doors after separate Discharge roster is removed', () => {
-    const mobile = board(true); mobile.sides[2].click(); mobile.next.click();
-    assert.equal(mobile.range.textContent, 'D6 · D4 · D1');
-    assert.deepEqual(mobile.visible(0), ['D6','D4','D1']);
+test('wider mobile pages four doors with continuous range labels and swipe navigation', () => {
+    const mobile = board(450);
+    assert.deepEqual(mobile.visible(0), ['D34','D32','D29','D26']);
+    assert.equal(mobile.range.textContent, 'D34–D26');
+    let prevented = 0;
+    mobile.scroll.handlers.touchstart({touches:[{clientX:280,clientY:100}]});
+    mobile.scroll.handlers.touchend({changedTouches:[{clientX:150,clientY:110}],preventDefault(){prevented++;}});
+    assert.deepEqual(mobile.visible(0), ['D24','D21','D17','D13']);
+    assert.equal(mobile.range.textContent, 'D24–D13');
+    mobile.next.click();
+    assert.deepEqual(mobile.visible(0), ['D9','D6','D4','D1']);
+    assert.equal(mobile.range.textContent, 'D9–D1');
+    assert.equal(mobile.next.disabled,true);
+    assert.equal(prevented,1);
+    mobile.window.innerWidth = 390; mobile.window.handlers.resize();
+    assert.deepEqual(mobile.visible(0), ['D17','D13','D9']);
 });
 
 const tick = () => new Promise(resolve => setImmediate(resolve));

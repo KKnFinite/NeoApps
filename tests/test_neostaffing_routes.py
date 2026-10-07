@@ -277,10 +277,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"SHIFT FLOW", response.data)
         self.assertIn(b"Final Door not set", response.data)
         self.assertIn(b"Shift Employee", response.data)
-        self.assertIn(
-            b'data-roster-side="east"',
-            response.data,
-        )
+        self.assertNotIn(b'data-roster-side=', response.data)
+        self.assertIn(b'data-roster-paging', response.data)
 
     def test_shift_flow_final_door_move_requires_simulator_and_csrf(self):
         simulator = self._user("shift_drag_simulator")
