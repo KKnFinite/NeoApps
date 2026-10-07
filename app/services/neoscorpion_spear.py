@@ -682,8 +682,10 @@ def _readiness_reasons(row, *, ramp, spear_settings, now_utc):
         reasons.append("parking")
 
     arrival = row.get("arrival_mission")
-    arrival_ready = False
-    if arrival is not None:
+    arrival_ready = (
+        str(row.get("arrival_status") or "").strip().lower() == "arrived"
+    )
+    if not arrival_ready and arrival is not None:
         actual_block_in = _utc_naive(
             getattr(arrival, "actual_block_in_datetime_utc", None)
         )
