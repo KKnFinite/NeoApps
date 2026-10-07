@@ -1,0 +1,135 @@
+"""Real Shift Flow drops, shared editor, permissions and contained roster scroll."""
+import unittest
+import os
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from playwright.sync_api import expect
+
+from app.extensions import db
+from app.models import StaffingUnit, StaffingPerson
+from app.services import neostaffing as staffing
+from tests.browser import test_mobile_drawer as existing
+
+
+class ShiftRosterBrowserTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.fixture = existing.MobileDrawerBrowserTest
+        cls.fixture.setUpClass()
+        cls.evidence = Path('instance/browser-evidence/shift-flow').resolve()
+        cls.evidence.mkdir(parents=True, exist_ok=True)
+        with cls.fixture.app.app_context():
+            night = StaffingUnit(unit_type='sort', name='Night')
+            ramp = StaffingUnit(unit_type='operation', name='Ramp', parent=night)
+            shift = StaffingUnit(unit_type='department', name='Shift', parent=ramp)
+            cls.areas = {name: StaffingUnit(unit_type='work_area', name=name, parent=shift)
+                for name in ['West Ballmat', 'East Ballmat', 'Discharge'] +
+                [f'Door {n}' for n in (34, 32, 29, 26, 24, 21, 17, 13, 9, 6, 4, 1)]}
+            db.session.add_all([night, ramp, shift, *cls.areas.values()]); db.session.commit()
+            cls.ids = {}
+            for employee_id, first, last, start, final, transition in [
+                ('GREEN', 'Grace', 'Door', 'Door 34', 'Door 34', ''),
+                ('WAVE1', 'Alex', 'Wave', 'West Ballmat', 'Door 34', '1'),
+                ('WAVE2', 'Blake', 'Wave', 'West Ballmat', 'Door 34', '2'),
+                ('CLEANUP', 'Chris', 'Wave', 'West Ballmat', 'Door 34', '3'),
+                ('MISSING', 'Ada', 'Smith', 'West Ballmat', 'Door 34', ''),
+                ('AFTER', 'Zoe', 'Smith', 'West Ballmat', 'Door 32', '2'),
+                ('BEFORE', 'Zoe', 'Adams', 'Door 32', 'Door 32', ''),
+                ('DISCHARGE', 'Drew', 'Discharge', 'Discharge', 'Door 1', ''),
+                ('UNSET', 'Una', 'Assigned', 'Door 1', '', ''),
+            ]:
+                person = staffing.create_person({'employee_id':employee_id, 'first_name':first, 'last_name':last,
+                    'seniority_date':'2020-01-01', 'classification':'part_time', 'employee_status':'active'})
+                staffing.assign_work_area(person, cls.areas[start])
+                if final:
+                    staffing.create_shift_flow_plan(person, {'shift_flow_sort_start_work_area_id':cls.areas[start].id,
+                        'shift_flow_final_door_work_area_id':cls.areas[final].id,
+                        'shift_flow_ballmat_transition':transition}, cls.areas[start])
+                cls.ids[employee_id] = person.id
+            db.session.commit()
+            cls.area_ids = {name: area.id for name, area in cls.areas.items()}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.fixture.tearDownClass()
+
+    def test_real_drop_editor_and_responsive_roster(self):
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':1920, 'height':1080})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page(); errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.on('dialog', lambda dialog: self.fail(f'Unexpected confirmation: {dialog.message}'))
+        helper = self.fixture()
+        helper.login(page)
+        helper.ready(page, '/neostaffing/shift-flow')
+        card = page.locator(f'[data-roster-person="{self.ids["MISSING"]}"]')
+        destination = page.locator(f'[data-final-door-target="{self.area_ids["Door 32"]}"]')
+        for employee_id, tint in [('GREEN','at-door'), ('WAVE1','wave-1'), ('WAVE2','wave-2'), ('CLEANUP','cleanup')]:
+            expect(page.locator(f'[data-roster-person="{self.ids[employee_id]}"]')).to_have_class(f'shift-door-person is-{tint}')
+        expect(card.locator('[data-flow-warning]')).to_be_visible()
+        discharge = page.locator('[data-roster-discharge]')
+        self.assertEqual(discharge.locator('[draggable], [data-final-door-target], a').count(), 0)
+        door_one = page.locator('[data-final-door-target][data-door-label="D1"]')
+        self.assertGreaterEqual(discharge.bounding_box()['x'], door_one.bounding_box()['x'] + door_one.bounding_box()['width'])
+        self.assertLessEqual(abs(discharge.bounding_box()['y'] - door_one.bounding_box()['y']), 1)
+        self.assertGreater(page.locator('.shift-roster-needs').bounding_box()['y'], discharge.bounding_box()['y'])
+        self.assertEqual(page.locator('.shift-ballmat-roster [data-roster-discharge]').count(), 0)
+        before = None
+        with self.fixture.app.app_context():
+            person = db.session.get(StaffingPerson, self.ids['MISSING'])
+            plan = person.shift_flow_plan; home = staffing.assignment_service.shift_home(person)
+            before = (home.id, home.work_area_unit_id, home.updated_at, plan.setup_work_area_id,
+                      plan.sort_start_work_area_id, plan.ballmat_transition)
+        with page.expect_response(lambda response: response.url.endswith('/final-door')) as saved:
+            card.drag_to(destination)
+        self.assertEqual(saved.value.status, 200)
+        self.assertEqual(set(saved.value.request.post_data_json), {'final_door_work_area_id', 'expected_version'})
+        expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
+        expect(page.locator('[data-roster-feedback]')).to_contain_text('Final Door saved')
+        expect(card.locator('[data-flow-warning]')).to_be_visible()
+        with self.fixture.app.app_context():
+            person = db.session.get(StaffingPerson, self.ids['MISSING'])
+            plan = person.shift_flow_plan; home = staffing.assignment_service.shift_home(person)
+            self.assertEqual((home.id, home.work_area_unit_id, home.updated_at, plan.setup_work_area_id,
+                              plan.sort_start_work_area_id, plan.ballmat_transition), before)
+            self.assertEqual(plan.final_door_work_area_id, self.area_ids['Door 32'])
+        card.click()
+        expect(page.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
+        self.assertEqual(page.locator('.neostaffing-shift-flow-drawer form').count(), 1)
+        expect(page.locator('[name="shift_flow_final_door_work_area_id"]')).to_have_value(str(self.area_ids['Door 32']))
+        page.locator('[name="shift_flow_ballmat_transition"]').select_option('2')
+        page.locator('button').filter(has_text='SAVE FLOW').click()
+        expect(card.locator('[data-flow-warning]')).to_be_hidden()
+        expect(card).to_have_class('shift-door-person is-wave-2')
+        page.locator('.neostaffing-shift-flow-drawer header a').click()
+        for width in (1920, 1280, 900, 390):
+            page.set_viewport_size({'width':width, 'height':900})
+            if width == 390:
+                page.locator('[data-roster-side="east"]').click()
+                page.locator('[data-roster-next]').click()
+            page.screenshot(path=str(self.evidence / f'roster-{width}.png'), full_page=True)
+            geometry = page.evaluate('''() => ({page:document.documentElement.scrollWidth,
+                viewport:innerWidth, roster:document.querySelector('[data-roster-scroll]').clientWidth,
+                scroll:document.querySelector('[data-roster-scroll]').scrollWidth})''')
+            self.assertLessEqual(geometry['page'], geometry['viewport'], geometry)
+            if width in (1280, 900, 390):
+                self.assertGreater(geometry['scroll'], geometry['roster'], geometry)
+                page.locator('[data-roster-scroll]').evaluate('el => { el.scrollLeft = el.scrollWidth; }')
+                rail = page.locator('.shift-roster-needs').bounding_box()
+                self.assertLessEqual(rail['x'] + rail['width'], width)
+                page.screenshot(path=str(self.evidence / f'roster-{width}-right.png'), full_page=True)
+                page.locator('[data-roster-scroll]').evaluate('el => { el.scrollLeft = 0; }')
+            else:
+                self.assertLessEqual(geometry['scroll'], geometry['roster'] + 1, geometry)
+        self.assertEqual(errors, [])
+        watcher_context = browser.new_context(viewport={'width':1920, 'height':1080})
+        watcher_context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        watcher = watcher_context.new_page(); helper.login(watcher, 'drawer-watcher')
+        helper.ready(watcher, '/neostaffing/shift-flow')
+        self.assertEqual(watcher.locator('[draggable="true"], [data-final-door-target]').count(), 0)
+        watcher.locator(f'[data-roster-person="{self.ids["MISSING"]}"]').click()
+        expect(watcher.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
+        self.assertEqual(watcher.locator('.neostaffing-shift-flow-drawer form').count(), 0)
+        browser.close()

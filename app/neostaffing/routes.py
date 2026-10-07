@@ -525,6 +525,9 @@ def move_shift_flow_final_door(person_id):
             "final_door_work_area_id": plan.final_door_work_area_id,
             "plan_version": result["version"],
             "shorthand": staffing_service.shift_flow_shorthand(plan),
+            **staffing_service._shift_flow_roster_status(plan,
+                staffing_service.assignment_service.shift_home(person).work_area,
+                {area.id for area in staffing_service.shift_flow_area_options(assignment.work_area)}),
         }
     )
 

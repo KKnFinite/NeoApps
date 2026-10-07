@@ -356,7 +356,14 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
         }
 
     plan.final_door_work_area = destination
-    _persist_flow_home(plan)
+    # Home is authoritative. A Final Door drop must never write Home from
+    # the compatibility Sort Start field (which may be stale in legacy data).
+    session = db.session()
+    session.info["staffing_final_door_only_plan"] = plan
+    try:
+        session.flush()
+    finally:
+        session.info.pop("staffing_final_door_only_plan", None)
     return {
         "changed": True,
         "plan": plan,
@@ -1015,6 +1022,38 @@ def _shift_flow_map(rows, areas):
             "count": len(matrix["rows"])}
 
 
+def _shift_flow_roster_status(plan, home, allowed_ids):
+    """Classify existing flow fields; a different Final Door is not an error."""
+    final_id = getattr(plan, "final_door_work_area_id", None)
+    transition = getattr(plan, "ballmat_transition", None)
+    home_type = shift_work_area_type(home)
+    color = ""
+    if home and final_id and home.id == final_id:
+        color = "at-door"
+    elif home_type == SHIFT_FLOW_BALLMAT:
+        color = {1: "wave-1", 2: "wave-2", 3: "cleanup"}.get(transition, "")
+
+    issues = []
+    if not home or home.id not in allowed_ids or home_type not in {
+        SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE
+    }:
+        issues.append("Start Area is missing or invalid.")
+    if not plan:
+        issues.append("Shift Flow plan is missing.")
+    else:
+        if not final_id or final_id not in allowed_ids or shift_work_area_type(plan.final_door_work_area) != SHIFT_FLOW_DOOR:
+            issues.append("Final Door is missing or invalid.")
+        # No Setup is an explicit, supported choice, not missing information.
+        if plan.setup_work_area_id and (plan.setup_work_area_id not in allowed_ids or
+                shift_work_area_type(plan.setup_work_area) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}):
+            issues.append("Setup Area is invalid.")
+        if home_type == SHIFT_FLOW_BALLMAT and transition not in {1, 2, 3}:
+            issues.append("Ballmat wave / cleanup transition is missing or invalid.")
+        elif home_type != SHIFT_FLOW_BALLMAT and transition is not None:
+            issues.append("Ballmat transition does not match Start Area.")
+    return {"flow_color": color, "flow_warning": " ".join(issues) if final_id else ""}
+
+
 def _shift_flow_door_roster(matrix):
     """Group final plans; start-area membership comes only from active Home assignments."""
     columns = [{"id": column["id"], "label": column["label"], "side": column["side"],
@@ -1127,6 +1166,7 @@ def _shift_flow_staffing_matrix(rows, areas, configurations):
     by_band = {band["key"]: band for band in bands}
     column_index = {column["id"]: index for index, column in enumerate(columns) if column["id"] is not None}
     entries, needs_assignment = [], []
+    allowed_ids = {area.id for area in areas}
     for row in unique.values():
         plan, home = row["plan"], row["home"]
         final_id = getattr(plan, "final_door_work_area_id", None)
@@ -1135,7 +1175,7 @@ def _shift_flow_staffing_matrix(rows, areas, configurations):
             "No Setup" if plan.setup_work_area_id is None else
             plan.setup_work_area.name if plan.setup_work_area else "Not set"),
             "start_label": home.name if home else "Not set", "final_side": column["side"] if column else "",
-            "reason": None}
+            "reason": None, **_shift_flow_roster_status(plan, home, allowed_ids)}
         entries.append(entry)
         # Physical planned counts include every eligible employee, even custom
         # routes whose current location differs from their eventual final door.

@@ -156,12 +156,16 @@ def enforce_work_assignment_lifecycle(session, _context, _instances):
                 session.delete(plan)
             else:
                 plan.sort_start_work_area = units[home.work_area_unit_id]
-                department_id = units[home.work_area_unit_id].parent_id
-                for field in ("setup_work_area", "final_door_work_area"):
-                    area = getattr(plan, field)
-                    if area and (not area.active or area.parent_id != department_id):
-                        setattr(plan, field, None)
-                if "ballmat" not in units[home.work_area_unit_id].name.casefold():
-                    plan.ballmat_transition = None
+                # Final Door-only drops retain incomplete/invalid flow details
+                # for the shared editor. Locks, Home mirror and revision remain
+                # enforced; assignment and full-flow edits keep normal cleanup.
+                if session.info.get("staffing_final_door_only_plan") is not plan:
+                    department_id = units[home.work_area_unit_id].parent_id
+                    for field in ("setup_work_area", "final_door_work_area"):
+                        area = getattr(plan, field)
+                        if area and (not area.active or area.parent_id != department_id):
+                            setattr(plan, field, None)
+                    if "ballmat" not in units[home.work_area_unit_id].name.casefold():
+                        plan.ballmat_transition = None
         # The aggregate revision covers Home-only changes and absent plans too.
         person.shift_flow_version = (person.shift_flow_version or 0) + 1

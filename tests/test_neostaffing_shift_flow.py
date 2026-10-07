@@ -13,6 +13,116 @@ from app.services import neostaffing as staffing_service
 
 
 class ShiftFlowTest(unittest.TestCase):
+    def test_roster_flow_colors_and_incomplete_warning_use_applicable_fields(self):
+        areas = self._configure_final_composite()
+        cases = [
+            ('GREEN', areas['Door 34'], '', 'at-door', False),
+            ('WAVE1', areas['West Ballmat'], '1', 'wave-1', False),
+            ('WAVE2', areas['West Ballmat'], '2', 'wave-2', False),
+            ('CLEANUP', areas['West Ballmat'], '3', 'cleanup', False),
+            ('MISSING', areas['West Ballmat'], '', '', True),
+            ('CUSTOM', areas['Door 32'], '', '', False),
+            ('DISCHARGE', self.discharge, '', '', False),
+        ]
+        for employee_id, start, transition, _color, _warning in cases:
+            person = self._person(employee_id)
+            self._plan(person, self._values(start=start, transition=transition, final=areas['Door 34']), start)
+        db.session.commit()
+        rows = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][0]['rows']
+        by_employee = {row['person'].employee_id: row for row in rows}
+        for employee_id, _start, _transition, color, warning in cases:
+            with self.subTest(employee_id=employee_id):
+                self.assertEqual(by_employee[employee_id]['flow_color'], color)
+                self.assertEqual(bool(by_employee[employee_id]['flow_warning']), warning)
+        green = by_employee['GREEN']
+        # Even inconsistent transition data must not override Start-at-Door green.
+        green['plan'].ballmat_transition = 2
+        status = staffing_service._shift_flow_roster_status(green['plan'], areas['Door 34'], {area.id for area in areas.values()})
+        self.assertEqual(status['flow_color'], 'at-door')
+        self.assertIn('transition', status['flow_warning'])
+        db.session.rollback()
+
+    def test_flow_warning_checks_start_and_optional_setup_without_requiring_no_setup(self):
+        from types import SimpleNamespace
+        areas = self._configure_final_composite()
+        allowed = {area.id for area in areas.values()}
+        plan = SimpleNamespace(final_door_work_area_id=areas['Door 34'].id,
+            final_door_work_area=areas['Door 34'], ballmat_transition=None,
+            setup_work_area_id=None, setup_work_area=None)
+        status = staffing_service._shift_flow_roster_status(plan, None, allowed)
+        self.assertIn('Start Area', status['flow_warning'])
+        status = staffing_service._shift_flow_roster_status(plan, self.other, allowed)
+        self.assertIn('Start Area', status['flow_warning'])
+        self.assertEqual(staffing_service._shift_flow_roster_status(plan, areas['Door 34'], allowed)['flow_warning'], '')
+        plan.setup_work_area_id, plan.setup_work_area = self.discharge.id, self.discharge
+        self.assertIn('Setup Area', staffing_service._shift_flow_roster_status(plan, areas['Door 34'], allowed)['flow_warning'])
+
+    def test_final_door_drop_preserves_partial_flow_and_sorts_destination_then_editor_completes_flow(self):
+        areas = self._configure_final_composite()
+        moved = self._person('DROP1'); moved.last_name = 'SMITH'; moved.first_name = 'ADA'
+        plan = self._plan(moved, self._values(start=areas['West Ballmat'], setup=areas['Door 21'], final=areas['Door 34']), areas['West Ballmat'])
+        for employee_id, first, last in [('DROP2', 'ZOE', 'SMITH'), ('DROP3', 'ZOE', 'ADAMS')]:
+            person = self._person(employee_id); person.first_name = first; person.last_name = last
+            self._plan(person, self._values(start=areas['Door 32'], final=areas['Door 32']), areas['Door 32'])
+        db.session.commit()
+        home = staffing_service.assignment_service.shift_home(moved)
+        before = (plan.setup_work_area_id, plan.sort_start_work_area_id, plan.ballmat_transition,
+                  home.id, home.work_area_unit_id, home.updated_at)
+        revision = self._revision(plan)
+        result = staffing_service.move_shift_flow_final_door(moved, areas['Door 32'].id, home.work_area, revision)
+        db.session.commit(); db.session.expire_all()
+        self.assertTrue(result['changed']); self.assertNotEqual(result['version'], revision)
+        self.assertEqual(plan.final_door_work_area_id, areas['Door 32'].id)
+        self.assertEqual((plan.setup_work_area_id, plan.sort_start_work_area_id, plan.ballmat_transition,
+                          home.id, home.work_area_unit_id, home.updated_at), before)
+        destination = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]
+        self.assertEqual([row['person'].employee_id for row in destination['rows']], ['DROP3', 'DROP1', 'DROP2'])
+        self.assertTrue(destination['rows'][1]['flow_warning'])
+        values = self._values(start=home.work_area, setup=areas['Door 21'], transition='2', final=areas['Door 32'])
+        values['expected_version'] = result['version']
+        staffing_service.save_shift_flow_plan(moved, values, home.work_area); db.session.commit()
+        updated = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]['rows'][1]
+        self.assertEqual(updated['flow_warning'], '')
+        self.assertEqual(updated['flow_color'], 'wave-2')
+
+    def test_final_door_drop_does_not_write_home_from_stale_compatibility_start(self):
+        from sqlalchemy import text
+        areas = self._configure_final_composite()
+        person = self._person('LEGACY-DROP')
+        plan = self._plan(person, self._values(start=areas['West Ballmat'], transition='2', final=areas['Door 34']), areas['West Ballmat'])
+        db.session.commit()
+        db.session.execute(text('UPDATE staffing_shift_flow_plans SET sort_start_work_area_id=:area WHERE id=:plan'),
+                           {'area': areas['Door 34'].id, 'plan': plan.id})
+        db.session.commit(); db.session.expire_all()
+        home = staffing_service.assignment_service.shift_home(person)
+        result = staffing_service.move_shift_flow_final_door(person, areas['Door 32'].id, home.work_area, self._revision(plan))
+        db.session.commit(); db.session.expire_all()
+        self.assertTrue(result['changed'])
+        self.assertEqual(home.work_area_unit_id, areas['West Ballmat'].id)
+        self.assertEqual(plan.ballmat_transition, 2)
+
+    def test_final_door_drop_retains_invalid_flow_for_editor_instead_of_silently_cleaning_it(self):
+        from sqlalchemy import text
+        areas = self._configure_final_composite()
+        person = self._person('PARTIAL-DROP')
+        plan = self._plan(person, self._values(start=areas['Door 34'], final=areas['Door 34']), areas['Door 34'])
+        db.session.commit()
+        # Legacy details may be inconsistent; the drop must report them, not
+        # silently remove Setup or wave data while changing the Final Door.
+        db.session.execute(text('UPDATE staffing_shift_flow_plans SET setup_work_area_id=:setup, ballmat_transition=2 WHERE id=:plan'),
+                           {'setup': self.non_shift.id, 'plan': plan.id})
+        db.session.commit(); db.session.expire_all()
+        result = staffing_service.move_shift_flow_final_door(person, areas['Door 32'].id, areas['Door 34'], self._revision(plan))
+        db.session.commit(); db.session.expire_all()
+        self.assertTrue(result['changed'])
+        self.assertEqual(plan.setup_work_area_id, self.non_shift.id)
+        self.assertEqual(plan.ballmat_transition, 2)
+        self.assertEqual(plan.sort_start_work_area_id, areas['Door 34'].id)
+        row = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]['rows'][0]
+        self.assertIn('Setup Area', row['flow_warning'])
+        self.assertIn('transition', row['flow_warning'])
+        self.assertNotIn('staffing_final_door_only_plan', db.session().info)
+
     def test_flow_map_phase_doors_follow_configured_order(self):
         self._configure_final_composite()
         board = staffing_service.shift_flow_context('sort_start')['flow_map']

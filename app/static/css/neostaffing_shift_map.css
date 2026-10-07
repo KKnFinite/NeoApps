@@ -88,6 +88,22 @@
 
 /* Shared tracks keep Final Door and read-only Ballmat Home rosters aligned. */
 .shift-door-roster { --roster-columns:12; min-width:0; }
+.shift-roster-scroll { max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; scrollbar-color:#365b59 #0a161c; }
+.shift-roster-layout { display:grid; grid-template-columns:minmax(0,1fr) 176px; gap:0 12px; min-width:calc(var(--roster-columns) * 116px + 188px); }
+.shift-roster-layout>section { min-width:0; grid-column:1; }
+.shift-roster-rail { grid-column:2; grid-row:1 / span 2; min-width:0; }
+.shift-roster-discharge { border:1px solid #3d5351; border-radius:5px; background:#14221f; }
+.shift-roster-rail .shift-roster-discharge header { background:#25332e; }
+.shift-roster-rail .shift-roster-discharge header strong { font-size:12px; }
+.shift-roster-readonly { display:block; padding:4px 7px; color:#92aaa5; font-size:9px; }
+.shift-roster-needs { margin-top:12px; padding:8px; background:#191f22; border:1px solid #504734; border-radius:5px; }
+.shift-roster-rail .shift-roster-needs h2 { margin:0 0 6px; font-size:11px; color:#cdb37c; }
+.shift-roster-needs>div { max-height:46vh; overflow-y:auto; scrollbar-width:thin; }
+.shift-roster-needs small,.shift-roster-needs p { font-size:10px; line-height:1.4; color:#a9a290; }
+.shift-roster-needs .shift-door-person { padding:6px 0; }
+.shift-roster-feedback { position:fixed; bottom:80px; right:20px; z-index:100; max-width:min(320px,80vw); padding:9px 13px; border:1px solid #537f71; border-radius:5px; background:#19332b; color:#d5e8df; font-size:12px; box-shadow:0 4px 18px #0006; }
+.shift-roster-feedback.is-error { background:#332b1c; border-color:#b29150; color:#e8c88f; }
+.shift-door-column.is-drop-target { outline:2px solid #7ba99a; outline-offset:-2px; }
 .shift-door-controls { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
 .shift-door-controls button { background:#10272b; color:#b8eeee; border:1px solid #286064; border-radius:4px; padding:8px 12px; cursor:pointer; }
 .shift-door-controls button[aria-pressed="true"] { background:#155049; border-color:#36c6b5; color:#fff; }
@@ -100,23 +116,28 @@
 .shift-door-column header strong { color:#e7ffff; font-size:16px; }
 .shift-door-column header span { color:#5ee1cd; font-size:12px; }
 .shift-door-person { display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
-a.shift-door-person:hover, a.shift-door-person:focus-visible { background:#18413e; color:#fff; }
+.shift-door-person.is-at-door { background:#172d25; }
+.shift-door-person.is-wave-1 { background:#2a2b1e; }
+.shift-door-person.is-wave-2 { background:#30261d; }
+.shift-door-person.is-cleanup { background:#302124; }
+a.shift-door-person:hover, a.shift-door-person:focus-visible { outline:1px solid #7ba99a; outline-offset:-1px; color:#fff; }
+.shift-door-person[draggable="true"] { cursor:grab; }
+.shift-flow-warning { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; margin-left:5px; border:1px solid #96773f; border-radius:50%; background:#3b301c; color:#e6bc69; font-size:11px; font-weight:700; vertical-align:middle; }
 .shift-door-empty { padding:4px 7px; color:#66888b; }
 .shift-ballmat-roster { margin-top:24px; padding-top:14px; border-top:2px solid #507079; }
 .shift-ballmat-roster .shift-door-column { background:#131e27; }
 .shift-ballmat-roster .shift-door-column header { background:#23333f; }
 .shift-ballmat-roster h2 { color:#b6cbdc; }
-.shift-door-missing { margin-top:12px; color:#c5a66a; }
-.shift-door-missing .shift-door-person { display:inline-block; }
 .shift-door-paging { display:flex; align-items:center; gap:8px; font-size:11px; color:#8fb9b9; }
 .shift-door-roster [hidden] { display:none !important; }
 @media(max-width:700px) {
  .shift-door-roster { --roster-columns:3; }
+ .shift-roster-layout { grid-template-columns:minmax(0,1fr) 148px; gap:0 8px; min-width:calc(var(--roster-columns) * 90px + 156px); }
  .shift-door-controls { flex-wrap:wrap; gap:8px; }
  .shift-door-controls .neo-segmented-control { display:flex; }
  .shift-door-controls button { min-height:40px; padding:8px 12px; }
  .shift-door-paging { width:100%; justify-content:space-between; }
- .shift-door-person { padding:9px 6px; }
+ .shift-door-person { padding:9px 6px; min-height:44px; box-sizing:border-box; }
  .shift-door-roster h2 small { display:block; margin:5px 0 0; }
  .neostaffing-shift-flow-head { display:flex; flex-wrap:wrap; gap:10px; }
 }
@@ -124,7 +145,7 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { background:#18413
 /* Ballmat Start is a dense read-only roster, visually split into West/East halves. */
 .shift-ballmat-side-bands {
   display:grid;
-  grid-template-columns:repeat(13,minmax(0,1fr));
+  grid-template-columns:repeat(12,minmax(0,1fr));
   margin-bottom:3px;
 }
 .shift-ballmat-side-bands span {
@@ -145,12 +166,6 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { background:#18413
   grid-column:7 / span 6;
   background:#17232d;
   border-left-width:3px;
-}
-.shift-ballmat-side-bands .is-discharge {
-  grid-column:13;
-  background:#1d2524;
-  border-left-width:3px;
-  border-radius:0 4px 0 0;
 }
 .shift-ballmat-roster .shift-ballmat-column {
   padding-bottom:3px;
@@ -188,23 +203,8 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { background:#18413
   .shift-ballmat-side-bands { display:none; }
   .shift-ballmat-roster .shift-ballmat-column.is-side-start { border-left:0; }
   .shift-ballmat-roster h2 small { line-height:1.45; }
-  .shift-ballmat-discharge[hidden] { display:none !important; }
 }
 
-.shift-ballmat-columns {
-  grid-template-columns:repeat(var(--start-roster-columns,var(--roster-columns)),minmax(0,1fr));
-}
-.shift-ballmat-discharge {
-  background:#172320 !important;
-  border-left:3px solid #6c837d;
-}
-.shift-ballmat-discharge header {
-  background:#263630 !important;
-}
-.shift-ballmat-discharge header strong {
-  font-size:11px !important;
-  letter-spacing:.03em;
-}
 .shift-door-roster[data-roster-active-side]:not([data-roster-active-side="all"]) .shift-ballmat-side-bands {
   display:none;
 }

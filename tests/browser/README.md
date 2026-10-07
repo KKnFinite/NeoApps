@@ -17,6 +17,15 @@ Run from the repository root:
     python -m unittest tests.browser.test_mobile_drawer -v
     node --test tests/js/mobile_drawer.test.js
 
+Shift Flow roster coverage runs a real Final Door drop and the shared editor,
+checks unchanged Home/Setup/transition data and watcher permissions, and measures
+contained scrolling at 1920, 1280, 900 and 390 pixels:
+
+    python -m unittest tests.browser.test_neostaffing_shift_roster -v
+
+Set `NEO_BROWSER_CHANNEL=msedge` to use an installed Edge browser. Screenshots
+are saved under the ignored `instance/browser-evidence/shift-flow/` directory.
+
 Chromium and WebKit each exercise Portal, Gateway, and MotherBrain at
 320x700 and 390x844, plus a separate mouse/keyboard
 1920x1080 desktop context. Coverage includes dismissal methods, focus,
