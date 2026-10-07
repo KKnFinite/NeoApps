@@ -224,6 +224,19 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
             ("inbound_fuel",),
         )
 
+    def test_dispatch_arrived_status_satisfies_spear_without_block_in(self):
+        row = _row()
+        row["arrival_status"] = "Arrived"
+        row["arrival_mission"].actual_block_in_datetime_utc = None
+        row["arrival_mission"].eta_datetime_utc = NOW + timedelta(minutes=45)
+        row["arrival_mission"].planned_datetime_utc = NOW + timedelta(minutes=45)
+
+        plan = _plan([row])
+
+        self.assertEqual(plan.readiness_by_mission_id[100], ())
+        self.assertEqual(plan.waiting_for_data_count, 0)
+        self.assertEqual(len(plan.steps), 1)
+
     def test_arrival_gate_opens_only_at_block_in_or_early_staging_window(self):
         outside = _row(100)
         outside["arrival_mission"].actual_block_in_datetime_utc = None
