@@ -136,6 +136,10 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) small:not(.neoscorpion-dispatch-secondary):not(.neoscorpion-spear-risk) {
     color: #d9d5c4;
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-arrived .neoscorpion-dispatch-arrival-secondary {
+    color: #8fffa8 !important;
+    font-weight: 900;
+}
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > td {
     border-bottom: 0;
     font-size: 1.1em;
