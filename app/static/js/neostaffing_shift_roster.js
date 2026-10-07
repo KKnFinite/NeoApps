@@ -52,9 +52,12 @@
     };
     const refreshColumn = column => {
         const people = column.querySelector('[data-roster-people]');
+        const colorOrder = {'at-door':0, discharge:1, 'wave-1':2, 'wave-2':3, cleanup:4};
+        const colorRank = card => card.dataset.rosterPerson ? (colorOrder[card.dataset.flowColor] ?? 5) : 0;
         // Template keys use the same casefolding as the server's roster order.
         const compare = (a, b) => a === b ? 0 : a < b ? -1 : 1;
         const sorted = [...people.children].sort((a, b) =>
+            colorRank(a) - colorRank(b) ||
             compare(a.dataset.personLast.toLowerCase(), b.dataset.personLast.toLowerCase()) ||
             compare(a.dataset.personFirst.toLowerCase(), b.dataset.personFirst.toLowerCase()) ||
             Number(a.dataset.rosterPerson || a.dataset.ballmatPerson) - Number(b.dataset.rosterPerson || b.dataset.ballmatPerson));
@@ -125,11 +128,15 @@
                 if (!response.ok || !payload.ok) throw new Error(payload.conflict?.message || payload.error || 'Final Door was not saved.');
                 card.dataset.finalDoor = String(payload.final_door_work_area_id);
                 card.dataset.flowVersion = payload.plan_version;
+                card.dataset.flowColor = payload.flow_color || '';
                 ['discharge','at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
+                const setupStrip = card.querySelector('[data-setup-strip]');
+                if (setupStrip) setupStrip.hidden = !payload.has_setup;
                 const warning = card.querySelector('[data-flow-warning]');
                 warning.hidden = !payload.flow_warning;
                 warning.title = payload.flow_warning || '';
                 warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
+                refreshColumn(target);
                 if (payload.previous_ballmat_side !== payload.ballmat_side) {
                     for (const [side, delta] of [[payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
                         const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);

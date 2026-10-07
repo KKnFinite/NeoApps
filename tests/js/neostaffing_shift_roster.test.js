@@ -62,8 +62,9 @@ function dropBoard() {
     }));
     const source=columns[0], destination=columns[1];
     const person=(id,last,first,ballmat=false)=>{
-        const card=element({[ballmat?'ballmatPerson':'rosterPerson']:id,personLast:last,personFirst:first,finalDoor:'1',flowVersion:'old:7'});
-        card.nodes={'[data-flow-warning]':element()}; card.nodes['[data-flow-warning]'].hidden=true;
+        const card=element({[ballmat?'ballmatPerson':'rosterPerson']:id,personLast:last,personFirst:first,flowColor:'wave-2',finalDoor:'1',flowVersion:'old:7'});
+        card.nodes={'[data-flow-warning]':element(),'[data-setup-strip]':element()}; card.nodes['[data-flow-warning]'].hidden=true;
+        card.nodes['[data-setup-strip]'].hidden=true;
         card.href='/neostaffing/shift-flow?person_id='+id;return card;
     };
     const card=person('42','SMITH','Ada'), other=person('2','Smith','Zoe'), before=person('3','Adams','Zoe');
@@ -86,7 +87,7 @@ function dropBoard() {
         fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
     const start=()=>card.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'42');}}});
     const drop=target=>target.handlers.drop({preventDefault(){}});
-    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,drop};
+    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,drop,person};
 }
 
 test('Final Door drop sends only Final Door and revision with CSRF, locks duplicate saves', async()=>{
@@ -193,6 +194,35 @@ test('a drawer with a different revision is never reconciled by another employee
 test('external drags and same-door drops do not save',()=>{
     const b=dropBoard();b.drop(b.destination);assert.equal(b.requests.length,0);
     b.start();b.drop(b.source);assert.equal(b.requests.length,0);
+});
+
+test('optimistic and accepted drops sort exact color groups then names, while Ballmat stays alphabetical', async()=>{
+    const b=dropBoard(), people=b.destination.nodes['[data-roster-people]'];
+    const expected=[];
+    for(const [index,color] of ['at-door','discharge','wave-1','wave-2','cleanup',''].entries()){
+        for(const [offset,first,last] of [[2,'Zoe','SMITH'],[0,'Zoe','Adams'],[1,'Ada','smith']]){
+            const p=b.person(String(100+index*3+offset),last,first);p.dataset.flowColor=color;people.append(p);
+        }
+        expected.push(...[0,1,2].map(offset=>String(100+index*3+offset)));
+    }
+    // Keep the original two employees and the dragged card in the green group.
+    people.children.filter(p=>['2','3'].includes(p.dataset.rosterPerson)).forEach(p=>{p.dataset.flowColor='at-door';});
+    b.card.dataset.flowColor='at-door';b.start();b.drop(b.destination);
+    const ids=()=>people.children.map(p=>p.dataset.rosterPerson);
+    assert.deepEqual(ids(),['3','100','42','101','2','102',...expected.slice(3)]);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',has_setup:true})});await tick();
+    assert.deepEqual(ids(),['3','100','101','2','102',...expected.slice(3,9),'109','42','110','111',...expected.slice(12)]);
+    assert.equal(b.card.dataset.flowColor,'wave-2');assert.equal(b.card.nodes['[data-setup-strip]'].hidden,false);
+    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(p=>p.dataset.ballmatPerson),['3','42','2']);
+});
+
+test('Setup strip is reconciled independently of the flow background and retained on failed saves', async()=>{
+    const b=dropBoard();b.card.nodes['[data-setup-strip]'].hidden=false;b.start();b.drop(b.destination);
+    b.requests[0].resolve({ok:false,json:async()=>({error:'Failed'})});await tick();
+    assert.equal(b.card.nodes['[data-setup-strip]'].hidden,false);assert.equal(b.card.dataset.flowColor,'wave-2');
+    b.start();b.drop(b.destination);
+    b.requests[1].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',has_setup:false})});await tick();
+    assert.equal(b.card.nodes['[data-setup-strip]'].hidden,true);assert.ok(b.card.classList.values.has('is-wave-2'));
 });
 
 test('Discharge-start card retains blue after a Final Door drop, without stale wave tint', async()=>{

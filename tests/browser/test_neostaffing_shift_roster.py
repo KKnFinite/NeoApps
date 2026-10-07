@@ -126,7 +126,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         }''')
         with page.expect_response(lambda response: response.url.endswith('/final-door')) as saved:
             card.drag_to(destination)
-            expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
+            expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Zoe Smith!', 'Ada Smith!'])
             expect(page.locator('[data-shift-roster]')).to_have_attribute('aria-busy', 'true')
             self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
             self.assertTrue(card.evaluate('el => !el.dispatchEvent(new MouseEvent("click", {bubbles:true,cancelable:true}))'))
@@ -134,7 +134,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             page.evaluate('window.releaseRosterSave()')
         self.assertEqual(saved.value.status, 200)
         self.assertEqual(set(saved.value.request.post_data_json), {'final_door_work_area_id', 'expected_version'})
-        expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
+        expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Zoe Smith!', 'Ada Smith!'])
         expect(page.locator('[data-roster-feedback]')).to_contain_text('Final Door saved')
         expect(card.locator('[data-flow-warning]')).to_be_visible()
         with self.fixture.app.app_context():
@@ -165,6 +165,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         page.locator('button').filter(has_text='SAVE FLOW').click()
         expect(card.locator('[data-flow-warning]')).to_be_hidden()
         expect(card).to_have_class('shift-door-person is-wave-2')
+        expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
         page.locator('.neostaffing-shift-flow-drawer header a').click()
         for width in (1920, 1280, 900, 390):
             page.set_viewport_size({'width':width, 'height':900})
@@ -194,6 +195,90 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         watcher.locator(f'[data-roster-person="{self.ids["MISSING"]}"]').click()
         expect(watcher.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
         self.assertEqual(watcher.locator('.neostaffing-shift-flow-drawer form').count(), 0)
+        browser.close()
+
+    def test_roster_groups_setup_strips_and_editor_resort(self):
+        expected, setup_people = [], []
+        with self.fixture.app.app_context():
+            areas = {name: db.session.get(StaffingUnit, area_id) for name, area_id in self.area_ids.items()}
+            for group, start, transition in [
+                ('at-door','Door 29',''), ('discharge','Discharge',''), ('wave-1','West Ballmat','1'),
+                ('wave-2','West Ballmat','2'), ('cleanup','West Ballmat','3')]:
+                members = {}
+                for index, first, last in [(2,'Zoe','Smith'), (0,'Zoe','Adams'), (1,'Ada','Smith')]:
+                    person = staffing.create_person({'employee_id':f'ORDER-{group}-{index}',
+                        'first_name':first, 'last_name':last, 'seniority_date':'2020-01-01',
+                        'classification':'part_time', 'employee_status':'active'})
+                    staffing.assign_work_area(person, areas[start])
+                    staffing.create_shift_flow_plan(person, {'shift_flow_sort_start_work_area_id':areas[start].id,
+                        'shift_flow_final_door_work_area_id':areas['Door 29'].id,
+                        'shift_flow_setup_work_area_id':areas['Door 34'].id if index == 1 else '',
+                        'shift_flow_ballmat_transition':transition}, areas[start])
+                    members[index] = person.id
+                    if index == 1:
+                        setup_people.append(person.id)
+                expected.extend(members[index] for index in (0,1,2))
+            db.session.commit()
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':1920, 'height':1080})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page()
+        helper = self.fixture(); helper.login(page); helper.ready(page, '/neostaffing/shift-flow')
+        column = page.locator(f'[data-roster-column][data-final-door-target="{self.area_ids["Door 29"]}"]')
+        def order():
+            return column.locator('[data-roster-person]').evaluate_all('cards => cards.map(card => Number(card.dataset.rosterPerson))')
+        self.assertEqual(order(), expected)
+        def luminance(rgb):
+            linear = [c / 255 / 12.92 if c / 255 <= .04045 else ((c / 255 + .055) / 1.055) ** 2.4 for c in rgb]
+            return sum(c * weight for c, weight in zip(linear, (.2126,.7152,.0722)))
+        for pid in expected:
+            card = column.locator(f'[data-roster-person="{pid}"]')
+            strip = card.locator('[data-setup-strip]')
+            if pid not in setup_people:
+                expect(strip).to_be_hidden()
+                continue
+            expect(strip).to_be_visible(); expect(strip).to_have_attribute('title', 'Setup assigned')
+            self.assertEqual(strip.inner_text(), '', 'Setup has no text badge')
+            box, card_box = strip.bounding_box(), card.bounding_box()
+            self.assertGreaterEqual(box['width'],3); self.assertLessEqual(box['width'],4)
+            self.assertLessEqual(abs(box['y'] - card_box['y']),1)
+            self.assertLessEqual(abs(box['height'] - card_box['height']),1)
+            self.assertLessEqual(abs(box['x'] + box['width'] - card_box['x'] - card_box['width']),1)
+            colors = card.evaluate('''el => {
+                const rgb = value => value.match(/[\\d.]+/g).slice(0,3).map(Number);
+                return {background:rgb(getComputedStyle(el).backgroundColor),
+                    strip:rgb(getComputedStyle(el.querySelector('[data-setup-strip]')).backgroundColor)};
+            }''')
+            self.assertGreaterEqual((luminance(colors['strip'])+.05)/(luminance(colors['background'])+.05),3)
+            self.assertLess(colors['strip'][0], colors['strip'][1])
+            self.assertLess(abs(colors['strip'][1] - colors['strip'][2]),20)
+        page.screenshot(path=str(self.evidence / 'roster-group-order-setup.png'), full_page=True)
+        # Use the existing editor to move a cleanup employee into the green
+        # group and remove Setup; the redirected roster must re-sort immediately.
+        edited = setup_people[-1]
+        column.locator(f'[data-roster-person="{edited}"]').click()
+        page.locator('[name="shift_flow_sort_start_work_area_id"]').select_option(str(self.area_ids['Door 29']))
+        page.locator('[name="shift_flow_ballmat_transition"]').select_option('')
+        page.locator('[name="shift_flow_setup_work_area_id"]').select_option('')
+        page.locator('button').filter(has_text='SAVE FLOW').click()
+        card = column.locator(f'[data-roster-person="{edited}"]')
+        expect(card).to_have_class('shift-door-person is-at-door')
+        expect(card.locator('[data-setup-strip]')).to_be_hidden()
+        self.assertEqual(order(), [*expected[:2], edited, *[pid for pid in expected[2:] if pid != edited]])
+        page.locator('.neostaffing-shift-flow-drawer header a').click()
+        page.locator('[data-roster-side="all"]').click()
+        # A blue drop must slot between green and Wave 1 without affecting the
+        # existing Setup strip or flow background.
+        discharge = page.locator(f'[data-roster-person="{self.ids["DISCHARGE"]}"]')
+        with page.expect_response(lambda response: response.url.endswith('/final-door')) as saved:
+            discharge.drag_to(column)
+        self.assertEqual(saved.value.status, 200)
+        expect(discharge).to_have_class('shift-door-person is-discharge')
+        expect(discharge.locator('[data-setup-strip]')).to_be_hidden()
+        # Discharge's last name follows Adams and precedes Smith within blue.
+        expected_order = [*expected[:2], edited, *[pid for pid in expected[2:] if pid != edited]]
+        expected_order.insert(expected_order.index(expected[3]) + 1, self.ids['DISCHARGE'])
+        self.assertEqual(order(), expected_order)
         browser.close()
 
     def test_special_moves_keep_colors_setup_and_ballmat_counts_in_sync(self):

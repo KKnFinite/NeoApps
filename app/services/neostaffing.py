@@ -195,6 +195,9 @@ SHIFT_FLOW_DOOR = "Door"
 SHIFT_FLOW_BALLMAT = "Ballmat"
 SHIFT_FLOW_DISCHARGE = "Discharge"
 SHIFT_FLOW_OTHER = "Other"
+SHIFT_FLOW_ROSTER_COLOR_ORDER = {
+    "at-door": 0, "discharge": 1, "wave-1": 2, "wave-2": 3, "cleanup": 4,
+}
 
 
 def shift_work_area_type(work_area):
@@ -1105,7 +1108,8 @@ def _shift_flow_roster_status(plan, home, allowed_ids):
             issues.append("Ballmat wave / cleanup transition is missing or invalid.")
         elif home_type != SHIFT_FLOW_BALLMAT and transition is not None:
             issues.append("Ballmat transition does not match Start Area.")
-    return {"flow_color": color, "flow_warning": " ".join(issues) if final_id else ""}
+    return {"flow_color": color, "flow_warning": " ".join(issues) if final_id else "",
+            "has_setup": bool(plan and plan.setup_work_area_id)}
 
 
 def _shift_flow_door_roster(matrix):
@@ -1139,7 +1143,8 @@ def _shift_flow_door_roster(matrix):
         row["person"].id,
     )
     for column in columns:
-        column["rows"].sort(key=name_key)
+        column["rows"].sort(key=lambda row: (
+            SHIFT_FLOW_ROSTER_COLOR_ORDER.get(row["flow_color"], 5), *name_key(row)))
         column["ballmat_rows"].sort(key=name_key)
     discharge_rows.sort(key=name_key)
     missing.sort(key=name_key)

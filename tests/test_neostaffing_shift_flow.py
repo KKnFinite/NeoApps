@@ -14,6 +14,70 @@ from app.services import neostaffing as staffing_service
 
 
 class ShiftFlowTest(unittest.TestCase):
+    def test_final_roster_groups_colors_then_last_and_first_names_and_renders_setup_strip(self):
+        import re
+        from flask import render_template
+        areas = self._configure_final_composite()
+        expected = []
+        has_setup = {}
+        for color, start, transition in [
+            ('at-door', areas['Door 34'], ''), ('discharge', self.discharge, ''),
+            ('wave-1', areas['West Ballmat'], '1'), ('wave-2', areas['West Ballmat'], '2'),
+            ('cleanup', areas['West Ballmat'], '3'), ('', areas['West Ballmat'], ''),
+        ]:
+            people = []
+            for index, first, last in [(2,'Zoe','smith'), (0,'Zoe','Adams'), (1,'Ada','SMITH')]:
+                person = self._person(f'GROUP-{color}-{index}')
+                person.first_name, person.last_name = first, last
+                setup = areas['Door 21'] if index == 1 else None
+                self._plan(person, self._values(start=start, transition=transition,
+                    final=areas['Door 34'], setup=setup), start)
+                people.append((index, person.id))
+                has_setup[person.id] = bool(setup)
+            expected.extend(pid for index, pid in sorted(people))
+        db.session.commit()
+        context = staffing_service.shift_flow_context()
+        roster = context['flow_map']['door_roster']
+        self.assertEqual([row['person'].id for row in roster['columns'][0]['rows']], expected)
+        with self.app.test_request_context('/neostaffing/shift-flow'):
+            html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context,
+                can_edit_shift_flow=False, shift_work_area_type=staffing_service.shift_work_area_type)
+        cards = re.findall(r'<a\b[^>]*data-roster-person="(\d+)"[^>]*>(.*?)</a>', html, re.S)
+        self.assertEqual([int(pid) for pid, _content in cards], expected)
+        for pid, content in cards:
+            strip = re.search(r'<span[^>]*data-setup-strip[^>]*></span>', content).group(0)
+            self.assertIn('title="Setup assigned"', strip)
+            self.assertEqual(' hidden' not in strip, has_setup[int(pid)])
+            self.assertNotIn('Setup assigned', re.sub(r'<[^>]+>', '', content))
+
+    def test_final_roster_resorts_after_existing_editor_changes_color_and_setup(self):
+        areas = self._configure_final_composite()
+        green = self._person('EDIT-GREEN'); green.last_name = 'Zulu'
+        self._plan(green, self._values(start=areas['Door 34'], final=areas['Door 34']), areas['Door 34'])
+        blue = self._person('EDIT-BLUE'); blue.last_name = 'Adams'
+        self._plan(blue, self._values(start=self.discharge, final=areas['Door 34']), self.discharge)
+        moved = self._person('EDIT-MOVED'); moved.last_name = 'Smith'
+        plan = self._plan(moved, self._values(start=areas['West Ballmat'], transition='3',
+            final=areas['Door 34'], setup=areas['Door 21']), areas['West Ballmat'])
+        db.session.commit()
+        def rows():
+            return staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][0]['rows']
+        self.assertEqual([r['person'].id for r in rows()], [green.id, blue.id, moved.id])
+        values = self._values(start=areas['Door 34'], final=areas['Door 34'])
+        values['expected_version'] = self._revision(plan)
+        staffing_service.save_shift_flow_plan(moved, values, areas['West Ballmat']); db.session.commit()
+        updated = rows()
+        self.assertEqual([r['person'].id for r in updated], [moved.id, green.id, blue.id])
+        self.assertEqual(updated[0]['flow_color'], 'at-door')
+        self.assertFalse(updated[0]['has_setup'])
+        values = self._values(start=self.discharge, final=areas['Door 34'], setup=areas['Door 21'])
+        values['expected_version'] = self._revision(plan)
+        staffing_service.save_shift_flow_plan(moved, values, areas['Door 34']); db.session.commit()
+        updated = rows()
+        self.assertEqual([r['person'].id for r in updated], [green.id, blue.id, moved.id])
+        self.assertEqual(updated[-1]['flow_color'], 'discharge')
+        self.assertTrue(updated[-1]['has_setup'])
+
     def test_green_drop_moves_home_final_and_matching_setup_and_stays_green(self):
         areas = self._configure_final_composite()
         for index, setup in enumerate((None, areas['Door 34'], areas['Door 21'])):
@@ -236,12 +300,12 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual((plan.setup_work_area_id, plan.sort_start_work_area_id, plan.ballmat_transition,
                           home.id, home.work_area_unit_id, home.updated_at), before)
         destination = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]
-        self.assertEqual([row['person'].employee_id for row in destination['rows']], ['DROP3', 'DROP1', 'DROP2'])
-        self.assertTrue(destination['rows'][1]['flow_warning'])
+        self.assertEqual([row['person'].employee_id for row in destination['rows']], ['DROP3', 'DROP2', 'DROP1'])
+        self.assertTrue(destination['rows'][2]['flow_warning'])
         values = self._values(start=home.work_area, setup=areas['Door 21'], transition='2', final=areas['Door 32'])
         values['expected_version'] = result['version']
         staffing_service.save_shift_flow_plan(moved, values, home.work_area); db.session.commit()
-        updated = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]['rows'][1]
+        updated = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]['rows'][2]
         self.assertEqual(updated['flow_warning'], '')
         self.assertEqual(updated['flow_color'], 'wave-2')
 

@@ -111,7 +111,8 @@
 .shift-door-column header { display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 7px; background:#143036; border-bottom:1px solid #285054; }
 .shift-door-column header strong { color:#e7ffff; font-size:16px; }
 .shift-door-column header span { color:#5ee1cd; font-size:12px; }
-.shift-door-person { display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
+.shift-door-person { position:relative; display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
+.shift-setup-indicator { position:absolute; top:0; right:0; bottom:0; width:4px; border-radius:0 2px 2px 0; background:#74ece6; }
 .shift-door-person.is-discharge { background:#285f8c; }
 .shift-door-person.is-at-door { background:#2c704e; }
 .shift-door-person.is-wave-1 { background:#82752e; color:#fff; }

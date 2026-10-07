@@ -1,6 +1,7 @@
 {% macro employee(entry, editable, draggable=false) -%}
-<a class="shift-door-person{% if entry.flow_color %} is-{{ entry.flow_color }}{% endif %}" data-roster-person="{{ entry.person.id }}" data-person-last="{{ entry.person.last_name.casefold() }}" data-person-first="{{ entry.person.first_name.casefold() }}" data-final-door="{{ entry.plan.final_door_work_area_id if entry.plan else '' }}" data-flow-version="{{ entry.version }}" href="{{ url_for('neostaffing.shift_flow', person_id=entry.person.id) }}"{% if editable and draggable %} draggable="true"{% endif %}>
+<a class="shift-door-person{% if entry.flow_color %} is-{{ entry.flow_color }}{% endif %}" data-roster-person="{{ entry.person.id }}" data-person-last="{{ entry.person.last_name.casefold() }}" data-person-first="{{ entry.person.first_name.casefold() }}" data-flow-color="{{ entry.flow_color }}" data-final-door="{{ entry.plan.final_door_work_area_id if entry.plan else '' }}" data-flow-version="{{ entry.version }}" href="{{ url_for('neostaffing.shift_flow', person_id=entry.person.id) }}"{% if editable and draggable %} draggable="true"{% endif %}>
   {{ entry.person.full_name }}<span class="shift-flow-warning" data-flow-warning role="img"{% if not entry.flow_warning %} hidden{% endif %} title="{{ entry.flow_warning }}" aria-label="Incomplete Shift Flow: {{ entry.flow_warning }}">!</span>
+  {% if draggable %}<span class="shift-setup-indicator" data-setup-strip role="img" title="Setup assigned" aria-label="Setup assigned"{% if not entry.has_setup %} hidden{% endif %}></span>{% endif %}
 </a>
 {%- endmacro %}
 {% set roster = shift_flow.flow_map.door_roster %}
