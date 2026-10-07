@@ -10,6 +10,7 @@ from tests import test_neostaffing_employee_records as fixture
 from app.extensions import db
 from app.models import StaffingLeadershipAssignment, StaffingReportingRelationship
 from app.services import neostaffing as staffing
+from app.neostaffing.routes import STAFFING_SCREEN_ITEMS
 
 
 class Forms(HTMLParser):
@@ -109,10 +110,16 @@ class StaffingShellTest(unittest.TestCase):
     def navigation(self, *, desktop=True, denied=(), settings=True, endpoint="neostaffing.people"):
         with self.app.test_request_context('/neostaffing/people') as context:
             context.request.url_rule = SimpleNamespace(endpoint=endpoint)
+            items = [dict(label=label, endpoint=item_endpoint,
+                          active=endpoint == item_endpoint,
+                          badge=('actionable_requests' if item_endpoint == 'neostaffing.change_requests'
+                                 else 'unread_notifications' if item_endpoint == 'neostaffing.staffing_notifications'
+                                 else None))
+                     for label, item_endpoint, permission, _description, _priority in STAFFING_SCREEN_ITEMS
+                     if (permission is None and settings) or (permission is not None and permission not in denied)]
             return render_template('neostaffing/_navigation_items.html',
                 staffing_nav_class='motherbrain-desktop-side-link' if desktop else '',
-                user_can=lambda permission: permission not in denied,
-                neostaffing_settings_visible=settings,
+                staffing_screen_items=items,
                 neostaffing_nav={'actionable_requests':3,'unread_notifications':7})
 
     def nav_links(self, html):
@@ -120,20 +127,16 @@ class StaffingShellTest(unittest.TestCase):
 
     def test_navigation_exact_order_desktop_split_and_mobile_links(self):
         endpoints=['people','org_chart','attendance','reports','shift_flow','staffing_groups',
-                   'change_requests','staffing_notifications','bulk_change','settings',
-                   'employee_records','timecards','accountability','vacation_selection']
+                   'change_requests','staffing_notifications','bulk_change','settings']
         with self.app.test_request_context():
             expected=[url_for('neostaffing.'+endpoint) for endpoint in endpoints]
-            home=url_for('neostaffing.index')
         desktop=self.navigation()
         self.assertEqual(self.nav_links(desktop),expected)
-        self.assertEqual(desktop.count('UNDER CONSTRUCTION'),1)
-        self.assertLess(desktop.index('href="'+expected[9]+'"'),desktop.index('UNDER CONSTRUCTION'))
-        self.assertLess(desktop.index('UNDER CONSTRUCTION'),desktop.index('href="'+expected[10]+'"'))
         mobile=self.navigation(desktop=False)
-        self.assertEqual(self.nav_links(mobile),[home]+expected)
-        self.assertNotIn('UNDER CONSTRUCTION',mobile)
+        self.assertEqual(self.nav_links(mobile),expected)
         for html in (desktop,mobile):
+            self.assertNotIn('UNDER CONSTRUCTION',html)
+            self.assertNotIn('>Home<',html)
             self.assertNotIn('aria-disabled',html)
             self.assertIn('aria-label="3 actionable requests">3</strong>',html)
             self.assertIn('aria-label="7 unread notifications">7</strong>',html)
@@ -141,8 +144,7 @@ class StaffingShellTest(unittest.TestCase):
     def test_navigation_preserves_each_permission_gate_on_both_surfaces(self):
         gates={'neostaffing.staffing_groups.view':['staffing_groups'],
                'neostaffing.change_requests.view':['change_requests','staffing_notifications'],
-               'neostaffing.bulk_change.use':['bulk_change'],
-               'neostaffing.vacation_selection.view':['vacation_selection']}
+               'neostaffing.bulk_change.use':['bulk_change']}
         for desktop in (True,False):
             all_links=self.nav_links(self.navigation(desktop=desktop))
             for permission,endpoints in gates.items():
@@ -156,7 +158,7 @@ class StaffingShellTest(unittest.TestCase):
                              [link for link in all_links if link!=settings])
 
     def test_bottom_links_keep_active_page_and_full_shell_mobile_menu(self):
-        for endpoint in ('employee_records','timecards','accountability','vacation_selection'):
+        for endpoint in ('people','org_chart','attendance','reports'):
             for desktop in (True,False):
                 with self.subTest(endpoint=endpoint,desktop=desktop),self.app.test_request_context():
                     href=url_for('neostaffing.'+endpoint)
@@ -166,6 +168,6 @@ class StaffingShellTest(unittest.TestCase):
         html=self.client.get('/neostaffing/people').get_data(as_text=True)
         rail=html.split('data-operational-sidebar ',1)[1].split('</aside>',1)[0]
         mobile=html.split('id="neo-mobile-drawer"',1)[1].split('</aside>',1)[0]
-        self.assertIn('UNDER CONSTRUCTION',rail)
+        self.assertNotIn('UNDER CONSTRUCTION',rail)
         self.assertNotIn('UNDER CONSTRUCTION',mobile)
-        self.assertEqual(self.nav_links(rail),self.nav_links(mobile)[1:])
+        self.assertEqual(self.nav_links(rail),self.nav_links(mobile))

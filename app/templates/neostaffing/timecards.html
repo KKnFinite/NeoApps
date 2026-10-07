@@ -4,7 +4,6 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_timecards.css') }}?v=1">
 <section class="theme-staffing timecards" data-timecards>
 <h1>TIMECARDS</h1>
-<a href="{{ url_for('neostaffing.index') }}">NEOSTAFFING</a>
 <form data-staffing-filter method="get">
   <label>Date <input type="date" name="date" value="{{ day }}" required></label>
   <label>Period <select name="period"><option value="day" {% if period == 'day' %}selected{% endif %}>DAY</option><option value="week" {% if period == 'week' %}selected{% endif %}>WEEK</option></select></label>

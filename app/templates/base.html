@@ -197,9 +197,9 @@
     <div class="shell"{% if is_gateway_dock_page %} data-gateway-dock{% endif %}{% if is_gateway_typography_page %} data-gateway-typography{% endif %}>
         {% if uses_operational_shell %}
         <header class="operational-node-topbar" data-operational-topbar>
-            <a class="operational-node-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
+            {% if is_neostaffing_page %}<span class="operational-node-identity" aria-label="NeoStaffing">{% else %}<a class="operational-node-identity" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
                 <span>{{ neo_brand_name(node_header_name, node_header_key) }}<small>{{ node_current_label }}</small></span>
-            </a>
+            {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
             {% if my_alert_tray %}{% include "_my_alert_tray.html" %}{% endif %}
             {% set character_switcher_modifier = "character-switcher-header operational-character-switcher" %}
             {% set character_switcher_use_neofont = true %}
@@ -218,9 +218,9 @@
         <header class="topbar">
             {% if uses_node_header %}
             {% if not is_neorain_page %}
-            <a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">
+            {% if is_neostaffing_page %}<span class="motherbrain-header-logo-link" aria-label="NeoStaffing">{% else %}<a class="motherbrain-header-logo-link" href="{{ url_for(node_home_endpoint) }}" aria-label="{{ node_header_name }} home">{% endif %}
                 <img class="motherbrain-header-logo{% if is_neoermac_page %} neoermac-header-logo{% endif %}{% if is_neosektor_page %} neosektor-header-logo{% endif %}" src="{{ url_for('static', filename=node_header_logo) }}" alt="{{ node_header_alt }}">
-            </a>
+            {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
             {% endif %}
             <div class="motherbrain-header-identity" aria-label="{{ node_header_name }} current area">
                 <span>
@@ -252,7 +252,7 @@
             </div>
             {% endif %}
             {% else %}
-            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif is_neostaffing_page %}{{ url_for('neostaffing.index') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% elif is_neostaffing_page %}NeoStaffing{% else %}NeoApps{% endif %}">
+            <a class="brand" href="{% if is_rfd_hub_page %}{{ url_for('neomotherbrain.rfd_hub') }}{% elif current_user.is_authenticated and not public_landing|default(false) %}{{ url_for('auth.portal_dashboard') }}{% else %}{{ url_for('neomotherbrain.dashboard') }}{% endif %}" aria-label="{% if is_rfd_hub_page %}NeoGateway - {{ default_gateway.code }}{% elif is_neostaffing_page %}NeoStaffing{% else %}NeoApps{% endif %}">
                 <span>
                     <strong>
                         {% if is_rfd_hub_page %}
@@ -443,7 +443,7 @@
                     <img class="mobile-topbar-node-icon" src="{{ url_for('static', filename='images/icons/neoapps/inapp/neoapps-inapp-128.png') }}" alt="NeoApps" width="32" height="32">
                 </a>
                 {% else %}
-                <a class="mobile-topbar-title" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">
+                {% if is_neostaffing_page %}<span class="mobile-topbar-title" aria-label="NeoStaffing">{% else %}<a class="mobile-topbar-title" href="{{ url_for(mobile_home_endpoint) }}" aria-label="{{ mobile_shell_name }} home">{% endif %}
                     <span>
                         {% if is_neosektor_page %}
                         <span class="neosektor-header-title neo-brand-title neo-brand neo-brand--sektor neo-node-name neo-node-sektor mobile-topbar-brand brand-inline-name node-sektor" aria-label="NeoSektor">
@@ -462,7 +462,7 @@
                         {% endif %}
                     </span>
                     {% if not (is_neostaffing_page and mobile_shell_label == 'NeoStaffing') %}<strong>{{ mobile_shell_label }}</strong>{% endif %}
-                </a>
+                {% if is_neostaffing_page %}</span>{% else %}</a>{% endif %}
                 {% endif %}
             </div>
             <div class="mobile-topbar-actions">
@@ -598,12 +598,7 @@
                         {% set motherbrain_mobile_item_class = "mobile-shell-menu-link" %}
                         {% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
                     {% elif is_neostaffing_page %}
-                        {% if request.endpoint != 'neostaffing.index' %}
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.people') }}" role="menuitem">People</a>
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.org_chart') }}" role="menuitem">Org Chart</a>
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.reports') }}" role="menuitem">Reports</a>
-                        <a class="mobile-shell-menu-link" href="{{ url_for('neostaffing.attendance') }}" role="menuitem">Attendance</a>
-                        {% endif %}
+                        {% set staffing_nav_class = 'mobile-shell-menu-link' %}{% set staffing_nav_role = 'menuitem' %}{% include "neostaffing/_navigation_items.html" %}
                         {% set mobile_node_utility_class = 'mobile-shell-menu-link' %}{% include "_mobile_node_utilities.html" %}
                     {% else %}
                         <a class="mobile-shell-menu-link" href="{{ url_for('auth.portal_dashboard') }}" role="menuitem">{{ neo_brand("Apps", "apps") }}</a>

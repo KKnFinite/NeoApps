@@ -113,7 +113,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neostaffing/requests"', response.data)
         self.assertIn(b'href="/neostaffing/notifications"', response.data)
         self.assertIn(b'href="/neostaffing/bulk-change"', response.data)
-        self.assertIn(b'href="/neostaffing/vacation-selection"', response.data)
+        self.assertNotIn(b'href="/neostaffing/vacation-selection"', response.data)
         self.assertIn(b"neo-brand--apps", response.data)
         self.assertIn(b"/static/images/icons/neostaffing/inapp/neostaffing-inapp-128.png", response.data)
         self.assertIn(b"operational-node-topbar", response.data)
@@ -121,7 +121,7 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b"neostaffing-launch-console", response.data)
         self.assertIn(b"neostaffing-launch-grid", response.data)
         self.assertIn(b"SHIFT FLOW", response.data)
-        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 11)
+        self.assertEqual(response.data.count(b"neostaffing-menu-tile"), 10)
         self.assertNotIn(b'href="/neostaffing/people/attendance" class="neostaffing-menu-tile"', response.data)
         self.assertNotIn(b"APP ROLE", response.data)
         self.assertNotIn(b"neostaffing-home-header", response.data)
@@ -166,8 +166,53 @@ class NeoStaffingRoutesTest(unittest.TestCase):
         self.assertIn(b'href="/neostaffing/requests"', landing_menu)
         self.assertIn(b'href="/neostaffing/notifications"', landing_menu)
         self.assertNotIn(b'href="/neostaffing/bulk-change"', landing_menu)
-        self.assertIn(b'href="/neostaffing/vacation-selection"', landing_menu)
+        self.assertNotIn(b'href="/neostaffing/vacation-selection"', landing_menu)
         self.assertNotIn(b'href="/neostaffing/permissions"', landing_menu)
+
+    def test_staffing_dashboard_sidebar_and_mobile_menu_share_ordered_destinations(self):
+        user = self._user("staffing_nav_order")
+        self._grant_app_access(user, "neostaffing", "operator")
+        db.session.commit()
+        self._login(user.username)
+
+        expected = [
+            b"/neostaffing/people", b"/neostaffing/org-chart",
+            b"/neostaffing/attendance", b"/neostaffing/reports",
+            b"/neostaffing/shift-flow", b"/neostaffing/staffing-groups",
+            b"/neostaffing/requests", b"/neostaffing/notifications",
+            b"/neostaffing/bulk-change", b"/neostaffing/settings",
+        ]
+
+        def destinations(html, label):
+            nav = re.search(rb'<nav[^>]*aria-label="' + label + rb'"[^>]*>(.*?)</nav>', html, re.S)
+            self.assertIsNotNone(nav, label)
+            return re.findall(rb'<a[^>]*href="([^"]+)"', nav.group(1))
+
+        dashboard = self.client.get("/neostaffing")
+        section = self.client.get("/neostaffing/people")
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(section.status_code, 200)
+        self.assertEqual(destinations(dashboard.data, b"NeoStaffing main menu"), expected)
+        self.assertEqual(destinations(dashboard.data, b"NeoStaffing screens"), expected)
+        self.assertEqual(destinations(section.data, b"NeoStaffing menu"), expected)
+        self.assertEqual(destinations(section.data, b"NeoStaffing screens"), expected)
+        for html in (dashboard.data, section.data):
+            self.assertNotIn(b'href="/neostaffing" aria-label="NeoStaffing home"', html)
+            for hidden in (b"employee-records", b"timecards", b"accountability", b"vacation-selection"):
+                self.assertNotIn(b'href="/neostaffing/' + hidden + b'"', html)
+
+    def test_staffing_menus_omit_items_without_permission(self):
+        user = self._user("staffing_nav_watcher")
+        self._grant_app_access(user, "neostaffing", "watcher")
+        db.session.commit()
+        self._login(user.username)
+
+        dashboard = self.client.get("/neostaffing").data
+        section = self.client.get("/neostaffing/people").data
+        for html in (dashboard, section):
+            self.assertNotIn(b'href="/neostaffing/bulk-change"', html)
+            self.assertIn(b'href="/neostaffing/people"', html)
+            self.assertIn(b'href="/neostaffing/settings"', html)
 
     def test_neostaffing_section_pages_render_clean_sidebar_navigation(self):
         user = self._user("staffing_sidebar_operator")
@@ -186,8 +231,8 @@ class NeoStaffingRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertNotIn(b'aria-label="NeoStaffing section navigation"', response.data)
                 self.assertEqual(response.data.count(b'data-operational-sidebar '), 1)
-                self.assertEqual(response.data.count(b'data-staffing-secondary '), 1)
-                for label in (b"Home", b"People", b"Org Chart", b"Reports", b"Attendance"):
+                self.assertEqual(response.data.count(b'data-staffing-secondary '), 0)
+                for label in (b"People", b"Org Chart", b"Reports", b"Attendance"):
                     self.assertIn(label, response.data)
                 self.assertIn(active_label, response.data)
                 self.assertIn(b"mobile-bottom-nav", response.data)

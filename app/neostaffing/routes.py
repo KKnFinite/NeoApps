@@ -57,15 +57,60 @@ CHANGE_REQUEST_APPROVE_PERMISSION = "neostaffing.change_requests.approve"
 BULK_CHANGE_PERMISSION = "neostaffing.bulk_change.use"
 HIERARCHY_VIEW_PERMISSION = "neostaffing.hierarchy.view"
 PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
+
+# Dashboard and all Staffing menus render this ordered, permission-aware catalog.
+STAFFING_SCREEN_ITEMS = (
+    ("People", "neostaffing.people", PEOPLE_VIEW_PERMISSION, "Roster and assignments", True),
+    ("Org Chart", "neostaffing.org_chart", ORG_CHART_VIEW_PERMISSION, "Operational and management", False),
+    ("Attendance", "neostaffing.attendance", PEOPLE_VIEW_PERMISSION, "Current-sort attendance", True),
+    ("Reports", "neostaffing.reports", REPORTS_VIEW_PERMISSION, "Staffing and attendance", False),
+    ("Shift Flow", "neostaffing.shift_flow", PEOPLE_VIEW_PERMISSION, "Flow planning board", True),
+    ("Staffing Groups", "neostaffing.staffing_groups", STAFFING_GROUPS_VIEW_PERMISSION, "Deduplicated reporting scope", False),
+    ("Requests", "neostaffing.change_requests", CHANGE_REQUEST_VIEW_PERMISSION, "Change queue", False),
+    ("Notifications", "neostaffing.staffing_notifications", CHANGE_REQUEST_VIEW_PERMISSION, "Operational alerts", False),
+    ("Bulk Change", "neostaffing.bulk_change", BULK_CHANGE_PERMISSION, "Session change workspace", False),
+    ("Settings", "neostaffing.settings", None, "Staffing settings", False),
+)
+
+
+def staffing_screen_items():
+    if not user_has_app_access(current_user, "neostaffing"):
+        return []
+    return [
+        {
+            "label": label,
+            "endpoint": endpoint,
+            "description": description,
+            "priority": priority,
+            "active": request.endpoint == endpoint or (
+                endpoint == "neostaffing.org_chart" and request.endpoint == "neostaffing.hierarchy"
+            ) or (
+                endpoint == "neostaffing.attendance" and request.endpoint == "neostaffing.people_attendance"
+            ) or (
+                endpoint == "neostaffing.shift_flow" and request.endpoint == "neostaffing.save_shift_flow"
+            ) or (
+                endpoint == "neostaffing.settings" and request.endpoint in (
+                    "neostaffing.save_floating_holiday_setting",
+                    "neostaffing.delete_floating_holiday_setting",
+                )
+            ),
+            "badge": (
+                "actionable_requests" if endpoint == "neostaffing.change_requests" else
+                "unread_notifications" if endpoint == "neostaffing.staffing_notifications" else None
+            ),
+        }
+        for label, endpoint, permission, description, priority in STAFFING_SCREEN_ITEMS
+        if permission is None or user_can(permission)
+    ]
+
+
 @bp.context_processor
 def inject_neostaffing_navigation():
     return {
         "neostaffing_nav": notification_service.notification_navigation_state(
             current_user
         ),
-        "neostaffing_settings_visible": user_has_app_access(
-            current_user, "neostaffing"
-        ),
+        "staffing_screen_items": staffing_screen_items(),
     }
 
 

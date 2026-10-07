@@ -2,7 +2,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_accountability.css', v='1') }}">
 <section class="staffing-accountability">
-  <header><a href="{{ url_for('neostaffing.index') }}">NEOSTAFFING</a><h1>ACCOUNTABILITY</h1></header>
+  <header><h1>ACCOUNTABILITY</h1></header>
   <div class="accountability-summary">
     {% for action, label in [('Warning Letter', 'Warning Letters Pending'), ('Suspension', 'Suspensions Pending'), ('Termination', 'Terminations Pending')] %}
     <div><strong>{{ summary|selectattr('0', 'equalto', 'ACTION REQUIRED')|selectattr('1', 'equalto', action)|map(attribute='2')|sum }}</strong><span>{{ label }}</span></div>

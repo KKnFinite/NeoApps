@@ -1,7 +1,7 @@
 {% from "neomotherbrain/_gateway_sort_control.html" import sort_control with context %}
 {% from "_neo_brand.html" import neo_brand %}
 {% set drawer_name = node_header_name if uses_operational_shell else ("NeoStaffing" if is_neostaffing_page else ("NeoGateway" if is_rfd_hub_page else "NeoPortal")) %}
-{% set drawer_home = node_home_endpoint if uses_operational_shell else ("neostaffing.index" if is_neostaffing_page else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard")) %}
+{% set drawer_home = node_home_endpoint if uses_operational_shell else ("neomotherbrain.rfd_hub" if is_rfd_hub_page else "auth.portal_dashboard") %}
 {# Bottom controls belong to this same modal region, never to an inert background. #}
 <div class="neo-mobile-navigation" data-mobile-navigation data-menu-title="{{ drawer_name }} menu" aria-label="{{ drawer_name }} navigation">
     <div class="neo-mobile-backdrop" data-drawer-backdrop hidden></div>
@@ -62,7 +62,7 @@
         </section>
     </aside>
     <nav class="neo-mobile-bottom {% if uses_operational_shell %}operational-mobile-bottom-nav{% elif is_rfd_hub_page %}gateway-mobile-bottom-nav{% endif %}" aria-label="{{ drawer_name }} mobile navigation">
-        <a href="{{ url_for(drawer_home) }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>Home</span></a>
+        {% if is_neostaffing_page %}<a href="{{ url_for('auth.portal_dashboard') }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>NeoPortal</span></a>{% else %}<a href="{{ url_for(drawer_home) }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-7v-7h-4v7H3Z"/></svg><span>Home</span></a>{% endif %}
         <button type="button" data-drawer-nodes aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3ZM14 3h7v7h-7ZM3 14h7v7H3ZM14 14h7v7h-7Z"/></svg><span data-drawer-nodes-label>Nodes</span></button>
         <button type="button" data-drawer-toggle aria-controls="neo-mobile-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18M3 12h18M3 19h18"/></svg><span data-drawer-toggle-label>Menu</span></button>
     </nav>
