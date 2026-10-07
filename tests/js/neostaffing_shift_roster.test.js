@@ -46,6 +46,9 @@ function dropBoard() {
         classList:{values:new Set(),add(k){this.values.add(k);},remove(k){this.values.delete(k);},toggle(k,v){v?this.values.add(k):this.values.delete(k);}},
         addEventListener(key, fn){this.handlers[key]=fn;}, setAttribute(k,v){this[k]=v;}, contains(node){return node===this;},
         append(...nodes){for(const node of nodes){if(node.parent)node.parent.children.splice(node.parent.children.indexOf(node),1);node.parent=this;this.children.push(node);}},
+        insertBefore(node,next){if(node.parent)node.parent.children.splice(node.parent.children.indexOf(node),1);node.parent=this;
+            const index=next?this.children.indexOf(next):this.children.length;this.children.splice(index,0,node);},
+        get nextSibling(){return this.parent?.children[this.parent.children.indexOf(this)+1] || null;},
         querySelector(selector){return this.nodes?.[selector] || null;},
         closest(selector){for(let node=this;node;node=node.parent){if(selector==='[data-final-door-target]' && node.dataset.finalDoorTarget)return node;
             if(selector==='[data-ballmat-door]' && node.dataset.ballmatDoor)return node;}return null;}
@@ -70,17 +73,20 @@ function dropBoard() {
     columns[13].nodes['[data-roster-people]'].append(person('2','Smith','Zoe',true),person('3','Adams','Zoe',true));
     const feedback=element(), sides=['all','west','east'].map(side=>element({rosterSide:side}));
     const media=element();media.matches=false;
-    const version={value:'old:7'}, final={value:'1'}, phase={dataset:{version:'old:7'}};
-    const editor={querySelector:s=>s==='[name="expected_version"]'?version:final};
+    const version={value:'old:7'}, final={value:'1'}, startArea={value:'1'}, setup={value:''}, transition={value:'2'}, phase={dataset:{version:'old:7'}};
+    const fields={expected_version:version,shift_flow_final_door_work_area_id:final,
+        shift_flow_sort_start_work_area_id:startArea,shift_flow_setup_work_area_id:setup,shift_flow_ballmat_transition:transition};
+    const editor={querySelector:s=>fields[s.match(/name="([^"]+)"/)[1]]};
+    const westCount={textContent:'6'},eastCount={textContent:'2'};
     const root={dataset:{finalDoorUrl:'/neostaffing/shift-flow/0/final-door'},style:{setProperty(){}},setAttribute:(k,v)=>attrs[k]=v,
         querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card]:[],
-        querySelector:s=>s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:element()};
+        querySelector:s=>s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
     vm.runInNewContext(code,{document:{querySelector:s=>s==='[data-shift-roster]'?root:s==='meta[name="csrf-token"]'?{content:'csrf'}:s==='.neostaffing-shift-flow-drawer form'?editor:s==='[data-phase-editor]'?phase:null},
         window:{matchMedia:()=>media},sessionStorage:{getItem(){},setItem(){}},setTimeout:fn=>timers.push(fn),clearTimeout(){},
-        fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}))});
+        fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
     const start=()=>card.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'42');}}});
     const drop=target=>target.handlers.drop({preventDefault(){}});
-    return {requests,card,source,destination,columns,ballmat,feedback,version,final,phase,attrs,timers,start,drop};
+    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,drop};
 }
 
 test('Final Door drop sends only Final Door and revision with CSRF, locks duplicate saves', async()=>{
@@ -89,7 +95,9 @@ test('Final Door drop sends only Final Door and revision with CSRF, locks duplic
     assert.equal(b.requests[0].url,'/neostaffing/shift-flow/42/final-door');
     assert.deepEqual(JSON.parse(b.requests[0].options.body),{final_door_work_area_id:'2',expected_version:'old:7'});
     assert.equal(b.requests[0].options.headers['X-CSRF-Token'],'csrf');
-    assert.equal(b.card.parent,b.source.nodes['[data-roster-people]']);
+    assert.equal(b.card.parent,b.destination.nodes['[data-roster-people]']);
+    assert.deepEqual(b.destination.nodes['[data-roster-people]'].children.map(p=>p.dataset.rosterPerson),['3','42','2']);
+    assert.equal(b.card.dataset.finalDoor,'1');assert.equal(b.card.dataset.flowVersion,'old:7');
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',flow_warning:''})});await tick();
     assert.equal(b.attrs['aria-busy'],'false');assert.equal(b.card.dataset.flowVersion,'new:8');
     assert.equal(b.version.value,'new:8');assert.equal(b.final.value,'2');assert.equal(b.phase.dataset.version,'new:8');
@@ -111,11 +119,75 @@ test('successful drop sorts last name then first name, aligns Ballmat and update
 test('stale or failed drop preserves all displayed data, shows error and never replays', async()=>{
     for(const payload of [{conflict:{message:'Flow changed. Reload.'}},{error:'Save failed.'}]){
         const b=dropBoard();b.start();b.drop(b.destination);
+        assert.equal(b.card.parent,b.destination.nodes['[data-roster-people]']);
+        assert.equal(b.ballmat.parent,b.columns[13].nodes['[data-roster-people]']);
         b.requests[0].resolve({ok:false,json:async()=>payload});await tick();
         assert.equal(b.requests.length,1);assert.equal(b.card.parent,b.source.nodes['[data-roster-people]']);
         assert.equal(b.card.dataset.flowVersion,'old:7');assert.equal(b.version.value,'old:7');assert.equal(b.final.value,'1');
+        assert.equal(b.ballmat.parent,b.columns[12].nodes['[data-roster-people]']);
+        assert.equal(b.source.nodes['[data-roster-count]'].textContent,'1');
+        assert.equal(b.destination.nodes['[data-roster-count]'].textContent,'2');
+        assert.deepEqual(b.destination.nodes['[data-roster-people]'].children.map(p=>p.dataset.rosterPerson),['3','2']);
         assert.ok(b.feedback.classList.values.has('is-error'));assert.match(b.feedback.textContent,/Reload|failed/);
     }
+});
+
+test('network failure rolls back card and Ballmat grouping without touching editor or colors', async()=>{
+    const b=dropBoard();b.card.classList.add('is-wave-2');b.start();b.drop(b.destination);
+    b.requests[0].reject(new Error('Network failed'));await tick();
+    assert.equal(b.card.parent,b.source.nodes['[data-roster-people]']);
+    assert.equal(b.ballmat.parent,b.columns[12].nodes['[data-roster-people]']);
+    assert.ok(b.card.classList.values.has('is-wave-2'));assert.equal(b.setup.value,'');
+    assert.equal(b.transition.value,'2');assert.equal(b.attrs['aria-busy'],'false');
+});
+
+test('server error restores the original alphabetical position and reports non-JSON failures', async()=>{
+    const b=dropBoard(), source=b.source.nodes['[data-roster-people]'], destination=b.destination.nodes['[data-roster-people]'];
+    const [after,before]=destination.children;
+    source.append(before,b.card,after);
+    const original=source.children.map(p=>p.dataset.rosterPerson);
+    b.start();b.drop(b.destination);
+    assert.equal(b.card.parent,destination);
+    b.requests[0].resolve({ok:false,json:async()=>{throw new Error('Not JSON');}});await tick();
+    assert.deepEqual(source.children.map(p=>p.dataset.rosterPerson),original);
+    assert.equal(destination.children.length,0);assert.equal(b.card.dataset.finalDoor,'1');
+    assert.equal(b.feedback.textContent,'Final Door was not saved.');
+});
+
+test('ordinary clicks follow the existing editor link; drag release click is suppressed', async()=>{
+    const b=dropBoard();let prevented=0,stopped=0;
+    const click=()=>b.card.handlers.click({preventDefault(){prevented++;},stopPropagation(){stopped++;}});
+    click();assert.equal(prevented,0);assert.equal(b.card.href,'/neostaffing/shift-flow?person_id=42');
+    b.start();b.drop(b.destination);b.card.handlers.dragend();click();assert.equal(prevented,1);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2'})});await tick();
+    b.card.handlers.pointerdown();click();assert.equal(prevented,1);assert.equal(stopped,1);
+    b.start();b.drop(b.source);b.card.handlers.dragend();
+    b.requests[1].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:1,plan_version:'new:9',flow_color:'wave-2'})});await tick();
+    click();assert.equal(prevented,2);assert.equal(stopped,2);
+});
+
+test('accepted green drop reconciles Start and matching Setup in the shared editor and keeps green', async()=>{
+    const b=dropBoard();b.setup.value='1';b.start();b.drop(b.destination);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'at-door',flow_warning:'',
+        editor_changes:{shift_flow_sort_start_work_area_id:2,shift_flow_final_door_work_area_id:2,shift_flow_setup_work_area_id:2}})});await tick();
+    assert.equal(b.startArea.value,'2');assert.equal(b.setup.value,'2');assert.equal(b.final.value,'2');
+    assert.ok(b.card.classList.values.has('is-at-door'));assert.equal(b.transition.value,'2');
+});
+
+test('accepted Ballmat side switch updates only the changed editor fields and side counts', async()=>{
+    const b=dropBoard();b.setup.value='24';b.start();b.drop(b.destination);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',flow_warning:'',
+        previous_ballmat_side:'west',ballmat_side:'east',
+        editor_changes:{shift_flow_sort_start_work_area_id:88,shift_flow_final_door_work_area_id:2}})});await tick();
+    assert.equal(b.startArea.value,'88');assert.equal(b.setup.value,'24');assert.equal(b.transition.value,'2');
+    assert.equal(b.westCount.textContent,'5');assert.equal(b.eastCount.textContent,'3');
+});
+
+test('a drawer with a different revision is never reconciled by another employee drop', async()=>{
+    const b=dropBoard();b.version.value='other:9';b.start();b.drop(b.destination);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'at-door',
+        editor_changes:{shift_flow_sort_start_work_area_id:2,shift_flow_final_door_work_area_id:2}})});await tick();
+    assert.equal(b.version.value,'other:9');assert.equal(b.final.value,'1');assert.equal(b.startArea.value,'1');
 });
 
 test('external drags and same-door drops do not save',()=>{

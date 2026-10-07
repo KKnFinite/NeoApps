@@ -41,7 +41,8 @@
 
     const feedback = root.querySelector('[data-roster-feedback]');
     const targets = [...root.querySelectorAll('[data-final-door-target]')];
-    let dragged = null, saving = false, toastTimer;
+    let dragged = null, pendingCard = null, saving = false, toastTimer;
+    const draggedClicks = new WeakSet();
     const announce = (message, error = false) => {
         clearTimeout(toastTimer);
         feedback.textContent = message;
@@ -66,10 +67,23 @@
         card.addEventListener('dragstart', event => {
             if (saving) { event.preventDefault(); return; }
             dragged = card;
+            draggedClicks.add(card);
             event.dataTransfer.setData('application/x-neostaffing-final-door', card.dataset.rosterPerson);
             event.dataTransfer.effectAllowed = 'move';
         });
         card.addEventListener('dragend', () => { dragged = null; clearTargets(); });
+        // A fresh pointer press is an intentional click; the click generated
+        // by the drag's release must never navigate to the assignment editor.
+        card.addEventListener('pointerdown', () => { draggedClicks.delete(card); });
+        card.addEventListener('keydown', event => {
+            if (event.key === 'Enter') draggedClicks.delete(card);
+        });
+        card.addEventListener('click', event => {
+            if (draggedClicks.has(card) || pendingCard === card) {
+                event.preventDefault(); event.stopPropagation();
+                draggedClicks.delete(card);
+            }
+        });
     });
     targets.forEach(target => {
         target.addEventListener('dragover', event => {
@@ -88,17 +102,27 @@
             dragged = null; clearTargets();
             if (card.dataset.finalDoor === door) return;
             const version = card.dataset.flowVersion;
-            saving = true; root.setAttribute('aria-busy', 'true');
+            const source = card.closest('[data-final-door-target]');
+            const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
+            const ballmatSource = ballmat?.closest('[data-ballmat-door]');
+            const ballmatTarget = ballmat && root.querySelector(`[data-ballmat-door="${door}"]`);
+            // Retain exact positions as well as field state until accepted.
+            const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
+            target.querySelector('[data-roster-people]').append(card);
+            refreshColumn(source); refreshColumn(target);
+            if (ballmatTarget) {
+                ballmatTarget.querySelector('[data-roster-people]').append(ballmat);
+                refreshColumn(ballmatSource); refreshColumn(ballmatTarget);
+            }
+            saving = true; pendingCard = card; root.setAttribute('aria-busy', 'true');
             try {
                 const response = await fetch(root.dataset.finalDoorUrl.replace('/0/', `/${card.dataset.rosterPerson}/`), {
                     method: 'POST', headers: {'Content-Type':'application/json', 'Accept':'application/json',
                         'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content || ''},
                     body: JSON.stringify({final_door_work_area_id:door, expected_version:version})
                 });
-                const payload = await response.json();
+                const payload = await response.json().catch(() => ({}));
                 if (!response.ok || !payload.ok) throw new Error(payload.conflict?.message || payload.error || 'Final Door was not saved.');
-                const source = card.closest('[data-final-door-target]');
-                target.querySelector('[data-roster-people]').append(card);
                 card.dataset.finalDoor = String(payload.final_door_work_area_id);
                 card.dataset.flowVersion = payload.plan_version;
                 ['discharge','at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
@@ -106,25 +130,34 @@
                 warning.hidden = !payload.flow_warning;
                 warning.title = payload.flow_warning || '';
                 warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
-                refreshColumn(source); refreshColumn(target);
-                // Keep the existing read-only Ballmat grouping aligned by Final Door.
-                const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
-                if (ballmat) {
-                    const from = ballmat.closest('[data-ballmat-door]');
-                    const to = root.querySelector(`[data-ballmat-door="${door}"]`);
-                    to.querySelector('[data-roster-people]').append(ballmat);
-                    refreshColumn(from); refreshColumn(to);
+                if (payload.previous_ballmat_side !== payload.ballmat_side) {
+                    for (const [side, delta] of [[payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
+                        const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
+                        if (count) count.textContent = String(Number(count.textContent) + delta);
+                    }
                 }
                 const editor = document.querySelector('.neostaffing-shift-flow-drawer form');
                 if (editor?.querySelector('[name="expected_version"]')?.value === version) {
                     editor.querySelector('[name="expected_version"]').value = payload.plan_version;
-                    editor.querySelector('[name="shift_flow_final_door_work_area_id"]').value = String(payload.final_door_work_area_id);
+                    const changes = payload.editor_changes || {shift_flow_final_door_work_area_id:payload.final_door_work_area_id};
+                    Object.entries(changes).forEach(([name, value]) => {
+                        const field = editor.querySelector(`[name="${name}"]`);
+                        if (field) field.value = value == null ? '' : String(value);
+                    });
                     const phase = document.querySelector('[data-phase-editor]');
                     if (phase) phase.dataset.version = payload.plan_version;
                 }
                 announce(`Final Door saved · ${target.dataset.doorLabel}`);
-            } catch (error) { announce(error.message, true); }
-            finally { saving = false; root.setAttribute('aria-busy', 'false'); }
+            } catch (error) {
+                source.querySelector('[data-roster-people]').insertBefore(card, nextCard);
+                refreshColumn(source); refreshColumn(target);
+                if (ballmatTarget) {
+                    ballmatSource.querySelector('[data-roster-people]').insertBefore(ballmat, nextBallmat);
+                    refreshColumn(ballmatSource); refreshColumn(ballmatTarget);
+                }
+                announce(error.message, true);
+            }
+            finally { saving = false; pendingCard = null; root.setAttribute('aria-busy', 'false'); }
         });
     });
 })();

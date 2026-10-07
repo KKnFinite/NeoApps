@@ -2,6 +2,7 @@ from tests.css_contracts import stylesheet_source
 from datetime import date, timedelta
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import event
 from sqlalchemy.dialects import postgresql
@@ -13,6 +14,153 @@ from app.services import neostaffing as staffing_service
 
 
 class ShiftFlowTest(unittest.TestCase):
+    def test_green_drop_moves_home_final_and_matching_setup_and_stays_green(self):
+        areas = self._configure_final_composite()
+        for index, setup in enumerate((None, areas['Door 34'], areas['Door 21'])):
+            with self.subTest(setup=setup):
+                person = self._person(f'GREEN-MOVE-{index}')
+                plan = self._plan(person, self._values(start=areas['Door 34'],
+                    final=areas['Door 34'], setup=setup), areas['Door 34'])
+                db.session.commit()
+                home = staffing_service.assignment_service.shift_home(person)
+                home_id = home.id
+                result = staffing_service.move_shift_flow_final_door(person,
+                    areas['Door 17'].id, home.work_area, self._revision(plan))
+                db.session.commit(); db.session.expire_all()
+                self.assertEqual(home.id, home_id)
+                self.assertEqual(home.work_area_unit_id, areas['Door 17'].id)
+                self.assertEqual(plan.sort_start_work_area_id, areas['Door 17'].id)
+                self.assertEqual(plan.final_door_work_area_id, areas['Door 17'].id)
+                self.assertEqual(plan.setup_work_area_id,
+                    areas['Door 17'].id if setup == areas['Door 34'] else getattr(setup, 'id', None))
+                self.assertIsNone(plan.ballmat_transition)
+                self.assertEqual(result['card']['flow_color'], 'at-door')
+                self.assertEqual(result['card']['flow_warning'], '')
+
+    def test_cross_side_ballmat_drop_preserves_transition_setup_and_assignment_identity(self):
+        areas = self._configure_final_composite()
+        for source, target, origin, destination in (
+            ('west', 'east', 'Door 34', 'Door 17'),
+            ('east', 'west', 'Door 17', 'Door 34')):
+            for transition in (1, 2, 3, None):
+                with self.subTest(source=source, transition=transition):
+                    start = areas[f'{source.title()} Ballmat']
+                    person = self._person(f'{source}-{transition}')
+                    plan = self._plan(person, self._values(start=start, transition=str(transition or ''),
+                        final=areas[origin], setup=areas['Door 21']), start)
+                    db.session.commit()
+                    home = staffing_service.assignment_service.shift_home(person)
+                    result = staffing_service.move_shift_flow_final_door(person,
+                        areas[destination].id, start, self._revision(plan))
+                    db.session.commit(); db.session.expire_all()
+                    self.assertEqual(home.work_area_unit_id, areas[f'{target.title()} Ballmat'].id)
+                    self.assertEqual(plan.sort_start_work_area_id, home.work_area_unit_id)
+                    self.assertEqual(plan.ballmat_transition, transition)
+                    self.assertEqual(plan.setup_work_area_id, areas['Door 21'].id)
+                    self.assertEqual(plan.final_door_work_area_id, areas[destination].id)
+                    self.assertEqual(result['card']['previous_ballmat_side'], source)
+                    self.assertEqual(result['card']['ballmat_side'], target)
+                    self.assertEqual(bool(result['card']['flow_warning']), transition is None)
+
+    def test_normal_drop_preserves_discharge_and_different_start_door(self):
+        areas = self._configure_final_composite()
+        for start in (self.discharge, areas['Door 21'], areas['West Ballmat']):
+            with self.subTest(start=start.name):
+                person = self._person(f'NORMAL-{start.id}')
+                plan = self._plan(person, self._values(start=start, transition='2' if start.name == 'West Ballmat' else '',
+                    setup=areas['Door 24'], final=areas['Door 34']), start)
+                db.session.commit()
+                home = staffing_service.assignment_service.shift_home(person)
+                before = (home.id, home.work_area_unit_id, home.updated_at,
+                          plan.setup_work_area_id, plan.sort_start_work_area_id, plan.ballmat_transition)
+                target = areas['Door 32'] if start.name == 'West Ballmat' else areas['Door 17']
+                result = staffing_service.move_shift_flow_final_door(person, target.id, start, self._revision(plan))
+                db.session.commit(); db.session.expire_all()
+                self.assertEqual((home.id, home.work_area_unit_id, home.updated_at,
+                    plan.setup_work_area_id, plan.sort_start_work_area_id, plan.ballmat_transition), before)
+                if start == self.discharge:
+                    self.assertEqual(result['card']['flow_color'], 'discharge')
+
+    def test_cross_side_drop_rejects_missing_or_ambiguous_ballmat_without_partial_write(self):
+        areas = self._configure_final_composite()
+        person = self._person('INVALID-SIDE')
+        plan = self._plan(person, self._values(start=areas['West Ballmat'], transition='2',
+            final=areas['Door 34']), areas['West Ballmat'])
+        areas['East Ballmat'].active = False
+        db.session.commit()
+        version = self._revision(plan)
+        with self.assertRaisesRegex(ValueError, 'Ballmat'):
+            staffing_service.move_shift_flow_final_door(person, areas['Door 17'].id, areas['West Ballmat'], version)
+        db.session.rollback()
+        self.assertEqual(plan.final_door_work_area_id, areas['Door 34'].id)
+        areas['East Ballmat'].active = True
+        db.session.add(StaffingUnit(unit_type='work_area', name='East Ballmat', parent=self.shift))
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, 'ambiguous'):
+            staffing_service.move_shift_flow_final_door(person, areas['Door 17'].id, areas['West Ballmat'], self._revision(plan))
+        db.session.rollback()
+
+    def test_final_drop_reuses_locked_reads_and_performs_only_required_updates(self):
+        areas = self._configure_final_composite()
+        person = self._person('FAST-MOVE')
+        plan = self._plan(person, self._values(start=areas['West Ballmat'], transition='2',
+            final=areas['Door 34']), areas['West Ballmat'])
+        db.session.commit()
+        for target, expected_updates in (('Door 32', 2), ('Door 17', 3)):
+            revision = self._revision(plan)
+            db.session.expire_all()
+            statements = []
+            def capture(_conn, _cursor, statement, _params, _context, _many):
+                statements.append(statement)
+            event.listen(db.engine, 'before_cursor_execute', capture)
+            try:
+                with patch.object(staffing_service, 'shift_flow_context', side_effect=AssertionError('Full board read')), \
+                     patch.object(staffing_service, 'shift_flow_area_options', side_effect=AssertionError('Full hierarchy read')):
+                    result = staffing_service.move_shift_flow_final_door(person, areas[target].id, None, revision)
+                    db.session.commit()
+            finally:
+                event.remove(db.engine, 'before_cursor_execute', capture)
+            selects = [s for s in statements if s.lstrip().upper().startswith('SELECT')]
+            updates = [s for s in statements if s.lstrip().upper().startswith('UPDATE')]
+            self.assertLessEqual(len(selects), 6, selects)
+            self.assertEqual(len(updates), expected_updates, updates)
+            self.assertFalse(any(s.lstrip().upper().startswith(('INSERT', 'DELETE')) for s in statements))
+            self.assertNotIn('staffing_flow_move_snapshot', db.session().info)
+            self.assertNotIn('shorthand', result['card'])
+
+    def test_roster_snapshot_still_enforces_assignment_multiplicity(self):
+        areas = self._configure_final_composite()
+        person = self._person('INVALID-MULTIPLICITY')
+        plan = self._plan(person, self._values(start=areas['Door 34'], final=areas['Door 34']), areas['Door 34'])
+        db.session.commit()
+        # Simulate pre-existing invalid data without going through the ORM guard.
+        db.session.execute(StaffingWorkAssignment.__table__.insert().values(
+            person_id=person.id, work_area_unit_id=areas['Door 21'].id, active=True))
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, 'Only FT Combo'):
+            staffing_service.move_shift_flow_final_door(person, areas['Door 17'].id, None, self._revision(plan))
+        self.assertNotIn('staffing_flow_move_snapshot', db.session().info)
+        db.session.rollback()
+        self.assertEqual(plan.final_door_work_area_id, areas['Door 34'].id)
+
+    def test_green_roster_move_preserves_other_sort_assignment_for_ft_combo(self):
+        areas = self._configure_final_composite()
+        person = self._person('COMBO-MOVE')
+        person.classification = 'full_time_combo'
+        plan = self._plan(person, self._values(start=areas['Door 34'], final=areas['Door 34']), areas['Door 34'])
+        other_sort = StaffingUnit(unit_type='sort', name='Day')
+        other_department = StaffingUnit(unit_type='department', name='Load', parent=other_sort)
+        other_area = StaffingUnit(unit_type='work_area', name='Day Work', parent=other_department)
+        db.session.add_all([other_sort, other_department, other_area]); db.session.flush()
+        other = staffing_service.assign_work_area(person, other_area)
+        db.session.commit()
+        other_id, other_updated, other_area_id = other.id, other.updated_at, other.work_area_unit_id
+        result = staffing_service.move_shift_flow_final_door(person, areas['Door 17'].id, None, self._revision(plan))
+        db.session.commit(); db.session.expire_all()
+        self.assertTrue(result['changed'])
+        self.assertEqual((other.id, other.updated_at, other.work_area_unit_id), (other_id, other_updated, other_area_id))
+        self.assertEqual(len([row for row in person.work_assignments if row.active]), 2)
+
     def test_roster_flow_colors_and_incomplete_warning_use_applicable_fields(self):
         areas = self._configure_final_composite()
         cases = [
@@ -129,7 +277,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertTrue(result['changed'])
         self.assertEqual(plan.setup_work_area_id, self.non_shift.id)
         self.assertEqual(plan.ballmat_transition, 2)
-        self.assertEqual(plan.sort_start_work_area_id, areas['Door 34'].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas['Door 32'].id)
         row = staffing_service.shift_flow_context()['flow_map']['door_roster']['columns'][1]['rows'][0]
         self.assertIn('Setup Area', row['flow_warning'])
         self.assertIn('transition', row['flow_warning'])

@@ -259,6 +259,11 @@ def create_shift_flow_plan(person, values, selected_work_area):
 
 
 def _locked_shift_flow_plan(person, expected_version):
+    plan, _home, _assignments, conflict = _locked_shift_flow_state(person, expected_version)
+    return plan, conflict
+
+
+def _locked_shift_flow_state(person, expected_version):
     """Read the current revision under transaction locks, never a cached relation.
 
     The person lock also covers FLOW NOT SET -> created races. Every interactive
@@ -269,16 +274,20 @@ def _locked_shift_flow_plan(person, expected_version):
     ).populate_existing().with_for_update().one()
     if not locked_person.active:
         raise ValueError("Inactive employees cannot be edited in Shift Flow.")
-    plan = StaffingShiftFlowPlan.query.filter_by(
+    plan = StaffingShiftFlowPlan.query.options(
+        joinedload(StaffingShiftFlowPlan.setup_work_area),
+        joinedload(StaffingShiftFlowPlan.final_door_work_area),
+    ).filter_by(
         staffing_person_id=person.id
-    ).populate_existing().with_for_update().first()
-    home = assignment_service.shift_home(person)
+    ).populate_existing().with_for_update(of=StaffingShiftFlowPlan).first()
+    assignments = assignment_service.flow_assignments(person)
+    home = next((row for row in assignments if row.active and assignment_service.is_shift(row.work_area)), None)
     if not home:
         raise ValueError("Shift Flow requires a Night / Ramp / Shift Home assignment.")
     current = shift_flow_revision(person, plan, home)
     if str(expected_version or "") != current:
-        return plan, {"type": "stale_version", "message": "Shift Flow changed while you were editing. Reload and try again.", "current_version": current}
-    return plan, None
+        return plan, home, assignments, {"type": "stale_version", "message": "Shift Flow changed while you were editing. Reload and try again.", "current_version": current}
+    return plan, home, assignments, None
 
 
 def shift_flow_revision(person, plan, assignment):
@@ -332,42 +341,85 @@ def save_shift_flow_plan(person, values, selected_work_area):
 
 
 def move_shift_flow_final_door(person, final_door_id, selected_work_area, expected_version):
-    """Move one complete Shift Flow plan to an existing Shift Door lane.
-
-    This deliberately changes only the final-door field used by the FINAL DOOR
-    board.  The rendered plan version prevents a drag from overwriting a newer
-    drawer edit.
-    """
-    plan, conflict = _locked_shift_flow_plan(person, expected_version)
+    """Move one employee, preserving flow except for the two roster rules."""
+    plan, home, assignments, conflict = _locked_shift_flow_state(person, expected_version)
     if conflict:
         return {"conflict": conflict}
     if not plan:
         raise ValueError("FLOW NOT SET employees cannot be moved to a Final Door.")
 
-    allowed = {area.id: area for area in shift_flow_area_options(selected_work_area)}
+    # Query only this Home's Shift department, not the full board/hierarchy.
+    ancestry = [home.work_area, home.work_area.parent,
+                home.work_area.parent.parent, home.work_area.parent.parent.parent]
+    if not all(area.active for area in ancestry):
+        raise ValueError("Shift Flow requires an active Night / Ramp / Shift Home assignment.")
+    allowed = {area.id: area for area in StaffingUnit.query.filter_by(
+        active=True, unit_type="work_area", parent_id=home.work_area.parent_id).populate_existing().all()}
     destination = _shift_flow_area(final_door_id, allowed, "Final Door")
     if shift_work_area_type(destination) != SHIFT_FLOW_DOOR:
         raise ValueError("Final Door must be a Shift Door.")
-    if plan.final_door_work_area_id == destination.id:
-        return {
-            "changed": False,
-            "plan": plan,
-            "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person)),
-        }
-
-    plan.final_door_work_area = destination
-    # Home is authoritative. A Final Door drop must never write Home from
-    # the compatibility Sort Start field (which may be stale in legacy data).
-    session = db.session()
-    session.info["staffing_final_door_only_plan"] = plan
-    try:
-        session.flush()
-    finally:
-        session.info.pop("staffing_final_door_only_plan", None)
+    old_final_id = plan.final_door_work_area_id
+    old_home = home.work_area
+    changed = old_final_id != destination.id
+    editor_changes = {"shift_flow_final_door_work_area_id": destination.id}
+    if changed:
+        start = old_home
+        if shift_work_area_type(start) == SHIFT_FLOW_DOOR and start.id == old_final_id:
+            if plan.setup_work_area_id == old_final_id:
+                plan.setup_work_area = destination
+                editor_changes["shift_flow_setup_work_area_id"] = destination.id
+            start = destination
+        elif shift_work_area_type(start) == SHIFT_FLOW_BALLMAT:
+            side_by_name = {_shift_flow_normalized_name(name): side
+                            for side, _label, names in SHIFT_FLOW_COMPOSITE_SIDES for name in names}
+            sides = {area.id: side_by_name.get(_shift_flow_normalized_name(area.name))
+                     for area in allowed.values()}
+            source_side, target_side = sides.get(old_final_id), sides.get(destination.id)
+            if source_side and target_side and source_side != target_side:
+                issues = []
+                start = _shift_flow_composite_area(list(allowed.values()), target_side, SHIFT_FLOW_BALLMAT, issues)
+                if not start:
+                    raise ValueError(" ".join(issues))
+        if start.id != old_home.id:
+            home.work_area = start
+            plan.sort_start_work_area = start
+            editor_changes["shift_flow_sort_start_work_area_id"] = start.id
+        plan.final_door_work_area = destination
+        units = dict(allowed)
+        for assignment in assignments:
+            area, seen = assignment.work_area, set()
+            while area and area.id not in seen:
+                seen.add(area.id)
+                units[area.id] = area
+                area = area.parent
+        session = db.session()
+        session.info["staffing_flow_move_snapshot"] = {
+            "person": person, "plan": plan, "assignments": assignments, "units": units}
+        # Preserve incomplete optional details for correction in the shared editor.
+        session.info["staffing_final_door_only_plan"] = plan
+        try:
+            session.flush()
+        finally:
+            session.info.pop("staffing_flow_move_snapshot", None)
+            session.info.pop("staffing_final_door_only_plan", None)
+    def ballmat_side(area):
+        name = area.name.casefold()
+        return next((side for side, _label, _names in SHIFT_FLOW_COMPOSITE_SIDES
+                     if shift_work_area_type(area) == SHIFT_FLOW_BALLMAT and side in name), None)
+    card = {
+        "person_id": person.id,
+        "final_door_work_area_id": destination.id,
+        "plan_version": shift_flow_revision(person, plan, home),
+        "editor_changes": editor_changes,
+        "previous_ballmat_side": ballmat_side(old_home),
+        "ballmat_side": ballmat_side(home.work_area),
+        **_shift_flow_roster_status(plan, home.work_area, set(allowed)),
+    }
     return {
-        "changed": True,
+        "changed": changed,
         "plan": plan,
-        "version": shift_flow_revision(plan.person, plan, assignment_service.shift_home(plan.person)),
+        "version": card["plan_version"],
+        "card": card,
     }
 
 

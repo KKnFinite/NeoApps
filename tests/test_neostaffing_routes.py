@@ -274,14 +274,41 @@ class NeoStaffingRoutesTest(unittest.TestCase):
             headers={"Accept": "application/json"},
         )
         self.assertEqual(missing.status_code, 400)
-        moved = client.post(
-            f"/neostaffing/shift-flow/{person.id}/final-door",
-            json={"final_door_work_area_id": door_two.id, "expected_version": staffing_service.shift_flow_revision(person, plan, staffing_service.assignment_service.shift_home(person))},
-            headers={"Accept": "application/json", "X-CSRF-Token": token},
-        )
+        revision = staffing_service.shift_flow_revision(person, plan, staffing_service.assignment_service.shift_home(person))
+        statements = []
+        def capture(_conn, _cursor, statement, _params, _context, _many):
+            statements.append(statement)
+        from sqlalchemy import event
+        event.listen(db.engine, 'before_cursor_execute', capture)
+        try:
+            with patch.object(staffing_service, 'shift_flow_context', side_effect=AssertionError('Full board read')), \
+                 patch.object(staffing_service, 'shift_flow_area_options', side_effect=AssertionError('Full hierarchy read')), \
+                 patch.object(staffing_service.assignment_service, 'shift_home', side_effect=AssertionError('Duplicate Home read')):
+                moved = client.post(
+                    f"/neostaffing/shift-flow/{person.id}/final-door",
+                    json={"final_door_work_area_id": door_two.id, "expected_version": revision},
+                    headers={"Accept": "application/json", "X-CSRF-Token": token},
+                )
+        finally:
+            event.remove(db.engine, 'before_cursor_execute', capture)
         self.assertEqual(moved.status_code, 200)
         self.assertTrue(moved.get_json()["changed"])
         self.assertEqual(db.session.get(StaffingShiftFlowPlan, plan.id).final_door_work_area_id, door_two.id)
+        self.assertEqual(staffing_service.assignment_service.shift_home(person).work_area_unit_id, door_two.id)
+        self.assertEqual(moved.get_json()['flow_color'], 'at-door')
+        self.assertNotIn('shorthand', moved.get_json())
+        for table in ('staffing_work_assignments', 'staffing_shift_flow_plans'):
+            reads = [s for s in statements if s.lstrip().upper().startswith('SELECT') and f'FROM {table} ' in s]
+            self.assertEqual(len(reads), 1, reads)
+        unit_reads = [s for s in statements if s.lstrip().upper().startswith('SELECT') and 'FROM staffing_units' in s]
+        self.assertEqual(len(unit_reads), 1, unit_reads)
+        self.assertIn('staffing_units.parent_id =', unit_reads[0])
+        stale = client.post(f'/neostaffing/shift-flow/{person.id}/final-door',
+            json={'final_door_work_area_id':door_one.id, 'expected_version':revision},
+            headers={'Accept':'application/json', 'X-CSRF-Token':token})
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.get_json()['conflict']['type'], 'stale_version')
+        self.assertEqual(staffing_service.assignment_service.shift_home(person).work_area_unit_id, door_two.id)
 
     def test_final_composite_attention_drop_authorization_creation_and_conflict(self):
         simulator = self._user("composite_drag_simulator")

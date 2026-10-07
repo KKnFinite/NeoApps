@@ -497,15 +497,14 @@ def save_shift_flow(person_id):
 @bp.route("/shift-flow/<int:person_id>/final-door", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def move_shift_flow_final_door(person_id):
-    """Persist one FINAL DOOR drag without touching the rest of the plan."""
+    """Save and reconcile one roster employee without rebuilding the board."""
     payload = request.get_json(silent=True) or request.form
     try:
         person = _get_person(person_id)
-        assignment = staffing_service.assignment_service.shift_home(person)
         result = staffing_service.move_shift_flow_final_door(
             person,
             payload.get("final_door_work_area_id"),
-            assignment.work_area if assignment else None,
+            None,
             payload.get("expected_version"),
         )
         if result.get("conflict"):
@@ -516,20 +515,7 @@ def move_shift_flow_final_door(person_id):
         db.session.rollback()
         return jsonify({"ok": False, "error": safe_mutation_error(error, "move shift flow final door")}), 400
 
-    plan = result["plan"]
-    return jsonify(
-        {
-            "ok": True,
-            "changed": result["changed"],
-            "person_id": person.id,
-            "final_door_work_area_id": plan.final_door_work_area_id,
-            "plan_version": result["version"],
-            "shorthand": staffing_service.shift_flow_shorthand(plan),
-            **staffing_service._shift_flow_roster_status(plan,
-                staffing_service.assignment_service.shift_home(person).work_area,
-                {area.id for area in staffing_service.shift_flow_area_options(assignment.work_area)}),
-        }
-    )
+    return jsonify({"ok": True, "changed": result["changed"], **result["card"]})
 
 
 @bp.route("/shift-flow/<int:person_id>/lane", methods=["POST"])

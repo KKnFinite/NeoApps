@@ -46,6 +46,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
                 if final:
                     staffing.create_shift_flow_plan(person, {'shift_flow_sort_start_work_area_id':cls.areas[start].id,
                         'shift_flow_final_door_work_area_id':cls.areas[final].id,
+                        'shift_flow_setup_work_area_id':cls.areas[start].id if employee_id == 'GREEN' else '',
                         'shift_flow_ballmat_transition':transition}, cls.areas[start])
                 cls.ids[employee_id] = person.id
             db.session.commit()
@@ -113,8 +114,24 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             plan = person.shift_flow_plan; home = staffing.assignment_service.shift_home(person)
             before = (home.id, home.work_area_unit_id, home.updated_at, plan.setup_work_area_id,
                       plan.sort_start_work_area_id, plan.ballmat_transition)
+        # Hold the real request before sending it to prove movement/sorting
+        # happens before the database responds, and drag clicks do not navigate.
+        page.evaluate('''() => {
+            const original = window.fetch;
+            window.fetch = (url, options) => {
+                if (!String(url).endsWith('/final-door')) return original(url, options);
+                window.fetch = original;
+                return new Promise(resolve => { window.releaseRosterSave = () => resolve(original(url, options)); });
+            };
+        }''')
         with page.expect_response(lambda response: response.url.endswith('/final-door')) as saved:
             card.drag_to(destination)
+            expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
+            expect(page.locator('[data-shift-roster]')).to_have_attribute('aria-busy', 'true')
+            self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
+            self.assertTrue(card.evaluate('el => !el.dispatchEvent(new MouseEvent("click", {bubbles:true,cancelable:true}))'))
+            self.assertNotIn('person_id=', page.url)
+            page.evaluate('window.releaseRosterSave()')
         self.assertEqual(saved.value.status, 200)
         self.assertEqual(set(saved.value.request.post_data_json), {'final_door_work_area_id', 'expected_version'})
         expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
@@ -126,6 +143,20 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             self.assertEqual((home.id, home.work_area_unit_id, home.updated_at, plan.setup_work_area_id,
                               plan.sort_start_work_area_id, plan.ballmat_transition), before)
             self.assertEqual(plan.final_door_work_area_id, self.area_ids['Door 32'])
+        # An actual 409 response restores the optimistic move and leaves the
+        # accepted revision, flow warning and editor fields unchanged.
+        revision = card.get_attribute('data-flow-version')
+        source = page.locator(f'[data-final-door-target="{self.area_ids["Door 34"]}"]')
+        page.route('**/final-door', lambda route: route.fulfill(status=409, content_type='application/json',
+            body='{"ok":false,"conflict":{"message":"Shift Flow changed. Reload and try again."}}'))
+        with page.expect_response(lambda response: response.url.endswith('/final-door')) as failed:
+            card.drag_to(source)
+        self.assertEqual(failed.value.status, 409)
+        expect(destination.locator(f'[data-roster-person="{self.ids["MISSING"]}"]')).to_be_visible()
+        expect(card).to_have_attribute('data-flow-version', revision)
+        expect(card.locator('[data-flow-warning]')).to_be_visible()
+        expect(page.locator('[data-roster-feedback]')).to_contain_text('Reload and try again')
+        page.unroute('**/final-door')
         card.click()
         expect(page.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
         self.assertEqual(page.locator('.neostaffing-shift-flow-drawer form').count(), 1)
@@ -163,4 +194,48 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         watcher.locator(f'[data-roster-person="{self.ids["MISSING"]}"]').click()
         expect(watcher.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
         self.assertEqual(watcher.locator('.neostaffing-shift-flow-drawer form').count(), 0)
+        browser.close()
+
+    def test_special_moves_keep_colors_setup_and_ballmat_counts_in_sync(self):
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':1920, 'height':1080})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page()
+        helper = self.fixture(); helper.login(page); helper.ready(page, '/neostaffing/shift-flow')
+        def move(employee, door, color):
+            card = page.locator(f'[data-roster-person="{self.ids[employee]}"]')
+            target = page.locator(f'[data-final-door-target="{self.area_ids[door]}"]')
+            with page.expect_response(lambda response: response.url.endswith('/final-door')) as response:
+                card.drag_to(target)
+            self.assertEqual(response.value.status, 200)
+            expect(target.locator(f'[data-roster-person="{self.ids[employee]}"]')).to_be_visible()
+            expect(card).to_have_class(f'shift-door-person is-{color}')
+            self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
+            return response.value.json()
+        move('GREEN', 'Door 17', 'at-door')
+        move('BEFORE', 'Door 13', 'at-door')
+        with self.fixture.app.app_context():
+            for employee, door, setup in [('GREEN','Door 17','Door 17'),('BEFORE','Door 13',None)]:
+                person = db.session.get(StaffingPerson, self.ids[employee])
+                self.assertEqual(staffing.assignment_service.shift_home(person).work_area_unit_id, self.area_ids[door])
+                self.assertEqual(person.shift_flow_plan.setup_work_area_id, self.area_ids[setup] if setup else None)
+                self.assertIsNone(person.shift_flow_plan.ballmat_transition)
+        west = page.locator('[data-ballmat-side-count="west"]')
+        east = page.locator('[data-ballmat-side-count="east"]')
+        before_west, before_east = int(west.inner_text()), int(east.inner_text())
+        payload = move('WAVE2', 'Door 17', 'wave-2')
+        self.assertEqual(payload['ballmat_side'], 'east')
+        expect(west).to_have_text(str(before_west - 1)); expect(east).to_have_text(str(before_east + 1))
+        expect(page.locator(f'[data-ballmat-door="{self.area_ids["Door 17"]}"] [data-ballmat-person="{self.ids["WAVE2"]}"]')).to_be_visible()
+        payload = move('WAVE2', 'Door 34', 'wave-2')
+        self.assertEqual(payload['ballmat_side'], 'west')
+        expect(west).to_have_text(str(before_west)); expect(east).to_have_text(str(before_east))
+        with self.fixture.app.app_context():
+            person = db.session.get(StaffingPerson, self.ids['WAVE2'])
+            self.assertEqual(staffing.assignment_service.shift_home(person).work_area_unit_id, self.area_ids['West Ballmat'])
+            self.assertEqual(person.shift_flow_plan.ballmat_transition, 2)
+        move('DISCHARGE', 'Door 21', 'discharge')
+        with self.fixture.app.app_context():
+            person = db.session.get(StaffingPerson, self.ids['DISCHARGE'])
+            self.assertEqual(staffing.assignment_service.shift_home(person).work_area_unit_id, self.area_ids['Discharge'])
         browser.close()

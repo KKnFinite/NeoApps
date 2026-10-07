@@ -39,13 +39,20 @@ def is_shift(area, units=None):
                 and sort.unit_type == "sort" and sort.name.strip().casefold() == "night")
 
 
-def shift_home(person):
-    """Resolve only Night/Ramp/Shift; never choose an arbitrary FT assignment."""
-    rows = StaffingWorkAssignment.query.options(
+def flow_assignments(person, *, active_only=False):
+    """Load one employee's assignments and ancestry for flow validation."""
+    query = StaffingWorkAssignment.query.options(
         joinedload(StaffingWorkAssignment.work_area).joinedload(StaffingUnit.parent)
         .joinedload(StaffingUnit.parent).joinedload(StaffingUnit.parent)
-    ).filter_by(person_id=person.id, active=True).populate_existing().all()
-    return next((row for row in rows if is_shift(row.work_area)), None)
+    ).filter_by(person_id=person.id).populate_existing()
+    if active_only:
+        query = query.filter_by(active=True)
+    return query.all()
+
+
+def shift_home(person):
+    """Resolve only Night/Ramp/Shift; never choose an arbitrary FT assignment."""
+    return next((row for row in flow_assignments(person, active_only=True) if is_shift(row.work_area)), None)
 
 
 def assignment_for_target(person, area, rows):
@@ -93,7 +100,17 @@ def enforce_work_assignment_lifecycle(session, _context, _instances):
                      and _changed(obj, ("parent_id", "parent", "name", "active"))]
     if not (assignments or plans or people or units_changed):
         return
-    units = {unit.id: unit for unit in session.scalars(select(StaffingUnit)).all()}
+    # A roster move already locked and read this employee's complete state.
+    # Reuse those reads, but run the same lifecycle and multiplicity checks.
+    snapshot = session.info.get("staffing_flow_move_snapshot")
+    if snapshot and (session.new or session.deleted or people or units_changed or
+                     any(obj not in [snapshot["person"], snapshot["plan"], *snapshot["assignments"]]
+                         and not (isinstance(obj, StaffingUnit) and
+                                  not session.is_modified(obj, include_collections=False))
+                         for obj in changed)):
+        snapshot = None
+    units = snapshot["units"] if snapshot else {
+        unit.id: unit for unit in session.scalars(select(StaffingUnit)).all()}
     for unit in units_changed:
         if inspect(unit).attrs.parent.history.has_changes():
             unit.parent_id = getattr(unit.parent, "id", None)
@@ -124,10 +141,11 @@ def enforce_work_assignment_lifecycle(session, _context, _instances):
             StaffingWorkAssignment.work_area_unit_id.in_(affected_areas))))
     if not ids:
         return
-    locked = session.scalars(select(StaffingPerson).where(StaffingPerson.id.in_(ids))
-                             .order_by(StaffingPerson.id).with_for_update()).all()
-    snapshot = session.info.get("staffing_assignment_snapshot")
-    rows = snapshot if snapshot is not None else session.scalars(select(StaffingWorkAssignment).where(StaffingWorkAssignment.person_id.in_(ids))).all()
+    locked = [snapshot["person"]] if snapshot else session.scalars(
+        select(StaffingPerson).where(StaffingPerson.id.in_(ids))
+        .order_by(StaffingPerson.id).with_for_update()).all()
+    assignment_snapshot = snapshot["assignments"] if snapshot else session.info.get("staffing_assignment_snapshot")
+    rows = assignment_snapshot if assignment_snapshot is not None else session.scalars(select(StaffingWorkAssignment).where(StaffingWorkAssignment.person_id.in_(ids))).all()
     rows = list({id(row): row for row in rows + assignments if row not in session.deleted}.values())
     by_person = defaultdict(list)
     for row in rows:
@@ -136,7 +154,7 @@ def enforce_work_assignment_lifecycle(session, _context, _instances):
         person_id = row.person_id or getattr(row.person, "id", None)
         if row.active is not False:
             by_person[person_id].append(row)
-    existing_plans = {row.staffing_person_id: row for row in session.scalars(
+    existing_plans = {snapshot["person"].id: snapshot["plan"]} if snapshot else {row.staffing_person_id: row for row in session.scalars(
         select(StaffingShiftFlowPlan).options(joinedload(StaffingShiftFlowPlan.setup_work_area),
             joinedload(StaffingShiftFlowPlan.final_door_work_area))
         .where(StaffingShiftFlowPlan.staffing_person_id.in_(ids))).all()}
