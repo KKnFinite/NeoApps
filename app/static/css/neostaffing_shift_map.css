@@ -92,11 +92,7 @@
 .shift-roster-layout { display:grid; grid-template-columns:minmax(0,1fr) 176px; gap:0 12px; min-width:calc(var(--roster-columns) * 116px + 188px); }
 .shift-roster-layout>section { min-width:0; grid-column:1; }
 .shift-roster-rail { grid-column:2; grid-row:1 / span 2; min-width:0; }
-.shift-roster-discharge { border:1px solid #3d5351; border-radius:5px; background:#14221f; }
-.shift-roster-rail .shift-roster-discharge header { background:#25332e; }
-.shift-roster-rail .shift-roster-discharge header strong { font-size:12px; }
-.shift-roster-readonly { display:block; padding:4px 7px; color:#92aaa5; font-size:9px; }
-.shift-roster-needs { margin-top:12px; padding:8px; background:#191f22; border:1px solid #504734; border-radius:5px; }
+.shift-roster-needs { padding:8px; background:#191f22; border:1px solid #504734; border-radius:5px; }
 .shift-roster-rail .shift-roster-needs h2 { margin:0 0 6px; font-size:11px; color:#cdb37c; }
 .shift-roster-needs>div { max-height:46vh; overflow-y:auto; scrollbar-width:thin; }
 .shift-roster-needs small,.shift-roster-needs p { font-size:10px; line-height:1.4; color:#a9a290; }
@@ -116,10 +112,11 @@
 .shift-door-column header strong { color:#e7ffff; font-size:16px; }
 .shift-door-column header span { color:#5ee1cd; font-size:12px; }
 .shift-door-person { display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
-.shift-door-person.is-at-door { background:#172d25; }
-.shift-door-person.is-wave-1 { background:#2a2b1e; }
-.shift-door-person.is-wave-2 { background:#30261d; }
-.shift-door-person.is-cleanup { background:#302124; }
+.shift-door-person.is-discharge { background:#285f8c; }
+.shift-door-person.is-at-door { background:#2c704e; }
+.shift-door-person.is-wave-1 { background:#82752e; color:#fff; }
+.shift-door-person.is-wave-2 { background:#92572f; }
+.shift-door-person.is-cleanup { background:#8b4149; }
 a.shift-door-person:hover, a.shift-door-person:focus-visible { outline:1px solid #7ba99a; outline-offset:-1px; color:#fff; }
 .shift-door-person[draggable="true"] { cursor:grab; }
 .shift-flow-warning { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; margin-left:5px; border:1px solid #96773f; border-radius:50%; background:#3b301c; color:#e6bc69; font-size:11px; font-weight:700; vertical-align:middle; }

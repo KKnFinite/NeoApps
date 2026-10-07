@@ -3,7 +3,6 @@
     const root = document.querySelector('[data-shift-roster]');
     if (!root) return;
     const columns = [...root.querySelectorAll('[data-roster-column]')];
-    const discharge = root.querySelector('[data-roster-discharge]');
     const sides = [...root.querySelectorAll('[data-roster-side]')];
     const mobile = window.matchMedia('(max-width: 700px)');
     const paging = root.querySelector('[data-roster-paging]');
@@ -23,8 +22,6 @@
         const keys = new Set(visible.map(column => column.dataset.rosterColumn));
         columns.forEach(column => { column.hidden = !keys.has(column.dataset.rosterColumn); });
         const lastPage = (page + 1) * size >= available.length;
-        const showDischarge = !!discharge && (!mobile.matches || (side === 'east' && lastPage));
-        if (discharge) discharge.hidden = !showDischarge;
         root.dataset.rosterActiveSide = side;
         root.style.setProperty('--roster-columns', String(size));
         sides.forEach(button => { button.hidden = mobile.matches && button.dataset.rosterSide === 'all';
@@ -33,7 +30,6 @@
         previous.disabled = page === 0;
         next.disabled = lastPage;
         const rangeLabels = visible.map(column => column.dataset.doorLabel);
-        if (showDischarge && mobile.matches) rangeLabels.push('DISCHARGE');
         range.textContent = rangeLabels.join(' · ');
         try { sessionStorage.setItem('staffing-door-roster', JSON.stringify({side, page})); } catch (_) {}
     };
@@ -105,7 +101,7 @@
                 target.querySelector('[data-roster-people]').append(card);
                 card.dataset.finalDoor = String(payload.final_door_work_area_id);
                 card.dataset.flowVersion = payload.plan_version;
-                ['at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
+                ['discharge','at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
                 const warning = card.querySelector('[data-flow-warning]');
                 warning.hidden = !payload.flow_warning;
                 warning.title = payload.flow_warning || '';

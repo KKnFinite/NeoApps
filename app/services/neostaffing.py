@@ -1028,7 +1028,9 @@ def _shift_flow_roster_status(plan, home, allowed_ids):
     transition = getattr(plan, "ballmat_transition", None)
     home_type = shift_work_area_type(home)
     color = ""
-    if home and final_id and home.id == final_id:
+    if home_type == SHIFT_FLOW_DISCHARGE:
+        color = "discharge"
+    elif home and final_id and home.id == final_id:
         color = "at-door"
     elif home_type == SHIFT_FLOW_BALLMAT:
         color = {1: "wave-1", 2: "wave-2", 3: "cleanup"}.get(transition, "")

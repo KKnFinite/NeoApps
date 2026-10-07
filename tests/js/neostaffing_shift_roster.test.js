@@ -9,15 +9,14 @@ function board(mobile = false, stored = null) {
         setAttribute(key, value) {this[key] = value;}, click() {this.handlers.click();}});
     const labels = ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'];
     const columns = [0,1].flatMap(() => labels.map((label, index) => element({rosterColumn:String(index), rosterColumnSide:index < 6 ? 'west':'east', doorLabel:label})));
-    const discharge = element({doorLabel:'DISCHARGE'});
     const sides = ['all','west','east'].map(side => element({rosterSide:side}));
     const paging = element(), previous = element(), next = element(), range = element();
     const media = element(); media.matches = mobile;
     const root = {style:{setProperty(){}}, dataset:{}, querySelectorAll(selector) {return selector === '[data-roster-column]' ? columns:selector === '[data-roster-side]' ? sides:[];},
-        querySelector(selector) {return {'[data-roster-discharge]':discharge,'[data-roster-paging]':paging,'[data-roster-previous]':previous,'[data-roster-next]':next,'[data-roster-range]':range}[selector];}};
+        querySelector(selector) {return {'[data-roster-paging]':paging,'[data-roster-previous]':previous,'[data-roster-next]':next,'[data-roster-range]':range}[selector];}};
     let saved = stored;
     vm.runInNewContext(code, {document:{querySelector:() => root}, window:{matchMedia:() => media}, sessionStorage:{getItem:() => saved, setItem:(_,value) => {saved = value;}}});
-    return {columns,discharge,sides,next,previous,media,paging,range,saved:() => saved, visible:section => columns.slice(section*12,(section+1)*12).filter(c => !c.hidden).map(c => c.dataset.doorLabel)};
+    return {columns,sides,next,previous,media,paging,range,saved:() => saved, visible:section => columns.slice(section*12,(section+1)*12).filter(c => !c.hidden).map(c => c.dataset.doorLabel)};
 }
 test('desktop sides preserve configured order and align Final Door and Ballmat rosters', () => {
     const b = board(); assert.equal(b.visible(0).length,12);
@@ -34,13 +33,10 @@ test('mobile pages three doors with both sections aligned and retained side', ()
     b.media.matches = false; b.media.handlers.change(); assert.equal(b.visible(0).length,6);
 });
 
-test('Discharge is a shared right-side start-area column and appears on the final East mobile page', () => {
-    const desktop = board(); assert.equal(desktop.discharge.hidden, false);
-    const west = board(); west.sides[1].click(); assert.equal(west.discharge.hidden, false);
-    const mobile = board(true); assert.equal(mobile.discharge.hidden, true);
-    mobile.sides[2].click(); assert.equal(mobile.discharge.hidden, true);
-    mobile.next.click(); assert.equal(mobile.discharge.hidden, false);
-    assert.match(mobile.range.textContent, /DISCHARGE$/);
+test('mobile final East page lists only doors after separate Discharge roster is removed', () => {
+    const mobile = board(true); mobile.sides[2].click(); mobile.next.click();
+    assert.equal(mobile.range.textContent, 'D6 · D4 · D1');
+    assert.deepEqual(mobile.visible(0), ['D6','D4','D1']);
 });
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -125,4 +121,12 @@ test('stale or failed drop preserves all displayed data, shows error and never r
 test('external drags and same-door drops do not save',()=>{
     const b=dropBoard();b.drop(b.destination);assert.equal(b.requests.length,0);
     b.start();b.drop(b.source);assert.equal(b.requests.length,0);
+});
+
+test('Discharge-start card retains blue after a Final Door drop, without stale wave tint', async()=>{
+    const b=dropBoard();b.card.classList.add('is-wave-2');b.start();b.drop(b.destination);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'discharge',flow_warning:''})});await tick();
+    assert.ok(b.card.classList.values.has('is-discharge'));
+    assert.ok(!b.card.classList.values.has('is-wave-2'));
+    assert.equal(b.card.nodes['[data-flow-warning]'].hidden,true);
 });

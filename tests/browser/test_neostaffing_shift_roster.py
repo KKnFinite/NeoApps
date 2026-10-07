@@ -1,6 +1,7 @@
 """Real Shift Flow drops, shared editor, permissions and contained roster scroll."""
 import unittest
 import os
+import colorsys
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -66,16 +67,46 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         helper.ready(page, '/neostaffing/shift-flow')
         card = page.locator(f'[data-roster-person="{self.ids["MISSING"]}"]')
         destination = page.locator(f'[data-final-door-target="{self.area_ids["Door 32"]}"]')
-        for employee_id, tint in [('GREEN','at-door'), ('WAVE1','wave-1'), ('WAVE2','wave-2'), ('CLEANUP','cleanup')]:
-            expect(page.locator(f'[data-roster-person="{self.ids[employee_id]}"]')).to_have_class(f'shift-door-person is-{tint}')
+        # Read the rendered colors, including inherited text color, so these
+        # assertions catch dull tints or unreadable text after stylesheet edits.
+        def luminance(rgb):
+            channels = [channel / 255 for channel in rgb]
+            linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in channels]
+            return sum(c * weight for c, weight in zip(linear, (.2126, .7152, .0722)))
+        for employee_id, tint, old_rgb, hue_range in [
+            ('DISCHARGE','discharge',None,(195,220)),
+            ('GREEN','at-door',(23,45,37),(130,165)),
+            ('WAVE1','wave-1',(42,43,30),(45,65)),
+            ('WAVE2','wave-2',(48,38,29),(15,35)),
+            ('CLEANUP','cleanup',(48,33,36),(340,360)),
+        ]:
+            person = page.locator(f'[data-roster-person="{self.ids[employee_id]}"]')
+            expect(person).to_have_class(f'shift-door-person is-{tint}')
+            colors = person.evaluate('''el => {
+                const css = getComputedStyle(el);
+                const rgb = value => value.match(/[\\d.]+/g).slice(0,3).map(Number);
+                return {background:rgb(css.backgroundColor),text:rgb(css.color)};
+            }''')
+            background = colors['background']
+            hue = colorsys.rgb_to_hsv(*(c / 255 for c in background))[0] * 360
+            self.assertGreaterEqual(hue, hue_range[0]); self.assertLessEqual(hue, hue_range[1])
+            self.assertGreaterEqual((luminance(colors['text']) + .05) / (luminance(background) + .05), 4.5)
+            self.assertLessEqual(max(background), 160, 'Tints stay within the dark palette')
+            if old_rgb:
+                self.assertGreater(luminance(background), luminance(old_rgb) * 3, 'Tint must be visibly brighter')
         expect(card.locator('[data-flow-warning]')).to_be_visible()
-        discharge = page.locator('[data-roster-discharge]')
-        self.assertEqual(discharge.locator('[draggable], [data-final-door-target], a').count(), 0)
+        self.assertEqual(page.locator('[data-roster-discharge], [data-discharge-person]').count(), 0)
+        discharge_person = page.locator(f'[data-roster-person="{self.ids["DISCHARGE"]}"]')
+        self.assertEqual(discharge_person.count(), 1)
+        expect(discharge_person).to_have_class('shift-door-person is-discharge')
+        rail = page.locator('.shift-roster-rail')
+        self.assertEqual(rail.locator(':scope > section').count(), 1)
+        self.assertEqual(rail.locator('.shift-roster-needs').count(), 1)
+        self.assertEqual(rail.locator('[data-roster-person]').count(), 1)
+        expect(rail.locator('[data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['UNSET']))
         door_one = page.locator('[data-final-door-target][data-door-label="D1"]')
-        self.assertGreaterEqual(discharge.bounding_box()['x'], door_one.bounding_box()['x'] + door_one.bounding_box()['width'])
-        self.assertLessEqual(abs(discharge.bounding_box()['y'] - door_one.bounding_box()['y']), 1)
-        self.assertGreater(page.locator('.shift-roster-needs').bounding_box()['y'], discharge.bounding_box()['y'])
-        self.assertEqual(page.locator('.shift-ballmat-roster [data-roster-discharge]').count(), 0)
+        self.assertGreaterEqual(rail.bounding_box()['x'], door_one.bounding_box()['x'] + door_one.bounding_box()['width'])
+        self.assertLessEqual(abs(rail.bounding_box()['y'] - door_one.bounding_box()['y']), 1)
         before = None
         with self.fixture.app.app_context():
             person = db.session.get(StaffingPerson, self.ids['MISSING'])

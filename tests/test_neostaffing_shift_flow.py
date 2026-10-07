@@ -22,7 +22,7 @@ class ShiftFlowTest(unittest.TestCase):
             ('CLEANUP', areas['West Ballmat'], '3', 'cleanup', False),
             ('MISSING', areas['West Ballmat'], '', '', True),
             ('CUSTOM', areas['Door 32'], '', '', False),
-            ('DISCHARGE', self.discharge, '', '', False),
+            ('DISCHARGE', self.discharge, '', 'discharge', False),
         ]
         for employee_id, start, transition, _color, _warning in cases:
             person = self._person(employee_id)
@@ -41,6 +41,18 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(status['flow_color'], 'at-door')
         self.assertIn('transition', status['flow_warning'])
         db.session.rollback()
+
+    def test_discharge_blue_takes_precedence_over_final_door_and_transition_colors(self):
+        from types import SimpleNamespace
+        areas = self._configure_final_composite()
+        allowed = {area.id for area in areas.values()}
+        for transition in (None, 1, 2, 3):
+            with self.subTest(transition=transition):
+                plan = SimpleNamespace(final_door_work_area_id=self.discharge.id,
+                    final_door_work_area=self.discharge, ballmat_transition=transition,
+                    setup_work_area_id=None, setup_work_area=None)
+                status = staffing_service._shift_flow_roster_status(plan, self.discharge, allowed)
+                self.assertEqual(status['flow_color'], 'discharge')
 
     def test_flow_warning_checks_start_and_optional_setup_without_requiring_no_setup(self):
         from types import SimpleNamespace
@@ -172,7 +184,16 @@ class ShiftFlowTest(unittest.TestCase):
             html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context, can_edit_shift_flow=True, shift_work_area_type=staffing_service.shift_work_area_type)
         self.assertEqual(sorted(re.findall(r'data-roster-person="(\d+)"', html)), sorted(str(p.id) for p in people))
         self.assertEqual(sorted(re.findall(r'data-ballmat-person="(\d+)"', html)), sorted(str(p.id) for p in people[:3]))
-        self.assertEqual(re.findall(r'data-discharge-person="(\d+)"', html), [str(discharge.id)])
+        self.assertNotIn('data-discharge-person', html)
+        self.assertNotIn('data-roster-discharge', html)
+        # Discharge starts have exactly one card, under their Final Door.
+        self.assertEqual(html.count(f'data-roster-person="{discharge.id}"'), 1)
+        self.assertRegex(html, rf'class="shift-door-person is-discharge" data-roster-person="{discharge.id}"')
+        rail = html.split('<aside class="shift-roster-rail"', 1)[1].split('</aside>', 1)[0]
+        self.assertIn('aria-label="Needs Assignment"', rail)
+        self.assertEqual(rail.count('<section '), 1)
+        self.assertIn('id="shift-needs-title"', rail)
+        self.assertEqual(re.findall(r'data-roster-person="(\d+)"', rail), [str(unset.id)])
         self.assertIn('BALLMAT START', html)
         self.assertIn('EAST BALLMAT', html)
         self.assertIn('WEST BALLMAT', html)
