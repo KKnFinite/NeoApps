@@ -39,13 +39,14 @@ class ShiftRosterBrowserTest(unittest.TestCase):
                 ('BEFORE', 'Zoe', 'Adams', 'Door 32', 'Door 32', ''),
                 ('DISCHARGE', 'Drew', 'Discharge', 'Discharge', 'Door 1', ''),
                 ('UNSET', 'Una', 'Assigned', 'Door 1', '', ''),
+                ('INCOMPLETE', 'Ian', 'Pending', 'Door 1', '', ''),
             ]:
                 person = staffing.create_person({'employee_id':employee_id, 'first_name':first, 'last_name':last,
                     'seniority_date':'2020-01-01', 'classification':'part_time', 'employee_status':'active'})
                 staffing.assign_work_area(person, cls.areas[start])
-                if final:
+                if final or employee_id == 'INCOMPLETE':
                     staffing.create_shift_flow_plan(person, {'shift_flow_sort_start_work_area_id':cls.areas[start].id,
-                        'shift_flow_final_door_work_area_id':cls.areas[final].id,
+                        'shift_flow_final_door_work_area_id':cls.areas[final].id if final else '',
                         'shift_flow_setup_work_area_id':cls.areas[start].id if employee_id == 'GREEN' else '',
                         'shift_flow_ballmat_transition':transition}, cls.areas[start])
                 cls.ids[employee_id] = person.id
@@ -101,13 +102,21 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         self.assertEqual(discharge_person.count(), 1)
         expect(discharge_person).to_have_class('shift-door-person is-discharge')
         rail = page.locator('.shift-roster-rail')
-        self.assertEqual(rail.locator(':scope > section').count(), 1)
+        self.assertEqual(rail.locator(':scope > section').count(), 2)
         self.assertEqual(rail.locator('.shift-roster-needs').count(), 1)
-        self.assertEqual(rail.locator('[data-roster-person]').count(), 1)
-        expect(rail.locator('[data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['UNSET']))
+        self.assertEqual(rail.locator('.shift-roster-unassigned').count(), 1)
+        self.assertEqual(rail.locator('[data-roster-person]').count(), 2)
+        expect(rail.locator('.shift-roster-needs [data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['INCOMPLETE']))
+        expect(rail.locator('.shift-roster-unassigned [data-roster-person]')).to_have_attribute('data-roster-person', str(self.ids['UNSET']))
         door_one = page.locator('[data-final-door-target][data-door-label="D1"]')
         self.assertGreaterEqual(rail.bounding_box()['x'], door_one.bounding_box()['x'] + door_one.bounding_box()['width'])
         self.assertLessEqual(abs(rail.bounding_box()['y'] - door_one.bounding_box()['y']), 1)
+        for employee_id, section in [('INCOMPLETE', 'shift-roster-needs'), ('UNSET', 'shift-roster-unassigned')]:
+            rail.locator(f'.{section} [data-roster-person="{self.ids[employee_id]}"]').click()
+            expect(page.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
+            expect(page.locator('.neostaffing-shift-flow-drawer header strong')).to_have_text(
+                'Ian Pending' if employee_id == 'INCOMPLETE' else 'Una Assigned')
+            page.locator('.neostaffing-shift-flow-drawer header a').click()
         before = None
         with self.fixture.app.app_context():
             person = db.session.get(StaffingPerson, self.ids['MISSING'])
@@ -202,6 +211,49 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         watcher.locator(f'[data-roster-person="{self.ids["MISSING"]}"]').click()
         expect(watcher.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
         self.assertEqual(watcher.locator('.neostaffing-shift-flow-drawer form').count(), 0)
+        browser.close()
+
+    def test_mobile_editor_safe_area_and_internal_scroll(self):
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':390, 'height':844})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page()
+        helper = self.fixture(); helper.login(page)
+        for width, height in ((390, 844), (375, 568), (375, 400)):
+            page.set_viewport_size({'width':width, 'height':height})
+            helper.ready(page, f'/neostaffing/shift-flow?person_id={self.ids["INCOMPLETE"]}')
+            page.add_style_tag(content=':root { --neo-safe-top: 47px; --neo-safe-bottom: 34px; }')
+            drawer = page.locator('.neostaffing-shift-flow-drawer')
+            expect(drawer).to_be_visible()
+            expect(drawer.locator('header strong')).to_have_text('Ian Pending')
+            expect(drawer.locator('header a')).to_have_text('CLOSE')
+            expect(drawer.locator('label').first).to_contain_text('Start Area')
+            self.assertEqual(drawer.locator('[data-phase-editor]').count(), 0)
+            geometry = page.evaluate('''() => {
+                const drawer = document.querySelector('.neostaffing-shift-flow-drawer');
+                const header = drawer.querySelector('header');
+                const content = drawer.querySelector('.neostaffing-shift-flow-drawer-content');
+                const dock = document.querySelector('.neo-mobile-bottom');
+                const rect = el => { const b=el.getBoundingClientRect(); return {top:b.top,bottom:b.bottom,left:b.left,right:b.right}; };
+                return {page:document.documentElement.scrollWidth, viewport:innerWidth,
+                    drawer:rect(drawer), header:rect(header), content:rect(content), dock:rect(dock),
+                    bodyOverflow:getComputedStyle(document.body).overflow,
+                    contentOverflow:getComputedStyle(content).overflowY};
+            }''')
+            self.assertLessEqual(geometry['page'], geometry['viewport'])
+            self.assertGreaterEqual(geometry['header']['top'], 47)
+            self.assertLessEqual(geometry['header']['bottom'], geometry['content']['top'])
+            self.assertLessEqual(geometry['drawer']['bottom'], geometry['dock']['top'] + 1)
+            self.assertEqual(geometry['bodyOverflow'], 'hidden')
+            self.assertEqual(geometry['contentOverflow'], 'auto')
+            self.assertLessEqual(geometry['drawer']['right'], width)
+            if height == 400:
+                scroll = drawer.locator('.neostaffing-shift-flow-drawer-content').evaluate(
+                    'el => { el.scrollTop = el.scrollHeight; return el.scrollTop; }')
+                self.assertGreater(scroll, 0)
+                self.assertGreaterEqual(drawer.locator('header').bounding_box()['y'], 47)
+            page.locator('.neostaffing-shift-flow-drawer header a').click()
+            self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
         browser.close()
 
     def test_roster_groups_setup_strips_and_editor_resort(self):

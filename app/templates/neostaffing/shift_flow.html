@@ -13,14 +13,15 @@
   {% if selected %}
     <aside class="neostaffing-shift-flow-drawer">
       <header><strong>{{ selected.person.full_name }}</strong><a href="{{ url_for('neostaffing.shift_flow', phase=shift_flow.phase) }}">CLOSE</a></header>
+      <div class="neostaffing-shift-flow-drawer-content">
       {% if can_edit_shift_flow %}
         {% include "neostaffing/_shift_flow_editor.html" %}
       {% else %}
-        <dl>{% if selected.plan %}<dt>Setup</dt><dd>{{ selected.plan.setup_work_area.name if selected.plan.setup_work_area else 'NO SETUP' }}</dd><dt>Home</dt><dd>{{ selected.assignment.work_area.name }}</dd><dt>Final Door</dt><dd>{{ selected.plan.final_door_work_area.name if selected.plan.final_door_work_area else 'NOT SET' }}</dd>{% else %}<dd>FLOW NOT SET</dd>{% endif %}</dl>
+        <dl>{% if selected.plan %}<dt>Setup</dt><dd>{{ selected.plan.setup_work_area.name if selected.plan.setup_work_area else 'NO SETUP' }}</dd><dt>Start Area</dt><dd>{{ selected.assignment.work_area.name }}</dd><dt>Final Door</dt><dd>{{ selected.plan.final_door_work_area.name if selected.plan.final_door_work_area else 'NOT SET' }}</dd>{% else %}<dd>FLOW NOT SET</dd>{% endif %}</dl>
       {% endif %}
+      </div>
     </aside>
   {% endif %}
 </section>
 <script src="{{ url_for('static', filename='js/neostaffing_shift_roster.js', v='20261007-continuous-doors') }}"></script>
-{% if selected and can_edit_shift_flow %}<script src="{{ url_for('static', filename='js/neostaffing_shift_map.js', v='20261001-stage-routes') }}"></script>{% endif %}
 {% endblock %}

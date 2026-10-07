@@ -1117,7 +1117,8 @@ def _shift_flow_door_roster(matrix):
     columns = [{"id": column["id"], "label": column["label"], "side": column["side"],
                 "rows": [], "ballmat_rows": []} for column in matrix["columns"]]
     by_id = {column["id"]: column for column in columns if column["id"] is not None}
-    missing = []
+    needs_assignment = []
+    unassigned = []
     discharge_rows = []
     ballmat_side_counts = {"west": 0, "east": 0}
     for row in matrix["rows"]:
@@ -1127,7 +1128,7 @@ def _shift_flow_door_roster(matrix):
             discharge_rows.append(row)
         column = by_id.get(getattr(row["plan"], "final_door_work_area_id", None))
         if column is None:
-            missing.append(row)
+            (needs_assignment if row["plan"] else unassigned).append(row)
             continue
         column["rows"].append(row)
         if home_type == SHIFT_FLOW_BALLMAT:
@@ -1147,8 +1148,10 @@ def _shift_flow_door_roster(matrix):
             SHIFT_FLOW_ROSTER_COLOR_ORDER.get(row["flow_color"], 5), *name_key(row)))
         column["ballmat_rows"].sort(key=name_key)
     discharge_rows.sort(key=name_key)
-    missing.sort(key=name_key)
-    return {"columns": columns, "missing": missing, "warnings": matrix["warnings"],
+    needs_assignment.sort(key=name_key)
+    unassigned.sort(key=name_key)
+    return {"columns": columns, "needs_assignment": needs_assignment,
+            "unassigned": unassigned, "warnings": matrix["warnings"],
             "count": sum(len(column["rows"]) for column in columns),
             "ballmat_count": sum(len(column["ballmat_rows"]) for column in columns),
             "ballmat_side_counts": ballmat_side_counts,

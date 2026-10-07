@@ -92,11 +92,15 @@
 .shift-roster-layout { display:grid; grid-template-columns:minmax(0,1fr) 176px; gap:0 12px; min-width:calc(var(--roster-columns) * 116px + 188px); }
 .shift-roster-layout>section { min-width:0; grid-column:1; }
 .shift-roster-rail { grid-column:2; grid-row:1 / span 2; min-width:0; }
-.shift-roster-needs { padding:8px; background:#191f22; border:1px solid #504734; border-radius:5px; }
-.shift-roster-rail .shift-roster-needs h2 { margin:0 0 6px; font-size:11px; color:#cdb37c; }
-.shift-roster-needs>div { max-height:46vh; overflow-y:auto; scrollbar-width:thin; }
-.shift-roster-needs small,.shift-roster-needs p { font-size:10px; line-height:1.4; color:#a9a290; }
-.shift-roster-needs .shift-door-person { padding:6px 0; }
+.shift-roster-rail { display:flex; flex-direction:column; gap:8px; }
+.shift-roster-needs,.shift-roster-unassigned { padding:8px; background:#191f22; border:1px solid #504734; border-radius:5px; }
+.shift-roster-unassigned { border-color:#36575c; }
+.shift-roster-rail section h2 { margin:0 0 6px; font-size:11px; color:#cdb37c; }
+.shift-roster-rail section h2 small { display:inline; margin-left:4px; font-size:10px; }
+.shift-roster-rail .shift-roster-unassigned h2 { color:#9fc9cd; }
+.shift-roster-rail section>div { max-height:32vh; overflow-y:auto; scrollbar-width:thin; }
+.shift-roster-rail small,.shift-roster-rail p { font-size:10px; line-height:1.4; color:#a9a290; }
+.shift-roster-rail .shift-door-person { padding:6px 0; }
 .shift-roster-feedback { position:fixed; bottom:80px; right:20px; z-index:100; max-width:min(320px,80vw); padding:9px 13px; border:1px solid #537f71; border-radius:5px; background:#19332b; color:#d5e8df; font-size:12px; box-shadow:0 4px 18px #0006; }
 .shift-roster-feedback.is-error { background:#332b1c; border-color:#b29150; color:#e8c88f; }
 .shift-door-column.is-drop-target { outline:2px solid #7ba99a; outline-offset:-2px; }

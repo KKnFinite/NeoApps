@@ -402,9 +402,10 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(html.count(f'data-roster-person="{discharge.id}"'), 1)
         self.assertRegex(html, rf'class="shift-door-person is-discharge" data-roster-person="{discharge.id}"')
         rail = html.split('<aside class="shift-roster-rail"', 1)[1].split('</aside>', 1)[0]
-        self.assertIn('aria-label="Needs Assignment"', rail)
-        self.assertEqual(rail.count('<section '), 1)
+        self.assertIn('aria-label="Needs Assignment and Unassigned"', rail)
+        self.assertEqual(rail.count('<section '), 2)
         self.assertIn('id="shift-needs-title"', rail)
+        self.assertIn('id="shift-unassigned-title"', rail)
         self.assertEqual(re.findall(r'data-roster-person="(\d+)"', rail), [str(unset.id)])
         self.assertIn('BALLMAT START', html)
         self.assertNotIn('EAST BALLMAT', html)
@@ -1112,6 +1113,41 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn('entry.reason', template)
         self.assertIn('data-roster-person', template)
         self.assertNotIn('data-shift-flow-composite-cell', template)
+
+    def test_final_door_rail_separates_missing_plan_from_incomplete_plan(self):
+        import re
+        from flask import render_template
+        areas = self._configure_final_composite()
+        unassigned = self._person('RAIL-UNASSIGNED')
+        self._assignment(unassigned, areas['Door 34'])
+        incomplete = self._person('RAIL-INCOMPLETE')
+        self._assignment(incomplete, areas['Door 34'])
+        staffing_service.create_shift_flow_plan(incomplete, {
+            'shift_flow_sort_start_work_area_id': str(areas['Door 34'].id),
+            'shift_flow_final_door_work_area_id': '',
+        }, areas['Door 34'])
+        db.session.commit()
+        roster = staffing_service.shift_flow_context()['flow_map']['door_roster']
+        self.assertEqual([row['person'].id for row in roster['needs_assignment']], [incomplete.id])
+        self.assertEqual([row['person'].id for row in roster['unassigned']], [unassigned.id])
+        with self.app.test_request_context('/neostaffing/shift-flow'):
+            html = render_template('neostaffing/_shift_flow_map.html',
+                shift_flow=staffing_service.shift_flow_context(), can_edit_shift_flow=True,
+                shift_work_area_type=staffing_service.shift_work_area_type)
+        rail = html.split('<aside class="shift-roster-rail"', 1)[1].split('</aside>', 1)[0]
+        needs = rail.split('class="shift-roster-needs"', 1)[1].split('</section>', 1)[0]
+        unplanned = rail.split('class="shift-roster-unassigned"', 1)[1].split('</section>', 1)[0]
+        self.assertEqual(re.findall(r'data-roster-person="(\d+)"', needs), [str(incomplete.id)])
+        self.assertEqual(re.findall(r'data-roster-person="(\d+)"', unplanned), [str(unassigned.id)])
+        self.assertIn(f'person_id={incomplete.id}', needs)
+        self.assertIn(f'person_id={unassigned.id}', unplanned)
+
+    def test_drawer_exposes_start_area_without_single_stage_editor(self):
+        editor = (Path(__file__).resolve().parents[1] / 'app/templates/neostaffing/_shift_flow_editor.html').read_text(encoding='utf-8')
+        self.assertIn('<label>Start Area<select name="shift_flow_sort_start_work_area_id">', editor)
+        self.assertNotIn('MOVE ONE STAGE', editor)
+        self.assertNotIn('data-phase-editor', editor)
+        self.assertIn('name="expected_version"', editor)
 
     def test_journey_reloads_canonical_projection_only_after_success(self):
         javascript = (Path(__file__).resolve().parents[1] / 'app/static/js/neostaffing_shift_map.js').read_text(encoding='utf-8')
