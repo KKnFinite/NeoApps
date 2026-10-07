@@ -29,7 +29,7 @@
 .neoscorpion-dispatch-table--compact {
     min-width: 1080px;
     table-layout: fixed;
-    --dispatch-font-large: 1.10rem;
+    --dispatch-font-large: 1.056rem;
     --dispatch-font-medium: .945rem;
     --dispatch-font-small: .79rem;
 }
