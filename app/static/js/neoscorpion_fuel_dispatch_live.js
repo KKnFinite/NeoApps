@@ -96,7 +96,7 @@
         const snapshot = () => {
             const wrap = tableWrap();
             const rows = Array.from(scope.querySelectorAll(
-                ".neoscorpion-dispatch-primary-row[data-dispatch-row-key]"
+                ".neoscorpion-dispatch-table--compact tr[data-dispatch-row-key]"
             ));
             const wrapRect = wrap?.getBoundingClientRect() || null;
             const anchor = rows.find((row) => {
@@ -138,7 +138,7 @@
             const wrap = tableWrap();
             const anchor = saved.rowKey
                 ? scope.querySelector(
-                    `.neoscorpion-dispatch-primary-row[data-dispatch-row-key="${saved.rowKey}"]`
+                    `.neoscorpion-dispatch-table--compact tr[data-dispatch-row-key="${saved.rowKey}"]`
                 ) || activeRowForKey(saved.rowKey)
                 : null;
             if (wrap) {

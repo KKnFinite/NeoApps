@@ -178,19 +178,6 @@
     font-size: 1.1em;
 }
 
-/* Frozen cycle snapshots use the original compact table type, not the live
-   mission row's enlarged typography. Keep this scoped through panel refreshes. */
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] > td,
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] > td :is(strong, span) {
-    font-size: .72rem !important;
-}
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] > td small {
-    font-size: .61rem !important;
-}
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] .neoscorpion-dispatch-details-toggle {
-    font-size: .53rem !important;
-}
-
 /* Live Dispatch readability hotfix: enlarge row data without growing headers. */
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-inline-input,
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-inline-select {
@@ -795,14 +782,13 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     .neoscorpion-dispatch-insights { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Frozen tail-swap / uplift / defuel cycle rows: subdued historical data.
-   Place after active-row sizing rules so refreshed snapshots cannot inherit
-   the larger live mission typography. Never affect current work. */
+/* Frozen tail-swap / uplift / defuel cycles have their own row class, so
+   live mission typography never applies to their historical values. */
 .neoscorpion-dispatch-table--compact tr[data-cycle-history] > td {
     font-size: .64rem !important;
     color: #aeb2b7 !important;
     filter: grayscale(.85);
-    opacity: .67;
+    opacity: .82;
     overflow-wrap: anywhere;
     word-break: normal;
     white-space: normal;
@@ -824,5 +810,5 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     color: #aeb2b7 !important;
 }
 .neoscorpion-dispatch-table--compact tr[data-cycle-history]:hover > td {
-    opacity: .83;
+    opacity: .92;
 }

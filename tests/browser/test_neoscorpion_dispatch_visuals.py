@@ -6,7 +6,7 @@ from unittest.mock import patch
 from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as Fixture
 from app.extensions import db
 from app.models import (
-    NeoScorpionFuelAssignment, NeoScorpionFuelCycleHistory, NeoScorpionFuelTankState, NeoScorpionFuelWorkState,
+    NeoScorpionFuelAssignment, NeoScorpionFuelCycleHistory, NeoScorpionFuelTankState, NeoScorpionFuelTruck, NeoScorpionFuelWorkState,
     NeoScorpionSortAssetState,
     NeoScorpionTailFuelState, SortDateMission, SortDateOperation,
     SortDateParkingAssignment, SortDateTailState, User,
@@ -14,6 +14,168 @@ from app.models import (
 
 
 class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
+    def test_archived_cycles_align_and_fit_beside_current_ups1038_row_after_refresh(self):
+        Fixture.setUpClass()
+        Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"] = 5000
+        browser = None
+        try:
+            with Fixture.app.app_context():
+                from app.services.access_control import ensure_default_gateway_and_nodes
+                gateway = ensure_default_gateway_and_nodes()
+                admin = User.query.filter_by(username="drawer-admin").one()
+                operation = SortDateOperation(
+                    generated_by_user_id=admin.id, gateway_id=gateway.id,
+                    gateway_code=gateway.code, sort_date=date.today(),
+                    sort_name="night", window_minutes=60,
+                )
+                db.session.add(operation)
+                db.session.flush()
+                mission = SortDateMission(
+                    sort_date=operation.sort_date, gateway_code=gateway.code,
+                    sort_name="night", sort_date_operation_id=operation.id,
+                    mission_type="departure", mission_source="manual",
+                    flight_number="UPS1038", origin=gateway.code,
+                    destination="SDF", timezone="America/Chicago",
+                    planned_datetime_local=datetime(2026, 10, 7, 23, 30),
+                    planned_datetime_utc=datetime(2026, 10, 8, 4, 30),
+                    planned_source="manual", planned_fuel_load=50_000,
+                    assigned_tail_number="N1038UP", tail_source="manual",
+                    fuel_status="assigned", departure_status="loading",
+                )
+                truck = NeoScorpionFuelTruck(gateway_id=gateway.id, truck_number="D07")
+                db.session.add_all((mission, truck))
+                db.session.flush()
+                assignment = NeoScorpionFuelAssignment(
+                    sort_date_operation_id=operation.id,
+                    sort_date_mission_id=mission.id,
+                    assigned_truck_id=truck.id, confirmed_tail_number="N1038UP",
+                    review_status="pending", current_cycle_number=4,
+                )
+                db.session.add_all((
+                    assignment,
+                    NeoScorpionTailFuelState(sort_date_operation_id=operation.id,
+                                             tail_number="N1038UP", inbound_fuel_lbs=12_000),
+                    SortDateParkingAssignment(sort_date_operation_id=operation.id,
+                                              tail_number="N1038UP", ramp_code="E",
+                                              position_code="E01", lane_number=1),
+                    SortDateTailState(sort_date=operation.sort_date,
+                                      gateway_code=gateway.code, sort_name="night",
+                                      tail_number="N1038UP", aircraft_type="757",
+                                      aircraft_type_source="derived"),
+                ))
+                db.session.flush()
+                for cycle_number, label in ((1, "TAIL SWAP"), (2, "UPLIFT"), (3, "DEFUEL")):
+                    db.session.add(NeoScorpionFuelCycleHistory(
+                        sort_date_operation_id=operation.id,
+                        fuel_assignment_id=assignment.id, mission_id=mission.id,
+                        cycle_number=cycle_number, label=label,
+                        snapshot={
+                            "tail_number": "N1038UP", "arrival_eta": "23:00",
+                            "destination": "SDF", "flight_number": "UPS1038",
+                            "departure_time": "23:30", "parking_position": "E01",
+                            "inbound_fuel_display": "12.0", "required_fuel_display": "50.0",
+                            "neo_fuel_display": "48.0",
+                            "actual_total_display": "INCOMPLETE",
+                            "apu_allowance_display": "INCOMPLETE",
+                            "fueler": "Alexandria Dispatcher", "truck": "D08",
+                            "transfer_fuel_gallons": 450,
+                            "dispatch_status_label": "INCOMPLETE", "tank_rows": [],
+                        },
+                    ))
+                db.session.commit()
+                operation_id = operation.id
+
+            with patch("app.services.neoscorpion.current_existing_operational_sort_operations",
+                       side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, operation_id)]):
+                browser = Fixture.pw.chromium.launch()
+                page = browser.new_page()
+                Fixture().login(page)
+                page.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1', 'seen')")
+
+                def measure():
+                    return page.evaluate("""() => {
+                        const table = document.querySelector('.neoscorpion-dispatch-table--compact');
+                        const history = [...table.querySelectorAll('tr[data-cycle-history]')];
+                        const active = table.querySelector('tr[data-dispatch-mission-id]');
+                        const font = el => parseFloat(getComputedStyle(el).fontSize);
+                        const rgb = el => getComputedStyle(el).color;
+                        const overflow = row => [...row.cells].flatMap((cell, index) => {
+                            const box = cell.getBoundingClientRect();
+                            const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+                            const violations = [];
+                            while (walker.nextNode()) {
+                                if (!walker.currentNode.textContent.trim()) continue;
+                                const range = document.createRange();
+                                range.selectNodeContents(walker.currentNode);
+                                for (const rect of range.getClientRects()) {
+                                    if (rect.left < box.left - 1 || rect.right > box.right + 1)
+                                        violations.push({column:index + 1, text:walker.currentNode.textContent.trim(),
+                                            left:rect.left, right:rect.right, cellLeft:box.left, cellRight:box.right});
+                                }
+                            }
+                            return violations;
+                        });
+                        return {history:history.map(row => ({key:row.dataset.dispatchRowKey,
+                            primary:row.classList.contains('neoscorpion-dispatch-primary-row'),
+                            cells:[...row.cells].map(cell => cell.textContent.trim()),
+                            fonts:[...row.cells].map(font),
+                            colors:[...row.cells].map(rgb),
+                            strong:[...row.querySelectorAll('strong')].map(el => [font(el),rgb(el)]),
+                            small:[...row.querySelectorAll('small')].map(el => [font(el),rgb(el)]),
+                            details:[font(row.querySelector('button')),rgb(row.querySelector('button'))],
+                            overflow:overflow(row)})),
+                            active:{key:active.dataset.dispatchRowKey,
+                                truck:active.cells[10].textContent.trim(),
+                                font:font(active.cells[0]), color:rgb(active.cells[0])},
+                            stylesheet:[...document.querySelectorAll('link[rel="stylesheet"]')]
+                                .map(link => link.href).find(href => href.includes('26-neoscorpion.css'))};
+                    }""")
+
+                for width, height in ((1440, 900), (390, 844), (375, 667)):
+                    with self.subTest(width=width):
+                        page.set_viewport_size({"width": width, "height": height})
+                        Fixture().ready(page, "/neoscorpion/fuel-dispatch")
+                        before = measure()
+                        if width in (1440, 390):
+                            page.screenshot(path=str(Fixture.evidence / f"dispatch-ups1038-{width}.png"))
+                        self.assertEqual(len(before["history"]), 3, before)
+                        self.assertTrue(all(not row["primary"] for row in before["history"]), before)
+                        self.assertEqual(before["active"]["truck"], "D07", before)
+                        self.assertTrue(all("D08" in row["cells"][10] for row in before["history"]), before)
+                        self.assertTrue(all(row["cells"][6] == "48.0" for row in before["history"]), before)
+                        self.assertTrue(all("INCOMPLETE" in row["cells"][7] for row in before["history"]), before)
+                        self.assertTrue(all(not row["overflow"] for row in before["history"]), before)
+                        self.assertTrue(all(max(row["fonts"]) <= 12 for row in before["history"]), before)
+                        self.assertTrue(all(set(row["colors"]) == {"rgb(174, 178, 183)"}
+                                            for row in before["history"]), before)
+                        self.assertTrue(all(max(size for size, _ in row["strong"]) <= 12
+                                            for row in before["history"]), before)
+                        self.assertTrue(all(all(color == "rgb(174, 178, 183)"
+                                                for _, color in row["strong"] + row["small"])
+                                            for row in before["history"]), before)
+                        self.assertTrue(all(row["details"][0] <= 10 for row in before["history"]), before)
+                        self.assertTrue(all(row["details"][1] == "rgb(174, 178, 183)"
+                                            for row in before["history"]), before)
+                        self.assertGreater(before["active"]["font"], 15, before)
+                        self.assertEqual(before["active"]["color"], "rgb(255, 253, 245)", before)
+                        self.assertNotIn("20261008-dispatch-visuals-v2", before["stylesheet"])
+                        if width == 1440:
+                            page.evaluate("window.oldHistoryRow = document.querySelector('[data-cycle-history]')")
+                            with Fixture.app.app_context():
+                                asset = NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation_id).first()
+                                if asset is None:
+                                    asset = NeoScorpionSortAssetState(sort_date_operation_id=operation_id, revision=0)
+                                    db.session.add(asset)
+                                asset.revision += 1
+                                db.session.commit()
+                            page.wait_for_function("""() => document.querySelector('[data-cycle-history]') !== window.oldHistoryRow""", timeout=15000)
+                            after = measure()
+                            self.assertEqual(before["history"], after["history"], (before, after))
+        finally:
+            if browser:
+                browser.close()
+            Fixture.tearDownClass()
+
     def test_outer_row_pulse_and_fuel_alignment_at_desktop_and_mobile_widths(self):
         Fixture.setUpClass()
         Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"] = 5000
@@ -109,7 +271,7 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                         Fixture().ready(page, "/neoscorpion/fuel-dispatch")
                         rows = page.locator(".neoscorpion-dispatch-primary-row.is-ready-to-assign")
                         self.assertEqual(rows.count(), 2)
-                        history_rows = page.locator(".neoscorpion-dispatch-primary-row[data-cycle-history]")
+                        history_rows = page.locator("[data-cycle-history]")
                         self.assertEqual(history_rows.count(), 2)
                         fonts = page.evaluate("""() => ({
                             history: [...document.querySelectorAll('[data-cycle-history]')].map(row =>
