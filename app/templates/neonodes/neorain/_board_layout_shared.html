@@ -127,7 +127,7 @@
         width: 100vw;
         max-width: none;
         height: 100dvh;
-        padding: 4px 40px 4px 4px;
+        padding: 4px 4px 4px 40px;
         overflow: hidden;
         background: #080e16;
     }
@@ -138,8 +138,8 @@
         display: none !important;
     }
     body.blueprint-neorain.operational-board-view .operational-board-exit {
-        left: auto;
-        right: 8px;
+        left: 8px;
+        right: auto;
     }
 }
 @media (max-width: 900px) {
@@ -147,6 +147,153 @@
         min-height: 32px;
         font-size: .65rem;
     }
+}
+/* NeoRain's operational facts form five consistently aligned, compact cards. */
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 10px;
+    border: 0;
+    background: transparent;
+}
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--node-rgb), .22);
+    border-radius: 3px;
+    background: #0b1018;
+}
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div:first-child {
+    border-left: 1px solid rgba(var(--node-rgb), .22);
+}
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div[data-neorain-summary-total] {
+    border-color: rgba(var(--node-rgb), .5);
+    background: #101722;
+}
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div > strong {
+    margin: 0 0 2px;
+    font-size: 1.035rem;
+    line-height: 1.15;
+}
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div > span {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 6px;
+    min-width: 0;
+    color: #fff;
+    font-size: .9rem;
+    font-weight: 650;
+    letter-spacing: .015em;
+    line-height: 1.2;
+}
+.neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div > span > output {
+    flex: 0 0 auto;
+    color: #fff;
+    font-size: 1.125rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+@media (min-width: 901px) and (max-width: 1499px) {
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div {
+        grid-column: span 2;
+    }
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div:nth-child(n+4) {
+        grid-column: span 3;
+    }
+}
+@media (max-width: 900px) {
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div {
+        padding: 8px 9px;
+        gap: 5px;
+    }
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div[data-neorain-summary-total] {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 760px) {
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div > strong {
+        font-size: .9rem;
+    }
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div > span {
+        font-size: .774rem;
+    }
+    .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary > div > span > output {
+        font-size: .936rem;
+    }
+}
+
+/* Pure-white neutral typography, scoped only to the two live Rain boards.
+   Semantic late red, alert colors and node-accent headings remain unchanged. */
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] {
+    color: #fff;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] :is(
+    .neorain-outbound-head h1,
+    .neorain-outbound-head > strong,
+    .neorain-outbound-empty,
+    .neorain-outbound-table,
+    .neorain-milestone-input,
+    .neorain-settings-panel p,
+    .neorain-crew-admin-field > span,
+    .neorain-crew-admin-field > legend,
+    .neorain-crew-admin-readonly span,
+    .neorain-crew-admin-readonly strong,
+    .neorain-crew-admin-ramp-option,
+    .neorain-crew-admin-empty,
+    .neorain-delay-toggle,
+    .neorain-delay-existing-copy,
+    .neorain-delay-empty,
+    .neorain-mobile-column-head span,
+    .neorain-mobile-mission-open strong,
+    .neorain-mobile-mission-open span,
+    .neorain-mobile-time-display span,
+    .neorain-mobile-time-editor input,
+    .neorain-mobile-detail-facts dt,
+    .neorain-mobile-detail-facts dd,
+    .neorain-mobile-detail-delay,
+    .neorain-mobile-inline-detail-head strong,
+    .neorain-outbound-planner-contact-popover
+) {
+    color: #fff;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-table tbody tr:is(
+    .neorain-inbound-row--blocked-in,
+    .neorain-outbound-row--blocked-out
+) {
+    color: #fff;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] :is(
+    .neorain-crew-admin input:not([type="hidden"]):not([type="checkbox"]),
+    .neorain-delay-line-form input:not([type="hidden"])
+) {
+    color: #fff;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-crew-admin select {
+    color: #fff !important;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-late-inclusion-control[data-neorain-included="false"] {
+    color: #fff;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] input::placeholder,
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] textarea::placeholder {
+    color: #fff;
+    opacity: 1;
 }
 </style>
 <script>
