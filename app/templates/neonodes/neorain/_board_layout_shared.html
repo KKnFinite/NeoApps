@@ -1,0 +1,184 @@
+{# Shared Rain board geometry and UI state; Scorpion/other nodes unaffected. #}
+<style>
+.neorain-outbound-shell[data-neorain-board-page] {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+}
+.neorain-outbound-shell[data-neorain-board-page] > header {
+    flex: 0 0 auto;
+}
+.neorain-board-support[hidden] {
+    display: none !important;
+}
+.neorain-board-support {
+    min-width: 0;
+}
+.neorain-board-collapse {
+    min-height: 30px;
+    padding: 5px 9px;
+    border: 1px solid rgba(var(--node-rgb), .45);
+    border-radius: 4px;
+    background: #101a27;
+    color: var(--node-highlight);
+    font: 800 .66rem/1.2 inherit;
+    letter-spacing: .04em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.neorain-board-collapse:hover,
+.neorain-board-collapse:focus-visible {
+    border-color: var(--node-highlight);
+    outline: 1px solid var(--node-highlight);
+}
+@media (min-width: 901px) {
+    body.blueprint-neorain.operational-shell-page .content {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: none;
+        padding: calc(var(--operational-topbar-height, 64px) + 8px) 8px 8px calc(var(--operational-sidebar-width, 220px) + 8px);
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        min-width: 0;
+        min-height: 0;
+        height: calc(100dvh - var(--operational-topbar-height, 64px) - 16px);
+    }
+    body.blueprint-neorain .neorain-board-support {
+        flex: 0 0 auto;
+        max-height: min(41dvh, 360px);
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+    body.blueprint-neorain .neorain-board-content {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+    }
+    body.blueprint-neorain .neorain-desktop-board.neorain-outbound-table-wrap {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        max-height: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-outbound-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-outbound-table th,
+    body.blueprint-neorain .neorain-desktop-board .neorain-outbound-table td {
+        min-width: 0;
+        padding: 8px 5px;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        vertical-align: middle;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-outbound-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 11;
+        background: #111a26;
+        box-shadow: 0 1px 0 rgba(var(--node-rgb), .38);
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-outbound-table td[data-label="Connecting Outbound"] {
+        min-width: 0;
+        max-width: none;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-milestone-input {
+        width: 100%;
+        max-width: 58px;
+        min-width: 0;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-no-return-control,
+    body.blueprint-neorain .neorain-desktop-board .neorain-late-inclusion-control {
+        min-width: 0;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-delay-panel-cell {
+        padding: 0;
+    }
+    body.blueprint-neorain .neorain-desktop-board .neorain-delay-line-form {
+        min-width: 0;
+    }
+    body.blueprint-neorain.operational-shell-page.operational-board-view .content,
+    html.operational-board-view-boot body.blueprint-neorain.operational-shell-page .content {
+        padding: 0;
+    }
+    body.blueprint-neorain.operational-board-view .neorain-outbound-shell[data-neorain-board-page],
+    html.operational-board-view-boot body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        box-sizing: border-box;
+        width: 100vw;
+        max-width: none;
+        height: 100dvh;
+        padding: 4px 40px 4px 4px;
+        overflow: hidden;
+        background: #080e16;
+    }
+    body.blueprint-neorain.operational-board-view .neorain-outbound-shell[data-neorain-board-page] > header,
+    body.blueprint-neorain.operational-board-view .neorain-board-support,
+    html.operational-board-view-boot body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] > header,
+    html.operational-board-view-boot body.blueprint-neorain .neorain-board-support {
+        display: none !important;
+    }
+    body.blueprint-neorain.operational-board-view .operational-board-exit {
+        left: auto;
+        right: 8px;
+    }
+}
+@media (max-width: 900px) {
+    .neorain-board-collapse {
+        min-height: 32px;
+        font-size: .65rem;
+    }
+}
+</style>
+<script>
+(() => {
+    const root = document.querySelector("[data-neorain-board-page]");
+    const support = root?.querySelector("[data-neorain-board-support]");
+    const toggle = root?.querySelector("[data-neorain-board-collapse]");
+    if (!root || !support || !toggle) return;
+    const boardKey = "neorain:board-support:" + window.location.pathname;
+    const scrollKey = "neorain:board-scroll:" + window.location.pathname;
+    const wrap = root.querySelector(".neorain-desktop-board.neorain-outbound-table-wrap");
+
+    const setCollapsed = (collapsed) => {
+        support.hidden = collapsed;
+        toggle.setAttribute("aria-expanded", String(!collapsed));
+        toggle.textContent = collapsed ? "SHOW TOP" : "HIDE TOP";
+        try { sessionStorage.setItem(boardKey, collapsed ? "collapsed" : "expanded"); } catch (_) {}
+    };
+    let collapsed = false;
+    try { collapsed = sessionStorage.getItem(boardKey) === "collapsed"; } catch (_) {}
+    setCollapsed(collapsed);
+    toggle.addEventListener("click", () => setCollapsed(!support.hidden));
+
+    if (!wrap) return;
+    const saveScroll = () => {
+        try { sessionStorage.setItem(scrollKey, String(wrap.scrollTop)); } catch (_) {}
+    };
+    let savedScroll = 0;
+    try { savedScroll = Number(sessionStorage.getItem(scrollKey) || 0); } catch (_) {}
+    if (Number.isFinite(savedScroll) && savedScroll > 0) {
+        window.requestAnimationFrame(() => { wrap.scrollTop = savedScroll; });
+    }
+    wrap.addEventListener("scroll", saveScroll, { passive: true });
+    window.addEventListener("pagehide", saveScroll);
+    document.addEventListener("neo:board-enter", saveScroll);
+})();
+</script>

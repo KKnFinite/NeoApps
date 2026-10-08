@@ -198,12 +198,14 @@
     }
 }
 </style>
-<section class="neorain-outbound-shell" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-late-inclusion-url="{{ url_for('neorain.inbound_late_inclusion') }}" data-block-in-url="{{ url_for('neorain.inbound_block_in') }}" data-inbound-revision="{{ inbound_revision }}">
+<section class="neorain-outbound-shell" data-neorain-board-page="inbound" data-neorain-inbound-live data-revision-url="{{ url_for('neorain.inbound_revision') }}" data-late-inclusion-url="{{ url_for('neorain.inbound_late_inclusion') }}" data-block-in-url="{{ url_for('neorain.inbound_block_in') }}" data-inbound-revision="{{ inbound_revision }}">
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div><p>LIVE OPERATIONS</p><h1>INBOUND</h1></div>
         <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }}{% else %}NO CURRENT SORT{% endif %}</strong>
         {% if operation and can_edit %}<a class="neorain-add-flight" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id, mission_type='arrival', return_to='neorain.inbound') }}">ADD FLIGHT</a>{% endif %}
+        <button type="button" class="neorain-board-collapse" data-neorain-board-collapse aria-expanded="true" aria-controls="neorain-board-support">HIDE TOP</button>
     </header>
+    <div id="neorain-board-support" class="neorain-board-support" data-neorain-board-support>
     <section class="neorain-outbound-late-summary" aria-label="Inbound late and staffing statistics" data-neorain-late-summary>
         <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
         <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
@@ -303,6 +305,7 @@
         <p class="muted">No current sort.</p>
         {% endif %}
     </section>
+    </div>
     {% if not operation %}
     <p class="neorain-outbound-empty">No current sort.</p>
     {% elif not rows %}
@@ -367,6 +370,7 @@
     {% endif %}
 </section>
 {% include "neonodes/neorain/_delay_panel_shared.html" %}
+{% include "neonodes/neorain/_board_layout_shared.html" %}
 <script>
 (() => {
     const root = document.querySelector("[data-neorain-inbound-live]");
