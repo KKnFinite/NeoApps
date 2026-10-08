@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, time
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.orm import aliased, joinedload
@@ -1065,6 +1066,8 @@ def _outbound_row(
         "fuel_source": fuel_source or rain_fuel_data_source(operation.gateway, operation.sort_name),
         "neo_fuel": fuel_value.get("neo_fuel", ""),
         "center_fuel": fuel_value.get("center_fuel", ""),
+        "neo_fuel_display": _fuel_display_value(fuel_value.get("neo_fuel", "")),
+        "center_fuel_display": _fuel_display_value(fuel_value.get("center_fuel", "")),
         "fuel_revision": fuel_value.get("revision", ""),
         "fuel_review_pending": fuel_review_pending,
         "ramp_load_complete": format_local_hhmm(
@@ -1143,6 +1146,18 @@ def _text(value):
 
 def _time_value(value):
     return value.strftime("%H:%M") if value else ""
+
+
+def _fuel_display_value(value):
+    """Render canonical full-unit fuel as one-decimal thousands for Rain only."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        amount = Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        return text
+    return f"{amount / Decimal('1000'):.1f}"
 
 
 def _revision_value(value):

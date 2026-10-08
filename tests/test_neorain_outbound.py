@@ -39,6 +39,7 @@ from app.services.live_collaboration import entity_version
 from app.services.neorain_load_planner_contacts import (
     set_neorain_load_planner_contact,
 )
+from app.services.neorain_fuel_authority import record_google_rain_fuel_value
 
 
 class NeoRainOutboundTest(unittest.TestCase):
@@ -131,6 +132,29 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertEqual(rows[1]["no_return"], "")
         self.assertEqual(rows[1]["status"], "BLOCKED OUT")
         self.assertEqual(later.id, rows[1]["mission_id"])
+
+    def test_outbound_fuel_display_uses_one_decimal_thousands_without_changing_truth(self):
+        operation = self._operation()
+        mission = self._mission(
+            operation,
+            "UPS456",
+            "ONT",
+            planned=datetime(2026, 8, 30, 2, 0),
+        )
+        record_google_rain_fuel_value(
+            operation,
+            mission,
+            "45600",
+            "49000",
+        )
+        db.session.commit()
+
+        row = neorain_outbound_context(self.gateway, operation=operation)["rows"][0]
+
+        self.assertEqual(row["neo_fuel"], "45600")
+        self.assertEqual(row["center_fuel"], "49000")
+        self.assertEqual(row["neo_fuel_display"], "45.6")
+        self.assertEqual(row["center_fuel_display"], "49.0")
 
     def test_inbound_variance_uses_sta_and_exposes_late_metrics_defaults(self):
         operation = self._operation()

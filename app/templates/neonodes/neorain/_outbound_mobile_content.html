@@ -113,8 +113,8 @@
                     <div><dt>STD/ETD</dt><dd>{{ row.planned_time or '-' }}</dd></div>
                     <div><dt>LOAD PLANNER</dt><dd>{{ row.load_planner or 'UNASSIGNED' }}</dd></div>
                     <div><dt>eLMAC</dt><dd>{{ row.elmac or '-' }}</dd></div>
-                    <div><dt>NEO FUEL · {{ row.fuel_source|upper }}</dt><dd>{{ row.neo_fuel or '-' }}</dd></div>
-                    <div><dt>CENTER FUEL</dt><dd>{{ row.center_fuel or '-' }}{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% if can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}{% endif %}</dd></div>
+                    <div><dt>NEO FUEL · {{ row.fuel_source|upper }}</dt><dd>{{ row.neo_fuel_display or '-' }}</dd></div>
+                    <div><dt>CENTER FUEL</dt><dd>{{ row.center_fuel_display or '-' }}{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% if can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}{% endif %}</dd></div>
                     <div><dt>RAMP LC</dt><dd data-neorain-display="ramp_load_complete">{{ row.ramp_load_complete or '-' }}</dd></div>
                     <div><dt>CREW LC</dt><dd data-neorain-display="crew_load_complete">{{ row.crew_load_complete or '-' }}</dd></div>
                     <div><dt>BLOCK-OUT</dt><dd data-neorain-display="official_block_out">{{ row.official_block_out or '-' }}</dd></div>
