@@ -14,6 +14,7 @@ from app.services.neoscorpion_spear import (
     SpearPlan,
     SpearSettings,
     build_spear_plan,
+    _parking_ramp,
     execute_spear_step,
     save_spear_settings,
     spear_dispatch_status,
@@ -86,26 +87,127 @@ def _row(identifier=100, *, demand=500, assignment=None, work_has_begun=False):
         "required_fuel_lbs": 20_000,
         "inbound_fuel_lbs": 12_000,
         "measured_inbound_fuel_lbs": None,
-        "parking_position": "Charlie4",
+        "parking_position": "C04",
+        "parking_valid": True,
         "detailed_aircraft_type": "B757",
         "assignment": assignment,
         "work_has_begun": work_has_begun,
     }
 
 
-def _plan(rows, *, trucks=None, settings=None):
+def _plan(rows, *, trucks=None, fuelers=None, settings=None):
     return build_spear_plan(
         rows,
         operation=SimpleNamespace(id=1),
         planning_settings=_PlanningSettings(),
         spear_settings=settings or SpearSettings(),
-        nightly_fuelers=(_fueler(),),
-        nightly_trucks=trucks or (_truck(),),
+        nightly_fuelers=(_fueler(),) if fuelers is None else fuelers,
+        nightly_trucks=(_truck(),) if trucks is None else trucks,
         now_utc=NOW,
     )
 
 
 class NeoScorpionSpearPlanningTest(unittest.TestCase):
+    def test_real_parking_codes_use_canonical_ramps_and_travel(self):
+        for parking, ramp, travel in (("B06", "Bravo", "4"), ("D07", "Delta", "8"),
+                                      ("E03", "Echo", "10"), ("B06 / S2", "Bravo", "4")):
+            with self.subTest(parking=parking):
+                row = _row()
+                row["parking_position"] = parking
+                plan = _plan([row])
+                self.assertEqual(_parking_ramp(parking), ramp)
+                self.assertEqual(plan.readiness_by_mission_id[100], ())
+                self.assertEqual(plan.waiting_for_data_count, 0)
+                self.assertEqual(len(plan.steps), 1)
+                self.assertEqual(plan.steps[0].explanation["truck_travel_minutes"], f"{travel} min")
+
+    def test_parking_readiness_uses_dispatch_validity_not_position_text(self):
+        row = _row()
+        row.update(parking_position="B06", parking_valid=False)
+        plan = _plan([row])
+        self.assertEqual(plan.readiness_by_mission_id[100], ("parking",))
+        self.assertFalse(plan.steps)
+
+    def test_unmapped_parking_blocks_travel_without_guessing(self):
+        for parking in ("Bravo anything", "B99", "D07 unknown", "E03 / S3", "AB12", ""):
+            with self.subTest(parking=parking):
+                row = _row()
+                row.update(parking_position=parking, parking_valid=True)
+                plan = _plan([row])
+                self.assertIsNone(_parking_ramp(parking))
+                self.assertFalse(plan.steps)
+                self.assertEqual(plan.waiting_for_data_count, 0)
+                self.assertIn("PARKING RAMP NOT MAPPED", plan.unavailable_by_mission_id[100])
+
+    def test_on_ground_and_arrived_without_timestamps_are_ready_with_unknown_timing(self):
+        for status in ("On Ground", "Arrived", "on ground", "ARRIVED"):
+            for arrival in (None, SimpleNamespace(actual_block_in_datetime_utc=None,
+                                                 eta_datetime_utc=None, planned_datetime_utc=None)):
+                with self.subTest(status=status, arrival=arrival):
+                    row = _row()
+                    row.update(arrival_status=status, arrival_mission=arrival)
+                    plan = _plan([row])
+                    self.assertEqual(plan.readiness_by_mission_id[100], ())
+                    self.assertEqual(plan.waiting_for_data_count, 0)
+                    step = plan.steps[0]
+                    self.assertEqual(step.risk, "TIMING UNKNOWN")
+                    self.assertIsNone(step.projected_complete_at_utc)
+                    self.assertEqual(step.explanation["aircraft_ready_source"], "Unknown")
+                    self.assertFalse(step.automatic_eligible)
+
+    def test_on_ground_clears_gate_but_preserves_eta_buffer_timing(self):
+        row = _row()
+        row["arrival_status"] = "On Ground"
+        row["arrival_mission"].actual_block_in_datetime_utc = None
+        row["arrival_mission"].eta_datetime_utc = NOW + timedelta(minutes=45)
+        step = _plan([row]).steps[0]
+        self.assertEqual(step.projected_start_at_utc, NOW + timedelta(minutes=50))
+        self.assertEqual(step.explanation["aircraft_ready_source"], "ETA + 5")
+
+    def test_missing_basic_data_reports_only_actual_missing_fields(self):
+        for field, value, reason in (("required_fuel_lbs", None, "required_fuel"),
+                                     ("inbound_fuel_lbs", None, "inbound_fuel"),
+                                     ("parking_valid", False, "parking"),
+                                     ("arrival_status", "Scheduled", "arrival_timing")):
+            with self.subTest(field=field):
+                row = _row()
+                row.update(arrival_status="On Ground", arrival_mission=None)
+                row[field] = value
+                plan = _plan([row])
+                self.assertEqual(plan.readiness_by_mission_id[100], (reason,))
+                self.assertFalse(plan.steps)
+
+    def test_resource_blockers_are_evaluated_not_waiting(self):
+        for fuelers, trucks, blocker in (((), (_truck(),), "NO ELIGIBLE FUELER"),
+                                         ((_fueler(),), (), "NO ELIGIBLE TRUCK"),
+                                         ((_fueler(),), (_truck(status="needs_sump"),), "NO ELIGIBLE TRUCK"),
+                                         ((_fueler(),), (_truck(current=600, capacity=600),), "truck fuel / capacity constraints")):
+            with self.subTest(blocker=blocker):
+                plan = _plan([_row(demand=1000)], fuelers=fuelers, trucks=trucks)
+                self.assertEqual(plan.waiting_for_data_count, 0)
+                self.assertEqual(plan.readiness_by_mission_id[100], ())
+                self.assertFalse(plan.steps)
+                self.assertIn(blocker, plan.unavailable_by_mission_id[100])
+
+    def test_waiting_to_ready_and_resource_blocked_transition_is_recalculated(self):
+        from app.services.neoscorpion import _attach_spear_plan
+        row = _row()
+        row.update(arrival_status="On Ground", arrival_mission=None, parking_position="D07",
+                   inbound_fuel_lbs=None)
+        _attach_spear_plan([row], [], _plan([row]))
+        self.assertFalse(row["spear_ready"])
+        self.assertTrue(row["spear_readiness_reasons"])
+        row["inbound_fuel_lbs"] = 12_000
+        _attach_spear_plan([row], [], _plan([row]))
+        self.assertTrue(row["spear_ready"])
+        self.assertFalse(row["spear_readiness_reasons"])
+        self.assertIsNotNone(row["spear_step"])
+        _attach_spear_plan([row], [], _plan([row], fuelers=()))
+        self.assertTrue(row["spear_ready"])
+        self.assertFalse(row["spear_readiness_reasons"])
+        self.assertIsNone(row["spear_step"])
+        self.assertEqual(row["spear_problem"], "NO ELIGIBLE FUELER")
+
     def test_operational_nickname_changes_displayed_plan_not_canonical_step(self):
         from app.services.neoscorpion import _apply_operational_fueler_names
 

@@ -91,6 +91,7 @@
     font-weight: 850;
 }
 .neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex; width:max-content; max-width:100%; margin:4px auto 0; padding:2px 4px; font-size:.52rem; white-space:nowrap; }
+.neoscorpion-dispatch-tail .neoscorpion-spear-risk.is-unplanned { white-space:normal; overflow-wrap:anywhere; }
 .neoscorpion-dispatch-fuel-input { display: block; width: min(100%, 58px) !important; margin: 0 auto; text-align: center; }
 /* Keep both fuel fields at the cell top; the FOB slot stays reserved when empty. */
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-inbound,

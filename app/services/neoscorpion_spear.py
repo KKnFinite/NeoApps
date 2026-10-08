@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import re
 from types import SimpleNamespace
 
 from app.extensions import db
@@ -12,6 +13,7 @@ from app.models import NeoScorpionSettings, NeoScorpionSpearAuditEntry
 from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
 from app.services.neoscorpion_learning_vault import require_learning_vault
 from app.services.neoscorpion_spear_calibration import calibrated_planning_settings
+from app.services.parking_rules import RAMP_OPTIONS, VALID_PARKING_POSITIONS
 from app.services.time_display import format_local_hhmm
 
 
@@ -331,11 +333,10 @@ def build_spear_plan(
         mission = row["mission"]
         mission_id = mission.id
         demand = _decimal_or_none(row.get("planning_demand_gallons"))
-        ramp = _ramp(row.get("parking_position"), allow_unknown=True)
+        ramp = _parking_ramp(row.get("parking_position"))
         timing = _spear_timing(row, operation, planning_settings)
         readiness_reasons = _readiness_reasons(
             row,
-            ramp=ramp,
             spear_settings=spear_settings,
             now_utc=now_utc,
         )
@@ -345,6 +346,10 @@ def build_spear_plan(
                 SPEAR_READINESS_REASON_LABELS[reason]
                 for reason in readiness_reasons
             )
+            continue
+
+        if ramp is None:
+            unavailable[mission_id] = "PARKING RAMP NOT MAPPED — travel cannot be planned safely"
             continue
 
         assignment = row.get("assignment")
@@ -477,7 +482,11 @@ def build_spear_plan(
             risks[mission_id] = "AT RISK"
             continue
         if not candidates:
-            unavailable[mission_id] = "NO FEASIBLE RESOURCE"
+            unavailable[mission_id] = (
+                "NO ELIGIBLE FUELER" if not fueler_ids else
+                "NO ELIGIBLE TRUCK" if not truck_ids else
+                "NO FEASIBLE RESOURCE — truck fuel / capacity constraints"
+            )
             continue
 
         ranked_candidates = sorted(candidates, key=lambda candidate: candidate["score"])
@@ -659,7 +668,7 @@ def _plan(
     )
 
 
-def _readiness_reasons(row, *, ramp, spear_settings, now_utc):
+def _readiness_reasons(row, *, spear_settings, now_utc):
     """Return only the canonical basic SPEAR readiness gate."""
     reasons = []
     mission = row["mission"]
@@ -678,12 +687,12 @@ def _readiness_reasons(row, *, ramp, spear_settings, now_utc):
         ):
             reasons.append("inbound_fuel")
 
-    if ramp not in SPEAR_RAMP_ORDER:
+    if not row.get("parking_valid"):
         reasons.append("parking")
 
     arrival = row.get("arrival_mission")
     arrival_ready = (
-        str(row.get("arrival_status") or "").strip().lower() == "arrived"
+        str(row.get("arrival_status") or "").strip().casefold() in {"on ground", "arrived"}
     )
     if not arrival_ready and arrival is not None:
         actual_block_in = _utc_naive(
@@ -746,7 +755,8 @@ def _assignment_explanation(
         ),
         "aircraft_ready": _display_time(timing.aircraft_ready_utc, mission),
         "aircraft_ready_source": (
-            "Block-In" if timing.aircraft_ready_source == "actual_block_in" else "ETA + 5"
+            "Block-In" if timing.aircraft_ready_source == "actual_block_in" else
+            "ETA + 5" if timing.aircraft_ready_source == "eta_plus_buffer" else "Unknown"
         ),
         "truck_travel_minutes": _minutes_display(selected["travel_minutes"]),
         "fueler_travel_minutes": _minutes_display(selected["travel_minutes"] / 2),
@@ -765,7 +775,10 @@ def _assignment_explanation(
         "reserve_gallons": settings.minimum_truck_reserve_gallons,
         "truck_location": selected["truck_location"],
         "fueler_location": selected["fueler_location"],
-        "early_staging_available": staging_allowed_at_utc < timing.aircraft_ready_utc,
+        "early_staging_available": bool(
+            timing.aircraft_ready_utc
+            and staging_allowed_at_utc < timing.aircraft_ready_utc
+        ),
         "alternatives": alternatives,
         "hard_constraint_notes": _truck_constraint_notes(truck_rows) + (
             ("Fuel demand unavailable: truck fuel feasibility is unverified",)
@@ -877,7 +890,7 @@ def _spear_timing(row, operation, planning_settings):
     mission = row["mission"]
     arrival = row.get("arrival_mission")
     if arrival is None:
-        return None
+        return _unknown_spear_timing(row)
 
     actual_block_in = _utc_naive(
         getattr(arrival, "actual_block_in_datetime_utc", None)
@@ -887,7 +900,7 @@ def _spear_timing(row, operation, planning_settings):
         or getattr(arrival, "planned_datetime_utc", None)
     )
     if actual_block_in is None and arrival_eta is None:
-        return None
+        return _unknown_spear_timing(row)
 
     departure = _departure_at(row)
     timing_mission = SimpleNamespace(
@@ -973,6 +986,19 @@ def _spear_timing(row, operation, planning_settings):
     )
 
 
+def _unknown_spear_timing(row):
+    """Keep a data-ready arrival evaluable without inventing timing evidence."""
+    return SimpleNamespace(
+        aircraft_ready_utc=None,
+        aircraft_ready_source="unknown",
+        planning_demand_gallons=_decimal_or_none(row.get("planning_demand_gallons")),
+        setup_minutes=None,
+        pump_minutes=None,
+        finishing_minutes=None,
+        total_duration_minutes=None,
+    )
+
+
 def _departure_at(row):
     mission = row["mission"]
     return _utc_naive(mission.eta_datetime_utc or mission.planned_datetime_utc)
@@ -1008,7 +1034,7 @@ def _schedule_pair(
     )
     truck_ready = max(truck_arrival, staging_allowed_at_utc)
     fueler_ready = max(fueler_arrival, staging_allowed_at_utc)
-    start = max(timing.aircraft_ready_utc, truck_ready, fueler_ready)
+    start = max(truck_ready, fueler_ready, timing.aircraft_ready_utc or truck_ready)
     finish = (
         start + timedelta(minutes=float(timing.total_duration_minutes))
         if timing.total_duration_minutes is not None
@@ -1052,7 +1078,7 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
         ),
     )
     for row in completed:
-        ramp = _ramp(row.get("parking_position"), allow_unknown=True)
+        ramp = _parking_ramp(row.get("parking_position"))
         if ramp not in SPEAR_RAMP_ORDER:
             continue
         assignment = row["assignment"]
@@ -1128,6 +1154,17 @@ def _fueler_sort_key(user):
         (getattr(user, "username", None) or "").casefold(),
         user.id,
     )
+
+
+def _parking_ramp(value):
+    """Resolve only established parking positions, including canonical lane 2."""
+    match = re.fullmatch(r"([ABCDER])(\d{1,2})(?: / S2)?", str(value or "").strip().upper())
+    if not match:
+        return None
+    code, number = match.groups()
+    if f"{code}{int(number):02d}" not in VALID_PARKING_POSITIONS:
+        return None
+    return dict(RAMP_OPTIONS).get(code)
 
 
 def _ramp(value, *, allow_unknown=False):

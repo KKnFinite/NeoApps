@@ -751,6 +751,7 @@ def _clear_optional_dispatch_enrichment(context):
             assignment_recommendation_reason_display=None,
             spear_step=None,
             spear_risk=None,
+            spear_ready=False,
             spear_waiting_for_data=None,
             spear_readiness_reasons=(),
             spear_problem=None,
@@ -5655,6 +5656,10 @@ def _attach_spear_plan(rows, truck_visuals, plan):
         mission_id = row["mission"].id
         row["spear_step"] = None
         row["spear_risk"] = plan.risks_by_mission_id.get(mission_id)
+        row["spear_ready"] = (
+            mission_id in plan.readiness_by_mission_id
+            and not plan.readiness_by_mission_id[mission_id]
+        )
         row["spear_waiting_for_data"] = plan.waiting_for_data_by_mission_id.get(
             mission_id
         )
