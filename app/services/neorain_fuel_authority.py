@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import timedelta
 
 from app.extensions import db
 from app.models import (
@@ -78,6 +79,13 @@ def completed_scorpion_fuel_by_mission(operation):
         )
         .all()
     )
+    # Events from the first COMPLETE often receive created/updated DB defaults
+    # a fraction of a millisecond AFTER completed_at_utc. That is publication,
+    # not a fuel correction. Keep this decision read-only and mission-scoped.
+    events_by_mission = {}
+    for assignment, event in rows:
+        events_by_mission.setdefault(assignment.sort_date_mission_id, []).append(event)
+
     values = {}
     for assignment, event in rows:
         mission_id = assignment.sort_date_mission_id
@@ -85,16 +93,35 @@ def completed_scorpion_fuel_by_mission(operation):
             continue
         if event.neo_fuel_lbs is None and event.center_fuel_lbs is None:
             continue
+
+        initial_cycle = int(event.cycle_number or 1)
+        prior_cycle = next(
+            (
+                previous for previous in events_by_mission[mission_id]
+                if int(previous.cycle_number or 1) < initial_cycle
+                and (previous.neo_fuel_lbs is not None or previous.center_fuel_lbs is not None)
+            ),
+            None,
+        )
+        later_cycle_changed_fuel = (
+            prior_cycle is not None
+            and (event.neo_fuel_lbs, event.center_fuel_lbs)
+            != (prior_cycle.neo_fuel_lbs, prior_cycle.center_fuel_lbs)
+        )
+        edited_after_publication = bool(
+            event.created_at
+            and event.updated_at
+            and assignment.completed_at_utc
+            and event.updated_at
+            > max(event.created_at, assignment.completed_at_utc)
+            + timedelta(milliseconds=1)
+        )
         revision = _fuel_revision(assignment, event)
         values[mission_id] = {
             "neo_fuel": _fuel_value(event.neo_fuel_lbs),
             "center_fuel": _fuel_value(event.center_fuel_lbs),
             "revision": revision,
-            "is_correction": bool(
-                assignment.completed_at_utc
-                and event.updated_at
-                and event.updated_at > assignment.completed_at_utc
-            ),
+            "is_correction": bool(later_cycle_changed_fuel or edited_after_publication),
         }
     return values
 
@@ -141,14 +168,11 @@ def fuel_review_pending_by_mission(operation, fuel_by_mission):
             NeoRainFuelReviewAcknowledgement.sort_date_mission_id.in_(fuel_by_mission),
         ).all()
     }
-    # The initial publication is not a correction. A revision becomes pending
-    # only after this mission has had an earlier acknowledgement.
-    acknowledged_missions = {
-        mission_id for mission_id, _revision in acknowledgements
-    }
+    # Never demand review for a first publication or an unchanged later cycle.
+    # An acknowledged correction stays acknowledged until a NEW fuel revision.
     return {
-        mission_id: (
-            (value.get("is_correction") or mission_id in acknowledged_missions)
+        mission_id: bool(
+            value.get("is_correction")
             and (mission_id, value["revision"]) not in acknowledgements
         )
         for mission_id, value in fuel_by_mission.items()
