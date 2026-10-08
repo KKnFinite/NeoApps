@@ -18,6 +18,10 @@
         <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
     </div>
     {% include "neonodes/neoscorpion/_nightly_assets.html" %}
+    {% if operation %}
+    <div class="neoscorpion-dispatch-insights" aria-label="SPEAR and fueling performance">
+    <section class="neoscorpion-dispatch-insights-spear" aria-label="SPEAR">
+    <h2>SPEAR</h2>
     {% if operation and spear_unavailable %}
     <div class="neoscorpion-spear-fleet-status is-at-risk" data-spear-fleet-status>
         SPEAR · UNAVAILABLE
@@ -40,6 +44,29 @@
             {% else %}<span>Collecting qualifying completed current-sort work.</span>{% endfor %}
         </div>
     </details>
+    {% endif %}
+    </section>
+    {% set performance = fueling_performance|default({'fuelers': (), 'trucks': ()}) %}
+    <section class="neoscorpion-dispatch-performance" aria-label="Fueling Performance" data-fueling-performance>
+        <h2>FUELING PERFORMANCE</h2>
+        <div class="neoscorpion-dispatch-performance-columns">
+            <div><h3>FUELERS</h3>
+                {% for item in performance.fuelers %}
+                <div class="neoscorpion-dispatch-performance-row" data-performance-fueler-id="{{ item.id }}">
+                    <strong>{{ item.name }}</strong><span>{{ item.jobs }} {{ 'job' if item.jobs == 1 else 'jobs' }} · PROF {{ item.prof if item.prof is not none else '—' }}</span>
+                </div>
+                {% else %}<p class="neoscorpion-dispatch-performance-empty">No selected fuelers.</p>{% endfor %}
+            </div>
+            <div><h3>TRUCKS</h3>
+                {% for item in performance.trucks %}
+                <div class="neoscorpion-dispatch-performance-row" data-performance-truck-id="{{ item.id }}">
+                    <strong>{{ item.name }}</strong><span>{{ item.jobs }} {{ 'job' if item.jobs == 1 else 'jobs' }} · PROF {{ item.prof if item.prof is not none else '—' }}</span>
+                </div>
+                {% else %}<p class="neoscorpion-dispatch-performance-empty">No selected trucks.</p>{% endfor %}
+            </div>
+        </div>
+    </section>
+    </div>
     {% endif %}
     {% if operation and truck_visuals %}
     <aside class="neoscorpion-truck-visual-panel" aria-label="Tonight's fuel truck capacity">

@@ -1418,7 +1418,10 @@ def fuel_dispatch_spear_action():
         flash("Access denied.", "error")
         return _dispatch_response(gateway, access, status_code=403)
     try:
-        context = fuel_dispatch_context(gateway, include_asset_choices=True, display_nicknames=False)
+        context = fuel_dispatch_context(
+            gateway, include_asset_choices=True, display_nicknames=False,
+            include_fueling_performance=False,
+        )
         operation = context["operation"]
         plan = context["spear_plan"]
         if operation is None or plan is None:

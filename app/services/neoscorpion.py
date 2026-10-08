@@ -358,12 +358,14 @@ def _fuel_assignments_revision_for_operation(operation):
     return int(revision or 0)
 
 
-def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nicknames=True):
+def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nicknames=True,
+                          include_fueling_performance=True):
     """Build core Dispatch first, then add optional planning intelligence."""
     context = _manual_fuel_dispatch_context(
         gateway, include_asset_choices=include_asset_choices
     )
     if context["operation"] is None:
+        context["fueling_performance"] = {"fuelers": (), "trucks": ()}
         return context
 
     nicknames = {}
@@ -374,6 +376,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
                  *(row["assigned_fueler"] for row in context["rows"])]
         nicknames = fueler_nicknames(gateway, users)
 
+    configured_planning_settings = None
     stage = "assignment recommendations"
     try:
         # Read-only enrichment must remain isolated from operational Dispatch.
@@ -430,6 +433,10 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
         _mark_spear_unavailable(context)
         if display_nicknames:
             _apply_operational_fueler_names(context, nicknames)
+        if include_fueling_performance:
+            context["fueling_performance"] = _fueling_performance_context(
+                context, gateway, nicknames,
+            )
         return context
 
     context.update(
@@ -441,7 +448,87 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
     )
     if display_nicknames:
         _apply_operational_fueler_names(context, nicknames)
+    if include_fueling_performance:
+        context["fueling_performance"] = _fueling_performance_context(
+            context, gateway, nicknames, planning_settings=configured_planning_settings,
+        )
     return context
+
+
+def _fueling_performance_context(context, gateway, nicknames, *, planning_settings=None):
+    """Current-sort physical event scores for selected resources only."""
+    fuelers = [row["user"] for row in context["nightly_fuelers"] if row["user"].is_active]
+    trucks = [row["truck"] for row in context["nightly_trucks"] if row["truck"].is_active]
+    fueler_ids = {user.id for user in fuelers}
+    truck_ids = {truck.id for truck in trucks}
+    totals = {("fueler", user_id): [0, Decimal(0), Decimal(0)] for user_id in fueler_ids}
+    totals.update({("truck", truck_id): [0, Decimal(0), Decimal(0)] for truck_id in truck_ids})
+    operation = context["operation"]
+    if operation is not None and totals:
+        if planning_settings is None:
+            planning_settings = assignment_planning_settings(gateway, settings=context["settings"])
+        events = (
+            db.session.query(
+                NeoScorpionFuelingEvent.fueler_user_id,
+                NeoScorpionFuelingEvent.fuel_truck_id,
+                NeoScorpionFuelingEvent.tail_number,
+                NeoScorpionFuelingEvent.transfer_fuel_gallons,
+                NeoScorpionFuelingEvent.started_at_utc,
+                NeoScorpionFuelingEvent.ended_at_utc,
+                NeoScorpionFuelWorkState.ended_early_at_utc,
+                NeoScorpionFuelAssignment.hold_at_utc,
+            )
+            .join(NeoScorpionFuelWorkState, NeoScorpionFuelWorkState.id == NeoScorpionFuelingEvent.fuel_work_state_id)
+            .join(NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.id == NeoScorpionFuelingEvent.fuel_assignment_id)
+            .filter(
+                NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
+                NeoScorpionFuelingEvent.event_type.in_(("fuel", "uplift")),
+                NeoScorpionFuelingEvent.transfer_fuel_gallons > 0,
+                NeoScorpionFuelingEvent.started_at_utc.isnot(None),
+                NeoScorpionFuelingEvent.ended_at_utc.isnot(None),
+                db.or_(
+                    NeoScorpionFuelingEvent.fueler_user_id.in_(fueler_ids),
+                    NeoScorpionFuelingEvent.fuel_truck_id.in_(truck_ids),
+                ),
+            )
+            .all()
+        )
+        for event in events:
+            started, ended = event.started_at_utc, event.ended_at_utc
+            if ended <= started or event.fueler_user_id is None:
+                continue
+            if event.ended_early_at_utc is not None and ended >= event.ended_early_at_utc:
+                continue
+            if event.hold_at_utc is not None and event.hold_at_utc <= ended:
+                continue
+            rate = planning_settings.pump_rate_for(detailed_aircraft_type_for_tail(event.tail_number))
+            if rate is None or Decimal(rate) <= 0:
+                continue
+            actual_minutes = Decimal(str((ended - started).total_seconds())) / Decimal(60)
+            if actual_minutes <= 0:
+                continue
+            expected_minutes = Decimal(event.transfer_fuel_gallons) / Decimal(rate)
+            for key in (("fueler", event.fueler_user_id), ("truck", event.fuel_truck_id)):
+                if key in totals:
+                    total = totals[key]
+                    total[0] += 1
+                    total[1] += expected_minutes
+                    total[2] += actual_minutes
+
+    def display_score(kind, resource_id):
+        jobs, expected, actual = totals[(kind, resource_id)]
+        return {
+            "jobs": jobs,
+            "prof": int((Decimal(100) * expected / actual).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+            if jobs and actual > 0 else None,
+        }
+
+    return {
+        "fuelers": tuple({"id": user.id, "name": operational_fueler_name(user, nicknames),
+                          **display_score("fueler", user.id)} for user in fuelers),
+        "trucks": tuple({"id": truck.id, "name": f"TRUCK {truck.truck_number}",
+                         **display_score("truck", truck.id)} for truck in trucks),
+    }
 
 
 def _apply_operational_fueler_names(context, nicknames):
