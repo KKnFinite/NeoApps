@@ -143,6 +143,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             [
                 "Dashboard",
                 "Fuel Dispatch",
+                "Fueling Board",
                 "Truck Manager",
                 "Fueler",
                 "Reports",

@@ -141,6 +141,7 @@ class PermissionRulesTest(unittest.TestCase):
             "NeoScorpion": {
                 "neoscorpion.dashboard.view",
                 "neoscorpion.fuel_dispatch.view",
+                "neoscorpion.fueling_board.view",
                 "neoscorpion.hanzo.view",
                 "neoscorpion.fueler.view",
                 "neoscorpion.truck_manager.view",

@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 import re
 from types import SimpleNamespace
@@ -278,6 +278,7 @@ class NeoScorpionMenuItem:
 NEOSCORPION_MENU = (
     NeoScorpionMenuItem("Dashboard", "neoscorpion.index", "neoscorpion.dashboard.view", "dashboard"),
     NeoScorpionMenuItem("Fuel Dispatch", "neoscorpion.fuel_dispatch", "neoscorpion.fuel_dispatch.view", "dispatch"),
+    NeoScorpionMenuItem("Fueling Board", "neoscorpion.fueling_board", "neoscorpion.fueling_board.view", "fueling-board"),
     NeoScorpionMenuItem(
         "Truck Manager",
         "neoscorpion.truck_manager",
@@ -791,6 +792,63 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         "operational_fueler_name": operational_name,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
+
+
+def fueling_board_context(gateway, user):
+    """Read-only projection of the same current-sort work visible to Fuelers."""
+    context = fueler_context(gateway, user, dispatcher=True)
+    rows = context["rows"]
+    nicknames = fueler_nicknames(gateway, (row["assigned_fueler"] for row in rows))
+
+    def etd_key(row):
+        mission = row["mission"]
+        departure = mission.eta_datetime_utc or mission.planned_datetime_utc
+        if departure is not None and departure.tzinfo is not None:
+            departure = departure.astimezone(timezone.utc).replace(tzinfo=None)
+        return (departure is None, departure or datetime.max, mission.flight_number or "", row["assignment"].id)
+
+    board_rows = []
+    for row in sorted(rows, key=etd_key):
+        if row["administratively_complete"]:
+            continue
+        progress = _fueling_board_progress(row)
+
+        exceptions = []
+        if row["fueler_work_blocked"] or row["dispatch_status_key"] == "review":
+            exceptions.append(row["hold_reason_display"] or row["dispatch_status_detail"] or "Dispatcher review required")
+        if row["direction_mismatch"]:
+            exceptions.append("Opposite fuel direction requires review.")
+        if row["fuel_configuration_message"]:
+            exceptions.append(row["fuel_configuration_message"])
+        board_rows.append({
+            "row": row,
+            "fueler_name": operational_fueler_name(row["assigned_fueler"], nicknames),
+            "progress": progress,
+            "exceptions": tuple(dict.fromkeys(exceptions)),
+        })
+
+    return {
+        "operation": context["operation"],
+        "board_rows": board_rows,
+        "fuel_assignments_revision": context["fuel_assignments_revision"],
+        "fuel_assignments_refresh": context["fuel_assignments_refresh"],
+    }
+
+
+def _fueling_board_progress(row):
+    """Display milestones already present in canonical assignment/work state."""
+    work = row["fuel_work_state"]
+    if row["fueler_work_blocked"] or row["dispatch_status_key"] == "review" or row["direction_mismatch"]:
+        return "HOLD / REVIEW"
+    if row["is_off"]:
+        return "OFF / AWAITING COMPLETE"
+    if row["actual_total_display"] != "INCOMPLETE":
+        return "ACTUAL ENTERED"
+    if (work and work.truck_segment_started_at_utc) or (row["transfer_fuel_gallons"] or 0) > 0:
+        return "FUELING"
+    if work and work.on_at_utc:
+        return "ON"
+    return "ASSIGNED"
 
 
 def truck_manager_context(gateway):

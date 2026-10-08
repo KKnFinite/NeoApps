@@ -1252,3 +1252,28 @@
     background: #0c1d29;
     color: #9ccce3;
 }
+
+/* Read-only live Fueling Board: card identity is stable across revision updates. */
+.neoscorpion-board-list { display: grid; gap: 12px; padding: 14px; }
+.neoscorpion-board-card { min-width: 0; padding: 13px 15px; border: 1px solid #31516a; background: #0a1826; color: #d8e7f0; }
+.neoscorpion-board-card.is-review { border-color: #c56d54; }
+.neoscorpion-board-card-head { display: grid; grid-template-columns: minmax(65px, .25fr) minmax(0, 1fr) auto; align-items: center; gap: 14px; border-bottom: 1px solid #28435a; padding-bottom: 10px; }
+.neoscorpion-board-card-head > div { display: grid; gap: 2px; min-width: 0; }
+.neoscorpion-board-card-head small, .neoscorpion-board-facts dt { color: #8fb4c9; font-size: .69rem; font-weight: 800; letter-spacing: .08em; }
+.neoscorpion-board-card-head strong { font-size: clamp(1.1rem, 2vw, 1.6rem); }
+.neoscorpion-board-flight span { overflow-wrap: anywhere; }
+.neoscorpion-board-progress { border: 1px solid #4b7b9a; padding: 5px 9px; color: #aee0ef; font-size: .75rem; font-weight: 900; text-align: center; }
+.neoscorpion-board-card.is-review .neoscorpion-board-progress { border-color: #c56d54; color: #f2b6a4; }
+.neoscorpion-board-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; margin: 11px 0 0; }
+.neoscorpion-board-facts div { min-width: 0; }
+.neoscorpion-board-facts dt, .neoscorpion-board-facts dd { margin: 0; }
+.neoscorpion-board-facts dd { margin-top: 2px; font-weight: 800; overflow-wrap: anywhere; }
+.neoscorpion-board-exception { margin: 9px 0 0; color: #f0b7a6; font-weight: 750; }
+.neoscorpion-board-refresh-status { min-height: 1.3em; }
+@media (max-width: 700px) {
+    .neoscorpion-board-list { padding: 9px; gap: 9px; }
+    .neoscorpion-board-card { padding: 10px; }
+    .neoscorpion-board-card-head { grid-template-columns: 65px minmax(0, 1fr); gap: 8px; }
+    .neoscorpion-board-progress { grid-column: 1 / -1; justify-self: start; }
+    .neoscorpion-board-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+}

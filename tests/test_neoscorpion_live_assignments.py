@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime, time
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sqlalchemy import event
@@ -13,6 +14,8 @@ from app.models import (
     LiveScreenRefreshSetting,
     NeoNode,
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelerNickname,
+    NeoScorpionFuelWorkState,
     NeoScorpionSettings,
     NeoScorpionSortAssetState,
     PortalAppAccess,
@@ -24,6 +27,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.neoscorpion import _fueling_board_progress
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
 
@@ -54,6 +58,134 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.context.pop()
+
+    def test_fueling_board_watcher_access_and_server_side_denial(self):
+        watcher = self._add_user("board_watcher", "watcher")
+        db.session.commit()
+        self._login(watcher)
+        for path in ("/neoscorpion/fueling-board", "/neoscorpion/fueling-board/live-panel",
+                     "/neoscorpion/fueling-board/revision"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn(b"neoscorpion-fueler-form", response.data)
+                self.assertEqual(self.client.post(path).status_code, 405)
+        with patch("app.neonodes.neoscorpion.routes.permission_access", return_value={"can_view": False}):
+            for path in ("/neoscorpion/fueling-board", "/neoscorpion/fueling-board/live-panel",
+                         "/neoscorpion/fueling-board/revision"):
+                self.assertEqual(self.client.get(path).status_code, 403)
+
+    def test_fueling_board_orders_active_assignments_and_uses_nicknames(self):
+        watcher = self._add_user("board_viewer", "watcher")
+        fueler = self._add_user("board_fueler", "operator")
+        idle = self._add_user("board_idle", "operator")
+        self._configure_active_night_sort()
+        operation, later = self._add_operation_with_mission()
+        earlier = SortDateMission(
+            sort_date=operation.sort_date, gateway_code=self.gateway.code,
+            sort_name="night", sort_date_operation_id=operation.id,
+            mission_type="departure", mission_source="manual", flight_number="UPS400",
+            origin=self.gateway.code, destination="ORD", timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 8, 17, 22, 30),
+            planned_datetime_utc=datetime(2026, 8, 18, 3, 30), planned_source="manual",
+            assigned_tail_number="N400UP", tail_source="manual", fuel_status="waiting",
+        )
+        unassigned = SortDateMission(
+            sort_date=operation.sort_date, gateway_code=self.gateway.code,
+            sort_name="night", sort_date_operation_id=operation.id,
+            mission_type="departure", mission_source="manual", flight_number="UPS300",
+            origin=self.gateway.code, destination="MIA", timezone="America/Chicago",
+            planned_datetime_local=datetime(2026, 8, 17, 21, 30),
+            planned_datetime_utc=datetime(2026, 8, 18, 2, 30), planned_source="manual",
+            assigned_tail_number="N300UP", tail_source="manual", fuel_status="waiting",
+        )
+        db.session.add_all([earlier, unassigned])
+        db.session.flush()
+        early_assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id, sort_date_mission_id=earlier.id,
+            assigned_fueler_user_id=fueler.id, current_cycle_type="defuel",
+        )
+        late_assignment = NeoScorpionFuelAssignment(
+            sort_date_operation_id=operation.id, sort_date_mission_id=later.id,
+            assigned_fueler_user_id=fueler.id, current_cycle_type="uplift",
+        )
+        db.session.add_all([
+            early_assignment, late_assignment,
+            NeoScorpionFuelerNickname(gateway_id=self.gateway.id, user_id=fueler.id,
+                                      nickname="Falcon", nickname_key="falcon"),
+            NeoScorpionSortAssetState(sort_date_operation_id=operation.id, revision=4),
+        ])
+        db.session.commit()
+        self._login(watcher)
+
+        statements = []
+        def capture_statement(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+        event.listen(db.engine, "before_cursor_execute", capture_statement)
+        try:
+            response = self.client.get("/neoscorpion/fueling-board")
+        finally:
+            event.remove(db.engine, "before_cursor_execute", capture_statement)
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(body.index('data-board-assignment-id="' + str(early_assignment.id)),
+                        body.index('data-board-assignment-id="' + str(late_assignment.id)))
+        self.assertIn("Falcon", body)
+        self.assertIn("DEFUEL", body)
+        self.assertIn("UPLIFT", body)
+        self.assertNotIn("UPS300", body)
+        self.assertNotIn(idle.display_name, body)
+        self.assertNotIn("neoscorpion-fueler-form", body)
+        self.assertFalse(any(sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")) for sql in statements))
+
+        later.eta_datetime_utc = datetime(2026, 8, 18, 3, 0)
+        db.session.commit()
+        reordered = self.client.get("/neoscorpion/fueling-board/live-panel").get_json()["html"]
+        self.assertLess(reordered.index(f'data-board-assignment-id="{late_assignment.id}"'),
+                        reordered.index(f'data-board-assignment-id="{early_assignment.id}"'))
+
+        early_assignment.review_status = "complete"
+        db.session.commit()
+        panel = self.client.get("/neoscorpion/fueling-board/live-panel").get_json()
+        self.assertNotIn(f'data-board-assignment-id="{early_assignment.id}"', panel["html"])
+        self.assertIn(f'data-board-assignment-id="{late_assignment.id}"', panel["html"])
+        self.assertEqual(panel["revision"], 4)
+
+        late_assignment.completed_at_utc = datetime(2026, 8, 18, 2, 45)
+        asset_state = NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation.id).one()
+        asset_state.revision = 5
+        db.session.commit()
+        panel = self.client.get("/neoscorpion/fueling-board/live-panel").get_json()
+        self.assertNotIn('data-board-assignment-id=', panel["html"])
+        self.assertEqual(self.client.get("/neoscorpion/fueling-board/revision").get_json()["revision"], 5)
+
+    def test_fueling_board_progress_uses_canonical_milestones(self):
+        work = SimpleNamespace(on_at_utc=None, truck_segment_started_at_utc=None)
+        row = {"fuel_work_state": work, "fueler_work_blocked": False,
+               "dispatch_status_key": "assigned", "direction_mismatch": False,
+               "is_off": False, "actual_total_display": "INCOMPLETE",
+               "transfer_fuel_gallons": None}
+        self.assertEqual(_fueling_board_progress(row), "ASSIGNED")
+        work.on_at_utc = datetime(2026, 8, 18, 1)
+        self.assertEqual(_fueling_board_progress(row), "ON")
+        work.truck_segment_started_at_utc = datetime(2026, 8, 18, 1, 5)
+        self.assertEqual(_fueling_board_progress(row), "FUELING")
+        row["actual_total_display"] = "42.0"
+        self.assertEqual(_fueling_board_progress(row), "ACTUAL ENTERED")
+        row["is_off"] = True
+        self.assertEqual(_fueling_board_progress(row), "OFF / AWAITING COMPLETE")
+        row["fueler_work_blocked"] = True
+        self.assertEqual(_fueling_board_progress(row), "HOLD / REVIEW")
+
+    def test_fueling_board_refresh_contract(self):
+        with open("app/static/js/neoscorpion_fueling_board_live.js", encoding="utf-8") as source:
+            script = source.read()
+        self.assertIn("NeoLiveUpdates.create", script)
+        self.assertIn("[data-board-assignment-id]", script)
+        self.assertIn("card.isEqualNode(nextCard)", script)
+        self.assertIn("currentList.insertBefore", script)
+        self.assertIn("window.scrollTo(scrollX, scrollY)", script)
+        self.assertNotIn("window.location.reload", script)
 
     def test_revision_endpoint_authorization_and_no_current_sort(self):
         operator = self._add_user("fueler_operator", "operator")

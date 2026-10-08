@@ -19,6 +19,7 @@ from app.services.neoscorpion import (
     deactivate_truck,
     fuel_dispatch_context,
     fuel_assignments_live_revision,
+    fueling_board_context,
     hanzo_context,
     fueler_context,
     FuelerDataConflict,
@@ -97,6 +98,7 @@ FUEL_DISPATCH_EDIT_PERMISSION = "neoscorpion.fuel_dispatch.edit"
 HANZO_VIEW_PERMISSION = "neoscorpion.hanzo.view"
 NEOSCORPION_DASHBOARD_VIEW_PERMISSION = "neoscorpion.dashboard.view"
 FUELER_VIEW_PERMISSION = "neoscorpion.fuel_assignments.view"
+FUELING_BOARD_VIEW_PERMISSION = "neoscorpion.fueling_board.view"
 FUELER_EDIT_PERMISSION = "neoscorpion.fueler.edit"
 TRUCK_MANAGER_VIEW_PERMISSION = "neoscorpion.truck_manager.view"
 TRUCK_MANAGER_EDIT_PERMISSION = "neoscorpion.truck_manager.edit"
@@ -1019,6 +1021,43 @@ def fuel_assignments_live_panel():
             ),
         }
     )
+
+
+@bp.get("/fueling-board")
+@gateway_node_required("scorpion")
+def fueling_board():
+    if not permission_access(FUELING_BOARD_VIEW_PERMISSION)["can_view"]:
+        return "Access denied.", 403
+    gateway = get_current_gateway()
+    return render_template(
+        "neonodes/neoscorpion/fueling_board.html",
+        gateway=gateway,
+        **fueling_board_context(gateway, current_user),
+    )
+
+
+@bp.get("/fueling-board/live-panel")
+@gateway_node_required("scorpion")
+def fueling_board_live_panel():
+    if not permission_access(FUELING_BOARD_VIEW_PERMISSION)["can_view"]:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    gateway = get_current_gateway()
+    context = fueling_board_context(gateway, current_user)
+    operation = context["operation"]
+    return _json_no_store({
+        "ok": True,
+        "operation_id": operation.id if operation else None,
+        "revision": int(context["fuel_assignments_revision"] or 0),
+        "html": render_template("neonodes/neoscorpion/_fueling_board_panel.html", **context),
+    })
+
+
+@bp.get("/fueling-board/revision")
+@gateway_node_required("scorpion")
+def fueling_board_revision():
+    if not permission_access(FUELING_BOARD_VIEW_PERMISSION)["can_view"]:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    return _json_no_store({"ok": True, **fuel_assignments_live_revision(get_current_gateway())})
 
 
 @bp.get("/fuel-assignments/revision")

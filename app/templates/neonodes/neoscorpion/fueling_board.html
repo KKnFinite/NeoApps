@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Fueling Board | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-fueling-board" aria-label="NeoScorpion Fueling Board"
+    data-fueling-board-live
+    data-revision-url="{{ url_for('neoscorpion.fueling_board_revision') }}"
+    data-panel-url="{{ url_for('neoscorpion.fueling_board_live_panel') }}"
+    data-operation-id="{{ operation.id if operation else '' }}"
+    data-revision="{{ fuel_assignments_revision }}"
+    data-refresh-interval-ms="{{ fuel_assignments_refresh.effective_interval_ms }}">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Fueling Board</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+    {% include "neonodes/neoscorpion/_fueling_board_panel.html" %}
+    <p class="neoscorpion-board-refresh-status" data-fueling-board-refresh-status role="status" aria-live="polite"></p>
+</section>
+<script src="{{ url_for('static', filename='js/neoscorpion_fueling_board_live.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+{% endblock %}

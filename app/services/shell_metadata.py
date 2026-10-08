@@ -566,6 +566,8 @@ def _neoermac_labels(path, is_view_outbound):
 def _neoscorpion_labels(path):
     if path.startswith("/neoscorpion/fuel-dispatch"):
         return "FUEL DISPATCH", "DISPATCH"
+    if path.startswith("/neoscorpion/fueling-board"):
+        return "FUELING BOARD", "BOARD"
     if path.startswith("/neoscorpion/hanzo"):
         return "HANZO", "HANZO"
     if path.startswith("/neoscorpion/fueler"):

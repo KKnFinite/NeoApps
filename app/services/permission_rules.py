@@ -367,6 +367,11 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoScorpion Fuel Dispatch screens.",
     ),
     (
+        "neoscorpion.fueling_board.view",
+        "watcher",
+        "View the read-only current-sort NeoScorpion Fueling Board.",
+    ),
+    (
         "neoscorpion.fuel_dispatch.edit",
         "simulator",
         "Edit NeoScorpion dispatcher fuel assignments and mission fuel requirements.",
@@ -1247,6 +1252,15 @@ PERMISSION_RULE_ITEMS = (
         {
             "view": "neoscorpion.fuel_dispatch.view",
             "edit": "neoscorpion.fuel_dispatch.edit",
+        },
+    ),
+    (
+        "scorpion",
+        "neoscorpion.fueling_board",
+        "Fueling Board",
+        "Read-only current-sort fuel assignment board.",
+        {
+            "view": "neoscorpion.fueling_board.view",
         },
     ),
     (

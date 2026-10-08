@@ -1,0 +1,36 @@
+<section class="neoscorpion-panel neoscorpion-board-panel" data-fueling-board-panel>
+    <div class="neoscorpion-panel-head">
+        <span>ACTIVE FUELING ASSIGNMENTS</span>
+        <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}NO CURRENT SORT{% endif %}</strong>
+    </div>
+    <div class="neoscorpion-board-list" data-board-list>
+        {% if not operation %}
+        <p class="neoscorpion-empty" data-board-empty>No current sort.</p>
+        {% elif not board_rows %}
+        <p class="neoscorpion-empty" data-board-empty>No active assigned fueling work.</p>
+        {% else %}
+        {% for item in board_rows %}
+        {% set row = item.row %}
+        <article class="neoscorpion-board-card{% if item.progress == 'HOLD / REVIEW' %} is-review{% endif %}"
+            data-board-assignment-id="{{ row.assignment.id }}">
+            <header class="neoscorpion-board-card-head">
+                <div><small>ETD</small><strong>{{ row.departure_time or '-' }}</strong></div>
+                <div class="neoscorpion-board-flight"><strong>{{ row.mission.flight_number or '-' }}</strong><span>{{ row.destination }}</span></div>
+                <span class="neoscorpion-board-progress">{{ item.progress }}</span>
+            </header>
+            <dl class="neoscorpion-board-facts">
+                <div><dt>FUELER</dt><dd>{{ item.fueler_name }}</dd></div>
+                <div><dt>TAIL</dt><dd>{{ row.tail_number }}</dd></div>
+                <div><dt>PARKING</dt><dd>{{ row.parking_position }}</dd></div>
+                <div><dt>TRUCK</dt><dd>{{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}</dd></div>
+                <div><dt>ON</dt><dd>{{ row.on_time }}</dd></div>
+                <div><dt>CYCLE</dt><dd>{{ row.cycle_type_label }}</dd></div>
+                <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }}</dd></div>
+                <div><dt>EST. GALLONS</dt><dd>{{ row.estimated_fuel_display }}</dd></div>
+            </dl>
+            {% for exception in item.exceptions %}<p class="neoscorpion-board-exception">{{ exception }}</p>{% endfor %}
+        </article>
+        {% endfor %}
+        {% endif %}
+    </div>
+</section>
