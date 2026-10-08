@@ -430,11 +430,13 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         mission.assigned_tail_number = "N422UP"
         db.session.commit()
 
-        with self.assertRaisesRegex(ValueError, "Confirm the tail swap"):
-            start_follow_up_fuel_cycle(self.gateway, self.dispatcher, assignment.id,
-                "uplift", "55.0", None, None)
-        started = confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id,
-            required_fuel="55.0", expected_cycle=1, expected_tail="N422UP")
+        started = start_follow_up_fuel_cycle(
+            self.gateway, self.dispatcher, assignment.id,
+            "uplift", "55.0", None, None,
+        )
+        db.session.commit()
+        self.assertEqual(assignment.confirmed_tail_number, "N422UP")
+        self.assertEqual(assignment.current_cycle_number, 2)
         self.assertTrue(started.fuel_work_state is None or not started.fuel_work_state.tank_states)
 
     def test_defuel_adds_gallons_sets_sump_and_holds_other_assignment(self):

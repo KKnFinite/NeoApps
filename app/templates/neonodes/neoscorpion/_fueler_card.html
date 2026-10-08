@@ -46,9 +46,9 @@
                 </header>
                 {% if row.fueler_work_blocked %}
                 <p class="neoscorpion-calculation-warning"><strong>HOLD / REVIEW REQUIRED</strong> {{ row.hold_reason_display }}</p>
-                {% if row.tail_mismatch %}
-                <p class="neoscorpion-calculation-warning">Confirmed tail {{ row.confirmed_tail_number }}; current mission tail {{ row.tail_number }}.</p>
                 {% endif %}
+                {% if row.tail_mismatch %}
+                <p class="neoscorpion-calculation-warning">TAIL SWAP DETECTED · {{ row.confirmed_tail_number }} → {{ row.tail_number }}. Dispatcher acknowledgment pending; fuel work may continue.</p>
                 {% endif %}
                 {% if row.fuel_configuration_message %}
                 <p class="neoscorpion-calculation-warning">{{ row.fuel_configuration_message }}</p>

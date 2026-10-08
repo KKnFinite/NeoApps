@@ -25,63 +25,49 @@ class CycleLinesTest(unittest.TestCase):
         _create_missing_application_tables(tables)
         self.assertIn('neoscorpion_fuel_cycle_history', inspect(db.engine).get_table_names())
 
-    def test_swap_freezes_history_and_resets_resources_with_confirmed_required(self):
+    def test_tail_acknowledgment_does_not_start_a_new_cycle(self):
         operation, mission, assignment = self._assignment()
-        mission.assigned_tail_number = 'N413UP'
+        mission.assigned_tail_number = "N413UP"
         assignment.transfer_fuel_gallons = 100
+        old_fueler = assignment.assigned_fueler_user_id
+        old_required = mission.planned_fuel_load
         db.session.commit()
-        with self.assertRaisesRegex(ValueError, 'Required Fuel'):
-            service.confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id)
-        with self.assertRaisesRegex(ValueError, 'tail changed again'):
-            service.confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id,
-                required_fuel='42', expected_cycle=1, expected_tail='N414UP')
-        service.confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id,
-            required_fuel='42', expected_cycle=1, expected_tail='N413UP')
+        with self.assertRaisesRegex(ValueError, "tail changed again"):
+            service.confirm_assignment_tail(
+                self.gateway, self.dispatcher, assignment.id,
+                expected_cycle=1, expected_tail="N414UP",
+            )
+        service.confirm_assignment_tail(
+            self.gateway, self.dispatcher, assignment.id,
+            expected_cycle=1, expected_tail="N413UP",
+        )
         db.session.commit()
+        self.assertEqual(assignment.current_cycle_number, 1)
+        self.assertEqual(assignment.assigned_fueler_user_id, old_fueler)
+        self.assertEqual(assignment.transfer_fuel_gallons, 100)
+        self.assertEqual(mission.planned_fuel_load, old_required)
+        self.assertEqual(NeoScorpionFuelCycleHistory.query.count(), 0)
         self.assertEqual(SortDateMission.query.count(), 1)
-        self.assertEqual(assignment.current_cycle_number, 2)
-        self.assertEqual(mission.planned_fuel_load, 42000)
-        self.assertIsNone(assignment.assigned_fueler_user_id)
-        self.assertIsNone(assignment.assigned_truck_id)
-        self.assertIsNone(assignment.transfer_fuel_gallons)
-        history = NeoScorpionFuelCycleHistory.query.one()
-        self.assertEqual(history.snapshot['tail_number'], 'N412UP')
-        self.assertEqual(history.snapshot['transfer_fuel_gallons'], 100)
-        with self.assertRaisesRegex(ValueError, 'cycle changed'):
-            service.confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id,
-                required_fuel='42', expected_cycle=1, expected_tail='N413UP')
-        self.assertEqual(NeoScorpionFuelCycleHistory.query.count(), 1)
-        self._login(self.dispatcher)
-        retry = self.client.post('/neoscorpion/fuel-dispatch/confirm-tail', data={
-            'assignment_id': assignment.id, 'new_required_fuel': '42',
-            'expected_cycle': '1', 'expected_tail': 'N413UP',
-        })
-        self.assertEqual(retry.status_code, 400)
-        self.assertEqual(NeoScorpionFuelCycleHistory.query.count(), 1)
-        html = self.client.get('/neoscorpion/fuel-dispatch').get_data(as_text=True)
-        historical = html.split('data-cycle-history>', 1)[1].split('</tr>', 1)[0]
-        self.assertNotIn('<input', historical)
-        self.assertNotIn('<form', historical)
-        self.assertNotIn('data-fuel-data-open', historical)
-        self.assertEqual(historical.count('<td'), 15)
-        self.assertIn('colspan="15"', html)
-        self.assertIn('HISTORY · TAIL SWAP', historical)
-        self.assertEqual(len(service.fuel_dispatch_context(self.gateway)['rows']), 1)
-        self.assertEqual(service.fueler_context(self.gateway, self.fueler)['rows'], [])
+        self.assertFalse(service.fuel_dispatch_context(self.gateway)["rows"][0]["tail_mismatch"])
 
-    def test_new_tail_measurement_can_be_fob_ready_without_resources(self):
+    def test_new_tail_measurement_is_not_inherited_from_other_mission(self):
         operation, mission, assignment = self._assignment()
-        self._completed_tail_event(operation, 'N413UP', (18000, 16000, 18000), 'UPS9001')
-        mission.assigned_tail_number = 'N413UP'
+        source = self._completed_tail_event(
+            operation, "N413UP", (18000, 16000, 18000), "UPS9001"
+        )
+        mission.assigned_tail_number = "N413UP"
         db.session.commit()
-        result = service.confirm_assignment_tail(self.gateway, self.dispatcher, assignment.id,
-            required_fuel='50', expected_cycle=1, expected_tail='N413UP')
+        result = service.confirm_assignment_tail(
+            self.gateway, self.dispatcher, assignment.id,
+            expected_cycle=1, expected_tail="N413UP",
+        )
         db.session.commit()
-        self.assertEqual(sum(t.remaining_lbs for t in result.fuel_work_state.tank_states), 52000)
-        self.assertTrue(all(t.actual_lbs is None for t in result.fuel_work_state.tank_states))
-        row = next(r for r in service.fuel_dispatch_context(self.gateway)['rows'] if r['mission'].id == mission.id)
-        self.assertTrue(row['fuel_on_board_ready'])
-        service.complete_fuel_on_board(self.gateway, self.dispatcher, mission.id)
+        self.assertIsNone(result.fuel_work_state)
+        row = next(r for r in service.fuel_dispatch_context(self.gateway)["rows"]
+                   if r["mission"].id == mission.id)
+        self.assertFalse(row["fuel_on_board_ready"])
+        self.assertIsNone(row["tail_swap_inherited_event_id"])
+        self.assertNotEqual(source.fuel_assignment_id, assignment.id)
 
     def test_uplift_freezes_completed_line_with_blank_new_resources(self):
         operation, _, _ = self._assignment()

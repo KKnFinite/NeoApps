@@ -620,7 +620,6 @@ def fuel_dispatch_confirm_tail():
             gateway,
             current_user,
             request.form.get("assignment_id"),
-            required_fuel=request.form.get("new_required_fuel"),
             expected_cycle=request.form.get("expected_cycle", ""),
             expected_tail=request.form.get("expected_tail", ""),
         ),
