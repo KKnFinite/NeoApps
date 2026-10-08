@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -188,6 +189,31 @@ class CancelUnassignTest(unittest.TestCase):
                          {'required_fuel_lbs':None}, {'parking_valid':False},
                          {'assignment':SimpleNamespace(assigned_fueler_user_id=1, assigned_truck_id=2)}):
             self.assertFalse(service._ready_to_assign({**row, **override}))
+
+    def test_dispatch_visual_contract_reserves_fob_slot_through_live_refresh(self):
+        operation = self._operation()
+        mission, assignment = self._assignment(operation)
+        truck, nightly = self._truck(operation, assignment, 'VISUAL-1', 500)
+        db.session.add(NeoScorpionTailFuelState(sort_date_operation_id=operation.id,
+            tail_number=mission.assigned_tail_number, inbound_fuel_lbs=12_000))
+        db.session.commit()
+        self._login(self.dispatcher)
+        before = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html']
+        self.assertIn('neoscorpion-dispatch-inbound', before)
+        self.assertIn('neoscorpion-dispatch-required', before)
+        self.assertIn('neoscorpion-dispatch-size-small is-empty" aria-hidden="true">&nbsp;', before)
+        self.assertIn('data-autosave-field="inbound_fuel"', before)
+        self._save_cycle(assignment, remaining=(10, 10, 10), actual=(10, 10, 10), transfer=0)
+        db.session.commit()
+        after = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html']
+        self.assertIn('>FOB 30.0</small>', after)
+        self.assertNotIn('neoscorpion-dispatch-size-small is-empty', after)
+        css = (Path(__file__).resolve().parents[1] / 'app/static/css/26-neoscorpion.css').read_text(encoding='utf-8')
+        self.assertIn('neoscorpion-ready-assign-horizontal 2.3s', css)
+        self.assertIn('is-ready-to-assign > td:first-child', css)
+        self.assertIn('is-ready-to-assign > td:last-child', css)
+        self.assertIn('prefers-reduced-motion: reduce', css)
+        self.assertNotIn('inset 0 0 0 1px', css)
 
     def _unassign(self, assignment, **overrides):
         return service.unassign_assignment_truck(self.gateway, self.dispatcher, assignment.id,
