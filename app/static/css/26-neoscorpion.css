@@ -127,31 +127,33 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) {
     background: rgba(8, 8, 3, .18);
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td {
-    animation: neoscorpion-ready-assign-horizontal 2.3s ease-in-out infinite;
+.neoscorpion-dispatch-primary-row.is-ready-to-assign {
+    --assignment-alert-color: #f0d17a;
+    --assignment-alert-glow: rgba(240, 209, 122, .5);
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td:first-child {
-    animation-name: neoscorpion-ready-assign-left;
+.neoscorpion-dispatch-primary-row.is-ready-to-assign.is-assignment-alert-red {
+    --assignment-alert-color: #ff7773;
+    --assignment-alert-glow: rgba(255, 85, 78, .55);
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td:last-child {
-    animation-name: neoscorpion-ready-assign-right;
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > strong,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > small,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > strong,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > small {
+    animation: neoscorpion-assignment-text-pulse 2.3s ease-in-out infinite;
 }
-@keyframes neoscorpion-ready-assign-horizontal {
-    0%, 100% { box-shadow: inset 0 1px rgba(240, 211, 122, .12), inset 0 -1px rgba(240, 211, 122, .12); }
-    50% { box-shadow: inset 0 2px rgba(240, 211, 122, .45), inset 0 -2px rgba(240, 211, 122, .45); }
-}
-@keyframes neoscorpion-ready-assign-left {
-    0%, 100% { box-shadow: inset 0 1px rgba(240, 211, 122, .12), inset 0 -1px rgba(240, 211, 122, .12), inset 1px 0 rgba(240, 211, 122, .12); }
-    50% { box-shadow: inset 0 2px rgba(240, 211, 122, .45), inset 0 -2px rgba(240, 211, 122, .45), inset 2px 0 rgba(240, 211, 122, .45); }
-}
-@keyframes neoscorpion-ready-assign-right {
-    0%, 100% { box-shadow: inset 0 1px rgba(240, 211, 122, .12), inset 0 -1px rgba(240, 211, 122, .12), inset -1px 0 rgba(240, 211, 122, .12); }
-    50% { box-shadow: inset 0 2px rgba(240, 211, 122, .45), inset 0 -2px rgba(240, 211, 122, .45), inset -2px 0 rgba(240, 211, 122, .45); }
+@keyframes neoscorpion-assignment-text-pulse {
+    0%, 100% { color: var(--assignment-alert-color); text-shadow: none; }
+    50% { color: var(--assignment-alert-color); text-shadow: 0 0 7px var(--assignment-alert-glow); }
 }
 @media (prefers-reduced-motion: reduce) {
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td { animation: none; box-shadow: inset 0 1px rgba(240, 211, 122, .32), inset 0 -1px rgba(240, 211, 122, .32); }
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td:first-child { box-shadow: inset 0 1px rgba(240, 211, 122, .32), inset 0 -1px rgba(240, 211, 122, .32), inset 1px 0 rgba(240, 211, 122, .32); }
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td:last-child { box-shadow: inset 0 1px rgba(240, 211, 122, .32), inset 0 -1px rgba(240, 211, 122, .32), inset -1px 0 rgba(240, 211, 122, .32); }
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > strong,
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > small,
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > strong,
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > small {
+        animation: none;
+        color: var(--assignment-alert-color);
+        text-shadow: none;
+    }
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) > td {
     color: #fffdf5;
@@ -780,6 +782,33 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-dispatch-performance-empty { margin: 0; color: #8fb4c9; font-size: .68rem; }
 @media (max-width: 899px) {
     .neoscorpion-dispatch-insights { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Only the canonical live STATUS pill receives workflow color. */
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-status-pill.is-complete {
+    color: #a2efb6;
+    border-color: #398d58;
+    background: #173926;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-status-pill.is-fueling {
+    color: #ffe79a;
+    border-color: #b28a34;
+    background: #3d3217;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-status-pill.is-assigned {
+    color: #ffc18e;
+    border-color: #b56b38;
+    background: #3d2516;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-status-pill.is-pending-ready {
+    color: #ffaaa5;
+    border-color: #af4946;
+    background: #401d20;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-status-pill.is-pending-missing {
+    color: #c3c7cb;
+    border-color: #697179;
+    background: #292d32;
 }
 
 /* Frozen tail-swap / uplift / defuel cycles have their own row class, so

@@ -1,6 +1,6 @@
 """Focused painted Dispatch table checks using an isolated local sort."""
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as Fixture
@@ -176,7 +176,7 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                 browser.close()
             Fixture.tearDownClass()
 
-    def test_outer_row_pulse_and_fuel_alignment_at_desktop_and_mobile_widths(self):
+    def test_assignment_text_alert_and_fuel_alignment_at_desktop_and_mobile_widths(self):
         Fixture.setUpClass()
         Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"] = 5000
         browser = None
@@ -263,6 +263,7 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                        side_effect=lambda gateway, now=None: [db.session.get(SortDateOperation, operation_id)]):
                 browser = Fixture.pw.chromium.launch()
                 page = browser.new_page()
+                page.clock.install(time=datetime(2026, 10, 8, 3, 59, tzinfo=timezone.utc))
                 Fixture().login(page)
                 page.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1', 'seen')")
                 for width, height in ((1440, 900), (390, 844), (375, 667)):
@@ -302,8 +303,13 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                             return {aligned: Math.abs(first.top - second.top) <= 1,
                                 reserved: fob.getBoundingClientRect().height > 0,
                                 empty: fob.classList.contains('is-empty'),
-                                animations: [cells[0], cells[1], cells.at(-1)].map(
+                                cellAnimations: [cells[0], cells[1], cells.at(-1)].map(
                                     cell => getComputedStyle(cell).animationName),
+                                textAnimations: [row.querySelector('.neoscorpion-dispatch-flight strong'),
+                                    row.querySelector('.neoscorpion-dispatch-flight small'),
+                                    row.querySelector('.neoscorpion-dispatch-etd-parking strong'),
+                                    row.querySelector('.neoscorpion-dispatch-etd-parking small')].map(
+                                    node => getComputedStyle(node).animationName),
                                 rowWidth: row.getBoundingClientRect().width,
                                 cellsWidth: cells.reduce((sum, cell) => sum + cell.getBoundingClientRect().width, 0)};
                         })""")
@@ -311,14 +317,53 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                         for item in geometry:
                             self.assertTrue(item["aligned"] and item["reserved"], item)
                             self.assertAlmostEqual(item["rowWidth"], item["cellsWidth"], delta=2)
-                            self.assertEqual(item["animations"], [
-                                "neoscorpion-ready-assign-left",
-                                "neoscorpion-ready-assign-horizontal",
-                                "neoscorpion-ready-assign-right",
-                            ])
+                            self.assertEqual(item["cellAnimations"], ["none"] * 3)
+                            self.assertEqual(item["textAnimations"],
+                                ["neoscorpion-assignment-text-pulse"] * 4)
+                        if width == 1440:
+                            self.assertEqual(rows.first.get_attribute('data-etd-utc'),
+                                '2026-10-08T04:30:00Z')
+                            self.assertNotIn('is-assignment-alert-red', rows.first.get_attribute('class'))
+                            colors = page.evaluate("""() => {
+                                const cell = document.querySelector('.neoscorpion-dispatch-primary-row td:nth-child(13)');
+                                const names = ['complete', 'fueling', 'assigned', 'pending-ready', 'pending-missing', 'review', 'fob'];
+                                return Object.fromEntries(names.map(name => {
+                                    const pill = document.createElement('span');
+                                    pill.className = `neoscorpion-status-pill is-${name}`;
+                                    cell.append(pill);
+                                    const color = getComputedStyle(pill).color;
+                                    pill.remove();
+                                    return [name, color];
+                                }));
+                            }""")
+                            self.assertEqual({key: colors[key] for key in
+                                ('complete', 'fueling', 'assigned', 'pending-ready', 'pending-missing')}, {
+                                'complete': 'rgb(162, 239, 182)',
+                                'fueling': 'rgb(255, 231, 154)',
+                                'assigned': 'rgb(255, 193, 142)',
+                                'pending-ready': 'rgb(255, 170, 165)',
+                                'pending-missing': 'rgb(195, 199, 203)',
+                            })
+                            self.assertEqual(colors['review'], colors['fob'])
+                            page.clock.fast_forward(60_000)
+                            self.assertIn('is-assignment-alert-red', rows.first.get_attribute('class'))
+                            alert_states = page.evaluate("""() => {
+                                const row = document.querySelector('.neoscorpion-dispatch-primary-row.is-ready-to-assign');
+                                const update = etd => {
+                                    row.dataset.etdUtc = etd;
+                                    document.dispatchEvent(new Event('visibilitychange'));
+                                    return row.classList.contains('is-assignment-alert-red');
+                                };
+                                const now = Date.now();
+                                return [update(''), update('invalid'),
+                                    update(new Date(now + 31 * 60000).toISOString()),
+                                    update(new Date(now + 30 * 60000).toISOString()),
+                                    update(new Date(now - 60000).toISOString())];
+                            }""")
+                            self.assertEqual(alert_states, [False, False, False, True, True])
                         page.emulate_media(reduced_motion="reduce")
-                        self.assertEqual(rows.first.locator("td").nth(1).evaluate(
-                            "cell => getComputedStyle(cell).animationName"), "none")
+                        self.assertEqual(rows.first.locator('.neoscorpion-dispatch-flight strong').evaluate(
+                            "node => getComputedStyle(node).animationName"), "none")
                         page.emulate_media(reduced_motion="no-preference")
                         if width in (1440, 390):
                             page.screenshot(path=str(Fixture.evidence / f"dispatch-history-{width}.png"))

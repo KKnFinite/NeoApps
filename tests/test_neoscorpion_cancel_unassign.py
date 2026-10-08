@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from datetime import datetime
 from types import SimpleNamespace
+from sqlalchemy import text
 
 from tests import test_neoscorpion_uplift_defuel as fixture
 from app.extensions import db
@@ -151,7 +152,7 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertIn('CANCEL UPLIFT', html)
         self.assertNotIn('data-autosave-field="inbound_fuel"', html)
 
-    def test_ready_assignment_pulse_and_gateway_toggle_refresh(self):
+    def test_ready_assignment_alert_threshold_refresh(self):
         operation = self._operation()
         mission, assignment = self._assignment(operation)
         assignment.assigned_fueler_user_id = None
@@ -175,20 +176,38 @@ class CancelUnassignTest(unittest.TestCase):
         panel = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json
         self.assertIn('is-ready-to-assign', panel['html'])
         revision = self._revision(operation)
-        service.save_settings(self.gateway, {'fuel_density_lbs_per_gallon':'6.7'})
+        service.save_settings(self.gateway, {'fuel_density_lbs_per_gallon':'6.7',
+            'red_assignment_alert_threshold_minutes':'0'})
         db.session.commit()
-        self.assertFalse(NeoScorpionSettings.query.one().pulse_ready_assignments)
+        self.assertEqual(NeoScorpionSettings.query.one().red_assignment_alert_threshold_minutes, 0)
         self.assertEqual(self._revision(operation), revision + 1)
         panel = self.client.get('/neoscorpion/fuel-dispatch/live-panel').json
-        self.assertNotIn('is-ready-to-assign', panel['html'])
-        service.save_settings(self.gateway, {'fuel_density_lbs_per_gallon':'6.7', 'pulse_ready_assignments':'1'})
+        self.assertIn('is-ready-to-assign', panel['html'])
+        self.assertIn('data-assignment-alert-threshold-minutes="0"', panel['html'])
+        # An existing production database may retain the retired boolean.
+        # Its former OFF value must not suppress the new always-on alert.
+        db.session.execute(text(
+            "ALTER TABLE neoscorpion_settings ADD COLUMN pulse_ready_assignments "
+            "BOOLEAN NOT NULL DEFAULT 0"
+        ))
+        db.session.commit()
+        self.assertIn('is-ready-to-assign',
+            self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html'])
+        service.save_settings(self.gateway, {'fuel_density_lbs_per_gallon':'6.7',
+            'red_assignment_alert_threshold_minutes':'45'})
         db.session.commit()
         self.assertEqual(self._revision(operation), revision + 2)
-        self.assertIn('is-ready-to-assign', self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html'])
+        self.assertIn('data-assignment-alert-threshold-minutes="45"',
+            self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html'])
         for override in ({'arrival_status':'Scheduled'}, {'inbound_fuel_lbs':None},
                          {'required_fuel_lbs':None}, {'parking_valid':False},
                          {'assignment':SimpleNamespace(assigned_fueler_user_id=1, assigned_truck_id=2)}):
             self.assertFalse(service._ready_to_assign({**row, **override}))
+        self._truck(operation, assignment, 'ALERT-1', 500)
+        assignment.assigned_fueler_user_id = self.fueler.id
+        db.session.commit()
+        self.assertNotIn('is-ready-to-assign',
+            self.client.get('/neoscorpion/fuel-dispatch/live-panel').json['html'])
 
     def test_dispatch_visual_contract_reserves_fob_slot_through_live_refresh(self):
         operation = self._operation()
@@ -209,9 +228,9 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertIn('>FOB 30.0</small>', after)
         self.assertNotIn('neoscorpion-dispatch-size-small is-empty', after)
         css = (Path(__file__).resolve().parents[1] / 'app/static/css/26-neoscorpion.css').read_text(encoding='utf-8')
-        self.assertIn('neoscorpion-ready-assign-horizontal 2.3s', css)
-        self.assertIn('is-ready-to-assign > td:first-child', css)
-        self.assertIn('is-ready-to-assign > td:last-child', css)
+        self.assertIn('neoscorpion-assignment-text-pulse 2.3s', css)
+        self.assertIn('td.neoscorpion-dispatch-flight > strong', css)
+        self.assertIn('td.neoscorpion-dispatch-etd-parking > small', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
         self.assertNotIn('inset 0 0 0 1px', css)
 

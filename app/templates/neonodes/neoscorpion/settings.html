@@ -30,8 +30,8 @@
             <label>Fuel Density, lb/gal
                 <input name="fuel_density_lbs_per_gallon" value="{{ settings.fuel_density_lbs_per_gallon if settings.fuel_density_lbs_per_gallon is not none else '' }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}>
             </label>
-            <label>Pulse Ready Assignments
-                <input type="checkbox" name="pulse_ready_assignments" value="1" {% if settings.pulse_ready_assignments %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+            <label>Red Assignment Alert Threshold (minutes)
+                <input type="number" name="red_assignment_alert_threshold_minutes" value="{{ settings.red_assignment_alert_threshold_minutes }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
             </label>
             <label>Planning Inbound Fuel Fallback, K lbs
                 <input name="planning_inbound_fuel_fallback" value="{{ planning_inbound_fallback_display }}" inputmode="decimal" min="0" {% if not can_edit %}readonly{% endif %}>

@@ -13,6 +13,37 @@
     const dispatchScroll = initializeDispatchScroll(root);
     const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
+    let assignmentAlertTimer = null;
+    function updateAssignmentAlerts(scope) {
+        if (assignmentAlertTimer !== null) window.clearTimeout(assignmentAlertTimer);
+        assignmentAlertTimer = null;
+        const panel = scope.querySelector(".neoscorpion-panel[data-assignment-alert-threshold-minutes]");
+        const threshold = Number(panel?.dataset.assignmentAlertThresholdMinutes);
+        const thresholdMs = (Number.isFinite(threshold) && threshold >= 0 ? threshold : 30) * 60000;
+        const now = Date.now();
+        let nextChangeMs = Infinity;
+        scope.querySelectorAll(".neoscorpion-dispatch-primary-row.is-ready-to-assign").forEach((row) => {
+            // The server supplies the mission's canonical UTC departure, not its display label.
+            const etdMs = row.dataset.etdUtc ? Date.parse(row.dataset.etdUtc) : NaN;
+            const remainingMs = etdMs - now;
+            const red = Number.isFinite(etdMs) && remainingMs <= thresholdMs;
+            row.classList.toggle("is-assignment-alert-red", red);
+            if (Number.isFinite(etdMs) && !red) {
+                nextChangeMs = Math.min(nextChangeMs, remainingMs - thresholdMs);
+            }
+        });
+        if (Number.isFinite(nextChangeMs)) {
+            assignmentAlertTimer = window.setTimeout(
+                () => updateAssignmentAlerts(root),
+                Math.max(1, Math.min(nextChangeMs, 60000))
+            );
+        }
+    }
+    updateAssignmentAlerts(root);
+    document.addEventListener("visibilitychange", () => updateAssignmentAlerts(root));
+    window.addEventListener("pagehide", () => {
+        if (assignmentAlertTimer !== null) window.clearTimeout(assignmentAlertTimer);
+    }, {once: true});
     if (!window.NeoLiveUpdates) {
         return;
     }
@@ -432,6 +463,7 @@
                 throw new Error("Fuel Dispatch refresh returned invalid content.");
             }
             currentPanel.replaceWith(nextPanel);
+            updateAssignmentAlerts(root);
             adoptFingerprint(payload);
             root.dataset.spearPlanToken = payload.spear_plan_token || "";
             root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? "true" : "false";

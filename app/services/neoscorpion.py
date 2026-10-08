@@ -618,7 +618,9 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "fuelers": fuelers,
             "trucks": trucks,
             "settings": settings,
-            "pulse_ready_assignments": settings is None or settings.pulse_ready_assignments,
+            "red_assignment_alert_threshold_minutes": (
+                settings.red_assignment_alert_threshold_minutes if settings else 30
+            ),
             "truck_visuals": [],
             "spear_plan": None,
             "spear_unavailable": False,
@@ -713,7 +715,9 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "fuelers": fuelers,
         "trucks": trucks,
         "settings": settings,
-        "pulse_ready_assignments": settings is None or settings.pulse_ready_assignments,
+        "red_assignment_alert_threshold_minutes": (
+            settings.red_assignment_alert_threshold_minutes if settings else 30
+        ),
         "spear_plan": None,
         "spear_unavailable": False,
         "spear_automatic_available": False,
@@ -982,7 +986,7 @@ def settings_context(gateway):
     if settings is None:
         settings = {
             "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
-            "pulse_ready_assignments": True,
+            "red_assignment_alert_threshold_minutes": 30,
             "planning_inbound_fuel_fallback_lbs": (
                 DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
             ),
@@ -4368,9 +4372,16 @@ def deactivate_truck(gateway, form, user=None):
 
 def save_settings(gateway, form):
     settings = ensure_neoscorpion_settings(gateway)
-    pulse_enabled = str(form.get("pulse_ready_assignments", "")).strip().lower() in {"1", "true", "yes", "on"}
-    pulse_changed = settings.pulse_ready_assignments != pulse_enabled
-    settings.pulse_ready_assignments = pulse_enabled
+    submitted_threshold = str(form.get("red_assignment_alert_threshold_minutes", "")).strip()
+    if not re.fullmatch(r"[0-9]+", submitted_threshold):
+        raise ValueError("Red assignment alert threshold must be a nonnegative whole number of minutes.")
+    if len(submitted_threshold) > 10:
+        raise ValueError("Red assignment alert threshold is too large.")
+    threshold = int(submitted_threshold)
+    if threshold > 2147483647:
+        raise ValueError("Red assignment alert threshold is too large.")
+    threshold_changed = settings.red_assignment_alert_threshold_minutes != threshold
+    settings.red_assignment_alert_threshold_minutes = threshold
     density = _decimal_or_none(form.get("fuel_density_lbs_per_gallon"))
     if density is None:
         settings.fuel_density_lbs_per_gallon = None
@@ -4387,7 +4398,7 @@ def save_settings(gateway, form):
     )
     if current_user and getattr(current_user, "is_authenticated", False):
         settings.updated_by_user_id = current_user.id
-    if pulse_changed:
+    if threshold_changed:
         operation = current_sort_operation(gateway)
         if operation is not None:
             operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)

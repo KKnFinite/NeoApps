@@ -198,7 +198,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
-        "pulse_ready_assignments": "BOOLEAN NOT NULL DEFAULT 1",
+        "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
@@ -433,7 +433,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
-        "pulse_ready_assignments": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",

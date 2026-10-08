@@ -713,6 +713,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             "/neoscorpion/settings",
             data={
                 "fuel_density_lbs_per_gallon": "6.8",
+                "red_assignment_alert_threshold_minutes": "25",
                 "fob_difference_threshold_lbs": "500",
                 "tf_vs_estimated_threshold_lbs": "750",
             },
@@ -722,9 +723,34 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         settings = NeoScorpionSettings.query.filter_by(gateway_id=self.gateway.id).one()
         self.assertEqual(settings.fuel_density_lbs_per_gallon, 6.8)
+        self.assertEqual(settings.red_assignment_alert_threshold_minutes, 25)
         self.assertEqual(settings.fob_difference_threshold_lbs, 500)
         self.assertEqual(settings.tf_vs_estimated_threshold_lbs, 750)
+        self.assertIn(b"Red Assignment Alert Threshold (minutes)", response.data)
+        self.assertNotIn(b"Pulse Ready Assignments", response.data)
         self.assertIn(b"Detailed aircraft-specific fuel calculations are not configured yet.", response.data)
+
+    def test_assignment_alert_threshold_validation_and_permission(self):
+        self._login_approved_user(role="operator")
+        denied = self.client.post("/neoscorpion/settings", data={
+            "red_assignment_alert_threshold_minutes": "15",
+        })
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(NeoScorpionSettings.query.count(), 0)
+        self._login_approved_user(role="master")
+        for value in ("", "-1", "1.5", "oops"):
+            with self.subTest(value=value):
+                invalid = self.client.post("/neoscorpion/settings", data={
+                    "red_assignment_alert_threshold_minutes": value,
+                })
+                self.assertEqual(invalid.status_code, 400)
+                self.assertIn(b"nonnegative whole number", invalid.data)
+                self.assertEqual(NeoScorpionSettings.query.count(), 0)
+        valid = self.client.post("/neoscorpion/settings", data={
+            "red_assignment_alert_threshold_minutes": "0",
+        })
+        self.assertEqual(valid.status_code, 302)
+        self.assertEqual(NeoScorpionSettings.query.one().red_assignment_alert_threshold_minutes, 0)
 
     def test_assignment_planning_settings_defaults_validation_and_readiness(self):
         initial = assignment_planning_settings(self.gateway)
