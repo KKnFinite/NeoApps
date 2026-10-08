@@ -60,16 +60,20 @@ PLANNED_STAFFING_EDIT_PERMISSION = "neostaffing.planned_staffing.edit"
 
 # Dashboard and all Staffing menus render this ordered, permission-aware catalog.
 STAFFING_SCREEN_ITEMS = (
-    ("People", "neostaffing.people", PEOPLE_VIEW_PERMISSION, "Roster and assignments", True),
-    ("Org Chart", "neostaffing.org_chart", ORG_CHART_VIEW_PERMISSION, "Operational and management", False),
-    ("Attendance", "neostaffing.attendance", PEOPLE_VIEW_PERMISSION, "Current-sort attendance", True),
-    ("Reports", "neostaffing.reports", REPORTS_VIEW_PERMISSION, "Staffing and attendance", False),
-    ("Shift Flow", "neostaffing.shift_flow", PEOPLE_VIEW_PERMISSION, "Flow planning board", True),
-    ("Staffing Groups", "neostaffing.staffing_groups", STAFFING_GROUPS_VIEW_PERMISSION, "Deduplicated reporting scope", False),
-    ("Requests", "neostaffing.change_requests", CHANGE_REQUEST_VIEW_PERMISSION, "Change queue", False),
-    ("Notifications", "neostaffing.staffing_notifications", CHANGE_REQUEST_VIEW_PERMISSION, "Operational alerts", False),
-    ("Bulk Change", "neostaffing.bulk_change", BULK_CHANGE_PERMISSION, "Session change workspace", False),
-    ("Settings", "neostaffing.settings", None, "Staffing settings", False),
+    ("People", "neostaffing.people", PEOPLE_VIEW_PERMISSION, "Roster and assignments", True, False),
+    ("Org Chart", "neostaffing.org_chart", ORG_CHART_VIEW_PERMISSION, "Operational and management", False, False),
+    ("Attendance", "neostaffing.attendance", PEOPLE_VIEW_PERMISSION, "Current-sort attendance", True, False),
+    ("Reports", "neostaffing.reports", REPORTS_VIEW_PERMISSION, "Staffing and attendance", False, False),
+    ("Shift Flow", "neostaffing.shift_flow", PEOPLE_VIEW_PERMISSION, "Flow planning board", True, False),
+    ("Settings", "neostaffing.settings", None, "Staffing settings", False, False),
+    ("Staffing Groups", "neostaffing.staffing_groups", STAFFING_GROUPS_VIEW_PERMISSION, "Deduplicated reporting scope", False, True),
+    ("Requests", "neostaffing.change_requests", CHANGE_REQUEST_VIEW_PERMISSION, "Change queue", False, True),
+    ("Notifications", "neostaffing.staffing_notifications", CHANGE_REQUEST_VIEW_PERMISSION, "Operational alerts", False, True),
+    ("Bulk Change", "neostaffing.bulk_change", BULK_CHANGE_PERMISSION, "Session change workspace", False, True),
+)
+STAFFING_UNDER_CONSTRUCTION_ENDPOINTS = frozenset(
+    endpoint for _label, endpoint, _permission, _description, _priority, under_construction
+    in STAFFING_SCREEN_ITEMS if under_construction
 )
 
 
@@ -82,6 +86,7 @@ def staffing_screen_items():
             "endpoint": endpoint,
             "description": description,
             "priority": priority,
+            "under_construction": under_construction,
             "active": request.endpoint == endpoint or (
                 endpoint == "neostaffing.org_chart" and request.endpoint == "neostaffing.hierarchy"
             ) or (
@@ -99,7 +104,7 @@ def staffing_screen_items():
                 "unread_notifications" if endpoint == "neostaffing.staffing_notifications" else None
             ),
         }
-        for label, endpoint, permission, description, priority in STAFFING_SCREEN_ITEMS
+        for label, endpoint, permission, description, priority, under_construction in STAFFING_SCREEN_ITEMS
         if permission is None or user_can(permission)
     ]
 

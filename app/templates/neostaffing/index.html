@@ -8,8 +8,6 @@
     <header class="neostaffing-launch-header">
         <div><h1 id="neostaffing-launch-title">NEOSTAFFING</h1><span>OPERATIONS WORKSPACE</span></div>
         <div class="neostaffing-launch-header-actions">
-            {% if 'neostaffing.change_requests' in staffing_screen_items|map(attribute='endpoint') and neostaffing_nav.actionable_requests %}<a href="{{ url_for('neostaffing.change_requests') }}" class="neostaffing-launch-alert"><strong>{{ neostaffing_nav.actionable_requests }}</strong><span>ACTIONABLE REQUEST{{ '' if neostaffing_nav.actionable_requests == 1 else 'S' }}</span></a>{% endif %}
-            {% if 'neostaffing.staffing_notifications' in staffing_screen_items|map(attribute='endpoint') and neostaffing_nav.unread_notifications %}<a href="{{ url_for('neostaffing.staffing_notifications') }}" class="neostaffing-launch-alert"><strong>{{ neostaffing_nav.unread_notifications }}</strong><span>UNREAD ALERT{{ '' if neostaffing_nav.unread_notifications == 1 else 'S' }}</span></a>{% endif %}
             <a class="neostaffing-launch-portal" href="{{ url_for('auth.portal_dashboard') }}">{{ neo_brand("Apps", "apps") }} PORTAL</a>
         </div>
     </header>
@@ -17,7 +15,7 @@
     <main class="neostaffing-launch-workspace">
         <header class="neostaffing-launch-workspace-heading"><div><h2>WORKSPACES</h2><span>SELECT AN AUTHORIZED OPERATIONAL AREA</span></div><strong>ROLE · {{ app_role|upper }}</strong></header>
         <nav class="neostaffing-primary-menu neostaffing-launch-grid" aria-label="NeoStaffing main menu">
-            {% for item in staffing_screen_items %}
+            {% for item in staffing_screen_items if not item.under_construction %}
             <a class="neostaffing-menu-tile{% if item.priority %} is-priority{% endif %}{% if item.badge == 'actionable_requests' and neostaffing_nav.actionable_requests %} is-actionable{% endif %}" href="{{ url_for(item.endpoint) }}"><span>{{ item.label|upper }}</span><em>{{ item.description }}</em>{% if item.badge and neostaffing_nav[item.badge] %}<strong class="neostaffing-status-pill is-yellow" aria-label="{{ neostaffing_nav[item.badge] }} {{ 'actionable requests' if item.badge == 'actionable_requests' else 'unread notifications' }}">{{ neostaffing_nav[item.badge] }}</strong>{% endif %}</a>
             {% endfor %}
         </nav>

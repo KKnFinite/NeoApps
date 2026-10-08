@@ -76,6 +76,10 @@ body.blueprint-neostaffing .org-explorer .neostaffing-org-workspace { width:100%
   margin-top:4px; padding:8px 10px 2px; border-top:1px solid #33434d;
   color:#b8cbd1; font-size:.65rem; line-height:1.4; letter-spacing:.06em;
 }
+.blueprint-neostaffing .neo-drawer-links .staffing-nav-section {
+  display:block; margin-top:8px; padding:10px 4px 4px; border-top:1px solid #33434d;
+  color:#b8cbd1; font-size:.7rem; font-weight:800; letter-spacing:.08em;
+}
 
 
 /* Shared compact side filter/navigation rail.

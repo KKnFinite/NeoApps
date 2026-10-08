@@ -10,7 +10,7 @@ from tests import test_neostaffing_employee_records as fixture
 from app.extensions import db
 from app.models import StaffingLeadershipAssignment, StaffingReportingRelationship
 from app.services import neostaffing as staffing
-from app.neostaffing.routes import STAFFING_SCREEN_ITEMS
+from app.neostaffing.routes import STAFFING_SCREEN_ITEMS, STAFFING_UNDER_CONSTRUCTION_ENDPOINTS
 
 
 class Forms(HTMLParser):
@@ -34,6 +34,12 @@ class StaffingShellTest(unittest.TestCase):
     def test_dashboard_has_launcher_without_sidebar_or_secondary_controls(self):
         html = self.client.get('/neostaffing').get_data(as_text=True)
         self.assertIn('neostaffing-launch-grid', html)
+        dashboard = html.split('class="neostaffing-primary-menu neostaffing-launch-grid"', 1)[1].split('</nav>', 1)[0]
+        self.assertNotIn('UNDER CONSTRUCTION', dashboard)
+        self.assertNotIn('neostaffing-launch-alert', html)
+        for endpoint in STAFFING_UNDER_CONSTRUCTION_ENDPOINTS:
+            with self.app.test_request_context():
+                self.assertNotIn(url_for(endpoint), dashboard)
         self.assertNotIn('data-operational-sidebar ', html)
         self.assertNotIn('data-staffing-secondary ', html)
         inner = self.client.get('/neostaffing/people').get_data(as_text=True)
@@ -112,10 +118,11 @@ class StaffingShellTest(unittest.TestCase):
             context.request.url_rule = SimpleNamespace(endpoint=endpoint)
             items = [dict(label=label, endpoint=item_endpoint,
                           active=endpoint == item_endpoint,
+                          under_construction=item_endpoint in STAFFING_UNDER_CONSTRUCTION_ENDPOINTS,
                           badge=('actionable_requests' if item_endpoint == 'neostaffing.change_requests'
                                  else 'unread_notifications' if item_endpoint == 'neostaffing.staffing_notifications'
                                  else None))
-                     for label, item_endpoint, permission, _description, _priority in STAFFING_SCREEN_ITEMS
+                     for label, item_endpoint, permission, _description, _priority, _under_construction in STAFFING_SCREEN_ITEMS
                      if (permission is None and settings) or (permission is not None and permission not in denied)]
             return render_template('neostaffing/_navigation_items.html',
                 staffing_nav_class='motherbrain-desktop-side-link' if desktop else '',
@@ -126,8 +133,8 @@ class StaffingShellTest(unittest.TestCase):
         return re.findall(r'<a\b[^>]*data-staffing-nav[^>]*href="([^"]+)"',html)
 
     def test_navigation_exact_order_desktop_split_and_mobile_links(self):
-        endpoints=['people','org_chart','attendance','reports','shift_flow','staffing_groups',
-                   'change_requests','staffing_notifications','bulk_change','settings']
+        endpoints=['people','org_chart','attendance','reports','shift_flow','settings',
+                   'staffing_groups','change_requests','staffing_notifications','bulk_change']
         with self.app.test_request_context():
             expected=[url_for('neostaffing.'+endpoint) for endpoint in endpoints]
         desktop=self.navigation()
@@ -135,7 +142,9 @@ class StaffingShellTest(unittest.TestCase):
         mobile=self.navigation(desktop=False)
         self.assertEqual(self.nav_links(mobile),expected)
         for html in (desktop,mobile):
-            self.assertNotIn('UNDER CONSTRUCTION',html)
+            self.assertEqual(html.count('UNDER CONSTRUCTION'),1)
+            self.assertLess(html.index(f'href="{expected[5]}"'),html.index('UNDER CONSTRUCTION'))
+            self.assertLess(html.index('UNDER CONSTRUCTION'),html.index(f'href="{expected[6]}"'))
             self.assertNotIn('>Home<',html)
             self.assertNotIn('aria-disabled',html)
             self.assertIn('aria-label="3 actionable requests">3</strong>',html)
@@ -168,6 +177,14 @@ class StaffingShellTest(unittest.TestCase):
         html=self.client.get('/neostaffing/people').get_data(as_text=True)
         rail=html.split('data-operational-sidebar ',1)[1].split('</aside>',1)[0]
         mobile=html.split('id="neo-mobile-drawer"',1)[1].split('</aside>',1)[0]
-        self.assertNotIn('UNDER CONSTRUCTION',rail)
-        self.assertNotIn('UNDER CONSTRUCTION',mobile)
+        self.assertEqual(rail.count('UNDER CONSTRUCTION'),1)
+        self.assertEqual(mobile.count('UNDER CONSTRUCTION'),1)
         self.assertEqual(self.nav_links(rail),self.nav_links(mobile))
+
+    def test_construction_heading_disappears_when_all_four_permissions_denied(self):
+        denied={'neostaffing.staffing_groups.view', 'neostaffing.change_requests.view',
+                'neostaffing.bulk_change.use'}
+        for desktop in (True,False):
+            html=self.navigation(desktop=desktop,denied=denied)
+            self.assertNotIn('UNDER CONSTRUCTION',html)
+            self.assertEqual(len(self.nav_links(html)),6)

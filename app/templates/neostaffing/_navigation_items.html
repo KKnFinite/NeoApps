@@ -1,4 +1,5 @@
 {% for item in staffing_screen_items %}
+{% if item.under_construction and (loop.first or not loop.previtem.under_construction) %}<span class="staffing-nav-section" role="separator">UNDER CONSTRUCTION</span>{% endif %}
 <a class="{{ staffing_nav_class|default('') }}{% if item.active and staffing_nav_class|default('') %} is-active{% endif %}" data-staffing-nav href="{{ url_for(item.endpoint) }}"{% if staffing_nav_role|default('') %} role="{{ staffing_nav_role }}"{% endif %}{% if item.active %} aria-current="page"{% endif %}>
     {% if staffing_nav_class|default('') %}<span class="operational-side-link-icon" aria-hidden="true">{{ item.label[0] }}</span><span class="operational-side-link-label">{% endif %}
     {{ item.label }}
