@@ -1141,6 +1141,41 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual(re.findall(r'data-roster-person="(\d+)"', unplanned), [str(unassigned.id)])
         self.assertIn(f'person_id={incomplete.id}', needs)
         self.assertIn(f'person_id={unassigned.id}', unplanned)
+        self.assertIn('draggable="true"', needs)
+        self.assertNotIn('draggable="true"', unplanned)
+        self.assertIn('data-roster-needs-people', needs)
+        self.assertIn('data-roster-search', html)
+
+    def test_needs_assignment_drop_preserves_plan_and_applies_ballmat_side_rule(self):
+        areas = self._configure_final_composite()
+        person = self._person('NEEDS-CROSS-SIDE')
+        values = self._values(start=areas['West Ballmat'], setup=areas['Door 21'])
+        values['shift_flow_final_door_work_area_id'] = ''
+        plan = self._plan(person, values, areas['West Ballmat'])
+        db.session.commit()
+        home = staffing_service.assignment_service.shift_home(person)
+        before = (home.id, plan.setup_work_area_id, plan.ballmat_transition)
+        revision = self._revision(plan)
+        self.assertEqual([row['person'].id for row in
+            staffing_service.shift_flow_context()['flow_map']['door_roster']['needs_assignment']], [person.id])
+
+        result = staffing_service.move_shift_flow_final_door(
+            person, areas['Door 17'].id, home.work_area, revision)
+        db.session.commit(); db.session.expire_all()
+        self.assertTrue(result['changed'])
+        self.assertEqual((home.id, plan.setup_work_area_id, plan.ballmat_transition), before)
+        self.assertEqual(home.work_area_unit_id, areas['East Ballmat'].id)
+        self.assertEqual(plan.sort_start_work_area_id, areas['East Ballmat'].id)
+        self.assertEqual(plan.final_door_work_area_id, areas['Door 17'].id)
+        self.assertEqual((result['card']['previous_ballmat_side'], result['card']['ballmat_side']), ('west', 'east'))
+        self.assertIn('Ballmat', result['card']['flow_warning'])
+        roster = staffing_service.shift_flow_context()['flow_map']['door_roster']
+        self.assertEqual(roster['needs_assignment'], [])
+        east = next(column for column in roster['columns'] if column['id'] == areas['Door 17'].id)
+        self.assertEqual([row['person'].id for row in east['rows']], [person.id])
+        self.assertEqual([row['person'].id for row in east['ballmat_rows']], [person.id])
+        self.assertEqual(staffing_service.move_shift_flow_final_door(
+            person, areas['Door 34'].id, home.work_area, revision)['conflict']['type'], 'stale_version')
 
     def test_drawer_exposes_start_area_without_single_stage_editor(self):
         editor = (Path(__file__).resolve().parents[1] / 'app/templates/neostaffing/_shift_flow_editor.html').read_text(encoding='utf-8')

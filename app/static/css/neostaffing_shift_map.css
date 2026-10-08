@@ -104,8 +104,17 @@
 .shift-roster-feedback { position:fixed; bottom:80px; right:20px; z-index:100; max-width:min(320px,80vw); padding:9px 13px; border:1px solid #537f71; border-radius:5px; background:#19332b; color:#d5e8df; font-size:12px; box-shadow:0 4px 18px #0006; }
 .shift-roster-feedback.is-error { background:#332b1c; border-color:#b29150; color:#e8c88f; }
 .shift-door-column.is-drop-target { outline:2px solid #7ba99a; outline-offset:-2px; }
-.shift-door-controls { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin-bottom:8px; }
+.shift-door-controls { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px 12px; margin-bottom:8px; }
 .shift-door-controls button { background:#10272b; color:#b8eeee; border:1px solid #286064; border-radius:4px; padding:8px 12px; cursor:pointer; }
+.shift-door-search { display:flex; align-items:center; gap:7px; margin-right:auto; color:#a9c8cb; font-size:10px; font-weight:800; letter-spacing:.06em; }
+.shift-door-search input { box-sizing:border-box; width:clamp(140px,20vw,240px); min-height:36px; padding:6px 9px; color:#e4f5f2; background:#10272b; border:1px solid #386b6a; border-radius:4px; font:inherit; font-size:12px; letter-spacing:normal; }
+.shift-door-search input:focus-visible,.shift-door-search-results button:focus-visible { outline:2px solid #7ae2d4; outline-offset:2px; }
+.shift-door-search-results { display:flex; align-items:center; gap:5px; color:#a9c8cb; font-size:11px; }
+.shift-door-search-results button { min-width:32px; padding:5px; }
+.shift-door-search-results button:disabled { opacity:.4; cursor:default; }
+.shift-door-person.is-search-match { outline:2px solid #a9e8d7; outline-offset:-2px; }
+.shift-door-person.is-search-current { box-shadow:inset 0 0 0 2px #d7fff0; }
+.shift-door-person.is-search-dimmed { opacity:.35; }
 .shift-door-roster h2 { margin:14px 0 8px; font-size:16px; letter-spacing:.06em; }
 .shift-door-roster h2 small { font-size:11px; font-weight:400; color:#82a9ad; margin-left:8px; }
 .shift-door-columns { display:grid; grid-template-columns:repeat(var(--roster-columns),minmax(0,1fr)); border:1px solid #285054; border-radius:5px; overflow:hidden; }
@@ -135,6 +144,9 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { outline:1px solid
  .shift-door-roster { --roster-columns:3; }
  .shift-roster-layout { grid-template-columns:minmax(0,1fr) 148px; gap:0 8px; min-width:calc(100% + 156px); }
  .shift-door-controls { gap:4px; }
+ .shift-door-search { flex:1 1 100%; }
+ .shift-door-search input { flex:1; width:0; min-height:40px; }
+ .shift-door-search-results { margin-right:auto; }
  .shift-door-controls button { min-height:40px; padding:5px 10px; }
  .shift-door-paging { width:100%; justify-content:space-between; }
  .shift-door-column header { padding:5px 6px; }

@@ -6,7 +6,7 @@
   <main class="neostaffing-shift-flow-workspace">
     <header class="neostaffing-shift-flow-head">
       <div><h1 id="shift-flow-title">SHIFT FLOW</h1><p>Ramp / Shift · Final Door rosters</p></div>
-      <strong>{{ shift_flow.flow_map.door_roster.count }} planned · {{ shift_flow.flow_map.door_roster.ballmat_count }} Ballmat start</strong>
+      <strong><span data-roster-planned-count>{{ shift_flow.flow_map.door_roster.count }}</span> planned · <span data-roster-header-ballmat-count>{{ shift_flow.flow_map.door_roster.ballmat_count }}</span> Ballmat start</strong>
     </header>
     {% include "neostaffing/_shift_flow_map.html" %}
   </main>
@@ -23,5 +23,5 @@
     </aside>
   {% endif %}
 </section>
-<script src="{{ url_for('static', filename='js/neostaffing_shift_roster.js', v='20261007-continuous-doors') }}"></script>
+<script src="{{ url_for('static', filename='js/neostaffing_shift_roster.js', v='20261007-needs-search-v1') }}"></script>
 {% endblock %}

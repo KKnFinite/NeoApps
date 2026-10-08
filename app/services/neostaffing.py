@@ -377,7 +377,13 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
                             for side, _label, names in SHIFT_FLOW_COMPOSITE_SIDES for name in names}
             sides = {area.id: side_by_name.get(_shift_flow_normalized_name(area.name))
                      for area in allowed.values()}
-            source_side, target_side = sides.get(old_final_id), sides.get(destination.id)
+            # A planned employee can be in Needs Assignment with no valid old
+            # Final Door; in that case the canonical Ballmat Home supplies the
+            # side for the same cross-side adjustment used by placed cards.
+            source_side = sides.get(old_final_id) or next(
+                (side for side, _label, _names in SHIFT_FLOW_COMPOSITE_SIDES
+                 if side in old_home.name.casefold()), None)
+            target_side = sides.get(destination.id)
             if source_side and target_side and source_side != target_side:
                 issues = []
                 start = _shift_flow_composite_area(list(allowed.values()), target_side, SHIFT_FLOW_BALLMAT, issues)

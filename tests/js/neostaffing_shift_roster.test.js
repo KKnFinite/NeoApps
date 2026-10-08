@@ -55,18 +55,20 @@ test('wider mobile pages four doors with continuous range labels and swipe navig
 });
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function dropBoard() {
+function dropBoard(width = 1920) {
     const requests = [], timers = [], attrs = {};
     const element = (dataset = {}) => ({dataset, children:[], hidden:false, handlers:{},
         classList:{values:new Set(),add(k){this.values.add(k);},remove(k){this.values.delete(k);},toggle(k,v){v?this.values.add(k):this.values.delete(k);}},
         addEventListener(key, fn){this.handlers[key]=fn;}, setAttribute(k,v){this[k]=v;}, contains(node){return node===this;},
         append(...nodes){for(const node of nodes){if(node.parent)node.parent.children.splice(node.parent.children.indexOf(node),1);node.parent=this;this.children.push(node);}},
+        remove(){if(this.parent)this.parent.children.splice(this.parent.children.indexOf(this),1);this.parent=null;},
         insertBefore(node,next){if(node.parent)node.parent.children.splice(node.parent.children.indexOf(node),1);node.parent=this;
             const index=next?this.children.indexOf(next):this.children.length;this.children.splice(index,0,node);},
         get nextSibling(){return this.parent?.children[this.parent.children.indexOf(this)+1] || null;},
         querySelector(selector){return this.nodes?.[selector] || null;},
         closest(selector){for(let node=this;node;node=node.parent){if(selector==='[data-final-door-target]' && node.dataset.finalDoorTarget)return node;
-            if(selector==='[data-ballmat-door]' && node.dataset.ballmatDoor)return node;}return null;}
+            if(selector==='[data-ballmat-door]' && node.dataset.ballmatDoor)return node;
+            if(selector==='[data-roster-needs-people]' && node.dataset.rosterNeedsPeople)return node;}return null;}
     });
     const labels = ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'];
     const columns = [0,1].flatMap(section => labels.map((label,index) => {
@@ -77,7 +79,7 @@ function dropBoard() {
     }));
     const source=columns[0], destination=columns[1];
     const person=(id,last,first,ballmat=false)=>{
-        const card=element({[ballmat?'ballmatPerson':'rosterPerson']:id,personLast:last,personFirst:first,flowColor:'wave-2',finalDoor:'1',flowVersion:'old:7'});
+        const card=element({[ballmat?'ballmatPerson':'rosterPerson']:id,personName:`${first} ${last}`,personLast:last,personFirst:first,flowColor:'wave-2',finalDoor:'1',flowVersion:'old:7',ballmatStart:'false'});
         card.nodes={'[data-flow-warning]':element(),'[data-setup-strip]':element()}; card.nodes['[data-flow-warning]'].hidden=true;
         card.nodes['[data-setup-strip]'].hidden=true;
         card.href='/neostaffing/shift-flow?person_id='+id;return card;
@@ -87,23 +89,78 @@ function dropBoard() {
     destination.nodes['[data-roster-people]'].append(other,before);
     const ballmat=person('42','SMITH','Ada',true);columns[12].nodes['[data-roster-people]'].append(ballmat);
     columns[13].nodes['[data-roster-people]'].append(person('2','Smith','Zoe',true),person('3','Adams','Zoe',true));
+    const needsPeople=element({rosterNeedsPeople:'true'}), needs=person('77','Pending','Ian');
+    needs.dataset.finalDoor='';needs.dataset.ballmatStart='true';
+    const needsReason=element({rosterNeedsReason:'77'}), needsEmpty=element();needsEmpty.hidden=true;
+    needsPeople.append(needs,needsReason,needsEmpty);
+    const unassigned=person('88','Unassigned','Uma');
+    const search=element(),searchStatus=element(),searchPrevious=element(),searchNext=element();search.value='';
+    const scroll=element(),paging=element(),previous=element(),next=element(),range=element();scroll.scrollLeft=0;scroll.scrollWidth=1800;
+    const extra=person('99','Other','Zoe');columns[7].nodes['[data-roster-people]'].append(extra);
+    const needsCount={textContent:'1'},rosterTotal={textContent:'3'},plannedCount={textContent:'3'},ballmatTotal={textContent:'3'},headerBallmatTotal={textContent:'3'};
     const feedback=element(), sides=['all','west','east'].map(side=>element({rosterSide:side}));
-    const media=element();media.matches=false;
+    const media=element();media.matches=width<=700;
     const version={value:'old:7'}, final={value:'1'}, startArea={value:'1'}, setup={value:''}, transition={value:'2'}, phase={dataset:{version:'old:7'}};
     const fields={expected_version:version,shift_flow_final_door_work_area_id:final,
         shift_flow_sort_start_work_area_id:startArea,shift_flow_setup_work_area_id:setup,shift_flow_ballmat_transition:transition};
     const editor={querySelector:s=>fields[s.match(/name="([^"]+)"/)[1]]};
     const westCount={textContent:'6'},eastCount={textContent:'2'};
     const root={dataset:{finalDoorUrl:'/neostaffing/shift-flow/0/final-door'},style:{setProperty(){}},setAttribute:(k,v)=>attrs[k]=v,
-        querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card]:[],
-        querySelector:s=>s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
-    vm.runInNewContext(code,{document:{querySelector:s=>s==='[data-shift-roster]'?root:s==='meta[name="csrf-token"]'?{content:'csrf'}:s==='.neostaffing-shift-flow-drawer form'?editor:s==='[data-phase-editor]'?phase:null},
-        window:{matchMedia:()=>media},sessionStorage:{getItem(){},setItem(){}},setTimeout:fn=>timers.push(fn),clearTimeout(){},
+        querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card,needs]:s==='[data-roster-person]'?[card,other,before,extra,needs,unassigned]:[],
+        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
+    vm.runInNewContext(code,{document:{createElement:()=>element(),querySelector:s=>s==='[data-shift-roster]'?root:s==='[data-roster-planned-count]'?plannedCount:s==='[data-roster-header-ballmat-count]'?headerBallmatTotal:s==='meta[name="csrf-token"]'?{content:'csrf'}:s==='.neostaffing-shift-flow-drawer form'?editor:s==='[data-phase-editor]'?phase:null},
+        window:{innerWidth:width,matchMedia:()=>media,addEventListener(){}},sessionStorage:{getItem(){},setItem(){}},setTimeout:fn=>timers.push(fn),clearTimeout(){},
         fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
     const start=()=>card.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'42');}}});
+    const startNeeds=()=>needs.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'77');}}});
     const drop=target=>target.handlers.drop({preventDefault(){}});
-    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,drop,person};
+    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,drop,person,needs,needsPeople,needsReason,needsCount,needsEmpty,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra};
 }
+
+test('Needs Assignment drop moves immediately, preserves existing fields and adds Ballmat roster on success', async()=>{
+    const b=dropBoard();b.startNeeds();b.drop(b.destination);
+    assert.deepEqual(JSON.parse(b.requests[0].options.body),{final_door_work_area_id:'2',expected_version:'old:7'});
+    assert.equal(b.needs.parent,b.destination.nodes['[data-roster-people]']);
+    assert.equal(b.needsCount.textContent,'0');assert.equal(b.needsEmpty.hidden,false);
+    assert.equal(b.needsReason.hidden,true);assert.equal(b.rosterTotal.textContent,'4');
+    assert.equal(b.plannedCount.textContent,'4');assert.equal(b.ballmatTotal.textContent,'4');assert.equal(b.headerBallmatTotal.textContent,'4');
+    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(row=>row.dataset.ballmatPerson),['3','77','2']);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',
+        flow_warning:'Ballmat transition is missing.',has_setup:true,previous_ballmat_side:'west',ballmat_side:'east'})});await tick();
+    assert.equal(b.needs.dataset.finalDoor,'2');assert.equal(b.needs.dataset.flowVersion,'new:8');
+    assert.equal(b.needsReason.parent,null);assert.equal(b.eastCount.textContent,'3');assert.equal(b.westCount.textContent,'6');
+    assert.equal(b.needs.nodes['[data-flow-warning]'].hidden,false);
+    assert.equal(b.setup.value,'');assert.equal(b.transition.value,'2');
+    assert.equal(b.unassigned.handlers.dragstart,undefined);
+});
+
+test('Needs Assignment conflict restores rail, reason, counts, Ballmat roster and revision', async()=>{
+    const b=dropBoard();b.startNeeds();b.drop(b.destination);
+    b.requests[0].resolve({ok:false,json:async()=>({conflict:{message:'Reload and try again.'}})});await tick();
+    assert.equal(b.needs.parent,b.needsPeople);assert.equal(b.needsPeople.children[0],b.needs);
+    assert.equal(b.needsReason.hidden,false);assert.equal(b.needsCount.textContent,'1');assert.equal(b.needsEmpty.hidden,true);
+    assert.equal(b.rosterTotal.textContent,'3');assert.equal(b.plannedCount.textContent,'3');assert.equal(b.ballmatTotal.textContent,'3');assert.equal(b.headerBallmatTotal.textContent,'3');
+    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(row=>row.dataset.ballmatPerson),['3','2']);
+    assert.equal(b.needs.dataset.flowVersion,'old:7');assert.equal(b.needs.dataset.finalDoor,'');
+    assert.match(b.feedback.textContent,/Reload/);
+});
+
+test('name search highlights without rearranging, pages through matches and searches both rail sections',()=>{
+    const b=dropBoard(390), order=b.destination.nodes['[data-roster-people]'].children.slice();
+    b.search.value='zOe';b.search.handlers.input();
+    assert.equal(b.searchStatus.textContent,'1 / 3');assert.equal(b.range.textContent,'D34–D29');
+    assert.ok(b.card.classList.values.has('is-search-dimmed'));
+    assert.ok(b.extra.classList.values.has('is-search-match'));
+    b.searchNext.handlers.click();b.searchNext.handlers.click();
+    assert.equal(b.searchStatus.textContent,'3 / 3');assert.equal(b.range.textContent,'D17–D9');
+    assert.deepEqual(b.destination.nodes['[data-roster-people]'].children,order);
+    b.search.value='ian';b.search.handlers.input();
+    assert.ok(b.needs.classList.values.has('is-search-current'));assert.equal(b.scroll.scrollLeft,b.scroll.scrollWidth);
+    b.search.value='uma';b.search.handlers.input();assert.ok(b.unassigned.classList.values.has('is-search-match'));
+    b.search.value='';b.search.handlers.input();
+    assert.equal(b.searchStatus.textContent,'');assert.ok(!b.card.classList.values.has('is-search-dimmed'));
+    assert.ok(!b.unassigned.classList.values.has('is-search-match'));
+});
 
 test('Final Door drop sends only Final Door and revision with CSRF, locks duplicate saves', async()=>{
     const b=dropBoard();b.start();b.drop(b.destination);b.start();

@@ -211,6 +211,8 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         watcher.locator(f'[data-roster-person="{self.ids["MISSING"]}"]').click()
         expect(watcher.locator('.neostaffing-shift-flow-drawer')).to_be_visible()
         self.assertEqual(watcher.locator('.neostaffing-shift-flow-drawer form').count(), 0)
+        watcher_context.unroute_all(behavior='ignoreErrors')
+        context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
     def test_mobile_editor_safe_area_and_internal_scroll(self):
@@ -254,6 +256,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
                 self.assertGreaterEqual(drawer.locator('header').bounding_box()['y'], 47)
             page.locator('.neostaffing-shift-flow-drawer header a').click()
             self.assertEqual(page.locator('.neostaffing-shift-flow-drawer').count(), 0)
+        context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
     def test_roster_groups_setup_strips_and_editor_resort(self):
@@ -337,6 +340,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         expected_order = [*expected[:2], edited, *[pid for pid in expected[2:] if pid != edited]]
         expected_order.insert(expected_order.index(expected[3]) + 1, self.ids['DISCHARGE'])
         self.assertEqual(order(), expected_order)
+        context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
     def test_special_moves_keep_colors_setup_and_ballmat_counts_in_sync(self):
@@ -381,4 +385,100 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         with self.fixture.app.app_context():
             person = db.session.get(StaffingPerson, self.ids['DISCHARGE'])
             self.assertEqual(staffing.assignment_service.shift_home(person).work_area_unit_id, self.area_ids['Discharge'])
+        context.unroute_all(behavior='ignoreErrors')
+        browser.close()
+
+    def test_z_mobile_search_and_needs_assignment_drop(self):
+        with self.fixture.app.app_context():
+            west_ballmat = db.session.get(StaffingUnit, self.area_ids['West Ballmat'])
+            for employee_id, first_name, door_name in (
+                ('SEARCH-FIRST', 'Bev', 'Door 34'), ('SEARCH-LATER', 'Zoe', 'Door 17')):
+                door = db.session.get(StaffingUnit, self.area_ids[door_name])
+                person = staffing.create_person({'employee_id':employee_id, 'first_name':first_name,
+                    'last_name':'Findprobe', 'seniority_date':'2020-01-01',
+                    'classification':'part_time', 'employee_status':'active'})
+                staffing.assign_work_area(person, door)
+                staffing.create_shift_flow_plan(person, {
+                    'shift_flow_sort_start_work_area_id':self.area_ids[door_name],
+                    'shift_flow_final_door_work_area_id':self.area_ids[door_name]}, door)
+            pending = staffing.create_person({'employee_id':'SEARCH-PENDING', 'first_name':'Bea',
+                'last_name':'Pending', 'seniority_date':'2020-01-01', 'classification':'part_time',
+                'employee_status':'active'})
+            staffing.assign_work_area(pending, west_ballmat)
+            staffing.create_shift_flow_plan(pending, {
+                'shift_flow_sort_start_work_area_id':self.area_ids['West Ballmat'],
+                'shift_flow_setup_work_area_id':self.area_ids['Door 21'],
+                'shift_flow_final_door_work_area_id':'',
+                'shift_flow_ballmat_transition':''}, west_ballmat)
+            db.session.commit()
+            pending_id = pending.id
+
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':390, 'height':844})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page(); errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        helper = self.fixture(); helper.login(page); helper.ready(page, '/neostaffing/shift-flow')
+        search = page.locator('[data-roster-search]')
+        search.fill('fInDpRoBe')
+        expect(page.locator('[data-search-status]')).to_have_text('1 / 2')
+        expect(page.locator('[data-roster-range]')).to_have_text('D34–D29')
+        page.locator('[data-search-next]').click()
+        expect(page.locator('[data-roster-range]')).to_have_text('D17–D9')
+        self.assertEqual(page.locator('.shift-door-person.is-search-match').count(), 2)
+        self.assertGreater(page.locator('.shift-door-person.is-search-dimmed').count(), 0)
+        search.fill('Bea')
+        expect(page.locator(f'.shift-roster-needs [data-roster-person="{pending_id}"]')).to_have_class('shift-door-person is-search-match is-search-current')
+        search.fill('Una')
+        expect(page.locator(f'.shift-roster-unassigned [data-roster-person="{self.ids["UNSET"]}"]')).to_have_class('shift-door-person is-search-match is-search-current')
+        search.fill('')
+        self.assertEqual(page.locator('.shift-door-person.is-search-match, .shift-door-person.is-search-dimmed').count(), 0)
+        self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
+
+        page.set_viewport_size({'width':1280, 'height':900})
+        helper.ready(page, '/neostaffing/shift-flow')
+        card = page.locator(f'[data-roster-person="{pending_id}"]')
+        expect(page.locator(f'.shift-roster-needs [data-roster-person="{pending_id}"]')).to_be_visible()
+        target = page.locator(f'[data-final-door-target="{self.area_ids["Door 17"]}"]')
+        before = int(page.locator('[data-roster-total-count]').inner_text())
+        page.evaluate('''() => {
+            const original = window.fetch;
+            window.fetch = (url, options) => {
+                if (!String(url).endsWith('/final-door')) return original(url, options);
+                window.fetch = original;
+                return new Promise(resolve => { window.releaseNeedsSave = () => resolve(original(url, options)); });
+            };
+        }''')
+        with page.expect_response(lambda response: response.url.endswith('/final-door')) as saved:
+            card.drag_to(target)
+            expect(target.locator(f'[data-roster-person="{pending_id}"]')).to_be_visible()
+            expect(page.locator('[data-roster-total-count]')).to_have_text(str(before + 1))
+            expect(page.locator('[data-roster-needs-people]')).not_to_contain_text('Bea Pending')
+            page.evaluate('window.releaseNeedsSave()')
+        self.assertEqual(saved.value.status, 200)
+        expect(card.locator('[data-flow-warning]')).to_be_visible()
+        expect(page.locator(f'[data-ballmat-door="{self.area_ids["Door 17"]}"] [data-ballmat-person="{pending_id}"]')).to_be_visible()
+        helper.ready(page, '/neostaffing/shift-flow')
+        expect(target.locator(f'[data-roster-person="{pending_id}"]')).to_be_visible()
+        self.assertEqual(page.locator(f'.shift-roster-needs [data-roster-person="{pending_id}"]').count(), 0)
+        with self.fixture.app.app_context():
+            person = db.session.get(StaffingPerson, pending_id)
+            self.assertEqual(staffing.assignment_service.shift_home(person).work_area_unit_id, self.area_ids['East Ballmat'])
+            self.assertEqual(person.shift_flow_plan.final_door_work_area_id, self.area_ids['Door 17'])
+            self.assertEqual(person.shift_flow_plan.setup_work_area_id, self.area_ids['Door 21'])
+            self.assertIsNone(person.shift_flow_plan.ballmat_transition)
+
+        incomplete = page.locator(f'.shift-roster-needs [data-roster-person="{self.ids["INCOMPLETE"]}"]')
+        original_count = page.locator('[data-roster-needs-count]').inner_text()
+        page.route('**/final-door', lambda route: route.fulfill(status=409, content_type='application/json',
+            body='{"ok":false,"conflict":{"message":"Reload and try again."}}'))
+        with page.expect_response(lambda response: response.url.endswith('/final-door')) as failed:
+            incomplete.drag_to(target)
+        self.assertEqual(failed.value.status, 409)
+        expect(incomplete).to_be_visible()
+        expect(page.locator('[data-roster-needs-count]')).to_have_text(original_count)
+        expect(page.locator('[data-roster-total-count]')).to_have_text(str(before + 1))
+        expect(page.locator('[data-roster-feedback]')).to_contain_text('Reload and try again')
+        self.assertEqual(errors, [])
+        context.unroute_all(behavior='ignoreErrors')
         browser.close()

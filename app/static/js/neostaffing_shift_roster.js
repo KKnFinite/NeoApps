@@ -29,8 +29,8 @@
     const turn = delta => { const before = page; page += delta; render(); if (page !== before && scroll) scroll.scrollLeft = 0; return page !== before; };
     previous.addEventListener('click', () => turn(-1));
     next.addEventListener('click', () => turn(1));
-    mobile.addEventListener('change', () => { page = 0; render(); });
-    window.addEventListener?.('resize', render);
+    mobile.addEventListener('change', () => { page = 0; render(); if (matches.length) showMatch(); });
+    window.addEventListener?.('resize', () => { render(); if (matches.length) showMatch(); });
     let touchStart;
     scroll?.addEventListener('touchstart', event => {
         if (!mobile.matches) return;
@@ -47,8 +47,52 @@
     }, {passive:false});
     render();
 
+    const search = root.querySelector('[data-roster-search]');
+    const searchStatus = root.querySelector('[data-search-status]');
+    const searchPrevious = root.querySelector('[data-search-previous]');
+    const searchNext = root.querySelector('[data-search-next]');
+    const cards = [...root.querySelectorAll('[data-roster-person]')];
+    let matches = [], matchIndex = -1;
+    const showMatch = () => {
+        const card = matches[matchIndex];
+        cards.forEach(item => item.classList.toggle('is-search-current', item === card));
+        searchStatus.textContent = card ? `${matchIndex + 1} / ${matches.length}` : '';
+        searchPrevious.disabled = searchNext.disabled = matches.length < 2;
+        if (!card) return;
+        const column = card.closest('[data-final-door-target]');
+        if (mobile.matches && column) {
+            const size = window.innerWidth >= 430 ? 4 : 3;
+            page = Math.floor(doors.indexOf(column) / size);
+            render();
+            if (scroll) scroll.scrollLeft = 0;
+        } else if (!column && scroll) {
+            scroll.scrollLeft = scroll.scrollWidth;
+        }
+    };
+    const searchRoster = () => {
+        const query = search.value.trim().toLocaleLowerCase();
+        matches = query ? cards.filter(card => card.dataset.personName.toLocaleLowerCase().includes(query)) : [];
+        cards.forEach(card => {
+            card.classList.toggle('is-search-match', !!query && matches.includes(card));
+            card.classList.toggle('is-search-dimmed', !!query && !matches.includes(card));
+        });
+        matchIndex = matches.length ? 0 : -1;
+        showMatch();
+        if (query && !matches.length) searchStatus.textContent = 'No matches';
+    };
+    search?.addEventListener('input', searchRoster);
+    searchPrevious?.addEventListener('click', () => { matchIndex = (matchIndex - 1 + matches.length) % matches.length; showMatch(); });
+    searchNext?.addEventListener('click', () => { matchIndex = (matchIndex + 1) % matches.length; showMatch(); });
+
     const feedback = root.querySelector('[data-roster-feedback]');
     const targets = [...root.querySelectorAll('[data-final-door-target]')];
+    const needsPeople = root.querySelector('[data-roster-needs-people]');
+    const needsCount = root.querySelector('[data-roster-needs-count]');
+    const needsEmpty = root.querySelector('[data-roster-needs-empty]');
+    const rosterTotal = root.querySelector('[data-roster-total-count]');
+    const plannedCount = document.querySelector('[data-roster-planned-count]');
+    const ballmatTotal = root.querySelector('[data-ballmat-total-count]');
+    const headerBallmatTotal = document.querySelector('[data-roster-header-ballmat-count]');
     let dragged = null, pendingCard = null, saving = false, toastTimer;
     const draggedClicks = new WeakSet();
     const announce = (message, error = false) => {
@@ -72,6 +116,15 @@
         people.append(...sorted);
         column.querySelector('[data-roster-count]').textContent = String(sorted.length);
         column.querySelector('[data-roster-empty]').hidden = sorted.length > 0;
+    };
+    const adjustCount = (element, delta) => {
+        if (element) element.textContent = String(Number(element.textContent) + delta);
+    };
+    const refreshNeeds = () => {
+        if (!needsPeople) return;
+        const count = [...needsPeople.children].filter(child => child.dataset.rosterPerson).length;
+        needsCount.textContent = String(count);
+        needsEmpty.hidden = count > 0;
     };
     const clearTargets = () => targets.forEach(target => target.classList.remove('is-drop-target'));
     root.querySelectorAll('[data-roster-person][draggable="true"]').forEach(card => {
@@ -113,17 +166,35 @@
             dragged = null; clearTargets();
             if (card.dataset.finalDoor === door) return;
             const version = card.dataset.flowVersion;
-            const source = card.closest('[data-final-door-target]');
+            const source = card.closest('[data-final-door-target]') || card.closest('[data-roster-needs-people]');
+            if (!source) return;
+            const fromNeeds = source === needsPeople;
+            const reason = fromNeeds && root.querySelector(`[data-roster-needs-reason="${card.dataset.rosterPerson}"]`);
             const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
             const ballmatSource = ballmat?.closest('[data-ballmat-door]');
-            const ballmatTarget = ballmat && root.querySelector(`[data-ballmat-door="${door}"]`);
+            const ballmatTarget = (ballmat || (fromNeeds && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
+            const newBallmat = fromNeeds && !ballmat && ballmatTarget ? document.createElement('span') : null;
+            if (newBallmat) {
+                newBallmat.className = 'shift-ballmat-person';
+                newBallmat.dataset.ballmatPerson = card.dataset.rosterPerson;
+                newBallmat.dataset.personLast = card.dataset.personLast;
+                newBallmat.dataset.personFirst = card.dataset.personFirst;
+                newBallmat.textContent = card.dataset.personName;
+            }
+            const marker = ballmat || newBallmat;
             // Retain exact positions as well as field state until accepted.
             const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
+            if (reason) reason.hidden = true;
             target.querySelector('[data-roster-people]').append(card);
-            refreshColumn(source); refreshColumn(target);
+            if (fromNeeds) {
+                refreshNeeds(); adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
+            } else refreshColumn(source);
+            refreshColumn(target);
             if (ballmatTarget) {
-                ballmatTarget.querySelector('[data-roster-people]').append(ballmat);
-                refreshColumn(ballmatSource); refreshColumn(ballmatTarget);
+                ballmatTarget.querySelector('[data-roster-people]').append(marker);
+                if (ballmatSource) refreshColumn(ballmatSource);
+                refreshColumn(ballmatTarget);
+                if (newBallmat) { adjustCount(ballmatTotal, 1); adjustCount(headerBallmatTotal, 1); }
             }
             saving = true; pendingCard = card; root.setAttribute('aria-busy', 'true');
             try {
@@ -145,8 +216,9 @@
                 warning.title = payload.flow_warning || '';
                 warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
                 refreshColumn(target);
-                if (payload.previous_ballmat_side !== payload.ballmat_side) {
-                    for (const [side, delta] of [[payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
+                if (reason) reason.remove();
+                if (fromNeeds || payload.previous_ballmat_side !== payload.ballmat_side) {
+                    for (const [side, delta] of [[fromNeeds ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
                         const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
                         if (count) count.textContent = String(Number(count.textContent) + delta);
                     }
@@ -162,14 +234,25 @@
                     const phase = document.querySelector('[data-phase-editor]');
                     if (phase) phase.dataset.version = payload.plan_version;
                 }
+                if (matches.length) showMatch();
                 announce(`Final Door saved · ${target.dataset.doorLabel}`);
             } catch (error) {
-                source.querySelector('[data-roster-people]').insertBefore(card, nextCard);
-                refreshColumn(source); refreshColumn(target);
+                (fromNeeds ? source : source.querySelector('[data-roster-people]')).insertBefore(card, nextCard);
+                if (reason) reason.hidden = false;
+                if (fromNeeds) {
+                    refreshNeeds(); adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
+                } else refreshColumn(source);
+                refreshColumn(target);
                 if (ballmatTarget) {
-                    ballmatSource.querySelector('[data-roster-people]').insertBefore(ballmat, nextBallmat);
-                    refreshColumn(ballmatSource); refreshColumn(ballmatTarget);
+                    if (newBallmat) {
+                        newBallmat.remove(); adjustCount(ballmatTotal, -1); adjustCount(headerBallmatTotal, -1);
+                    } else if (ballmatSource) {
+                        ballmatSource.querySelector('[data-roster-people]').insertBefore(ballmat, nextBallmat);
+                        refreshColumn(ballmatSource);
+                    }
+                    refreshColumn(ballmatTarget);
                 }
+                if (matches.length) showMatch();
                 announce(error.message, true);
             }
             finally { saving = false; pendingCard = null; root.setAttribute('aria-busy', 'false'); }
