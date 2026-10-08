@@ -33,7 +33,7 @@
   <aside class="shift-roster-rail" aria-label="Needs Assignment and Unassigned">
     <section class="shift-roster-needs" aria-labelledby="shift-needs-title">
       <h2 id="shift-needs-title">NEEDS ASSIGNMENT <small data-roster-needs-count>{{ roster.needs_assignment|length }}</small></h2>
-      <div data-roster-needs-people>{% for entry in roster.needs_assignment %}{{ employee(entry, can_edit_shift_flow, true) }}<small data-roster-needs-reason="{{ entry.person.id }}">{{ entry.reason }}</small>{% endfor %}<p data-roster-needs-empty{% if roster.needs_assignment %} hidden{% endif %}>All plans have a Final Door.</p></div>
+      <div data-roster-needs-people>{% for entry in roster.needs_assignment %}{{ employee(entry, can_edit_shift_flow, true) }}{% if can_edit_shift_flow %}<select class="shift-needs-door-select" data-needs-door-select="{{ entry.person.id }}" aria-label="Assign {{ entry.person.full_name }} to a Final Door"><option value="">ASSIGN TO DOOR…</option>{% for column in roster.columns if column.id %}<option value="{{ column.id }}">{{ column.label }}</option>{% endfor %}</select>{% endif %}<small data-roster-needs-reason="{{ entry.person.id }}">{{ entry.reason }}</small>{% endfor %}<p data-roster-needs-empty{% if roster.needs_assignment %} hidden{% endif %}>All plans have a Final Door.</p></div>
     </section>
     <section class="shift-roster-unassigned" aria-labelledby="shift-unassigned-title">
       <h2 id="shift-unassigned-title">UNASSIGNED <small>{{ roster.unassigned|length }}</small></h2>

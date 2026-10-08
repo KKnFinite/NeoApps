@@ -149,6 +149,118 @@
             }
         });
     });
+    // Native drag and the touch-friendly Needs Assignment picker use one save path.
+    const moveToDoor = async (card, target) => {
+        if (!card || saving) return;
+        const door = target.dataset.finalDoorTarget;
+        if (card.dataset.finalDoor === door) return;
+        const version = card.dataset.flowVersion;
+        const source = card.closest('[data-final-door-target]') || card.closest('[data-roster-needs-people]');
+        if (!source) return;
+        const fromNeeds = source === needsPeople;
+        const reason = fromNeeds && root.querySelector(`[data-roster-needs-reason="${card.dataset.rosterPerson}"]`);
+        const assignSelect = fromNeeds && root.querySelector(`[data-needs-door-select="${card.dataset.rosterPerson}"]`);
+        const directAssignment = !!(assignSelect && assignSelect.value === door);
+        const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
+        const ballmatSource = ballmat?.closest('[data-ballmat-door]');
+        const ballmatTarget = (ballmat || (fromNeeds && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
+        const newBallmat = fromNeeds && !ballmat && ballmatTarget ? document.createElement('span') : null;
+        if (newBallmat) {
+            newBallmat.className = 'shift-ballmat-person';
+            newBallmat.dataset.ballmatPerson = card.dataset.rosterPerson;
+            newBallmat.dataset.personLast = card.dataset.personLast;
+            newBallmat.dataset.personFirst = card.dataset.personFirst;
+            newBallmat.textContent = card.dataset.personName;
+        }
+        const marker = ballmat || newBallmat;
+        // Retain exact positions as well as field state until accepted.
+        const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
+        if (reason) reason.hidden = true;
+        if (assignSelect) assignSelect.hidden = true;
+        target.querySelector('[data-roster-people]').append(card);
+        if (fromNeeds) {
+            refreshNeeds(); adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
+        } else refreshColumn(source);
+        refreshColumn(target);
+        if (ballmatTarget) {
+            ballmatTarget.querySelector('[data-roster-people]').append(marker);
+            if (ballmatSource) refreshColumn(ballmatSource);
+            refreshColumn(ballmatTarget);
+            if (newBallmat) { adjustCount(ballmatTotal, 1); adjustCount(headerBallmatTotal, 1); }
+        }
+        saving = true; pendingCard = card; root.setAttribute('aria-busy', 'true');
+        try {
+            const response = await fetch(root.dataset.finalDoorUrl.replace('/0/', `/${card.dataset.rosterPerson}/`), {
+                method: 'POST', headers: {'Content-Type':'application/json', 'Accept':'application/json',
+                    'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content || ''},
+                body: JSON.stringify({final_door_work_area_id:door, expected_version:version})
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.ok) throw new Error(payload.conflict?.message || payload.error || 'Final Door was not saved.');
+            card.dataset.finalDoor = String(payload.final_door_work_area_id);
+            card.dataset.flowVersion = payload.plan_version;
+            card.dataset.flowColor = payload.flow_color || '';
+            ['discharge','at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
+            const setupStrip = card.querySelector('[data-setup-strip]');
+            if (setupStrip) setupStrip.hidden = !payload.has_setup;
+            const warning = card.querySelector('[data-flow-warning]');
+            warning.hidden = !payload.flow_warning;
+            warning.title = payload.flow_warning || '';
+            warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
+            refreshColumn(target);
+            if (reason) reason.remove();
+            if (assignSelect) assignSelect.remove();
+            if (fromNeeds || payload.previous_ballmat_side !== payload.ballmat_side) {
+                for (const [side, delta] of [[fromNeeds ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
+                    const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
+                    if (count) count.textContent = String(Number(count.textContent) + delta);
+                }
+            }
+            const editor = document.querySelector('.neostaffing-shift-flow-drawer form');
+            if (editor?.querySelector('[name="expected_version"]')?.value === version) {
+                editor.querySelector('[name="expected_version"]').value = payload.plan_version;
+                const changes = payload.editor_changes || {shift_flow_final_door_work_area_id:payload.final_door_work_area_id};
+                Object.entries(changes).forEach(([name, value]) => {
+                    const field = editor.querySelector(`[name="${name}"]`);
+                    if (field) field.value = value == null ? '' : String(value);
+                });
+                const phase = document.querySelector('[data-phase-editor]');
+                if (phase) phase.dataset.version = payload.plan_version;
+            }
+            if (matches.length) showMatch();
+            if (directAssignment) {
+                if (mobile.matches) {
+                    const size = window.innerWidth >= 430 ? 4 : 3;
+                    page = Math.floor(doors.indexOf(target) / size);
+                    render();
+                    if (scroll) scroll.scrollLeft = 0;
+                } else if (scroll?.getBoundingClientRect && target.getBoundingClientRect) {
+                    scroll.scrollLeft += target.getBoundingClientRect().left - scroll.getBoundingClientRect().left - 8;
+                }
+            }
+            announce(`Final Door saved · ${target.dataset.doorLabel}`);
+        } catch (error) {
+            (fromNeeds ? source : source.querySelector('[data-roster-people]')).insertBefore(card, nextCard);
+            if (reason) reason.hidden = false;
+            if (assignSelect) { assignSelect.hidden = false; assignSelect.value = ''; }
+            if (fromNeeds) {
+                refreshNeeds(); adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
+            } else refreshColumn(source);
+            refreshColumn(target);
+            if (ballmatTarget) {
+                if (newBallmat) {
+                    newBallmat.remove(); adjustCount(ballmatTotal, -1); adjustCount(headerBallmatTotal, -1);
+                } else if (ballmatSource) {
+                    ballmatSource.querySelector('[data-roster-people]').insertBefore(ballmat, nextBallmat);
+                    refreshColumn(ballmatSource);
+                }
+                refreshColumn(ballmatTarget);
+            }
+            if (matches.length) showMatch();
+            announce(error.message, true);
+        }
+        finally { saving = false; pendingCard = null; root.setAttribute('aria-busy', 'false'); }
+    };
     targets.forEach(target => {
         target.addEventListener('dragover', event => {
             if (!dragged || saving) return;
@@ -159,103 +271,22 @@
         target.addEventListener('dragleave', event => {
             if (!target.contains(event.relatedTarget)) target.classList.remove('is-drop-target');
         });
-        target.addEventListener('drop', async event => {
+        target.addEventListener('drop', event => {
             if (!dragged || saving) return;
             event.preventDefault();
-            const card = dragged, door = target.dataset.finalDoorTarget;
-            dragged = null; clearTargets();
-            if (card.dataset.finalDoor === door) return;
-            const version = card.dataset.flowVersion;
-            const source = card.closest('[data-final-door-target]') || card.closest('[data-roster-needs-people]');
-            if (!source) return;
-            const fromNeeds = source === needsPeople;
-            const reason = fromNeeds && root.querySelector(`[data-roster-needs-reason="${card.dataset.rosterPerson}"]`);
-            const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
-            const ballmatSource = ballmat?.closest('[data-ballmat-door]');
-            const ballmatTarget = (ballmat || (fromNeeds && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
-            const newBallmat = fromNeeds && !ballmat && ballmatTarget ? document.createElement('span') : null;
-            if (newBallmat) {
-                newBallmat.className = 'shift-ballmat-person';
-                newBallmat.dataset.ballmatPerson = card.dataset.rosterPerson;
-                newBallmat.dataset.personLast = card.dataset.personLast;
-                newBallmat.dataset.personFirst = card.dataset.personFirst;
-                newBallmat.textContent = card.dataset.personName;
-            }
-            const marker = ballmat || newBallmat;
-            // Retain exact positions as well as field state until accepted.
-            const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
-            if (reason) reason.hidden = true;
-            target.querySelector('[data-roster-people]').append(card);
-            if (fromNeeds) {
-                refreshNeeds(); adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
-            } else refreshColumn(source);
-            refreshColumn(target);
-            if (ballmatTarget) {
-                ballmatTarget.querySelector('[data-roster-people]').append(marker);
-                if (ballmatSource) refreshColumn(ballmatSource);
-                refreshColumn(ballmatTarget);
-                if (newBallmat) { adjustCount(ballmatTotal, 1); adjustCount(headerBallmatTotal, 1); }
-            }
-            saving = true; pendingCard = card; root.setAttribute('aria-busy', 'true');
-            try {
-                const response = await fetch(root.dataset.finalDoorUrl.replace('/0/', `/${card.dataset.rosterPerson}/`), {
-                    method: 'POST', headers: {'Content-Type':'application/json', 'Accept':'application/json',
-                        'X-CSRF-Token':document.querySelector('meta[name="csrf-token"]')?.content || ''},
-                    body: JSON.stringify({final_door_work_area_id:door, expected_version:version})
-                });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok || !payload.ok) throw new Error(payload.conflict?.message || payload.error || 'Final Door was not saved.');
-                card.dataset.finalDoor = String(payload.final_door_work_area_id);
-                card.dataset.flowVersion = payload.plan_version;
-                card.dataset.flowColor = payload.flow_color || '';
-                ['discharge','at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
-                const setupStrip = card.querySelector('[data-setup-strip]');
-                if (setupStrip) setupStrip.hidden = !payload.has_setup;
-                const warning = card.querySelector('[data-flow-warning]');
-                warning.hidden = !payload.flow_warning;
-                warning.title = payload.flow_warning || '';
-                warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
-                refreshColumn(target);
-                if (reason) reason.remove();
-                if (fromNeeds || payload.previous_ballmat_side !== payload.ballmat_side) {
-                    for (const [side, delta] of [[fromNeeds ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
-                        const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
-                        if (count) count.textContent = String(Number(count.textContent) + delta);
-                    }
-                }
-                const editor = document.querySelector('.neostaffing-shift-flow-drawer form');
-                if (editor?.querySelector('[name="expected_version"]')?.value === version) {
-                    editor.querySelector('[name="expected_version"]').value = payload.plan_version;
-                    const changes = payload.editor_changes || {shift_flow_final_door_work_area_id:payload.final_door_work_area_id};
-                    Object.entries(changes).forEach(([name, value]) => {
-                        const field = editor.querySelector(`[name="${name}"]`);
-                        if (field) field.value = value == null ? '' : String(value);
-                    });
-                    const phase = document.querySelector('[data-phase-editor]');
-                    if (phase) phase.dataset.version = payload.plan_version;
-                }
-                if (matches.length) showMatch();
-                announce(`Final Door saved · ${target.dataset.doorLabel}`);
-            } catch (error) {
-                (fromNeeds ? source : source.querySelector('[data-roster-people]')).insertBefore(card, nextCard);
-                if (reason) reason.hidden = false;
-                if (fromNeeds) {
-                    refreshNeeds(); adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
-                } else refreshColumn(source);
-                refreshColumn(target);
-                if (ballmatTarget) {
-                    if (newBallmat) {
-                        newBallmat.remove(); adjustCount(ballmatTotal, -1); adjustCount(headerBallmatTotal, -1);
-                    } else if (ballmatSource) {
-                        ballmatSource.querySelector('[data-roster-people]').insertBefore(ballmat, nextBallmat);
-                        refreshColumn(ballmatSource);
-                    }
-                    refreshColumn(ballmatTarget);
-                }
-                if (matches.length) showMatch();
-                announce(error.message, true);
-            }
-            finally { saving = false; pendingCard = null; root.setAttribute('aria-busy', 'false'); }
+            const card = dragged;
+            dragged = null;
+            clearTargets();
+            void moveToDoor(card, target);
+        });
+    });
+    root.querySelectorAll('[data-needs-door-select]').forEach(select => {
+        select.addEventListener('change', () => {
+            const card = cards.find(item => item.dataset.rosterPerson === select.dataset.needsDoorSelect
+                && item.closest('[data-roster-needs-people]') === needsPeople);
+            const target = targets.find(item => item.dataset.finalDoorTarget === select.value);
+            if (!card || !target || saving) { select.value = ''; return; }
+            void moveToDoor(card, target);
         });
     });
 })();

@@ -101,6 +101,9 @@
 .shift-roster-rail section>div { max-height:32vh; overflow-y:auto; scrollbar-width:thin; }
 .shift-roster-rail small,.shift-roster-rail p { font-size:10px; line-height:1.4; color:#a9a290; }
 .shift-roster-rail .shift-door-person { padding:6px 0; }
+.shift-needs-door-select { display:block; width:100%; min-height:34px; margin:4px 0 6px; padding:5px 6px; border:1px solid #478481; border-radius:4px; background:#112a30; color:#e4f7f2; font-size:11px; cursor:pointer; }
+.shift-needs-door-select:focus-visible { outline:2px solid #8de2d2; outline-offset:1px; }
+.shift-needs-door-select[hidden] { display:none; }
 .shift-roster-feedback { position:fixed; bottom:80px; right:20px; z-index:100; max-width:min(320px,80vw); padding:9px 13px; border:1px solid #537f71; border-radius:5px; background:#19332b; color:#d5e8df; font-size:12px; box-shadow:0 4px 18px #0006; }
 .shift-roster-feedback.is-error { background:#332b1c; border-color:#b29150; color:#e8c88f; }
 .shift-door-column.is-drop-target { outline:2px solid #7ba99a; outline-offset:-2px; }
