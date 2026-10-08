@@ -314,6 +314,14 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                                 cellsWidth: cells.reduce((sum, cell) => sum + cell.getBoundingClientRect().width, 0)};
                         })""")
                         self.assertEqual([item["empty"] for item in geometry], [True, False])
+                        font_tiers = rows.evaluate_all("""rows => rows.map(row => ({
+                            transfer: getComputedStyle(row.querySelector('.neoscorpion-dispatch-transfer-estimate > strong')).fontSize,
+                            estimate: getComputedStyle(row.querySelector('.neoscorpion-dispatch-transfer-estimate > small')).fontSize,
+                            apu: getComputedStyle(row.querySelector('.neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed > strong')).fontSize,
+                        }))""")
+                        for tiers in font_tiers:
+                            self.assertEqual(tiers['estimate'], tiers['apu'])
+                            self.assertLess(float(tiers['estimate'][:-2]), float(tiers['transfer'][:-2]))
                         for item in geometry:
                             self.assertTrue(item["aligned"] and item["reserved"], item)
                             self.assertAlmostEqual(item["rowWidth"], item["cellsWidth"], delta=2)
@@ -385,6 +393,12 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                             }""", timeout=15000)
                             self.assertEqual(page.locator('.neoscorpion-dispatch-primary-row.is-ready-to-assign').count(), 2)
                             self.assertEqual(page.locator('[data-cycle-history]').count(), 2)
+                            refreshed_tiers = page.locator('.neoscorpion-dispatch-primary-row').nth(1).evaluate("""row => ({
+                                transfer: getComputedStyle(row.querySelector('.neoscorpion-dispatch-transfer-estimate > strong')).fontSize,
+                                estimate: getComputedStyle(row.querySelector('.neoscorpion-dispatch-transfer-estimate > small')).fontSize,
+                                apu: getComputedStyle(row.querySelector('.neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed > strong')).fontSize,
+                            })""")
+                            self.assertEqual(refreshed_tiers, font_tiers[1])
                             self.assertEqual(history_rows.first.locator('td').first.evaluate(
                                 'cell => getComputedStyle(cell).fontSize'), fonts['history'][0][0])
         finally:
