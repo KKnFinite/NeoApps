@@ -223,6 +223,24 @@
         font-size: .62rem;
     }
 }
+/* Mission-line readability: about 10% larger without enlarging headers or summaries. */
+.neorain-outbound-table tbody tr[data-neorain-inbound-row] > td,
+.neorain-outbound-table tbody tr[data-neorain-outbound-row] > td {
+    font-size: .836rem;
+}
+@media (max-width: 760px) {
+    .neorain-mobile-mission-grid .neorain-mobile-mission-open strong,
+    .neorain-mobile-mission-grid .neorain-mobile-mission-open span,
+    .neorain-mobile-mission-grid .neorain-mobile-time-display span {
+        font-size: .77rem;
+    }
+    .neorain-mobile-mission-grid .neorain-late-inclusion-control {
+        font-size: .55rem;
+    }
+    .neorain-mobile-inline-detail .neorain-mobile-detail-facts dd {
+        font-size: .748rem;
+    }
+}
 </style>
 <script>
 (() => {
