@@ -100,7 +100,8 @@
         <tbody>
             {% for row in rows %}
             {% set row_state = 'neorain-outbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-outbound-row--no-return' if row.no_return else ('neorain-outbound-row--blocked-out' if row.status == 'BLOCKED OUT' else '')) %}
-            <tr class="{{ row_state }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
+            {% set late_class = 'neorain-row--late' if (row.departure_variance|int) >= 1 else '' %}
+            <tr class="{{ row_state }} {{ late_class }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
                 <td data-label="Wave">{{ row.wave }}</td>
                 <td data-label="Flight #"><strong>{{ row.flight_number or '-' }}</strong></td>
                 <td data-label="Tail">{{ row.tail or '-' }}</td>

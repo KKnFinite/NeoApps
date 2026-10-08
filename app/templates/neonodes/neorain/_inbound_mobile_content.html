@@ -88,7 +88,8 @@
         </div>
         {% for row in rows %}
         {% set row_state = 'neorain-inbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-inbound-row--blocked-in' if row.block_in else '') %}
-        <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
+        {% set late_class = 'neorain-row--late' if (row.arrival_variance|int) >= 1 else '' %}
+        <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
             <div class="neorain-mobile-mission-grid">
                 <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>
                 <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.origin or '-' }}</span></button>

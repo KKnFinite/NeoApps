@@ -111,6 +111,28 @@
     color: #728194;
     font-size: .66rem;
 }
+
+.neorain-outbound-table tbody tr[data-neorain-inbound-row].neorain-row--late > td:nth-child(-n+9),
+.neorain-outbound-table tbody tr[data-neorain-outbound-row].neorain-row--late > td:nth-child(-n+15) {
+    color: #f2a3aa;
+    font-weight: 800;
+}
+
+.neorain-outbound-table tbody tr[data-neorain-inbound-row].neorain-row--late > td:nth-child(-n+9) :is(strong, span, output, summary, button, input, select),
+.neorain-outbound-table tbody tr[data-neorain-outbound-row].neorain-row--late > td:nth-child(-n+15) :is(strong, span, output, summary, button, input, select) {
+    color: #f2a3aa;
+    font-weight: 800;
+}
+
+@media (max-width: 760px) {
+    .neorain-mobile-mission[data-neorain-inbound-row].neorain-row--late .neorain-mobile-mission-grid > :nth-child(-n+5),
+    .neorain-mobile-mission[data-neorain-inbound-row].neorain-row--late .neorain-mobile-mission-grid > :nth-child(-n+5) :is(strong, span, output, button, input),
+    .neorain-mobile-mission[data-neorain-outbound-row].neorain-row--late .neorain-mobile-mission-grid > :nth-child(-n+6),
+    .neorain-mobile-mission[data-neorain-outbound-row].neorain-row--late .neorain-mobile-mission-grid > :nth-child(-n+6) :is(strong, span, output, button, input) {
+        color: #f2a3aa;
+        font-weight: 800;
+    }
+}
 @media (max-width: 900px) {
     .neorain-delay-line-form {
         grid-template-columns: 4.5rem 3.5rem minmax(0, 1fr) auto;
