@@ -143,6 +143,27 @@ class NeoScorpionSortFueler(db.Model):
     user = db.relationship("User")
 
 
+class NeoScorpionFuelerNickname(db.Model):
+    """Gateway-scoped display preference; operational records keep real user IDs."""
+
+    __tablename__ = "neoscorpion_fueler_nicknames"
+    __table_args__ = (
+        db.UniqueConstraint("gateway_id", "user_id", name="uq_neoscorpion_fueler_nickname_user"),
+        db.UniqueConstraint("gateway_id", "nickname_key", name="uq_neoscorpion_fueler_nickname_key"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    nickname = db.Column(db.String(80), nullable=False)
+    nickname_key = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    gateway = db.relationship("Gateway")
+    user = db.relationship("User")
+
+
 class NeoScorpionSortTruck(db.Model):
     __tablename__ = "neoscorpion_sort_trucks"
     __table_args__ = (

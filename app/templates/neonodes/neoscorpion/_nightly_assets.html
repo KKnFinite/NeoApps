@@ -62,6 +62,16 @@
                         <small>{{ row.user.username }}{% if not row.user.is_active %} / INACTIVE{% endif %}</small>
                     </span>
                     {% if can_manage_assets %}
+                    <form class="neoscorpion-assets-inline-form neoscorpion-assets-nickname-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                        <input type="hidden" name="action" value="set_fueler_nickname">
+                        <input type="hidden" name="user_id" value="{{ row.user.id }}">
+                        <input type="hidden" name="expected_nickname" value="{{ fueler_nicknames.get(row.user.id, '') }}">
+                        <label>
+                            Operational Nickname
+                            <input name="nickname" maxlength="80" value="{{ fueler_nicknames.get(row.user.id, '') }}" placeholder="Actual name when blank">
+                        </label>
+                        <button class="action-button neoscorpion-save-button" type="submit">Save Nickname</button>
+                    </form>
                     <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
                         <input type="hidden" name="action" value="remove_fueler">
                         <input type="hidden" name="user_id" value="{{ row.user.id }}">

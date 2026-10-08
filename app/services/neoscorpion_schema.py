@@ -13,6 +13,7 @@ from app.models import (
     NeoScorpionFuelingEventTankSnapshot,
     NeoScorpionFuelCycleHistory,
     NeoScorpionFuelTankState,
+    NeoScorpionFuelerNickname,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
     NeoScorpionSettings,
@@ -31,6 +32,7 @@ NEOSCORPION_SCHEMA_LOCK_TIMEOUT = "5s"
 NEOSCORPION_MODEL_TABLES = (
     NeoScorpionTailFuelState,
     NeoScorpionFuelTruck,
+    NeoScorpionFuelerNickname,
     NeoScorpionSettings,
     NeoScorpionSpearAuditEntry,
     NeoScorpionSpearCalibrationReset,

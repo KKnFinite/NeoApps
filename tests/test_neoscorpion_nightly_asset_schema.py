@@ -8,6 +8,7 @@ from app import create_app
 from app.extensions import db
 from app.models import (
     NeoScorpionFuelTruck,
+    NeoScorpionFuelerNickname,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
@@ -66,6 +67,7 @@ class NeoScorpionNightlyAssetSchemaTest(unittest.TestCase):
             NeoScorpionSortTruck,
             NeoScorpionSortFueler,
             NeoScorpionSortAssetState,
+            NeoScorpionFuelerNickname,
         ):
             model.__table__.drop(bind=db.engine)
 
@@ -78,6 +80,7 @@ class NeoScorpionNightlyAssetSchemaTest(unittest.TestCase):
                 "neoscorpion_sort_asset_states",
                 "neoscorpion_sort_fuelers",
                 "neoscorpion_sort_trucks",
+                "neoscorpion_fueler_nicknames",
             }.issubset(table_names)
         )
 

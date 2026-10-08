@@ -1,6 +1,6 @@
 <section class="neoscorpion-panel" data-fuel-assignments-panel>
         <div class="neoscorpion-panel-head">
-            <span>My Fuel Assignments</span>
+            <span>{{ operational_fueler_name }} · My Fuel Assignments</span>
             <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }}{% else %}No current sort{% endif %}</strong>
         </div>
         {% if not operation %}

@@ -546,12 +546,27 @@
 
 .neoscorpion-assets-row {
     display: flex;
+    flex-wrap: wrap;
     min-height: 42px;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding: 8px 0;
     border-bottom: 1px solid rgba(201, 208, 214, 0.1);
+}
+
+.neoscorpion-assets-nickname-form {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.neoscorpion-assets-nickname-form input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(201, 208, 214, 0.2);
+    border-radius: 6px;
+    background: rgba(3, 4, 6, 0.82);
+    color: var(--text);
 }
 
 .neoscorpion-assets-truck {

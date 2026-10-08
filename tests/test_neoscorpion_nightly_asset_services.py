@@ -1,11 +1,13 @@
 import unittest
 from datetime import date, datetime
+from sqlalchemy.exc import IntegrityError
 
 from app import create_app
 from app.extensions import db
 from app.models import (
     Gateway,
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelerNickname,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
     NeoScorpionSortAssetState,
@@ -21,10 +23,12 @@ from app.services.neoscorpion_assets import (
     remove_nightly_fueler,
     remove_nightly_truck,
     select_nightly_fueler,
+    set_nightly_fueler_nickname,
     select_nightly_truck,
     set_nightly_fuel_island_count,
     update_nightly_truck,
 )
+from app.services.neoscorpion_fueler_names import fueler_nicknames, operational_fueler_name
 
 
 class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
@@ -151,6 +155,41 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
             ).count(),
             1,
         )
+
+    def test_nickname_persists_across_sorts_is_gateway_scoped_and_clears(self):
+        self._commit(select_nightly_fueler(self.operation_a, self.user))
+        self._commit(select_nightly_fueler(self.operation_b, self.user))
+        self._commit(select_nightly_fueler(self.other_operation, self.user))
+        self._commit(set_nightly_fueler_nickname(
+            self.operation_a, self.gateway, self.user, "  Ace  "
+        ))
+        db.session.expire_all()
+        self.assertEqual(fueler_nicknames(self.gateway, [self.user]), {self.user.id: "Ace"})
+        self.assertEqual(operational_fueler_name(self.user, fueler_nicknames(self.gateway, [self.user])), "Ace")
+        self.assertEqual(operational_fueler_name(self.user, fueler_nicknames(self.other_gateway, [self.user])), self.user.display_name)
+        self._commit(set_nightly_fueler_nickname(
+            self.other_operation, self.other_gateway, self.user, "SDF Ace"
+        ))
+        self._commit(set_nightly_fueler_nickname(
+            self.operation_b, self.gateway, self.user, "", expected_nickname="Ace"
+        ))
+        self.assertEqual(NeoScorpionFuelerNickname.query.filter_by(gateway_id=self.gateway.id).count(), 0)
+        self.assertEqual(operational_fueler_name(self.user, fueler_nicknames(self.gateway, [self.user])), self.user.display_name)
+        self.assertEqual(fueler_nicknames(self.other_gateway, [self.user])[self.user.id], "SDF Ace")
+
+    def test_nickname_uniqueness_and_stale_edit(self):
+        other = User(username="second_fueler", password_hash="test")
+        db.session.add(other)
+        db.session.commit()
+        self._commit(select_nightly_fueler(self.operation_a, self.user))
+        self._commit(select_nightly_fueler(self.operation_a, other))
+        self._commit(set_nightly_fueler_nickname(self.operation_a, self.gateway, self.user, "Ace"))
+        with self.assertRaises(IntegrityError):
+            set_nightly_fueler_nickname(self.operation_a, self.gateway, other, "  ace  ")
+        db.session.rollback()
+        with self.assertRaisesRegex(ValueError, "Nickname changed"):
+            set_nightly_fueler_nickname(self.operation_a, self.gateway, self.user, "Pilot", expected_nickname="")
+        self.assertEqual(NeoScorpionFuelerNickname.query.filter_by(gateway_id=self.gateway.id).count(), 1)
 
     def test_truck_selection_validation_and_atomicity(self):
         selected = self._commit(

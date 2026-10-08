@@ -18,6 +18,7 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelWorkState,
     NeoScorpionFuelAuditEntry,
+    NeoScorpionFuelerNickname,
     NeoScorpionFuelTruck,
     NeoScorpionSortAssetState,
     NeoScorpionSortFueler,
@@ -297,6 +298,46 @@ def select_nightly_fueler(operation, user):
             user_id=user_id,
         )
     )
+    state = _record_change(state, locked_operation.id)
+    db.session.flush()
+    return _changed(state)
+
+
+def set_nightly_fueler_nickname(operation, gateway, user, nickname, expected_nickname=""):
+    """Edit a persistent gateway preference from a selected nightly fueler row."""
+    user_id = _entity_id(user, "fueler")
+    requested = str(nickname or "").strip()
+    nickname_key = requested.casefold()
+    if len(requested) > 80 or len(nickname_key) > 80 or any(ord(char) < 32 for char in requested):
+        raise ValueError("Nickname must be 80 characters or fewer and contain no control characters.")
+    locked_operation, state = _lock_operation_and_state(operation)
+    if locked_operation.gateway_id != gateway.id:
+        raise ValueError("Sort operation does not belong to this gateway.")
+    selected = NeoScorpionSortFueler.query.filter_by(
+        sort_date_operation_id=locked_operation.id, user_id=user_id,
+    ).first()
+    if selected is None:
+        raise ValueError("Select this fueler for tonight before editing a nickname.")
+    if User.query.filter_by(id=user_id).with_for_update().first() is None:
+        raise ValueError("Select an existing fueler.")
+    existing = NeoScorpionFuelerNickname.query.filter_by(
+        gateway_id=gateway.id, user_id=user_id,
+    ).with_for_update().first()
+    current = existing.nickname if existing else ""
+    if current != str(expected_nickname or ""):
+        raise ValueError("Nickname changed. Reload Fuel Dispatch and try again.")
+    if requested == current:
+        return _unchanged(state)
+    if not requested:
+        db.session.delete(existing)
+    elif existing is None:
+        db.session.add(NeoScorpionFuelerNickname(
+            gateway_id=gateway.id, user_id=user_id,
+            nickname=requested, nickname_key=nickname_key,
+        ))
+    else:
+        existing.nickname = requested
+        existing.nickname_key = nickname_key
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)

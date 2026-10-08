@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
 import re
@@ -41,6 +41,11 @@ from app.services.neoscorpion_assets import (
     lock_nightly_asset_scope_for_mutation,
     nightly_asset_context,
     record_nightly_operational_change,
+)
+from app.services.neoscorpion_fueler_names import (
+    OperationalFuelerDisplay,
+    fueler_nicknames,
+    operational_fueler_name,
 )
 from app.services.neoscorpion_fuel_planning import plan_fuel_by_tank
 from app.services.neoermac_tail_presence import (
@@ -352,13 +357,21 @@ def _fuel_assignments_revision_for_operation(operation):
     return int(revision or 0)
 
 
-def fuel_dispatch_context(gateway, *, include_asset_choices=False):
+def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nicknames=True):
     """Build core Dispatch first, then add optional planning intelligence."""
     context = _manual_fuel_dispatch_context(
         gateway, include_asset_choices=include_asset_choices
     )
     if context["operation"] is None:
         return context
+
+    nicknames = {}
+    if display_nicknames:
+        users = [*context["eligible_nightly_fuelers"],
+                 *context["nightly_assignment_fuelers"],
+                 *(row["user"] for row in context["nightly_fuelers"]),
+                 *(row["assigned_fueler"] for row in context["rows"])]
+        nicknames = fueler_nicknames(gateway, users)
 
     stage = "assignment recommendations"
     try:
@@ -372,6 +385,10 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
                 gateway=gateway,
                 settings=context["settings"],
                 nightly_assignment_fuelers=context["nightly_assignment_fuelers"],
+                operational_names={
+                    user.id: operational_fueler_name(user, nicknames)
+                    for user in context["nightly_assignment_fuelers"]
+                },
                 nightly_assignment_trucks=context["nightly_assignment_trucks"],
                 nightly_truck_states_by_truck_id=context[
                     "nightly_truck_states_by_truck_id"
@@ -410,6 +427,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
             gateway, include_asset_choices=include_asset_choices
         )
         _mark_spear_unavailable(context)
+        if display_nicknames:
+            _apply_operational_fueler_names(context, nicknames)
         return context
 
     context.update(
@@ -419,7 +438,46 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False):
         spear_indicator=spear_dispatch_status(spear_plan, context["spear_settings"]),
         spear_calibration=calibration_summary(live_calibrations),
     )
+    if display_nicknames:
+        _apply_operational_fueler_names(context, nicknames)
     return context
+
+
+def _apply_operational_fueler_names(context, nicknames):
+    """Adapt only live presentation; canonical SPEAR execution/audits stay unchanged."""
+    def display(user):
+        return OperationalFuelerDisplay(user, nicknames)
+
+    context["nightly_fuelers"] = [
+        {**row, "user": display(row["user"])} for row in context["nightly_fuelers"]
+    ]
+    for key in ("eligible_nightly_fuelers", "nightly_assignment_fuelers"):
+        context[key] = [display(user) for user in context[key]]
+    context["fueler_nicknames"] = nicknames
+    for row in context["rows"]:
+        if row.get("assigned_fueler") is not None:
+            row["assigned_fueler"] = display(row["assigned_fueler"])
+    plan = context.get("spear_plan")
+    if plan is None:
+        return
+    displayed_steps = []
+    for step in plan.steps:
+        explanation = step.explanation
+        if explanation and explanation.get("alternatives"):
+            explanation = {
+                **explanation,
+                "alternatives": [
+                    {**option, "fueler_name": nicknames.get(option["fueler_id"], option["fueler_name"])}
+                    for option in explanation["alternatives"]
+                ],
+            }
+        displayed_steps.append(replace(
+            step, fueler_name=nicknames.get(step.fueler_id, step.fueler_name),
+            explanation=explanation,
+        ))
+    displayed_plan = replace(plan, steps=tuple(displayed_steps))
+    context["spear_plan"] = displayed_plan
+    _attach_spear_plan(context["rows"], context["truck_visuals"], displayed_plan)
 
 
 def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
@@ -654,6 +712,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         gateway,
         NEOSCORPION_FUEL_ASSIGNMENTS_REFRESH_KEY,
     )
+    operational_name = operational_fueler_name(user, fueler_nicknames(gateway, [user]))
     if not operation:
         return {
             "operation": None,
@@ -661,6 +720,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
             "fuel_assignments_revision": 0,
             "fuel_assignments_refresh": refresh_setting,
             "settings": settings,
+            "operational_fueler_name": operational_name,
             "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
         }
 
@@ -728,6 +788,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         "fuel_assignments_revision": _fuel_assignments_revision_for_operation(operation),
         "fuel_assignments_refresh": refresh_setting,
         "settings": settings,
+        "operational_fueler_name": operational_name,
         "calculation_not_configured_message": CALCULATION_NOT_CONFIGURED_MESSAGE,
     }
 
@@ -5654,6 +5715,7 @@ def _attach_dispatch_assignment_recommendations(
     gateway,
     settings,
     nightly_assignment_fuelers,
+    operational_names,
     nightly_assignment_trucks,
     nightly_truck_states_by_truck_id,
     now_utc,
@@ -5702,9 +5764,7 @@ def _attach_dispatch_assignment_recommendations(
         }
         for truck in nightly_assignment_trucks
     )
-    fueler_names = {
-        fueler.id: fueler.display_name for fueler in nightly_assignment_fuelers
-    }
+    fueler_names = operational_names
     truck_numbers = {
         truck.id: truck.truck_number for truck in nightly_assignment_trucks
     }

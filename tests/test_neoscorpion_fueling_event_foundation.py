@@ -13,6 +13,7 @@ from app.models import (
     NeoNode,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
+    NeoScorpionFuelerNickname,
     NeoScorpionFuelTankState,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
@@ -27,6 +28,8 @@ from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
     classify_fuel_movement,
     complete_fuel_on_board,
+    fuel_report_context,
+    history_context,
     mark_fueler_off,
     save_fueler_entry,
 )
@@ -113,6 +116,25 @@ class NeoScorpionFuelingEventFoundationTest(unittest.TestCase):
                 transfer_fuel_gallons=-1,
             )
         )
+
+    def test_report_and_history_keep_real_name_after_operational_nickname(self):
+        operation, _mission, assignment = self._assignment()
+        work = self._save_complete(assignment).fuel_work_state
+        truck = NeoScorpionFuelTruck(gateway_id=self.gateway.id, truck_number="EVENT-NAME")
+        db.session.add(truck)
+        db.session.flush()
+        event = self._event(operation, assignment, work, truck, sequence=1)
+        event.fueler_user_id = self.fueler.id
+        db.session.add_all((event, NeoScorpionFuelerNickname(
+            gateway_id=self.gateway.id, user_id=self.fueler.id,
+            nickname="Ace", nickname_key="ace",
+        )))
+        assignment.review_status = "complete"
+        db.session.commit()
+        report = fuel_report_context(self.gateway)
+        self.assertEqual(report["fuel_report_rows"][0]["fueler_name"], self.fueler.display_name)
+        history = history_context(self.gateway)
+        self.assertEqual(history["completed_rows"][0]["assigned_fueler"].display_name, self.fueler.display_name)
 
     def test_fuel_on_board_and_positive_tf_are_authoritative(self):
         assignment = NeoScorpionFuelAssignment(

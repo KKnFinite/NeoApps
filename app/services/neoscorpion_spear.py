@@ -729,6 +729,7 @@ def _assignment_explanation(
         alternatives.append(
             {
                 "rank": rank,
+                "fueler_id": candidate["fueler_id"],
                 "truck_number": str(truck.truck_number),
                 "fueler_name": _fueler_name(fueler),
                 "complete": _display_time(candidate["finish"], mission),

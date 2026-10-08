@@ -13,6 +13,7 @@ from app.models import (
     GatewaySortMatrix,
     NeoNode,
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelerNickname,
     NeoScorpionFuelTruck,
     NeoScorpionFuelWorkState,
     NeoScorpionSettings,
@@ -146,6 +147,32 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(NeoScorpionSortAssetState.query.count(), 0)
+
+    def test_nickname_requires_dispatch_edit_and_keeps_real_user_identity(self):
+        dispatcher = self._login_user("nickname_dispatcher", "simulator")
+        operation = self._add_operation(date(2026, 8, 17))
+        fueler = self._add_approved_user("real_fueler", "operator")
+        db.session.add(NeoScorpionSortFueler(sort_date_operation_id=operation.id, user_id=fueler.id))
+        db.session.commit()
+        page = self.client.get("/neoscorpion/fuel-dispatch?assets=open")
+        self.assertIn(b"Operational Nickname", page.data)
+        self.assertIn(fueler.display_name.encode(), page.data)
+        response = self.client.post("/neoscorpion/fuel-dispatch/assets", data={
+            "action": "set_fueler_nickname", "user_id": str(fueler.id),
+            "nickname": "Ace", "expected_nickname": "",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(fueler.display_name, "Real Fueler")
+        self.assertIn(b"Ace", self.client.get("/neoscorpion/fuel-dispatch?assets=open").data)
+        self.assertEqual(NeoScorpionFuelerNickname.query.one().user_id, fueler.id)
+        self.client.get("/logout")
+        self._login_user("nickname_operator", "operator")
+        denied = self.client.post("/neoscorpion/fuel-dispatch/assets", data={
+            "action": "set_fueler_nickname", "user_id": str(fueler.id),
+            "nickname": "Other", "expected_nickname": "Ace",
+        })
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(NeoScorpionFuelerNickname.query.one().nickname, "Ace")
 
     def test_simulator_island_mutation_commits_once_and_rejects_invalid_value(self):
         self._login_user("island_dispatcher", "simulator")

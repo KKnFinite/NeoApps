@@ -55,6 +55,7 @@ from app.services.neoscorpion_assets import (
     remove_nightly_fueler,
     remove_nightly_truck,
     select_nightly_fueler,
+    set_nightly_fueler_nickname,
     select_nightly_truck,
     set_nightly_fuel_island_count,
     update_nightly_truck,
@@ -677,7 +678,11 @@ def manage_nightly_assets():
         message = (
             str(exc)
             if isinstance(exc, ValueError)
-            else "Nightly assets changed. Reload and try again."
+            else (
+                "Nickname is already in use at this gateway. Reload and try again."
+                if action == "set_fueler_nickname"
+                else "Nightly assets changed. Reload and try again."
+            )
         )
         flash(message, "error")
         if json_response:
@@ -1374,7 +1379,7 @@ def fuel_dispatch_spear_action():
         flash("Access denied.", "error")
         return _dispatch_response(gateway, access, status_code=403)
     try:
-        context = fuel_dispatch_context(gateway, include_asset_choices=True)
+        context = fuel_dispatch_context(gateway, include_asset_choices=True, display_nicknames=False)
         operation = context["operation"]
         plan = context["spear_plan"]
         if operation is None or plan is None:
@@ -1694,6 +1699,12 @@ def _apply_nightly_asset_action(gateway, operation, form):
         if user_id not in eligible_ids:
             raise ValueError("Select an eligible NeoScorpion fueler.")
         return select_nightly_fueler(operation, user_id)
+    if action == "set_fueler_nickname":
+        return set_nightly_fueler_nickname(
+            operation, gateway,
+            _positive_form_id(form.get("user_id"), "fueler"),
+            form.get("nickname"), form.get("expected_nickname"),
+        )
     if action == "remove_fueler":
         return remove_nightly_fueler(
             operation,

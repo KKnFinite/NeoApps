@@ -47,6 +47,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
         expected_table_names = (
             "neoscorpion_tail_fuel_states",
             "neoscorpion_fuel_trucks",
+            "neoscorpion_fueler_nicknames",
             "neoscorpion_settings",
             "neoscorpion_spear_audit_entries",
             "neoscorpion_spear_calibration_resets",

@@ -106,6 +106,28 @@ def _plan(rows, *, trucks=None, settings=None):
 
 
 class NeoScorpionSpearPlanningTest(unittest.TestCase):
+    def test_operational_nickname_changes_displayed_plan_not_canonical_step(self):
+        from app.services.neoscorpion import _apply_operational_fueler_names
+
+        rows = [_row()]
+        plan = _plan(rows)
+        self.assertTrue(plan.steps)
+        fueler = _fueler()
+        context = {
+            "nightly_fuelers": [{"user": fueler}],
+            "eligible_nightly_fuelers": [],
+            "nightly_assignment_fuelers": [fueler],
+            "rows": rows,
+            "truck_visuals": [],
+            "spear_plan": plan,
+        }
+        _apply_operational_fueler_names(context, {fueler.id: "Ace"})
+        self.assertEqual(context["nightly_fuelers"][0]["user"].display_name, "Ace")
+        self.assertEqual(context["spear_plan"].steps[0].fueler_name, "Ace")
+        self.assertEqual(context["spear_plan"].steps[0].fueler_id, fueler.id)
+        self.assertEqual(context["spear_plan"].token, plan.token)
+        self.assertEqual(plan.steps[0].fueler_name, fueler.display_name)
+
     def test_compact_dispatch_status_prioritizes_risk_over_automation(self):
         plan = SpearPlan((), {}, {}, 0, 0, 0, 0, "", "token")
         self.assertEqual(
