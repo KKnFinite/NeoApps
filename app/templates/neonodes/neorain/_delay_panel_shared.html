@@ -208,12 +208,33 @@
         const root = document.querySelector("[data-neorain-inbound-live], [data-neorain-outbound-live]");
         if (!root || root.dataset.neorainDelayPanelsReady === "true") return;
         root.dataset.neorainDelayPanelsReady = "true";
-        const setOpen = (panel, open) => {
+
+        const storageKey = "neorain:desktop-delay-ui:" + window.location.pathname;
+        const readStored = () => {
+            try {
+                const value = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
+                return Array.isArray(value) ? value.map(String) : [];
+            } catch (_) {
+                return [];
+            }
+        };
+        const writeStored = () => {
+            if (window.matchMedia("(max-width: 760px)").matches) return;
+            try {
+                const ids = Array.from(root.querySelectorAll("[data-neorain-delay-panel]"))
+                    .filter((panel) => panel.hidden === false)
+                    .map((panel) => panel.id);
+                sessionStorage.setItem(storageKey, JSON.stringify(ids));
+            } catch (_) {}
+        };
+        const setOpen = (panel, open, { persist = true } = {}) => {
             if (!panel) return;
             panel.hidden = !open;
             const button = root.querySelector('[data-neorain-delay-toggle][aria-controls="' + panel.id + '"]');
             button?.setAttribute("aria-expanded", open ? "true" : "false");
+            if (persist) writeStored();
         };
+
         root.addEventListener("click", (event) => {
             const button = event.target.closest("[data-neorain-delay-toggle]");
             if (!button || !root.contains(button)) return;
@@ -221,6 +242,15 @@
             if (!panel || !root.contains(panel)) return;
             setOpen(panel, panel.hidden);
         });
+
+        if (!window.matchMedia("(max-width: 760px)").matches) {
+            readStored().forEach((id) => {
+                const panel = document.getElementById(id);
+                if (panel && root.contains(panel)) setOpen(panel, true, { persist: false });
+            });
+            writeStored();
+        }
+
         const openHashPanel = () => {
             if (window.matchMedia("(max-width: 760px)").matches) return;
             const id = window.location.hash.slice(1);

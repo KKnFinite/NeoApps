@@ -520,14 +520,42 @@
     const board = root?.querySelector('[data-neorain-mobile-board="inbound"]');
     if (!root || !board) return;
 
+    const storageKey = "neorain:inbound:mobile-ui:" + window.location.pathname;
     const items = () => Array.from(board.querySelectorAll(".neorain-mobile-mission[data-neorain-mission-id]"));
-    const mobileState = () => history.state?.neorainMobileBoard === "inbound" ? history.state : {};
-    const saveState = (missionId = null) => history.replaceState(
-        { ...(history.state || {}), neorainMobileBoard: "inbound", neorainMobileMissionId: missionId },
-        "",
-    );
+    const itemFor = (missionId) => items().find((candidate) => candidate.dataset.neorainMissionId === String(missionId)) || null;
+    const readStored = () => {
+        try {
+            const value = JSON.parse(sessionStorage.getItem(storageKey) || "{}");
+            return {
+                missions: Array.isArray(value.missions) ? value.missions.map(String) : [],
+                delays: Array.isArray(value.delays) ? value.delays.map(String) : [],
+            };
+        } catch (_) {
+            return { missions: [], delays: [] };
+        }
+    };
+    const writeStored = () => {
+        try {
+            const missions = items()
+                .filter((item) => item.querySelector("[data-neorain-mobile-inline-detail]")?.hidden === false)
+                .map((item) => String(item.dataset.neorainMissionId));
+            const delays = items()
+                .filter((item) => item.querySelector("[data-neorain-mobile-delay]")?.open)
+                .map((item) => String(item.dataset.neorainMissionId));
+            sessionStorage.setItem(storageKey, JSON.stringify({ missions, delays }));
+            history.replaceState(
+                {
+                    ...(history.state || {}),
+                    neorainMobileBoard: "inbound",
+                    neorainMobileMissionId: null,
+                    neorainMobileMissionIds: missions,
+                },
+                "",
+            );
+        } catch (_) {}
+    };
 
-    const setOpen = (item, open) => {
+    const setOpen = (item, open, { persist = true } = {}) => {
         if (!item) return;
         const detail = item.querySelector("[data-neorain-mobile-inline-detail]");
         if (!detail) return;
@@ -536,14 +564,15 @@
         item.querySelectorAll("[data-neorain-mobile-row-open]").forEach((button) => {
             button.setAttribute("aria-expanded", open ? "true" : "false");
         });
+        if (persist) writeStored();
     };
 
-    const openMission = (missionId, { openDelay = false } = {}) => {
-        const item = items().find((candidate) => candidate.dataset.neorainMissionId === String(missionId));
+    const openMission = (missionId, { openDelay = false, persist = true } = {}) => {
+        const item = itemFor(missionId);
         if (!item) return;
-        setOpen(item, true);
+        setOpen(item, true, { persist: false });
         if (openDelay) item.querySelector("[data-neorain-mobile-delay]")?.setAttribute("open", "");
-        saveState(item.dataset.neorainMissionId);
+        if (persist) writeStored();
     };
 
     board.addEventListener("click", (event) => {
@@ -552,17 +581,34 @@
         const item = opener.closest(".neorain-mobile-mission[data-neorain-mission-id]");
         if (!item) return;
         const detail = item.querySelector("[data-neorain-mobile-inline-detail]");
-        const shouldOpen = detail?.hidden !== false;
-        setOpen(item, shouldOpen);
-        saveState(shouldOpen ? item.dataset.neorainMissionId : null);
+        setOpen(item, detail?.hidden !== false);
     });
+
+    board.addEventListener("toggle", (event) => {
+        if (event.target.matches?.("[data-neorain-mobile-delay]")) writeStored();
+    }, true);
+
+    const stored = readStored();
+    stored.missions.forEach((missionId) => openMission(missionId, { persist: false }));
+    stored.delays.forEach((missionId) => {
+        const item = itemFor(missionId);
+        if (!item) return;
+        setOpen(item, true, { persist: false });
+        item.querySelector("[data-neorain-mobile-delay]")?.setAttribute("open", "");
+    });
+
+    const legacyMissionId = history.state?.neorainMobileBoard === "inbound"
+        ? history.state?.neorainMobileMissionId
+        : null;
+    if (!stored.missions.length && legacyMissionId) openMission(legacyMissionId, { persist: false });
 
     const hash = window.location.hash.slice(1);
     const mobileMatch = /^mobile-flight-(\d+)$/.exec(hash);
     const legacyDelayMatch = /^delay-info-(\d+)$/.exec(hash);
-    if (mobileMatch) openMission(mobileMatch[1], { openDelay: true });
-    else if (legacyDelayMatch) openMission(legacyDelayMatch[1], { openDelay: true });
-    else if (mobileState().neorainMobileMissionId) openMission(mobileState().neorainMobileMissionId);
+    if (mobileMatch) openMission(mobileMatch[1], { openDelay: true, persist: false });
+    else if (legacyDelayMatch) openMission(legacyDelayMatch[1], { openDelay: true, persist: false });
+
+    writeStored();
 })();
 </script>
 {% endblock %}
