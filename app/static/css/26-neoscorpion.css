@@ -794,3 +794,28 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 @media (max-width: 899px) {
     .neoscorpion-dispatch-insights { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Frozen tail-swap / uplift / defuel cycle rows: subdued historical data.
+   Place after active-row sizing rules so refreshed snapshots cannot inherit
+   the larger live mission typography. Never affect current work. */
+.neoscorpion-dispatch-table--compact tr[data-cycle-history] > td {
+    font-size: .72rem !important;
+    color: #aeb2b7 !important;
+    filter: grayscale(.8);
+    opacity: .76;
+}
+.neoscorpion-dispatch-table--compact tr[data-cycle-history] > td :is(strong, span, b) {
+    font-size: .72rem !important;
+    color: inherit !important;
+}
+.neoscorpion-dispatch-table--compact tr[data-cycle-history] > td small {
+    font-size: .61rem !important;
+    color: inherit !important;
+}
+.neoscorpion-dispatch-table--compact tr[data-cycle-history] .neoscorpion-dispatch-details-toggle {
+    font-size: .53rem !important;
+    color: #aeb2b7 !important;
+}
+.neoscorpion-dispatch-table--compact tr[data-cycle-history]:hover > td {
+    opacity: .83;
+}
