@@ -455,6 +455,20 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
     return context
 
 
+def _ready_to_assign(row):
+    """Dispatch-only visual readiness; independent of SPEAR automation/staging."""
+    assignment = row["assignment"]
+    return bool(
+        not row["administratively_complete"]
+        and row["arrival_status"].casefold() in {"on ground", "arrived"}
+        and row["inbound_fuel_lbs"] is not None
+        and row["required_fuel_lbs"] is not None
+        and row["parking_valid"]
+        and (assignment is None or assignment.assigned_fueler_user_id is None
+             or assignment.assigned_truck_id is None)
+    )
+
+
 def _fueling_performance_context(context, gateway, nicknames, *, planning_settings=None):
     """Current-sort physical event scores for selected resources only."""
     fuelers = [row["user"] for row in context["nightly_fuelers"] if row["user"].is_active]
@@ -604,6 +618,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
             "fuelers": fuelers,
             "trucks": trucks,
             "settings": settings,
+            "pulse_ready_assignments": settings is None or settings.pulse_ready_assignments,
             "truck_visuals": [],
             "spear_plan": None,
             "spear_unavailable": False,
@@ -677,6 +692,12 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
                           if row["assignment"] and history.cycle_number < (row["assignment"].current_cycle_number or 1)]
         cycle_number = row["assignment"].current_cycle_number if row["assignment"] else 1
         row["row_key"] = f"{row['mission'].id}-{cycle_number or 1}"
+        if int(cycle_number or 1) > 1 and row["history"]:
+            original = row["history"][0].snapshot
+            if "inbound_fuel_lbs" in original:
+                row["inbound_fuel_lbs"] = original["inbound_fuel_lbs"]
+                row["inbound_fuel_display"] = format_dispatch_thousands(original["inbound_fuel_lbs"])
+        row["ready_to_assign"] = _ready_to_assign(row)
     truck_visuals = _dispatch_truck_visuals(
         asset_context["nightly_trucks"],
         rows,
@@ -692,6 +713,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         "fuelers": fuelers,
         "trucks": trucks,
         "settings": settings,
+        "pulse_ready_assignments": settings is None or settings.pulse_ready_assignments,
         "spear_plan": None,
         "spear_unavailable": False,
         "spear_automatic_available": False,
@@ -960,6 +982,7 @@ def settings_context(gateway):
     if settings is None:
         settings = {
             "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
+            "pulse_ready_assignments": True,
             "planning_inbound_fuel_fallback_lbs": (
                 DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
             ),
@@ -1358,6 +1381,8 @@ def autosave_dispatch_field(
         .first()
     )
     _validate_dispatch_assignment_editable(assignment, mission)
+    if field_name == "inbound_fuel" and assignment and int(assignment.current_cycle_number or 1) > 1:
+        raise ValueError("Original Inbound Fuel is read-only during follow-up cycles.")
 
     requested_lbs = display_thousands_to_lbs(value)
     expected_lbs = display_thousands_to_lbs(expected_value)
@@ -1571,7 +1596,7 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
             changed = True
 
         tail_number = _normalize_tail(mission.assigned_tail_number)
-        if tail_number:
+        if tail_number and not (assignment and int(assignment.current_cycle_number or 1) > 1):
             tail_fuel_state = NeoScorpionTailFuelState.query.filter_by(
                 sort_date_operation_id=operation.id,
                 tail_number=tail_number,
@@ -2571,6 +2596,7 @@ def _freeze_cycle_display(operation, assignment, mission, label, *, events=None)
 
 
 # Private JSON in existing cycle history, never included in editable UI state.
+# Keep the original key for rollback records already written in production.
 _UPLIFT_ROLLBACK_KEY = "_uplift_rollbacks"
 _MISSION_FUEL_FIELDS = ("planned_fuel_load", "planned_fuel_updated_at", "fuel_status", "fuel_completed_at_utc", "updated_at")
 
@@ -2598,31 +2624,32 @@ def _restore_fuel_rollback_values(row, values):
         flag_modified(row, "updated_at")
 
 
-def cancel_uplift(gateway, user, assignment_id, *, expected_cycle, expected_tail, now_utc=None):
+def _cancel_follow_up_cycle(gateway, user, assignment_id, cycle_type, *, expected_cycle, expected_tail, now_utc=None):
+    label = cycle_type.upper()
     operation = current_sort_operation(gateway)
     if not operation:
-        raise ValueError("No current sort operation is available for CANCEL UPLIFT.")
+        raise ValueError(f"No current sort operation is available for CANCEL {label}.")
     now_utc = now_utc or datetime.utcnow()
     operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
-    assignment, mission = _locked_current_fuel_assignment(operation, assignment_id, action_label="CANCEL UPLIFT")
+    assignment, mission = _locked_current_fuel_assignment(operation, assignment_id, action_label=f"CANCEL {label}")
     if expected_cycle is None or expected_tail is None:
-        raise ValueError("Refresh before cancelling the uplift.")
+        raise ValueError(f"Refresh before cancelling the {cycle_type}.")
     _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
-    if _assignment_cycle_type(assignment) != "uplift":
-        raise ValueError("The current fuel cycle is not an uplift.")
+    if _assignment_cycle_type(assignment) != cycle_type:
+        raise ValueError(f"The current fuel cycle is not a {cycle_type}.")
     tail = _normalize_tail(mission.assigned_tail_number)
     if not tail or _effective_confirmed_tail(assignment, mission) != tail:
-        raise ValueError("REVIEW REQUIRED: confirm the current mission tail before cancelling uplift.")
+        raise ValueError(f"REVIEW REQUIRED: confirm the current mission tail before cancelling {cycle_type}.")
     work = _locked_fuel_work_state_for_tail(assignment, tail)
     tanks = _locked_tank_states(work)
     events = NeoScorpionFuelingEvent.query.filter_by(
         fuel_assignment_id=assignment.id, cycle_number=assignment.current_cycle_number,
     ).with_for_update().all()
-    movement = _segment_movement_status(assignment, work, tanks)
-    if events or movement == "moved":
+    # Setup measurements, ON/OFF, and APU fields are not confirmed transfer.
+    # Current-cycle T/F and persisted transfer events are the two authorities.
+    if (assignment.transfer_fuel_gallons not in (None, 0)
+            or any(event.transfer_fuel_gallons not in (None, 0) for event in events)):
         raise ValueError("Fuel movement occurred. Use the existing correction or interruption workflow.")
-    if movement == "unknown":
-        raise ValueError("REVIEW REQUIRED: fuel movement cannot be determined safely for uplift cancellation.")
     histories = NeoScorpionFuelCycleHistory.query.filter_by(
         fuel_assignment_id=assignment.id,
     ).with_for_update().all()
@@ -2630,7 +2657,7 @@ def cancel_uplift(gateway, user, assignment_id, *, expected_cycle, expected_tail
         for index, record in enumerate(history.snapshot.get(_UPLIFT_ROLLBACK_KEY, []))
         if record["cycle"] == assignment.current_cycle_number and not record.get("cancelled_at")), None)
     if selected is None:
-        raise ValueError("REVIEW REQUIRED: exact pre-uplift rollback state is unavailable for this cycle.")
+        raise ValueError(f"REVIEW REQUIRED: exact pre-{cycle_type} rollback state is unavailable for this cycle.")
     history, index, rollback = selected
     # Tail fuel is shared canonical state. A later physical event on another
     # mission must not be overwritten with this assignment's old measurements.
@@ -2642,7 +2669,7 @@ def cancel_uplift(gateway, user, assignment_id, *, expected_cycle, expected_tail
     ).with_for_update().first() is not None:
         raise ValueError("REVIEW REQUIRED: another mission updated this tail's physical fuel state.")
     if rollback["tail"] != tail:
-        raise ValueError("REVIEW REQUIRED: uplift rollback tail does not match the current mission.")
+        raise ValueError(f"REVIEW REQUIRED: {cycle_type} rollback tail does not match the current mission.")
     tail_state = NeoScorpionTailFuelState.query.filter_by(
         sort_date_operation_id=operation.id, tail_number=tail,
     ).with_for_update().first()
@@ -2671,12 +2698,22 @@ def cancel_uplift(gateway, user, assignment_id, *, expected_cycle, expected_tail
     records = list(history.snapshot[_UPLIFT_ROLLBACK_KEY])
     records[index] = {**rollback, "cancelled_at": now_utc.isoformat(), "cancelled_by": user.id}
     history.snapshot = {**history.snapshot, _UPLIFT_ROLLBACK_KEY: records}
-    audit = _new_fuel_audit(operation, assignment, user, "cancel_uplift", "current_cycle_number",
-        expected_cycle, assignment.current_cycle_number, "Dispatcher cancelled uplift before fuel movement.",
+    audit = _new_fuel_audit(operation, assignment, user, f"cancel_{cycle_type}", "current_cycle_number",
+        expected_cycle, assignment.current_cycle_number, f"Dispatcher cancelled {cycle_type} before fuel movement.",
         fuel_work_state=work if rollback["work"] is not None else None, now_utc=now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return FuelInterruptionResult(True, int(asset_state.revision), assignment, work, audit_entries=(audit,))
+
+
+def cancel_uplift(gateway, user, assignment_id, *, expected_cycle, expected_tail, now_utc=None):
+    return _cancel_follow_up_cycle(gateway, user, assignment_id, "uplift",
+        expected_cycle=expected_cycle, expected_tail=expected_tail, now_utc=now_utc)
+
+
+def cancel_defuel(gateway, user, assignment_id, *, expected_cycle, expected_tail, now_utc=None):
+    return _cancel_follow_up_cycle(gateway, user, assignment_id, "defuel",
+        expected_cycle=expected_cycle, expected_tail=expected_tail, now_utc=now_utc)
 
 
 def _validate_cycle_request(assignment, mission, expected_cycle, expected_tail):
@@ -2762,7 +2799,7 @@ def start_follow_up_fuel_cycle(
         "work": _fuel_rollback_values(fuel_work_state),
         "tanks": [_fuel_rollback_values(tank) for tank in _locked_tank_states(fuel_work_state)],
         "tail_state": _fuel_rollback_values(rollback_tail_state),
-    } if cycle_type == "uplift" else None
+    }
     if fuel_work_state is None:
         fuel_work_state = NeoScorpionFuelWorkState(
             fuel_assignment_id=assignment.id,
@@ -2790,10 +2827,9 @@ def start_follow_up_fuel_cycle(
             )
 
     prior_actual_by_tank = {}
-    if cycle_type == "uplift":
-        measured = _latest_trusted_completed_tail_measurement(operation, tail_number)
-        if measured:
-            prior_actual_by_tank = measured["actual_by_tank"]
+    measured = _latest_trusted_completed_tail_measurement(operation, tail_number)
+    if measured:
+        prior_actual_by_tank = measured["actual_by_tank"]
     tail_fuel_state = (
         NeoScorpionTailFuelState.query.filter_by(
             sort_date_operation_id=operation.id,
@@ -4533,6 +4569,9 @@ def deactivate_truck(gateway, form, user=None):
 
 def save_settings(gateway, form):
     settings = ensure_neoscorpion_settings(gateway)
+    pulse_enabled = str(form.get("pulse_ready_assignments", "")).strip().lower() in {"1", "true", "yes", "on"}
+    pulse_changed = settings.pulse_ready_assignments != pulse_enabled
+    settings.pulse_ready_assignments = pulse_enabled
     density = _decimal_or_none(form.get("fuel_density_lbs_per_gallon"))
     if density is None:
         settings.fuel_density_lbs_per_gallon = None
@@ -4549,6 +4588,11 @@ def save_settings(gateway, form):
     )
     if current_user and getattr(current_user, "is_authenticated", False):
         settings.updated_by_user_id = current_user.id
+    if pulse_changed:
+        operation = current_sort_operation(gateway)
+        if operation is not None:
+            operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+            record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return settings
 
@@ -5161,12 +5205,14 @@ def _fuel_rows(
             and apu_allowance_lbs is not None
             else None
         )
+        follow_up = bool(assignment and int(assignment.current_cycle_number or 1) > 1)
         estimated_fuel = estimate_fuel_demand_gallons(
             mission.planned_fuel_load,
-            tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
+            None if follow_up else tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
             fuel_density_lbs_per_gallon,
-            measured_fob_lbs=remaining_total_lbs,
-            fallback_inbound_lbs=planning_inbound_fallback_lbs,
+            measured_fob_lbs=(remaining_total_lbs if remaining_complete else
+                               tail_fuel_state.fob_lbs if follow_up and tail_fuel_state else None),
+            fallback_inbound_lbs=None if follow_up else planning_inbound_fallback_lbs,
         )
         cycle_type = _assignment_cycle_type(assignment)
         planning_demand_gallons = (
@@ -5690,7 +5736,8 @@ def _fuel_rows(
                     mission.eta_datetime_utc or mission.planned_datetime_utc,
                     mission.timezone,
                 ),
-                "parking_position": parking.get(tail_number, "-") if tail_number else "-",
+                "parking_position": parking.get(tail_number, ("-", False))[0] if tail_number else "-",
+                "parking_valid": parking.get(tail_number, ("-", False))[1] if tail_number else False,
                 "required_fuel_display": format_dispatch_thousands(mission.planned_fuel_load),
                 "required_fuel_lbs": mission.planned_fuel_load,
                 "inbound_fuel_display": format_dispatch_thousands(
@@ -6280,13 +6327,14 @@ def _parking_by_tail(operation):
     for assignment in assignments:
         tail_number = _normalize_tail(assignment.tail_number)
         lane_suffix = f" / S{assignment.lane_number}" if assignment.lane_number == 2 else ""
-        positions[tail_number] = (
+        display = (
             format_dispatch_parking_position(
                 assignment.ramp_code,
                 assignment.position_code,
             )
             + lane_suffix
         ).strip() or "-"
+        positions[tail_number] = (display, bool(assignment.ramp_code and assignment.position_code))
     return positions
 
 

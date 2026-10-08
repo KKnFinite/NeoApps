@@ -198,6 +198,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
+        "pulse_ready_assignments": "BOOLEAN NOT NULL DEFAULT 1",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
@@ -432,6 +433,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
+        "pulse_ready_assignments": "BOOLEAN NOT NULL DEFAULT TRUE",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
@@ -1152,7 +1154,7 @@ def _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names):
             "WHERE type = 'table' AND name = 'neoscorpion_fuel_audit_entries'"
         )
     ).scalar() or ""
-    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "unassign_truck")):
+    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "cancel_defuel", "unassign_truck")):
         return False
 
     all_tables = set(inspector.get_table_names())
@@ -1383,6 +1385,7 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
         and "auto_hold" in constraint_definition
         and "end_early" in constraint_definition
         and "cancel_uplift" in constraint_definition
+        and "cancel_defuel" in constraint_definition
         and "unassign_truck" in constraint_definition
     ):
         return
@@ -1408,6 +1411,7 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
                     'confirm_tail',
                     'end_early',
                     'cancel_uplift',
+                    'cancel_defuel',
                     'unassign_truck'
                 )
             )

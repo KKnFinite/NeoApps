@@ -80,10 +80,13 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             NEOSCORPION_ADDITIVE_COLUMNS["neoscorpion_settings"],
             {
                 "planning_inbound_fuel_fallback_lbs": "INTEGER",
+                "pulse_ready_assignments": "BOOLEAN NOT NULL DEFAULT TRUE",
                 "assignment_setup_minutes": "NUMERIC(8, 2)",
                 "assignment_finishing_minutes": "NUMERIC(8, 2)",
                 "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
-                **SPEAR_SETTINGS_COLUMNS,
+                # Live calibration has its own additive SPEAR bootstrap.
+                **{name: sql for name, sql in SPEAR_SETTINGS_COLUMNS.items()
+                   if name != "spear_live_calibration_mode"},
             },
         )
         self.assertEqual(
@@ -198,6 +201,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
                     "confirm_tail",
                     "end_early",
                     "cancel_uplift",
+                    "cancel_defuel",
                     "unassign_truck",
                 )
             ),

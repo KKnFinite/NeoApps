@@ -41,6 +41,7 @@ from app.services.neoscorpion import (
     settings_context,
     start_follow_up_fuel_cycle,
     cancel_uplift,
+    cancel_defuel,
     unassign_assignment_truck,
     swap_assignment_fueler,
     swap_assignment_truck,
@@ -473,6 +474,16 @@ def fuel_dispatch_cancel_uplift():
         expected_cycle=request.form.get("expected_cycle", ""),
         expected_tail=request.form.get("expected_tail", ""),
     ), "UPLIFT CANCELLED.")
+
+
+@bp.post("/fuel-dispatch/cancel-defuel")
+@gateway_node_required("scorpion")
+def fuel_dispatch_cancel_defuel():
+    return _run_dispatch_lifecycle_action(lambda gateway: cancel_defuel(
+        gateway, current_user, request.form.get("assignment_id"),
+        expected_cycle=request.form.get("expected_cycle", ""),
+        expected_tail=request.form.get("expected_tail", ""),
+    ), "DEFUEL CANCELLED.")
 
 
 @bp.post("/fuel-dispatch/unassign-truck")

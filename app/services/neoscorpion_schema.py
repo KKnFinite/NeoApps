@@ -52,6 +52,7 @@ NEOSCORPION_MODEL_TABLES = (
 NEOSCORPION_ADDITIVE_COLUMNS = {
     "neoscorpion_settings": {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
+        "pulse_ready_assignments": "BOOLEAN NOT NULL DEFAULT TRUE",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
@@ -160,6 +161,7 @@ NEOSCORPION_CHECK_CONSTRAINTS = (
             "confirm_tail",
             "end_early",
             "cancel_uplift",
+            "cancel_defuel",
             "unassign_truck",
         ),
     ),
