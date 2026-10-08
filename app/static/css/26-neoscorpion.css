@@ -178,6 +178,19 @@
     font-size: 1.1em;
 }
 
+/* Frozen cycle snapshots use the original compact table type, not the live
+   mission row's enlarged typography. Keep this scoped through panel refreshes. */
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] > td,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] > td :is(strong, span) {
+    font-size: .72rem !important;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] > td small {
+    font-size: .61rem !important;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row[data-cycle-history] .neoscorpion-dispatch-details-toggle {
+    font-size: .53rem !important;
+}
+
 /* Live Dispatch readability hotfix: enlarge row data without growing headers. */
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-inline-input,
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-inline-select {
