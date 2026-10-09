@@ -28,7 +28,7 @@
 .neoscorpion-dispatch-board-toggle { min-height:28px; border:1px solid rgba(var(--node-scorpion-primary-rgb),.48); border-radius:6px; background:#100b0d; color:#ffe6a3; padding:5px 9px; font:850 .6rem/1 var(--font-sans); letter-spacing:.07em; cursor:pointer; }
 .neoscorpion-dispatch-board-toggle:hover,.neoscorpion-dispatch-board-toggle:focus-visible { border-color:var(--node-scorpion-primary); outline:0; box-shadow:0 0 0 2px rgba(var(--node-scorpion-primary-rgb),.16); }
 .neoscorpion-dispatch-table--compact {
-    min-width: 1080px;
+    min-width: 1120px;
     table-layout: fixed;
     --dispatch-font-large: 1.056rem;
     --dispatch-font-medium: .945rem;
@@ -45,7 +45,7 @@
 .neoscorpion-dispatch-table--compact th,
 .neoscorpion-dispatch-table--compact td { min-width: 0; padding: 7px 5px; overflow-wrap: anywhere; text-align:center; vertical-align:middle; }
 .neoscorpion-dispatch-table--compact th { text-align:center; }
-.neoscorpion-dispatch-table--compact th:nth-child(2) { width: 8%; }
+.neoscorpion-dispatch-table--compact th:nth-child(2) { width: 112px; }
 .neoscorpion-dispatch-table--compact th:nth-child(3) { width: 6%; }
 .neoscorpion-dispatch-table--compact th:nth-child(4) { width: 8%; }
 .neoscorpion-dispatch-table--compact th:nth-child(5) { width: 7%; }
@@ -91,7 +91,7 @@
     font-size: .68rem;
     font-weight: 850;
 }
-.neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex; width:max-content; max-width:100%; margin:2px auto 0; padding:0; white-space:nowrap; overflow-wrap:normal; }
+.neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:block; width:max-content; max-width:100%; margin:2px auto 0; padding:0; white-space:nowrap; overflow-wrap:normal; }
 .neoscorpion-dispatch-fuel-input { display: block; width: min(100%, 58px) !important; margin: 0 auto; text-align: center; }
 /* Keep both fuel fields at the cell top; the FOB slot stays reserved when empty. */
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-inbound,
@@ -200,8 +200,12 @@
     font-size: .75rem;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
-    color:#67c5f2; font:700 8px/1.1 NeoFontPlain,sans-serif; letter-spacing:-.3px;
+    color:#67c5f2; font:700 12px/1.1 NeoFontPlain,sans-serif; letter-spacing:-.3px;
 }
+.neoscorpion-spear-risk.is-at-risk > .neoscorpion-spear-severity,
+.neoscorpion-truck-spear .neoscorpion-spear-severity.is-at-risk { color:#f6e37a; }
+.neoscorpion-spear-risk.is-late > .neoscorpion-spear-severity,
+.neoscorpion-truck-spear .neoscorpion-spear-severity.is-late { color:#ff737f; }
 .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-recommendation,
 .neoscorpion-truck-spear > :is(strong,span,small) { color:#67c5f2 !important; }
 .neoscorpion-truck-spear > :is(span,small) { grid-column:1; min-width:0; overflow-wrap:anywhere; }
@@ -286,8 +290,8 @@
 }
 @media (max-width: 760px) {
     .neoscorpion-dispatch-detail-grid { grid-template-columns: 1fr; }
-    .neoscorpion-dispatch-table--compact { min-width: 900px; }
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk { font-size:7px; }
+    .neoscorpion-dispatch-table--compact { min-width: 950px; }
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk { font-size:10.5px; }
 }
 
 /* Fuel Dispatch Board View is an operations board, not the normal page with

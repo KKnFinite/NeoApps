@@ -108,7 +108,7 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                 expect(status('risk')).not_to_contain_text('TIMING UNKNOWN')
                 expect(status('check')).not_to_contain_text('FOB CHECK')
                 expect(status('check').get_by_text('CALL DISPATCH', exact=True)).to_be_visible()
-                self.assertIn('20261009-spear-display-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
+                self.assertIn('20261009-spear-size-risk-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
                 self.assertIn('20261009-fuel-status-fob-v1',page.locator('script[src*="neoscorpion_fuel_status.js"]').get_attribute('src'))
 
                 for width in (1440,390):

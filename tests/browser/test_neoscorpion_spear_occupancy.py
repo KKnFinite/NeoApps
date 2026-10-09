@@ -11,6 +11,7 @@ from app.models import (NeoScorpionFuelAssignment, NeoScorpionFuelTruck, NeoScor
     SortDateParkingAssignment, SortDateTailState, User)
 from app.services.access_control import ensure_default_gateway_and_nodes, backfill_default_gateway_node_roles
 from app.services.neoscorpion_assets import record_nightly_operational_change
+from app.services.neoscorpion import _attach_spear_plan
 from tests.browser import test_mobile_drawer as fixture_module
 
 
@@ -87,8 +88,12 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                         styles=indicator.evaluate("el=>{const s=getComputedStyle(el);return {whiteSpace:s.whiteSpace,color:s.color,font:parseFloat(s.fontSize),height:el.getBoundingClientRect().height,text:el.textContent,width:el.clientWidth,content:el.scrollWidth,clipped:el.scrollWidth>el.clientWidth+1};}")
                         self.assertEqual(styles['whiteSpace'],'nowrap')
                         self.assertEqual(styles['color'],'rgb(103, 197, 242)')
-                        self.assertLessEqual(styles['font'],8.5)
-                        self.assertLessEqual(styles['height'],10)
+                        self.assertEqual(styles['font'],12 if page.viewport_size['width']>760 else 10.5)
+                        self.assertLessEqual(styles['height'],14)
+                        self.assertEqual(indicator.locator('span').first.evaluate('el=>getComputedStyle(el).color'),'rgb(103, 197, 242)')
+                        severity=indicator.locator('.neoscorpion-spear-severity')
+                        color={'AT RISK':'rgb(246, 227, 122)','LATE':'rgb(255, 115, 127)'}.get(severity.inner_text(),'rgb(103, 197, 242)')
+                        self.assertEqual(severity.evaluate('el=>getComputedStyle(el).color'),color)
                         self.assertFalse(styles['clipped'],styles)
                     for status in page.locator('[data-fuel-status]').all():
                         self.assertLessEqual(status.locator('[data-fuel-status-secondary]').count(),1)
@@ -130,6 +135,22 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                     page.set_viewport_size({'width':width,'height':900})
                     verify_compact()
                     page.screenshot(path=str(Fixture.evidence/f'spear-current-availability-{width}.png'),full_page=True)
+                # Controlled presentation data exercises both severity colors
+                # in the real HTTP-rendered panel without changing planning.
+                def severity_display(rows, visuals, plan):
+                    _attach_spear_plan(rows, visuals, plan)
+                    for item in rows:
+                        if item['mission'].id == missions[0]: item['spear_risk']='AT RISK'
+                        if item['mission'].id == missions[2]: item['spear_risk']='LATE'
+                with patch('app.services.neoscorpion._attach_spear_plan',side_effect=severity_display):
+                    page.reload(wait_until='domcontentloaded')
+                    expect(row.locator('[data-spear-tail-indicator]')).to_have_text('SPEAR · AT RISK')
+                    expect(page.locator(f'[data-dispatch-mission-id="{missions[2]}"] [data-spear-tail-indicator]')).to_have_text('SPEAR · LATE')
+                    for width in (1440,390,320):
+                        page.set_viewport_size({'width':width,'height':900}); verify_compact()
+                        page.screenshot(path=str(Fixture.evidence/f'spear-severity-{width}.png'),full_page=True)
+                    page.wait_for_timeout(5500)
+                    verify_compact()
                 with Fixture.app.app_context():
                     self.assertEqual(NeoScorpionFuelAssignment.query.count(),1)
                     self.assertEqual(NeoScorpionSpearAuditEntry.query.count(),0)

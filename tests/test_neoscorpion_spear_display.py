@@ -32,8 +32,9 @@ class SpearDisplayTest(unittest.TestCase):
                 row = dict(spear_risk=risk, spear_readiness_reasons=reasons, spear_problem=problem, spear_ready=True)
                 html = self.render('spear_indicator', row=row)
                 self.assertEqual(html.count('data-spear-tail-indicator'), 1)
-                self.assertIn('SPEAR · '+expected, html)
+                self.assertIn('SPEAR · '+expected, re.sub('<[^>]+>', '', html))
                 self.assertNotIn('COVERED', html)
+                self.assertIn('class="neoscorpion-spear-severity"', html)
                 self.assertEqual(row['spear_risk'], risk)
 
     def test_labeled_parking_resources_risk_and_ramp_fallback(self):
@@ -44,7 +45,8 @@ class SpearDisplayTest(unittest.TestCase):
             self.assertNotIn('COVERED', html)
         for risk in ('LATE', 'AT RISK'):
             spear['risk'] = risk
-            self.assertIn(risk, self.render('spear_resources', spear=spear, parking='E03'))
+            html = self.render('spear_resources', spear=spear, parking='E03')
+            self.assertIn('class="neoscorpion-spear-severity is-'+risk.lower().replace(' ', '-')+'">'+risk, html)
         spear['action_type'] = 'top_off'
         html = self.render('spear_resources', spear=spear, parking=None)
         self.assertIn('TOP OFF · TRUCK 10', html)
@@ -104,4 +106,4 @@ class SpearDisplayHttpTest(unittest.TestCase):
                     self.assertEqual(response.status_code, 200, response.text[:200])
                     html = response.json['html'] if response.is_json else response.text
                     self.assertEqual(len(re.findall('data-spear-tail-indicator', html)), 1)
-                    if incomplete: self.assertIn('SPEAR · WAITING', html)
+                    if incomplete: self.assertIn('SPEAR · WAITING', re.sub('<[^>]+>', '', html))
