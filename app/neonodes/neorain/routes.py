@@ -53,6 +53,11 @@ from app.services.google_rain_sheets import (
     write_google_rain_departure_milestone,
 )
 from app.services.live_collaboration import entity_version, version_conflict
+from app.services.operation_lifecycle import current_existing_operational_sort_operations
+from app.services.neoscorpion_assets import (
+    lock_nightly_asset_scope_for_mutation,
+    record_nightly_operational_change,
+)
 from app.services.neorain_load_planner_contacts import (
     neorain_load_planner_contact_values,
     neorain_load_planner_contacts,
@@ -838,6 +843,9 @@ def _save_load_planner_assignment(gateway, operation):
         raise ValueError("Choose an eligible Load Planner.")
 
     if scope == "master":
+        # Lock affected live operations before the departure, matching Dispatch's
+        # operation -> child order. Historical sorts do not need a live refresh.
+        dispatch_scopes = _master_load_planner_dispatch_scopes(gateway, departure_id)
         departure = (
             MasterFlightSchedule.query.filter_by(
                 id=departure_id,
@@ -855,11 +863,16 @@ def _save_load_planner_assignment(gateway, operation):
         conflict = version_conflict(departure, expected_version)
         if conflict:
             raise _LoadPlannerStaleError(conflict["message"])
+        previous_planner_id = departure.load_planner_person_id
         assign_master_departure_load_planner(departure, planner)
+        if departure.load_planner_person_id != previous_planner_id:
+            for dispatch_operation, state in dispatch_scopes:
+                record_nightly_operational_change(state, dispatch_operation.id)
         return departure
 
     if operation is None or operation.gateway_id != gateway.id:
         raise ValueError("No current sort.")
+    dispatch_operation, state = lock_nightly_asset_scope_for_mutation(operation)
     departure = (
         SortDateMission.query.filter_by(
             id=departure_id,
@@ -877,8 +890,32 @@ def _save_load_planner_assignment(gateway, operation):
     conflict = version_conflict(departure, expected_version)
     if conflict:
         raise _LoadPlannerStaleError(conflict["message"])
+    previous_planner_id = departure.load_planner_person_id
     assign_current_sort_only_departure_load_planner(departure, planner)
+    if departure.load_planner_person_id != previous_planner_id:
+        record_nightly_operational_change(state, dispatch_operation.id)
     return departure
+
+
+def _master_load_planner_dispatch_scopes(gateway, master_departure_id):
+    """Publish only to live operations linked by canonical Master Schedule ID."""
+    operations = current_existing_operational_sort_operations(gateway)
+    if not operations:
+        return []
+    linked_operation_ids = {
+        operation_id for (operation_id,) in db.session.query(
+            SortDateMission.sort_date_operation_id
+        ).filter(
+            SortDateMission.sort_date_operation_id.in_(op.id for op in operations),
+            SortDateMission.master_flight_schedule_id == master_departure_id,
+            SortDateMission.mission_type == "departure",
+        ).distinct().all()
+    }
+    return [
+        lock_nightly_asset_scope_for_mutation(operation)
+        for operation in sorted(operations, key=lambda op: op.id)
+        if operation.id in linked_operation_ids
+    ]
 
 
 def _save_neorain_load_planner_contact(gateway):

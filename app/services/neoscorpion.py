@@ -12,6 +12,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
 from app.models import (
+    MasterFlightSchedule,
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelAssignment,
@@ -31,6 +32,10 @@ from app.models import (
     SortDateParkingAssignment,
     SortDateTailState,
     User,
+)
+from app.neonodes.neorain.services import (
+    effective_neorain_load_planner,
+    eligible_neorain_load_planners,
 )
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
@@ -633,7 +638,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
             **asset_context,
         }
 
-    missions = _departure_missions(operation)
+    missions = _departure_missions(operation, include_load_planners=True)
     (
         apu_rates_by_aircraft_type,
         lateral_imbalance_limits_by_aircraft_type,
@@ -674,6 +679,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         fuel_density_lbs_per_gallon=fuel_density,
         planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
     )
+    _attach_dispatch_load_planners(rows)
     rows.sort(
         key=lambda row: (
             0
@@ -6011,9 +6017,29 @@ def _gauge_percent(percent):
     return min(100, max(0, percent)) if percent is not None else None
 
 
-def _departure_missions(operation):
+def _attach_dispatch_load_planners(rows):
+    """Use Rain's canonical identity/eligibility with already-loaded relationships."""
+    if not rows:
+        return
+    eligible_ids = {person.id for person in eligible_neorain_load_planners()}
+    for row in rows:
+        planner = effective_neorain_load_planner(
+            row["mission"], eligible_person_ids=eligible_ids
+        )
+        row["load_planner_name"] = planner.full_name if planner else "UNASSIGNED"
+
+
+def _departure_missions(operation, *, include_load_planners=False):
+    query = SortDateMission.query
+    if include_load_planners:
+        query = query.options(
+            joinedload(SortDateMission.load_planner_person),
+            joinedload(SortDateMission.master_flight_schedule).joinedload(
+                MasterFlightSchedule.load_planner_person
+            ),
+        )
     return (
-        SortDateMission.query.filter(
+        query.filter(
             SortDateMission.sort_date_operation_id == operation.id,
             SortDateMission.mission_type == "departure",
             db.or_(

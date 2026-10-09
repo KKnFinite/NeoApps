@@ -8,6 +8,7 @@ from app.models import (
     Gateway,
     MasterFlightSchedule,
     NeoRainLoadPlannerContact,
+    NeoScorpionSortAssetState,
     SortDateMission,
     SortDateOperation,
     StaffingPerson,
@@ -53,6 +54,51 @@ class NeoRainLoadPlannerRoutesTest(unittest.TestCase):
         db.session.remove()
         db.drop_all()
         self.context.pop()
+
+    def test_master_lineup_save_publishes_only_canonically_linked_live_sort(self):
+        linked = self._mission("5X100", source="master")
+        linked.master_flight_schedule_id = self.master.id
+        unrelated = SortDateOperation(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+                                      sort_name="night", sort_date=date(2026, 9, 2))
+        db.session.add(unrelated)
+        db.session.flush()
+        # Identical flight/destination on another operation is not a canonical link.
+        db.session.add(SortDateMission(sort_date_operation_id=unrelated.id,
+            sort_date=unrelated.sort_date, gateway_code=self.gateway.code, sort_name="night",
+            mission_type="departure", mission_source="manual", flight_number="5X100",
+            origin="RFD", destination="SDF"))
+        db.session.commit()
+        self._login(self._user("planner_revision_editor", "operator"))
+        with self._current_operation(self.operation), patch(
+                "app.neonodes.neorain.routes.current_existing_operational_sort_operations",
+                return_value=[self.operation, unrelated]):
+            response = self._post(assignment_scope="master", departure_id=self.master.id,
+                                  planner_person_id=self.eligible.id,
+                                  expected_version=entity_version(self.master))
+        self.assertEqual(response.status_code, 302)
+        states = NeoScorpionSortAssetState.query.all()
+        self.assertEqual([(state.sort_date_operation_id, state.revision) for state in states],
+                         [(self.operation.id, 1)])
+        db.session.expire_all()
+        with self._current_operation(self.operation), patch(
+                "app.neonodes.neorain.routes.current_existing_operational_sort_operations",
+                return_value=[self.operation, unrelated]):
+            cleared = self._post(assignment_scope="master", departure_id=self.master.id,
+                                 planner_person_id="", expected_version=entity_version(self.master))
+        self.assertEqual(cleared.status_code, 302)
+        self.assertEqual(NeoScorpionSortAssetState.query.one().revision, 2)
+
+    def test_current_sort_lineup_change_and_clear_publish_but_noop_does_not(self):
+        self._login(self._user("temporary_revision_editor", "operator"))
+        for planner_id, revision in ((self.eligible.id, 1), (self.eligible.id, 1), ("", 2)):
+            with self.subTest(planner_id=planner_id, revision=revision):
+                db.session.expire_all()
+                with self._current_operation(self.operation):
+                    response = self._post(assignment_scope="current_sort", departure_id=self.manual.id,
+                                          planner_person_id=planner_id,
+                                          expected_version=entity_version(self.manual))
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(NeoScorpionSortAssetState.query.one().revision, revision)
 
     def test_master_section_renders_and_saves_without_a_current_sort(self):
         editor = self._user("load_planner_editor", "operator")
