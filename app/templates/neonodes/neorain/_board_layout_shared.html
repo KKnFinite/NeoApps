@@ -489,6 +489,30 @@ tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
         overscroll-behavior: contain;
     }
 }
+
+/* Outbound fuel figures and blanks are centered under their single headers.
+   The source is metadata, not a label repeated in every mission row. */
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board :is(
+    th:nth-child(12), th:nth-child(13),
+    td[data-label="Neo Fuel"], td[data-label="Center Fuel"]
+) {
+    text-align: center;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board .neorain-fuel-cell > span {
+    display: block;
+    width: 100%;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board .neorain-fuel-cell > form,
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board .neorain-fuel-cell > .neorain-fuel-review-warning {
+    margin-inline: auto;
+    text-align: center;
+}
 </style>
 <script>
 (() => {

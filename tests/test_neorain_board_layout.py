@@ -67,6 +67,21 @@ class NeoRainBoardLayoutTest(unittest.TestCase):
         self.assertIn("@media (max-width: 1440px)", delay_styles)
         self.assertIn("neorain-mobile-board", base_styles)
 
+    def test_outbound_fuel_labels_not_repeated_and_both_columns_centered(self):
+        desktop = (TEMPLATES / "_outbound_content.html").read_text()
+        mobile = (TEMPLATES / "_outbound_mobile_content.html").read_text()
+        styles = (TEMPLATES / "_board_layout_shared.html").read_text()
+
+        self.assertIn("<th>NEO FUEL</th><th>CENTER FUEL</th>", desktop)
+        self.assertNotIn('class="neorain-fuel-source"', desktop)
+        self.assertNotIn("FUEL · {{ row.fuel_source|upper }}", desktop)
+        self.assertIn("<dt>NEO FUEL</dt>", mobile)
+        self.assertNotIn("NEO FUEL · {{ row.fuel_source|upper }}", mobile)
+        self.assertIn('td[data-label="Neo Fuel"], td[data-label="Center Fuel"]', styles)
+        self.assertIn("th:nth-child(12), th:nth-child(13)", styles)
+        self.assertIn(".neorain-fuel-cell > span", styles)
+        self.assertIn("text-align: center;", styles)
+
     def test_inbound_outbound_share_full_width_board_layout(self):
         common = (TEMPLATES / "_board_layout_shared.html").read_text()
         self.assertIn("table-layout: fixed", common)
