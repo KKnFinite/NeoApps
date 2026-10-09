@@ -155,6 +155,25 @@
     .neorain-mobile-column-head--outbound {
         grid-template-columns: .9fr .8fr 1fr 1fr 1fr .48fr 1fr;
     }
+    /* Inbound header and mission values must share the exact six-column grid.
+       Give status room before shrinking the displayed text or hiding its end. */
+    .neorain-mobile-board[data-neorain-mobile-board="inbound"] {
+        --neorain-inbound-columns: minmax(0, 1.06fr) minmax(0, .69fr) minmax(0, .94fr) minmax(0, 1.44fr) minmax(0, .43fr) minmax(0, 1.04fr);
+    }
+    .neorain-mobile-board[data-neorain-mobile-board="inbound"] .neorain-mobile-column-head,
+    .neorain-mobile-board[data-neorain-mobile-board="inbound"] .neorain-mobile-mission-grid {
+        grid-template-columns: var(--neorain-inbound-columns);
+    }
+    .neorain-mobile-board[data-neorain-mobile-board="inbound"] .neorain-mobile-mission-grid > :nth-child(4) span[data-neorain-display="status"] {
+        display: block;
+        min-width: 0;
+        width: 100%;
+        overflow: visible;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+        line-height: 1.15;
+    }
     .neorain-mobile-column-head span {
         min-width: 0;
         padding: 6px 5px;

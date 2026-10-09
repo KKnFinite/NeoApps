@@ -82,6 +82,23 @@ class NeoRainBoardLayoutTest(unittest.TestCase):
         self.assertIn(".neorain-fuel-cell > span", styles)
         self.assertIn("text-align: center;", styles)
 
+    def test_inbound_mobile_status_does_not_truncate_and_headers_align(self):
+        shared = (TEMPLATES / "_delay_panel_shared.html").read_text()
+        inbound = (TEMPLATES / "_inbound_mobile_content.html").read_text()
+        outbound = (TEMPLATES / "_outbound_mobile_content.html").read_text()
+        self.assertIn('--neorain-inbound-columns:', shared)
+        self.assertIn('data-neorain-mobile-board="inbound"] .neorain-mobile-column-head', shared)
+        self.assertIn('data-neorain-mobile-board="inbound"] .neorain-mobile-mission-grid', shared)
+        self.assertIn('grid-template-columns: var(--neorain-inbound-columns)', shared)
+        self.assertIn('span[data-neorain-display="status"]', shared)
+        self.assertIn('white-space: normal;', shared)
+        self.assertIn('overflow-wrap: anywhere;', shared)
+        self.assertIn('text-overflow: clip;', shared)
+        self.assertIn('data-neorain-mobile-board="inbound"', inbound)
+        self.assertIn('data-neorain-display="status"', inbound)
+        self.assertIn('data-neorain-mobile-board="outbound"', outbound)
+        self.assertNotIn('--neorain-inbound-columns:', outbound)
+
     def test_inbound_outbound_share_full_width_board_layout(self):
         common = (TEMPLATES / "_board_layout_shared.html").read_text()
         self.assertIn("table-layout: fixed", common)
