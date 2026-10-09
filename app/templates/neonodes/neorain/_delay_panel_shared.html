@@ -152,8 +152,14 @@
         background: #111a26;
         box-shadow: 0 4px 10px rgba(0, 0, 0, .32);
     }
-    .neorain-mobile-column-head--outbound {
-        grid-template-columns: .9fr .8fr 1fr 1fr 1fr .48fr 1fr;
+    /* Outbound flight numbers get priority over compact time and route fields.
+       The fixed header uses exactly the same seven-column grid as each row. */
+    .neorain-mobile-board[data-neorain-mobile-board="outbound"] {
+        --neorain-outbound-columns: minmax(0, 1.6fr) minmax(0, .65fr) minmax(0, .92fr) minmax(0, .92fr) minmax(0, .92fr) minmax(0, .4fr) minmax(0, 1.05fr);
+    }
+    .neorain-mobile-board[data-neorain-mobile-board="outbound"] .neorain-mobile-column-head,
+    .neorain-mobile-board[data-neorain-mobile-board="outbound"] .neorain-mobile-mission-grid {
+        grid-template-columns: var(--neorain-outbound-columns);
     }
     /* Inbound header and mission values must share the exact six-column grid.
        Give status room before shrinking the displayed text or hiding its end. */
@@ -190,6 +196,64 @@
     }
     .neorain-mobile-column-head span:first-child {
         border-left: 0;
+    }
+    /* Center every compact column on both boards, including editable time
+       buttons and Include/Exclude, without losing full flight numbers. */
+    .neorain-mobile-board .neorain-mobile-column-head > span {
+        display: grid;
+        place-items: center;
+        padding-inline: 2px;
+        text-align: center;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-mission-open,
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-time .neorain-mobile-time-display {
+        justify-items: center;
+        text-align: center;
+        padding-inline: 2px;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-time {
+        display: grid;
+        align-items: center;
+        text-align: center;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-time .neorain-mobile-time-display {
+        width: 100%;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-time > span {
+        display: block;
+        width: 100%;
+        text-align: center;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-mission-open > :is(strong, span),
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-time .neorain-mobile-time-display > span {
+        min-width: 0;
+        max-width: 100%;
+        text-align: center;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > :first-child strong {
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+        line-height: 1.15;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-inclusion {
+        padding-inline: 2px;
+        text-align: center;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-inclusion > .neorain-late-inclusion-control,
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-inclusion > .neorain-no-return-control {
+        width: 100%;
+        min-width: 0;
+        text-align: center;
+    }
+    .neorain-mobile-board .neorain-mobile-mission-grid > .neorain-mobile-inclusion > span {
+        display: block;
+        width: 100%;
+        text-align: center;
     }
     .neorain-mobile-mission-open,
     .neorain-mobile-time-display {
