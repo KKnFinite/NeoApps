@@ -115,7 +115,7 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                     page.set_viewport_size({"width":width,"height":950})
                     visible_headers = page.locator('.neoscorpion-dispatch-table--compact thead th').evaluate_all(
                         '(cells) => cells.filter(c => getComputedStyle(c).display !== "none")'
-                        '.map(c => c.textContent.trim().replace(/\\s+/g, " "))'
+                        '.map(c => c.innerText.trim().replace(/\\s+/g, " "))'
                     )
                     if width == 390:
                         self.assertEqual(visible_headers, ["Tail", "Dest", "ETD", "Est Gal", "Status"])
