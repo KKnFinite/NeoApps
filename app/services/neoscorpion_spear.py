@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from app.extensions import db
 from app.models import NeoScorpionSettings, NeoScorpionSpearAuditEntry
-from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
+from app.services.neoscorpion_dispatch_planning import assignment_mission_timing, _assignment_finished
 from app.services.neoscorpion_learning_vault import require_learning_vault
 from app.services.neoscorpion_spear_calibration import calibrated_planning_settings
 from app.services.parking_rules import RAMP_OPTIONS, VALID_PARKING_POSITIONS
@@ -79,6 +79,7 @@ class SpearPlanStep:
     truck_location_provenance: dict | None = None
     fueler_location_provenance: dict | None = None
     explanation: dict | None = None
+    requires_resource_release: bool = False
 
 
 @dataclass(frozen=True)
@@ -279,6 +280,7 @@ def build_spear_plan(
 ):
     """Plan the remaining sort from already-bounded canonical dispatch data."""
     now_utc = _utc_naive(now_utc) or datetime.utcnow()
+    rows = tuple(rows)
     if not spear_settings.recommendations_enabled:
         return _plan((), {}, {}, status_text="SPEAR: RECOMMENDATIONS OFF")
 
@@ -316,6 +318,10 @@ def build_spear_plan(
         for identifier, item in usable_trucks.items()
     }
     _adopt_completed_locations(rows, fueler_state, truck_state)
+    # Availability now is independent of departure order, readiness or predicted
+    # finish. Partial assignments and holds reserve their resources too. Reuse
+    # follows the same recorded release boundary as Dispatch's calendars.
+    occupied_fuelers, occupied_trucks = _current_resource_owners(rows)
 
     steps = []
     risks = {}
@@ -353,6 +359,10 @@ def build_spear_plan(
             continue
 
         assignment = row.get("assignment")
+        if assignment is not None and _assignment_finished(assignment, row.get("fuel_work_state")):
+            # Recorded release must not reserve resources again or trigger a
+            # replacement recommendation while awaiting dispatcher completion.
+            continue
         assigned_fueler = getattr(assignment, "assigned_fueler_user_id", None)
         assigned_truck = getattr(assignment, "assigned_truck_id", None)
         fueler_valid = assigned_fueler in fuelers
@@ -384,8 +394,12 @@ def build_spear_plan(
             _apply_demand(truck_gallons, assigned_truck, demand)
             continue
 
-        fueler_ids = (assigned_fueler,) if fueler_valid else tuple(fuelers)
-        truck_ids = (assigned_truck,) if truck_valid else tuple(usable_trucks)
+        fueler_ids = tuple(identifier for identifier in
+            ((assigned_fueler,) if fueler_valid else tuple(fuelers))
+            if not occupied_fuelers.get(identifier, set()) - {mission_id})
+        truck_ids = tuple(identifier for identifier in
+            ((assigned_truck,) if truck_valid else tuple(usable_trucks))
+            if not occupied_trucks.get(identifier, set()) - {mission_id})
         candidates = []
         top_off_candidates = []
         for fueler_id in fueler_ids:
@@ -442,7 +456,10 @@ def build_spear_plan(
                 )
                 candidates.append(
                     {
-                        "score": score,
+                        # Preserve priority scoring within each availability
+                        # tier; genuinely unassigned resources come first.
+                        "score": (int(fueler_state[fueler_id].workload > 0)
+                                  + int(truck_state[truck_id].workload > 0), *score),
                         "fueler_id": fueler_id,
                         "truck_id": truck_id,
                         "start": start,
@@ -483,7 +500,9 @@ def build_spear_plan(
             continue
         if not candidates:
             unavailable[mission_id] = (
+                "NO AVAILABLE FUELER — active assignment" if not fueler_ids and fuelers else
                 "NO ELIGIBLE FUELER" if not fueler_ids else
+                "NO AVAILABLE TRUCK — active assignment" if not truck_ids and usable_trucks else
                 "NO ELIGIBLE TRUCK" if not truck_ids else
                 "NO FEASIBLE RESOURCE — truck fuel / capacity constraints"
             )
@@ -504,12 +523,14 @@ def build_spear_plan(
             assignment
             and ((assigned_fueler is not None and not fueler_valid) or (assigned_truck is not None and not truck_valid))
         )
+        requires_resource_release = bool(fueler_state[fueler_id].workload or truck_state[truck_id].workload)
         steps.append(
             SpearPlanStep(
                 "assign", mission_id, mission.flight_number or "-", ramp,
                 truck_id, str(truck.truck_number), fueler_id,
                 getattr(fueler, "display_name", None) or getattr(fueler, "full_name", None) or str(fueler_id),
                 start, finish, risk,
+                "Future plan — resource release required" if requires_resource_release else
                 "Replace invalid sent resource" if invalid_sent_resource else "Minimum-delay deterministic assignment",
                 automatic_eligible=(
                     demand is not None
@@ -539,6 +560,7 @@ def build_spear_plan(
                     staging_allowed_at_utc=staging_allowed_at,
                     calibrations=calibrations or {},
                 ),
+                requires_resource_release=requires_resource_release,
             )
         )
         risks[mission_id] = risk
@@ -650,7 +672,7 @@ def _plan(
     token_payload = [
         (
             step.action_type, step.mission_id, step.truck_id, step.fueler_id,
-            step.risk,
+            step.risk, step.requires_resource_release,
         )
         for step in steps
     ]
@@ -1053,6 +1075,23 @@ def _staging_allowed_at(row, settings, now_utc):
     return eta - timedelta(minutes=settings.incoming_early_staging_minutes)
 
 
+def _current_resource_owners(rows):
+    """Snapshot committed resources from bounded current-sort/cycle rows only."""
+    fuelers, trucks = {}, {}
+    for row in rows:
+        assignment = row.get("assignment")
+        if (assignment is None or row.get("administratively_complete")
+                or _assignment_finished(assignment, row.get("fuel_work_state"))):
+            continue
+        for owners, identifier in (
+            (fuelers, getattr(assignment, "assigned_fueler_user_id", None)),
+            (trucks, getattr(assignment, "assigned_truck_id", None)),
+        ):
+            if identifier is not None:
+                owners.setdefault(identifier, set()).add(row["mission"].id)
+    return fuelers, trucks
+
+
 def _advance_resources(fueler, truck, ramp, finish):
     for state in (fueler, truck):
         if finish is not None:
@@ -1065,15 +1104,24 @@ def _advance_resources(fueler, truck, ramp, finish):
 
 
 def _adopt_completed_locations(rows, fueler_state, truck_state):
+    def released_at(row):
+        assignment = row["assignment"]
+        work = row.get("fuel_work_state")
+        return _utc_naive(
+            getattr(assignment, "completed_at_utc", None)
+            or getattr(assignment, "fuel_on_board_at_utc", None)
+            or getattr(work, "off_at_utc", None)
+            or getattr(work, "ended_early_at_utc", None)
+        )
+
     completed = sorted(
         (
             row for row in rows
-            if row.get("administratively_complete") and row.get("assignment") is not None
+            if row.get("assignment") is not None and (row.get("administratively_complete")
+                or _assignment_finished(row["assignment"], row.get("fuel_work_state")))
         ),
         key=lambda row: (
-            _datetime_sort_key(
-                getattr(row["assignment"], "completed_at_utc", None)
-            ),
+            _datetime_sort_key(released_at(row)),
             row["mission"].id,
         ),
     )
@@ -1090,9 +1138,7 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
                 mapping[identifier].ramp = ramp
                 mapping[identifier].location_source = "last_completed_assignment"
                 mapping[identifier].location_confidence = "high"
-                mapping[identifier].location_recorded_at_utc = _utc_naive(
-                    getattr(assignment, "completed_at_utc", None)
-                )
+                mapping[identifier].location_recorded_at_utc = released_at(row)
 
 
 def _location_provenance(state):

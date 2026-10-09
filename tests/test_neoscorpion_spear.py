@@ -108,6 +108,89 @@ def _plan(rows, *, trucks=None, fuelers=None, settings=None):
 
 
 class NeoScorpionSpearPlanningTest(unittest.TestCase):
+    def commitment(self, *, fueler=1, truck=10, **values):
+        return SimpleNamespace(id=7, assigned_fueler_user_id=fueler, assigned_truck_id=truck,
+            operational_status='active', completed_at_utc=None, fuel_on_board_at_utc=None, **values)
+
+    def test_occupancy_audited_before_departure_order_including_pending_partial_and_hold(self):
+        for fueler, truck in ((1,10),(1,None),(None,10)):
+            for hold in (False,True):
+                with self.subTest(fueler=fueler,truck=truck,hold=hold):
+                    owner=_row(200,assignment=self.commitment(fueler=fueler,truck=truck))
+                    owner.update(required_fuel_lbs=None,parking_valid=False)
+                    if hold: owner['assignment'].operational_status='hold_review'
+                    owner['mission'].planned_datetime_utc=NOW+timedelta(hours=5)
+                    plan=_plan([_row(100),owner],trucks=(_truck(10),_truck(20),_truck(30)),
+                        fuelers=(_fueler(1),_fueler(2),_fueler(3)))
+                    step=next(s for s in plan.steps if s.mission_id==100)
+                    if fueler: self.assertNotEqual(step.fueler_id,fueler)
+                    if truck: self.assertNotEqual(step.truck_id,truck)
+                    self.assertFalse(step.requires_resource_release)
+
+    def test_occupied_resource_never_becomes_available_from_projected_finish(self):
+        owner=_row(200,assignment=self.commitment())
+        owner['mission'].planned_datetime_utc=NOW-timedelta(hours=2)
+        owner['fuel_work_state']=SimpleNamespace(on_at_utc=NOW-timedelta(hours=3),off_at_utc=None,ended_early_at_utc=None)
+        plan=_plan([_row(100),owner])
+        self.assertFalse(plan.steps)
+        self.assertIn('NO AVAILABLE FUELER',plan.unavailable_by_mission_id[100])
+        owner['assignment'].assigned_fueler_user_id=None
+        plan=_plan([_row(100),owner],fuelers=(_fueler(1),_fueler(2)))
+        self.assertNotIn(100,[step.mission_id for step in plan.steps])
+        self.assertIn('NO AVAILABLE TRUCK',plan.unavailable_by_mission_id[100])
+
+    def test_recorded_release_allows_reuse_without_re_reserving_finished_work(self):
+        for boundary in ('off','ended_early','complete','fob'):
+            with self.subTest(boundary=boundary):
+                assignment=self.commitment()
+                owner=_row(99,assignment=assignment)
+                owner['fuel_work_state']=SimpleNamespace(off_at_utc=None,ended_early_at_utc=None)
+                if boundary in ('off','ended_early'):
+                    setattr(owner['fuel_work_state'],boundary+'_at_utc',NOW-timedelta(minutes=10))
+                else:
+                    setattr(assignment,'completed_at_utc' if boundary=='complete' else 'fuel_on_board_at_utc',NOW-timedelta(minutes=10))
+                    owner['administratively_complete']=True
+                plan=_plan([owner,_row(100)])
+                self.assertEqual(len(plan.steps),1)
+                step=plan.steps[0]
+                self.assertEqual((step.mission_id,step.fueler_id,step.truck_id),(100,1,10))
+                self.assertFalse(step.requires_resource_release)
+                self.assertTrue(step.automatic_eligible)
+                self.assertEqual(step.truck_location_provenance['location'],'Charlie')
+
+    def test_free_resources_preferred_over_hypothetical_reuse_and_future_plans_labeled(self):
+        plan=_plan([_row(100),_row(101)],trucks=(_truck(10),_truck(20)),fuelers=(_fueler(1),_fueler(2)))
+        self.assertEqual([(s.fueler_id,s.truck_id) for s in plan.steps],[(1,10),(2,20)])
+        self.assertTrue(all(not s.requires_resource_release for s in plan.steps))
+        future=_plan([_row(100),_row(101)])
+        self.assertFalse(future.steps[0].requires_resource_release)
+        self.assertTrue(future.steps[1].requires_resource_release)
+        self.assertFalse(future.steps[1].automatic_eligible)
+        self.assertIn('release required',future.steps[1].reason)
+        self.assertGreaterEqual(future.steps[1].projected_start_at_utc,future.steps[0].projected_complete_at_utc)
+
+    def test_latest_recorded_release_sets_location_across_release_types(self):
+        older = _row(98, assignment=self.commitment())
+        older['parking_position'] = 'B06'
+        older['fuel_work_state'] = SimpleNamespace(off_at_utc=NOW-timedelta(minutes=30))
+        newer = _row(99, assignment=self.commitment())
+        newer['parking_position'] = 'D07'
+        newer['assignment'].completed_at_utc = NOW-timedelta(minutes=5)
+        newer['administratively_complete'] = True
+        for rows in ((older, newer), (newer, older)):
+            step = _plan([*rows, _row(100)]).steps[0]
+            self.assertEqual(step.truck_location_provenance['location'], 'Delta')
+            self.assertEqual(step.fueler_location_provenance['location'], 'Delta')
+
+    def test_occupied_truck_not_top_off_candidate_and_own_partial_assignment_kept(self):
+        owner=_row(200,assignment=self.commitment(fueler=None))
+        plan=_plan([_row(100,demand=100),owner],trucks=(_truck(10,current=550,capacity=2000),))
+        self.assertNotIn(100,[step.mission_id for step in plan.steps])
+        self.assertIn('NO AVAILABLE TRUCK',plan.unavailable_by_mission_id[100])
+        partial=_row(100,assignment=self.commitment(truck=None))
+        plan=_plan([partial],trucks=(_truck(20),),fuelers=(_fueler(1),_fueler(2)))
+        self.assertEqual((plan.steps[0].fueler_id,plan.steps[0].truck_id),(1,20))
+
     def test_real_parking_codes_use_canonical_ramps_and_travel(self):
         for parking, ramp, travel in (("B06", "Bravo", "4"), ("D07", "Delta", "8"),
                                       ("E03", "Echo", "10"), ("B06 / S2", "Bravo", "4")):

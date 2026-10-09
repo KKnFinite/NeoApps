@@ -452,7 +452,10 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
 
     def test_dispatch_recommendations_are_advisory_and_support_partial_assignments(self):
         fueler = self._login_user("suggested_fueler", "operator")
+        free_fueler = self._login_user("free_fueler", "operator")
+        occupied_fueler = self._login_user("occupied_fueler", "operator")
         truck = self._nightly_truck("123456", 10_000)
+        self._nightly_truck("654321", 10_000)
         unassigned = self._mission("UPS701", "N411UP", 25_400, 1)
         partial = self._mission("UPS702", "N412UP", 25_400, 2)
         fully_assigned = self._mission("UPS703", "N413UP", 25_400, 3)
@@ -468,6 +471,14 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
                     sort_date_operation_id=self.operation.id,
                     user_id=fueler.id,
                 ),
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=self.operation.id,
+                    user_id=free_fueler.id,
+                ),
+                NeoScorpionSortFueler(
+                    sort_date_operation_id=self.operation.id,
+                    user_id=occupied_fueler.id,
+                ),
                 NeoScorpionFuelAssignment(
                     sort_date_operation_id=self.operation.id,
                     sort_date_mission_id=partial.id,
@@ -476,7 +487,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
                 NeoScorpionFuelAssignment(
                     sort_date_operation_id=self.operation.id,
                     sort_date_mission_id=fully_assigned.id,
-                    assigned_fueler_user_id=fueler.id,
+                    assigned_fueler_user_id=occupied_fueler.id,
                     assigned_truck_id=truck.id,
                 ),
             ]
@@ -492,12 +503,12 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertTrue(rows["UPS701"]["assignment_recommendation"].available)
         self.assertEqual(
             rows["UPS701"]["assignment_recommendation_display"],
-            "Dispatch Planner · Truck 123456",
+            "Dispatch Planner · Truck 654321",
         )
         self.assertTrue(rows["UPS702"]["assignment_recommendation"].available)
         self.assertEqual(
             rows["UPS702"]["assignment_recommendation_display"],
-            "Truck 123456",
+            "Truck 654321",
         )
         self.assertIsNone(rows["UPS703"]["assignment_recommendation_display"])
         self.assertEqual(
@@ -510,14 +521,15 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             mocked_datetime.utcnow.return_value = frozen_now
             response = self.client.get("/neoscorpion/fuel-dispatch")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("SUGGESTED Dispatch Planner · Truck 123456".encode(), response.data)
+        self.assertIn("SUGGESTED Dispatch Planner · Truck 654321".encode(), response.data)
         self.assertIn(b"DEADLINE AT RISK", response.data)
-        self.assertIn(b"123456 (Recommended)</option>", response.data)
+        self.assertIn(b"654321 (Recommended)</option>", response.data)
+        self.assertNotIn(b"123456 (Recommended)</option>", response.data)
         self.assertIn(
             b"Dispatch Planner (Recommended)</option>", response.data
         )
         self.assertNotIn(
-            b'<option value="123456" selected>123456 (Recommended)</option>',
+            b'<option value="654321" selected>654321 (Recommended)</option>',
             response.data,
         )
         self.assertNotIn(

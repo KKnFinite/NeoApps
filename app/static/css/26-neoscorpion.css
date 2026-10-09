@@ -892,26 +892,33 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     color: #ff626b !important; font-weight: 900 !important;
 }
 .neoscorpion-fuel-status {
+    container: fuel-status / inline-size;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 3px;
     min-width: 0;
     max-width: 100%;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-wrap: normal;
     font-size: 11px;
     line-height: 1.25;
 }
 .neoscorpion-fuel-status > *, .neoscorpion-call-dispatch > * { min-width: 0; max-width: 100%; }
 .neoscorpion-fuel-status-chip {
     display: inline-block;
-    padding: 3px 5px;
+    padding: 6px 7px;
     border: 1px solid currentColor;
     border-radius: 5px;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: 900;
+    font-family: NeoFontPlain, var(--font-sans);
+    letter-spacing: 0;
+    box-sizing: border-box;
     line-height: 1.2;
-    white-space: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 [data-fuel-status-color="gray"] > .neoscorpion-fuel-status-chip { --fuel-status-foreground: #b5bec9; color: #b5bec9; background: #28313c; }
 [data-fuel-status-color="amber"] > .neoscorpion-fuel-status-chip { --fuel-status-foreground: #f4c66b; color: #f4c66b; background: #44381c; }
@@ -921,13 +928,17 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 [data-fuel-status-color="green"] > .neoscorpion-fuel-status-chip { --fuel-status-foreground: #94e0aa; color: #94e0aa; background: #193c29; }
 [data-fuel-status-color="red"] > .neoscorpion-fuel-status-chip { --fuel-status-foreground: #ff919c; color: #ff919c; background: #491f2b; }
 .neoscorpion-fuel-status-operation { color: #c0cbd8; font-weight: 700; }
-.neoscorpion-fuel-status-warning { color: #e2c884; }
+.neoscorpion-fuel-status-warning { color: #e2c884; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .neoscorpion-fuel-status small { font-size: inherit; }
 .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status { font-size: 10px; }
-.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 10px; padding: 3px 2px; }
-.neoscorpion-call-dispatch { display: flex; flex-direction: column; gap: 3px; color: #ff737f; font-weight: 800; }
-.neoscorpion-call-dispatch .action-button { padding: 2px 5px; font-size: 10px; min-height: 24px; }
-.neoscorpion-call-dispatch form { display: flex; flex-wrap: wrap; gap: 3px; max-width: 100%; }
+.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 12px; padding: 5px 2px; font-weight: 900; letter-spacing: -.3px; }
+.neoscorpion-call-dispatch { display: flex; flex-direction: row; align-items: center; gap: 3px; color: #ff737f; font-weight: 800; width: 100%; white-space: nowrap; }
+.neoscorpion-call-dispatch > strong { font: 900 9px/1.25 var(--font-sans); letter-spacing: -.2px; white-space: nowrap; }
+.neoscorpion-call-dispatch-details { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #ff737f; }
+@container fuel-status (max-width: 60px) {
+    .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 10px; padding: 5px 1px; letter-spacing: -.7px; }
+    .neoscorpion-call-dispatch > strong { font-size: 7.5px; letter-spacing: -.4px; }
+}
 
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-fuel-status .neoscorpion-fuel-status-chip { color: var(--fuel-status-foreground); }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-call-dispatch strong { color: #ff737f; font-weight: 900; }

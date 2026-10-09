@@ -20,6 +20,44 @@ from tests import test_neoscorpion_fuel_interruptions as interruption_fixture
 
 
 class FuelingStatusClassificationTest(unittest.TestCase):
+    def test_pending_secondary_is_empty_but_missing_reasons_remain_internal(self):
+        row=self.row(); row.update(arrival_status='Scheduled',inbound_fuel_lbs=None,required_fuel_lbs=None,parking_valid=False)
+        status=fueling_status(row)
+        self.assertEqual(status['dispatch_status_label'],'PENDING')
+        self.assertEqual(status['dispatch_status_detail'],'Needs Arrival, Inbound, Required, Parking')
+        self.assertEqual(status['fuel_status_secondary'],'')
+
+    def test_one_secondary_prioritizes_timing_and_discrepancy_over_routine_details(self):
+        row=self.row(); row.update(tail_mismatch=True,direction_mismatch=True,fob_likely=True)
+        status=fueling_status(row)
+        self.assertEqual(status['fuel_status_secondary'],'Fuel direction discrepancy')
+        self.assertEqual(len(status['fuel_status_warnings']),3)
+        row['fuel_work_state'].on_at_utc=datetime(2026,10,9,2)
+        status=fueling_status(row)
+        self.assertEqual(status['fuel_status_secondary'],'TIMING UNKNOWN')
+
+    def test_macro_call_dispatch_uses_only_secondary_line_and_preserves_fueler_secrecy(self):
+        from app import create_app
+        from flask import render_template_string
+        row=self.row(); row.update(fob_likely=True,cycle_type='fuel',cycle_number=1,
+            call_dispatch_alert=SimpleNamespace(fingerprint='abc'),tail_mismatch=True)
+        row['mission'].id=1; row['mission'].flight_number='UPS1'
+        row.update(fueling_status(row))
+        app=create_app(type('Config',(),dict(SECRET_KEY='test',TESTING=True,
+            SQLALCHEMY_DATABASE_URI='sqlite:///:memory:',SQLALCHEMY_TRACK_MODIFICATIONS=False)))
+        source="{% from 'neonodes/neoscorpion/_fuel_status.html' import fuel_status with context %}{{ fuel_status(row, dispatcher=dispatcher, can_ack=dispatcher) }}"
+        with app.test_request_context('/'):
+            html=render_template_string(source,row=row,dispatcher=True)
+            self.assertEqual(html.count('data-fuel-status-secondary'),1)
+            self.assertIn('CALL DISPATCH',html); self.assertNotIn('>ACK</button>',html)
+            ack=render_template_string("{% from 'neonodes/neoscorpion/_fuel_status.html' import call_dispatch_ack with context %}{{ call_dispatch_ack(row) }}",row=row)
+            self.assertIn('>ACK</button>',ack); self.assertIn('alert_fingerprint',ack)
+            self.assertNotIn('FOB LIKELY',html); self.assertNotIn('TAIL SWAP',html)
+            fueler=render_template_string(source,row=row,dispatcher=False)
+            self.assertEqual(fueler.count('data-fuel-status-secondary'),1)
+            self.assertNotIn('CALL DISPATCH',fueler); self.assertNotIn('>ACK</button>',fueler)
+            self.assertIn('FOB LIKELY',fueler)
+
     def row(self):
         return dict(mission=SimpleNamespace(eta_datetime_utc=None, planned_datetime_utc=datetime(2026, 10, 9, 8)),
             assignment=SimpleNamespace(assigned_fueler_user_id=None, assigned_truck_id=None, review_status="pending"),

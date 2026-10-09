@@ -106,27 +106,42 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                 self.assertEqual(status('check').locator('.neoscorpion-call-dispatch > strong').evaluate('(el)=>getComputedStyle(el).color'),'rgb(255, 115, 127)')
                 expect(status('fueling')).to_contain_text('TIMING UNKNOWN')
                 expect(status('risk')).not_to_contain_text('TIMING UNKNOWN')
-                expect(status('check')).to_contain_text('FOB CHECK')
+                expect(status('check')).not_to_contain_text('FOB CHECK')
                 expect(status('check').get_by_text('CALL DISPATCH', exact=True)).to_be_visible()
-                self.assertIn('20261009-fuel-status-fob-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
+                self.assertIn('20261009-spear-availability-status-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
                 self.assertIn('20261009-fuel-status-fob-v1',page.locator('script[src*="neoscorpion_fuel_status.js"]').get_attribute('src'))
 
                 for width in (1440,390):
                     page.set_viewport_size({"width":width,"height":950})
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth + 1'))
                     for stage in colors:
-                        self.assertTrue(status(stage).evaluate('el=>el.scrollWidth <= el.clientWidth+1'))
-                        self.assertTrue(status(stage).locator('.neoscorpion-fuel-status-chip').evaluate('el=>el.scrollWidth <= el.clientWidth+1'))
+                        self.assertLessEqual(status(stage).locator('[data-fuel-status-secondary]').count(),1)
+                        chip=status(stage).locator('.neoscorpion-fuel-status-chip')
+                        self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).fontSize)'),12 if width==1440 else 10)
+                        self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).fontWeight)'),800)
+                        self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).paddingTop)'),5)
+                        self.assertEqual(chip.evaluate('el=>getComputedStyle(el).whiteSpace'),'nowrap')
+                        for secondary in status(stage).locator('[data-fuel-status-secondary]').all():
+                            self.assertEqual(secondary.evaluate('el=>getComputedStyle(el).whiteSpace'),'nowrap')
+                        self.assertTrue(status(stage).evaluate('el=>el.scrollWidth <= el.clientWidth+1'),
+                            (stage,width,status(stage).evaluate('el=>({width:el.clientWidth,scroll:el.scrollWidth,children:[...el.children].map(c=>({text:c.textContent,width:c.clientWidth,scroll:c.scrollWidth,font:getComputedStyle(c).font}))})')))
+                        self.assertTrue(chip.evaluate('el=>el.scrollWidth <= el.clientWidth+1'),
+                            (stage,width,chip.evaluate('el=>({width:el.clientWidth,scroll:el.scrollWidth,css:getComputedStyle(el).font})')))
                     if width == 390:
                         status('check').scroll_into_view_if_needed()
                         # The existing table scrolls locally; reveal STATUS on
                         # mobile and check its actual painted location.
                         self.assertTrue(status('check').evaluate('el=>{const r=el.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth;}'))
                     page.screenshot(path=str(Fixture.evidence/f'fuel-status-{width}.png'),full_page=True)
+                expect(status('pending')).to_have_text('PENDING')
+                expect(row('pending').locator('[data-fuel-status-secondary]')).to_have_count(0)
+                details=page.locator('[data-fuel-status-details]').filter(has_text='Needs Arrival')
+                self.assertGreater(details.count(),0)
 
                 # Real ACK POST, CSRF and existing fragment update; no confirmation dialog.
                 page.set_viewport_size({"width":1440,"height":950})
-                status('check').get_by_role('button',name='Acknowledge CALL DISPATCH',exact=False).click()
+                row('check').locator('[data-neoscorpion-dispatch-details]').click()
+                page.get_by_role('button',name='Acknowledge CALL DISPATCH',exact=False).click()
                 expect(status('check').locator('.neoscorpion-call-dispatch')).to_have_count(0)
                 page.reload(wait_until='domcontentloaded')
                 expect(status('check').locator('.neoscorpion-call-dispatch')).to_have_count(0)

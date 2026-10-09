@@ -63,6 +63,7 @@ from app.services.neoscorpion_spear import (
     SPEAR_HARD_CONSTRAINTS,
     SPEAR_READINESS_REASON_LABELS,
     build_spear_plan,
+    _current_resource_owners,
     active_fueling_finish,
     effective_spear_settings,
     first_automatic_step,
@@ -5857,6 +5858,7 @@ def _attach_dispatch_assignment_recommendations(
         planning_settings=planning_settings,
         now_utc=now_utc,
     )
+    occupied_fuelers, occupied_trucks = _current_resource_owners(rows)
     fueler_candidates = tuple(
         {
             "id": fueler.id,
@@ -5898,8 +5900,10 @@ def _attach_dispatch_assignment_recommendations(
         recommendation = recommend_assignment_resources(
             assignment=row["assignment"],
             mission_timing=timing,
-            fueler_candidates=fueler_candidates,
-            truck_candidates=candidate_trucks_by_mission_id[row["mission"].id],
+            fueler_candidates=tuple(candidate for candidate in fueler_candidates
+                if not occupied_fuelers.get(candidate["id"], set()) - {row["mission"].id}),
+            truck_candidates=tuple(candidate for candidate in candidate_trucks_by_mission_id[row["mission"].id]
+                if not occupied_trucks.get(candidate["id"], set()) - {row["mission"].id}),
             resource_calendars=resource_calendars,
             now_utc=now_utc,
         )

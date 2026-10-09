@@ -10,6 +10,19 @@ STAGE_COLORS = {
 DEPARTURE_ALERT_STAGES = frozenset({"pending", "ready", "assigned", "off", "fob-ready"})
 
 
+def status_secondary(stage, detail, warnings):
+    """Pick one compact line; full reasons/warnings remain in canonical data."""
+    if stage == "review" and detail:
+        return detail
+    for critical in ("TIMING UNKNOWN", "Fuel direction discrepancy", "Dispatcher review requested",
+                     "FOB CHECK", "FOB LIKELY"):
+        if critical in warnings:
+            return critical
+    if detail and stage != "pending":
+        return detail
+    return next(iter(warnings), "")
+
+
 def utc_naive(value):
     if value is not None and value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
@@ -87,6 +100,7 @@ def fueling_status(row, *, now=None, threshold=30):
         "dispatch_status_label": stage.upper().replace("-", " "),
         "dispatch_status_detail": detail,
         "fuel_status_warnings": tuple(warnings),
+        "fuel_status_secondary": status_secondary(stage, detail, warnings),
         "fuel_status_color": status_color(stage, departure, now=now, threshold=threshold,
                                           predicted_finish=predicted_finish),
         "fuel_status_etd_utc": departure.isoformat() + "Z" if departure else "",
