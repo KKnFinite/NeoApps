@@ -48,7 +48,12 @@
     </section>
     {% set performance = fueling_performance|default({'fuelers': (), 'trucks': ()}) %}
     <section class="neoscorpion-dispatch-performance" aria-label="Fueling Performance" data-fueling-performance>
-        <h2>FUELING PERFORMANCE</h2>
+        <header class="neoscorpion-dispatch-performance-header">
+            <h2>FUELING PERFORMANCE</h2>
+            <div class="neoscorpion-sort-fuel-totals" aria-label="Current sort fuel totals">
+                {% include "neonodes/neoscorpion/_sort_fuel_totals.html" %}
+            </div>
+        </header>
         <div class="neoscorpion-dispatch-performance-columns">
             <div><h3>FUELERS</h3>
                 {% for item in performance.fuelers %}

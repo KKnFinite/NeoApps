@@ -19,7 +19,15 @@ def fuel_report_pdf(context):
     summary = context["fuel_report_summary"]
     story = [Paragraph("Fuel Report", styles["Title"]),
              Paragraph(escape(scope), styles["Normal"]), Spacer(1, 10),
-             Paragraph(f"Events: {summary['event_count']} | Fuel: {summary['fuel_count']} | Uplift: {summary['uplift_count']} | Defuel: {summary['defuel_count']} | Total T/F: {summary['total_transfer_gallons']:,} GAL", styles["Normal"]), Spacer(1, 12)]
+             Paragraph(f"Events: {summary['event_count']} | Fuel: {summary['fuel_count']} | Uplift: {summary['uplift_count']} | Defuel: {summary['defuel_count']}", styles["Normal"])]
+    totals = context["sort_fuel_totals"]
+    story.append(Paragraph(" | ".join(
+        f"{label}: {totals[key]['display']} {totals[key]['unit']}"
+        for key, label in (("estimated", "TOTAL EST FUEL"), ("transfer", "TOTAL T/F"),
+                           ("required", "TOTAL REQUIRED FUEL"))), styles["Normal"]))
+    if any(stat["incomplete"] for stat in totals.values()):
+        story.append(Paragraph("* Known subtotal; missing values are excluded. A dash means all values are unknown.", styles["Normal"]))
+    story.append(Spacer(1, 12))
     headers = ["#", "Type", "Flight / Dest", "Tail", "Fueler", "Truck", "Start", "End", "T/F GAL", "Required", "Neo Fuel"]
     data = [headers]
     for row in context["fuel_report_rows"]:

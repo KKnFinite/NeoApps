@@ -647,17 +647,23 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     fuel_work_states = _fuel_work_states_by_assignment_tail(
         assignments_by_mission.values()
     )
-    fueling_event_cycle_keys = {
-        (work_state_id, int(cycle_number or 1))
-        for work_state_id, cycle_number in db.session.query(
+    # Reuse the existing cycle lookup for totals; assignment T/F is a mirror of
+    # completed events and must not be added to the physical event ledger.
+    fueling_events = (
+        db.session.query(
+            NeoScorpionFuelingEvent.id,
             NeoScorpionFuelingEvent.fuel_work_state_id,
             NeoScorpionFuelingEvent.cycle_number,
+            NeoScorpionFuelingEvent.transfer_fuel_gallons,
         )
         .filter(
             NeoScorpionFuelingEvent.sort_date_operation_id == operation.id
         )
-        .distinct()
         .all()
+    )
+    fueling_event_cycle_keys = {
+        (event.fuel_work_state_id, int(event.cycle_number or 1))
+        for event in fueling_events
     }
 
     nightly_truck_states_by_truck_id = {
@@ -717,6 +723,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     context = {
         "operation": operation,
         "rows": rows,
+        "sort_fuel_totals": _sort_fuel_totals(rows, fueling_events),
         "truck_visuals": truck_visuals,
         "fuelers": fuelers,
         "trucks": trucks,
@@ -1147,12 +1154,81 @@ def history_context(gateway):
     return {"operation": operation, "completed_rows": completed}
 
 
+def _sort_fuel_totals(rows, events):
+    """Current canonical departure loads and every physical sort event once."""
+    missions = {row["mission"].id: row for row in rows}
+    physical_events = {event.id: event for event in events}
+
+    def total(values, unit, item):
+        values = list(values)
+        known = [value for value in values if value is not None]
+        missing = len(values) - len(known)
+        value = sum(known) if known or not values else None
+        display = (format_dispatch_thousands(value) if unit == "K LBS"
+                   else f"{value:,}") if value is not None else "—"
+        if missing and known:
+            display += "*"
+        title = (f"{'Known subtotal; ' if known else ''}{missing} {item} missing."
+                 if missing else "Current sort total")
+        return {"value": value, "display": display, "unit": unit,
+                "incomplete": bool(missing), "title": title}
+
+    return {
+        "estimated": total((row["estimated_fuel_gallons"] for row in missions.values()),
+                           "GAL", "estimated fuel values"),
+        "transfer": total((event.transfer_fuel_gallons for event in physical_events.values()),
+                          "GAL", "recorded transfer values"),
+        "required": total((row["required_fuel_lbs"] for row in missions.values()),
+                          "K LBS", "required fuel values"),
+    }
+
+
+def _estimated_dispatch_fuel(mission, assignment, tail_fuel_state, remaining_lbs,
+                             fuel_density, inbound_fallback_lbs):
+    """Shared current-cycle estimate for Dispatch and sort reports."""
+    follow_up = bool(assignment and int(assignment.current_cycle_number or 1) > 1)
+    return estimate_fuel_demand_gallons(
+        mission.planned_fuel_load,
+        None if follow_up else tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
+        fuel_density,
+        measured_fob_lbs=(remaining_lbs if remaining_lbs is not None else
+                         tail_fuel_state.fob_lbs if follow_up and tail_fuel_state else None),
+        fallback_inbound_lbs=None if follow_up else inbound_fallback_lbs,
+    )
+
+
+def _fuel_report_current_rows(gateway, operation):
+    """Load only canonical estimate inputs in batches, without building a board."""
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    assignments = _assignments_by_mission(operation)
+    work_states = _fuel_work_states_by_assignment_tail(assignments.values())
+    tail_fuel_states = _tail_fuel_states_by_tail(operation)
+    density = (settings.fuel_density_lbs_per_gallon if settings
+               else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON)
+    fallback = (settings.planning_inbound_fuel_fallback_lbs
+                if settings and settings.planning_inbound_fuel_fallback_lbs is not None
+                else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS)
+    rows = []
+    for mission in _departure_missions(operation):
+        tail = _normalize_tail(mission.assigned_tail_number)
+        assignment = assignments.get(mission.id)
+        work = work_states.get((assignment.id, tail)) if assignment else None
+        tanks = {tank.tank_code: tank for tank in work.tank_states} if work else {}
+        remaining_lbs = _fuel_work_calculation(tank_layout_for_tail(tail), tanks,
+                                             None, None)[1]
+        estimate = _estimated_dispatch_fuel(mission, assignment, tail_fuel_states.get(tail),
+                                            remaining_lbs, density, fallback)
+        rows.append({"mission": mission, "estimated_fuel_gallons": estimate.gallons,
+                     "required_fuel_lbs": mission.planned_fuel_load})
+    return rows
+
+
 def fuel_report_context(gateway):
     """Return one immutable report row per persisted physical fueling event."""
     operation = current_sort_operation(gateway)
     rows = []
     counts = {"fuel": 0, "uplift": 0, "defuel": 0}
-    total_transfer_gallons = 0
+    events = []
     if operation:
         events = (
             NeoScorpionFuelingEvent.query.options(
@@ -1183,7 +1259,6 @@ def fuel_report_context(gateway):
             event_type = str(event.event_type or "fuel").strip().lower()
             if event_type in counts:
                 counts[event_type] += 1
-            total_transfer_gallons += int(event.transfer_fuel_gallons or 0)
             rows.append(
                 {
                     "number": index,
@@ -1226,15 +1301,18 @@ def fuel_report_context(gateway):
                     ),
                 }
             )
+    totals = _sort_fuel_totals(
+        _fuel_report_current_rows(gateway, operation) if operation else [], events)
     return {
         "operation": operation,
+        "sort_fuel_totals": totals,
         "fuel_report_rows": rows,
         "fuel_report_summary": {
             "event_count": len(rows),
             "fuel_count": counts["fuel"],
             "uplift_count": counts["uplift"],
             "defuel_count": counts["defuel"],
-            "total_transfer_gallons": total_transfer_gallons,
+            "total_transfer_gallons": totals["transfer"]["value"],
         },
     }
 
@@ -5001,14 +5079,9 @@ def _fuel_rows(
             and apu_allowance_lbs is not None
             else None
         )
-        follow_up = bool(assignment and int(assignment.current_cycle_number or 1) > 1)
-        estimated_fuel = estimate_fuel_demand_gallons(
-            mission.planned_fuel_load,
-            None if follow_up else tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
-            fuel_density_lbs_per_gallon,
-            measured_fob_lbs=(remaining_total_lbs if remaining_complete else
-                               tail_fuel_state.fob_lbs if follow_up and tail_fuel_state else None),
-            fallback_inbound_lbs=None if follow_up else planning_inbound_fallback_lbs,
+        estimated_fuel = _estimated_dispatch_fuel(
+            mission, assignment, tail_fuel_state, remaining_total_lbs,
+            fuel_density_lbs_per_gallon, planning_inbound_fallback_lbs,
         )
         cycle_type = _assignment_cycle_type(assignment)
         planning_demand_gallons = (

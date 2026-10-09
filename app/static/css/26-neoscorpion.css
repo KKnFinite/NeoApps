@@ -592,7 +592,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 }
 .neoscorpion-report-summary {
     display: grid;
-    grid-template-columns: repeat(5, minmax(90px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
     gap: 8px;
     padding: 12px;
 }
@@ -759,6 +759,39 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     font-size: .74rem;
     font-weight: 900;
     letter-spacing: .08em;
+}
+.neoscorpion-dispatch-performance-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 7px 12px;
+    margin-bottom: 9px;
+}
+.neoscorpion-dispatch-performance-header h2 { margin: 0; }
+.neoscorpion-sort-fuel-totals {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px 12px;
+    margin-left: auto;
+    min-width: 0;
+    text-align: right;
+}
+.neoscorpion-sort-fuel-totals > div { min-width: 0; }
+.neoscorpion-sort-fuel-totals span {
+    display: block;
+    color: #8fb4c9;
+    font-size: .5rem;
+    font-weight: 850;
+    letter-spacing: .03em;
+}
+.neoscorpion-sort-fuel-totals strong {
+    display: block;
+    color: #fff0b0;
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
 }
 .neoscorpion-dispatch-performance-columns {
     display: grid;

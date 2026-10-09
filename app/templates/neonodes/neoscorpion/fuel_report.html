@@ -30,7 +30,7 @@
             <div><span>Fuel</span><strong>{{ fuel_report_summary.fuel_count }}</strong></div>
             <div><span>Uplift</span><strong>{{ fuel_report_summary.uplift_count }}</strong></div>
             <div><span>Defuel</span><strong>{{ fuel_report_summary.defuel_count }}</strong></div>
-            <div><span>Total T/F</span><strong>{{ '{:,}'.format(fuel_report_summary.total_transfer_gallons) }} GAL</strong></div>
+            {% include "neonodes/neoscorpion/_sort_fuel_totals.html" %}
         </div>
 
         {% if fuel_report_rows %}
