@@ -1,0 +1,30 @@
+<header class="neostaffing-people-drawer-head"><strong>{{ person.full_name if person else 'ADD EMPLOYEE' }}</strong><button type="button" data-employee-close>CLOSE</button></header>
+<form class="neostaffing-people-form" data-employee-form method="post" action="{{ url_for('neostaffing.update_person', person_id=person.id) if person else url_for('neostaffing.create_person') }}"
+ {% if person %}data-delete-url="{{ url_for('neostaffing.delete_person', person_id=person.id) }}" data-delete-name="{{ person.full_name }}" data-delete-id="{{ person.employee_id }}"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="shared_editor" value="1">
+  <input type="hidden" name="expected_person_version" value="{{ person_version }}">
+  <input type="hidden" name="expected_version" value="{{ flow_version }}">
+  <input type="hidden" name="active" value="{{ 1 if not person or person.active else 0 }}">
+  {% if not person %}<input type="hidden" name="creation_flow" value="employee">{% endif %}
+  {% if create_in_shift %}<input type="hidden" name="require_shift_start" value="1"><input type="hidden" name="initial_work_area_unit_id" data-employee-initial-area>{% endif %}
+  <label data-person-field="employee-id"><span>Employee ID</span><input name="employee_id" value="{{ person.employee_id if person else '' }}" required></label>
+  <label data-person-field="employee-status"><span>Employee Status</span><select name="employee_status" required>{% for value,label in employee_status_choices %}<option value="{{ value }}"{% if person and person.employee_status==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label data-person-field="first-name"><span>First Name</span><input name="first_name" value="{{ person.first_name if person else '' }}" required></label>
+  <label data-person-field="last-name"><span>Last Name</span><input name="last_name" value="{{ person.last_name if person else '' }}" required></label>
+  <label data-person-field="seniority-date"><span>Seniority Date</span><input name="seniority_date" value="{{ person.seniority_date.strftime('%m/%d/%Y') if person else '' }}" placeholder="MM/DD/YYYY" inputmode="numeric" maxlength="10" required></label>
+  <label data-person-field="classification"><span>Classification</span><select name="classification" required>{% if not person %}<option value="">Select classification</option>{% endif %}{% for value,label in classification_choices %}<option value="{{ value }}"{% if person and person.classification==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label data-person-field="phone"><span>Phone</span><input name="phone_number" value="{{ (person.phone_number or '') if person else '' }}" inputmode="tel" placeholder="xxx-xxx-xxxx" maxlength="12"></label>
+  {% if assignment_display %}<section class="employee-assignment-summary" aria-label="{{ assignment_display.heading }}"><strong>{{ assignment_display.heading }}</strong><ul>{% for assignment in assignment_display["items"] %}<li><span>{{ assignment.label }}</span> <b>{{ assignment.path }}</b></li>{% else %}<li>Unassigned</li>{% endfor %}</ul></section>{% endif %}
+  {% if not person and not create_in_shift %}<label>Work Area<select name="initial_work_area_unit_id" required><option value="">Select Work Area</option>{% for area in work_areas %}<option value="{{ area.id }}">{{ area.name }}</option>{% endfor %}</select></label>{% endif %}
+  {% if (home and person.active) or create_in_shift %}
+  <fieldset class="employee-shift-fields"><legend>SHIFT FLOW</legend>
+    <label>Start Area<select name="shift_flow_sort_start_work_area_id" required data-employee-start><option value="">Select Start Area</option>{% for area in areas %}{% if shift_work_area_type(area) in ['Door','Ballmat','Discharge'] %}<option value="{{ area.id }}" data-area-type="{{ shift_work_area_type(area) }}"{% if home and home.work_area_unit_id==area.id %} selected{% endif %}>{{ area.name }}</option>{% endif %}{% endfor %}</select></label>
+    <label>Setup<select name="shift_flow_setup_work_area_id"><option value="">NO SETUP</option>{% for area in areas %}{% if shift_work_area_type(area) in ['Door','Ballmat'] %}<option value="{{ area.id }}"{% if plan and plan.setup_work_area_id==area.id %} selected{% endif %}>{{ area.name }}</option>{% endif %}{% endfor %}</select></label>
+    <label>Ballmat transition<select name="shift_flow_ballmat_transition"><option value=""></option>{% for value,label in [(1,'1ST WAVE'),(2,'2ND WAVE'),(3,'BALLMAT CLEANUP')] %}<option value="{{ value }}"{% if plan and plan.ballmat_transition==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Final Door<select name="shift_flow_final_door_work_area_id" data-employee-final><option value=""></option>{% for area in areas %}{% if shift_work_area_type(area)=='Door' %}<option value="{{ area.id }}"{% if plan and plan.final_door_work_area_id==area.id %} selected{% endif %}>{{ area.name }}</option>{% endif %}{% endfor %}</select></label>
+  </fieldset>
+  {% endif %}
+  <p data-employee-error role="alert" hidden></p>
+  <div class="employee-editor-actions"><button type="submit">SAVE</button>{% if person %}<button type="button" class="employee-delete" data-employee-delete>DELETE EMPLOYEE</button>{% endif %}</div>
+</form>

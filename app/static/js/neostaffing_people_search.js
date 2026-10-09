@@ -22,6 +22,9 @@
     return out;
   };
   const go = item => {
+    if (document.querySelector('[data-employee-editor]')) {
+      hide(); document.dispatchEvent(new CustomEvent('neostaffing:edit-employee', {detail:{personId:item.id}})); return;
+    }
     const query = params();
     query.set('person_id', item.id);
     const target = new URL(form.action || window.location.pathname, window.location.href);

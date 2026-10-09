@@ -102,6 +102,7 @@ def main():
     )
     print("NeoApps bootstrap phase 3/3: schema and seed data ready.", flush=True)
     print("NeoGateway database bootstrap complete.")
+    print(f"NeoStaffing Door Final repair: corrected={result.get('shift_door_finals_corrected', 0)}", flush=True)
     print(f"Username: {result['username']}")
     print(f"Email: {result['email']}")
     print(f"Gateway: {result['gateway_code']}")

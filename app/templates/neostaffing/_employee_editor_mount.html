@@ -1,0 +1,5 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_employee_editor.css', v='20261009-unified-editor-v1') }}">
+<dialog class="employee-editor theme-staffing" data-employee-editor data-editor-url="{{ url_for('neostaffing.employee_editor') }}"{% if selected %} data-initial-person="{{ selected.person.id }}"{% endif %}>
+  <div data-employee-editor-content></div>
+</dialog>
+<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='20261009-unified-editor-v1') }}"></script>

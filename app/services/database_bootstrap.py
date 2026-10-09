@@ -62,6 +62,8 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     ensure_sheets_compatibility_setting(gateway)
     ensure_google_motherbrain_live_polling_setting(gateway)
     _ensure_staffing_sort_roots()
+    from app.services.neostaffing import repair_shift_door_finals
+    shift_door_finals_corrected = repair_shift_door_finals()
     from app.services.gateway_matrix import current_gateway_local_datetime
     from app.services.neostaffing_discipline import backfill_legacy_workdays
     backfill_legacy_workdays(current_gateway_local_datetime(gateway).date())
@@ -98,9 +100,11 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     membership = backfill_default_gateway_node_roles(user, role="grandmaster")
 
     db.session.commit()
+    app.logger.info("NeoStaffing Door Final repair: corrected=%s", shift_door_finals_corrected)
 
     return {
         "username": user.username,
+        "shift_door_finals_corrected": shift_door_finals_corrected,
         "email": user.email,
         "gateway_code": membership.gateway.code,
         "created_user": created_user,

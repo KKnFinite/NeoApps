@@ -527,6 +527,34 @@ def shift_flow():
     )
 
 
+@bp.route("/people/employee-editor")
+@neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
+def employee_editor():
+    person_id = request.args.get("person_id", type=int)
+    person = _get_person(person_id) if person_id else None
+    home = staffing_service.assignment_service.shift_home(person) if person else None
+    create_in_shift = person is None and request.args.get("origin") == "shift"
+    if create_in_shift:
+        units = StaffingUnit.query.filter_by(active=True).all()
+        by_id = {unit.id: unit for unit in units}
+        areas = [unit for unit in units if staffing_service.assignment_service.is_shift(unit, by_id)]
+    else:
+        areas = staffing_service.shift_flow_area_options(home.work_area) if home else []
+    assignment_display = staffing_service._people_detail_assignment_display(
+        staffing_service._people_rows([person], None)[0]) if person else None
+    return render_template("neostaffing/_employee_editor.html", person=person,
+        home=home, plan=person.shift_flow_plan if person else None,
+        flow_version=staffing_service.shift_flow_revision(person, person.shift_flow_plan, home) if home else "",
+        person_version=staffing_service.entity_version(person) if person else "",
+        create_in_shift=create_in_shift, areas=areas, assignment_display=assignment_display,
+        work_areas=staffing_service.work_area_units() if not person else [],
+        classification_choices=staffing_service.classification_choices() if person else [
+            choice for choice in staffing_service.classification_choices()
+            if choice[0] in staffing_service.WRITABLE_NON_MANAGEMENT_CLASSIFICATIONS],
+        employee_status_choices=staffing_service.employee_status_choices(),
+        shift_work_area_type=staffing_service.shift_work_area_type)
+
+
 @bp.route("/shift-flow/<int:person_id>", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def save_shift_flow(person_id):
@@ -2224,6 +2252,7 @@ def people_management():
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def create_person():
     person = None
+    creation_flow = request.form.get("creation_flow", "").strip().lower()
     try:
         person = staffing_service.create_person(request.form)
         creation_flow = request.form.get("creation_flow", "").strip().lower()
@@ -2303,14 +2332,22 @@ def create_person():
                     )
 
         if creation_flow == "employee":
+            if request.form.get("require_shift_start") == "1":
+                options = staffing_service.shift_flow_area_options(units[0])
+                staffing_service._shift_flow_area(request.form.get("shift_flow_sort_start_work_area_id"),
+                    {unit.id: unit for unit in options}, "Shift Start Area")
             staffing_service.create_shift_flow_plan(person, request.form, units[0])
         db.session.commit()
     except (ValueError, IntegrityError) as error:
         db.session.rollback()
         person = None
         message = safe_mutation_error(error, "create person")
+        if request.form.get("shared_editor") == "1":
+            return jsonify(ok=False, error=message), 400
         flash(f"Person was not created: {message}", "error")
     else:
+        if request.form.get("shared_editor") == "1":
+            return jsonify(ok=True, person_id=person.id)
         flash("Person added.", "success")
     return redirect(_people_return_url(creation_flow=creation_flow if person else None))
 
@@ -2374,6 +2411,14 @@ def _bulk_employee_rows(raw_rows):
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def update_person(person_id):
     person = _get_person(person_id)
+    if request.form.get("shared_editor") == "1":
+        try:
+            staffing_service.save_employee_editor(person, request.form)
+            db.session.commit()
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            return jsonify(ok=False, error=safe_mutation_error(error, "save employee")), 400
+        return jsonify(ok=True, person_id=person.id)
     return _mutate_to_people(
         lambda: staffing_service.update_person(person, request.form),
         "Person updated.",
@@ -2396,6 +2441,17 @@ def toggle_person_active(person_id):
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def delete_person(person_id):
     person = _get_person(person_id)
+    if request.form.get("shared_editor") == "1":
+        try:
+            person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+            if request.form.get("expected_person_version") != staffing_service.entity_version(person):
+                raise ValueError("Employee changed while you were editing. Close and reopen the editor.")
+            staffing_service.delete_person(person)
+            db.session.commit()
+        except (ValueError, IntegrityError) as error:
+            db.session.rollback()
+            return jsonify(ok=False, error=safe_mutation_error(error, "delete employee")), 400
+        return jsonify(ok=True)
     return _mutate_to_people(lambda: staffing_service.delete_person(person), "Person deleted.")
 
 

@@ -245,6 +245,8 @@ def create_shift_flow_plan(person, values, selected_work_area):
         raise ValueError("Shift Flow requires a Night / Ramp / Shift Home assignment.")
     start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id") or home.work_area_unit_id, allowed, "Home / Sort Start")
     final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id"), allowed, "Final Door", optional=True)
+    if final is None and shift_work_area_type(start) == SHIFT_FLOW_DOOR:
+        final = start
     if setup and shift_work_area_type(setup) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
         raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
     if shift_work_area_type(start) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
@@ -259,6 +261,58 @@ def create_shift_flow_plan(person, values, selected_work_area):
     db.session.add(plan)
     home.work_area = start
     return plan
+
+
+def repair_shift_door_finals():
+    """Idempotent deployment repair using canonical Home, retaining all other flow data."""
+    units = {unit.id: unit for unit in StaffingUnit.query.all()}
+    active_units = {identifier: unit for identifier, unit in units.items() if unit.active}
+    door_ids = {unit.id for unit in units.values()
+                if unit.active and assignment_service.is_shift(unit, active_units)
+                and shift_work_area_type(unit) == SHIFT_FLOW_DOOR}
+    people = StaffingPerson.query.filter(
+        StaffingPerson.active.is_(True),
+        StaffingPerson.classification.in_(NON_MANAGEMENT_CLASSIFICATIONS),
+        StaffingPerson.work_assignments.any(db.and_(
+            StaffingWorkAssignment.active.is_(True),
+            StaffingWorkAssignment.work_area_unit_id.in_(door_ids or {-1}))),
+    ).order_by(StaffingPerson.id).with_for_update().all()
+    corrected = 0
+    for person in people:
+        home = assignment_service.shift_home(person)
+        if not home or home.work_area_unit_id not in door_ids:
+            continue
+        plan = StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).with_for_update().first()
+        final = units.get(plan.final_door_work_area_id) if plan else None
+        if final and final.id in door_ids and final.parent_id == home.work_area.parent_id:
+            continue
+        if plan is None:
+            plan = StaffingShiftFlowPlan(person=person, sort_start_work_area=home.work_area)
+            db.session.add(plan)
+        plan.final_door_work_area = home.work_area
+        # Keep optional legacy fields intact, with the same Home/revision guard
+        # used by roster moves. This repair never rewrites assignment history.
+        session = db.session()
+        session.info["staffing_final_door_only_plan"] = plan
+        try:
+            session.flush()
+        finally:
+            session.info.pop("staffing_final_door_only_plan", None)
+        corrected += 1
+    return corrected
+
+
+def save_employee_editor(person, values):
+    """One locked transaction for the profile and its optional canonical flow."""
+    person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
+    if values.get("expected_person_version") != entity_version(person):
+        raise ValueError("Employee changed while you were editing. Close and reopen the editor.")
+    home = assignment_service.shift_home(person)
+    if home and person.active:
+        save_shift_flow_plan(person, values, home.work_area)
+    update_person(person, values)
+    db.session.flush()
+    return person
 
 
 def _locked_shift_flow_plan(person, expected_version):
@@ -328,6 +382,8 @@ def save_shift_flow_plan(person, values, selected_work_area):
     home = assignment_service.shift_home(person)
     start = _shift_flow_area(values.get("shift_flow_sort_start_work_area_id", home.work_area_unit_id), allowed, "Home / Sort Start")
     final = _shift_flow_area(values.get("shift_flow_final_door_work_area_id", existing.final_door_work_area_id), allowed, "Final Door", optional=True)
+    if final is None and shift_work_area_type(start) == SHIFT_FLOW_DOOR:
+        final = start
     if setup and shift_work_area_type(setup) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT}:
         raise ValueError("Setup Assignment must be a Shift Door or Ballmat.")
     if shift_work_area_type(start) not in {SHIFT_FLOW_DOOR, SHIFT_FLOW_BALLMAT, SHIFT_FLOW_DISCHARGE}:
@@ -1010,8 +1066,12 @@ def shift_flow_context(phase="final_door", side="east"):
     groups = shift_flow_board_lanes(phase, shift_areas)
     groups_by_id = {group["id"]: group for group in groups}
     flow_not_set = groups_by_id["FLOW NOT SET"]
+    seen_people = set()
     for assignment in assignments:
         person = assignment.person
+        if person.id in seen_people or person.classification not in NON_MANAGEMENT_CLASSIFICATIONS:
+            continue
+        seen_people.add(person.id)
         plan = person.shift_flow_plan
         if not plan:
             target = groups_by_id.get(assignment.work_area_unit_id, flow_not_set) if phase == "sort_start" else flow_not_set
@@ -1142,7 +1202,7 @@ def _shift_flow_door_roster(matrix):
             discharge_rows.append(row)
         column = by_id.get(getattr(row["plan"], "final_door_work_area_id", None))
         if column is None:
-            (needs_assignment if row["plan"] else unassigned).append(row)
+            needs_assignment.append(row)
             continue
         column["rows"].append(row)
         if home_type == SHIFT_FLOW_BALLMAT:

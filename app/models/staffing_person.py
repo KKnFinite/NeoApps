@@ -4,6 +4,7 @@ from app.extensions import db
 
 
 STAFFING_WRITABLE_CLASSIFICATIONS = (
+    "seasonal",
     "part_time",
     "full_time_combo",
     "part_time_supervisor",
@@ -15,7 +16,6 @@ STAFFING_WRITABLE_CLASSIFICATIONS = (
 )
 
 STAFFING_PHASE1_CLASSIFICATIONS = (
-    "seasonal",
     "domiciled_full_time_combo",
     "non_domiciled_full_time_combo",
 )
@@ -25,9 +25,8 @@ STAFFING_DATABASE_CLASSIFICATIONS = (
     *STAFFING_PHASE1_CLASSIFICATIONS,
 )
 
-# Backward-compatible Phase 1 contract: existing callers use this name for
-# normal mutation choices, which must not expose the newly database-valid
-# classifications until the later write-enablement deployment.
+# Normal mutation choices; the two domiciled Combo classifications remain
+# database-valid without changing their existing write-enablement policy.
 STAFFING_CLASSIFICATIONS = STAFFING_WRITABLE_CLASSIFICATIONS
 
 STAFFING_EMPLOYEE_STATUSES = (
