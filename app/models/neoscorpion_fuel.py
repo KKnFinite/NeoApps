@@ -5,6 +5,23 @@ from sqlalchemy.orm import validates
 from app.extensions import db
 
 
+class NeoScorpionCallDispatchAck(db.Model):
+    """Advisory acknowledgment, scoped to one canonical mission and cycle."""
+    __tablename__ = "neoscorpion_call_dispatch_acks"
+    __table_args__ = (
+        db.CheckConstraint("cycle_number >= 1", name="ck_neoscorpion_call_dispatch_ack_cycle"),
+        db.Index("ix_neoscorpion_call_dispatch_ack_scope", "sort_date_operation_id", "mission_id", "cycle_number"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id"), nullable=False)
+    mission_id = db.Column(db.Integer, db.ForeignKey("sort_date_missions.id"), nullable=False)
+    cycle_number = db.Column(db.Integer, nullable=False)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    acknowledged_at_utc = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    alert_fingerprint = db.Column(db.String(64), nullable=False)
+    alert_values = db.Column(db.JSON, nullable=False)
+
+
 class NeoScorpionTailFuelState(db.Model):
     __tablename__ = "neoscorpion_tail_fuel_states"
     __table_args__ = (

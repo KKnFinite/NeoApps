@@ -37,6 +37,7 @@ from app.neonodes.neorain.services import (
     effective_neorain_load_planner,
     eligible_neorain_load_planners,
 )
+from app.services.neoscorpion_fueling_status import fueling_status, fob_assessment
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.live_screen_refresh import live_screen_refresh_value
@@ -62,6 +63,7 @@ from app.services.neoscorpion_spear import (
     SPEAR_HARD_CONSTRAINTS,
     SPEAR_READINESS_REASON_LABELS,
     build_spear_plan,
+    active_fueling_finish,
     effective_spear_settings,
     first_automatic_step,
     priority_rows,
@@ -71,6 +73,7 @@ from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services.neoscorpion_spear_calibration import (
     build_live_calibration,
     calibration_summary,
+    calibrated_planning_settings,
 )
 from app.services.neoscorpion_dispatch_planning import (
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
@@ -412,6 +415,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
             live_calibrations = build_live_calibration(
                 context["operation"], configured_planning_settings, context["rows"]
             )
+            _attach_fueling_timing(context["rows"], context["operation"], context["settings"],
+                                   configured_planning_settings, live_calibrations, context["spear_settings"])
             stage = "SPEAR plan"
             spear_plan = build_spear_plan(
                 context["rows"],
@@ -461,18 +466,34 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
     return context
 
 
+def _attach_fueling_timing(rows, operation, settings, planning=None, calibrations=None, spear=None):
+    if not any(row["dispatch_status_key"] == "fueling" for row in rows):
+        return
+    planning = planning or assignment_planning_settings(operation.gateway, settings=settings)
+    spear = spear or effective_spear_settings(settings)
+    if calibrations is None:
+        calibrations = {}
+        if spear.live_calibration_mode == "apply":
+            # Fueler lists omit completed jobs. APPLY must still use the same
+            # current-sort observations as Dispatch, without loading its board.
+            calibration_rows = [
+                {"assignment": assignment, "detailed_aircraft_type": detailed_aircraft_type_for_tail(tail)}
+                for assignment, tail in db.session.query(
+                    NeoScorpionFuelAssignment, SortDateMission.assigned_tail_number,
+                ).join(SortDateMission, SortDateMission.id == NeoScorpionFuelAssignment.sort_date_mission_id)
+                .filter(NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
+                        SortDateMission.mission_type == "departure").all()
+            ]
+            calibrations = build_live_calibration(operation, planning, calibration_rows)
+    effective = calibrated_planning_settings(planning, calibrations, mode=spear.live_calibration_mode)
+    for row in rows:
+        row["fueling_predicted_finish_utc"] = active_fueling_finish(row, operation, effective)
+        row.update(fueling_status(row, threshold=getattr(settings, "red_assignment_alert_threshold_minutes", 30)))
+
+
 def _ready_to_assign(row):
-    """Dispatch-only visual readiness; independent of SPEAR automation/staging."""
-    assignment = row["assignment"]
-    return bool(
-        not row["administratively_complete"]
-        and row["arrival_status"].casefold() in {"on ground", "arrived"}
-        and row["inbound_fuel_lbs"] is not None
-        and row["required_fuel_lbs"] is not None
-        and row["parking_valid"]
-        and (assignment is None or assignment.assigned_fueler_user_id is None
-             or assignment.assigned_truck_id is None)
-    )
+    """Resource readiness follows the same canonical progress as other views."""
+    return fueling_status(row)["dispatch_status_key"] == "ready"
 
 
 def _fueling_performance_context(context, gateway, nicknames, *, planning_settings=None):
@@ -685,8 +706,11 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         ),
         fuel_density_lbs_per_gallon=fuel_density,
         planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
+        status_settings=settings,
     )
     _attach_dispatch_load_planners(rows)
+    from app.services.neoscorpion_call_dispatch import attach_call_dispatch_alerts
+    attach_call_dispatch_alerts(rows, operation, settings)
     checked_missions = checked_dispatch_mission_ids(operation, current_user)
     excess_threshold = getattr(settings, "neo_fuel_excess_alert_gallons", 500)
     for row in rows:
@@ -820,9 +844,13 @@ def hanzo_context(gateway):
         apu_rates_by_aircraft_type,
         lateral_imbalance_limits_by_aircraft_type,
     ) = _effective_aircraft_fuel_configuration(gateway.id)
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     rows = _fuel_rows(
         operation,
         missions,
+        status_settings=settings,
+        fuel_density_lbs_per_gallon=(settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON),
+        planning_inbound_fallback_lbs=(settings.planning_inbound_fuel_fallback_lbs if settings else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS),
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
         apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
@@ -830,6 +858,11 @@ def hanzo_context(gateway):
             lateral_imbalance_limits_by_aircraft_type
         ),
     )
+    try:
+        with db.session.begin_nested():
+            _attach_fueling_timing(rows, operation, settings)
+    except Exception:
+        current_app.logger.exception("Hanzo fueling timing unavailable.")
     for row in rows:
         row["hanzo_status"] = _hanzo_planning_status(row)
     return {
@@ -904,6 +937,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
             and settings.planning_inbound_fuel_fallback_lbs is not None
             else DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
         ),
+        status_settings=settings,
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
         apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
@@ -911,6 +945,14 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
             lateral_imbalance_limits_by_aircraft_type
         ),
     )
+    try:
+        with db.session.begin_nested():
+            _attach_fueling_timing(rows, operation, settings)
+    except Exception:
+        current_app.logger.exception("Fueling timing unavailable; retaining TIMING UNKNOWN.")
+        for row in rows:
+            row.pop("fueling_predicted_finish_utc", None)
+            row.update(fueling_status(row, threshold=getattr(settings, "red_assignment_alert_threshold_minutes", 30)))
     for row in rows:
         work = row["fuel_work_state"]
         row["edit_baseline"] = fueler_edit_state(
@@ -970,19 +1012,7 @@ def fueling_board_context(gateway, user):
 
 
 def _fueling_board_progress(row):
-    """Display milestones already present in canonical assignment/work state."""
-    work = row["fuel_work_state"]
-    if row["fueler_work_blocked"] or row["dispatch_status_key"] == "review" or row["direction_mismatch"]:
-        return "HOLD / REVIEW"
-    if row["is_off"]:
-        return "OFF / AWAITING COMPLETE"
-    if row["actual_total_display"] != "INCOMPLETE":
-        return "ACTUAL ENTERED"
-    if (work and work.truck_segment_started_at_utc) or (row["transfer_fuel_gallons"] or 0) > 0:
-        return "FUELING"
-    if work and work.on_at_utc:
-        return "ON"
-    return "ASSIGNED"
+    return row["dispatch_status_label"]
 
 
 def truck_manager_context(gateway):
@@ -2585,7 +2615,7 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         )
     if assignment.operational_status == "hold_review":
         raise ValueError(
-            "HOLD / REVIEW REQUIRED must be resolved before Fuel On Board."
+            "REVIEW REQUIRED must be resolved before Fuel On Board."
         )
 
     tail_number = _normalize_tail(mission.assigned_tail_number)
@@ -2607,11 +2637,15 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         fuel_work_state,
         tank_states=tank_states,
     )
-    inherited_fob_ready = bool(
-        inherited_measurement is not None
-        and mission.planned_fuel_load is not None
-        and inherited_measurement["total_lbs"] >= mission.planned_fuel_load
+    assumed_apu = calculate_apu_allowance_lbs(
+        mission.eta_datetime_utc or mission.planned_datetime_utc, operation.window_minutes,
+        now_utc, _effective_apu_rate(gateway.id, detailed_aircraft_type_for_tail(tail_number)),
     )
+    inherited_fob_ready = bool(inherited_measurement and mission.planned_fuel_load is not None
+                              and assumed_apu is not None
+                              and inherited_measurement["total_lbs"] - assumed_apu >= mission.planned_fuel_load)
+    if _assignment_cycle_type(assignment) == "defuel":
+        raise ValueError("DEFUEL requires physical completion, not Fuel On Board.")
 
     if not inherited_fob_ready:
         if assignment.assigned_fueler_user_id is None:
@@ -2640,12 +2674,15 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
             tank_layout,
             tank_states_by_code,
             fuel_work_state.apu_running,
-            fuel_work_state.apu_allowance_lbs,
+            _effective_apu_allowance_lbs(fuel_work_state),
         )
         if neo_fuel_lbs is None:
             raise ValueError(
                 "Complete Actual fuel and confirm APU before Fuel On Board."
             )
+
+        if mission.planned_fuel_load is None or neo_fuel_lbs < mission.planned_fuel_load:
+            raise ValueError("Insufficient verified fuel for Fuel On Board.")
 
     assignment.fuel_on_board_at_utc = now_utc
     assignment.fuel_on_board_by_user_id = user.id
@@ -3114,7 +3151,7 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None):
     if assignment.review_status == "complete" or mission.fuel_status == "complete":
         raise ValueError("REVIEW REQUIRED: completion audit is missing.")
     if assignment.operational_status == "hold_review":
-        raise ValueError("HOLD / REVIEW REQUIRED must be resolved before COMPLETE.")
+        raise ValueError("REVIEW REQUIRED must be resolved before COMPLETE.")
 
     tail_number = _normalize_tail(mission.assigned_tail_number)
     if not tail_number:
@@ -3955,7 +3992,7 @@ def _validate_fueler_work_access(assignment, mission, fuel_work_state):
     _validate_precompletion_assignment(assignment, mission, "Fueler entry")
     if assignment.operational_status == "hold_review":
         raise ValueError(
-            "HOLD / REVIEW REQUIRED. A dispatcher must resolve the assignment before fuel work continues."
+            "REVIEW REQUIRED. A dispatcher must resolve the assignment before fuel work continues."
         )
     if fuel_work_state is not None and fuel_work_state.ended_early_at_utc is not None:
         raise ValueError("This tail's fuel work was ENDED EARLY and cannot be edited.")
@@ -4929,7 +4966,10 @@ def _fuel_rows(
     lateral_imbalance_limits_by_aircraft_type=None,
     fuel_density_lbs_per_gallon=None,
     planning_inbound_fallback_lbs=None,
+    status_settings=None,
+    now_utc=None,
 ):
+    now_utc = now_utc or datetime.utcnow()
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
     parking = _parking_by_tail(operation)
@@ -5214,28 +5254,31 @@ def _fuel_rows(
             if nightly_truck_states_by_truck_id is not None and assignment
             else None
         )
-        inherited_fob_ready = bool(
-            assignment
-            and inherited_measurement is not None
-            and mission.planned_fuel_load is not None
-            and inherited_measurement["total_lbs"] >= mission.planned_fuel_load
-            and not fuel_on_board_complete
-            and not effective_hold
-            and not work_ended_early
-        )
-        fuel_on_board_ready = bool(
-            inherited_fob_ready
-            or (
-                assignment
-                and not fuel_on_board_complete
-                and not effective_hold
-                and not work_ended_early
-                and assignment.assigned_fueler_user_id is not None
-                and assignment.assigned_truck_id is None
-                and assignment.transfer_fuel_gallons in (None, 0)
-                and apu_source_valid
-                and neo_fuel_lbs is not None
+        fob_apu_allowance = apu_allowance_lbs
+        if apu_running is None:
+            fob_apu_allowance = calculate_apu_allowance_lbs(
+                mission.eta_datetime_utc or mission.planned_datetime_utc,
+                operation.window_minutes, now_utc,
+                effective_apu_rates.get(detailed_aircraft_type, DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR),
             )
+        fob = fob_assessment(
+            required=mission.planned_fuel_load,
+            inbound=tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
+            remaining=remaining_total_lbs if remaining_complete else None,
+            actual=actual_total_lbs if actual_complete else None,
+            apu_allowance=fob_apu_allowance,
+            apu_confirmed=apu_running is not None, apu_source_valid=apu_source_valid,
+            inherited=inherited_measurement["total_lbs"] if inherited_measurement else None,
+            transfer=assignment.transfer_fuel_gallons if assignment else None,
+            cycle_type=cycle_type,
+        )
+        inherited_fob_ready = bool(inherited_measurement and fob["fob_verified"])
+        fuel_on_board_ready = bool(
+            assignment and fob["fob_verified"]
+            and not administratively_complete and not effective_hold and not work_ended_early
+            and (inherited_fob_ready or (
+                assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
+            ))
         )
         off_transfer_ready = bool(
             assignment
@@ -5294,7 +5337,7 @@ def _fuel_rows(
         if fuel_on_board_complete:
             fuel_on_board_reason = "COMPLETE"
         elif effective_hold:
-            fuel_on_board_reason = "HOLD / REVIEW REQUIRED"
+            fuel_on_board_reason = "REVIEW REQUIRED"
         elif work_ended_early:
             fuel_on_board_reason = "ENDED EARLY"
         elif inherited_fob_ready:
@@ -5309,6 +5352,8 @@ def _fuel_rows(
             fuel_on_board_reason = "APU source tank required."
         elif neo_fuel_lbs is None:
             fuel_on_board_reason = "Actual/APU incomplete."
+        elif not fuel_on_board_ready:
+            fuel_on_board_reason = "Insufficient verified fuel for FOB."
         else:
             fuel_on_board_reason = ""
         normal_completion_ready = bool(
@@ -5350,7 +5395,7 @@ def _fuel_rows(
         elif administratively_complete:
             normal_completion_reason = "REVIEW REQUIRED"
         elif effective_hold:
-            normal_completion_reason = "HOLD / REVIEW REQUIRED"
+            normal_completion_reason = "REVIEW REQUIRED"
         elif work_ended_early:
             normal_completion_reason = "ENDED EARLY"
         elif not fuel_work_state or not fuel_work_state.off_at_utc:
@@ -5384,77 +5429,6 @@ def _fuel_rows(
             normal_completion_reason = "Insufficient truck gallons."
         else:
             normal_completion_reason = ""
-
-        if fuel_on_board_complete:
-            dispatch_status_key = "fob"
-            dispatch_status_label = "FOB"
-            dispatch_status_detail = ""
-        elif administratively_complete:
-            dispatch_status_key = "complete"
-            dispatch_status_label = "Complete"
-            dispatch_status_detail = ""
-        elif effective_hold or work_ended_early:
-            dispatch_status_key = "review"
-            dispatch_status_label = "Hold / Review"
-            dispatch_status_detail = (
-                assignment.hold_reason
-                if assignment and assignment.hold_reason
-                else tail_safety_label
-                or "Dispatcher review required"
-            )
-        elif inherited_fob_ready:
-            dispatch_status_key = "fob-ready"
-            dispatch_status_label = "FOB READY"
-            dispatch_status_detail = (
-                f"{format_display_thousands(inherited_measurement['total_lbs'])} measured "
-                f"on {tail_number}"
-            )
-        elif assignment and assignment.review_status == "review":
-            dispatch_status_key = "review"
-            dispatch_status_label = "Review"
-            dispatch_status_detail = "Dispatcher review required"
-        elif fuel_work_state and fuel_work_state.off_at_utc:
-            dispatch_status_key = "off"
-            dispatch_status_label = "OFF"
-            dispatch_status_detail = format_local_hhmm(
-                fuel_work_state.off_at_utc,
-                mission.timezone,
-            )
-        elif assignment and assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None:
-            dispatch_status_key = "pending"
-            dispatch_status_label = "Pending"
-            dispatch_status_detail = "Needs truck"
-        elif fuel_work_state and fuel_work_state.on_at_utc:
-            dispatch_status_key = "fueling"
-            dispatch_status_label = "Fueling"
-            dispatch_status_detail = format_local_hhmm(
-                fuel_work_state.on_at_utc,
-                mission.timezone,
-            )
-        elif assignment and assignment.ready_for_fuel_at_utc:
-            dispatch_status_key = "ready"
-            dispatch_status_label = "Ready"
-            dispatch_status_detail = format_local_hhmm(
-                assignment.ready_for_fuel_at_utc,
-                mission.timezone,
-            )
-        elif (
-            assignment
-            and assignment.assigned_fueler_user_id is not None
-            and assignment.assigned_truck_id is not None
-        ):
-            dispatch_status_key = "assigned"
-            dispatch_status_label = "Assigned"
-            dispatch_status_detail = ""
-        else:
-            dispatch_status_key = "pending"
-            dispatch_status_label = "Pending"
-            if assignment and assignment.assigned_fueler_user_id is not None:
-                dispatch_status_detail = "Needs truck"
-            elif assignment and assignment.assigned_truck_id is not None:
-                dispatch_status_detail = "Needs fueler"
-            else:
-                dispatch_status_detail = ""
 
         rows.append(
             {
@@ -5740,15 +5714,17 @@ def _fuel_rows(
                 "review_status": (
                     assignment.review_status if assignment else (mission.fuel_status or "pending")
                 ),
-                "dispatch_status_key": dispatch_status_key,
-                "dispatch_status_label": dispatch_status_label,
-                "dispatch_status_detail": dispatch_status_detail,
+                **fob,
                 "load_planning_output": load_planning_output,
                 "load_planning_ready": load_planning_output is not None,
                 "load_planning_placeholder": "-",
                 "tail_fuel_state": tail_fuel_state,
             }
         )
+        rows[-1].update(fueling_status(
+            rows[-1], now=now_utc,
+            threshold=getattr(status_settings, "red_assignment_alert_threshold_minutes", 30),
+        ))
     if nightly_truck_states_by_truck_id is not None:
         projections = project_truck_remaining(
             {

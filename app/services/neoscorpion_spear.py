@@ -1121,6 +1121,21 @@ def _apply_demand(gallons_by_truck, truck_id, demand):
     gallons_by_truck[truck_id] += -int(abs(demand)) if demand > 0 else int(abs(demand))
 
 
+def active_fueling_finish(row, operation, planning_settings):
+    """Use SPEAR's configured/calibrated duration for an already started job.
+
+    This is presentation only; it does not alter resource plans or automation.
+    Without a complete timing model we deliberately return unknown.
+    """
+    work = row.get("fuel_work_state")
+    if work is None or work.on_at_utc is None or work.off_at_utc is not None:
+        return None
+    timing = _spear_timing(row, operation, planning_settings)
+    if not getattr(timing, "available", False) or timing.total_duration_minutes is None:
+        return None
+    return _utc_naive(work.on_at_utc) + timedelta(minutes=float(timing.total_duration_minutes))
+
+
 def _risk(finish, departure):
     if finish is None or departure is None:
         return "TIMING UNKNOWN"

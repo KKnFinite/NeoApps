@@ -1,3 +1,4 @@
+{% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
 {% macro fuel_tank_total_row(row) -%}
 <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row">
     <strong role="rowheader">TOTAL</strong>
@@ -34,8 +35,7 @@
                         <span>{{ row.destination }}</span>
                         <strong>{{ row.tail_number }}</strong>
                         <div class="neoscorpion-fueler-state-row">
-                            <span class="neoscorpion-status-pill" data-fueler-status-chip>{{ row.dispatch_status_label }}</span>
-                            {% if row.cycle_type_label|lower != "fuel" %}<span class="neoscorpion-status-pill" data-fueler-cycle-chip>{{ row.cycle_type_label }}</span>{% endif %}
+                            {{ fuel_status(row) }}
                         </div>
                     </div>
                     <div>
@@ -45,7 +45,7 @@
                     </div>
                 </header>
                 {% if row.fueler_work_blocked %}
-                <p class="neoscorpion-calculation-warning"><strong>HOLD / REVIEW REQUIRED</strong> {{ row.hold_reason_display }}</p>
+                <p class="neoscorpion-calculation-warning"><strong>REVIEW</strong> {{ row.hold_reason_display }}</p>
                 {% endif %}
                 {% if row.tail_mismatch %}
                 <p class="neoscorpion-calculation-warning">TAIL SWAP DETECTED · {{ row.confirmed_tail_number }} → {{ row.tail_number }}. Dispatcher acknowledgment pending; fuel work may continue.</p>

@@ -299,14 +299,14 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         )
         db.session.commit()
 
-        with self.assertRaisesRegex(ValueError, "HOLD / REVIEW REQUIRED"):
+        with self.assertRaisesRegex(ValueError, "REVIEW REQUIRED"):
             save_fueler_entry(
                 self.gateway,
                 self.fueler,
                 self._fuel_form(assignment, actual_left="12.0"),
             )
         db.session.rollback()
-        with self.assertRaisesRegex(ValueError, "HOLD / REVIEW REQUIRED"):
+        with self.assertRaisesRegex(ValueError, "REVIEW REQUIRED"):
             mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.rollback()
 
@@ -511,6 +511,7 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         operation, mission, assignment = self._assignment(flight_number="UPS1476")
         self._select_fueler(operation, self.fueler)
         mission.assigned_tail_number = "N413UP"
+        mission.planned_fuel_load = 30000  # Verified 31K is sufficient for this FOB check.
         db.session.commit()
 
         work = self._save_work(assignment)

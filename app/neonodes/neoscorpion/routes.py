@@ -193,6 +193,25 @@ def fuel_dispatch_check():
     return _json_no_store({"ok": True, **result})
 
 
+@bp.post("/fuel-dispatch/call-dispatch/ack")
+@gateway_node_required("scorpion")
+def fuel_dispatch_call_dispatch_ack():
+    from app.services.neoscorpion_call_dispatch import acknowledge_call_dispatch, CallDispatchConflict
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    if not access["can_view"] or not access["can_edit"]:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    try:
+        result = acknowledge_call_dispatch(get_current_gateway(), current_user, request.form)
+        db.session.commit()
+    except CallDispatchConflict as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc)}, 409)
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc)}, 400)
+    return _json_no_store({"ok": True, **result})
+
+
 @bp.get("/fuel-dispatch/live-panel")
 @gateway_node_required("scorpion")
 def fuel_dispatch_live_panel():

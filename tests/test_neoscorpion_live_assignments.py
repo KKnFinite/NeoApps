@@ -312,22 +312,11 @@ class NeoScorpionLiveAssignmentsTest(unittest.TestCase):
         self.assertEqual(self.client.get("/neoscorpion/fueling-board/revision").get_json()["revision"], 5)
 
     def test_fueling_board_progress_uses_canonical_milestones(self):
-        work = SimpleNamespace(on_at_utc=None, truck_segment_started_at_utc=None)
-        row = {"fuel_work_state": work, "fueler_work_blocked": False,
-               "dispatch_status_key": "assigned", "direction_mismatch": False,
-               "is_off": False, "actual_total_display": "INCOMPLETE",
-               "transfer_fuel_gallons": None}
-        self.assertEqual(_fueling_board_progress(row), "ASSIGNED")
-        work.on_at_utc = datetime(2026, 8, 18, 1)
-        self.assertEqual(_fueling_board_progress(row), "ON")
-        work.truck_segment_started_at_utc = datetime(2026, 8, 18, 1, 5)
-        self.assertEqual(_fueling_board_progress(row), "FUELING")
-        row["actual_total_display"] = "42.0"
-        self.assertEqual(_fueling_board_progress(row), "ACTUAL ENTERED")
-        row["is_off"] = True
-        self.assertEqual(_fueling_board_progress(row), "OFF / AWAITING COMPLETE")
-        row["fueler_work_blocked"] = True
-        self.assertEqual(_fueling_board_progress(row), "HOLD / REVIEW")
+        # Read-only Board displays the primary status produced by the shared
+        # classifier, including truckless FOB and genuine review.
+        for label in ("PENDING", "READY", "ASSIGNED", "FUELING", "OFF", "FOB READY", "COMPLETE", "FOB", "REVIEW"):
+            with self.subTest(label=label):
+                self.assertEqual(_fueling_board_progress({"dispatch_status_label": label}), label)
 
     def test_fueling_board_refresh_contract(self):
         with open("app/static/js/neoscorpion_fueling_board_live.js", encoding="utf-8") as source:

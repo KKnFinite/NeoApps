@@ -63,6 +63,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             "neoscorpion_fuel_cycle_history",
             "neoscorpion_fuel_audit_entries",
             "neoscorpion_dispatcher_checks",
+            "neoscorpion_call_dispatch_acks",
         )
         self.assertEqual(
             tuple(model.__table__.name for model in NEOSCORPION_MODEL_TABLES),

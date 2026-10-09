@@ -51,6 +51,7 @@ from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
 from app.models.neosektor_wave_state import NeoSektorWaveState
 from app.models.neoscorpion_fuel import (
     NeoScorpionDispatcherCheck,
+    NeoScorpionCallDispatchAck,
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelAssignment,
@@ -183,6 +184,7 @@ __all__ = [
     "NeoSektorDriverRouteSetting",
     "NeoSektorUldOnTheWayEvent",
     "NeoScorpionAircraftFuelSetting",
+    "NeoScorpionCallDispatchAck",
     "NeoScorpionFuelAuditEntry",
     "NeoScorpionFuelAssignment",
     "NeoScorpionFuelingEvent",

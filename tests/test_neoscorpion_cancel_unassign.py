@@ -358,7 +358,8 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
         row=service.fuel_dispatch_context(self.gateway)['rows'][0]
         self.assertTrue(row['initial_truck_assignment_available'])
-        self.assertEqual(row['dispatch_status_detail'],'Needs truck')
+        self.assertEqual(row['dispatch_status_key'],'fueling')
+        self.assertEqual(row['dispatch_status_detail'],'')
         self._login(self.fueler)
         self.assertIn(b'TRUCK UNASSIGNED',self.client.get('/neoscorpion/fueler').data)
         revision=self.client.get('/neoscorpion/fuel-assignments/revision')
@@ -561,7 +562,8 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertEqual(assignment.operational_status,'active')
         row=service.fuel_dispatch_context(self.gateway)['rows'][0]
         self.assertTrue(row['initial_truck_assignment_available'])
-        self.assertEqual(row['dispatch_status_detail'],'Needs truck')
+        self.assertEqual(row['dispatch_status_key'],'fueling')
+        self.assertEqual(row['dispatch_status_detail'],'')
         new,new_nightly=self._truck(operation,assignment,'OOS-2',500)
         assignment.assigned_truck_id=None; db.session.commit()
         self._assign_new(assignment,new.id)

@@ -3,6 +3,7 @@
 {% block title %}Hanzo | NeoScorpion{% endblock %}
 
 {% block content %}
+{% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
 <section
     class="neoscorpion-shell neoscorpion-screen neoscorpion-hanzo"
     aria-label="NeoScorpion Hanzo"
@@ -45,6 +46,7 @@
                     <div><dt>ETD</dt><dd>{{ row.departure_time or '-' }}</dd></div>
                     <div><dt>Required Fuel</dt><dd>{{ row.required_fuel_display or '-' }}</dd></div>
                 </dl>
+                {{ fuel_status(row) }}
                 {% if row.hanzo_status %}
                 <p class="neoscorpion-hanzo-status">{{ row.hanzo_status }}</p>
                 {% else %}

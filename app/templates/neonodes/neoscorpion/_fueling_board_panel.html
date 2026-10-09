@@ -1,3 +1,4 @@
+{% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
 <section class="neoscorpion-panel neoscorpion-board-panel" data-fueling-board-panel>
     <div class="neoscorpion-panel-head">
         <span>ACTIVE FUELING ASSIGNMENTS</span>
@@ -11,12 +12,12 @@
         {% else %}
         {% for item in board_rows %}
         {% set row = item.row %}
-        <article class="neoscorpion-board-card{% if item.progress == 'HOLD / REVIEW' %} is-review{% endif %}"
+        <article class="neoscorpion-board-card{% if item.progress == 'REVIEW' %} is-review{% endif %}"
             data-board-assignment-id="{{ row.assignment.id }}">
             <header class="neoscorpion-board-card-head">
                 <div><small>ETD</small><strong>{{ row.departure_time or '-' }}</strong></div>
                 <div class="neoscorpion-board-flight"><strong>{{ row.mission.flight_number or '-' }}</strong><span>{{ row.destination }}</span></div>
-                <span class="neoscorpion-board-progress">{{ item.progress }}</span>
+                {{ fuel_status(row) }}
             </header>
             <dl class="neoscorpion-board-facts">
                 <div><dt>FUELER</dt><dd>{{ item.fueler_name }}</dd></div>

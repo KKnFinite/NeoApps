@@ -564,6 +564,8 @@
         if (nextOperationId !== operationId || nextRevision !== revision) {
             window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
             await handleChangedFingerprint();
+        } else if (pendingFuelDataRefresh && !hasUnsavedControls()) {
+            await reloadPage();
         } else if (
             root.dataset.spearRecommendationsEnabled === "true"
             && Date.now() - spearRenderedAt >= spearRecalculationMs
@@ -615,6 +617,7 @@
             }
             adoptFingerprint(payload);
             updateNeoFuel(missionId, payload.neo_fuel);
+            if (payload.changed) pendingFuelDataRefresh = true;
             setStatus(status, payload.changed ? "Saved" : "No change");
             return true;
         } catch (error) {
@@ -628,6 +631,7 @@
         } finally {
             input.dataset.autosaveSaving = "false";
             syncDirtyState();
+            if (pendingFuelDataRefresh && !hasUnsavedControls()) await reloadPage();
         }
     };
 
@@ -736,6 +740,7 @@
             updateAssignmentBaseline(form, payload);
             updateApuAllowanceDisplay(form, payload, button);
             updateNeoFuel(form.elements.namedItem("mission_id")?.value, payload.neo_fuel);
+            if (payload.changed) pendingFuelDataRefresh = true;
             button.textContent = payload.button_label || "UPDATE ASSIGNMENT";
             setStatus(status, payload.changed ? "Saved" : "No change");
             if (payload.changed && resourceChangeRequested) {
@@ -752,13 +757,14 @@
             form.dataset.assignmentSaving = "false";
             button.disabled = false;
             syncDirtyState();
+            if (pendingFuelDataRefresh && !hasUnsavedControls()) await reloadPage();
         }
     };
 
     const submitLifecycleAction = async (form, button) => {
         if (lifecycleSaving) return;
         const status = form.querySelector("[data-lifecycle-status]");
-        if (!window.confirm(form.dataset.confirm)) return;
+        if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
         lifecycleSaving = true;
         if (button) button.disabled = true;
         setStatus(status, "Saving...");

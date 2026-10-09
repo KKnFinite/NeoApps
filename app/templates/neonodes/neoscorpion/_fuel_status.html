@@ -1,0 +1,19 @@
+{% macro fuel_status(row, dispatcher=false, can_ack=false) -%}
+<div class="neoscorpion-fuel-status" data-fuel-status="{{ row.dispatch_status_key }}" data-fuel-status-etd="{{ row.fuel_status_etd_utc }}" data-fuel-status-threshold="{{ row.fuel_status_threshold }}" data-fuel-status-finish="{{ row.fuel_status_predicted_finish_utc }}" data-fuel-status-color="{{ row.fuel_status_color }}">
+    {% if row.cycle_type != 'fuel' %}<small class="neoscorpion-fuel-status-operation">{{ row.cycle_type_label }}</small>{% endif %}
+    <strong class="neoscorpion-fuel-status-chip" data-fueler-status-chip>{{ row.dispatch_status_label }}</strong>
+    {% if row.dispatch_status_detail %}<small>{{ row.dispatch_status_detail }}</small>{% endif %}
+    {% for warning in row.fuel_status_warnings %}<small class="neoscorpion-fuel-status-warning">{{ warning }}</small>{% endfor %}
+    {% if dispatcher and can_ack and row.call_dispatch_alert %}
+    <div class="neoscorpion-call-dispatch" title="LOCAL FUEL DISPATCH must contact AIRLINE DISPATCH" role="status">
+        <strong>CALL DISPATCH</strong>
+        {% if can_ack %}
+        <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_call_dispatch_ack') }}" data-dispatch-lifecycle-form>
+            {{ csrf_field() }}<input type="hidden" name="mission_id" value="{{ row.mission.id }}"><input type="hidden" name="expected_cycle" value="{{ row.cycle_number }}"><input type="hidden" name="alert_fingerprint" value="{{ row.call_dispatch_alert.fingerprint }}">
+            <button class="action-button" type="submit" aria-label="Acknowledge CALL DISPATCH for {{ row.mission.flight_number }}">ACK</button><small data-lifecycle-status role="status"></small>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{%- endmacro %}
