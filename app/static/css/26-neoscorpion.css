@@ -984,8 +984,8 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     /* Positions are the canonical columns: Tail(2), Dest(4), ETD(5),
        Est Gal(13), Status(14). Apply to current and frozen history rows. */
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
-    :is(thead th, tr.neoscorpion-dispatch-primary-row > td, tr[data-cycle-history] > td)
-    :is(:nth-child(1), :nth-child(3), :nth-child(6), :nth-child(7),
+    :is(thead th, tr.neoscorpion-dispatch-primary-row > td, tr[data-cycle-history] > td):is(
+        :nth-child(1), :nth-child(3), :nth-child(6), :nth-child(7),
         :nth-child(8), :nth-child(9), :nth-child(10), :nth-child(11),
         :nth-child(12), :nth-child(15), :nth-child(16)) {
         display: none !important;
@@ -1055,7 +1055,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         display: block;
         width: 100%;
         max-width: 100%;
-        padding: 4px 1px;
+        padding: 5px 1px;
         font-size: .66rem;
         line-height: 1.12;
         text-align: center;

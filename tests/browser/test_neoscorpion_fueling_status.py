@@ -113,6 +113,22 @@ class FuelingStatusBrowserTest(unittest.TestCase):
 
                 for width in (1440,390):
                     page.set_viewport_size({"width":width,"height":950})
+                    visible_headers = page.locator('.neoscorpion-dispatch-table--compact thead th').evaluate_all(
+                        '(cells) => cells.filter(c => getComputedStyle(c).display !== "none")'
+                        '.map(c => c.textContent.trim().replace(/\\s+/g, " "))'
+                    )
+                    if width == 390:
+                        self.assertEqual(visible_headers, ["Tail", "Dest", "ETD", "Est Gal", "Status"])
+                        for mission_row in page.locator('.neoscorpion-dispatch-primary-row').all():
+                            visible_cells = mission_row.locator(':scope > td').evaluate_all(
+                                '(cells) => cells.filter(c => getComputedStyle(c).display !== "none").length'
+                            )
+                            self.assertEqual(visible_cells, 5, "Mobile Dispatch leaked hidden desktop columns")
+                        self.assertTrue(page.locator('.neoscorpion-dispatch-table--compact').evaluate(
+                            'table => table.getBoundingClientRect().width <= window.innerWidth'
+                        ))
+                    else:
+                        self.assertEqual(len(visible_headers), 16)
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth + 1'))
                     for stage in colors:
                         self.assertLessEqual(status(stage).locator('[data-fuel-status-secondary]').count(),1)
