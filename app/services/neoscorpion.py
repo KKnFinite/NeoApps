@@ -5256,11 +5256,18 @@ def _fuel_rows(
         )
         fob_apu_allowance = apu_allowance_lbs
         if apu_running is None:
-            fob_apu_allowance = calculate_apu_allowance_lbs(
-                mission.eta_datetime_utc or mission.planned_datetime_utc,
-                operation.window_minutes, now_utc,
-                effective_apu_rates.get(detailed_aircraft_type, DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR),
-            )
+            # Forecast-only APU burn needs a departure time. A mission without
+            # ETD must remain viewable; leave FOB likelihood unknown rather
+            # than treating missing timing as zero burn or crashing Dispatch.
+            fob_departure_utc = mission.eta_datetime_utc or mission.planned_datetime_utc
+            if fob_departure_utc is not None:
+                fob_apu_allowance = calculate_apu_allowance_lbs(
+                    fob_departure_utc,
+                    operation.window_minutes, now_utc,
+                    effective_apu_rates.get(
+                        detailed_aircraft_type, DEFAULT_APU_RATE_THOUSAND_LBS_PER_HOUR
+                    ),
+                )
         fob = fob_assessment(
             required=mission.planned_fuel_load,
             inbound=tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
