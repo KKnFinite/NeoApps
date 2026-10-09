@@ -10,6 +10,7 @@
     data-neorain-outbound-live
     data-revision-url="{{ url_for('neorain.outbound_revision') }}"
     data-mutation-url="{{ url_for('neorain.outbound_milestone') }}"
+    data-service-url="{{ url_for('neorain.outbound_service_field') }}"
     data-late-inclusion-url="{{ url_for('neorain.outbound_late_inclusion') }}"
     data-outbound-revision="{{ outbound_revision }}"
     data-neorain-integration-mode="{{ rain_integration_mode }}"
@@ -38,6 +39,9 @@
 </section>
 {% include "neonodes/neorain/_delay_panel_shared.html" %}
 {% include "neonodes/neorain/_board_layout_shared.html" %}
+{% if can_edit_service_fields %}
+<script defer src="{{ url_for('static', filename='js/neorain_outbound_service_fields.js', v=config.STATIC_ASSET_VERSION, ui='20261008-service-fields-v1') }}"></script>
+{% endif %}
 <script>
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
@@ -52,7 +56,7 @@
         });
     };
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true']"
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-service-field][data-neorain-service-dirty='true'], [data-neorain-service-field][data-neorain-service-saving='true']"
     ));
     root.addEventListener("neorain:revision", (event) => {
         const nextRevision = event.detail?.revision;

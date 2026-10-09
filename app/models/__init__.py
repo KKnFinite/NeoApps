@@ -35,6 +35,7 @@ from app.models.neorain_load_planner_contact import NeoRainLoadPlannerContact
 from app.models.neorain_crew_admin_assignment import NeoRainCrewAdminAssignment
 from app.models.neorain_delay_info import NeoRainDelayInfo
 from app.models.neorain_google_rollover_state import NeoRainGoogleRolloverState
+from app.models.neorain_outbound_service_state import NeoRainOutboundServiceState
 from app.models.neorain_fuel_review_acknowledgement import NeoRainFuelReviewAcknowledgement
 from app.models.neorain_google_fuel_value import NeoRainGoogleFuelValue
 from app.models.neosubzero_pretreat_state import NeoSubZeroPretreatState
@@ -167,6 +168,7 @@ __all__ = [
     "NeoRainCrewAdminAssignment",
     "NeoRainDelayInfo",
     "NeoRainGoogleRolloverState",
+    "NeoRainOutboundServiceState",
     "NeoRainFuelReviewAcknowledgement",
     "NeoRainGoogleFuelValue",
     "NeoSubZeroPretreatState",

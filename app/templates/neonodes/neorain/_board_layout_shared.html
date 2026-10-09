@@ -295,6 +295,82 @@ body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] textarea
     color: #fff;
     opacity: 1;
 }
+/* Operator-editable Outbound support cells (no impact on canonical times). */
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-cell {
+    min-width: 0;
+    text-align: center;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-input {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    padding: 3px 2px;
+    border: 1px solid rgba(var(--node-rgb), .48);
+    border-radius: 3px;
+    background: #111a26;
+    color: #fff;
+    font-family: inherit;
+    font-size: .7rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-input:focus-visible,
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-check input:focus-visible {
+    outline: 2px solid var(--node-highlight);
+    outline-offset: 1px;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    cursor: pointer;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-check input {
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    accent-color: var(--node-highlight);
+    cursor: pointer;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-message {
+    display: block;
+    margin-top: 4px;
+    color: #f2a3aa;
+    font-size: .58rem;
+    font-weight: 700;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-service-message[hidden] {
+    display: none;
+}
+.neorain-outbound-shell[data-neorain-board-page="outbound"] [data-neorain-service-saving="true"] {
+    opacity: .6;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-desktop-board
+tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
+    color: #f2a3aa;
+}
+@media (max-width: 760px) {
+    .neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-mobile-service-field {
+        display: block;
+        min-width: 0;
+    }
+    .neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-mobile-service-field .neorain-service-input {
+        width: 100%;
+        min-height: 36px;
+        font-size: .748rem;
+    }
+    .neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-mobile-service-field .neorain-service-check {
+        justify-content: flex-start;
+        min-height: 36px;
+    }
+}
 </style>
 <script>
 (() => {

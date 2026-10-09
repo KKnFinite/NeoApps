@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from flask import (
     current_app,
     flash,
@@ -13,7 +15,7 @@ from flask_login import current_user
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import MasterFlightSchedule, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainLoadPlannerContact, SortDateMission, SortDateOperation, StaffingPerson
+from app.models import MasterFlightSchedule, NeoRainCrewAdminAssignment, NeoRainDelayInfo, NeoRainLoadPlannerContact, NeoRainOutboundServiceState, SortDateMission, SortDateOperation, StaffingPerson
 from app.neonodes.neorain import bp
 from app.services.access_control import get_current_gateway
 from app.neonodes.neorain.services import (
@@ -51,6 +53,13 @@ from app.services.google_rain_integration_mode import (
 from app.services.google_rain_sheets import (
     GoogleRainWriterError,
     write_google_rain_departure_milestone,
+)
+from app.services.neorain_outbound_service_fields import (
+    NeoRainOutboundServiceFieldError,
+    apply_outbound_service_value,
+    current_outbound_service_value,
+    parse_outbound_service_field,
+    serialize_outbound_service_state,
 )
 from app.services.live_collaboration import entity_version, version_conflict
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
@@ -404,6 +413,10 @@ def outbound():
         "neonodes/neorain/outbound.html",
         can_edit=access["can_edit"],
         can_view=access["can_view"],
+        can_edit_service_fields=(
+            access["can_view"]
+            and user_can("neorain.outbound.service_fields.edit")
+        ),
         can_edit_timestamp_milestones=(
             access["can_edit"]
             and integration_mode in {NEO_PRIMARY_GOOGLE_MIRROR, NEO_ONLY}
@@ -438,6 +451,118 @@ def outbound_revision():
             "refresh": refresh,
         }
     )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.route("/outbound/service-field", methods=["POST"])
+@gateway_node_required("rain")
+def outbound_service_field():
+    """Save operator-owned Outbound values in every Rain milestone authority mode."""
+    if not (
+        user_can("neorain.outbound.view")
+        and user_can("neorain.outbound.service_fields.edit")
+    ):
+        return _json_error("access_denied", "Operator edit access required.", 403)
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) != {
+        "mission_id", "field", "value", "expected_version",
+    }:
+        return _json_error("invalid_request", "Invalid Outbound service field request.", 400)
+    mission_id = _positive_integer(payload["mission_id"])
+    expected_version = payload["expected_version"]
+    if (
+        mission_id is None
+        or type(expected_version) is not int
+        or expected_version < 0
+        or not isinstance(payload["field"], str)
+    ):
+        return _json_error("invalid_request", "Provide a valid mission, field and version.", 400)
+    field = payload["field"]
+    try:
+        normalized = parse_outbound_service_field(field, payload["value"])
+    except NeoRainOutboundServiceFieldError as exc:
+        return _json_error("invalid_service_field", str(exc), 400)
+
+    gateway = get_current_gateway()
+    operation = current_neorain_outbound_operation(gateway)
+    if operation is None or operation.gateway_id != gateway.id:
+        return _json_error("no_current_sort", "No current sort.", 409)
+
+    mission = SortDateMission.query.filter_by(
+        id=mission_id,
+        sort_date_operation_id=operation.id,
+        gateway_code=gateway.code,
+        mission_type="departure",
+    ).one_or_none()
+    if mission is None:
+        return _json_error("mission_not_found", "Departure mission is not in the current sort.", 404)
+
+    state = (
+        NeoRainOutboundServiceState.query.filter_by(
+            sort_date_operation_id=operation.id,
+            sort_date_mission_id=mission_id,
+        )
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    actual_version = int(state.revision or 1) if state is not None else 0
+    if expected_version != actual_version:
+        latest = serialize_outbound_service_state(state)
+        db.session.rollback()
+        return jsonify({
+            "ok": False,
+            "code": "stale_version",
+            "error": "These Outbound details changed. Review the latest values.",
+            "service": latest,
+        }), 409
+
+    changed = current_outbound_service_value(state, field) != normalized
+    if changed:
+        if state is None:
+            state = NeoRainOutboundServiceState(
+                sort_date_operation_id=operation.id,
+                sort_date_mission_id=mission.id,
+                revision=1,
+            )
+            db.session.add(state)
+        else:
+            state.revision = actual_version + 1
+        apply_outbound_service_value(state, field, normalized)
+        state.updated_by_user_id = current_user.id
+        state.updated_at = datetime.utcnow()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            latest = NeoRainOutboundServiceState.query.filter_by(
+                sort_date_operation_id=operation.id,
+                sort_date_mission_id=mission_id,
+            ).one_or_none()
+            return jsonify({
+                "ok": False,
+                "code": "stale_version",
+                "error": "These Outbound details changed. Review the latest values.",
+                "service": serialize_outbound_service_state(latest),
+            }), 409
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception(
+                "NeoRain Outbound service field save failed: mission_id=%s", mission_id
+            )
+            return _json_error("save_failed", "Unable to save Outbound details.", 500)
+
+    values = serialize_outbound_service_state(state)
+    if not changed:
+        db.session.rollback()
+    response = jsonify({
+        "ok": True,
+        "changed": changed,
+        "service": values,
+        "revision": neorain_outbound_revision(gateway, operation=operation),
+    })
     response.headers["Cache-Control"] = "no-store"
     return response
 

@@ -482,6 +482,11 @@ DEFAULT_PERMISSION_RULES = (
         "Edit NeoRain Crew Admin assignments.",
     ),
     (
+        "neorain.outbound.service_fields.edit",
+        "operator",
+        "Edit NeoRain Outbound Meal, Jump, and JS In independently of milestones.",
+    ),
+    (
         "neosubzero.pretreat.view",
         "watcher",
         "View NeoSub-Zero Pretreat workspace.",

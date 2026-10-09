@@ -93,7 +93,7 @@
         {% for row in rows %}
         {% set row_state = 'neorain-outbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-outbound-row--no-return' if row.no_return else ('neorain-outbound-row--blocked-out' if row.status == 'BLOCKED OUT' else '')) %}
         {% set late_class = 'neorain-row--late' if (row.departure_variance|int) >= 1 else '' %}
-        <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
+        <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-service-version="{{ row.service_version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
             <div class="neorain-mobile-mission-grid neorain-mobile-mission-grid--outbound">
                 <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>
                 <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.destination or '-' }}</span></button>
@@ -113,6 +113,24 @@
                     <div><dt>STD/ETD</dt><dd>{{ row.planned_time or '-' }}</dd></div>
                     <div><dt>LOAD PLANNER</dt><dd>{{ row.load_planner or 'UNASSIGNED' }}</dd></div>
                     <div><dt>eLMAC</dt><dd>{{ row.elmac or '-' }}</dd></div>
+                    <div><dt>MEAL</dt><dd class="neorain-mobile-service-field">
+                        {% if can_edit_service_fields %}
+                        <label class="neorain-service-check"><input type="checkbox" aria-label="Meal for {{ row.flight_number }}" data-neorain-service-field="meal" data-neorain-service-saved-value="{{ 'true' if row.meal else 'false' }}" {% if row.meal %}checked{% endif %}></label>
+                        <output class="neorain-service-message" data-neorain-service-message aria-live="polite" hidden></output>
+                        {% else %}<span data-neorain-service-display="meal">{{ 'YES' if row.meal else '—' }}</span>{% endif %}
+                    </dd></div>
+                    <div><dt>JUMP</dt><dd class="neorain-mobile-service-field">
+                        {% if can_edit_service_fields %}
+                        <input class="neorain-service-input" type="text" inputmode="numeric" maxlength="1" aria-label="Jump for {{ row.flight_number }}" value="{{ row.jump if row.jump is not none else '' }}" data-neorain-service-field="jump" data-neorain-service-saved-value="{{ row.jump if row.jump is not none else '' }}" placeholder="—">
+                        <output class="neorain-service-message" data-neorain-service-message aria-live="polite" hidden></output>
+                        {% else %}<span data-neorain-service-display="jump">{{ row.jump if row.jump is not none else '—' }}</span>{% endif %}
+                    </dd></div>
+                    <div><dt>JS IN</dt><dd class="neorain-mobile-service-field">
+                        {% if can_edit_service_fields %}
+                        <input class="neorain-service-input" type="text" inputmode="numeric" maxlength="5" aria-label="JS In for {{ row.flight_number }} (24-hour HH:MM)" value="{{ row.js_in }}" data-neorain-service-field="js_in" data-neorain-service-saved-value="{{ row.js_in }}" placeholder="HH:MM">
+                        <output class="neorain-service-message" data-neorain-service-message aria-live="polite" hidden></output>
+                        {% else %}<span data-neorain-service-display="js_in">{{ row.js_in or '—' }}</span>{% endif %}
+                    </dd></div>
                     <div><dt>NEO FUEL · {{ row.fuel_source|upper }}</dt><dd>{{ row.neo_fuel_display or '-' }}</dd></div>
                     <div><dt>CENTER FUEL</dt><dd>{{ row.center_fuel_display or '-' }}{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% if can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}{% endif %}</dd></div>
                     <div><dt>RAMP LC</dt><dd data-neorain-display="ramp_load_complete">{{ row.ramp_load_complete or '-' }}</dd></div>
