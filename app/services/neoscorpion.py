@@ -5814,12 +5814,17 @@ def _attach_spear_plan(rows, truck_visuals, plan):
     visuals_by_truck_id = {item["truck_id"]: item for item in truck_visuals}
     for visual in truck_visuals:
         visual["spear_recommendation"] = None
+        visual["spear_parking_position"] = None
     for step in plan.steps:
         if step.mission_id in rows_by_mission_id:
             rows_by_mission_id[step.mission_id]["spear_step"] = step
         visual = visuals_by_truck_id.get(step.truck_id)
         if visual is not None and visual["spear_recommendation"] is None:
             visual["spear_recommendation"] = step
+            mission_row = rows_by_mission_id.get(step.mission_id, {})
+            visual["spear_parking_position"] = (
+                mission_row.get("parking_position") if mission_row.get("parking_valid") else None
+            )
 
 
 def _attach_dispatch_assignment_recommendations(

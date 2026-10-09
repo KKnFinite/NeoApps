@@ -1,0 +1,25 @@
+{% macro spear_indicator(row) -%}
+{% set state = 'ready' %}
+{% if row.spear_risk == 'LATE' %}{% set text = 'LATE' %}{% set state = 'late' %}
+{% elif row.spear_risk == 'AT RISK' %}{% set text = 'AT RISK' %}{% set state = 'at-risk' %}
+{% elif row.spear_readiness_reasons %}{% set text = 'WAITING' %}{% set state = 'waiting' %}
+{% elif row.spear_problem %}
+  {% set state = 'unplanned' %}
+  {% if 'TRUCK' in row.spear_problem %}{% set text = 'NO TRUCK' %}
+  {% elif 'FUELER' in row.spear_problem %}{% set text = 'NO FUELER' %}
+  {% elif 'PARKING' in row.spear_problem %}{% set text = 'PARKING' %}
+  {% elif 'fuel / capacity' in row.spear_problem %}{% set text = 'FUEL' %}
+  {% else %}{% set text = 'UNAVAIL' %}{% endif %}
+{% elif row.spear_ready or row.spear_risk == 'COVERED' %}{% set text = 'READY' %}
+{% else %}{% set text = '—' %}{% endif %}
+<span class="neoscorpion-spear-risk is-{{ state }}" data-spear-tail-indicator>SPEAR · {{ text }}</span>
+{%- endmacro %}
+
+{% macro spear_resources(spear, parking=none) -%}
+{% if spear.action_type == 'top_off' %}
+<span>TOP OFF · TRUCK {{ spear.truck_number }}</span>
+{% else %}
+<span>FLIGHT {{ spear.flight_number }} · {% if parking %}PARKING {{ parking }}{% else %}RAMP {{ spear.ramp|upper }}{% endif %}</span>
+<small>TRUCK {{ spear.truck_number }} · FUELER {{ spear.fueler_name }}{% if spear.risk in ['AT RISK', 'LATE'] %} · {{ spear.risk }}{% endif %}{% if spear.requires_resource_release %} · AFTER RELEASE{% endif %}</small>
+{% endif %}
+{%- endmacro %}

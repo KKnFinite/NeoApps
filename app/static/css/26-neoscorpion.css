@@ -1,6 +1,7 @@
 /* Solid working surface for Fuel Dispatch only, including Board View. */
 .neoscorpion-screen[data-fuel-dispatch-live] > .neoscorpion-panel {
     background: #171405;
+    min-width: 0;
 }
 
 
@@ -90,8 +91,7 @@
     font-size: .68rem;
     font-weight: 850;
 }
-.neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex; width:max-content; max-width:100%; margin:4px auto 0; padding:2px 4px; font-size:.52rem; white-space:nowrap; }
-.neoscorpion-dispatch-tail .neoscorpion-spear-risk.is-unplanned { white-space:normal; overflow-wrap:anywhere; }
+.neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:flex; width:max-content; max-width:100%; margin:2px auto 0; padding:0; white-space:nowrap; overflow-wrap:normal; }
 .neoscorpion-dispatch-fuel-input { display: block; width: min(100%, 58px) !important; margin: 0 auto; text-align: center; }
 /* Keep both fuel fields at the cell top; the FOB slot stays reserved when empty. */
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-inbound,
@@ -200,8 +200,11 @@
     font-size: .75rem;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
-    font-size: .57rem;
+    color:#67c5f2; font:700 8px/1.1 NeoFontPlain,sans-serif; letter-spacing:-.3px;
 }
+.neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-recommendation,
+.neoscorpion-truck-spear > :is(strong,span,small) { color:#67c5f2 !important; }
+.neoscorpion-truck-spear > :is(span,small) { grid-column:1; min-width:0; overflow-wrap:anywhere; }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-complete {
     background: rgba(0, 0, 0, .10);
 }
@@ -284,6 +287,7 @@
 @media (max-width: 760px) {
     .neoscorpion-dispatch-detail-grid { grid-template-columns: 1fr; }
     .neoscorpion-dispatch-table--compact { min-width: 900px; }
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk { font-size:7px; }
 }
 
 /* Fuel Dispatch Board View is an operations board, not the normal page with
@@ -931,6 +935,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-fuel-status-warning { color: #e2c884; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .neoscorpion-fuel-status small { font-size: inherit; }
 .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status { font-size: 10px; }
+.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status .neoscorpion-fuel-status-warning { font-size:8px; letter-spacing:-.2px; }
 .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 12px; padding: 5px 2px; font-weight: 900; letter-spacing: -.3px; }
 .neoscorpion-call-dispatch { display: flex; flex-direction: row; align-items: center; gap: 3px; color: #ff737f; font-weight: 800; width: 100%; white-space: nowrap; }
 .neoscorpion-call-dispatch > strong { font: 900 9px/1.25 var(--font-sans); letter-spacing: -.2px; white-space: nowrap; }
@@ -938,6 +943,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 @container fuel-status (max-width: 60px) {
     .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 10px; padding: 5px 1px; letter-spacing: -.7px; }
     .neoscorpion-call-dispatch > strong { font-size: 7.5px; letter-spacing: -.4px; }
+    .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status .neoscorpion-fuel-status-warning { font-size:7px; letter-spacing:-.7px; }
 }
 
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-fuel-status .neoscorpion-fuel-status-chip { color: var(--fuel-status-foreground); }

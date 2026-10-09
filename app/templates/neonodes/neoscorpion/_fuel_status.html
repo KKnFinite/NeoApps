@@ -13,7 +13,15 @@
         <strong>CALL DISPATCH</strong>
     </div>
     {% elif row.fuel_status_secondary %}
-    <small class="neoscorpion-fuel-status-warning" data-fuel-status-secondary title="{{ row.fuel_status_secondary }}">{{ row.fuel_status_secondary }}</small>
+    {% set secondary = {
+        'Needs Fueler': 'Needs Fueler', 'Needs Truck': 'Needs Truck',
+        'Needs Fueler / Truck': 'Fueler/Truck', 'TIMING UNKNOWN': 'TIMING UNKNOWN',
+        'Fuel direction discrepancy': 'FUEL DIRECTION',
+        'Dispatcher review requested': 'REVIEW REQUEST',
+        'FOB CHECK': 'FOB CHECK', 'FOB LIKELY': 'FOB LIKELY',
+        'TAIL SWAP · advisory': 'TAIL SWAP'
+    }.get(row.fuel_status_secondary, 'SEE DETAILS') if dispatcher else row.fuel_status_secondary %}
+    <small class="neoscorpion-fuel-status-warning" data-fuel-status-secondary title="{{ row.fuel_status_secondary }}">{{ secondary }}</small>
     {% endif %}
 </div>
 {%- endmacro %}

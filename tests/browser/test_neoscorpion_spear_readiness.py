@@ -14,11 +14,12 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion_assets import record_nightly_operational_change
-from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as Fixture
+from tests.browser import test_mobile_drawer as fixture_module
 
 
 class SpearReadinessBrowserTest(unittest.TestCase):
     def test_rendered_readiness_resource_blockers_and_live_transitions(self):
+        Fixture = fixture_module.MobileDrawerBrowserTest
         Fixture.setUpClass()
         Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"] = 5000
         browser = None
@@ -93,16 +94,16 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                 page.on("request", lambda request: requests.append((request.method, request.url)))
                 Fixture().ready(page, "/neoscorpion/fuel-dispatch")
                 css = page.locator('link[href*="26-neoscorpion.css"]')
-                self.assertIn("scorpion=20261008-dispatch-check-excess-v1", css.get_attribute("href"))
+                self.assertIn("scorpion=20261009-spear-display-v1", css.get_attribute("href"))
                 rows = [page.locator(f'.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="{mid}"]')
                         for mid in mission_ids]
                 for row, parking in zip(rows[:2], ("B06", "D07")):
-                    expect(row.locator(".is-ready")).to_have_text("SPEAR READY")
+                    expect(row.locator(".is-ready")).to_have_text("SPEAR · READY")
                     expect(row.locator(".is-waiting")).to_have_count(0)
                     expect(row.locator(".neoscorpion-dispatch-etd-parking strong")).to_have_text(parking)
-                    expect(row.locator(".is-timing-unknown")).to_have_text("TIMING UNKNOWN")
+                    expect(row.locator("xpath=following-sibling::tr[1]")).to_contain_text("TIMING UNKNOWN")
                     expect(row.locator(".neoscorpion-dispatch-recommendation").first).to_contain_text("SPEAR")
-                expect(rows[2].locator(".is-waiting")).to_have_text("SPEAR WAITING")
+                expect(rows[2].locator(".is-waiting")).to_have_text("SPEAR · WAITING")
                 page.screenshot(path=str(Fixture.evidence / "spear-waiting-desktop.png"), full_page=True)
 
                 # The upstream data update publishes the same revision used by the live board.
@@ -117,7 +118,7 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                     state = NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation_id).one()
                     record_nightly_operational_change(state, operation_id)
                     db.session.commit()
-                expect(rows[2].locator(".is-ready")).to_have_text("SPEAR READY", timeout=20000)
+                expect(rows[2].locator(".is-ready")).to_have_text("SPEAR · READY", timeout=20000)
                 expect(rows[2].locator(".is-waiting")).to_have_count(0)
                 expect(rows[2].locator(".neoscorpion-dispatch-etd-parking strong")).to_have_text("E03")
                 expect(page.locator("[data-spear-readiness]")).to_contain_text("3/3 MISSIONS READY")
@@ -131,16 +132,16 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                     record_nightly_operational_change(state, operation_id)
                     db.session.commit()
                 for row in rows:
-                    expect(row.locator(".is-unplanned")).to_have_text("SPEAR NO ELIGIBLE TRUCK", timeout=20000)
+                    expect(row.locator(".is-unplanned")).to_have_text("SPEAR · NO TRUCK", timeout=20000)
                     expect(row.locator(".is-waiting")).to_have_count(0)
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.screenshot(path=str(Fixture.evidence / "spear-resource-blocked-mobile.png"), full_page=True)
-                # Actual rendered blockers wrap inside the tail cells at both widths.
+                # Compact blockers stay on one line inside the existing tail cells.
                 for row in rows:
                     self.assertTrue(row.locator(".is-unplanned").evaluate("""badge => {
                         const cell = badge.closest('td').getBoundingClientRect();
                         const box = badge.getBoundingClientRect();
-                        return box.width <= cell.width && getComputedStyle(badge).whiteSpace === 'normal';
+                        return box.width <= cell.width && getComputedStyle(badge).whiteSpace === 'nowrap' && badge.scrollWidth <= badge.clientWidth+1;
                     }"""))
 
                 with Fixture.app.app_context():
@@ -149,7 +150,7 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                     state = NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation_id).one()
                     record_nightly_operational_change(state, operation_id)
                     db.session.commit()
-                expect(rows[0].locator(".is-unplanned")).to_have_text("SPEAR NO ELIGIBLE FUELER", timeout=20000)
+                expect(rows[0].locator(".is-unplanned")).to_have_text("SPEAR · NO FUELER", timeout=20000)
                 with Fixture.app.app_context():
                     self.assertFalse(NeoScorpionSettings.query.one().spear_automation_enabled)
                     self.assertEqual(NeoScorpionSettings.query.one().spear_live_calibration_mode, "observe")
