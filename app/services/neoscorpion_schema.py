@@ -6,6 +6,7 @@ from sqlalchemy import inspect, text
 
 from app.extensions import db
 from app.models import (
+    NeoScorpionDispatcherCheck,
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelAuditEntry,
@@ -47,10 +48,12 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionFuelingEventTankSnapshot,
     NeoScorpionFuelCycleHistory,
     NeoScorpionFuelAuditEntry,
+    NeoScorpionDispatcherCheck,
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
     "neoscorpion_settings": {
+        "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
@@ -168,6 +171,11 @@ NEOSCORPION_CHECK_CONSTRAINTS = (
 )
 
 NEOSCORPION_EXPRESSION_CHECK_CONSTRAINTS = (
+    (
+        "neoscorpion_settings",
+        "ck_neoscorpion_neo_fuel_excess_nonnegative",
+        "neo_fuel_excess_alert_gallons >= 0",
+    ),
     (
         "neoscorpion_fuel_assignments",
         "ck_neoscorpion_fuel_assignment_cycle_number_positive",

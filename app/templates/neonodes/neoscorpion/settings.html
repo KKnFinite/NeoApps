@@ -33,6 +33,9 @@
             <label>Red Assignment Alert Threshold (minutes)
                 <input type="number" name="red_assignment_alert_threshold_minutes" value="{{ settings.red_assignment_alert_threshold_minutes }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
             </label>
+            <label>Neo Fuel Excess Alert (gallons)
+                <input type="number" name="neo_fuel_excess_alert_gallons" value="{{ settings.neo_fuel_excess_alert_gallons }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+            </label>
             <label>Planning Inbound Fuel Fallback, K lbs
                 <input name="planning_inbound_fuel_fallback" value="{{ planning_inbound_fallback_display }}" inputmode="decimal" min="0" {% if not can_edit %}readonly{% endif %}>
             </label>

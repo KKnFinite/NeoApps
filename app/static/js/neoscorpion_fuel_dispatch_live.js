@@ -352,6 +352,7 @@
     const revisionUrl = root.dataset.revisionUrl;
     const panelUrl = root.dataset.panelUrl;
     const autosaveUrl = root.dataset.autosaveUrl;
+    const checkUrl = root.dataset.checkUrl;
     const spearActionUrl = root.dataset.spearActionUrl;
     const spearRecalculationMs = Math.max(
         60000,
@@ -363,6 +364,7 @@
     const initialControlValues = new WeakMap();
     let reloading = false;
     let lifecycleSaving = false;
+    let dispatcherCheckSaving = 0;
     let controller = null;
 
     const isEditableControl = (element) => element?.matches(
@@ -429,9 +431,60 @@
         root.dataset.revision = String(revision);
     };
 
+    const updateNeoFuel = (missionId, presentation) => {
+        if (!presentation) return;
+        const value = root.querySelector(`[data-dispatch-mission-id='${missionId}'] [data-dispatch-neo-fuel]`);
+        if (!value) return;
+        value.textContent = presentation.available ? presentation.display : "-";
+        value.classList.toggle("is-neo-fuel-excess", presentation.excess === true);
+    };
+
+    const saveDispatcherCheck = async (input) => {
+        if (!checkUrl || input.disabled) return;
+        const previous = input.dataset.savedChecked === "1";
+        const status = input.parentElement.querySelector("[data-dispatch-check-status]");
+        const body = new FormData();
+        body.set("mission_id", input.dataset.missionId);
+        body.set("operation_id", input.dataset.operationId);
+        body.set("checked", input.checked ? "1" : "0");
+        body.set("expected_checked", previous ? "1" : "0");
+        dispatcherCheckSaving += 1;
+        input.disabled = true;
+        input.title = "Saving personal check…";
+        setStatus(status, "Saving personal check");
+        try {
+            const response = await fetch(checkUrl, {
+                method: "POST", body, cache: "no-store", credentials: "same-origin",
+                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Checkbox save failed.");
+            input.checked = payload.checked === true;
+            input.dataset.savedChecked = input.checked ? "1" : "0";
+            input.title = "Personal dispatcher check saved";
+            input.removeAttribute("aria-invalid");
+            setStatus(status, "Personal check saved");
+        } catch (error) {
+            input.checked = previous;
+            input.title = `Save Failed: ${error.message}`;
+            input.setAttribute("aria-invalid", "true");
+            setStatus(status, input.title, "error");
+        } finally {
+            input.disabled = false;
+            dispatcherCheckSaving -= 1;
+            if (pendingFuelDataRefresh && !hasUnsavedControls()) reloadPage();
+        }
+    };
+
     let pendingFuelDataRefresh = false;
 
     const reloadPage = async () => {
+        // Protect personal saves from markup replacement without making them
+        // operational dirty controls or delaying SPEAR automation.
+        if (dispatcherCheckSaving > 0) {
+            pendingFuelDataRefresh = true;
+            return false;
+        }
         if (window.NeoScorpionFuelData?.isOpen()) {
             pendingFuelDataRefresh = true;
             return false;
@@ -451,7 +504,7 @@
             }
             // Input may have become dirty while the network request was in
             // flight. Never replace live operator typing with fetched markup.
-            if (hasUnsavedControls()) {
+            if (hasUnsavedControls() || dispatcherCheckSaving > 0) {
                 pendingFuelDataRefresh = true;
                 return false;
             }
@@ -561,6 +614,7 @@
                 input.value = payload.display_value || "";
             }
             adoptFingerprint(payload);
+            updateNeoFuel(missionId, payload.neo_fuel);
             setStatus(status, payload.changed ? "Saved" : "No change");
             return true;
         } catch (error) {
@@ -681,6 +735,7 @@
             adoptFingerprint(payload);
             updateAssignmentBaseline(form, payload);
             updateApuAllowanceDisplay(form, payload, button);
+            updateNeoFuel(form.elements.namedItem("mission_id")?.value, payload.neo_fuel);
             button.textContent = payload.button_label || "UPDATE ASSIGNMENT";
             setStatus(status, payload.changed ? "Saved" : "No change");
             if (payload.changed && resourceChangeRequested) {
@@ -790,12 +845,14 @@
     });
 
     root.addEventListener("input", (event) => {
-        if (isEditableControl(event.target) && !event.target.matches("[data-dispatch-autosave]")) {
+        if (isEditableControl(event.target) && !event.target.matches("[data-dispatch-autosave], [data-dispatch-check]")) {
             syncDirtyState();
         }
     });
     root.addEventListener("change", (event) => {
-        if (event.target.matches("[data-dispatch-autosave]")) {
+        if (event.target.matches("[data-dispatch-check]")) {
+            saveDispatcherCheck(event.target);
+        } else if (event.target.matches("[data-dispatch-autosave]")) {
             autosaveField(event.target);
         } else if (isEditableControl(event.target)) {
             syncDirtyState();

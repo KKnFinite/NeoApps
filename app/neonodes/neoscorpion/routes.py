@@ -18,6 +18,7 @@ from app.services.neoscorpion import (
     current_sort_operation,
     deactivate_truck,
     fuel_dispatch_context,
+    dispatch_neo_fuel_presentation,
     fuel_assignments_live_revision,
     fueling_board_context,
     hanzo_context,
@@ -62,6 +63,7 @@ from app.services.neoscorpion_assets import (
     set_nightly_fuel_island_count,
     update_nightly_truck,
 )
+from app.services.neoscorpion_dispatch_checks import DispatcherCheckConflict, save_dispatcher_check
 from app.services.permission_rules import (
     permission_access,
     preload_permission_rules,
@@ -171,6 +173,26 @@ def fuel_dispatch():
     return _dispatch_response(gateway, access)
 
 
+@bp.post("/fuel-dispatch/check")
+@gateway_node_required("scorpion")
+def fuel_dispatch_check():
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    if not access["can_view"] or not access["can_edit"]:
+        return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    try:
+        result = save_dispatcher_check(get_current_gateway(), current_user, request.form)
+        if result["changed"]:
+            db.session.commit()
+    except (DispatcherCheckConflict, IntegrityError) as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc) if isinstance(exc, DispatcherCheckConflict)
+                              else "Your checkbox changed. Refresh Dispatch and try again."}, 409)
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({"ok": False, "error": str(exc)}, 400)
+    return _json_no_store({"ok": True, **result})
+
+
 @bp.get("/fuel-dispatch/live-panel")
 @gateway_node_required("scorpion")
 def fuel_dispatch_live_panel():
@@ -262,6 +284,7 @@ def fuel_dispatch_autosave():
             "changed": result.changed,
             "field_name": result.field_name,
             "display_value": result.display_value,
+            "neo_fuel": result.neo_fuel_presentation,
             "operation_id": result.operation_id,
             "revision": result.revision,
         }
@@ -307,6 +330,8 @@ def fuel_dispatch_assignment():
             "ok": True,
             "changed": result.changed,
             "assignment_id": result.assignment.id,
+            "neo_fuel": dispatch_neo_fuel_presentation(gateway, result.assignment.sort_date_mission,
+                result.assignment, result.fuel_work_state),
             "assigned_fueler_user_id": result.assignment.assigned_fueler_user_id,
             "assigned_truck_id": result.assignment.assigned_truck_id,
             "operation_id": result.assignment.sort_date_operation_id,

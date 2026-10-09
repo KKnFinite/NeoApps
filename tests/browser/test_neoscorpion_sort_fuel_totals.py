@@ -101,7 +101,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                     const totals = panel.querySelector('.neoscorpion-sort-fuel-totals').getBoundingClientRect();
                     return title.right <= totals.left && Math.abs(title.top - totals.top) < 20;
                 }"""), "Desktop title and totals must share a header row")
-                self.assertIn("20261008-sort-fuel-totals-v1",
+                self.assertIn("20261008-dispatch-check-excess-v1",
                               page.locator('link[href*="26-neoscorpion.css"]').get_attribute("href"))
                 for width in (1440, 1024, 390, 375):
                     page.set_viewport_size({"width": width, "height": 900})

@@ -62,6 +62,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             "neoscorpion_fueling_event_tank_snapshots",
             "neoscorpion_fuel_cycle_history",
             "neoscorpion_fuel_audit_entries",
+            "neoscorpion_dispatcher_checks",
         )
         self.assertEqual(
             tuple(model.__table__.name for model in NEOSCORPION_MODEL_TABLES),
@@ -81,6 +82,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             {
                 "planning_inbound_fuel_fallback_lbs": "INTEGER",
                 "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
+                "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
                 "assignment_setup_minutes": "NUMERIC(8, 2)",
                 "assignment_finishing_minutes": "NUMERIC(8, 2)",
                 "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
@@ -186,6 +188,7 @@ class NeoScorpionProductionSchemaTest(unittest.TestCase):
             {
                 "ck_neoscorpion_fuel_assignment_cycle_number_positive": "current_cycle_number >= 1",
                 "ck_neoscorpion_fueling_event_cycle_number_positive": "cycle_number >= 1",
+                "ck_neoscorpion_neo_fuel_excess_nonnegative": "neo_fuel_excess_alert_gallons >= 0",
             },
         )
         self.assertEqual(

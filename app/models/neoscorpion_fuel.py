@@ -691,10 +691,26 @@ class NeoScorpionFuelAuditEntry(db.Model):
     changed_by_user = db.relationship("User")
 
 
+class NeoScorpionDispatcherCheck(db.Model):
+    """Personal organization only; never an operational mission status."""
+
+    __tablename__ = "neoscorpion_dispatcher_checks"
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "sort_date_operation_id", "sort_date_mission_id",
+                            name="uq_neoscorpion_dispatcher_check_scope"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    sort_date_operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id", ondelete="CASCADE"), nullable=False)
+    sort_date_mission_id = db.Column(db.Integer, db.ForeignKey("sort_date_missions.id", ondelete="CASCADE"), nullable=False)
+    checked = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+
 class NeoScorpionSettings(db.Model):
     __tablename__ = "neoscorpion_settings"
     __table_args__ = (
         db.UniqueConstraint("gateway_id", name="uq_neoscorpion_settings_gateway"),
+        db.CheckConstraint("neo_fuel_excess_alert_gallons >= 0", name="ck_neoscorpion_neo_fuel_excess_nonnegative"),
         db.CheckConstraint(
             "spear_live_calibration_mode IN ('observe', 'apply')",
             name="ck_neoscorpion_live_calibration_mode",
@@ -704,6 +720,7 @@ class NeoScorpionSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=True, index=True)
     fuel_density_lbs_per_gallon = db.Column(db.Float, nullable=True, default=6.7)
+    neo_fuel_excess_alert_gallons = db.Column(db.Integer, nullable=False, default=500, server_default="500")
     planning_inbound_fuel_fallback_lbs = db.Column(db.Integer, nullable=True)
     red_assignment_alert_threshold_minutes = db.Column(
         db.Integer, nullable=False, default=30, server_default="30"

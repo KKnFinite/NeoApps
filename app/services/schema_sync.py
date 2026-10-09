@@ -197,6 +197,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "ended_early_reason": "TEXT",
     },
     "neoscorpion_settings": {
+        "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
@@ -432,6 +433,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "ended_early_reason": "TEXT",
     },
     "neoscorpion_settings": {
+        "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
@@ -1715,6 +1717,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoSubZeroUccTruckAssignment,
         NeoSubZeroSprayRecord,
         NeoScorpionAircraftFuelSetting,
+        NeoScorpionDispatcherCheck,
         NeoScorpionFuelAuditEntry,
         NeoScorpionFuelAssignment,
         NeoScorpionFuelingEvent,
@@ -1801,6 +1804,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoScorpionFuelTruck,
         NeoScorpionFuelerNickname,
         NeoScorpionFuelAssignment,
+        NeoScorpionDispatcherCheck,
         NeoScorpionFuelWorkState,
         NeoScorpionFuelTankState,
         NeoScorpionFuelingEvent,

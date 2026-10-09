@@ -40,6 +40,7 @@ from app.neonodes.neorain.services import (
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.live_screen_refresh import live_screen_refresh_value
+from app.services.neoscorpion_dispatch_checks import checked_dispatch_mission_ids
 from app.services.neoscorpion_assets import (
     eligible_nightly_fueler_users,
     hold_active_assignments_for_truck,
@@ -686,6 +687,12 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         planning_inbound_fallback_lbs=planning_inbound_fallback_lbs,
     )
     _attach_dispatch_load_planners(rows)
+    checked_missions = checked_dispatch_mission_ids(operation, current_user)
+    excess_threshold = getattr(settings, "neo_fuel_excess_alert_gallons", 500)
+    for row in rows:
+        row["dispatcher_checked"] = row["mission"].id in checked_missions
+        row["neo_fuel_excess_alert"] = neo_fuel_excess_alert(
+            row["neo_fuel_lbs"], row["required_fuel_lbs"], fuel_density, excess_threshold)
     rows.sort(
         key=lambda row: (
             0
@@ -995,12 +1002,45 @@ def truck_manager_context(gateway):
     }
 
 
+def neo_fuel_excess_alert(neo_lbs, required_lbs, density, threshold_gallons=500):
+    """Compare unrounded pounds at the gateway density, without changing fuel."""
+    if any(value is None for value in (neo_lbs, required_lbs, density)):
+        return False
+    try:
+        neo, required, density, threshold = (Decimal(str(value)) for value in
+            (neo_lbs, required_lbs, density, 500 if threshold_gallons is None else threshold_gallons))
+        if not all(value.is_finite() for value in (neo, required, density, threshold)):
+            return False
+        return bool(neo >= 0 and required >= 0 and density > 0 and threshold >= 0
+                    and neo > required and neo - required >= threshold * density)
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+
+
+def dispatch_neo_fuel_presentation(gateway, mission, assignment, work=None):
+    """Reconcile only the changed mission after Required or APU edits."""
+    if work is not None and _normalize_tail(work.tail_number) != _normalize_tail(mission.assigned_tail_number):
+        work = None
+    if work is None and assignment is not None:
+        work = _fuel_work_states_by_assignment_tail([assignment]).get(
+            (assignment.id, _normalize_tail(mission.assigned_tail_number)))
+    tanks = {tank.tank_code: tank for tank in work.tank_states} if work else {}
+    neo_lbs = _fuel_work_calculation(tank_layout_for_tail(mission.assigned_tail_number), tanks,
+        work.apu_running if work else None, _effective_apu_allowance_lbs(work))[4]
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+    density = settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON
+    return {"available": neo_lbs is not None, "display": format_display_thousands(neo_lbs),
+            "excess": neo_fuel_excess_alert(neo_lbs, mission.planned_fuel_load, density,
+                                           getattr(settings, "neo_fuel_excess_alert_gallons", 500))}
+
+
 def settings_context(gateway):
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     if settings is None:
         settings = {
             "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
             "red_assignment_alert_threshold_minutes": 30,
+            "neo_fuel_excess_alert_gallons": 500,
             "planning_inbound_fuel_fallback_lbs": (
                 DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
             ),
@@ -1333,6 +1373,7 @@ class DispatchAutosaveResult:
     revision: int
     field_name: str
     display_value: str
+    neo_fuel_presentation: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -1504,6 +1545,7 @@ def autosave_dispatch_field(
             revision,
             field_name,
             format_display_thousands(current_lbs),
+            dispatch_neo_fuel_presentation(gateway, mission, assignment) if field_name == "required_fuel" else None,
         )
 
     if field_name == "required_fuel":
@@ -1537,6 +1579,7 @@ def autosave_dispatch_field(
         int(asset_state.revision),
         field_name,
         format_display_thousands(requested_lbs),
+        dispatch_neo_fuel_presentation(gateway, mission, assignment) if field_name == "required_fuel" else None,
     )
 
 
@@ -4457,6 +4500,15 @@ def deactivate_truck(gateway, form, user=None):
 
 def save_settings(gateway, form):
     settings = ensure_neoscorpion_settings(gateway)
+    old_density = settings.fuel_density_lbs_per_gallon
+    old_excess_threshold = settings.neo_fuel_excess_alert_gallons
+    if "neo_fuel_excess_alert_gallons" in form:
+        submitted_excess = str(form.get("neo_fuel_excess_alert_gallons", "")).strip()
+        if not re.fullmatch(r"[0-9]+", submitted_excess):
+            raise ValueError("Neo Fuel Excess Alert must be a nonnegative whole number of gallons.")
+        if len(submitted_excess) > 10 or int(submitted_excess) > 2147483647:
+            raise ValueError("Neo Fuel Excess Alert is too large.")
+        settings.neo_fuel_excess_alert_gallons = int(submitted_excess)
     submitted_threshold = str(form.get("red_assignment_alert_threshold_minutes", "")).strip()
     if not re.fullmatch(r"[0-9]+", submitted_threshold):
         raise ValueError("Red assignment alert threshold must be a nonnegative whole number of minutes.")
@@ -4483,7 +4535,8 @@ def save_settings(gateway, form):
     )
     if current_user and getattr(current_user, "is_authenticated", False):
         settings.updated_by_user_id = current_user.id
-    if threshold_changed:
+    if (threshold_changed or old_density != settings.fuel_density_lbs_per_gallon
+            or old_excess_threshold != settings.neo_fuel_excess_alert_gallons):
         operation = current_sort_operation(gateway)
         if operation is not None:
             operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
@@ -5533,6 +5586,7 @@ def _fuel_rows(
                     else "INCOMPLETE"
                 ),
                 "neo_fuel_available": neo_fuel_lbs is not None,
+                "neo_fuel_lbs": neo_fuel_lbs,
                 "fuel_on_board_complete": fuel_on_board_complete,
                 "fuel_on_board_ready": fuel_on_board_ready,
                 "fuel_on_board_reason": fuel_on_board_reason,

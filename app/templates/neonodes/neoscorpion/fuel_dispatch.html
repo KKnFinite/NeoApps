@@ -10,6 +10,7 @@
     data-revision-url="{{ url_for('neoscorpion.fuel_dispatch_revision') }}"
     data-panel-url="{{ url_for('neoscorpion.fuel_dispatch_live_panel') }}"
     data-autosave-url="{{ url_for('neoscorpion.fuel_dispatch_autosave') }}"
+    data-check-url="{{ url_for('neoscorpion.fuel_dispatch_check') }}"
     data-operation-id="{{ operation.id if operation else '' }}"
     data-revision="{{ nightly_asset_revision }}"
     data-refresh-interval-ms="{{ fuel_dispatch_refresh.effective_interval_ms }}"
@@ -56,5 +57,5 @@
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION, scorpion='20261001-fuel-display-no-k-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION, scorpion='20260930-mobile-preview-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v=config.STATIC_ASSET_VERSION, scorpion='20261008-assignment-alerts-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v=config.STATIC_ASSET_VERSION, scorpion='20261008-dispatch-check-excess-v1') }}"></script>
 {% endblock %}
