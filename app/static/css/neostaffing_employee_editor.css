@@ -5,6 +5,7 @@
 .employee-editor label { display:flex; flex-direction:column; gap:5px; min-width:0; }
 .employee-editor input,.employee-editor select { width:100%; box-sizing:border-box; min-height:40px; background:#0b1520; color:#e3edf5; border:1px solid #3b5364; border-radius:4px; padding:7px; }
 .employee-shift-fields { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:12px; min-width:0; margin:0; border:1px solid #286064; padding:12px; }
+.employee-shift-fields legend { font-size:.8rem; font-weight:600; line-height:normal; }
 .employee-editor button { cursor:pointer; border:1px solid #286064; background:#19323c; color:#d5f5f2; border-radius:4px; padding:9px 12px; }
 .employee-editor-actions { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:10px; }
 .employee-assignment-summary { grid-column:1/-1; font-size:.8rem; overflow-wrap:anywhere; }
