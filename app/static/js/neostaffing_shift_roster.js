@@ -88,6 +88,9 @@
     const feedback = root.querySelector('[data-roster-feedback]');
     const targets = [...root.querySelectorAll('[data-final-door-target]')];
     const needsPeople = root.querySelector('[data-roster-needs-people]');
+    const unassignedPeople = root.querySelector('[data-roster-unassigned-people]');
+    const unassignedCount = root.querySelector('[data-roster-unassigned-count]');
+    const unassignedEmpty = root.querySelector('[data-roster-unassigned-empty]');
     const needsCount = root.querySelector('[data-roster-needs-count]');
     const needsEmpty = root.querySelector('[data-roster-needs-empty]');
     const rosterTotal = root.querySelector('[data-roster-total-count]');
@@ -126,6 +129,12 @@
         const count = [...needsPeople.children].filter(child => child.dataset.rosterPerson).length;
         needsCount.textContent = String(count);
         needsEmpty.hidden = count > 0;
+    };
+    const refreshUnassigned = () => {
+        if (!unassignedPeople) return;
+        const count = [...unassignedPeople.children].filter(child => child.dataset.rosterPerson).length;
+        unassignedCount.textContent = String(count);
+        unassignedEmpty.hidden = count > 0;
     };
     const clearTargets = () => targets.forEach(target => target.classList.remove('is-drop-target'));
     let touchDrag = null, preview = null, dragPoint = null, dragFrame = null;
@@ -254,14 +263,17 @@
         const door = target.dataset.finalDoorTarget;
         if (card.dataset.finalDoor === door) return;
         const version = card.dataset.flowVersion;
-        const source = card.closest('[data-final-door-target]') || card.closest('[data-roster-needs-people]');
+        const source = card.closest('[data-final-door-target]') ||
+            card.closest('[data-roster-needs-people]') || card.closest('[data-roster-unassigned-people]');
         if (!source) return;
         const fromNeeds = source === needsPeople;
+        const fromUnassigned = source === unassignedPeople;
+        const fromRail = fromNeeds || fromUnassigned;
         const reason = fromNeeds && root.querySelector(`[data-roster-needs-reason="${card.dataset.rosterPerson}"]`);
         const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
         const ballmatSource = ballmat?.closest('[data-ballmat-door]');
-        const ballmatTarget = (ballmat || (fromNeeds && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
-        const newBallmat = fromNeeds && !ballmat && ballmatTarget ? document.createElement('span') : null;
+        const ballmatTarget = (ballmat || (fromRail && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
+        const newBallmat = fromRail && !ballmat && ballmatTarget ? document.createElement('span') : null;
         if (newBallmat) {
             newBallmat.className = 'shift-ballmat-person';
             newBallmat.dataset.ballmatPerson = card.dataset.rosterPerson;
@@ -274,8 +286,9 @@
         const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
         if (reason) reason.hidden = true;
         target.querySelector('[data-roster-people]').append(card);
-        if (fromNeeds) {
-            refreshNeeds(); adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
+        if (fromRail) {
+            if (fromNeeds) refreshNeeds(); else refreshUnassigned();
+            adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
         } else refreshColumn(source);
         refreshColumn(target);
         if (ballmatTarget) {
@@ -305,8 +318,8 @@
             warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
             refreshColumn(target);
             if (reason) reason.remove();
-            if (fromNeeds || payload.previous_ballmat_side !== payload.ballmat_side) {
-                for (const [side, delta] of [[fromNeeds ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
+            if (fromRail || payload.previous_ballmat_side !== payload.ballmat_side) {
+                for (const [side, delta] of [[fromRail ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
                     const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
                     if (count) count.textContent = String(Number(count.textContent) + delta);
                 }
@@ -325,10 +338,11 @@
             if (matches.length) showMatch();
             announce(`Final Door saved · ${target.dataset.doorLabel}`);
         } catch (error) {
-            (fromNeeds ? source : source.querySelector('[data-roster-people]')).insertBefore(card, nextCard);
+            (fromRail ? source : source.querySelector('[data-roster-people]')).insertBefore(card, nextCard);
             if (reason) reason.hidden = false;
-            if (fromNeeds) {
-                refreshNeeds(); adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
+            if (fromRail) {
+                if (fromNeeds) refreshNeeds(); else refreshUnassigned();
+                adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
             } else refreshColumn(source);
             refreshColumn(target);
             if (ballmatTarget) {

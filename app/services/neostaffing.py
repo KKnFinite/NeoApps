@@ -348,8 +348,9 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
     plan, home, assignments, conflict = _locked_shift_flow_state(person, expected_version)
     if conflict:
         return {"conflict": conflict}
-    if not plan:
-        raise ValueError("FLOW NOT SET employees cannot be moved to a Final Door.")
+    # No-plan employees are Unassigned. Placing one must create their
+    # first plan without guessing a Ballmat wave or Setup.
+    created = plan is None
 
     # Query only this Home's Shift department, not the full board/hierarchy.
     ancestry = [home.work_area, home.work_area.parent,
@@ -361,9 +362,12 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
     destination = _shift_flow_area(final_door_id, allowed, "Final Door")
     if shift_work_area_type(destination) != SHIFT_FLOW_DOOR:
         raise ValueError("Final Door must be a Shift Door.")
-    old_final_id = plan.final_door_work_area_id
+    old_final_id = plan.final_door_work_area_id if plan else None
     old_home = home.work_area
-    changed = old_final_id != destination.id
+    if created:
+        plan = StaffingShiftFlowPlan(person=person, sort_start_work_area=old_home)
+        db.session.add(plan)
+    changed = created or old_final_id != destination.id
     editor_changes = {"shift_flow_final_door_work_area_id": destination.id}
     if changed:
         start = old_home
@@ -402,8 +406,11 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
                 units[area.id] = area
                 area = area.parent
         session = db.session()
-        session.info["staffing_flow_move_snapshot"] = {
-            "person": person, "plan": plan, "assignments": assignments, "units": units}
+        # The snapshot optimization applies only to existing plans.
+        # Pending plans must go through the normal lifecycle validation.
+        if not created:
+            session.info["staffing_flow_move_snapshot"] = {
+                "person": person, "plan": plan, "assignments": assignments, "units": units}
         # Preserve incomplete optional details for correction in the shared editor.
         session.info["staffing_final_door_only_plan"] = plan
         try:
@@ -426,6 +433,7 @@ def move_shift_flow_final_door(person, final_door_id, selected_work_area, expect
     }
     return {
         "changed": changed,
+        "created": created,
         "plan": plan,
         "version": card["plan_version"],
         "card": card,

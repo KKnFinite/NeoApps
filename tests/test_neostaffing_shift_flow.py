@@ -842,9 +842,11 @@ class ShiftFlowTest(unittest.TestCase):
     def test_final_door_move_rejects_unplanned_invalid_same_and_stale_drops(self):
         unplanned = self._person("100002")
         home = staffing_service.assign_work_area(unplanned, self.door)
-        with self.assertRaisesRegex(ValueError, "FLOW NOT SET"):
-            staffing_service.move_shift_flow_final_door(unplanned, self.empty_door.id, self.door,
-                staffing_service.shift_flow_revision(unplanned, None, home))
+        created = staffing_service.move_shift_flow_final_door(unplanned, self.empty_door.id, self.door,
+            staffing_service.shift_flow_revision(unplanned, None, home))
+        db.session.commit()
+        self.assertTrue(created["created"])
+        self.assertEqual(unplanned.shift_flow_plan.final_door_work_area_id, self.empty_door.id)
 
         person = self._person("100003")
         plan = self._plan(person, self._values(self.door), self.door)
@@ -1142,11 +1144,57 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn(f'person_id={incomplete.id}', needs)
         self.assertIn(f'person_id={unassigned.id}', unplanned)
         self.assertIn('draggable="true"', needs)
-        self.assertNotIn('draggable="true"', unplanned)
+        self.assertIn('draggable="true"', unplanned)
+        self.assertIn('data-roster-unassigned-people', unplanned)
         self.assertIn('data-roster-needs-people', needs)
         self.assertNotIn('ASSIGN TO DOOR', html)
         self.assertNotIn('data-needs-door-select', html)
         self.assertIn('data-roster-search', html)
+
+    def test_unassigned_drop_creates_plan_without_guessing_transition_or_setup(self):
+        areas = self._configure_final_composite()
+        scenarios = (
+            ('DOOR', areas['Door 34'], areas['Door 34'], areas['Door 34'], 'at-door', False),
+            ('DISCHARGE', self.discharge, areas['Door 17'], self.discharge, 'discharge', False),
+            ('BALLMAT', areas['West Ballmat'], areas['Door 17'], areas['East Ballmat'], '', True),
+        )
+        for identifier, start, destination, expected_start, color, warning in scenarios:
+            with self.subTest(identifier=identifier):
+                person = self._person('UNASSIGNED-' + identifier)
+                home = staffing_service.assign_work_area(person, start)
+                db.session.commit()
+                revision = staffing_service.shift_flow_revision(person, None, home)
+                result = staffing_service.move_shift_flow_final_door(person, destination.id, None, revision)
+                db.session.commit()
+                db.session.expire_all()
+                plan = StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).one()
+                self.assertTrue(result['created'])
+                self.assertTrue(result['changed'])
+                self.assertEqual(plan.final_door_work_area_id, destination.id)
+                self.assertEqual(plan.sort_start_work_area_id, expected_start.id)
+                self.assertEqual(home.work_area_unit_id, expected_start.id)
+                self.assertIsNone(plan.setup_work_area_id)
+                self.assertIsNone(plan.ballmat_transition)
+                self.assertEqual(result['card']['flow_color'], color)
+                self.assertEqual(bool(result['card']['flow_warning']), warning)
+                self.assertEqual(staffing_service.move_shift_flow_final_door(
+                    person, areas['Door 32'].id, None, revision)['conflict']['type'], 'stale_version')
+                db.session.rollback()
+                roster = staffing_service.shift_flow_context()['flow_map']['door_roster']
+                self.assertNotIn(person.id, [row['person'].id for row in roster['unassigned']])
+                self.assertEqual([row['person'].id for column in roster['columns']
+                                  for row in column['rows']].count(person.id), 1)
+
+    def test_unassigned_drop_rejects_invalid_door_without_creating_plan(self):
+        areas = self._configure_final_composite()
+        person = self._person('UNASSIGNED-INVALID')
+        home = staffing_service.assign_work_area(person, areas['Door 34'])
+        db.session.commit()
+        revision = staffing_service.shift_flow_revision(person, None, home)
+        with self.assertRaisesRegex(ValueError, 'Final Door'):
+            staffing_service.move_shift_flow_final_door(person, self.discharge.id, None, revision)
+        db.session.rollback()
+        self.assertIsNone(StaffingShiftFlowPlan.query.filter_by(staffing_person_id=person.id).first())
 
     def test_needs_assignment_drop_preserves_plan_and_applies_ballmat_side_rule(self):
         areas = self._configure_final_composite()

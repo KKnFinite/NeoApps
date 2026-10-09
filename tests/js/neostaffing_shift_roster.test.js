@@ -68,7 +68,8 @@ function dropBoard(width = 1920) {
         querySelector(selector){return this.nodes?.[selector] || null;},
         closest(selector){for(let node=this;node;node=node.parent){if(selector==='[data-final-door-target]' && node.dataset.finalDoorTarget)return node;
             if(selector==='[data-ballmat-door]' && node.dataset.ballmatDoor)return node;
-            if(selector==='[data-roster-needs-people]' && node.dataset.rosterNeedsPeople)return node;}return null;}
+            if(selector==='[data-roster-needs-people]' && node.dataset.rosterNeedsPeople)return node;
+            if(selector==='[data-roster-unassigned-people]' && node.dataset.rosterUnassignedPeople)return node;}return null;}
     });
     const labels = ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'];
     const columns = [0,1].flatMap(section => labels.map((label,index) => {
@@ -94,10 +95,14 @@ function dropBoard(width = 1920) {
     const needsReason=element({rosterNeedsReason:'77'}), needsEmpty=element();needsEmpty.hidden=true;
     needsPeople.append(needs,needsReason,needsEmpty);
     const unassigned=person('88','Unassigned','Uma');
+    unassigned.dataset.finalDoor=''; unassigned.dataset.flowColor=''; unassigned.dataset.ballmatStart='false';
+    const unassignedPeople=element({rosterUnassignedPeople:'true'}), unassignedEmpty=element();
+    unassignedEmpty.hidden=true;
+    unassignedPeople.append(unassigned, unassignedEmpty);
     const search=element(),searchStatus=element(),searchPrevious=element(),searchNext=element();search.value='';
     const scroll=element(),paging=element(),previous=element(),next=element(),range=element();scroll.scrollLeft=0;scroll.scrollWidth=1800;
     const extra=person('99','Other','Zoe');columns[7].nodes['[data-roster-people]'].append(extra);
-    const needsCount={textContent:'1'},rosterTotal={textContent:'3'},plannedCount={textContent:'3'},ballmatTotal={textContent:'3'},headerBallmatTotal={textContent:'3'};
+    const needsCount={textContent:'1'},unassignedCount={textContent:'1'},rosterTotal={textContent:'3'},plannedCount={textContent:'3'},ballmatTotal={textContent:'3'},headerBallmatTotal={textContent:'3'};
     const feedback=element(), sides=['all','west','east'].map(side=>element({rosterSide:side}));
     const media=element();media.matches=width<=700;
     const version={value:'old:7'}, final={value:'1'}, startArea={value:'1'}, setup={value:''}, transition={value:'2'}, phase={dataset:{version:'old:7'}};
@@ -106,14 +111,14 @@ function dropBoard(width = 1920) {
     const editor={querySelector:s=>fields[s.match(/name="([^"]+)"/)[1]]};
     const westCount={textContent:'6'},eastCount={textContent:'2'};
     const root={dataset:{finalDoorUrl:'/neostaffing/shift-flow/0/final-door'},style:{setProperty(){}},setAttribute:(k,v)=>attrs[k]=v,
-        querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card,needs]:s==='[data-roster-person]'?[card,other,before,extra,needs,unassigned]:[],
-        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-door="8"]'?columns[19]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
+        querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card,needs,unassigned]:s==='[data-roster-person]'?[card,other,before,extra,needs,unassigned]:[],
+        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?null:s==='[data-ballmat-person="88"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-unassigned-people]'?unassignedPeople:s==='[data-roster-unassigned-count]'?unassignedCount:s==='[data-roster-unassigned-empty]'?unassignedEmpty:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-door="8"]'?columns[19]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
     let hitTarget = destination, frameId = 0;
     const frames = new Map(), handlers = {}, body = element();
     scroll.getBoundingClientRect = () => ({left:0,right:300,top:0,bottom:400,width:300});
     let scrollLeft = 0;
     Object.defineProperty(scroll, 'scrollLeft', {get:()=>scrollLeft, set:value=>{scrollLeft=Math.max(0,Math.min(156,value));}});
-    for (const item of [card, needs]) {
+    for (const item of [card, needs, unassigned]) {
         item.setPointerCapture = () => {};
         item.getBoundingClientRect = () => ({width:120});
         item.cloneNode = () => ({...element(), style:{}, removeAttribute(){}});
@@ -124,14 +129,52 @@ function dropBoard(width = 1920) {
         fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
     const start=()=>card.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'42');}}});
     const startNeeds=()=>needs.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'77');}}});
+    const startUnassigned=()=>unassigned.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'88');}}});
     const drop=target=>target.handlers.drop({preventDefault(){}});
-    const touch = (type, x=150, y=100) => {
+    const touch = (type, x=150, y=100, person=needs) => {
         const event={type,pointerType:'touch',pointerId:1,isPrimary:true,clientX:x,clientY:y,preventDefault(){}};
-        if(type==='pointerdown') needs.handlers.pointerdown(event); else handlers[type](event);
+        if(type==='pointerdown') person.handlers.pointerdown(event); else handlers[type](event);
     };
     const advance = timestamp => { const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn(timestamp)); };
-    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,drop,person,needs,needsPeople,needsReason,needsCount,needsEmpty,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra,touch,advance,hit:target=>{hitTarget=target;},body};
+    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,startUnassigned,drop,person,needs,needsPeople,needsReason,needsCount,needsEmpty,unassignedPeople,unassignedEmpty,unassignedCount,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra,touch,advance,hit:target=>{hitTarget=target;},body};
 }
+
+test('Unassigned mouse drag creates a plan in the selected Door and updates counts', async()=>{
+    const b=dropBoard();b.startUnassigned();b.drop(b.destination);
+    assert.equal(b.requests.length,1);
+    assert.equal(b.requests[0].url,'/neostaffing/shift-flow/88/final-door');
+    assert.deepEqual(JSON.parse(b.requests[0].options.body),{final_door_work_area_id:'2',expected_version:'old:7'});
+    assert.equal(b.unassigned.parent,b.destination.nodes['[data-roster-people]']);
+    assert.equal(b.unassignedCount.textContent,'0');assert.equal(b.unassignedEmpty.hidden,false);
+    assert.equal(b.rosterTotal.textContent,'4');assert.equal(b.plannedCount.textContent,'4');
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,
+        plan_version:'new:8',flow_color:'at-door',flow_warning:'',has_setup:false})});await tick();
+    assert.equal(b.unassigned.dataset.finalDoor,'2');assert.equal(b.unassigned.dataset.flowVersion,'new:8');
+    assert.ok(b.unassigned.classList.values.has('is-at-door'));
+    assert.equal(b.unassignedCount.textContent,'0');assert.equal(b.ballmatTotal.textContent,'3');
+});
+test('Unassigned conflict restores the employee and both counts without a plan', async()=>{
+    const b=dropBoard();b.startUnassigned();b.drop(b.destination);
+    b.requests[0].resolve({ok:false,json:async()=>({conflict:{message:'Reload before assigning.'}})});await tick();
+    assert.equal(b.unassigned.parent,b.unassignedPeople);
+    assert.equal(b.unassignedCount.textContent,'1');assert.equal(b.unassignedEmpty.hidden,true);
+    assert.equal(b.rosterTotal.textContent,'3');assert.equal(b.plannedCount.textContent,'3');
+    assert.equal(b.unassigned.dataset.finalDoor,'');assert.equal(b.unassigned.dataset.flowVersion,'old:7');
+    assert.match(b.feedback.textContent,/Reload/);
+});
+test('Unassigned mobile touch drag reaches an offscreen Door and does not open editor', async()=>{
+    const b=dropBoard(390);
+    b.touch('pointerdown',150,100,b.unassigned);b.touch('pointermove',298);
+    for(let timestamp=16;timestamp<=2400;timestamp+=16)b.advance(timestamp);
+    assert.equal(b.range.textContent,'D17–D9');
+    b.hit(b.columns[7]);b.touch('pointermove',150);b.touch('pointerup');
+    assert.equal(b.requests.length,1);
+    assert.equal(b.unassigned.parent,b.columns[7].nodes['[data-roster-people]']);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:8,
+        plan_version:'new:8',flow_color:'',flow_warning:'Ballmat transition is missing.',has_setup:false})});await tick();
+    assert.equal(b.unassignedCount.textContent,'0');assert.equal(b.unassignedEmpty.hidden,false);
+    assert.equal(b.body.children.length,0);
+});
 
 test('Needs Assignment touch drag pages to an offscreen Door and uses the protected save', async()=>{
     const b=dropBoard(390);
@@ -175,7 +218,7 @@ test('Needs Assignment drop moves immediately, preserves existing fields and add
     assert.equal(b.needsReason.parent,null);assert.equal(b.eastCount.textContent,'3');assert.equal(b.westCount.textContent,'6');
     assert.equal(b.needs.nodes['[data-flow-warning]'].hidden,false);
     assert.equal(b.setup.value,'');assert.equal(b.transition.value,'2');
-    assert.equal(b.unassigned.handlers.dragstart,undefined);
+    assert.equal(typeof b.unassigned.handlers.dragstart,'function');
 });
 
 test('Needs Assignment conflict restores rail, reason, counts, Ballmat roster and revision', async()=>{

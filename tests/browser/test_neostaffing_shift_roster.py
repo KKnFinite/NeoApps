@@ -388,6 +388,38 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
+    def test_zz_unassigned_real_mouse_drop_creates_missing_plan(self):
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':1280, 'height':900})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page(); errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        helper = self.fixture(); helper.login(page); helper.ready(page, '/neostaffing/shift-flow')
+        person_id = self.ids['UNSET']
+        card = page.locator(f'.shift-roster-unassigned [data-roster-person="{person_id}"]')
+        target = page.locator(f'[data-final-door-target="{self.area_ids["Door 17"]}"]')
+        expect(card).to_have_attribute('draggable', 'true')
+        before = int(page.locator('[data-roster-total-count]').inner_text())
+        with page.expect_response(lambda response: response.url.endswith('/final-door')) as response:
+            card.drag_to(target)
+        self.assertEqual(response.value.status, 200)
+        expect(target.locator(f'[data-roster-person="{person_id}"]')).to_be_visible()
+        expect(page.locator('[data-roster-total-count]')).to_have_text(str(before + 1))
+        self.assertEqual(page.locator(f'.shift-roster-unassigned [data-roster-person="{person_id}"]').count(), 0)
+        with self.fixture.app.app_context():
+            person = db.session.get(StaffingPerson, person_id)
+            plan = person.shift_flow_plan
+            self.assertIsNotNone(plan)
+            self.assertEqual(plan.final_door_work_area_id, self.area_ids['Door 17'])
+            self.assertEqual(plan.sort_start_work_area_id, self.area_ids['Door 1'])
+            self.assertIsNone(plan.setup_work_area_id)
+            self.assertIsNone(plan.ballmat_transition)
+        helper.ready(page, '/neostaffing/shift-flow')
+        expect(target.locator(f'[data-roster-person="{person_id}"]')).to_be_visible()
+        self.assertEqual(errors, [])
+        context.unroute_all(behavior='ignoreErrors')
+        browser.close()
+
     def test_z_mobile_search_and_needs_assignment_drop(self):
         with self.fixture.app.app_context():
             west_ballmat = db.session.get(StaffingUnit, self.area_ids['West Ballmat'])

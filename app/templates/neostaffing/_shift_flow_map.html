@@ -36,8 +36,8 @@
       <div data-roster-needs-people>{% for entry in roster.needs_assignment %}{{ employee(entry, can_edit_shift_flow, true) }}<small data-roster-needs-reason="{{ entry.person.id }}">{{ entry.reason }}</small>{% endfor %}<p data-roster-needs-empty{% if roster.needs_assignment %} hidden{% endif %}>All plans have a Final Door.</p></div>
     </section>
     <section class="shift-roster-unassigned" aria-labelledby="shift-unassigned-title">
-      <h2 id="shift-unassigned-title">UNASSIGNED <small>{{ roster.unassigned|length }}</small></h2>
-      <div>{% for entry in roster.unassigned %}{{ employee(entry, can_edit_shift_flow) }}{% else %}<p>All employees have a flow plan.</p>{% endfor %}</div>
+      <h2 id="shift-unassigned-title">UNASSIGNED <small data-roster-unassigned-count>{{ roster.unassigned|length }}</small></h2>
+      <div data-roster-unassigned-people>{% for entry in roster.unassigned %}{{ employee(entry, can_edit_shift_flow, true) }}{% endfor %}<p data-roster-unassigned-empty{% if roster.unassigned %} hidden{% endif %}>All employees have a flow plan.</p></div>
     </section>
   </aside>
   <section class="shift-ballmat-roster" aria-labelledby="ballmat-roster-title">
