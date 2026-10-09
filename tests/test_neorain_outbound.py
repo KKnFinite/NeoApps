@@ -426,15 +426,15 @@ class NeoRainOutboundTest(unittest.TestCase):
         self.assertIn(b"UPS500", response.data)
         self.assertIn(b"data-neorain-outbound-live", response.data)
         for column in (
-            b">Wave<",
-            b">Flight #<",
+            b">WAVE<",
+            b">FLIGHT #<",
             b">eLMAC<",
-            b">Ramp Load Complete<",
-            b">Crew Load Complete<",
-            b">Official Block-Out<",
+            b">RAMP LC<",
+            b">CREW LC<",
+            b">BLOCK-OUT<",
             b">+/-<",
-            b">Include/Exclude<",
-            b">No Return<",
+            b">INCLUDE<",
+            b">NO RETURN<",
         ):
             self.assertIn(column, response.data)
         self.assertIn(b'data-neorain-late-summary', response.data)

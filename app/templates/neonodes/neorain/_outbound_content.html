@@ -30,7 +30,7 @@
 </td>
 {%- endmacro %}
 {% macro delay_info_toggle(row) -%}
-<button type="button" class="neorain-delay-toggle" data-neorain-delay-toggle aria-expanded="false" aria-controls="delay-info-{{ row.mission_id }}">DELAY INFO ({{ row.delay_info|length }})</button>
+<button type="button" class="neorain-delay-toggle" data-neorain-delay-toggle aria-label="Delay Info for {{ row.flight_number }}" aria-expanded="false" aria-controls="delay-info-{{ row.mission_id }}">DELAY ({{ row.delay_info|length }})</button>
 {%- endmacro %}
 {% macro delay_info_panel(row) -%}
 <tr id="delay-info-{{ row.mission_id }}" class="neorain-delay-panel-row" data-neorain-delay-panel data-neorain-delay-mission-id="{{ row.mission_id }}" hidden>
@@ -92,10 +92,33 @@
 </tr>
 {%- endmacro %}
 <div class="neorain-outbound-table-wrap neorain-desktop-board">
-    <table class="neorain-outbound-table">
+    <table class="neorain-outbound-table neorain-outbound-table--flight-board">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
+        <colgroup>
+            <col data-neorain-outbound-column="wave" style="width: 2.5%">
+            <col data-neorain-outbound-column="flight" style="width: 6.3%">
+            <col data-neorain-outbound-column="tail" style="width: 4.8%">
+            <col data-neorain-outbound-column="dest" style="width: 4.6%">
+            <col data-neorain-outbound-column="parking" style="width: 3.7%">
+            <col data-neorain-outbound-column="std" style="width: 4.8%">
+            <col data-neorain-outbound-column="status" style="width: 5.2%">
+            <col data-neorain-outbound-column="planner" style="width: 5.7%">
+            <col data-neorain-outbound-column="meal" style="width: 2.4%">
+            <col data-neorain-outbound-column="jump" style="width: 2.9%">
+            <col data-neorain-outbound-column="js-in" style="width: 4.8%">
+            <col data-neorain-outbound-column="neo-fuel" style="width: 5.2%">
+            <col data-neorain-outbound-column="center-fuel" style="width: 4.4%">
+            <col data-neorain-outbound-column="elmac" style="width: 4.6%">
+            <col data-neorain-outbound-column="ramp-lc" style="width: 5.6%">
+            <col data-neorain-outbound-column="crew-lc" style="width: 5.6%">
+            <col data-neorain-outbound-column="block-out" style="width: 5.6%">
+            <col data-neorain-outbound-column="variance" style="width: 3%">
+            <col data-neorain-outbound-column="include" style="width: 5.8%">
+            <col data-neorain-outbound-column="no-return" style="width: 5.5%">
+            <col data-neorain-outbound-column="delay" style="width: 7%">
+        </colgroup>
         <thead><tr>
-            <th>Wave</th><th>Flight #</th><th>Tail</th><th>Destination</th><th>Parking</th><th>STD/ETD</th><th>Status</th><th>Load Planner</th><th>eLMAC</th><th>Meal</th><th>Jump</th><th>JS In</th><th>Neo Fuel</th><th>Center Fuel</th><th>Ramp Load Complete</th><th>Crew Load Complete</th><th>Official Block-Out</th><th>+/-</th><th>Include/Exclude</th><th>No Return</th><th>Delay Info</th>
+            <th>WAVE</th><th>FLIGHT #</th><th>TAIL</th><th title="Destination">DEST</th><th>PARKING</th><th>STD/ETD</th><th>STATUS</th><th title="Load Planner">PLANNER</th><th>MEAL</th><th>JUMP</th><th>JS IN</th><th>NEO FUEL</th><th>CENTER FUEL</th><th>eLMAC</th><th title="Ramp Load Complete">RAMP LC</th><th title="Crew Load Complete">CREW LC</th><th title="Official Block-Out">BLOCK-OUT</th><th>+/-</th><th title="Include/Exclude">INCLUDE</th><th>NO RETURN</th><th title="Delay Info">DELAY INFO</th>
         </tr></thead>
         <tbody>
             {% for row in rows %}
@@ -122,7 +145,6 @@
                     <span>{{ row.load_planner or 'UNASSIGNED' }}</span>
                     {% endif %}
                 </td>
-                <td data-label="eLMAC">{{ row.elmac or '-' }}</td>
                 <td data-label="Meal" class="neorain-service-cell">
                     {% if can_edit_service_fields %}
                     <label class="neorain-service-check"><input type="checkbox" aria-label="Meal for {{ row.flight_number }}" data-neorain-service-field="meal" data-neorain-service-saved-value="{{ 'true' if row.meal else 'false' }}" {% if row.meal %}checked{% endif %}></label>
@@ -143,6 +165,7 @@
                 </td>
                 <td data-label="Neo Fuel" class="neorain-fuel-cell"><span class="neorain-fuel-source">FUEL · {{ row.fuel_source|upper }}</span><span>{{ row.neo_fuel_display or '-' }}</span>{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% endif %}</td>
                 <td data-label="Center Fuel" class="neorain-fuel-cell"><span>{{ row.center_fuel_display or '-' }}</span>{% if row.fuel_review_pending and can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}</td>
+                <td data-label="eLMAC">{{ row.elmac or '-' }}</td>
                 {{ milestone_cell(row, 'ramp_load_complete', 'Ramp Load Complete') }}
                 {{ milestone_cell(row, 'crew_load_complete', 'Crew Load Complete') }}
                 {{ milestone_cell(row, 'official_block_out', 'Official Block-Out') }}

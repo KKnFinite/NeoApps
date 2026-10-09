@@ -31,6 +31,42 @@ class NeoRainBoardLayoutTest(unittest.TestCase):
         self.assertIn("input::placeholder", common)
         self.assertIn("color: #f2a3aa", late)
 
+    def test_outbound_columns_fit_the_viewport_and_elmac_follows_center_fuel(self):
+        import re
+
+        desktop = (TEMPLATES / "_outbound_content.html").read_text()
+        mobile = (TEMPLATES / "_outbound_mobile_content.html").read_text()
+        styles = (TEMPLATES / "_board_layout_shared.html").read_text()
+        delay_styles = (TEMPLATES / "_delay_panel_shared.html").read_text()
+        base_styles = (
+            TEMPLATES.parents[2] / "static" / "css" / "22-neorain.css"
+        ).read_text()
+
+        cols = re.findall(
+            r'<col data-neorain-outbound-column="([^"]+)" style="width: ([0-9.]+)%">',
+            desktop,
+        )
+        self.assertEqual(len(cols), 21)
+        self.assertAlmostEqual(sum(float(width) for _name, width in cols), 100)
+        self.assertEqual(
+            [name for name, _width in cols][11:15],
+            ["neo-fuel", "center-fuel", "elmac", "ramp-lc"],
+        )
+        self.assertLess(desktop.index('data-label="Center Fuel"'), desktop.index('data-label="eLMAC"'))
+        self.assertLess(desktop.index('data-label="eLMAC"'), desktop.index("milestone_cell(row, 'ramp_load_complete'"))
+        self.assertLess(mobile.index("<dt>CENTER FUEL</dt>"), mobile.index("<dt>eLMAC</dt>"))
+        self.assertLess(mobile.index("<dt>eLMAC</dt>"), mobile.index("<dt>RAMP LC</dt>"))
+        self.assertIn("neorain-outbound-table--flight-board", desktop)
+        self.assertIn(">DELAY ({{ row.delay_info|length }})", desktop)
+        self.assertIn("table-layout: fixed", styles)
+        self.assertIn("max-width: 100%;", styles)
+        self.assertIn("padding: 7px 3px", styles)
+        self.assertIn('overflow-x: hidden;', styles)
+        self.assertIn("@media (min-width: 901px) and (max-width: 1440px)", styles)
+        self.assertIn("@media (max-width: 1440px)", base_styles)
+        self.assertIn("@media (max-width: 1440px)", delay_styles)
+        self.assertIn("neorain-mobile-board", base_styles)
+
     def test_inbound_outbound_share_full_width_board_layout(self):
         common = (TEMPLATES / "_board_layout_shared.html").read_text()
         self.assertIn("table-layout: fixed", common)

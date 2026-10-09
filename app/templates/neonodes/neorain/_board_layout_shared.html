@@ -356,7 +356,7 @@ body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound
 tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
     color: #f2a3aa;
 }
-@media (max-width: 760px) {
+@media (max-width: 1440px) {
     .neorain-outbound-shell[data-neorain-board-page="outbound"] .neorain-mobile-service-field {
         display: block;
         min-width: 0;
@@ -371,6 +371,122 @@ tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
         min-height: 36px;
     }
 }
+
+/* Outbound: allocate the 21 columns by actual information density.
+   Equal-width cells previously wasted space and clipped the Delay control. */
+@media (min-width: 1441px) {
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        table-layout: fixed;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board :is(th, td) {
+        box-sizing: border-box;
+        min-width: 0;
+        padding: 7px 3px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board :is(
+        th:nth-child(1), th:nth-child(9), th:nth-child(10), th:nth-child(11),
+        th:nth-child(14), th:nth-child(15), th:nth-child(16),
+        th:nth-child(17), th:nth-child(18), th:nth-child(19), th:nth-child(20),
+        td:nth-child(1), td:nth-child(9), td:nth-child(10), td:nth-child(11),
+        td:nth-child(14), td:nth-child(15), td:nth-child(16),
+        td:nth-child(17), td:nth-child(18), td:nth-child(19), td:nth-child(20)
+    ) {
+        text-align: center;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-delay-toggle {
+        display: inline-block;
+        max-width: 100%;
+        font-size: .7rem;
+        line-height: 1.2;
+        white-space: normal;
+        overflow-wrap: normal;
+        text-align: left;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-service-input {
+        width: 100%;
+        min-height: 28px;
+        padding-inline: 1px;
+        font-size: .68rem;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-fuel-cell {
+        min-width: 0;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-fuel-source {
+        font-size: .51rem;
+        white-space: normal;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-fuel-reviewed {
+        box-sizing: border-box;
+        max-width: 100%;
+        padding-inline: 2px;
+        font-size: .53rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-late-inclusion-control {
+        min-width: 0;
+        padding-inline: 2px;
+        max-width: 100%;
+        font-size: .54rem;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-no-return-control {
+        min-width: 0;
+        max-width: 100%;
+        padding-inline: 2px;
+        font-size: .54rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board .neorain-milestone-editor {
+        min-width: 0;
+    }
+}
+
+/* At tablet/narrow desktop widths use the existing compact mission cards,
+   so there is no unreadable sideways-scrolling 21-column table. */
+@media (min-width: 901px) and (max-width: 1440px) {
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] {
+        display: block;
+        height: auto;
+        min-height: calc(100dvh - var(--operational-topbar-height, 64px) - 16px);
+    }
+    body.blueprint-neorain .neorain-board-content {
+        display: block;
+        flex: none;
+        min-height: 0;
+    }
+    body.blueprint-neorain.operational-board-view .neorain-outbound-shell[data-neorain-board-page] {
+        display: flex;
+        height: 100dvh;
+        min-height: 0;
+    }
+    body.blueprint-neorain.operational-board-view .neorain-board-content,
+    body.blueprint-neorain.operational-board-view .neorain-outbound-shell[data-neorain-board-page] > .neorain-mobile-board {
+        display: block;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+}
 </style>
 <script>
 (() => {
@@ -381,6 +497,9 @@ tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
     const boardKey = "neorain:board-support:" + window.location.pathname;
     const scrollKey = "neorain:board-scroll:" + window.location.pathname;
     const wrap = root.querySelector(".neorain-desktop-board.neorain-outbound-table-wrap");
+    const compact = root.querySelector(".neorain-board-content") ||
+        root.querySelector(".neorain-mobile-board");
+    const compactScrollKey = "neorain:compact-board-scroll:" + window.location.pathname;
 
     const setCollapsed = (collapsed) => {
         support.hidden = collapsed;
@@ -405,5 +524,28 @@ tr.neorain-row--late > td:nth-child(-n+18) .neorain-service-input {
     wrap.addEventListener("scroll", saveScroll, { passive: true });
     window.addEventListener("pagehide", saveScroll);
     document.addEventListener("neo:board-enter", saveScroll);
+
+    if (compact) {
+        const compactIsScrollable = () =>
+            compact.scrollHeight > compact.clientHeight + 1 &&
+            window.getComputedStyle(compact).overflowY !== "visible";
+        const saveCompactScroll = () => {
+            if (!compactIsScrollable()) return;
+            try { sessionStorage.setItem(compactScrollKey, String(compact.scrollTop)); } catch (_) {}
+        };
+        const restoreCompactScroll = () => {
+            if (!compactIsScrollable()) return;
+            try {
+                const value = Number(sessionStorage.getItem(compactScrollKey) || 0);
+                if (Number.isFinite(value) && value > 0) compact.scrollTop = value;
+            } catch (_) {}
+        };
+        compact.addEventListener("scroll", saveCompactScroll, { passive: true });
+        window.addEventListener("pagehide", saveCompactScroll);
+        window.addEventListener("pageshow", () => window.requestAnimationFrame(restoreCompactScroll));
+        document.addEventListener("neo:board-enter", () =>
+            window.requestAnimationFrame(restoreCompactScroll)
+        );
+    }
 })();
 </script>

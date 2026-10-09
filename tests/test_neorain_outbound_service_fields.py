@@ -240,7 +240,7 @@ class NeoRainOutboundServiceFieldsTest(unittest.TestCase):
         desktop = (templates / "_outbound_content.html").read_text()
         mobile = (templates / "_outbound_mobile_content.html").read_text()
         page = (templates / "outbound.html").read_text()
-        self.assertIn("<th>Meal</th><th>Jump</th><th>JS In</th>", desktop)
+        self.assertIn("<th>MEAL</th><th>JUMP</th><th>JS IN</th>", desktop)
         self.assertIn('colspan="21"', desktop)
         self.assertIn("<dt>MEAL</dt>", mobile)
         self.assertIn("<dt>JUMP</dt>", mobile)

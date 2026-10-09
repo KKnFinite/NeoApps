@@ -603,7 +603,7 @@
     cursor: pointer;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1440px) {
     .neorain-outbound-head {
         align-items: start;
         flex-direction: column;
