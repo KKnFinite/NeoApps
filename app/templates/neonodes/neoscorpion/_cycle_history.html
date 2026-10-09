@@ -9,7 +9,7 @@
   <td>{{ frozen.neo_fuel_display }}</td>
   <td class="neoscorpion-dispatch-actual-apu"><strong>{{ frozen.actual_total_display }}</strong><span class="neoscorpion-apu-collapsed"><strong class="neoscorpion-dispatch-secondary">APU {{ frozen.apu_allowance_display }}</strong></span></td>
   <td>{{ frozen.fueler }}</td><td>—</td><td>{{ frozen.truck }}</td>
-  <td>{{ frozen.transfer_fuel_gallons if frozen.transfer_fuel_gallons is not none else '-' }}</td>
+  <td><span class="neoscorpion-dispatch-desktop-transfer">{{ frozen.transfer_fuel_gallons if frozen.transfer_fuel_gallons is not none else '-' }}</span><span class="neoscorpion-dispatch-mobile-estimate">{{ '{:,}'.format(frozen.get('estimated_fuel_gallons')) if frozen.get('estimated_fuel_gallons') is not none else '—' }}</span></td>
   <td>{{ frozen.dispatch_status_label }}</td><td>READ ONLY</td>
   <td><button type="button" class="neoscorpion-dispatch-details-toggle" data-neoscorpion-dispatch-details aria-expanded="false" aria-controls="neoscorpion-dispatch-detail-{{ history_key }}">DETAILS</button></td>
 </tr>

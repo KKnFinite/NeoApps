@@ -12,6 +12,8 @@
     <div class="neoscorpion-call-dispatch" data-fuel-status-secondary title="LOCAL FUEL DISPATCH must contact AIRLINE DISPATCH" role="status">
         <strong>CALL DISPATCH</strong>
     </div>
+    {% elif row.dispatch_status_key == 'complete' and row.off_time is defined and row.off_time and row.off_time != '-' %}
+    <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-off" data-fuel-status-secondary title="Fueler OFF at {{ row.off_time }}">OFF {{ row.off_time }}</small>
     {% elif row.fuel_status_secondary %}
     {% set secondary = {
         'Needs Fueler': 'Needs Fueler', 'Needs Truck': 'Needs Truck',

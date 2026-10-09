@@ -952,3 +952,124 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-fuel-status .neoscorpion-fuel-status-chip { color: var(--fuel-status-foreground); }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-call-dispatch strong { color: #ff737f; font-weight: 900; }
+
+
+/* A normal completion keeps its recorded Fueler OFF time beneath COMPLETE. */
+.neoscorpion-fuel-status .neoscorpion-fuel-status-off {
+    color: #b5c6bb;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+/* Mobile Dispatch is a five-column overview, never a squeezed 16-column table.
+   Keep the full editable desktop DOM for existing actions and live refresh. */
+.neoscorpion-dispatch-mobile-only,
+.neoscorpion-dispatch-mobile-estimate { display: none; }
+@media (max-width: 760px) {
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-table-wrap--sticky {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+        --dispatch-font-large: .69rem;
+        --dispatch-font-medium: .65rem;
+        --dispatch-font-small: .57rem;
+    }
+    /* Positions are the canonical columns: Tail(2), Dest(4), ETD(5),
+       Est Gal(13), Status(14). Apply to current and frozen history rows. */
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    :is(thead th, tr.neoscorpion-dispatch-primary-row > td, tr[data-cycle-history] > td)
+    :is(:nth-child(1), :nth-child(3), :nth-child(6), :nth-child(7),
+        :nth-child(8), :nth-child(9), :nth-child(10), :nth-child(11),
+        :nth-child(12), :nth-child(15), :nth-child(16)) {
+        display: none !important;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact tr.neoscorpion-dispatch-detail-row {
+        display: none !important;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact th:nth-child(2) { width: 21%; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact th:nth-child(4) { width: 16%; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact th:nth-child(5) { width: 14%; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact th:nth-child(13) { width: 18%; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact th:nth-child(14) { width: 31%; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact thead th {
+        padding: 5px 1px;
+        font-size: .55rem;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow-wrap: normal;
+        letter-spacing: 0;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    :is(tr.neoscorpion-dispatch-primary-row, tr[data-cycle-history]) > td {
+        padding: 5px 2px;
+        font-size: .64rem;
+        vertical-align: middle;
+        overflow-wrap: normal;
+        word-break: normal;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-mobile-only { display: inline; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-desktop-label { display: none; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    :is(tr.neoscorpion-dispatch-primary-row, tr[data-cycle-history]) > td.neoscorpion-dispatch-tail > :is(small, [data-spear-tail-indicator]) { display: none; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    tr.neoscorpion-dispatch-primary-row > td.neoscorpion-dispatch-flight > small { display: none; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    tr.neoscorpion-dispatch-primary-row > td.neoscorpion-dispatch-etd-parking > strong { display: none; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    tr.neoscorpion-dispatch-primary-row > td.neoscorpion-dispatch-etd-parking > small {
+        margin: 0;
+        font-size: .64rem !important;
+        line-height: 1.1;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    tr[data-cycle-history] > td.neoscorpion-dispatch-flight > small,
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    tr[data-cycle-history] > td.neoscorpion-dispatch-etd-parking > small { display: none; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    tr.neoscorpion-dispatch-primary-row > td.neoscorpion-dispatch-transfer-estimate > :is(strong, small),
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-desktop-transfer { display: none !important; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-mobile-estimate {
+        display: block;
+        color: inherit;
+        font-size: .64rem;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status {
+        align-items: center;
+        width: 100%;
+        gap: 2px;
+        font-size: .51rem;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        padding: 4px 1px;
+        font-size: .66rem;
+        line-height: 1.12;
+        text-align: center;
+        letter-spacing: -.2px;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    .neoscorpion-fuel-status :is(.neoscorpion-fuel-status-warning, .neoscorpion-fuel-status-off) {
+        max-width: 100%;
+        font-size: .51rem;
+        line-height: 1.12;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-call-dispatch { justify-content: center; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-call-dispatch > strong { font-size: .48rem; }
+}
