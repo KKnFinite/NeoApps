@@ -30,8 +30,265 @@
     {% endif %}
 {%- endmacro %}
 
+{% macro mobile_planner_card(row, scope) -%}
+<article class="neorain-mobile-lineup-card" data-neorain-mobile-lineup-card data-lineup-scope="{{ scope }}">
+    <div class="neorain-mobile-lineup-facts">
+        <div><span>FLIGHT #</span><strong>{{ row.departure.flight_number }}</strong></div>
+        <div><span>DEST</span><strong>{{ row.departure.destination or '—' }}</strong></div>
+        <div><span>ETD</span><strong>{{ row.planned_time or '—' }}</strong></div>
+        <div><span>EXT</span><strong>{{ (row.planner_contact.extension if row.planner else '') or '—' }}</strong></div>
+    </div>
+    {% if can_edit %}
+    <form method="post" class="neorain-mobile-lineup-form">
+        <input type="hidden" name="assignment_scope" value="{{ scope }}">
+        <input type="hidden" name="departure_id" value="{{ row.departure.id }}">
+        <input type="hidden" name="expected_version" value="{{ row.version }}">
+        <label for="mobile-load-planner-{{ scope }}-{{ row.departure.id }}">
+            <span>NAME</span>
+            <select id="mobile-load-planner-{{ scope }}-{{ row.departure.id }}" name="planner_person_id" aria-label="Load Planner name for {{ row.departure.flight_number }}">
+                <option value="" {% if not row.planner %}selected{% endif %}>UNASSIGNED</option>
+                {% for person in eligible_load_planners %}
+                <option value="{{ person.id }}" {% if row.planner and row.planner.id == person.id %}selected{% endif %}>{{ person.full_name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit">SAVE</button>
+    </form>
+    {% else %}
+    <div class="neorain-mobile-lineup-readonly"><span>NAME</span><strong>{{ row.planner.full_name if row.planner else 'UNASSIGNED' }}</strong></div>
+    {% endif %}
+</article>
+{%- endmacro %}
+
 {% block content %}
-<section class="neorain-outbound-shell" aria-labelledby="neorain-load-planner-title">
+<style>
+/* NeoRain Load Planner mobile presentation; the desktop tables are unchanged. */
+.neorain-load-planner-page .neorain-mobile-lineup-cards,
+.neorain-load-planner-page .neorain-mobile-contact-details {
+    display: none;
+}
+@media (max-width: 760px) {
+    .neorain-load-planner-page {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: clip;
+    }
+    .neorain-load-planner-page > .neorain-outbound-head { order: 0; }
+    .neorain-load-planner-page > #neorain-master-departures-section { order: 1; }
+    .neorain-load-planner-page > #neorain-current-sort-only-section { order: 2; }
+    .neorain-load-planner-page > .neorain-mobile-contacts-area { order: 3; }
+
+    .neorain-load-planner-page .neorain-load-planner-section,
+    .neorain-load-planner-page .neorain-mobile-contacts-area {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        margin: 0;
+    }
+    .neorain-load-planner-page .neorain-load-planner-section > h2 {
+        margin: 0 0 7px;
+        color: var(--node-highlight);
+        font-size: .8rem;
+    }
+    .neorain-load-planner-page .neorain-planner-desktop-table,
+    .neorain-load-planner-page .neorain-mobile-contacts-area > header {
+        display: none;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-cards {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+        max-width: 100%;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-card {
+        box-sizing: border-box;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        border: 1px solid rgba(var(--node-rgb), .32);
+        border-left: 3px solid var(--node-primary);
+        background: #0b1018;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-facts {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, .65fr) minmax(0, .82fr) minmax(0, .8fr);
+        gap: 1px;
+        min-width: 0;
+        background: rgba(var(--node-rgb), .15);
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-facts > div {
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 4px;
+        box-sizing: border-box;
+        min-width: 0;
+        padding: 8px 3px;
+        background: #0b1018;
+        text-align: center;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-facts span,
+    .neorain-load-planner-page .neorain-mobile-lineup-form label > span,
+    .neorain-load-planner-page .neorain-mobile-lineup-readonly > span,
+    .neorain-load-planner-page .neorain-mobile-contact-card label > span {
+        display: block;
+        color: #fff;
+        font-size: .55rem;
+        font-weight: 800;
+        letter-spacing: .055em;
+        line-height: 1.2;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-facts strong {
+        min-width: 0;
+        max-width: 100%;
+        color: #fff;
+        font-size: .76rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+        line-height: 1.2;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 7px;
+        min-width: 0;
+        margin: 0;
+        padding: 8px;
+        border-top: 1px solid rgba(var(--node-rgb), .18);
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-form label {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+        margin: 0;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-form select,
+    .neorain-load-planner-page .neorain-mobile-contact-card input {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        min-height: 35px;
+        padding: 5px 7px;
+        border: 1px solid rgba(var(--node-rgb), .44);
+        border-radius: 3px;
+        background: #101a27;
+        color: #fff;
+        font-size: .73rem;
+        font-family: inherit;
+        text-overflow: ellipsis;
+        color-scheme: dark;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-form button,
+    .neorain-load-planner-page .neorain-mobile-contact-card button {
+        box-sizing: border-box;
+        min-width: 55px;
+        min-height: 35px;
+        margin: 0;
+        padding: 5px 8px;
+        border: 1px solid rgba(var(--node-rgb), .5);
+        border-radius: 3px;
+        background: #101a27;
+        color: var(--node-highlight);
+        font-family: inherit;
+        font-size: .68rem;
+        font-weight: 800;
+        line-height: 1.2;
+        cursor: pointer;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-readonly {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+        padding: 8px;
+        border-top: 1px solid rgba(var(--node-rgb), .18);
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-readonly strong {
+        color: #fff;
+        font-size: .74rem;
+        overflow-wrap: anywhere;
+    }
+    .neorain-load-planner-page .neorain-mobile-lineup-empty {
+        margin: 0;
+        padding: 12px;
+        border: 1px solid rgba(var(--node-rgb), .25);
+        color: #fff;
+        font-size: .72rem;
+        background: #0b1018;
+    }
+    .neorain-load-planner-page .neorain-mobile-contacts-area {
+        padding: 0;
+        border: 0;
+        background: transparent;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-details {
+        display: block;
+        min-width: 0;
+        border: 1px solid rgba(var(--node-rgb), .3);
+        background: #0b1018;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-details > summary {
+        padding: 11px;
+        color: var(--node-highlight);
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+        cursor: pointer;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-cards {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+        padding: 8px;
+        border-top: 1px solid rgba(var(--node-rgb), .24);
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-card {
+        display: grid;
+        gap: 7px;
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid rgba(var(--node-rgb), .2);
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-card > strong {
+        color: #fff;
+        font-size: .73rem;
+        overflow-wrap: anywhere;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-card form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        min-width: 0;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-card label {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-card button {
+        grid-column: 1 / -1;
+        justify-self: end;
+    }
+    .neorain-load-planner-page .neorain-mobile-contact-card p {
+        margin: 0;
+        color: #fff;
+        font-size: .7rem;
+    }
+    .neorain-load-planner-page :is(select, input, button, summary):focus-visible {
+        outline: 2px solid var(--node-highlight);
+        outline-offset: 2px;
+    }
+}
+</style>
+<section class="neorain-outbound-shell neorain-load-planner-page" aria-labelledby="neorain-load-planner-title">
     <header class="neorain-outbound-head mobile-shell-duplicate-title">
         <div>
             <p>NEORAIN WORKSPACE</p>
@@ -40,12 +297,12 @@
         <strong>{{ gateway.code }} · {{ operation.sort_name|upper if operation else 'NIGHT MASTER' }}</strong>
     </header>
 
-    <section class="neorain-load-planner-contacts" aria-labelledby="neorain-load-planner-contacts-title">
+    <section class="neorain-load-planner-contacts neorain-mobile-contacts-area" aria-labelledby="neorain-load-planner-contacts-title">
         <header>
             <h2 id="neorain-load-planner-contacts-title">LOAD PLANNER CONTACTS</h2>
             <p>Gateway-specific operational contact details.</p>
         </header>
-        <div class="neorain-outbound-table-wrap">
+        <div class="neorain-outbound-table-wrap neorain-planner-desktop-table">
             <table class="neorain-outbound-table neorain-load-planner-contact-table">
                 <thead><tr><th>Load Planner</th><th>Extension</th><th>Radio Channel</th>{% if can_edit %}<th>Action</th>{% endif %}</tr></thead>
                 <tbody>
@@ -68,11 +325,41 @@
                 </tbody>
             </table>
         </div>
+        <details class="neorain-mobile-contact-details">
+            <summary>LOAD PLANNER CONTACTS</summary>
+            <div class="neorain-mobile-contact-cards">
+                {% for row in planner_contacts %}
+                <article class="neorain-mobile-contact-card">
+                    <strong>{{ row.planner.full_name }}</strong>
+                    {% if can_edit %}
+                    <form method="post">
+                        <input type="hidden" name="action" value="save_planner_contact">
+                        <input type="hidden" name="planner_person_id" value="{{ row.planner.id }}">
+                        <input type="hidden" name="expected_version" value="{{ row.version }}">
+                        <label for="mobile-load-planner-extension-{{ row.planner.id }}">
+                            <span>EXTENSION</span>
+                            <input id="mobile-load-planner-extension-{{ row.planner.id }}" name="extension" type="text" maxlength="64" value="{{ row.values.extension }}">
+                        </label>
+                        <label for="mobile-load-planner-radio-{{ row.planner.id }}">
+                            <span>RADIO</span>
+                            <input id="mobile-load-planner-radio-{{ row.planner.id }}" name="radio_channel" type="text" maxlength="64" value="{{ row.values.radio_channel }}">
+                        </label>
+                        <button type="submit">SAVE</button>
+                    </form>
+                    {% else %}
+                    <p>EXT {{ row.values.extension or '—' }} · RADIO {{ row.values.radio_channel or '—' }}</p>
+                    {% endif %}
+                </article>
+                {% else %}
+                <p class="neorain-mobile-lineup-empty">No active eligible Load Planners.</p>
+                {% endfor %}
+            </div>
+        </details>
     </section>
 
-    <section class="neorain-load-planner-section" aria-labelledby="neorain-master-departures-title">
+    <section id="neorain-master-departures-section" class="neorain-load-planner-section" aria-labelledby="neorain-master-departures-title">
         <h2 id="neorain-master-departures-title">MASTER DEPARTURES</h2>
-        <div class="neorain-outbound-table-wrap">
+        <div class="neorain-outbound-table-wrap neorain-planner-desktop-table">
             <table class="neorain-outbound-table neorain-load-planner-table">
                 <thead><tr><th>Flight #</th><th>Destination</th><th>STD</th><th>Load Planner</th></tr></thead>
                 <tbody>
@@ -89,11 +376,18 @@
                 </tbody>
             </table>
         </div>
+        <div class="neorain-mobile-lineup-cards" aria-label="Mobile Master departures">
+            {% for row in lineup.master_departures %}
+            {{ mobile_planner_card(row, 'master') }}
+            {% else %}
+            <p class="neorain-mobile-lineup-empty">No active Night Master departures.</p>
+            {% endfor %}
+        </div>
     </section>
 
-    <section class="neorain-load-planner-section" aria-labelledby="neorain-current-sort-only-title">
+    <section id="neorain-current-sort-only-section" class="neorain-load-planner-section" aria-labelledby="neorain-current-sort-only-title">
         <h2 id="neorain-current-sort-only-title">CURRENT SORT ONLY</h2>
-        <div class="neorain-outbound-table-wrap">
+        <div class="neorain-outbound-table-wrap neorain-planner-desktop-table">
             <table class="neorain-outbound-table neorain-load-planner-table">
                 <thead><tr><th>Flight #</th><th>Destination</th><th>STD/ETD</th><th>Load Planner</th></tr></thead>
                 <tbody>
@@ -109,6 +403,13 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+        <div class="neorain-mobile-lineup-cards" aria-label="Mobile Current Sort departures">
+            {% for row in lineup.current_sort_only_departures %}
+            {{ mobile_planner_card(row, 'current_sort') }}
+            {% else %}
+            <p class="neorain-mobile-lineup-empty">{{ 'No current-sort-only departures.' if operation else 'No current sort.' }}</p>
+            {% endfor %}
         </div>
     </section>
 </section>

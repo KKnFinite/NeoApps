@@ -100,6 +100,55 @@ class NeoRainLoadPlannerRoutesTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 302)
                 self.assertEqual(NeoScorpionSortAssetState.query.one().revision, revision)
 
+    def test_mobile_lineup_renders_five_requested_facts_and_preserves_save_forms(self):
+        self.master.load_planner_person_id = self.eligible.id
+        self.manual.load_planner_person_id = self.eligible.id
+        db.session.add(
+            NeoRainLoadPlannerContact(
+                gateway_id=self.gateway.id,
+                staffing_person_id=self.eligible.id,
+                extension="4101",
+                radio_channel="OPS",
+            )
+        )
+        db.session.commit()
+        self._login(self._user("mobile_lineup_editor", "operator"))
+        with self._current_operation(self.operation):
+            response = self.client.get("/neorain/load-planner-lineup")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('class="neorain-outbound-shell neorain-load-planner-page"', html)
+        self.assertIn("neorain-mobile-lineup-facts", html)
+        self.assertIn("<span>FLIGHT #</span>", html)
+        self.assertIn("<span>DEST</span>", html)
+        self.assertIn("<span>ETD</span>", html)
+        self.assertIn("<span>EXT</span>", html)
+        self.assertIn("<strong>4101</strong>", html)
+        self.assertIn('data-lineup-scope="master"', html)
+        self.assertIn('data-lineup-scope="current_sort"', html)
+        self.assertIn('id="mobile-load-planner-master-', html)
+        self.assertIn('id="mobile-load-planner-current_sort-', html)
+        self.assertIn('name="assignment_scope" value="master"', html)
+        self.assertIn('name="assignment_scope" value="current_sort"', html)
+        self.assertIn('name="expected_version"', html)
+        self.assertIn('name="planner_person_id"', html)
+        self.assertIn("neorain-mobile-contact-details", html)
+        self.assertIn('id="mobile-load-planner-extension-', html)
+        self.assertIn('name="radio_channel"', html)
+        self.assertIn('overflow-x: clip;', html)
+        self.assertIn('grid-template-columns: minmax(0, 1.3fr)', html)
+
+        self.client.get("/logout")
+        self._login(self._user("mobile_lineup_viewer", "watcher"))
+        with self._current_operation(self.operation):
+            readonly = self.client.get("/neorain/load-planner-lineup")
+        self.assertEqual(readonly.status_code, 200)
+        viewer_html = readonly.get_data(as_text=True)
+        self.assertIn("neorain-mobile-lineup-readonly", viewer_html)
+        self.assertNotIn('id="mobile-load-planner-master-', viewer_html)
+        self.assertNotIn('name="assignment_scope"', viewer_html)
+        self.assertNotIn('name="action" value="save_planner_contact"', viewer_html)
+
     def test_master_section_renders_and_saves_without_a_current_sort(self):
         editor = self._user("load_planner_editor", "operator")
         self._login(editor)
