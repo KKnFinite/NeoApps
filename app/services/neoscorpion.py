@@ -5149,6 +5149,25 @@ def _fuel_rows(
             and assignment.transfer_fuel_gallons is not None
             else estimated_fuel.gallons
         )
+        # APU burn affects the truck's projected inventory only. Keep the
+        # canonical estimate and shared SPEAR demand unchanged; recorded T/F
+        # already includes the physical transfer and must not receive it again.
+        truck_projection_demand_gallons = planning_demand_gallons
+        if (
+            apu_running is True
+            and cycle_type != "defuel"
+            and (assignment is None or assignment.transfer_fuel_gallons is None)
+        ):
+            apu_gallons = (
+                lbs_to_gallons(apu_allowance_lbs, fuel_density_lbs_per_gallon)
+                if planning_demand_gallons is not None
+                else None
+            )
+            truck_projection_demand_gallons = (
+                planning_demand_gallons + apu_gallons
+                if planning_demand_gallons is not None and apu_gallons is not None
+                else None
+            )
         center_actual_lbs = (
             tank_states_by_code["ctr"].actual_lbs
             if detailed_aircraft_type == "A300"
@@ -5693,6 +5712,7 @@ def _fuel_rows(
                 "estimated_fuel_source": estimated_fuel.source,
                 "estimated_fuel_source_label": estimated_fuel.source_label,
                 "planning_demand_gallons": planning_demand_gallons,
+                "truck_projection_demand_gallons": truck_projection_demand_gallons,
                 "assigned_fueler": assignment.assigned_fueler if assignment else None,
                 "assigned_truck": truck,
                 "assignment_update_pending": bool(
@@ -5740,7 +5760,7 @@ def _fuel_rows(
                 (
                     row["mission"].id,
                     row["assignment"].assigned_truck_id,
-                    row["planning_demand_gallons"],
+                    row["truck_projection_demand_gallons"],
                 )
                 for row in rows
                 if row["assignment"] is not None
