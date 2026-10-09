@@ -34,6 +34,7 @@
     let touchStart;
     scroll?.addEventListener('touchstart', event => {
         if (!mobile.matches) return;
+        if (event.target?.closest('[draggable="true"]')) { touchStart = null; return; }
         const touch = event.touches[0];
         touchStart = touch ? {x: touch.clientX, y: touch.clientY} : null;
     }, {passive:true});
@@ -127,18 +128,116 @@
         needsEmpty.hidden = count > 0;
     };
     const clearTargets = () => targets.forEach(target => target.classList.remove('is-drop-target'));
+    let touchDrag = null, preview = null, dragPoint = null, dragFrame = null;
+    let lastFrame = 0, edgeSince = null, edgeDirection = 0;
+    const targetAt = (x, y) => {
+        const target = document.elementFromPoint(x, y)?.closest('[data-final-door-target]');
+        return targets.includes(target) && !target.hidden ? target : null;
+    };
+    const highlightAt = (x, y) => {
+        clearTargets();
+        targetAt(x, y)?.classList.add('is-drop-target');
+    };
+    const stopDragMotion = () => {
+        if (dragFrame !== null) window.cancelAnimationFrame(dragFrame);
+        dragFrame = null; dragPoint = null; lastFrame = 0; edgeSince = null; edgeDirection = 0;
+        preview?.remove(); preview = null;
+        dragged?.classList.remove('is-dragging');
+        clearTargets();
+    };
+    const dragTick = timestamp => {
+        dragFrame = null;
+        if (!dragged || !dragPoint || saving) return;
+        const elapsed = lastFrame ? Math.min(32, timestamp - lastFrame) : 16;
+        lastFrame = timestamp;
+        const box = scroll.getBoundingClientRect();
+        const {x, y} = dragPoint;
+        const edge = Math.min(48, box.width / 4);
+        const inside = y >= box.top && y <= box.bottom && x >= box.left - 12 && x <= box.right + 12;
+        const direction = !inside ? 0 : x < box.left + edge ? -1 : x > box.right - edge ? 1 : 0;
+        if (direction !== edgeDirection) { edgeSince = null; edgeDirection = direction; }
+        if (direction) {
+            const before = scroll.scrollLeft;
+            const distance = direction < 0 ? x - box.left : box.right - x;
+            const speed = 180 + 620 * Math.max(0, Math.min(1, (edge - distance) / edge));
+            scroll.scrollLeft += direction * speed * elapsed / 1000;
+            if (Math.abs(scroll.scrollLeft - before) > 0.1) edgeSince = null;
+            else if (mobile.matches) {
+                // Holding a dragged card at the edge turns Door pages after
+                // scrolling the rail into/out of view. The finger stays down.
+                edgeSince ??= timestamp;
+                if (timestamp - edgeSince >= 650) { turn(direction); edgeSince = timestamp; }
+            }
+        } else edgeSince = null;
+        highlightAt(x, y);
+        dragFrame = window.requestAnimationFrame(dragTick);
+    };
+    const trackDrag = (x, y) => {
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !dragged) return;
+        dragPoint = {x, y};
+        if (preview) {
+            preview.style.left = `${Math.max(8, Math.min(x + 12, window.innerWidth - parseFloat(preview.style.width) - 8))}px`;
+            preview.style.top = `${y + 12}px`;
+        }
+        highlightAt(x, y);
+        if (dragFrame === null) dragFrame = window.requestAnimationFrame(dragTick);
+    };
+    window.addEventListener('dragover', event => {
+        if (!dragged || saving || touchDrag) return;
+        trackDrag(event.clientX, event.clientY);
+        if (scroll.contains(event.target)) {
+            event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+        }
+    });
+    window.addEventListener('pointermove', event => {
+        if (!touchDrag || event.pointerId !== touchDrag.id) return;
+        if (!touchDrag.active && Math.hypot(event.clientX - touchDrag.x, event.clientY - touchDrag.y) < 8) return;
+        if (!touchDrag.active) {
+            touchDrag.active = true; touchStart = null;
+            dragged = touchDrag.card; draggedClicks.add(dragged);
+            const box = dragged.getBoundingClientRect();
+            preview = dragged.cloneNode(true);
+            preview.removeAttribute('data-roster-person'); preview.removeAttribute('href');
+            preview.removeAttribute('draggable'); preview.setAttribute('aria-hidden', 'true');
+            preview.classList.add('shift-drag-preview');
+            preview.style.width = `${box.width}px`;
+            document.body.append(preview);
+            dragged.classList.add('is-dragging');
+        }
+        event.preventDefault();
+        trackDrag(event.clientX, event.clientY);
+    }, {passive:false});
+    const finishTouch = event => {
+        if (!touchDrag || event.pointerId !== touchDrag.id) return;
+        const {card, active} = touchDrag;
+        const target = active && event.type === 'pointerup' && targetAt(event.clientX, event.clientY);
+        stopDragMotion(); dragged = null; touchDrag = null;
+        if (active) {
+            event.preventDefault();
+            if (target) void moveToDoor(card, target);
+        }
+    };
+    window.addEventListener('pointerup', finishTouch);
+    window.addEventListener('pointercancel', finishTouch);
+    window.addEventListener('blur', () => { stopDragMotion(); dragged = null; touchDrag = null; });
     root.querySelectorAll('[data-roster-person][draggable="true"]').forEach(card => {
         card.addEventListener('dragstart', event => {
-            if (saving) { event.preventDefault(); return; }
+            if (saving || touchDrag) { event.preventDefault(); return; }
             dragged = card;
             draggedClicks.add(card);
             event.dataTransfer.setData('application/x-neostaffing-final-door', card.dataset.rosterPerson);
             event.dataTransfer.effectAllowed = 'move';
         });
-        card.addEventListener('dragend', () => { dragged = null; clearTargets(); });
+        card.addEventListener('dragend', () => { stopDragMotion(); dragged = null; });
         // A fresh pointer press is an intentional click; the click generated
         // by the drag's release must never navigate to the assignment editor.
-        card.addEventListener('pointerdown', () => { draggedClicks.delete(card); });
+        card.addEventListener('pointerdown', event => {
+            draggedClicks.delete(card);
+            if (event.pointerType !== 'touch' || saving || touchDrag || !event.isPrimary) return;
+            touchDrag = {card, id:event.pointerId, x:event.clientX, y:event.clientY, active:false};
+            card.setPointerCapture(event.pointerId);
+        });
+        card.addEventListener('contextmenu', event => { if (touchDrag?.active) event.preventDefault(); });
         card.addEventListener('keydown', event => {
             if (event.key === 'Enter') draggedClicks.delete(card);
         });
@@ -149,7 +248,7 @@
             }
         });
     });
-    // Native drag and the touch-friendly Needs Assignment picker use one save path.
+    // Mouse and touch drops share the existing protected optimistic save path.
     const moveToDoor = async (card, target) => {
         if (!card || saving) return;
         const door = target.dataset.finalDoorTarget;
@@ -159,8 +258,6 @@
         if (!source) return;
         const fromNeeds = source === needsPeople;
         const reason = fromNeeds && root.querySelector(`[data-roster-needs-reason="${card.dataset.rosterPerson}"]`);
-        const assignSelect = fromNeeds && root.querySelector(`[data-needs-door-select="${card.dataset.rosterPerson}"]`);
-        const directAssignment = !!(assignSelect && assignSelect.value === door);
         const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
         const ballmatSource = ballmat?.closest('[data-ballmat-door]');
         const ballmatTarget = (ballmat || (fromNeeds && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
@@ -176,7 +273,6 @@
         // Retain exact positions as well as field state until accepted.
         const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
         if (reason) reason.hidden = true;
-        if (assignSelect) assignSelect.hidden = true;
         target.querySelector('[data-roster-people]').append(card);
         if (fromNeeds) {
             refreshNeeds(); adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
@@ -209,7 +305,6 @@
             warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
             refreshColumn(target);
             if (reason) reason.remove();
-            if (assignSelect) assignSelect.remove();
             if (fromNeeds || payload.previous_ballmat_side !== payload.ballmat_side) {
                 for (const [side, delta] of [[fromNeeds ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
                     const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
@@ -228,21 +323,10 @@
                 if (phase) phase.dataset.version = payload.plan_version;
             }
             if (matches.length) showMatch();
-            if (directAssignment) {
-                if (mobile.matches) {
-                    const size = window.innerWidth >= 430 ? 4 : 3;
-                    page = Math.floor(doors.indexOf(target) / size);
-                    render();
-                    if (scroll) scroll.scrollLeft = 0;
-                } else if (scroll?.getBoundingClientRect && target.getBoundingClientRect) {
-                    scroll.scrollLeft += target.getBoundingClientRect().left - scroll.getBoundingClientRect().left - 8;
-                }
-            }
             announce(`Final Door saved · ${target.dataset.doorLabel}`);
         } catch (error) {
             (fromNeeds ? source : source.querySelector('[data-roster-people]')).insertBefore(card, nextCard);
             if (reason) reason.hidden = false;
-            if (assignSelect) { assignSelect.hidden = false; assignSelect.value = ''; }
             if (fromNeeds) {
                 refreshNeeds(); adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
             } else refreshColumn(source);
@@ -275,17 +359,9 @@
             if (!dragged || saving) return;
             event.preventDefault();
             const card = dragged;
+            stopDragMotion();
             dragged = null;
             clearTargets();
-            void moveToDoor(card, target);
-        });
-    });
-    root.querySelectorAll('[data-needs-door-select]').forEach(select => {
-        select.addEventListener('change', () => {
-            const card = cards.find(item => item.dataset.rosterPerson === select.dataset.needsDoorSelect
-                && item.closest('[data-roster-needs-people]') === needsPeople);
-            const target = targets.find(item => item.dataset.finalDoorTarget === select.value);
-            if (!card || !target || saving) { select.value = ''; return; }
             void moveToDoor(card, target);
         });
     });

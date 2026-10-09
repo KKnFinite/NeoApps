@@ -1144,6 +1144,8 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertIn('draggable="true"', needs)
         self.assertNotIn('draggable="true"', unplanned)
         self.assertIn('data-roster-needs-people', needs)
+        self.assertNotIn('ASSIGN TO DOOR', html)
+        self.assertNotIn('data-needs-door-select', html)
         self.assertIn('data-roster-search', html)
 
     def test_needs_assignment_drop_preserves_plan_and_applies_ballmat_side_rule(self):

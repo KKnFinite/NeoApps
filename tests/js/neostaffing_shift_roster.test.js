@@ -92,8 +92,7 @@ function dropBoard(width = 1920) {
     const needsPeople=element({rosterNeedsPeople:'true'}), needs=person('77','Pending','Ian');
     needs.dataset.finalDoor='';needs.dataset.ballmatStart='true';
     const needsReason=element({rosterNeedsReason:'77'}), needsEmpty=element();needsEmpty.hidden=true;
-    const needsSelect=element({needsDoorSelect:'77'});needsSelect.value='';
-    needsPeople.append(needs,needsSelect,needsReason,needsEmpty);
+    needsPeople.append(needs,needsReason,needsEmpty);
     const unassigned=person('88','Unassigned','Uma');
     const search=element(),searchStatus=element(),searchPrevious=element(),searchNext=element();search.value='';
     const scroll=element(),paging=element(),previous=element(),next=element(),range=element();scroll.scrollLeft=0;scroll.scrollWidth=1800;
@@ -107,43 +106,57 @@ function dropBoard(width = 1920) {
     const editor={querySelector:s=>fields[s.match(/name="([^"]+)"/)[1]]};
     const westCount={textContent:'6'},eastCount={textContent:'2'};
     const root={dataset:{finalDoorUrl:'/neostaffing/shift-flow/0/final-door'},style:{setProperty(){}},setAttribute:(k,v)=>attrs[k]=v,
-        querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card,needs]:s==='[data-needs-door-select]'?[needsSelect]:s==='[data-roster-person]'?[card,other,before,extra,needs,unassigned]:[],
-        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-needs-door-select="77"]'?needsSelect:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-door="8"]'?columns[19]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
-    vm.runInNewContext(code,{document:{createElement:()=>element(),querySelector:s=>s==='[data-shift-roster]'?root:s==='[data-roster-planned-count]'?plannedCount:s==='[data-roster-header-ballmat-count]'?headerBallmatTotal:s==='meta[name="csrf-token"]'?{content:'csrf'}:s==='.neostaffing-shift-flow-drawer form'?editor:s==='[data-phase-editor]'?phase:null},
-        window:{innerWidth:width,matchMedia:()=>media,addEventListener(){}},sessionStorage:{getItem(){},setItem(){}},setTimeout:fn=>timers.push(fn),clearTimeout(){},
+        querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card,needs]:s==='[data-roster-person]'?[card,other,before,extra,needs,unassigned]:[],
+        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-door="8"]'?columns[19]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
+    let hitTarget = destination, frameId = 0;
+    const frames = new Map(), handlers = {}, body = element();
+    scroll.getBoundingClientRect = () => ({left:0,right:300,top:0,bottom:400,width:300});
+    let scrollLeft = 0;
+    Object.defineProperty(scroll, 'scrollLeft', {get:()=>scrollLeft, set:value=>{scrollLeft=Math.max(0,Math.min(156,value));}});
+    for (const item of [card, needs]) {
+        item.setPointerCapture = () => {};
+        item.getBoundingClientRect = () => ({width:120});
+        item.cloneNode = () => ({...element(), style:{}, removeAttribute(){}});
+    }
+    vm.runInNewContext(code,{document:{body,elementFromPoint:()=>hitTarget,createElement:()=>element(),querySelector:s=>s==='[data-shift-roster]'?root:s==='[data-roster-planned-count]'?plannedCount:s==='[data-roster-header-ballmat-count]'?headerBallmatTotal:s==='meta[name="csrf-token"]'?{content:'csrf'}:s==='.neostaffing-shift-flow-drawer form'?editor:s==='[data-phase-editor]'?phase:null},
+        window:{innerWidth:width,matchMedia:()=>media,addEventListener:(key,fn)=>handlers[key]=fn,
+            requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId;},cancelAnimationFrame:id=>frames.delete(id)},sessionStorage:{getItem(){},setItem(){}},setTimeout:fn=>timers.push(fn),clearTimeout(){},
         fetch:(url,options)=>new Promise((resolve,reject)=>requests.push({url,options,resolve,reject}))});
     const start=()=>card.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'42');}}});
     const startNeeds=()=>needs.handlers.dragstart({preventDefault(){},dataTransfer:{setData(type,value){assert.equal(type,'application/x-neostaffing-final-door');assert.equal(value,'77');}}});
     const drop=target=>target.handlers.drop({preventDefault(){}});
-    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,drop,person,needs,needsPeople,needsSelect,needsReason,needsCount,needsEmpty,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra};
+    const touch = (type, x=150, y=100) => {
+        const event={type,pointerType:'touch',pointerId:1,isPrimary:true,clientX:x,clientY:y,preventDefault(){}};
+        if(type==='pointerdown') needs.handlers.pointerdown(event); else handlers[type](event);
+    };
+    const advance = timestamp => { const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn(timestamp)); };
+    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,drop,person,needs,needsPeople,needsReason,needsCount,needsEmpty,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra,touch,advance,hit:target=>{hitTarget=target;},body};
 }
 
-test('Needs Assignment direct picker assigns an offscreen door on mobile without HTML drag events', async()=>{
+test('Needs Assignment touch drag pages to an offscreen Door and uses the protected save', async()=>{
     const b=dropBoard(390);
-    b.needsSelect.value='8'; b.needsSelect.handlers.change();
+    b.touch('pointerdown'); b.touch('pointermove',298);
+    for(let timestamp=16;timestamp<=2400;timestamp+=16)b.advance(timestamp);
+    assert.equal(b.range.textContent,'D17–D9');
+    b.hit(b.columns[7]);b.touch('pointermove',150);b.touch('pointerup');
     assert.equal(b.requests.length,1);
     assert.equal(b.requests[0].url,'/neostaffing/shift-flow/77/final-door');
     assert.deepEqual(JSON.parse(b.requests[0].options.body),{final_door_work_area_id:'8',expected_version:'old:7'});
     assert.equal(b.needs.parent,b.columns[7].nodes['[data-roster-people]']);
-    assert.equal(b.needsSelect.hidden,true);
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:8,plan_version:'new:8',
         flow_color:'wave-2',flow_warning:'',has_setup:false,previous_ballmat_side:'west',ballmat_side:'east'})});
     await tick();
-    assert.equal(b.needsSelect.parent,null);
     assert.equal(b.needsReason.parent,null);
     assert.equal(b.needsCount.textContent,'0');
     assert.equal(b.range.textContent,'D17–D9');
-    assert.equal(b.scroll.scrollLeft,0);
+    assert.equal(b.body.children.length,0);
 });
-test('Needs Assignment picker restores its value, row and feedback on conflicting save', async()=>{
+test('Needs Assignment touch drag restores row and feedback on conflicting save', async()=>{
     const b=dropBoard(390);
-    b.needsSelect.value='8'; b.needsSelect.handlers.change();
+    b.touch('pointerdown',100);b.touch('pointermove',150);b.touch('pointerup');
     b.requests[0].resolve({ok:false,json:async()=>({conflict:{message:'Reload before assigning.'}})});
     await tick();
     assert.equal(b.needs.parent,b.needsPeople);
-    assert.equal(b.needsSelect.parent,b.needsPeople);
-    assert.equal(b.needsSelect.hidden,false);
-    assert.equal(b.needsSelect.value,'');
     assert.equal(b.needsReason.hidden,false);
     assert.match(b.feedback.textContent,/Reload/);
 });
@@ -186,7 +199,7 @@ test('name search highlights without rearranging, pages through matches and sear
     assert.equal(b.searchStatus.textContent,'3 / 3');assert.equal(b.range.textContent,'D17–D9');
     assert.deepEqual(b.destination.nodes['[data-roster-people]'].children,order);
     b.search.value='ian';b.search.handlers.input();
-    assert.ok(b.needs.classList.values.has('is-search-current'));assert.equal(b.scroll.scrollLeft,b.scroll.scrollWidth);
+    assert.ok(b.needs.classList.values.has('is-search-current'));assert.equal(b.scroll.scrollLeft,156);
     b.search.value='uma';b.search.handlers.input();assert.ok(b.unassigned.classList.values.has('is-search-match'));
     b.search.value='';b.search.handlers.input();
     assert.equal(b.searchStatus.textContent,'');assert.ok(!b.card.classList.values.has('is-search-dimmed'));
@@ -264,7 +277,7 @@ test('ordinary clicks follow the existing editor link; drag release click is sup
     click();assert.equal(prevented,0);assert.equal(b.card.href,'/neostaffing/shift-flow?person_id=42');
     b.start();b.drop(b.destination);b.card.handlers.dragend();click();assert.equal(prevented,1);
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2'})});await tick();
-    b.card.handlers.pointerdown();click();assert.equal(prevented,1);assert.equal(stopped,1);
+    b.card.handlers.pointerdown({pointerType:'mouse'});click();assert.equal(prevented,1);assert.equal(stopped,1);
     b.start();b.drop(b.source);b.card.handlers.dragend();
     b.requests[1].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:1,plan_version:'new:9',flow_color:'wave-2'})});await tick();
     click();assert.equal(prevented,2);assert.equal(stopped,2);
