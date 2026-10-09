@@ -108,7 +108,7 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                 expect(status('risk')).not_to_contain_text('TIMING UNKNOWN')
                 expect(status('check')).not_to_contain_text('FOB CHECK')
                 expect(status('check').get_by_text('CALL DISPATCH', exact=True)).to_be_visible()
-                self.assertIn('20261009-spear-size-risk-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
+                self.assertIn('20261009-dispatch-compact-trucks-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
                 self.assertIn('20261009-fuel-status-fob-v1',page.locator('script[src*="neoscorpion_fuel_status.js"]').get_attribute('src'))
 
                 for width in (1440,390):
@@ -127,6 +127,19 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                         self.assertTrue(page.locator('.neoscorpion-dispatch-table--compact').evaluate(
                             'table => table.getBoundingClientRect().width <= window.innerWidth'
                         ))
+                        # The truck cards are compact rows on phones, not tall desktop cards.
+                        truck_card = page.locator('.neoscorpion-truck-visual-card').first
+                        self.assertEqual(truck_card.evaluate('el => getComputedStyle(el).display'), 'grid')
+                        self.assertLessEqual(truck_card.locator('header > strong').evaluate(
+                            'el => parseFloat(getComputedStyle(el).fontSize)'), 13)
+                        self.assertLessEqual(truck_card.locator('.neoscorpion-truck-visual-values').evaluate(
+                            'el => parseFloat(getComputedStyle(el).fontSize)'), 11)
+                        self.assertEqual(truck_card.locator('.neoscorpion-truck-gauges progress').count(), 2)
+                        self.assertTrue(truck_card.locator('.neoscorpion-truck-gauge').first.evaluate(
+                            'el => el.getBoundingClientRect().height <= 5'))
+                        self.assertTrue(truck_card.evaluate(
+                            'el => { const box = el.getBoundingClientRect();'
+                            'return box.left >= -1 && box.right <= innerWidth + 1; }'))
                     else:
                         self.assertEqual(len(visible_headers), 16)
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth + 1'))

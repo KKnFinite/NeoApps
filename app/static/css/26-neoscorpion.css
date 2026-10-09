@@ -1073,3 +1073,136 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-call-dispatch { justify-content: center; }
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-call-dispatch > strong { font-size: .48rem; }
 }
+
+/* Mobile-only condensed truck inventory: keep gallons, reserve projections,
+   both gauges and asset actions; do not change the desktop layout. */
+@media (max-width: 760px) {
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-panel {
+        position: static;
+        margin: 6px 0;
+        padding: 6px;
+        font-size: .65rem;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-panel > header {
+        gap: 5px;
+        line-height: 1.1;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-panel > header > strong {
+        font-size: .73rem;
+        line-height: 1.1;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-panel > header > span {
+        font-size: .57rem;
+        line-height: 1.1;
+        text-align: right;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-list {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 5px;
+        margin-top: 5px;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas: "heading heading" "values values" "gauges action";
+        gap: 3px 7px;
+        min-width: 0;
+        padding: 5px 7px;
+        border-radius: 4px;
+        font-size: .63rem;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > header {
+        grid-area: heading;
+        min-width: 0;
+        gap: 5px;
+        line-height: 1.08;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > header > strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: .72rem;
+        line-height: 1.08;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-status {
+        flex-shrink: 0;
+        font-size: .63rem;
+        line-height: 1.08;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-values {
+        grid-area: values;
+        min-width: 0;
+        margin: 0;
+        gap: 6px;
+        font-size: .57rem;
+        line-height: 1.1;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-values > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-values > span:last-child {
+        text-align: right;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-gauges {
+        grid-area: gauges;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+        min-width: 0;
+        align-items: center;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-gauges > div {
+        min-width: 0;
+        gap: 3px;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-gauges span {
+        flex-shrink: 0;
+        font-size: .47rem;
+        line-height: 1.05;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-gauges .neoscorpion-truck-gauge {
+        flex: 1 1 0;
+        min-width: 0;
+        height: 4px;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > form[data-dispatch-truck-card-form] {
+        grid-area: action;
+        align-self: center;
+        margin: 0;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > form.neoscorpion-truck-return-form {
+        grid-area: auto;
+        grid-column: 1 / -1;
+        margin-top: 2px;
+        justify-content: flex-end;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-return-form input {
+        width: 5rem;
+        min-height: 25px;
+        padding: 3px 5px;
+        font-size: .6rem;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card
+    :is(.neoscorpion-truck-card-action, .neoscorpion-truck-spear .action-button) {
+        min-height: 26px;
+        padding: 3px 7px;
+        font-size: .6rem;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-spear {
+        grid-column: 1 / -1;
+        margin: 2px 0 0;
+        min-width: 0;
+        gap: 2px;
+        font-size: .58rem;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-spear > :is(strong, span, small) {
+        font-size: .58rem;
+        line-height: 1.15;
+    }
+}
