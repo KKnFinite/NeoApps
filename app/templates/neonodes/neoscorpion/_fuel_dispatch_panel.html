@@ -99,9 +99,9 @@
                 {% if truck.spear_recommendation %}
                 {% set spear = truck.spear_recommendation %}
                 <div class="neoscorpion-truck-spear">
-                    <strong>SPEAR RECOMMENDS</strong>
+                    <strong>{{ 'SPEAR NEXT · AFTER CURRENT' if truck.spear_advisory_only else 'SPEAR RECOMMENDS' }}</strong>
                     {{ spear_resources(spear, truck.spear_parking_position) }}
-                    {% if can_edit %}
+                    {% if can_edit and not truck.spear_advisory_only %}
                     <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_spear_action') }}" data-spear-action-form>
                         <input type="hidden" name="plan_token" value="{{ spear_plan.token }}">
                         <input type="hidden" name="mission_id" value="{{ spear.mission_id or '' }}">
@@ -110,6 +110,8 @@
                     </form>
                     {% endif %}
                 </div>
+                {% elif truck.spear_next_status %}
+                <div class="neoscorpion-truck-spear"><strong>SPEAR NEXT</strong><small>{{ truck.spear_next_status }}</small></div>
                 {% endif %}
                 {% if can_manage_assets and truck.status == "available" %}
                 <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>

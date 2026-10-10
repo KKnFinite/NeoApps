@@ -42,7 +42,7 @@ class SpearDisplayTest(unittest.TestCase):
         for parking, label in (('E03', 'PARKING E03'), (None, 'RAMP ECHO')):
             html = self.render('spear_resources', spear=spear, parking=parking)
             for text in ('FLIGHT UPS0910', label, 'TRUCK 10', 'FUELER DANIEL'): self.assertIn(text, html)
-            self.assertNotIn('COVERED', html)
+            self.assertIn('class="neoscorpion-spear-severity is-covered">COVERED', html)
         for risk in ('LATE', 'AT RISK'):
             spear['risk'] = risk
             html = self.render('spear_resources', spear=spear, parking='E03')
@@ -57,7 +57,10 @@ class SpearDisplayTest(unittest.TestCase):
                 for i, parking in ((1,'B06'), (2,'E03'))]
         visual = dict(truck_id=7)
         plan = SimpleNamespace(risks_by_mission_id={2:'COVERED'}, readiness_by_mission_id={2:()},
-            waiting_for_data_by_mission_id={}, unavailable_by_mission_id={}, steps=[SimpleNamespace(mission_id=2, truck_id=7)])
+            waiting_for_data_by_mission_id={}, unavailable_by_mission_id={},
+            steps=[SimpleNamespace(mission_id=2, truck_id=7, action_type="assign",
+                                   risk="COVERED", projected_complete_at_utc=object())],
+            occupied_truck_next={}, status_text="SPEAR: ALL LOADS COVERED", waiting_for_data_count=0, relevant_count=1)
         _attach_spear_plan(rows, [visual], plan)
         self.assertEqual(visual['spear_parking_position'], 'E03')
         self.assertEqual(rows[1]['spear_risk'], 'COVERED')

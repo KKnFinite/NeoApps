@@ -94,7 +94,7 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                 page.on("request", lambda request: requests.append((request.method, request.url)))
                 Fixture().ready(page, "/neoscorpion/fuel-dispatch")
                 css = page.locator('link[href*="26-neoscorpion.css"]')
-                self.assertIn("scorpion=20261010-spear-mission-small-v1", css.get_attribute("href"))
+                self.assertIn("scorpion=20261010-spear-next-v2", css.get_attribute("href"))
                 rows = [page.locator(f'.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="{mid}"]')
                         for mid in mission_ids]
 

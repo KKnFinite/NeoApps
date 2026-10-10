@@ -1,6 +1,6 @@
 """Deterministic NeoScorpion SPEAR fleet planning and settings."""
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -83,6 +83,14 @@ class SpearPlanStep:
 
 
 @dataclass(frozen=True)
+class SpearTruckNext:
+    """Read-only forecast; never included in executable plan steps."""
+
+    step: SpearPlanStep | None
+    status: str
+
+
+@dataclass(frozen=True)
 class SpearPlan:
     steps: tuple[SpearPlanStep, ...]
     risks_by_mission_id: dict[int, str]
@@ -99,6 +107,7 @@ class SpearPlan:
     relevant_count: int = 0
     readiness_by_mission_id: dict[int, tuple[str, ...]] = field(default_factory=dict)
     timing_unknown_count: int = 0
+    occupied_truck_next: dict[int, SpearTruckNext] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -318,6 +327,8 @@ def build_spear_plan(
         for identifier, item in usable_trucks.items()
     }
     _adopt_completed_locations(rows, fueler_state, truck_state)
+    initial_fueler_state = {identifier: replace(state) for identifier, state in fueler_state.items()}
+    initial_truck_state = {identifier: replace(state) for identifier, state in truck_state.items()}
     # Availability now is independent of departure order, readiness or predicted
     # finish. Partial assignments and holds reserve their resources too. Reuse
     # follows the same recorded release boundary as Dispatch's calendars.
@@ -567,6 +578,13 @@ def build_spear_plan(
         _advance_resources(fueler_state[fueler_id], truck_state[truck_id], ramp, finish)
         truck_gallons[truck_id] = projected
 
+    occupied_truck_next = _occupied_truck_recommendations(
+        rows, steps=steps, operation=operation, planning_settings=planning_settings,
+        spear_settings=spear_settings, fuelers=fuelers, usable_trucks=usable_trucks,
+        fueler_state=initial_fueler_state, truck_state=initial_truck_state,
+        occupied_fuelers=occupied_fuelers, occupied_trucks=occupied_trucks,
+        now_utc=now_utc,
+    )
     return _plan(
         tuple(steps),
         risks,
@@ -575,6 +593,7 @@ def build_spear_plan(
         relevant_count=len(ordered_rows),
         readiness_by_mission_id=readiness,
         live_calibration_mode=spear_settings.live_calibration_mode,
+        occupied_truck_next=occupied_truck_next,
     )
 
 
@@ -628,6 +647,167 @@ def priority_rows(settings):
     return tuple((key, labels[key]) for key in settings.priority_order)
 
 
+def _occupied_truck_recommendations(
+    rows, *, steps, operation, planning_settings, spear_settings, fuelers,
+    usable_trucks, fueler_state, truck_state, occupied_fuelers,
+    occupied_trucks, now_utc,
+):
+    """Forecast one non-executable next job per occupied truck from this sort."""
+    result = {
+        truck_id: SpearTruckNext(None, "NEXT PENDING · CURRENT WORK")
+        for truck_id in occupied_trucks
+    }
+    if not result:
+        return result
+
+    rows_by_mission = {row["mission"].id: row for row in rows}
+    forecast_fuelers = {}
+    forecast_trucks = {}
+    gallons_after_current = {}
+    for truck_id, owners in occupied_trucks.items():
+        if len(owners) != 1 or truck_id not in usable_trucks:
+            continue
+        row = rows_by_mission.get(next(iter(owners)))
+        assignment = row.get("assignment") if row else None
+        fueler_id = getattr(assignment, "assigned_fueler_user_id", None)
+        if (
+            assignment is None or fueler_id not in fuelers
+            or occupied_fuelers.get(fueler_id) != owners
+            or getattr(assignment, "operational_status", "active") != "active"
+            or not row.get("parking_valid")
+        ):
+            continue
+        ramp = _parking_ramp(row.get("parking_position"))
+        timing = _spear_timing(row, operation, planning_settings)
+        demand = _decimal_or_none(row.get("planning_demand_gallons"))
+        if ramp is None or timing.total_duration_minutes is None or demand is None:
+            continue
+        truck = usable_trucks[truck_id]["truck"]
+        current_gallons = int(usable_trucks[truck_id]["selection"].current_gallons)
+        feasible, remaining = _fuel_feasibility(current_gallons, int(truck.capacity_gallons), demand)
+        if not feasible:
+            continue
+        work = row.get("fuel_work_state")
+        if getattr(work, "on_at_utc", None) is not None:
+            finish = active_fueling_finish(row, operation, planning_settings)
+        elif row.get("work_has_begun"):
+            finish = None
+        else:
+            _, finish = _schedule_pair(
+                ramp, timing, fueler_state[fueler_id], truck_state[truck_id],
+                spear_settings, staging_allowed_at_utc=_staging_allowed_at(
+                    row, spear_settings, now_utc,
+                ),
+            )
+        # A forecast that has already elapsed while the job is still open is
+        # not release evidence. Wait for the canonical OFF/complete transition.
+        if finish is None or finish <= now_utc:
+            continue
+        forecast_fuelers[fueler_id] = replace(fueler_state[fueler_id])
+        forecast_trucks[truck_id] = replace(truck_state[truck_id])
+        _advance_resources(forecast_fuelers[fueler_id], forecast_trucks[truck_id], ramp, finish)
+        gallons_after_current[truck_id] = remaining
+
+    planned_missions = {step.mission_id for step in steps}
+    planned_fuelers = {step.fueler_id for step in steps if step.fueler_id is not None}
+    current_missions = {owner for owners in occupied_trucks.values() for owner in owners}
+    eligible_rows = []
+    pending_data = False
+    for row in rows:
+        mission_id = row["mission"].id
+        assignment = row.get("assignment")
+        if (
+            row.get("administratively_complete") or mission_id in planned_missions
+            or mission_id in current_missions
+            or row.get("work_has_begun")
+            or (assignment and (assignment.assigned_truck_id or assignment.assigned_fueler_user_id))
+        ):
+            continue
+        timing = _spear_timing(row, operation, planning_settings)
+        departure = _departure_at(row)
+        demand = _decimal_or_none(row.get("planning_demand_gallons"))
+        ramp = _parking_ramp(row.get("parking_position")) if row.get("parking_valid") else None
+        if (
+            _readiness_reasons(row, spear_settings=spear_settings, now_utc=now_utc)
+            or ramp is None or departure is None or demand is None
+            or timing.total_duration_minutes is None
+        ):
+            pending_data = True
+            continue
+        eligible_rows.append((row, timing, departure, demand, ramp))
+
+    candidates = []
+    fuel_short = set()
+    for truck_id, truck in usable_trucks.items():
+        if truck_id not in forecast_trucks:
+            continue
+        state = forecast_trucks[truck_id]
+        for row, timing, departure, demand, ramp in eligible_rows:
+            feasible, projected = _fuel_feasibility(
+                gallons_after_current[truck_id], int(truck["truck"].capacity_gallons), demand,
+            )
+            if not feasible or projected < spear_settings.minimum_truck_reserve_gallons:
+                fuel_short.add(truck_id)
+                continue
+            for fueler_id in fuelers:
+                if fueler_id in planned_fuelers:
+                    continue
+                if fueler_id in occupied_fuelers:
+                    fueler = forecast_fuelers.get(fueler_id)
+                    if fueler is None:
+                        continue
+                else:
+                    fueler = fueler_state[fueler_id]
+                start, finish = _schedule_pair(
+                    ramp, timing, fueler, state, spear_settings,
+                    staging_allowed_at_utc=_staging_allowed_at(row, spear_settings, now_utc),
+                )
+                risk = _risk(finish, departure)
+                travel = _travel_minutes(state.ramp, ramp, spear_settings.truck_minutes_per_ramp_move)
+                score = _candidate_score(
+                    spear_settings.priority_order, risk=risk, reserve_short=False,
+                    travel=travel, workload=fueler.workload + state.workload,
+                    fueler_id=fueler_id, truck_id=truck_id,
+                )
+                candidates.append((departure, score, row, truck_id, fueler_id, start, finish, risk))
+
+    claimed_missions = set(planned_missions)
+    claimed_fuelers = set(planned_fuelers)
+    for _departure, _score, row, truck_id, fueler_id, start, finish, risk in sorted(
+        candidates, key=lambda item: (item[0], item[1], item[2]["mission"].id),
+    ):
+        mission = row["mission"]
+        if (
+            result[truck_id].step is not None or mission.id in claimed_missions
+            or fueler_id in claimed_fuelers
+        ):
+            continue
+        fueler = fuelers[fueler_id]
+        truck = usable_trucks[truck_id]["truck"]
+        result[truck_id] = SpearTruckNext(
+            SpearPlanStep(
+                "assign", mission.id, mission.flight_number or "-",
+                _parking_ramp(row.get("parking_position")), truck_id,
+                str(truck.truck_number), fueler_id, _fueler_name(fueler),
+                start, finish, risk, "Future plan — current assignment release required",
+                automatic_eligible=False, requires_resource_release=True,
+            ),
+            "NEXT AFTER CURRENT",
+        )
+        claimed_missions.add(mission.id)
+        claimed_fuelers.add(fueler_id)
+
+    for truck_id in forecast_trucks:
+        if result[truck_id].step is None:
+            result[truck_id] = SpearTruckNext(
+                None,
+                "NEXT PENDING · FUEL / CAPACITY" if truck_id in fuel_short else
+                "NEXT PENDING · MISSION DATA" if pending_data else
+                "NO NEXT MISSION" if not eligible_rows else "NEXT UNAVAILABLE",
+            )
+    return result
+
+
 def _plan(
     steps,
     risks,
@@ -638,6 +818,7 @@ def _plan(
     relevant_count=None,
     readiness_by_mission_id=None,
     live_calibration_mode="observe",
+    occupied_truck_next=None,
 ):
     waiting_for_data = dict(waiting_for_data or {})
     covered = sum(value == "COVERED" for value in risks.values())
@@ -687,6 +868,7 @@ def _plan(
         relevant_count if relevant_count is not None else evaluated + waiting_count,
         dict(readiness_by_mission_id or {}),
         timing_unknown,
+        dict(occupied_truck_next or {}),
     )
 
 

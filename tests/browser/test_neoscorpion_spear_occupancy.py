@@ -41,7 +41,7 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                     NeoScorpionSortAssetState(sort_date_operation_id=operation.id,revision=1)])
                 missions=[]
                 for index in (1,2,3):
-                    tail='N432UP' if index==1 else f'N{index}OCCUPIED'
+                    tail='N432UP' if index==1 else 'N42OCCUPIED' if index==2 else f'N{index}OCCUPIED'
                     mission=SortDateMission(sort_date_operation_id=operation.id,sort_date=operation.sort_date,gateway_code=gateway.code,
                         sort_name='night',mission_type='departure',mission_source='manual',flight_number='UPS0910' if index==1 else f'UPS-OCC-{index}',
                         origin=gateway.code,destination='SDF',assigned_tail_number=tail,timezone='America/Chicago',planned_source='manual',
@@ -56,7 +56,7 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                         SortDateParkingAssignment(sort_date_operation_id=operation.id,tail_number=tail,ramp_code={1:'E',2:'B',3:'D'}[index],position_code={1:'E03',2:'B07',3:'D07'}[index],lane_number=1)])
                     db.session.flush(); missions.append(mission.id)
                 owner=NeoScorpionFuelAssignment(sort_date_operation_id=operation.id,sort_date_mission_id=missions[1],
-                    assigned_fueler_user_id=admin.id,assigned_truck_id=trucks[0],confirmed_tail_number='N2OCCUPIED',
+                    assigned_fueler_user_id=admin.id,assigned_truck_id=trucks[0],confirmed_tail_number='N42OCCUPIED',
                     operational_status='active',review_status='pending')
                 db.session.add(owner); db.session.commit()
                 opid,ownerid,freeid=operation.id,owner.id,free.id
@@ -79,7 +79,7 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                 expect(row.locator('xpath=following-sibling::tr[1]')).to_contain_text('COVERED')
                 card=page.locator('.neoscorpion-truck-spear').filter(has_text='FLIGHT UPS0910').first
                 for text in ('PARKING E03','TRUCK 10','FUELER DANIEL'): expect(card).to_contain_text(text)
-                self.assertNotIn('COVERED',card.inner_text())
+                expect(card).to_contain_text('COVERED')
                 expect(card.locator('button')).to_have_text('ASSIGN')
                 self.assertIn('/fuel-dispatch/spear-action',card.locator('form').get_attribute('action'))
                 expect(card.locator('xpath=ancestor::article[1]').locator('[data-dispatch-truck-card-form] button')).to_have_text('TOP OFF')
@@ -88,8 +88,9 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                         styles=indicator.evaluate("el=>{const s=getComputedStyle(el);return {whiteSpace:s.whiteSpace,color:s.color,font:parseFloat(s.fontSize),height:el.getBoundingClientRect().height,text:el.textContent,width:el.clientWidth,content:el.scrollWidth,clipped:el.scrollWidth>el.clientWidth+1};}")
                         self.assertEqual(styles['whiteSpace'],'nowrap')
                         self.assertEqual(styles['color'],'rgb(103, 197, 242)')
-                        self.assertEqual(styles['font'],12 if page.viewport_size['width']>760 else 10.5)
-                        self.assertLessEqual(styles['height'],14)
+                        expected=12.64 if page.viewport_size['width']>760 else 9.12
+                        self.assertAlmostEqual(styles['font'],expected,delta=.15)
+                        self.assertLessEqual(styles['height'],15)
                         self.assertEqual(indicator.locator('span').first.evaluate('el=>getComputedStyle(el).color'),'rgb(103, 197, 242)')
                         severity=indicator.locator('.neoscorpion-spear-severity')
                         color={'AT RISK':'rgb(246, 227, 122)','LATE':'rgb(255, 115, 127)'}.get(severity.inner_text(),'rgb(103, 197, 242)')
@@ -123,13 +124,39 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                         NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=opid,fuel_truck_id=tid).one().status='unavailable_oos'
                 change(restore_fueler_disable_free_trucks)
                 expect(row.locator('.is-unplanned')).to_contain_text('SPEAR · NO TRUCK',timeout=20000)
+                busy_card=page.locator('.neoscorpion-truck-visual-card').filter(has_text='TRUCK BUSY')
+                expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text('NEXT PENDING · CURRENT WORK')
+                change(lambda:setattr(db.session.get(SortDateMission,missions[1]),'planned_fuel_load',25000))
+                expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text('FLIGHT UPS0910',timeout=20000)
+                for text in ('PARKING E03','FUELER DANIEL','NEXT · AFTER CURRENT'):
+                    expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text(text)
+                self.assertRegex(busy_card.locator('.neoscorpion-truck-spear').inner_text(),
+                                 r'\b(COVERED|AT RISK|LATE)\b')
+                expect(busy_card.locator('[data-spear-action-form]')).to_have_count(0)
+                self.assertNotIn('UPS-OCC-2',busy_card.locator('.neoscorpion-truck-spear').inner_text())
+                def set_busy_gallons(gallons):
+                    NeoScorpionSortTruck.query.filter_by(
+                        sort_date_operation_id=opid, fuel_truck_id=trucks[0],
+                    ).one().current_gallons = gallons
+                change(lambda:set_busy_gallons(2000))
+                expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text(
+                    'NEXT PENDING · FUEL / CAPACITY', timeout=20000,
+                )
+                change(lambda:set_busy_gallons(9000))
+                expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text(
+                    'FLIGHT UPS0910', timeout=20000,
+                )
                 for width in (1440,390,320):
                     page.set_viewport_size({'width':width,'height':900}); verify_compact()
+                    expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text('FLIGHT UPS0910')
+                    expect(busy_card.locator('[data-spear-action-form]')).to_have_count(0)
                     expect(row.locator('xpath=following-sibling::tr[1]')).to_contain_text('NO AVAILABLE TRUCK — active assignment')
                     page.screenshot(path=str(Fixture.evidence/f'spear-display-no-truck-{width}.png'),full_page=True)
-                change(lambda:db.session.add(NeoScorpionFuelWorkState(fuel_assignment_id=ownerid,tail_number='N2OCCUPIED',
+                change(lambda:db.session.add(NeoScorpionFuelWorkState(fuel_assignment_id=ownerid,tail_number='N42OCCUPIED',
                     on_at_utc=datetime.utcnow()-timedelta(minutes=20),off_at_utc=datetime.utcnow())))
                 expect(row.locator('.neoscorpion-dispatch-recommendation').last).to_have_text('SPEAR → BUSY',timeout=20000)
+                expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text('FLIGHT UPS0910')
+                expect(busy_card.locator('[data-spear-action-form]')).to_have_count(1)
                 expect(row.locator('.is-unplanned')).to_have_count(0)
                 for width in (1440,390):
                     page.set_viewport_size({'width':width,'height':900})

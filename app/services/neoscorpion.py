@@ -605,7 +605,16 @@ def _apply_operational_fueler_names(context, nicknames):
             step, fueler_name=nicknames.get(step.fueler_id, step.fueler_name),
             explanation=explanation,
         ))
-    displayed_plan = replace(plan, steps=tuple(displayed_steps))
+    displayed_next = {
+        truck_id: replace(next_job, step=replace(
+            next_job.step,
+            fueler_name=nicknames.get(next_job.step.fueler_id, next_job.step.fueler_name),
+        )) if next_job.step is not None else next_job
+        for truck_id, next_job in plan.occupied_truck_next.items()
+    }
+    displayed_plan = replace(
+        plan, steps=tuple(displayed_steps), occupied_truck_next=displayed_next,
+    )
     context["spear_plan"] = displayed_plan
     _attach_spear_plan(context["rows"], context["truck_visuals"], displayed_plan)
 
@@ -5815,15 +5824,53 @@ def _attach_spear_plan(rows, truck_visuals, plan):
     for visual in truck_visuals:
         visual["spear_recommendation"] = None
         visual["spear_parking_position"] = None
+        visual["spear_next_status"] = None
+        visual["spear_advisory_only"] = False
     for step in plan.steps:
         if step.mission_id in rows_by_mission_id:
             rows_by_mission_id[step.mission_id]["spear_step"] = step
         visual = visuals_by_truck_id.get(step.truck_id)
-        if visual is not None and visual["spear_recommendation"] is None:
+        if (visual is not None and visual["spear_recommendation"] is None
+                and step.truck_id not in plan.occupied_truck_next):
+            if (step.action_type == "assign" and
+                    (step.risk == "TIMING UNKNOWN" or step.projected_complete_at_utc is None)):
+                visual["spear_next_status"] = "NEXT PENDING · MISSION DATA"
+                continue
             visual["spear_recommendation"] = step
             mission_row = rows_by_mission_id.get(step.mission_id, {})
             visual["spear_parking_position"] = (
                 mission_row.get("parking_position") if mission_row.get("parking_valid") else None
+            )
+    for truck_id, next_job in plan.occupied_truck_next.items():
+        visual = visuals_by_truck_id.get(truck_id)
+        if visual is None:
+            continue
+        visual["spear_recommendation"] = next_job.step
+        visual["spear_next_status"] = next_job.status
+        visual["spear_advisory_only"] = True
+        if next_job.step is not None:
+            mission_row = rows_by_mission_id.get(next_job.step.mission_id, {})
+            visual["spear_parking_position"] = (
+                mission_row.get("parking_position") if mission_row.get("parking_valid") else None
+            )
+    if plan.status_text != "SPEAR: RECOMMENDATIONS OFF":
+        has_unassigned_mission = any(
+            not row.get("administratively_complete") and (
+                row.get("assignment") is None or not (
+                    row["assignment"].assigned_truck_id
+                    or row["assignment"].assigned_fueler_user_id
+                )
+            )
+            for row in rows
+        )
+        for visual in truck_visuals:
+            if visual["spear_recommendation"] is not None or visual["spear_next_status"]:
+                continue
+            visual["spear_next_status"] = (
+                "NEXT UNAVAILABLE · TRUCK STATUS" if visual["status"] != "available" else
+                "NO NEXT MISSION" if not has_unassigned_mission else
+                "NEXT PENDING · MISSION DATA" if plan.waiting_for_data_count else
+                "NEXT UNAVAILABLE"
             )
 
 

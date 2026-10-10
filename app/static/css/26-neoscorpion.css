@@ -200,7 +200,7 @@
     font-size: .75rem;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
-    color:#67c5f2; font-family:NeoFontPlain,sans-serif; font-weight:700; line-height:1.1; letter-spacing:-.3px;
+    color:#67c5f2; font-family:NeoFontPlain,sans-serif; font-weight:700; line-height:1.1; letter-spacing:-1px;
 }
 .neoscorpion-spear-risk.is-at-risk > .neoscorpion-spear-severity,
 .neoscorpion-truck-spear .neoscorpion-spear-severity.is-at-risk { color:#f6e37a; }

@@ -139,6 +139,81 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertNotIn(100,[step.mission_id for step in plan.steps])
         self.assertIn('NO AVAILABLE TRUCK',plan.unavailable_by_mission_id[100])
 
+    def test_occupied_truck_gets_advisory_next_without_executable_step(self):
+        owner = _row(200, assignment=self.commitment())
+        next_mission = _row(100)
+        next_mission['parking_position'] = 'D07'
+        plan = _plan([next_mission, owner])
+        self.assertFalse(plan.steps)
+        next_job = plan.occupied_truck_next[10]
+        self.assertEqual(next_job.status, 'NEXT AFTER CURRENT')
+        self.assertEqual((next_job.step.mission_id, next_job.step.flight_number,
+                          next_job.step.fueler_id, next_job.step.truck_id), (100, 'UPS100', 1, 10))
+        self.assertFalse(next_job.step.automatic_eligible)
+        self.assertTrue(next_job.step.requires_resource_release)
+        self.assertGreaterEqual(next_job.step.projected_start_at_utc,
+                                NOW + timedelta(minutes=15))
+        self.assertEqual(next_job.step.risk, 'COVERED')
+
+    def test_next_forecast_never_recommends_current_mission_or_guesses_missing_data(self):
+        owner = _row(200, assignment=self.commitment())
+        self.assertIsNone(_plan([owner]).occupied_truck_next[10].step)
+        candidate = _row(100)
+        candidate['mission'].planned_datetime_utc = None
+        plan = _plan([owner, candidate])
+        self.assertIsNone(plan.occupied_truck_next[10].step)
+        self.assertIn('PENDING', plan.occupied_truck_next[10].status)
+        candidate['mission'].planned_datetime_utc = NOW + timedelta(hours=2)
+        owner['planning_demand_gallons'] = None
+        plan = _plan([owner, candidate])
+        self.assertIsNone(plan.occupied_truck_next[10].step)
+        self.assertIn('CURRENT WORK', plan.occupied_truck_next[10].status)
+
+    def test_next_forecast_respects_fuel_and_truck_availability(self):
+        owner = _row(200, demand=500, assignment=self.commitment())
+        candidate = _row(100, demand=800)
+        plan = _plan([owner, candidate], trucks=(_truck(current=1000),))
+        self.assertIsNone(plan.occupied_truck_next[10].step)
+        self.assertIn('FUEL / CAPACITY', plan.occupied_truck_next[10].status)
+        plan = _plan([owner, candidate], trucks=(_truck(status='unavailable_oos'),))
+        self.assertIsNone(plan.occupied_truck_next[10].step)
+        self.assertIn('CURRENT WORK', plan.occupied_truck_next[10].status)
+
+    def test_competing_next_jobs_do_not_double_book_missions_or_fuelers(self):
+        owners = [_row(200, assignment=self.commitment(fueler=1, truck=10)),
+                  _row(201, assignment=self.commitment(fueler=2, truck=20))]
+        candidates = [_row(100), _row(101)]
+        plan = _plan([*candidates, *owners], trucks=(_truck(10), _truck(20)),
+                     fuelers=(_fueler(1), _fueler(2)))
+        next_steps = [item.step for item in plan.occupied_truck_next.values() if item.step]
+        self.assertEqual(len(next_steps), 2)
+        self.assertEqual({step.mission_id for step in next_steps}, {100, 101})
+        self.assertEqual({step.fueler_id for step in next_steps}, {1, 2})
+        self.assertEqual({step.truck_id for step in next_steps}, {10, 20})
+        self.assertFalse(plan.steps)
+
+    def test_released_truck_uses_normal_actionable_plan_instead_of_forecast(self):
+        owner = _row(200, assignment=self.commitment())
+        owner['fuel_work_state'] = SimpleNamespace(off_at_utc=NOW-timedelta(minutes=5),
+                                                   ended_early_at_utc=None)
+        plan = _plan([owner, _row(100)])
+        self.assertEqual(plan.occupied_truck_next, {})
+        self.assertEqual(plan.steps[0].mission_id, 100)
+        self.assertTrue(plan.steps[0].automatic_eligible)
+
+    def test_idle_truck_card_uses_plan_but_pends_unknown_timing(self):
+        from app.services.neoscorpion import _attach_spear_plan
+
+        row = _row(100)
+        visual = {"truck_id": 10, "status": "available"}
+        _attach_spear_plan([row], [visual], _plan([row]))
+        self.assertEqual(visual["spear_recommendation"].mission_id, 100)
+        self.assertFalse(visual["spear_advisory_only"])
+        row["mission"].planned_datetime_utc = None
+        _attach_spear_plan([row], [visual], _plan([row]))
+        self.assertIsNone(visual["spear_recommendation"])
+        self.assertIn("PENDING · MISSION DATA", visual["spear_next_status"])
+
     def test_recorded_release_allows_reuse_without_re_reserving_finished_work(self):
         for boundary in ('off','ended_early','complete','fob'):
             with self.subTest(boundary=boundary):
@@ -312,6 +387,28 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         self.assertEqual(context["spear_plan"].steps[0].fueler_id, fueler.id)
         self.assertEqual(context["spear_plan"].token, plan.token)
         self.assertEqual(plan.steps[0].fueler_name, fueler.display_name)
+
+    def test_occupied_next_card_uses_nickname_without_changing_canonical_forecast(self):
+        from app.services.neoscorpion import _apply_operational_fueler_names
+
+        rows = [_row(200, assignment=self.commitment()), _row(100)]
+        plan = _plan(rows)
+        fueler = _fueler()
+        visual = {"truck_id": 10, "status": "available"}
+        context = {
+            "nightly_fuelers": [{"user": fueler}],
+            "eligible_nightly_fuelers": [],
+            "nightly_assignment_fuelers": [fueler],
+            "rows": rows,
+            "truck_visuals": [visual],
+            "spear_plan": plan,
+        }
+        _apply_operational_fueler_names(context, {fueler.id: "Ace"})
+        self.assertEqual(visual["spear_recommendation"].fueler_name, "Ace")
+        self.assertEqual(visual["spear_parking_position"], "C04")
+        self.assertTrue(visual["spear_advisory_only"])
+        self.assertEqual(plan.occupied_truck_next[10].step.fueler_name, fueler.display_name)
+        self.assertEqual(context["spear_plan"].token, plan.token)
 
     def test_compact_dispatch_status_prioritizes_risk_over_automation(self):
         plan = SpearPlan((), {}, {}, 0, 0, 0, 0, "", "token")

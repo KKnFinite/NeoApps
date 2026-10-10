@@ -20,6 +20,6 @@
 <span>TOP OFF · TRUCK {{ spear.truck_number }}</span>
 {% else %}
 <span>FLIGHT {{ spear.flight_number }} · {% if parking %}PARKING {{ parking }}{% else %}RAMP {{ spear.ramp|upper }}{% endif %}</span>
-<small>TRUCK {{ spear.truck_number }} · FUELER {{ spear.fueler_name }}{% if spear.risk in ['AT RISK', 'LATE'] %} · <span class="neoscorpion-spear-severity is-{{ spear.risk|lower|replace(' ', '-') }}">{{ spear.risk }}</span>{% endif %}{% if spear.requires_resource_release %} · AFTER RELEASE{% endif %}</small>
+<small>TRUCK {{ spear.truck_number }} · FUELER {{ spear.fueler_name }}{% if spear.risk %} · <span class="neoscorpion-spear-severity is-{{ spear.risk|lower|replace(' ', '-') }}">{{ spear.risk }}</span>{% endif %}{% if spear.requires_resource_release %} · AFTER RELEASE{% endif %}</small>
 {% endif %}
 {%- endmacro %}
