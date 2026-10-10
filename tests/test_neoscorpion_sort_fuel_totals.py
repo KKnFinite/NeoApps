@@ -9,7 +9,8 @@ from sqlalchemy import event as sql_event
 
 from app.extensions import db
 from app.models import (NeoScorpionFuelCycleHistory, NeoScorpionFuelingEvent,
-                        NeoScorpionFuelTankState, NeoScorpionFuelWorkState, SortDateOperation)
+                        NeoScorpionFuelTankState, NeoScorpionFuelWorkState,
+                        NeoScorpionSettings, SortDateOperation)
 from app.services.neoscorpion import (
     _manual_fuel_dispatch_context, _sort_fuel_totals, fuel_dispatch_context, fuel_report_context,
 )
@@ -24,30 +25,42 @@ class SortFuelTotalsAggregationTest(unittest.TestCase):
         second = {"mission": SimpleNamespace(id=2), "estimated_fuel_gallons": 2000,
                   "required_fuel_lbs": 32_100}
         events = [SimpleNamespace(id=index, transfer_fuel_gallons=500) for index in (1, 2)]
-        totals = _sort_fuel_totals([first, first, second], [*events, events[0]])
+        totals = _sort_fuel_totals([first, first, second], [*events, events[0]], 6.7)
         self.assertEqual(totals["estimated"]["display"], "3,000")
         self.assertEqual(totals["transfer"]["display"], "1,000")
-        self.assertEqual(totals["required"]["display"], "57.5")
-        self.assertEqual([totals[key]["unit"] for key in totals], ["GAL", "GAL", "K LBS"])
+        self.assertEqual(totals["required"]["value"], 8582)
+        self.assertEqual(totals["required"]["display"], "8,582")
+        self.assertEqual([totals[key]["unit"] for key in totals], ["GAL", "GAL", "GAL"])
 
     def test_unknown_zero_partial_and_empty_are_distinct(self):
         def row(identifier, value):
             return {"mission": SimpleNamespace(id=identifier), "estimated_fuel_gallons": value,
                     "required_fuel_lbs": value}
         unknown = _sort_fuel_totals([row(1, None)],
-                                   [SimpleNamespace(id=1, transfer_fuel_gallons=None)])
+                                   [SimpleNamespace(id=1, transfer_fuel_gallons=None)], 6.7)
         self.assertTrue(all(stat["value"] is None and stat["display"] == "—"
                             and stat["incomplete"] for stat in unknown.values()))
-        zero = _sort_fuel_totals([row(1, 0)], [SimpleNamespace(id=1, transfer_fuel_gallons=0)])
+        zero = _sort_fuel_totals([row(1, 0)], [SimpleNamespace(id=1, transfer_fuel_gallons=0)], 6.7)
         self.assertTrue(all(stat["value"] == 0 and not stat["incomplete"] for stat in zero.values()))
         partial = _sort_fuel_totals([row(1, 0), row(2, None)],
                                    [SimpleNamespace(id=1, transfer_fuel_gallons=1200),
-                                    SimpleNamespace(id=2, transfer_fuel_gallons=None)])
+                                    SimpleNamespace(id=2, transfer_fuel_gallons=None)], 6.7)
         self.assertEqual(partial["transfer"]["display"], "1,200*")
         self.assertEqual(partial["estimated"]["display"], "0*")
         self.assertIn("Known subtotal", partial["required"]["title"])
         self.assertTrue(all(stat["value"] == 0 and not stat["incomplete"]
-                            for stat in _sort_fuel_totals([], []).values()))
+                            for stat in _sort_fuel_totals([], [], 6.7).values()))
+
+    def test_missing_zero_and_invalid_density_never_mislabel_pounds_as_gallons(self):
+        row = {"mission": SimpleNamespace(id=1), "estimated_fuel_gallons": 100,
+               "required_fuel_lbs": 6700}
+        for density in (None, 0, -1, "bad"):
+            required = _sort_fuel_totals([row], [], density)["required"]
+            self.assertIsNone(required["value"])
+            self.assertEqual((required["display"], required["unit"]), ("—", "GAL"))
+            self.assertTrue(required["incomplete"])
+        self.assertEqual(_sort_fuel_totals([row], [], 6.7)["required"]["value"], 1000)
+        self.assertEqual(_sort_fuel_totals([row], [], 5.0)["required"]["value"], 1340)
 
 
 class SortFuelTotalsIntegrationTest(unittest.TestCase):
@@ -101,7 +114,7 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
         dispatch = fuel_dispatch_context(self.gateway)
         totals = dispatch["sort_fuel_totals"]
         self.assertEqual(totals["estimated"]["value"], 4000)
-        self.assertEqual(totals["required"]["value"], 57_500)
+        self.assertEqual(totals["required"]["value"], 8582)
         self.assertEqual(totals["transfer"]["value"], 3300)
         report = fuel_report_context(self.gateway)
         self.assertEqual(report["sort_fuel_totals"], totals)
@@ -114,7 +127,7 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
         text = "".join(page.extract_text() for page in pdf.pages)
         self.assertIn("TOTAL EST FUEL: 4,000 GAL", text)
         self.assertIn("TOTAL T/F: 3,300 GAL", text)
-        self.assertIn("TOTAL REQUIRED FUEL: 57.5 K LBS", text)
+        self.assertIn("TOTAL REQUIRED FUEL: 8,582 GAL", text)
 
     def test_missing_current_load_and_unclosed_assignment_do_not_become_zero_or_event(self):
         mission = self.fixture._mission("UPS900", "N490UP", None, 1)
@@ -132,6 +145,22 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
             self.assertEqual(html.count('data-total-incomplete'), 3)
             self.assertIn("— GAL", html)
         self.assertTrue(self.fixture.client.get("/neoscorpion/reports/fuel?format=pdf").data.startswith(b"%PDF-"))
+
+    def test_configured_density_updates_dispatch_report_and_pdf_without_changing_load_pounds(self):
+        mission = self.fixture._mission("UPS900", "N490UP", 25_400, 1)
+        db.session.add(NeoScorpionSettings(
+            gateway_id=self.gateway.id, fuel_density_lbs_per_gallon=5.0,
+        ))
+        db.session.commit()
+        dispatch = fuel_dispatch_context(self.gateway)["sort_fuel_totals"]["required"]
+        report = fuel_report_context(self.gateway)
+        self.assertEqual((dispatch["value"], dispatch["display"], dispatch["unit"]),
+                         (5080, "5,080", "GAL"))
+        self.assertEqual(report["sort_fuel_totals"]["required"], dispatch)
+        self.assertIn("TOTAL REQUIRED FUEL: 5,080 GAL",
+                      "".join(page.extract_text() for page in
+                              PdfReader(BytesIO(fuel_report_pdf(report).getvalue())).pages))
+        self.assertEqual(mission.planned_fuel_load, 25_400)
 
     def test_report_matches_measured_remaining_zero_and_current_mission_scope(self):
         mission = self.fixture._mission("UPS901", "N491UP", 25_400, 1)
@@ -154,7 +183,7 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
                 tank.remaining_lbs = lbs
             db.session.commit()
             totals = fuel_dispatch_context(self.gateway)["sort_fuel_totals"]
-            self.assertEqual(totals["required"]["value"], 25_400)
+            self.assertEqual(totals["required"]["value"], 3791)
             self.assertEqual(totals["transfer"]["value"], 0)
             self.assertEqual(fuel_report_context(self.gateway)["sort_fuel_totals"], totals)
             if readings[0] is None:
@@ -181,7 +210,7 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
         changed = self.fixture.client.get("/neoscorpion/fuel-dispatch/live-panel")
         self.assertIn(b"3,000 GAL", changed.data)
         self.assertIn(b"1,500 GAL", changed.data)
-        self.assertIn(b"32.1 K LBS", changed.data)
+        self.assertIn(b"4,791 GAL", changed.data)
 
     def test_dispatch_reuses_single_cycle_event_query_and_report_reads_are_batched(self):
         for index in range(2):

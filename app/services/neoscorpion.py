@@ -85,6 +85,7 @@ from app.services.neoscorpion_dispatch_planning import (
     recommend_assignment_resources,
 )
 from app.services.time_display import format_local_hhmm
+from app.services.gateway_matrix import gateway_timezone
 
 
 DEFAULT_FUEL_DENSITY_LBS_PER_GALLON = 6.7
@@ -756,6 +757,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     truck_visuals = _dispatch_truck_visuals(
         asset_context["nightly_trucks"],
         rows,
+        timezone_name=gateway_timezone(gateway),
     )
     _attach_dispatch_mission_truck_visuals(
         rows,
@@ -764,7 +766,7 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     context = {
         "operation": operation,
         "rows": rows,
-        "sort_fuel_totals": _sort_fuel_totals(rows, fueling_events),
+        "sort_fuel_totals": _sort_fuel_totals(rows, fueling_events, fuel_density),
         "truck_visuals": truck_visuals,
         "fuelers": fuelers,
         "trucks": trucks,
@@ -1234,7 +1236,7 @@ def history_context(gateway):
     return {"operation": operation, "completed_rows": completed}
 
 
-def _sort_fuel_totals(rows, events):
+def _sort_fuel_totals(rows, events, fuel_density_lbs_per_gallon):
     """Current canonical departure loads and every physical sort event once."""
     missions = {row["mission"].id: row for row in rows}
     physical_events = {event.id: event for event in events}
@@ -1244,8 +1246,7 @@ def _sort_fuel_totals(rows, events):
         known = [value for value in values if value is not None]
         missing = len(values) - len(known)
         value = sum(known) if known or not values else None
-        display = (format_dispatch_thousands(value) if unit == "K LBS"
-                   else f"{value:,}") if value is not None else "—"
+        display = f"{value:,}" if value is not None else "—"
         if missing and known:
             display += "*"
         title = (f"{'Known subtotal; ' if known else ''}{missing} {item} missing."
@@ -1253,13 +1254,31 @@ def _sort_fuel_totals(rows, events):
         return {"value": value, "display": display, "unit": unit,
                 "incomplete": bool(missing), "title": title}
 
+    required_lbs = total((row["required_fuel_lbs"] for row in missions.values()),
+                         "LBS", "required fuel values")
+    invalid_density = False
+    try:
+        required_gallons = lbs_to_gallons(
+            required_lbs["value"], fuel_density_lbs_per_gallon,
+        )
+    except (InvalidOperation, TypeError, ValueError):
+        required_gallons = None
+        invalid_density = True
+        required_lbs["incomplete"] = True
+        required_lbs["title"] = "Configure a valid fuel density to show required gallons."
+    required_lbs.update(
+        value=required_gallons,
+        display=(f"{required_gallons:,}" + ("*" if required_lbs["incomplete"] and
+                not invalid_density else "")
+                 if required_gallons is not None else "—"),
+        unit="GAL",
+    )
     return {
         "estimated": total((row["estimated_fuel_gallons"] for row in missions.values()),
                            "GAL", "estimated fuel values"),
         "transfer": total((event.transfer_fuel_gallons for event in physical_events.values()),
                           "GAL", "recorded transfer values"),
-        "required": total((row["required_fuel_lbs"] for row in missions.values()),
-                          "K LBS", "required fuel values"),
+        "required": required_lbs,
     }
 
 
@@ -1277,9 +1296,8 @@ def _estimated_dispatch_fuel(mission, assignment, tail_fuel_state, remaining_lbs
     )
 
 
-def _fuel_report_current_rows(gateway, operation):
+def _fuel_report_current_rows(gateway, operation, settings):
     """Load only canonical estimate inputs in batches, without building a board."""
-    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     assignments = _assignments_by_mission(operation)
     work_states = _fuel_work_states_by_assignment_tail(assignments.values())
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
@@ -1381,8 +1399,14 @@ def fuel_report_context(gateway):
                     ),
                 }
             )
+    settings = (NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
+                if operation else None)
+    density = (settings.fuel_density_lbs_per_gallon if settings
+               else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON)
     totals = _sort_fuel_totals(
-        _fuel_report_current_rows(gateway, operation) if operation else [], events)
+        _fuel_report_current_rows(gateway, operation, settings) if operation else [],
+        events, density,
+    )
     return {
         "operation": operation,
         "sort_fuel_totals": totals,
@@ -6084,7 +6108,7 @@ def _hanzo_planning_status(row):
     return ""
 
 
-def _dispatch_truck_visuals(nightly_trucks, rows):
+def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
     """Decorate existing dispatch projections for the read-only truck visual aid."""
     projections_by_truck_id = {}
     for row in rows:
@@ -6113,6 +6137,10 @@ def _dispatch_truck_visuals(nightly_trucks, rows):
                 "truck_number": truck.truck_number,
                 "status": selection.status,
                 "status_label": _dispatch_truck_status_label(selection.status),
+                "top_off_sent_time": (
+                    format_local_hhmm(selection.top_off_sent_at_utc, timezone_name)
+                    if selection.status == "topping_off" else ""
+                ),
                 "capacity_gallons": truck.capacity_gallons,
                 "capacity_display": _gallons_display(truck.capacity_gallons),
                 "current_gallons": current_gallons,

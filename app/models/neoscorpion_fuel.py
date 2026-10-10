@@ -223,6 +223,7 @@ class NeoScorpionSortTruck(db.Model):
     status = db.Column(db.String(32), nullable=False)
     starting_gallons = db.Column(db.Integer, nullable=True)
     current_gallons = db.Column(db.Integer, nullable=True)
+    top_off_sent_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,

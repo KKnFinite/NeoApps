@@ -29,6 +29,7 @@ from app.services.neoscorpion_assets import (
     update_nightly_truck,
 )
 from app.services.neoscorpion_fueler_names import fueler_nicknames, operational_fueler_name
+from app.services.neoscorpion import _dispatch_truck_visuals
 
 
 class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
@@ -313,13 +314,23 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
                 current_gallons=1200,
             )
         )
+        sent_at = datetime(2026, 8, 18, 3, 42)
         topping = self._commit(
-            mark_nightly_truck_topping_off(self.operation_a, self.truck)
+            mark_nightly_truck_topping_off(self.operation_a, self.truck, now_utc=sent_at)
         )
         self.assertEqual(topping.revision, 2)
         duplicate = mark_nightly_truck_topping_off(self.operation_a, self.truck)
         self.assertFalse(duplicate.changed)
         self.assertEqual(duplicate.revision, 2)
+        db.session.expire_all()
+        nightly_truck = NeoScorpionSortTruck.query.filter_by(
+            sort_date_operation_id=self.operation_a.id, fuel_truck_id=self.truck.id,
+        ).one()
+        self.assertEqual(nightly_truck.top_off_sent_at_utc, sent_at)
+        self.assertEqual(_dispatch_truck_visuals(
+            [{"truck": self.truck, "selection": nightly_truck}], [],
+            timezone_name="America/Chicago",
+        )[0]["top_off_sent_time"], "22:42")
 
         with self.assertRaisesRegex(ValueError, "Top Off Complete"):
             update_nightly_truck(
@@ -349,6 +360,7 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
         self.assertEqual(nightly_truck.status, "available")
         self.assertEqual(nightly_truck.starting_gallons, 1800)
         self.assertEqual(nightly_truck.current_gallons, 1900)
+        self.assertEqual(nightly_truck.top_off_sent_at_utc, sent_at)
         self.assertEqual(self.truck.remaining_fuel_gallons, legacy_remaining)
         self.assertEqual(self.truck.is_out_of_service, legacy_oos)
 
@@ -359,6 +371,19 @@ class NeoScorpionNightlyAssetServicesTest(unittest.TestCase):
                 1800,
             )
         self.assertEqual(self._state(self.operation_a).revision, 3)
+        later_sent_at = datetime(2026, 8, 19, 15, 9)
+        self._commit(mark_nightly_truck_topping_off(
+            self.operation_a, self.truck, now_utc=later_sent_at,
+        ))
+        db.session.expire_all()
+        nightly_truck = NeoScorpionSortTruck.query.filter_by(
+            sort_date_operation_id=self.operation_a.id, fuel_truck_id=self.truck.id,
+        ).one()
+        self.assertEqual(nightly_truck.top_off_sent_at_utc, later_sent_at)
+        self.assertEqual(_dispatch_truck_visuals(
+            [{"truck": self.truck, "selection": nightly_truck}], [],
+            timezone_name="America/Chicago",
+        )[0]["top_off_sent_time"], "10:09")
 
     def test_top_off_blocks_active_and_future_truck_assignments(self):
         self._commit(

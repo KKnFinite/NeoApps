@@ -554,6 +554,7 @@ def mark_nightly_truck_topping_off(
         raise ValueError("Truck has a future assigned job.")
 
     nightly_truck.status = "topping_off"
+    nightly_truck.top_off_sent_at_utc = now_utc or datetime.utcnow()
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)

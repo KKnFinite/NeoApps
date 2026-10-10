@@ -90,7 +90,7 @@ class ApuTruckProjectionsBrowserTest(unittest.TestCase):
                     expect(dispatch.locator(".neoscorpion-dispatch-transfer-estimate small")).to_have_text(
                         ["EST 2,000 gal", "EST 2,000 gal"])
                     expect(dispatch.locator('[data-sort-fuel-total="estimated"] strong')).to_have_text("4,000 GAL")
-                    expect(dispatch.locator('[data-sort-fuel-total="required"] strong')).to_have_text("50.8 K LBS")
+                    expect(dispatch.locator('[data-sort-fuel-total="required"] strong')).to_have_text("7,582 GAL")
 
                 check_projection(0)
                 fueler = context.new_page()

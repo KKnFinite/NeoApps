@@ -93,7 +93,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                     for key, value in zip(("estimated", "transfer", "required"), values):
                         expect(scope.locator(f'[data-sort-fuel-total="{key}"] strong')).to_have_text(value,
                                                                                                       timeout=20000)
-                check_totals(performance, ("5,000 GAL", "2,200 GAL", "57.5 K LBS"))
+                check_totals(performance, ("5,000 GAL", "2,200 GAL", "8,582 GAL"))
                 expect(performance.locator("[data-performance-fueler-id]")).to_have_count(1)
                 expect(performance.locator("[data-performance-truck-id]")).to_have_count(1)
                 self.assertTrue(performance.evaluate("""panel => {
@@ -101,7 +101,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                     const totals = panel.querySelector('.neoscorpion-sort-fuel-totals').getBoundingClientRect();
                     return title.right <= totals.left && Math.abs(title.top - totals.top) < 20;
                 }"""), "Desktop title and totals must share a header row")
-                self.assertIn("20261008-dispatch-check-excess-v1",
+                self.assertIn("20261010-dispatch-totals-status-v1",
                               page.locator('link[href*="26-neoscorpion.css"]').get_attribute("href"))
                 for width in (1440, 1024, 390, 375):
                     page.set_viewport_size({"width": width, "height": 900})
@@ -122,13 +122,13 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                     state = NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation_id).one()
                     record_nightly_operational_change(state, operation_id)
                     db.session.commit()
-                check_totals(performance, ("6,000 GAL", "3,000 GAL", "64.2 K LBS"))
+                check_totals(performance, ("6,000 GAL", "3,000 GAL", "9,582 GAL"))
                 self.assertTrue(any("live-panel" in url for _, url in requests))
                 self.assertEqual(sum(url == Fixture.origin + "/neoscorpion/fuel-dispatch"
                                      for _, url in requests), 1)
                 self.assertFalse(errors)
                 Fixture().ready(page, "/neoscorpion/reports/fuel")
-                check_totals(page, ("6,000 GAL", "3,000 GAL", "64.2 K LBS"))
+                check_totals(page, ("6,000 GAL", "3,000 GAL", "9,582 GAL"))
                 expect(page.locator("[data-fueling-event-id]")).to_have_count(4)
                 self.assertTrue(page.locator(".neoscorpion-report-summary").evaluate(
                     "el => el.getBoundingClientRect().right <= window.innerWidth"))
@@ -138,7 +138,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                 (Fixture.evidence / "sort-fuel-report.pdf").write_bytes(pdf_bytes)
                 pdf = PdfReader(BytesIO(pdf_bytes))
                 text = "".join(p.extract_text() for p in pdf.pages)
-                for value in ("TOTAL EST FUEL: 6,000 GAL", "TOTAL T/F: 3,000 GAL", "TOTAL REQUIRED FUEL: 64.2 K LBS"):
+                for value in ("TOTAL EST FUEL: 6,000 GAL", "TOTAL T/F: 3,000 GAL", "TOTAL REQUIRED FUEL: 9,582 GAL"):
                     self.assertIn(value, text)
                 page.screenshot(path=str(Fixture.evidence / "sort-fuel-report-mobile.png"), full_page=True)
         finally:

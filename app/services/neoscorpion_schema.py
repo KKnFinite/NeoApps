@@ -54,6 +54,9 @@ NEOSCORPION_MODEL_TABLES = (
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
+    "neoscorpion_sort_trucks": {
+        "top_off_sent_at_utc": "TIMESTAMP",
+    },
     "neoscorpion_settings": {
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",

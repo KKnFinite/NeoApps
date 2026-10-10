@@ -10,6 +10,9 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 }
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
+    "neoscorpion_sort_trucks": {
+        "top_off_sent_at_utc": "DATETIME",
+    },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
         "cut_discharge": "BOOLEAN NOT NULL DEFAULT FALSE",
@@ -266,6 +269,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
+    "neoscorpion_sort_trucks": {
+        "top_off_sent_at_utc": "TIMESTAMP",
+    },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
         "cut_discharge": "BOOLEAN NOT NULL DEFAULT FALSE",

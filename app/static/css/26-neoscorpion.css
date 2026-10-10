@@ -269,6 +269,30 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-spear-detail :is(strong, span, small, summary, li, .neoscorpion-spear-readiness-reasons, .neoscorpion-spear-why, .neoscorpion-spear-why > div) {
     font-size: var(--dispatch-font-small);
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-status-cell .neoscorpion-fuel-status {
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-inline: auto;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-status-cell {
+    padding-inline: 3px;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-status-cell .neoscorpion-fuel-status-chip {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    width: min(100%, 68px);
+    height: 25px;
+    min-height: 25px;
+    padding: 3px 2px;
+    text-align: center;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-status-cell [data-fuel-status-secondary] {
+    display: block;
+    max-width: 100%;
+    text-align: center;
+}
 .neoscorpion-dispatch-spear-detail .neoscorpion-spear-why ol { margin: 2px 0 0 16px; padding: 0; }
 .neoscorpion-dispatch-spear-detail .neoscorpion-teach-spear { width: 100%; margin-top: 6px; }
 .neoscorpion-dispatch-combobox { position:relative; width:100%; min-width:0; }
@@ -825,6 +849,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-dispatch-performance-row strong { min-width: 0; overflow-wrap: anywhere; }
 .neoscorpion-dispatch-performance-row span { color: #91dfb4; white-space: nowrap; font-weight: 900; }
 .neoscorpion-dispatch-performance-empty { margin: 0; color: #8fb4c9; font-size: .68rem; }
+.neoscorpion-truck-top-off-sent { display: block; margin: 2px 0; color: #ddc890; font-size: .64rem; font-weight: 800; }
 @media (max-width: 899px) {
     .neoscorpion-dispatch-insights { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1065,6 +1090,13 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         letter-spacing: -.2px;
     }
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
+    .neoscorpion-dispatch-status-cell .neoscorpion-fuel-status-chip {
+        width: min(100%, 68px);
+        height: 25px;
+        min-height: 25px;
+        padding: 3px 1px;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
     .neoscorpion-fuel-status :is(.neoscorpion-fuel-status-warning, .neoscorpion-fuel-status-off) {
         max-width: 100%;
         font-size: .51rem;
@@ -1119,6 +1151,10 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         min-width: 0;
         gap: 5px;
         line-height: 1.08;
+    }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-top-off-sent {
+        grid-column: 1 / -1;
+        margin: 0;
     }
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > header > strong {
         min-width: 0;

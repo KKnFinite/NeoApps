@@ -108,17 +108,21 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                 expect(status('risk')).not_to_contain_text('TIMING UNKNOWN')
                 expect(status('check')).not_to_contain_text('FOB CHECK')
                 expect(status('check').get_by_text('CALL DISPATCH', exact=True)).to_be_visible()
-                self.assertIn('20261009-dispatch-compact-trucks-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
+                self.assertIn('20261010-dispatch-totals-status-v1',page.locator('link[href*="26-neoscorpion.css"]').get_attribute('href'))
                 self.assertIn('20261009-fuel-status-fob-v1',page.locator('script[src*="neoscorpion_fuel_status.js"]').get_attribute('src'))
 
                 for width in (1440,390):
                     page.set_viewport_size({"width":width,"height":950})
+                    action_size = row('pending').locator('.neoscorpion-dispatch-assignment-action').evaluate(
+                        'el => {const r=el.getBoundingClientRect();return [r.width,r.height]}') if width == 1440 else None
+                    pill_sizes = []
                     visible_headers = page.locator('.neoscorpion-dispatch-table--compact thead th').evaluate_all(
                         '(cells) => cells.filter(c => getComputedStyle(c).display !== "none")'
                         '.map(c => c.innerText.trim().replace(/\\s+/g, " "))'
                     )
                     if width == 390:
-                        self.assertEqual(visible_headers, ["Tail", "Dest", "ETD", "Est Gal", "Status"])
+                        self.assertEqual([label.upper() for label in visible_headers],
+                                         ["TAIL", "DEST", "ETD", "EST GAL", "STATUS"])
                         for mission_row in page.locator('.neoscorpion-dispatch-primary-row').all():
                             visible_cells = mission_row.locator(':scope > td').evaluate_all(
                                 '(cells) => cells.filter(c => getComputedStyle(c).display !== "none").length'
@@ -146,9 +150,16 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                     for stage in colors:
                         self.assertLessEqual(status(stage).locator('[data-fuel-status-secondary]').count(),1)
                         chip=status(stage).locator('.neoscorpion-fuel-status-chip')
+                        geometry = chip.evaluate('''el => {
+                            const pill=el.getBoundingClientRect();
+                            const cell=el.closest('td').getBoundingClientRect();
+                            return [pill.width,pill.height,Math.abs((pill.left+pill.right-cell.left-cell.right)/2)];
+                        }''')
+                        pill_sizes.append(geometry[:2])
+                        self.assertLessEqual(geometry[2], 1, (stage,width,geometry))
                         self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).fontSize)'),12 if width==1440 else 10)
                         self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).fontWeight)'),800)
-                        self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).paddingTop)'),5)
+                        self.assertGreaterEqual(chip.evaluate('el=>parseFloat(getComputedStyle(el).paddingTop)'),3)
                         self.assertEqual(chip.evaluate('el=>getComputedStyle(el).whiteSpace'),'nowrap')
                         for secondary in status(stage).locator('[data-fuel-status-secondary]').all():
                             self.assertEqual(secondary.evaluate('el=>getComputedStyle(el).whiteSpace'),'nowrap')
@@ -158,6 +169,11 @@ class FuelingStatusBrowserTest(unittest.TestCase):
                             (stage,width,status(stage).evaluate('el=>({width:el.clientWidth,scroll:el.scrollWidth,children:[...el.children].map(c=>({text:c.textContent,width:c.clientWidth,scroll:c.scrollWidth,font:getComputedStyle(c).font}))})')))
                         self.assertTrue(chip.evaluate('el=>el.scrollWidth <= el.clientWidth+1'),
                             (stage,width,chip.evaluate('el=>({width:el.clientWidth,scroll:el.scrollWidth,css:getComputedStyle(el).font})')))
+                    self.assertLessEqual(max(size[0] for size in pill_sizes) - min(size[0] for size in pill_sizes), 1)
+                    self.assertLessEqual(max(size[1] for size in pill_sizes) - min(size[1] for size in pill_sizes), 1)
+                    if action_size:
+                        self.assertLessEqual(abs(pill_sizes[0][0] - action_size[0]), 1)
+                        self.assertLessEqual(abs(pill_sizes[0][1] - action_size[1]), 1)
                     if width == 390:
                         status('check').scroll_into_view_if_needed()
                         # The existing table scrolls locally; reveal STATUS on

@@ -1,7 +1,7 @@
 import unittest
 from datetime import date
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from app import create_app
@@ -83,6 +83,28 @@ class NeoScorpionNightlyAssetSchemaTest(unittest.TestCase):
                 "neoscorpion_fueler_nicknames",
             }.issubset(table_names)
         )
+
+    def test_existing_truck_rows_gain_optional_sent_timestamp_idempotently(self):
+        operation = self._operation()
+        db.session.add(NeoScorpionSortTruck(
+            sort_date_operation_id=operation.id, fuel_truck_id=self.truck.id,
+            status="topping_off", starting_gallons=1000, current_gallons=900,
+        ))
+        db.session.commit()
+        db.session.execute(text(
+            "ALTER TABLE neoscorpion_sort_trucks DROP COLUMN top_off_sent_at_utc"
+        ))
+        db.session.commit()
+        sync_local_sqlite_schema(self.app)
+        sync_local_sqlite_schema(self.app)
+        self.assertIn("top_off_sent_at_utc", {
+            column["name"] for column in inspect(db.engine).get_columns("neoscorpion_sort_trucks")
+        })
+        selection = NeoScorpionSortTruck.query.filter_by(
+            sort_date_operation_id=operation.id, fuel_truck_id=self.truck.id,
+        ).one()
+        self.assertEqual((selection.status, selection.current_gallons,
+                          selection.top_off_sent_at_utc), ("topping_off", 900, None))
 
     def test_sort_asset_state_constraints_and_defaults(self):
         operations = [self._operation(index) for index in range(6)]
