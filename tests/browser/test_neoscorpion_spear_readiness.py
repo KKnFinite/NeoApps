@@ -94,15 +94,48 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                 page.on("request", lambda request: requests.append((request.method, request.url)))
                 Fixture().ready(page, "/neoscorpion/fuel-dispatch")
                 css = page.locator('link[href*="26-neoscorpion.css"]')
-                self.assertIn("scorpion=20261009-spear-size-risk-v1", css.get_attribute("href"))
+                self.assertIn("scorpion=20261010-spear-mission-small-v1", css.get_attribute("href"))
                 rows = [page.locator(f'.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="{mid}"]')
                         for mid in mission_ids]
+
+                def assert_mission_spear_sizes(row):
+                    sizes = row.evaluate("""row => {
+                        const table = row.closest('table');
+                        const expected = parseFloat(getComputedStyle(table).getPropertyValue('--dispatch-font-small'))
+                            * parseFloat(getComputedStyle(document.documentElement).fontSize);
+                        const detail = row.nextElementSibling.querySelector('.neoscorpion-dispatch-spear-detail');
+                        const elements = [row.querySelector('[data-spear-tail-indicator]'),
+                            ...row.querySelectorAll('[data-spear-tail-indicator] .neoscorpion-spear-severity'),
+                            ...row.querySelectorAll('.neoscorpion-dispatch-recommendation'),
+                            ...detail.querySelectorAll('strong, span, small, summary, li, .neoscorpion-spear-why')];
+                        return {expected, actual: elements.map(el => ({text: el.textContent.trim(),
+                            size: parseFloat(getComputedStyle(el).fontSize)}))};
+                    }""")
+                    self.assertTrue(sizes["actual"], sizes)
+                    for item in sizes["actual"]:
+                        self.assertAlmostEqual(item["size"], sizes["expected"], delta=0.15, msg=str(sizes))
+
+                def assert_mission_spear_fit(row):
+                    toggle = row.locator(".neoscorpion-dispatch-details-toggle")
+                    if not toggle.is_visible():  # Five-column mobile view omits the details column.
+                        return
+                    toggle.click()
+                    detail = row.locator("xpath=following-sibling::tr[1]").locator(".neoscorpion-dispatch-spear-detail")
+                    self.assertTrue(detail.evaluate("""section =>
+                        section.scrollWidth <= section.clientWidth + 1 &&
+                        [...section.querySelectorAll('strong, span, small, summary')].every(el =>
+                            el.scrollWidth <= el.clientWidth + 1)
+                    """))
+                    toggle.click()
+
                 for row, parking in zip(rows[:2], ("B06", "D07")):
                     expect(row.locator(".is-ready")).to_have_text("SPEAR · READY")
                     expect(row.locator(".is-waiting")).to_have_count(0)
                     expect(row.locator(".neoscorpion-dispatch-etd-parking strong")).to_have_text(parking)
                     expect(row.locator("xpath=following-sibling::tr[1]")).to_contain_text("TIMING UNKNOWN")
                     expect(row.locator(".neoscorpion-dispatch-recommendation").first).to_contain_text("SPEAR")
+                    assert_mission_spear_sizes(row)
+                assert_mission_spear_fit(rows[0])
                 expect(rows[2].locator(".is-waiting")).to_have_text("SPEAR · WAITING")
                 page.screenshot(path=str(Fixture.evidence / "spear-waiting-desktop.png"), full_page=True)
 
@@ -121,6 +154,7 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                 expect(rows[2].locator(".is-ready")).to_have_text("SPEAR · READY", timeout=20000)
                 expect(rows[2].locator(".is-waiting")).to_have_count(0)
                 expect(rows[2].locator(".neoscorpion-dispatch-etd-parking strong")).to_have_text("E03")
+                assert_mission_spear_sizes(rows[2])
                 expect(page.locator("[data-spear-readiness]")).to_contain_text("3/3 MISSIONS READY")
                 page.screenshot(path=str(Fixture.evidence / "spear-ready-desktop.png"), full_page=True)
 
@@ -135,6 +169,9 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                     expect(row.locator(".is-unplanned")).to_have_text("SPEAR · NO TRUCK", timeout=20000)
                     expect(row.locator(".is-waiting")).to_have_count(0)
                 page.set_viewport_size({"width": 390, "height": 844})
+                for row in rows:
+                    assert_mission_spear_sizes(row)
+                assert_mission_spear_fit(rows[0])
                 page.screenshot(path=str(Fixture.evidence / "spear-resource-blocked-mobile.png"), full_page=True)
                 # Compact blockers stay on one line inside the existing tail cells.
                 for row in rows:
@@ -143,6 +180,12 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                         const box = badge.getBoundingClientRect();
                         return box.width <= cell.width && getComputedStyle(badge).whiteSpace === 'nowrap' && badge.scrollWidth <= badge.clientWidth+1;
                     }"""))
+
+                page.set_viewport_size({"width": 375, "height": 667})
+                for row in rows:
+                    assert_mission_spear_sizes(row)
+                    self.assertTrue(row.locator(".is-unplanned").evaluate("""badge =>
+                        badge.scrollWidth <= badge.clientWidth + 1"""))
 
                 with Fixture.app.app_context():
                     NeoScorpionSortFueler.query.filter_by(sort_date_operation_id=operation_id).delete()

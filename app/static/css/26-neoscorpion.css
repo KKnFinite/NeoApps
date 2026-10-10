@@ -200,7 +200,7 @@
     font-size: .75rem;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
-    color:#67c5f2; font:700 12px/1.1 NeoFontPlain,sans-serif; letter-spacing:-.3px;
+    color:#67c5f2; font-family:NeoFontPlain,sans-serif; font-weight:700; line-height:1.1; letter-spacing:-.3px;
 }
 .neoscorpion-spear-risk.is-at-risk > .neoscorpion-spear-severity,
 .neoscorpion-truck-spear .neoscorpion-spear-severity.is-at-risk { color:#f6e37a; }
@@ -264,7 +264,11 @@
 .neoscorpion-dispatch-detail-grid input,
 .neoscorpion-dispatch-detail-grid select { width: 100%; min-width: 0; }
 .neoscorpion-dispatch-detail-grid .action-button { min-height: 25px; margin-top: 4px; padding: 3px 5px; font-size: .57rem; }
-.neoscorpion-dispatch-spear-detail .neoscorpion-spear-why > div { display: grid; gap: 4px; margin-top: 6px; font-size: .63rem; }
+.neoscorpion-dispatch-spear-detail .neoscorpion-spear-why > div { display: grid; gap: 4px; margin-top: 6px; }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-spear-detail,
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-spear-detail :is(strong, span, small, summary, li, .neoscorpion-spear-readiness-reasons, .neoscorpion-spear-why, .neoscorpion-spear-why > div) {
+    font-size: var(--dispatch-font-small);
+}
 .neoscorpion-dispatch-spear-detail .neoscorpion-spear-why ol { margin: 2px 0 0 16px; padding: 0; }
 .neoscorpion-dispatch-spear-detail .neoscorpion-teach-spear { width: 100%; margin-top: 6px; }
 .neoscorpion-dispatch-combobox { position:relative; width:100%; min-width:0; }
@@ -291,7 +295,6 @@
 @media (max-width: 760px) {
     .neoscorpion-dispatch-detail-grid { grid-template-columns: 1fr; }
     .neoscorpion-dispatch-table--compact { min-width: 950px; }
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk { font-size:10.5px; }
 }
 
 /* Fuel Dispatch Board View is an operations board, not the normal page with

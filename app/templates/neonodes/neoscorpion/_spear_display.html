@@ -12,7 +12,7 @@
   {% else %}{% set text = 'UNAVAIL' %}{% endif %}
 {% elif row.spear_ready or row.spear_risk == 'COVERED' %}{% set text = 'READY' %}
 {% else %}{% set text = '—' %}{% endif %}
-<span class="neoscorpion-spear-risk is-{{ state }}" data-spear-tail-indicator><span>SPEAR · </span><span class="neoscorpion-spear-severity">{{ text }}</span></span>
+<span class="neoscorpion-spear-risk neoscorpion-dispatch-size-small is-{{ state }}" data-spear-tail-indicator><span>SPEAR · </span><span class="neoscorpion-spear-severity">{{ text }}</span></span>
 {%- endmacro %}
 
 {% macro spear_resources(spear, parking=none) -%}
