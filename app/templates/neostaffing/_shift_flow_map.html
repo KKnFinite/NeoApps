@@ -40,15 +40,15 @@
   </aside>
   <section class="shift-ballmat-roster" aria-labelledby="ballmat-roster-title">
     <h2 id="ballmat-roster-title">BALLMAT START <small><span data-ballmat-total-count>{{ roster.ballmat_count }}</span> employees · READ ONLY</small></h2>
-    <span hidden data-ballmat-side-count="east">{{ roster.ballmat_side_counts.east }}</span><span hidden data-ballmat-side-count="west">{{ roster.ballmat_side_counts.west }}</span>
-    <div class="shift-door-columns shift-ballmat-columns" data-roster-columns>
-      {% for column in roster.columns %}
-      <article class="shift-door-column shift-ballmat-column" data-roster-column="{{ loop.index0 }}" data-door-label="{{ column.label }}" data-ballmat-door="{{ column.id }}">
-        <header><strong>{{ column.label }}</strong><span data-roster-count>{{ column.ballmat_rows|length }}</span></header>
-        <div class="shift-ballmat-names" data-roster-people>
-          {% for entry in column.ballmat_rows %}<span class="shift-ballmat-person" data-ballmat-person="{{ entry.person.id }}" data-person-last="{{ entry.person.last_name.casefold() }}" data-person-first="{{ entry.person.first_name.casefold() }}">{{ entry.person.full_name }}</span>{% endfor %}
+    <div class="shift-ballmat-sides">
+      {% for side, label in [('west', 'WEST BALLMAT'), ('east', 'EAST BALLMAT')] %}
+      {% set rows = roster.ballmat_sides[side] %}
+      <article class="shift-ballmat-side" data-ballmat-side="{{ side }}">
+        <header><strong>{{ label }}</strong><span data-ballmat-side-count="{{ side }}">{{ rows|length }}</span></header>
+        <div class="shift-ballmat-names" data-ballmat-people>
+          {% for entry in rows %}<span class="shift-ballmat-person" data-ballmat-person="{{ entry.person.id }}" data-person-last="{{ entry.person.last_name.casefold() }}" data-person-first="{{ entry.person.first_name.casefold() }}">{{ entry.person.full_name }}</span>{% endfor %}
         </div>
-        <span class="shift-ballmat-empty" data-roster-empty{% if column.ballmat_rows %} hidden{% endif %}>—</span>
+        <span class="shift-ballmat-empty" data-ballmat-empty{% if rows %} hidden{% endif %}>—</span>
       </article>
       {% endfor %}
     </div>

@@ -3,7 +3,7 @@
     const root = document.querySelector('[data-shift-roster]');
     if (!root) return;
     const columns = [...root.querySelectorAll('[data-roster-column]')];
-    const doors = columns.slice(0, columns.length / 2);
+    const doors = columns;
     const mobile = window.matchMedia('(max-width: 700px)');
     const scroll = root.querySelector('[data-roster-scroll]');
     const paging = root.querySelector('[data-roster-paging]');
@@ -108,7 +108,7 @@
     };
     const refreshColumn = column => {
         const people = column.querySelector('[data-roster-people]');
-        const colorOrder = {'at-door':0, discharge:1, 'wave-1':2, 'wave-2':3, cleanup:4};
+        const colorOrder = {'at-door':0, 'wave-1':1, 'wave-2':2, discharge:3, cleanup:4};
         const colorRank = card => card.dataset.rosterPerson ? (colorOrder[card.dataset.flowColor] ?? 5) : 0;
         // Template keys use the same casefolding as the server's roster order.
         const compare = (a, b) => a === b ? 0 : a < b ? -1 : 1;
@@ -123,6 +123,18 @@
     };
     const adjustCount = (element, delta) => {
         if (element) element.textContent = String(Number(element.textContent) + delta);
+    };
+    const refreshBallmatSide = side => {
+        if (!side) return;
+        const people = side.querySelector('[data-ballmat-people]');
+        const compare = (a, b) => a === b ? 0 : a < b ? -1 : 1;
+        const sorted = [...people.children].sort((a, b) =>
+            compare(a.dataset.personLast.toLowerCase(), b.dataset.personLast.toLowerCase()) ||
+            compare(a.dataset.personFirst.toLowerCase(), b.dataset.personFirst.toLowerCase()) ||
+            Number(a.dataset.ballmatPerson) - Number(b.dataset.ballmatPerson));
+        people.append(...sorted);
+        side.querySelector('[data-ballmat-side-count]').textContent = String(sorted.length);
+        side.querySelector('[data-ballmat-empty]').hidden = sorted.length > 0;
     };
     const refreshNeeds = () => {
         if (!needsPeople) return;
@@ -271,19 +283,8 @@
         const fromRail = fromNeeds || fromUnassigned;
         const reason = fromNeeds && root.querySelector(`[data-roster-needs-reason="${card.dataset.rosterPerson}"]`);
         const ballmat = root.querySelector(`[data-ballmat-person="${card.dataset.rosterPerson}"]`);
-        const ballmatSource = ballmat?.closest('[data-ballmat-door]');
-        const ballmatTarget = (ballmat || (fromRail && card.dataset.ballmatStart === 'true')) && root.querySelector(`[data-ballmat-door="${door}"]`);
-        const newBallmat = fromRail && !ballmat && ballmatTarget ? document.createElement('span') : null;
-        if (newBallmat) {
-            newBallmat.className = 'shift-ballmat-person';
-            newBallmat.dataset.ballmatPerson = card.dataset.rosterPerson;
-            newBallmat.dataset.personLast = card.dataset.personLast;
-            newBallmat.dataset.personFirst = card.dataset.personFirst;
-            newBallmat.textContent = card.dataset.personName;
-        }
-        const marker = ballmat || newBallmat;
         // Retain exact positions as well as field state until accepted.
-        const nextCard = card.nextSibling, nextBallmat = ballmat?.nextSibling;
+        const nextCard = card.nextSibling;
         if (reason) reason.hidden = true;
         target.querySelector('[data-roster-people]').append(card);
         if (fromRail) {
@@ -291,12 +292,6 @@
             adjustCount(rosterTotal, 1); adjustCount(plannedCount, 1);
         } else refreshColumn(source);
         refreshColumn(target);
-        if (ballmatTarget) {
-            ballmatTarget.querySelector('[data-roster-people]').append(marker);
-            if (ballmatSource) refreshColumn(ballmatSource);
-            refreshColumn(ballmatTarget);
-            if (newBallmat) { adjustCount(ballmatTotal, 1); adjustCount(headerBallmatTotal, 1); }
-        }
         saving = true; pendingCard = card; root.setAttribute('aria-busy', 'true');
         try {
             const response = await fetch(root.dataset.finalDoorUrl.replace('/0/', `/${card.dataset.rosterPerson}/`), {
@@ -318,12 +313,27 @@
             warning.setAttribute('aria-label', `Incomplete Shift Flow: ${payload.flow_warning || ''}`);
             refreshColumn(target);
             if (reason) reason.remove();
-            if (fromRail || payload.previous_ballmat_side !== payload.ballmat_side) {
-                for (const [side, delta] of [[fromRail ? null : payload.previous_ballmat_side, -1], [payload.ballmat_side, 1]]) {
-                    const count = side && root.querySelector(`[data-ballmat-side-count="${side}"]`);
-                    if (count) count.textContent = String(Number(count.textContent) + delta);
+            const ballmatSource = ballmat?.closest('[data-ballmat-side]');
+            const canonicalSide = payload.ballmat_side === undefined ? ballmatSource?.dataset.ballmatSide : payload.ballmat_side;
+            const ballmatTarget = canonicalSide && root.querySelector(`[data-ballmat-side="${canonicalSide}"]`);
+            if (ballmat && !ballmatTarget) {
+                ballmat.remove();
+                adjustCount(ballmatTotal, -1); adjustCount(headerBallmatTotal, -1);
+            } else if (ballmatTarget) {
+                const marker = ballmat || document.createElement('span');
+                if (!ballmat) {
+                    marker.className = 'shift-ballmat-person';
+                    marker.dataset.ballmatPerson = card.dataset.rosterPerson;
+                    marker.dataset.personLast = card.dataset.personLast;
+                    marker.dataset.personFirst = card.dataset.personFirst;
+                    marker.textContent = card.dataset.personName;
+                    adjustCount(ballmatTotal, 1); adjustCount(headerBallmatTotal, 1);
                 }
+                ballmatTarget.querySelector('[data-ballmat-people]').append(marker);
             }
+            refreshBallmatSide(ballmatSource);
+            refreshBallmatSide(ballmatTarget);
+            card.dataset.ballmatStart = String(!!ballmatTarget);
             const editor = document.querySelector('.neostaffing-shift-flow-drawer form');
             if (editor?.querySelector('[name="expected_version"]')?.value === version) {
                 editor.querySelector('[name="expected_version"]').value = payload.plan_version;
@@ -345,15 +355,6 @@
                 adjustCount(rosterTotal, -1); adjustCount(plannedCount, -1);
             } else refreshColumn(source);
             refreshColumn(target);
-            if (ballmatTarget) {
-                if (newBallmat) {
-                    newBallmat.remove(); adjustCount(ballmatTotal, -1); adjustCount(headerBallmatTotal, -1);
-                } else if (ballmatSource) {
-                    ballmatSource.querySelector('[data-roster-people]').insertBefore(ballmat, nextBallmat);
-                    refreshColumn(ballmatSource);
-                }
-                refreshColumn(ballmatTarget);
-            }
             if (matches.length) showMatch();
             announce(error.message, true);
         }

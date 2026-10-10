@@ -196,7 +196,7 @@ SHIFT_FLOW_BALLMAT = "Ballmat"
 SHIFT_FLOW_DISCHARGE = "Discharge"
 SHIFT_FLOW_OTHER = "Other"
 SHIFT_FLOW_ROSTER_COLOR_ORDER = {
-    "at-door": 0, "discharge": 1, "wave-1": 2, "wave-2": 3, "cleanup": 4,
+    "at-door": 0, "wave-1": 1, "wave-2": 2, "discharge": 3, "cleanup": 4,
 }
 
 
@@ -1194,12 +1194,16 @@ def _shift_flow_door_roster(matrix):
     needs_assignment = []
     unassigned = []
     discharge_rows = []
-    ballmat_side_counts = {"west": 0, "east": 0}
+    ballmat_sides = {"west": [], "east": []}
     for row in matrix["rows"]:
         home = row["assignment"].work_area
         home_type = shift_work_area_type(home)
         if home_type == SHIFT_FLOW_DISCHARGE:
             discharge_rows.append(row)
+        elif home_type == SHIFT_FLOW_BALLMAT:
+            home_label = _shift_flow_area_short_label(home)
+            if home_label in ("WBM", "EBM"):
+                ballmat_sides["west" if home_label == "WBM" else "east"].append(row)
         column = by_id.get(getattr(row["plan"], "final_door_work_area_id", None))
         if column is None:
             needs_assignment.append(row)
@@ -1207,11 +1211,6 @@ def _shift_flow_door_roster(matrix):
         column["rows"].append(row)
         if home_type == SHIFT_FLOW_BALLMAT:
             column["ballmat_rows"].append(row)
-            home_label = _shift_flow_area_short_label(home)
-            if home_label == "WBM":
-                ballmat_side_counts["west"] += 1
-            elif home_label == "EBM":
-                ballmat_side_counts["east"] += 1
     name_key = lambda row: (
         row["person"].last_name.casefold(),
         row["person"].first_name.casefold(),
@@ -1221,14 +1220,17 @@ def _shift_flow_door_roster(matrix):
         column["rows"].sort(key=lambda row: (
             SHIFT_FLOW_ROSTER_COLOR_ORDER.get(row["flow_color"], 5), *name_key(row)))
         column["ballmat_rows"].sort(key=name_key)
+    for rows in ballmat_sides.values():
+        rows.sort(key=name_key)
     discharge_rows.sort(key=name_key)
     needs_assignment.sort(key=name_key)
     unassigned.sort(key=name_key)
     return {"columns": columns, "needs_assignment": needs_assignment,
             "unassigned": unassigned, "warnings": matrix["warnings"],
             "count": sum(len(column["rows"]) for column in columns),
-            "ballmat_count": sum(len(column["ballmat_rows"]) for column in columns),
-            "ballmat_side_counts": ballmat_side_counts,
+            "ballmat_count": sum(len(rows) for rows in ballmat_sides.values()),
+            "ballmat_side_counts": {side: len(rows) for side, rows in ballmat_sides.items()},
+            "ballmat_sides": ballmat_sides,
             "discharge_rows": discharge_rows, "discharge_count": len(discharge_rows)}
 
 

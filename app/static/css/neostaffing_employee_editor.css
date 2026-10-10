@@ -7,9 +7,10 @@
 .employee-shift-fields { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:12px; min-width:0; margin:0; border:1px solid #286064; padding:12px; }
 .employee-shift-fields legend { font-size:.8rem; font-weight:600; line-height:normal; }
 .employee-editor button { cursor:pointer; border:1px solid #286064; background:#19323c; color:#d5f5f2; border-radius:4px; padding:9px 12px; }
-.employee-editor-actions { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:10px; }
+.employee-editor-actions { grid-column:1/-1; display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; }
 .employee-assignment-summary { grid-column:1/-1; font-size:.8rem; overflow-wrap:anywhere; }
 .employee-assignment-summary ul { margin:6px 0; padding-left:18px; }
 .employee-editor .employee-delete { background:#61252b; border-color:#d25d68; color:#ffe8eb; }
+.employee-editor-actions .employee-delete { margin-left:auto; }
 .employee-editor [data-employee-error] { grid-column:1/-1; color:#ffb7bf; }
 @media(max-width:480px) { .employee-editor .neostaffing-people-form,.employee-shift-fields { grid-template-columns:1fr; } }

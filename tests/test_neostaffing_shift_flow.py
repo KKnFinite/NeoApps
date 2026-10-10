@@ -21,8 +21,8 @@ class ShiftFlowTest(unittest.TestCase):
         expected = []
         has_setup = {}
         for color, start, transition in [
-            ('at-door', areas['Door 34'], ''), ('discharge', self.discharge, ''),
-            ('wave-1', areas['West Ballmat'], '1'), ('wave-2', areas['West Ballmat'], '2'),
+            ('at-door', areas['Door 34'], ''), ('wave-1', areas['West Ballmat'], '1'),
+            ('wave-2', areas['West Ballmat'], '2'), ('discharge', self.discharge, ''),
             ('cleanup', areas['West Ballmat'], '3'), ('', areas['West Ballmat'], ''),
         ]:
             people = []
@@ -408,8 +408,8 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertNotIn('id="shift-unassigned-title"', rail)
         self.assertEqual(re.findall(r'data-roster-person="(\d+)"', rail), [str(unset.id)])
         self.assertIn('BALLMAT START', html)
-        self.assertNotIn('EAST BALLMAT', html)
-        self.assertNotIn('WEST BALLMAT', html)
+        self.assertIn('EAST BALLMAT', html)
+        self.assertIn('WEST BALLMAT', html)
         self.assertNotIn('shift-ballmat-side-bands', html)
         self.assertNotIn('data-roster-side=', html)
         self.assertEqual(re.findall(r'data-door-label="(D\d+)"', html)[:12],
@@ -442,11 +442,39 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([r['person'].id for r in roster['columns'][1]['ballmat_rows']], [ballmat.id])
         self.assertEqual((roster['count'], roster['ballmat_count']), (2, 1))
         self.assertEqual(roster['ballmat_side_counts'], {'west': 1, 'east': 0})
+        self.assertEqual([r['person'].id for r in roster['ballmat_sides']['west']], [ballmat.id])
         self.assertEqual(roster['discharge_count'], 0)
         self.assertEqual(
             [row['person'].last_name for row in roster['columns'][1]['rows']],
             ['ALPHA', 'ZULU'],
         )
+
+    def test_ballmat_start_sections_include_employees_without_final_doors(self):
+        from flask import render_template
+        areas = self._configure_final_composite()
+        west = self._person('WEST-NO-DOOR')
+        west.last_name = 'Zulu'
+        values = self._values(start=areas['West Ballmat'])
+        values['shift_flow_final_door_work_area_id'] = ''
+        self._plan(west, values, areas['West Ballmat'])
+        east = self._person('EAST-NO-PLAN')
+        east.last_name = 'Adams'
+        self._assignment(east, areas['East Ballmat'])
+        db.session.commit()
+        context = staffing_service.shift_flow_context()
+        roster = context['flow_map']['door_roster']
+        self.assertEqual(roster['count'], 0)
+        self.assertEqual(roster['ballmat_count'], 2)
+        self.assertEqual(roster['ballmat_side_counts'], {'west': 1, 'east': 1})
+        self.assertEqual([row['person'].id for row in roster['ballmat_sides']['west']], [west.id])
+        self.assertEqual([row['person'].id for row in roster['ballmat_sides']['east']], [east.id])
+        with self.app.test_request_context('/neostaffing/shift-flow'):
+            html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context,
+                can_edit_shift_flow=False, shift_work_area_type=staffing_service.shift_work_area_type)
+        self.assertIn(f'data-ballmat-person="{west.id}"', html)
+        self.assertIn(f'data-ballmat-person="{east.id}"', html)
+        self.assertIn('data-ballmat-side="west"', html)
+        self.assertIn('data-ballmat-side="east"', html)
 
     def test_route_grid_bundles_identical_paths_and_preserves_custom_cross_side_locations(self):
         areas = self._configure_final_composite()
@@ -1222,6 +1250,7 @@ class ShiftFlowTest(unittest.TestCase):
         east = next(column for column in roster['columns'] if column['id'] == areas['Door 17'].id)
         self.assertEqual([row['person'].id for row in east['rows']], [person.id])
         self.assertEqual([row['person'].id for row in east['ballmat_rows']], [person.id])
+        self.assertEqual([row['person'].id for row in roster['ballmat_sides']['east']], [person.id])
         self.assertEqual(staffing_service.move_shift_flow_final_door(
             person, areas['Door 34'].id, home.work_area, revision)['conflict']['type'], 'stale_version')
 

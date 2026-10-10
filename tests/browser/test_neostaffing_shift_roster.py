@@ -57,6 +57,58 @@ class ShiftRosterBrowserTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.fixture.tearDownClass()
 
+    def test_sticky_headers_and_shared_editor_actions_at_desktop_and_mobile_widths(self):
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        context = browser.new_context(viewport={'width':1280, 'height':900})
+        context.route('**/*', lambda route: route.continue_() if urlsplit(route.request.url).hostname == '127.0.0.1' else route.abort())
+        page = context.new_page()
+        helper = self.fixture(); helper.login(page)
+        for width in (1280, 390):
+            page.set_viewport_size({'width':width, 'height':844})
+            helper.ready(page, '/neostaffing/shift-flow')
+            self.assertEqual(page.locator('[data-final-door-target]:visible').count(), 12 if width == 1280 else 3)
+            sticky = page.evaluate('''() => {
+                const scroll = document.querySelector('[data-roster-scroll]');
+                const column = document.querySelector('[data-final-door-target]');
+                const people = column.querySelector('[data-roster-people]');
+                const card = people.firstElementChild;
+                for (let i = 0; i < 28; i++) {
+                    const copy = card.cloneNode(true);
+                    copy.removeAttribute('data-roster-person');
+                    copy.removeAttribute('draggable');
+                    people.append(copy);
+                }
+                scroll.scrollTop = 260;
+                const header = column.querySelector('header');
+                return {scrollTop:scroll.scrollTop, headerTop:header.getBoundingClientRect().top,
+                    viewportTop:scroll.getBoundingClientRect().top,
+                    position:getComputedStyle(header).position,
+                    pageWidth:document.documentElement.scrollWidth, viewportWidth:innerWidth};
+            }''')
+            self.assertGreater(sticky['scrollTop'], 0)
+            self.assertEqual(sticky['position'], 'sticky')
+            self.assertLessEqual(abs(sticky['headerTop'] - sticky['viewportTop']), 2)
+            self.assertLessEqual(sticky['pageWidth'], sticky['viewportWidth'])
+            helper.ready(page, f'/neostaffing/shift-flow?person_id={self.ids["GREEN"]}')
+            actions = page.locator('.employee-editor-actions')
+            bounds = actions.bounding_box()
+            save = actions.locator('button[type="submit"]').bounding_box()
+            delete = actions.locator('[data-employee-delete]').bounding_box()
+            self.assertLess(save['x'], delete['x'])
+            self.assertLessEqual(abs(save['x'] - bounds['x']), 2)
+            self.assertLessEqual(abs(delete['x'] + delete['width'] - bounds['x'] - bounds['width']), 2)
+            self.assertLessEqual(abs((save['y'] + save['height']) - (delete['y'] + delete['height'])), 2)
+            helper.ready(page, f'/neostaffing/people?person_id={self.ids["GREEN"]}')
+            actions = page.locator('.employee-editor-actions')
+            bounds = actions.bounding_box()
+            save = actions.locator('button[type="submit"]').bounding_box()
+            delete = actions.locator('[data-employee-delete]').bounding_box()
+            self.assertLess(save['x'], delete['x'])
+            self.assertLessEqual(abs(save['x'] - bounds['x']), 2)
+            self.assertLessEqual(abs(delete['x'] + delete['width'] - bounds['x'] - bounds['width']), 2)
+        context.unroute_all(behavior='ignoreErrors')
+        browser.close()
+
     def test_real_drop_editor_and_responsive_roster(self):
         browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
         context = browser.new_context(viewport={'width':1920, 'height':1080})
@@ -171,11 +223,11 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         self.assertEqual(page.locator('.neostaffing-shift-flow-drawer form').count(), 1)
         expect(page.locator('[name="shift_flow_final_door_work_area_id"]')).to_have_value(str(self.area_ids['Door 32']))
         page.locator('[name="shift_flow_ballmat_transition"]').select_option('2')
-        page.locator('button').filter(has_text='SAVE FLOW').click()
+        page.locator('[data-employee-editor] button[type="submit"]').click()
         expect(card.locator('[data-flow-warning]')).to_be_hidden()
         expect(card).to_have_class('shift-door-person is-wave-2')
         expect(destination.locator('[data-roster-person]')).to_have_text(['Zoe Adams!', 'Ada Smith!', 'Zoe Smith!'])
-        page.locator('.neostaffing-shift-flow-drawer header a').click()
+        expect(page.locator('[data-employee-editor]')).not_to_be_visible()
         for width in (1920, 1280, 900, 450, 390):
             page.set_viewport_size({'width':width, 'height':900})
             if width in (450, 390):
@@ -264,8 +316,8 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         with self.fixture.app.app_context():
             areas = {name: db.session.get(StaffingUnit, area_id) for name, area_id in self.area_ids.items()}
             for group, start, transition in [
-                ('at-door','Door 29',''), ('discharge','Discharge',''), ('wave-1','West Ballmat','1'),
-                ('wave-2','West Ballmat','2'), ('cleanup','West Ballmat','3')]:
+                ('at-door','Door 29',''), ('wave-1','West Ballmat','1'),
+                ('wave-2','West Ballmat','2'), ('discharge','Discharge',''), ('cleanup','West Ballmat','3')]:
                 members = {}
                 for index, first, last in [(2,'Zoe','Smith'), (0,'Zoe','Adams'), (1,'Ada','Smith')]:
                     person = staffing.create_person({'employee_id':f'ORDER-{group}-{index}',
@@ -322,13 +374,13 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         page.locator('[name="shift_flow_sort_start_work_area_id"]').select_option(str(self.area_ids['Door 29']))
         page.locator('[name="shift_flow_ballmat_transition"]').select_option('')
         page.locator('[name="shift_flow_setup_work_area_id"]').select_option('')
-        page.locator('button').filter(has_text='SAVE FLOW').click()
+        page.locator('[data-employee-editor] button[type="submit"]').click()
         card = column.locator(f'[data-roster-person="{edited}"]')
         expect(card).to_have_class('shift-door-person is-at-door')
         expect(card.locator('[data-setup-strip]')).to_be_hidden()
         self.assertEqual(order(), [*expected[:2], edited, *[pid for pid in expected[2:] if pid != edited]])
-        page.locator('.neostaffing-shift-flow-drawer header a').click()
-        # A blue drop must slot between green and Wave 1 without affecting the
+        expect(page.locator('[data-employee-editor]')).not_to_be_visible()
+        # A blue drop must slot after Wave 2 without affecting the
         # existing Setup strip or flow background.
         discharge = page.locator(f'[data-roster-person="{self.ids["DISCHARGE"]}"]')
         with page.expect_response(lambda response: response.url.endswith('/final-door')) as saved:
@@ -338,7 +390,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         expect(discharge.locator('[data-setup-strip]')).to_be_hidden()
         # Discharge's last name follows Adams and precedes Smith within blue.
         expected_order = [*expected[:2], edited, *[pid for pid in expected[2:] if pid != edited]]
-        expected_order.insert(expected_order.index(expected[3]) + 1, self.ids['DISCHARGE'])
+        expected_order.insert(expected_order.index(expected[9]) + 1, self.ids['DISCHARGE'])
         self.assertEqual(order(), expected_order)
         context.unroute_all(behavior='ignoreErrors')
         browser.close()
@@ -373,7 +425,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         payload = move('WAVE2', 'Door 17', 'wave-2')
         self.assertEqual(payload['ballmat_side'], 'east')
         expect(west).to_have_text(str(before_west - 1)); expect(east).to_have_text(str(before_east + 1))
-        expect(page.locator(f'[data-ballmat-door="{self.area_ids["Door 17"]}"] [data-ballmat-person="{self.ids["WAVE2"]}"]')).to_be_visible()
+        expect(page.locator(f'[data-ballmat-side="east"] [data-ballmat-person="{self.ids["WAVE2"]}"]')).to_be_visible()
         payload = move('WAVE2', 'Door 34', 'wave-2')
         self.assertEqual(payload['ballmat_side'], 'west')
         expect(west).to_have_text(str(before_west)); expect(east).to_have_text(str(before_east))
@@ -489,7 +541,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             page.evaluate('window.releaseNeedsSave()')
         self.assertEqual(saved.value.status, 200)
         expect(card.locator('[data-flow-warning]')).to_be_visible()
-        expect(page.locator(f'[data-ballmat-door="{self.area_ids["Door 17"]}"] [data-ballmat-person="{pending_id}"]')).to_be_visible()
+        expect(page.locator(f'[data-ballmat-side="east"] [data-ballmat-person="{pending_id}"]')).to_be_visible()
         helper.ready(page, '/neostaffing/shift-flow')
         expect(target.locator(f'[data-roster-person="{pending_id}"]')).to_be_visible()
         self.assertEqual(page.locator(f'.shift-roster-needs [data-roster-person="{pending_id}"]').count(), 0)

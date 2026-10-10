@@ -8,7 +8,7 @@ function board(width = 1920, stored = null) {
         addEventListener(key, fn) {this.handlers[key] = fn;},
         setAttribute(key, value) {this[key] = value;}, click() {this.handlers.click();}});
     const labels = ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'];
-    const columns = [0,1].flatMap(() => labels.map((label, index) => element({rosterColumn:String(index), doorLabel:label})));
+    const columns = labels.map((label, index) => element({rosterColumn:String(index), doorLabel:label}));
     const paging = element(), previous = element(), next = element(), range = element();
     const media = element(); media.matches = width <= 700;
     const scroll = element(); scroll.scrollLeft = 0;
@@ -17,19 +17,18 @@ function board(width = 1920, stored = null) {
     let saved = stored;
     const window = {innerWidth:width,matchMedia:() => media,handlers:{},addEventListener(key,fn){this.handlers[key]=fn;}};
     vm.runInNewContext(code, {document:{querySelector:() => root}, window, sessionStorage:{getItem:() => saved, setItem:(_,value) => {saved = value;}}});
-    return {columns,next,previous,media,paging,range,scroll,window,saved:() => saved, visible:section => columns.slice(section*12,(section+1)*12).filter(c => !c.hidden).map(c => c.dataset.doorLabel)};
+    return {columns,next,previous,media,paging,range,scroll,window,saved:() => saved, visible:() => columns.filter(c => !c.hidden).map(c => c.dataset.doorLabel)};
 }
-test('desktop shows the full configured order and aligns Final Door and Ballmat rosters', () => {
+test('desktop shows the full configured Final Door order', () => {
     const b = board(); assert.equal(b.visible(0).length,12);
     assert.deepEqual(b.visible(0),['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1']);
-    assert.deepEqual(b.visible(0),b.visible(1));
     assert.deepEqual(board(1920,b.saved()).visible(0),b.visible(0));
 });
 test('narrow mobile pages continuously through three doors, retaining its page', () => {
     const b = board(390); assert.deepEqual(b.visible(0),['D34','D32','D29']);
     assert.equal(b.range.textContent,'D34–D29');
     b.next.click(); assert.deepEqual(b.visible(0),['D26','D24','D21']);
-    assert.deepEqual(b.visible(0),b.visible(1)); assert.equal(b.next.disabled,false);
+    assert.equal(b.next.disabled,false);
     b.next.click(); assert.deepEqual(b.visible(0),['D17','D13','D9']);
     assert.deepEqual(board(390,b.saved()).visible(0),b.visible(0));
     b.next.click(); assert.deepEqual(b.visible(0),['D6','D4','D1']);assert.equal(b.next.disabled,true);
@@ -67,17 +66,17 @@ function dropBoard(width = 1920) {
         get nextSibling(){return this.parent?.children[this.parent.children.indexOf(this)+1] || null;},
         querySelector(selector){return this.nodes?.[selector] || null;},
         closest(selector){for(let node=this;node;node=node.parent){if(selector==='[data-final-door-target]' && node.dataset.finalDoorTarget)return node;
-            if(selector==='[data-ballmat-door]' && node.dataset.ballmatDoor)return node;
+            if(selector==='[data-ballmat-side]' && node.dataset.ballmatSide)return node;
             if(selector==='[data-roster-needs-people]' && node.dataset.rosterNeedsPeople)return node;
             if(selector==='[data-roster-unassigned-people]' && node.dataset.rosterUnassignedPeople)return node;}return null;}
     });
     const labels = ['D34','D32','D29','D26','D24','D21','D17','D13','D9','D6','D4','D1'];
-    const columns = [0,1].flatMap(section => labels.map((label,index) => {
+    const columns = labels.map((label,index) => {
         const column=element({rosterColumn:String(index),rosterColumnSide:index<6?'west':'east',doorLabel:label,
-            ...(section ? {ballmatDoor:String(index+1)}:{finalDoorTarget:String(index+1)})});
+            finalDoorTarget:String(index+1)});
         const people=element(), count=element(), empty=element(); people.parent=column;
         column.nodes={'[data-roster-people]':people,'[data-roster-count]':count,'[data-roster-empty]':empty};return column;
-    }));
+    });
     const source=columns[0], destination=columns[1];
     const person=(id,last,first,ballmat=false)=>{
         const card=element({[ballmat?'ballmatPerson':'rosterPerson']:id,personName:`${first} ${last}`,personLast:last,personFirst:first,flowColor:'wave-2',finalDoor:'1',flowVersion:'old:7',ballmatStart:'false'});
@@ -88,8 +87,11 @@ function dropBoard(width = 1920) {
     const card=person('42','SMITH','Ada'), other=person('2','Smith','Zoe'), before=person('3','Adams','Zoe');
     source.nodes['[data-roster-people]'].append(card);
     destination.nodes['[data-roster-people]'].append(other,before);
-    const ballmat=person('42','SMITH','Ada',true);columns[12].nodes['[data-roster-people]'].append(ballmat);
-    columns[13].nodes['[data-roster-people]'].append(person('2','Smith','Zoe',true),person('3','Adams','Zoe',true));
+    const ballmatSides={west:element({ballmatSide:'west'}),east:element({ballmatSide:'east'})};
+    for(const side of Object.values(ballmatSides))side.nodes={'[data-ballmat-people]':element(),'[data-ballmat-side-count]':{textContent:side.dataset.ballmatSide==='west'?'1':'2'},'[data-ballmat-empty]':element()};
+    for(const side of Object.values(ballmatSides))side.nodes['[data-ballmat-people]'].parent=side;
+    const ballmat=person('42','SMITH','Ada',true);ballmatSides.west.nodes['[data-ballmat-people]'].append(ballmat);
+    ballmatSides.east.nodes['[data-ballmat-people]'].append(person('2','Smith','Zoe',true),person('3','Adams','Zoe',true));
     const needsPeople=element({rosterNeedsPeople:'true'}), needs=person('77','Pending','Ian');
     needs.dataset.finalDoor='';needs.dataset.ballmatStart='true';
     const needsReason=element({rosterNeedsReason:'77'}), needsEmpty=element();needsEmpty.hidden=true;
@@ -109,10 +111,10 @@ function dropBoard(width = 1920) {
     const fields={expected_version:version,shift_flow_final_door_work_area_id:final,
         shift_flow_sort_start_work_area_id:startArea,shift_flow_setup_work_area_id:setup,shift_flow_ballmat_transition:transition};
     const editor={querySelector:s=>fields[s.match(/name="([^"]+)"/)[1]]};
-    const westCount={textContent:'6'},eastCount={textContent:'2'};
+    const westCount=ballmatSides.west.nodes['[data-ballmat-side-count]'],eastCount=ballmatSides.east.nodes['[data-ballmat-side-count]'];
     const root={dataset:{finalDoorUrl:'/neostaffing/shift-flow/0/final-door'},style:{setProperty(){}},setAttribute:(k,v)=>attrs[k]=v,
         querySelectorAll:s=>s==='[data-roster-column]'?columns:s==='[data-roster-side]'?sides:s==='[data-final-door-target]'?columns.slice(0,12):s==='[data-roster-person][draggable="true"]'?[card,needs,unassigned]:s==='[data-roster-person]'?[card,other,before,extra,needs,unassigned]:[],
-        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?null:s==='[data-ballmat-person="88"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-unassigned-people]'?unassignedPeople:s==='[data-roster-unassigned-count]'?unassignedCount:s==='[data-roster-unassigned-empty]'?unassignedEmpty:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-door="2"]'?columns[13]:s==='[data-ballmat-door="1"]'?columns[12]:s==='[data-ballmat-door="8"]'?columns[19]:s==='[data-ballmat-side-count="west"]'?westCount:s==='[data-ballmat-side-count="east"]'?eastCount:element()};
+        querySelector:s=>s==='[data-roster-scroll]'?scroll:s==='[data-roster-paging]'?paging:s==='[data-roster-previous]'?previous:s==='[data-roster-next]'?next:s==='[data-roster-range]'?range:s==='[data-roster-feedback]'?feedback:s==='[data-ballmat-person="42"]'?ballmat:s==='[data-ballmat-person="77"]'?Object.values(ballmatSides).flatMap(side=>side.nodes['[data-ballmat-people]'].children).find(row=>row.dataset.ballmatPerson==='77')||null:s==='[data-ballmat-person="88"]'?null:s==='[data-roster-needs-people]'?needsPeople:s==='[data-roster-unassigned-people]'?unassignedPeople:s==='[data-roster-unassigned-count]'?unassignedCount:s==='[data-roster-unassigned-empty]'?unassignedEmpty:s==='[data-roster-needs-count]'?needsCount:s==='[data-roster-needs-empty]'?needsEmpty:s==='[data-roster-needs-reason="77"]'?needsReason:s==='[data-roster-total-count]'?rosterTotal:s==='[data-ballmat-total-count]'?ballmatTotal:s==='[data-roster-search]'?search:s==='[data-search-status]'?searchStatus:s==='[data-search-previous]'?searchPrevious:s==='[data-search-next]'?searchNext:s==='[data-ballmat-side="west"]'?ballmatSides.west:s==='[data-ballmat-side="east"]'?ballmatSides.east:element()};
     let hitTarget = destination, frameId = 0;
     const frames = new Map(), handlers = {}, body = element();
     scroll.getBoundingClientRect = () => ({left:0,right:300,top:0,bottom:400,width:300});
@@ -136,7 +138,7 @@ function dropBoard(width = 1920) {
         if(type==='pointerdown') person.handlers.pointerdown(event); else handlers[type](event);
     };
     const advance = timestamp => { const pending=[...frames.values()];frames.clear();pending.forEach(fn=>fn(timestamp)); };
-    return {requests,card,source,destination,columns,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,startUnassigned,drop,person,needs,needsPeople,needsReason,needsCount,needsEmpty,unassignedPeople,unassignedEmpty,unassignedCount,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra,touch,advance,hit:target=>{hitTarget=target;},body};
+    return {requests,card,source,destination,columns,ballmatSides,ballmat,feedback,version,final,startArea,setup,transition,westCount,eastCount,phase,attrs,timers,start,startNeeds,startUnassigned,drop,person,needs,needsPeople,needsReason,needsCount,needsEmpty,unassignedPeople,unassignedEmpty,unassignedCount,rosterTotal,plannedCount,ballmatTotal,headerBallmatTotal,unassigned,search,searchStatus,searchPrevious,searchNext,scroll,range,extra,touch,advance,hit:target=>{hitTarget=target;},body};
 }
 
 test('Unassigned mouse drag creates a plan in the selected Door and updates counts', async()=>{
@@ -210,12 +212,14 @@ test('Needs Assignment drop moves immediately, preserves existing fields and add
     assert.equal(b.needs.parent,b.destination.nodes['[data-roster-people]']);
     assert.equal(b.needsCount.textContent,'0');assert.equal(b.needsEmpty.hidden,false);
     assert.equal(b.needsReason.hidden,true);assert.equal(b.rosterTotal.textContent,'4');
-    assert.equal(b.plannedCount.textContent,'4');assert.equal(b.ballmatTotal.textContent,'4');assert.equal(b.headerBallmatTotal.textContent,'4');
-    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(row=>row.dataset.ballmatPerson),['3','77','2']);
+    assert.equal(b.plannedCount.textContent,'4');assert.equal(b.ballmatTotal.textContent,'3');assert.equal(b.headerBallmatTotal.textContent,'3');
+    assert.deepEqual(b.ballmatSides.east.nodes['[data-ballmat-people]'].children.map(row=>row.dataset.ballmatPerson),['2','3']);
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',
         flow_warning:'Ballmat transition is missing.',has_setup:true,previous_ballmat_side:'west',ballmat_side:'east'})});await tick();
     assert.equal(b.needs.dataset.finalDoor,'2');assert.equal(b.needs.dataset.flowVersion,'new:8');
-    assert.equal(b.needsReason.parent,null);assert.equal(b.eastCount.textContent,'3');assert.equal(b.westCount.textContent,'6');
+    assert.equal(b.needsReason.parent,null);assert.equal(b.eastCount.textContent,'3');assert.equal(b.westCount.textContent,'1');
+    assert.equal(b.ballmatTotal.textContent,'4');
+    assert.deepEqual(b.ballmatSides.east.nodes['[data-ballmat-people]'].children.map(row=>row.dataset.ballmatPerson),['3','77','2']);
     assert.equal(b.needs.nodes['[data-flow-warning]'].hidden,false);
     assert.equal(b.setup.value,'');assert.equal(b.transition.value,'2');
     assert.equal(typeof b.unassigned.handlers.dragstart,'function');
@@ -227,9 +231,22 @@ test('Needs Assignment conflict restores rail, reason, counts, Ballmat roster an
     assert.equal(b.needs.parent,b.needsPeople);assert.equal(b.needsPeople.children[0],b.needs);
     assert.equal(b.needsReason.hidden,false);assert.equal(b.needsCount.textContent,'1');assert.equal(b.needsEmpty.hidden,true);
     assert.equal(b.rosterTotal.textContent,'3');assert.equal(b.plannedCount.textContent,'3');assert.equal(b.ballmatTotal.textContent,'3');assert.equal(b.headerBallmatTotal.textContent,'3');
-    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(row=>row.dataset.ballmatPerson),['3','2']);
+    assert.deepEqual(b.ballmatSides.east.nodes['[data-ballmat-people]'].children.map(row=>row.dataset.ballmatPerson),['2','3']);
     assert.equal(b.needs.dataset.flowVersion,'old:7');assert.equal(b.needs.dataset.finalDoor,'');
     assert.match(b.feedback.textContent,/Reload/);
+});
+
+test('subsequent Final Door move changes a Ballmat side without duplicating its start-area marker', async()=>{
+    const b=dropBoard();b.startNeeds();b.drop(b.destination);
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',
+        flow_color:'wave-2',previous_ballmat_side:'west',ballmat_side:'east'})});await tick();
+    const marker=b.ballmatSides.east.nodes['[data-ballmat-people]'].children.find(row=>row.dataset.ballmatPerson==='77');
+    b.startNeeds();b.drop(b.source);
+    b.requests[1].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:1,plan_version:'new:9',
+        flow_color:'wave-2',previous_ballmat_side:'east',ballmat_side:'west'})});await tick();
+    assert.equal(marker.parent,b.ballmatSides.west.nodes['[data-ballmat-people]']);
+    assert.equal(b.ballmatTotal.textContent,'4');
+    assert.equal(b.westCount.textContent,'2');assert.equal(b.eastCount.textContent,'2');
 });
 
 test('name search highlights without rearranging, pages through matches and searches both rail sections',()=>{
@@ -267,7 +284,7 @@ test('successful drop sorts last name then first name, aligns Ballmat and update
     const b=dropBoard();b.start();b.drop(b.destination);
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',flow_warning:'Ballmat transition is missing.'})});await tick();
     assert.deepEqual(b.destination.nodes['[data-roster-people]'].children.map(p=>p.dataset.rosterPerson),['3','42','2']);
-    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(p=>p.dataset.ballmatPerson),['3','42','2']);
+    assert.deepEqual(b.ballmatSides.west.nodes['[data-ballmat-people]'].children.map(p=>p.dataset.ballmatPerson),['42']);
     assert.equal(b.source.nodes['[data-roster-empty]'].hidden,false);assert.equal(b.destination.nodes['[data-roster-count]'].textContent,'3');
     assert.equal(b.card.nodes['[data-flow-warning]'].hidden,false);assert.match(b.card.nodes['[data-flow-warning]'].title,/missing/);
     assert.ok(b.card.classList.values.has('is-wave-2'));assert.equal(b.feedback.hidden,false);assert.match(b.feedback.textContent,/Final Door saved/);
@@ -280,11 +297,11 @@ test('stale or failed drop preserves all displayed data, shows error and never r
     for(const payload of [{conflict:{message:'Flow changed. Reload.'}},{error:'Save failed.'}]){
         const b=dropBoard();b.start();b.drop(b.destination);
         assert.equal(b.card.parent,b.destination.nodes['[data-roster-people]']);
-        assert.equal(b.ballmat.parent,b.columns[13].nodes['[data-roster-people]']);
+        assert.equal(b.ballmat.parent,b.ballmatSides.west.nodes['[data-ballmat-people]']);
         b.requests[0].resolve({ok:false,json:async()=>payload});await tick();
         assert.equal(b.requests.length,1);assert.equal(b.card.parent,b.source.nodes['[data-roster-people]']);
         assert.equal(b.card.dataset.flowVersion,'old:7');assert.equal(b.version.value,'old:7');assert.equal(b.final.value,'1');
-        assert.equal(b.ballmat.parent,b.columns[12].nodes['[data-roster-people]']);
+        assert.equal(b.ballmat.parent,b.ballmatSides.west.nodes['[data-ballmat-people]']);
         assert.equal(b.source.nodes['[data-roster-count]'].textContent,'1');
         assert.equal(b.destination.nodes['[data-roster-count]'].textContent,'2');
         assert.deepEqual(b.destination.nodes['[data-roster-people]'].children.map(p=>p.dataset.rosterPerson),['3','2']);
@@ -296,7 +313,7 @@ test('network failure rolls back card and Ballmat grouping without touching edit
     const b=dropBoard();b.card.classList.add('is-wave-2');b.start();b.drop(b.destination);
     b.requests[0].reject(new Error('Network failed'));await tick();
     assert.equal(b.card.parent,b.source.nodes['[data-roster-people]']);
-    assert.equal(b.ballmat.parent,b.columns[12].nodes['[data-roster-people]']);
+    assert.equal(b.ballmat.parent,b.ballmatSides.west.nodes['[data-ballmat-people]']);
     assert.ok(b.card.classList.values.has('is-wave-2'));assert.equal(b.setup.value,'');
     assert.equal(b.transition.value,'2');assert.equal(b.attrs['aria-busy'],'false');
 });
@@ -340,7 +357,8 @@ test('accepted Ballmat side switch updates only the changed editor fields and si
         previous_ballmat_side:'west',ballmat_side:'east',
         editor_changes:{shift_flow_sort_start_work_area_id:88,shift_flow_final_door_work_area_id:2}})});await tick();
     assert.equal(b.startArea.value,'88');assert.equal(b.setup.value,'24');assert.equal(b.transition.value,'2');
-    assert.equal(b.westCount.textContent,'5');assert.equal(b.eastCount.textContent,'3');
+    assert.equal(b.westCount.textContent,'0');assert.equal(b.eastCount.textContent,'3');
+    assert.equal(b.ballmat.parent,b.ballmatSides.east.nodes['[data-ballmat-people]']);
 });
 
 test('a drawer with a different revision is never reconciled by another employee drop', async()=>{
@@ -358,7 +376,7 @@ test('external drags and same-door drops do not save',()=>{
 test('optimistic and accepted drops sort exact color groups then names, while Ballmat stays alphabetical', async()=>{
     const b=dropBoard(), people=b.destination.nodes['[data-roster-people]'];
     const expected=[];
-    for(const [index,color] of ['at-door','discharge','wave-1','wave-2','cleanup',''].entries()){
+    for(const [index,color] of ['at-door','wave-1','wave-2','discharge','cleanup',''].entries()){
         for(const [offset,first,last] of [[2,'Zoe','SMITH'],[0,'Zoe','Adams'],[1,'Ada','smith']]){
             const p=b.person(String(100+index*3+offset),last,first);p.dataset.flowColor=color;people.append(p);
         }
@@ -370,9 +388,9 @@ test('optimistic and accepted drops sort exact color groups then names, while Ba
     const ids=()=>people.children.map(p=>p.dataset.rosterPerson);
     assert.deepEqual(ids(),['3','100','42','101','2','102',...expected.slice(3)]);
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',has_setup:true})});await tick();
-    assert.deepEqual(ids(),['3','100','101','2','102',...expected.slice(3,9),'109','42','110','111',...expected.slice(12)]);
+    assert.deepEqual(ids(),['3','100','101','2','102',...expected.slice(3,6),'106','42','107','108',...expected.slice(9)]);
     assert.equal(b.card.dataset.flowColor,'wave-2');assert.equal(b.card.nodes['[data-setup-strip]'].hidden,false);
-    assert.deepEqual(b.columns[13].nodes['[data-roster-people]'].children.map(p=>p.dataset.ballmatPerson),['3','42','2']);
+    assert.deepEqual(b.ballmatSides.west.nodes['[data-ballmat-people]'].children.map(p=>p.dataset.ballmatPerson),['42']);
 });
 
 test('Setup strip is reconciled independently of the flow background and retained on failed saves', async()=>{

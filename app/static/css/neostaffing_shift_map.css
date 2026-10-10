@@ -86,9 +86,9 @@
   .shift-route-targets { grid-template-columns:1fr; }
 }
 
-/* Shared tracks keep Final Door and read-only Ballmat Home rosters aligned. */
+/* The roster owns both scroll axes so Door headers can stick within it. */
 .shift-door-roster { --roster-columns:12; min-width:0; }
-.shift-roster-scroll { width:100%; max-width:100%; box-sizing:border-box; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:thin; scrollbar-color:#365b59 #0a161c; }
+.shift-roster-scroll { width:100%; max-width:100%; max-height:min(74vh,720px); box-sizing:border-box; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#365b59 #0a161c; }
 .shift-roster-layout { display:grid; grid-template-columns:minmax(0,1fr) 176px; gap:0 12px; min-width:calc(var(--roster-columns) * 116px + 188px); }
 .shift-roster-layout>section { min-width:0; grid-column:1; }
 .shift-roster-rail { grid-column:2; grid-row:1 / span 2; min-width:0; }
@@ -117,10 +117,10 @@
 .shift-door-person.is-search-dimmed { opacity:.35; }
 .shift-door-roster h2 { margin:14px 0 8px; font-size:16px; letter-spacing:.06em; }
 .shift-door-roster h2 small { font-size:11px; font-weight:400; color:#82a9ad; margin-left:8px; }
-.shift-door-columns { display:grid; grid-template-columns:repeat(var(--roster-columns),minmax(0,1fr)); border:1px solid #285054; border-radius:5px; overflow:hidden; }
+.shift-door-columns { display:grid; grid-template-columns:repeat(var(--roster-columns),minmax(0,1fr)); border:1px solid #285054; border-radius:5px; }
 .shift-door-column { min-width:0; border-right:1px solid #285054; background:#0b1b20; padding-bottom:8px; }
 .shift-door-column:last-child { border-right:0; }
-.shift-door-column header { display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 7px; background:#143036; border-bottom:1px solid #285054; }
+.shift-door-column header { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:4px; padding:10px 7px; background:#143036; border-bottom:1px solid #285054; }
 .shift-door-column header strong { color:#e7ffff; font-size:16px; }
 .shift-door-column header span { color:#5ee1cd; font-size:12px; }
 .shift-door-person { position:relative; display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
@@ -159,23 +159,12 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { outline:1px solid
  .neostaffing-shift-flow-head { display:flex; flex-wrap:wrap; gap:10px; }
 }
 
-/* Ballmat Start stays aligned with the continuous Final Door roster. */
-.shift-ballmat-roster .shift-ballmat-column {
-  padding-bottom:3px;
-  background:#0f2025;
-}
-.shift-ballmat-roster .shift-ballmat-column header {
-  padding:5px 7px;
-}
-.shift-ballmat-roster .shift-ballmat-column header strong {
-  font-size:13px;
-}
-.shift-ballmat-roster .shift-ballmat-column header span {
-  font-size:10px;
-}
-.shift-ballmat-names {
-  padding:2px 0 3px;
-}
+/* Start-area staffing is independent of Final Door completion. */
+.shift-ballmat-sides { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.shift-ballmat-side { min-width:0; border:1px solid #285054; border-radius:5px; background:#0f2025; }
+.shift-ballmat-side header { display:flex; justify-content:space-between; gap:8px; padding:6px 9px; background:#23333f; color:#e7ffff; font-size:12px; }
+.shift-ballmat-side header span { color:#5ee1cd; }
+.shift-ballmat-names { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:2px 8px; padding:4px; }
 .shift-ballmat-person,
 .shift-ballmat-empty {
   display:block;
@@ -188,4 +177,5 @@ a.shift-door-person:hover, a.shift-door-person:focus-visible { outline:1px solid
 .shift-ballmat-empty { color:#66888b; }
 @media(max-width:700px) {
   .shift-ballmat-roster h2 small { line-height:1.45; }
+  .shift-ballmat-sides { grid-template-columns:1fr; }
 }
