@@ -215,7 +215,8 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
         db.session.commit()
 
         no_row = fueler_context(self.gateway, self.operator)["rows"][0]
-        self.assertEqual(no_row["fueling_target_display"], "50.0")
+        self.assertEqual(no_row["required_display"], "50.0")
+        self.assertEqual(no_row["fuel_load_display"], "50.0")
         self.assertEqual(no_row["neo_fuel_display"], "INCOMPLETE")
 
         db.session.add(
@@ -243,7 +244,8 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
         db.session.commit()
 
         yes_row = fueler_context(self.gateway, self.operator)["rows"][0]
-        self.assertEqual(yes_row["fueling_target_display"], "50.5")
+        self.assertEqual(yes_row["required_display"], "50.0")
+        self.assertEqual(yes_row["fuel_load_display"], "50.5")
         self.assertEqual(mission.planned_fuel_load, 50000)
         self.assertEqual(operation.window_minutes, 60)
 
@@ -318,7 +320,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
         with patch.object(db.session, "commit", wraps=db.session.commit) as commit:
             unconfirmed = self.client.get("/neoscorpion/fueler")
             self.assertEqual(commit.call_count, 0)
-        self.assertIn(b"FUELING TARGET", unconfirmed.data.upper())
+        self.assertIn(b"TARGET ONBOARD", unconfirmed.data.upper())
         self.assertIn(b"NEO FUEL", unconfirmed.data.upper())
         self.assertNotIn(b"data-copy-neo-fuel", unconfirmed.data)
         self.assertEqual(NeoScorpionAircraftFuelSetting.query.count(), 0)
@@ -338,7 +340,9 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
         self.assertEqual(incomplete.revision, 1)
         db.session.commit()
         incomplete_row = fueler_context(self.gateway, self.operator)["rows"][0]
-        self.assertEqual(incomplete_row["fueling_target_display"], "50.0")
+        self.assertEqual(incomplete_row["fuel_load_display"], "50.0")
+        self.assertEqual(incomplete_row["actual_total_display"], "INCOMPLETE")
+        self.assertEqual(incomplete_row["actual_fuel_display"], "INCOMPLETE")
         self.assertEqual(incomplete_row["neo_fuel_display"], "INCOMPLETE")
 
         complete = save_fueler_entry(
@@ -359,6 +363,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
 
         complete_row = fueler_context(self.gateway, self.operator)["rows"][0]
         self.assertEqual(complete_row["actual_total_display"], "54.0")
+        self.assertEqual(complete_row["actual_fuel_display"], "54.0")
         self.assertEqual(complete_row["neo_fuel_display"], "54.0")
         rendered = self.client.get("/neoscorpion/fueler")
         self.assertNotIn(b"data-copy-neo-fuel", rendered.data)

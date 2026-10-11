@@ -94,6 +94,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                         expect(scope.locator(f'[data-sort-fuel-total="{key}"] strong')).to_have_text(value,
                                                                                                       timeout=20000)
                 check_totals(performance, ("5,000 GAL", "2,200 GAL", "8,582 GAL"))
+                expect(page.locator(".neoscorpion-dispatch-table thead")).to_contain_text("Fuel Load")
                 expect(performance.locator("[data-performance-fueler-id]")).to_have_count(1)
                 expect(performance.locator("[data-performance-truck-id]")).to_have_count(1)
                 self.assertTrue(performance.evaluate("""panel => {
@@ -101,7 +102,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                     const totals = panel.querySelector('.neoscorpion-sort-fuel-totals').getBoundingClientRect();
                     return title.right <= totals.left && Math.abs(title.top - totals.top) < 20;
                 }"""), "Desktop title and totals must share a header row")
-                self.assertIn("20261010-dispatch-totals-status-v1",
+                self.assertIn("20261010-quick-fuel-v1",
                               page.locator('link[href*="26-neoscorpion.css"]').get_attribute("href"))
                 for width in (1440, 1024, 390, 375):
                     page.set_viewport_size({"width": width, "height": 900})
@@ -129,6 +130,7 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                 self.assertFalse(errors)
                 Fixture().ready(page, "/neoscorpion/reports/fuel")
                 check_totals(page, ("6,000 GAL", "3,000 GAL", "9,582 GAL"))
+                expect(page.locator(".neoscorpion-report-table thead")).to_contain_text("Fuel Load")
                 expect(page.locator("[data-fueling-event-id]")).to_have_count(4)
                 self.assertTrue(page.locator(".neoscorpion-report-summary").evaluate(
                     "el => el.getBoundingClientRect().right <= window.innerWidth"))
@@ -138,7 +140,8 @@ class DispatchSortFuelTotalsBrowserTest(unittest.TestCase):
                 (Fixture.evidence / "sort-fuel-report.pdf").write_bytes(pdf_bytes)
                 pdf = PdfReader(BytesIO(pdf_bytes))
                 text = "".join(p.extract_text() for p in pdf.pages)
-                for value in ("TOTAL EST FUEL: 6,000 GAL", "TOTAL T/F: 3,000 GAL", "TOTAL REQUIRED FUEL: 9,582 GAL"):
+                self.assertIn("Fuel Load", text)
+                for value in ("TOTAL EST FUEL: 6,000 GAL", "TOTAL T/F: 3,000 GAL", "TOTAL FUEL LOAD: 9,582 GAL"):
                     self.assertIn(value, text)
                 page.screenshot(path=str(Fixture.evidence / "sort-fuel-report-mobile.png"), full_page=True)
         finally:

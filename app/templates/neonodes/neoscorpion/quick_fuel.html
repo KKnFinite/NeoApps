@@ -17,7 +17,7 @@
             {{ csrf_field() }}
             <div class="neoscorpion-quick-fuel-setup">
                 <label>Tail Number<input name="tail_number" data-quick-tail maxlength="12" autocomplete="off" placeholder="AIRCRAFT TAIL" aria-label="Tail Number"></label>
-                <label>Required Fuel Load · K LBS<input name="required_fuel" inputmode="decimal" placeholder="K LBS" aria-label="Required Fuel Load"></label>
+                <label>Fuel Load · K LBS<input name="required_fuel" inputmode="decimal" placeholder="K LBS" aria-label="Fuel Load"></label>
                 <label>Departure · {{ gateway.code }} local (optional)<input name="departure_local" type="datetime-local" aria-label="Departure local date and time"></label>
                 <button type="button" class="action-button" data-quick-clear>CLEAR / NEW AIRCRAFT</button>
             </div>
@@ -34,9 +34,9 @@
                 <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row" data-quick-total-row><strong role="rowheader">TOTAL</strong><strong role="cell" data-quick-total="remaining">—</strong><strong role="cell" data-quick-total="planned">—</strong><strong role="cell" data-quick-total="actual">—</strong></div>
             </div>
             <dl class="neoscorpion-fuel-totals" data-quick-totals hidden>
-                <div><dt>Required Fuel</dt><dd data-quick-total="required">—</dd></div>
+                <div><dt>Fuel Load</dt><dd data-quick-total="required">—</dd></div>
                 <div><dt>APU Allowance</dt><dd data-quick-total="apu">—</dd></div>
-                <div class="neoscorpion-fuel-total-primary"><dt>Fuel Load</dt><dd data-quick-total="fuel_load">—</dd></div>
+                <div class="neoscorpion-fuel-total-primary"><dt>Target Onboard</dt><dd data-quick-total="fuel_load">—</dd></div>
                 <div><dt>Uplift Required</dt><dd data-quick-total="uplift">—</dd></div>
                 <div><dt>Estimated Gallons</dt><dd data-quick-total="estimated_gallons">—</dd></div>
                 <div class="neoscorpion-fuel-total-primary"><dt>Neo Fuel</dt><dd data-quick-total="neo_fuel">—</dd></div>

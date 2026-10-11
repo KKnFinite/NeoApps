@@ -127,7 +127,7 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
         text = "".join(page.extract_text() for page in pdf.pages)
         self.assertIn("TOTAL EST FUEL: 4,000 GAL", text)
         self.assertIn("TOTAL T/F: 3,300 GAL", text)
-        self.assertIn("TOTAL REQUIRED FUEL: 8,582 GAL", text)
+        self.assertIn("TOTAL FUEL LOAD: 8,582 GAL", text)
 
     def test_missing_current_load_and_unclosed_assignment_do_not_become_zero_or_event(self):
         mission = self.fixture._mission("UPS900", "N490UP", None, 1)
@@ -157,7 +157,7 @@ class SortFuelTotalsIntegrationTest(unittest.TestCase):
         self.assertEqual((dispatch["value"], dispatch["display"], dispatch["unit"]),
                          (5080, "5,080", "GAL"))
         self.assertEqual(report["sort_fuel_totals"]["required"], dispatch)
-        self.assertIn("TOTAL REQUIRED FUEL: 5,080 GAL",
+        self.assertIn("TOTAL FUEL LOAD: 5,080 GAL",
                       "".join(page.extract_text() for page in
                               PdfReader(BytesIO(fuel_report_pdf(report).getvalue())).pages))
         self.assertEqual(mission.planned_fuel_load, 25_400)

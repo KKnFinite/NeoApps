@@ -24,11 +24,11 @@ def fuel_report_pdf(context):
     story.append(Paragraph(" | ".join(
         f"{label}: {totals[key]['display']} {totals[key]['unit']}"
         for key, label in (("estimated", "TOTAL EST FUEL"), ("transfer", "TOTAL T/F"),
-                           ("required", "TOTAL REQUIRED FUEL"))), styles["Normal"]))
+                           ("required", "TOTAL FUEL LOAD"))), styles["Normal"]))
     if any(stat["incomplete"] for stat in totals.values()):
         story.append(Paragraph("* Known subtotal; missing values are excluded. A dash means all values are unknown.", styles["Normal"]))
     story.append(Spacer(1, 12))
-    headers = ["#", "Type", "Flight / Dest", "Tail", "Fueler", "Truck", "Start", "End", "T/F GAL", "Required", "Neo Fuel"]
+    headers = ["#", "Type", "Flight / Dest", "Tail", "Fueler", "Truck", "Start", "End", "T/F GAL", "Fuel Load", "Neo Fuel"]
     data = [headers]
     for row in context["fuel_report_rows"]:
         gallons = row["transfer_fuel_gallons"]

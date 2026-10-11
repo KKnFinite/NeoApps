@@ -1256,7 +1256,7 @@ def _sort_fuel_totals(rows, events, fuel_density_lbs_per_gallon):
                 "incomplete": bool(missing), "title": title}
 
     required_lbs = total((row["required_fuel_lbs"] for row in missions.values()),
-                         "LBS", "required fuel values")
+                         "LBS", "fuel load values")
     invalid_density = False
     try:
         required_gallons = lbs_to_gallons(
@@ -1266,7 +1266,7 @@ def _sort_fuel_totals(rows, events, fuel_density_lbs_per_gallon):
         required_gallons = None
         invalid_density = True
         required_lbs["incomplete"] = True
-        required_lbs["title"] = "Configure a valid fuel density to show required gallons."
+        required_lbs["title"] = "Configure a valid fuel density to show fuel load gallons."
     required_lbs.update(
         value=required_gallons,
         display=(f"{required_gallons:,}" + ("*" if required_lbs["incomplete"] and
@@ -5707,8 +5707,10 @@ def _fuel_rows(
                 "center_fuel_display": format_display_thousands(
                     tail_fuel_state.center_fuel_lbs if tail_fuel_state else None
                 ),
-                "actual_fuel_display": format_display_thousands(
-                    actual_total_lbs
+                "actual_fuel_display": (
+                    format_display_thousands(actual_total_lbs)
+                    if actual_complete
+                    else "INCOMPLETE"
                 ),
                 "apu_lbs": tail_fuel_state.apu_lbs if tail_fuel_state else None,
                 "transfer_fuel_gallons": (
@@ -6099,7 +6101,7 @@ def _hanzo_planning_status(row):
     if row["fuel_configuration_message"]:
         return row["fuel_configuration_message"]
     if row["mission"].planned_fuel_load is None:
-        return "Required Fuel needed"
+        return "Fuel Load needed"
     if not row["planned_ready"]:
         return "Awaiting fuel readings"
     if row["apu_running"] is None or not row["apu_source_valid"]:

@@ -1,4 +1,4 @@
-{% for key, label in [('estimated', 'TOTAL EST FUEL'), ('transfer', 'TOTAL T/F'), ('required', 'TOTAL REQUIRED FUEL')] %}
+{% for key, label in [('estimated', 'TOTAL EST FUEL'), ('transfer', 'TOTAL T/F'), ('required', 'TOTAL FUEL LOAD')] %}
 {% set stat = sort_fuel_totals[key] %}
 <div data-sort-fuel-total="{{ key }}" title="{{ stat.title }}"{% if stat.incomplete %} data-total-incomplete{% endif %}>
     <span>{{ label }}</span><strong>{{ stat.display }} {{ stat.unit }}</strong>

@@ -44,7 +44,7 @@
                     <div><dt>Aircraft Type</dt><dd>{{ row.aircraft_type }}</dd></div>
                     <div><dt>Parking Position</dt><dd>{{ row.parking_position }}</dd></div>
                     <div><dt>ETD</dt><dd>{{ row.departure_time or '-' }}</dd></div>
-                    <div><dt>Required Fuel</dt><dd>{{ row.required_fuel_display or '-' }}</dd></div>
+                    <div><dt>Fuel Load</dt><dd>{{ row.required_fuel_display or '-' }}</dd></div>
                 </dl>
                 {{ fuel_status(row) }}
                 {% if row.hanzo_status %}
@@ -52,8 +52,8 @@
                 {% else %}
                 <dl class="neoscorpion-fuel-totals neoscorpion-hanzo-totals">
                     <div class="neoscorpion-fuel-total-primary"><dt>Planned Total</dt><dd>{{ row.planned_total_display }}</dd></div>
-                    {% if row.apu_running is sameas true %}
                     <div><dt>Effective APU Allowance</dt><dd>{{ row.apu_allowance_display }}</dd></div>
+                    {% if row.apu_running is sameas true %}
                     <div><dt>APU Source Tank</dt><dd>{{ row.apu_source_tank_label }}</dd></div>
                     {% endif %}
                 </dl>

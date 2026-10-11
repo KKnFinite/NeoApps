@@ -151,6 +151,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"data-quick-fuel", page.data)
         self.assertIn(b"Quick Fuel", page.data)
+        self.assertIn(b"Fuel Load", page.data)
+        self.assertIn(b"Target Onboard", page.data)
         response = self.client.post("/neoscorpion/quick-fuel/calculate",
             data={"tail_number": "N456UP", "required_fuel": "30.0", "apu_running": "no",
                   "remaining_left": "5.0", "remaining_ctr": "5.0", "remaining_right": "5.0"})
