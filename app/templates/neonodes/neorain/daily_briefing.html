@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Daily Briefing | NeoRain{% endblock %}
+{% block content %}
+{% include "neonodes/neorain/_report_style.html" %}
+<main class="rain-report">
+  <h1>DAILY BRIEFING</h1>
+  {% include "neonodes/neorain/_report_sort_picker.html" %}
+  {% if report %}<p>{{ operation.gateway_code }} · {{ operation.sort_name }} · {{ operation.sort_date }} · {{ report.google_status }}</p>{% endif %}
+  <section class="rain-report-panel"><h2>Copy-ready nightly briefing</h2>
+    <button type="button" id="copy-briefing">COPY BRIEFING</button><span id="copy-briefing-status" role="status" aria-live="polite"></span>
+    <pre class="rain-report-briefing" id="briefing-text">{{ briefing }}</pre>
+  </section>
+</main>
+<script>
+document.getElementById('copy-briefing').addEventListener('click', async function () {
+  const text = document.getElementById('briefing-text').textContent;
+  const status = document.getElementById('copy-briefing-status');
+  try { await navigator.clipboard.writeText(text); status.textContent = 'Copied.'; }
+  catch (_) { status.textContent = 'Copy failed. Select the text to copy manually.'; }
+});
+</script>
+{% if is_current %}<script>
+setInterval(async () => {
+  if (document.hidden) return;
+  try {
+    const response = await fetch(location.href, {credentials: 'same-origin', cache: 'no-store'});
+    if (!response.ok) return;
+    const next = new DOMParser().parseFromString(await response.text(), 'text/html').getElementById('briefing-text');
+    const preview = document.getElementById('briefing-text');
+    if (next && preview && next.textContent !== preview.textContent) preview.textContent = next.textContent;
+  } catch (_) { /* Keep the last confirmed briefing during an outage. */ }
+}, 60000);
+</script>{% endif %}
+{% endblock %}

@@ -1,0 +1,9 @@
+<form method="get" aria-label="Select nightly sort">
+  <label for="rain-report-sort">Sort / reporting date</label>
+  <select id="rain-report-sort" name="operation_id" onchange="this.form.submit()">
+    {% for choice in operations %}
+    <option value="{{ choice.id }}" {% if operation and choice.id == operation.id %}selected{% endif %}>{{ choice.gateway_code }} {{ choice.sort_name }} — {{ choice.sort_date }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">Open Sort</button></noscript>
+</form>

@@ -1,0 +1,35 @@
+<style>
+.rain-report {max-width: 1500px; margin: 0 auto; padding: 16px; color: #dce8f3;}
+.rain-report * {box-sizing: border-box;}
+.rain-report h1 {margin: 0 0 8px; color: #eef7ff; font-size: clamp(1.4rem, 2vw, 2rem);}
+.rain-report h2 {margin: 0 0 12px; font-size: 1.05rem; color: #b8e1f4;}
+.rain-report p {line-height: 1.45;}
+.rain-report .rain-report-panel {min-width: 0; margin: 12px 0; padding: 16px; border: 1px solid rgba(var(--node-rgb), .38); border-radius: 6px; background: #0d1925;}
+.rain-report-grid {display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr)); gap: 10px;}
+.rain-report-metric {min-width: 0; padding: 10px; border: 1px solid #28465a; background: #102231; border-radius: 4px;}
+.rain-report-metric span {display: block; color: #a9becc; font-size: .78rem;}
+.rain-report-metric strong {display: block; margin: 3px 0; color: #f2f8fd; font-size: 1.35rem; overflow-wrap: anywhere;}
+.rain-report-metric small {color: #82b6ca;}
+.rain-report label {display: block; color: #a8c7d5; font-weight: 700; font-size: .8rem;}
+.rain-report input, .rain-report select, .rain-report textarea, .rain-report button {font: inherit; color: #eaf4f8; background: #14293a; border: 1px solid #3b7388; border-radius: 4px; min-height: 42px; padding: 7px 10px; max-width: 100%;}
+.rain-report input:focus-visible, .rain-report select:focus-visible, .rain-report textarea:focus-visible, .rain-report button:focus-visible {outline: 2px solid #74d5eb; outline-offset: 2px;}
+.rain-report button {cursor: pointer; font-weight: 700; background: #16445a;}
+.rain-report select {width: min(100%, 320px);}
+.rain-report-entry {display: grid; grid-template-columns: minmax(0, 1fr) minmax(90px, 140px) auto; gap: 8px; align-items: end; margin: 8px 0;}
+.rain-report-entry input {width: 100%;}
+.rain-report-table {width: 100%; border-collapse: collapse; font-size: .86rem;}
+.rain-report-table th, .rain-report-table td {padding: 8px; text-align: left; border-bottom: 1px solid #2b4455; overflow-wrap: anywhere;}
+.rain-report-table th {color: #a7d7e9;}
+.rain-report-briefing {white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; background: #101e2c; color: #e9f4fc; border: 1px solid #346077; font: 1rem/1.65 system-ui, sans-serif;}
+@media (max-width: 700px) {
+  .rain-report {padding: 9px;}
+  .rain-report .rain-report-panel {padding: 11px;}
+  .rain-report-entry {grid-template-columns: minmax(0, 1fr) auto;}
+  .rain-report-entry label {grid-column: 1 / -1;}
+  .rain-report-table thead {display: none;}
+  .rain-report-table, .rain-report-table tbody, .rain-report-table tr, .rain-report-table td {display: block; width: 100%;}
+  .rain-report-table tr {margin: 10px 0; padding: 8px; background: #112331; border: 1px solid #2b4455;}
+  .rain-report-table td {display: grid; grid-template-columns: minmax(80px, 40%) minmax(0, 1fr); gap: 8px; padding: 5px; border: 0;}
+  .rain-report-table td::before {content: attr(data-label); color: #a7d7e9; font-weight: 700;}
+}
+</style>

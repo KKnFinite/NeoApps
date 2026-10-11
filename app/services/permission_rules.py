@@ -457,6 +457,21 @@ DEFAULT_PERMISSION_RULES = (
         "View NeoRain Load Planner Lineup workspace.",
     ),
     (
+        "neorain.rainrock.view",
+        "watcher",
+        "View NeoRain nightly Rainrock recap.",
+    ),
+    (
+        "neorain.rainrock.edit",
+        "operator",
+        "Edit NeoRain sort-scoped recap inputs.",
+    ),
+    (
+        "neorain.daily_briefing.view",
+        "watcher",
+        "View and copy the NeoRain Daily Briefing.",
+    ),
+    (
         "neorain.load_planner_lineup.edit",
         "operator",
         "Edit NeoRain Load Planner Lineup workspace.",
@@ -1354,6 +1369,20 @@ PERMISSION_RULE_ITEMS = (
             "view": "neorain.load_planner_lineup.view",
             "edit": "neorain.load_planner_lineup.edit",
         },
+    ),
+    (
+        "rain",
+        "neorain.rainrock",
+        "Rainrock",
+        "NeoRain nightly recap and operator inputs.",
+        {"view": "neorain.rainrock.view", "edit": "neorain.rainrock.edit"},
+    ),
+    (
+        "rain",
+        "neorain.daily_briefing",
+        "Daily Briefing",
+        "NeoRain copy-ready nightly briefing.",
+        {"view": "neorain.daily_briefing.view"},
     ),
     (
         "rain",

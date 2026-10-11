@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import (
     current_app,
+    abort,
     flash,
     jsonify,
     redirect,
@@ -92,6 +93,9 @@ from app.services.neorain_fuel_authority import (
     completed_scorpion_fuel_by_mission,
     rain_fuel_data_source,
 )
+from app.services.neorain_reports import (
+    REPORT_FIELDS, briefing_text, report_context, save_report_entry,
+)
 
 
 NEORAIN_LAST_PAGE_SESSION_KEY = "neorain.last_page"
@@ -103,6 +107,8 @@ class _LoadPlannerStaleError(ValueError):
 NEORAIN_PAGES = (
     ("Inbound", "neorain.inbound", "neorain.inbound.view", "neorain.inbound.edit"),
     ("Outbound", "neorain.outbound", "neorain.outbound.view", "neorain.outbound.edit"),
+    ("Rainrock", "neorain.rainrock", "neorain.rainrock.view", "neorain.rainrock.edit"),
+    ("Daily Briefing", "neorain.daily_briefing", "neorain.daily_briefing.view", None),
     (
         "Load Planner Lineup",
         "neorain.load_planner_lineup",
@@ -132,6 +138,83 @@ def index():
 @gateway_node_required("rain")
 def index_slash():
     return index()
+
+
+def _selected_report_operation(gateway):
+    current = current_neorain_outbound_operation(gateway)
+    selected_id = request.values.get("operation_id", type=int)
+    if selected_id is None:
+        return current, current
+    operation = SortDateOperation.query.filter_by(id=selected_id).first()
+    if operation is None or operation.gateway_code != gateway.code or (
+        operation.gateway_id is not None and operation.gateway_id != gateway.id
+    ):
+        abort(404)
+    return operation, current
+
+
+def _report_choices(gateway):
+    return (SortDateOperation.query.filter_by(gateway_code=gateway.code)
+            .order_by(SortDateOperation.sort_date.desc(), SortDateOperation.id.desc())
+            .limit(60).all())
+
+
+@bp.route("/rainrock")
+@gateway_node_required("rain")
+def rainrock():
+    access = permission_access("neorain.rainrock.view", "neorain.rainrock.edit")
+    if not access["can_view"]:
+        abort(403)
+    gateway = get_current_gateway()
+    operation, current = _selected_report_operation(gateway)
+    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.rainrock"
+    is_current = bool(current and operation and current.id == operation.id)
+    return render_template(
+        "neonodes/neorain/rainrock.html", gateway=gateway, operation=operation,
+        operations=_report_choices(gateway), can_edit=access["can_edit"],
+        report=report_context(operation, current=is_current) if operation else None,
+        is_current=is_current,
+        report_fields=REPORT_FIELDS,
+    )
+
+
+@bp.route("/rainrock/entry", methods=["POST"])
+@gateway_node_required("rain")
+def rainrock_entry():
+    if not user_can("neorain.rainrock.edit"):
+        abort(403)
+    gateway = get_current_gateway()
+    operation, current = _selected_report_operation(gateway)
+    if operation is None:
+        abort(404)
+    try:
+        expected_version = int(request.form.get("expected_version", ""))
+        save_report_entry(operation, request.form.get("field", ""),
+                          request.form.get("value", ""), expected_version, current_user.id,
+                          current=bool(current and operation.id == current.id))
+        flash("Recap input saved.", "success")
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        flash(str(exc) if isinstance(exc, ValueError) else "This recap input changed. Reload and try again.", "error")
+    return redirect(url_for("neorain.rainrock", operation_id=operation.id))
+
+
+@bp.route("/daily-briefing")
+@gateway_node_required("rain")
+def daily_briefing():
+    if not user_can("neorain.daily_briefing.view"):
+        abort(403)
+    gateway = get_current_gateway()
+    operation, current = _selected_report_operation(gateway)
+    is_current = bool(current and operation and current.id == operation.id)
+    report = report_context(operation, current=is_current) if operation else None
+    session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.daily_briefing"
+    return render_template(
+        "neonodes/neorain/daily_briefing.html", gateway=gateway, operation=operation,
+        operations=_report_choices(gateway), report=report,
+        is_current=is_current,
+        briefing=briefing_text(report) if report else "No selected sort.",
+    )
 
 
 @bp.route("/inbound")

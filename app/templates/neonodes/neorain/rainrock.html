@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Rainrock | NeoRain{% endblock %}
+{% block content %}
+{% include "neonodes/neorain/_report_style.html" %}
+<main class="rain-report">
+  <h1>RAINROCK</h1>
+  {% include "neonodes/neorain/_report_sort_picker.html" %}
+  {% if report %}
+  <p>{{ operation.gateway_code }} · {{ operation.sort_name }} · Operational reporting date {{ operation.sort_date }}</p>
+  <div data-rain-report-live>
+  <section class="rain-report-panel" aria-label="Report output">
+    <h2>Volume &amp; performance</h2>
+    <div class="rain-report-grid">
+      {% for key in ('planned_volume','actual_volume','smalls_percent','planned_fph','actual_fph') %}
+      {% set item = report.fields[key] %}
+      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}{% if key == 'smalls_percent' and item.value is not none %}%{% endif %}</strong><small>{{ item.source }}</small></div>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="rain-report-panel">
+    <h2>Staffing — Hub / Shift</h2>
+    <div class="rain-report-grid">
+      {% for key in ('hub_planned_payroll','hub_actual_payroll','hub_planned_working','hub_actual_working') %}
+      {% set item = report.fields[key] %}
+      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}</strong><small>{{ item.source }}</small></div>
+      {% endfor %}
+    </div>
+    <h2>Ramp</h2>
+    <div class="rain-report-grid">
+      {% for key in ('ramp_planned_payroll','ramp_actual_payroll','ramp_planned_working','ramp_actual_working') %}
+      {% set item = report.fields[key] %}
+      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}</strong><small>{{ item.source }}</small></div>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="rain-report-panel">
+    <h2>Aircraft lateness</h2>
+    <p>Recorded actuals: inbound {{ report.recorded_inbound }}/{{ report.eligible_inbound }}, outbound {{ report.recorded_outbound }}/{{ report.eligible_outbound }}. Counts can remain provisional until all flights are recorded.</p>
+    <div class="rain-report-grid">
+      {% for side, summary in (('Inbound', report.inbound_late), ('Outbound', report.outbound_late)) %}
+      <div class="rain-report-metric"><span>{{ side }} late aircraft</span><strong>{{ summary.aircraft_late }}</strong></div>
+      <div class="rain-report-metric"><span>{{ side }} total late minutes</span><strong>{{ summary.late_minutes }}</strong></div>
+      <div class="rain-report-metric"><span>{{ side }} average late minutes</span><strong>{{ '%.1f'|format(summary.late_minutes / summary.aircraft_late) if summary.aircraft_late else '0.0' }}</strong></div>
+      {% endfor %}
+    </div>
+  </section>
+  {% for heading, rows, location_label, scheduled_label, actual_label in (('Inbound aircraft', report.inbound_rows, 'Origin', 'Scheduled arrival', 'Actual Block-In'), ('Outbound aircraft', report.outbound_rows, 'Destination', 'Scheduled departure', 'Actual Block-Out')) %}
+  <section class="rain-report-panel">
+    <h2>{{ heading }}</h2>
+    <table class="rain-report-table"><thead><tr><th>Flight</th><th>Tail</th><th>{{ location_label }}</th><th>{{ scheduled_label }}</th><th>{{ actual_label }}</th><th>+/- min</th>{% if heading == 'Outbound aircraft' %}<th>Delay codes / notes</th>{% endif %}</tr></thead><tbody>
+    {% for row in rows %}<tr><td data-label="Flight">{{ row.flight or '—' }}</td><td data-label="Tail">{{ row.tail or '—' }}</td><td data-label="{{ location_label }}">{{ row.place or '—' }}</td><td data-label="{{ scheduled_label }}">{{ row.scheduled or '—' }}</td><td data-label="{{ actual_label }}">{{ row.actual or '—' }}</td><td data-label="+/- min">{{ row.variance }}</td>{% if heading == 'Outbound aircraft' %}<td data-label="Delay codes / notes">{% for code, note in row.delays %}<div>{{ code }} {{ note }}</div>{% endfor %}</td>{% endif %}</tr>{% else %}<tr><td colspan="7">No records for this Sort.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  {% endfor %}
+  <section class="rain-report-panel"><h2>Additional sort notes</h2>{% for n in range(1, 6) %}{% set item = report.fields['note_' ~ n] %}{% if item.value %}<p>{{ item.value }} <small>({{ item.source }})</small></p>{% endif %}{% endfor %}</section>
+  </div>
+  <section class="rain-report-panel"><h2>Editable recap inputs</h2>
+    {% if can_edit %}
+      {% for field, spec in report_fields.items() %}{% set item = report.fields[field] %}
+      {% if item.editable %}<form class="rain-report-entry" method="post" action="{{ url_for('neorain.rainrock_entry') }}">
+        <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="field" value="{{ field }}"><input type="hidden" name="expected_version" value="{{ item.version }}">
+        <label for="entry-{{ field }}">{{ item.label }} · {{ item.source }}</label>
+        <input id="entry-{{ field }}" name="value" value="{{ item.manual_value }}" placeholder="{{ item.value if item.value is not none else 'No value' }}" maxlength="2000" aria-label="{{ item.label }}"><button type="submit">Save</button>
+      </form>{% endif %}
+      {% endfor %}
+    {% else %}<p>Read-only. An authorized NeoRain operator can edit available recap inputs.</p>{% endif %}
+  </section>
+  <section class="rain-report-panel"><h2>Data-source status</h2><p>{{ report.google_status }}. Each field shows its own source above. A dash means unavailable; zero is retained as a valid value.</p></section>
+  {% else %}<p>No Sort is selected. Select a historical Sort above when available.</p>{% endif %}
+</main>
+{% if is_current %}<script>
+setInterval(async () => {
+  if (document.hidden) return;
+  try {
+    const response = await fetch(location.href, {credentials: 'same-origin', cache: 'no-store'});
+    if (!response.ok) return;
+    const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('[data-rain-report-live]');
+    const live = document.querySelector('[data-rain-report-live]');
+    if (next && live && next.innerHTML !== live.innerHTML) live.innerHTML = next.innerHTML;
+  } catch (_) { /* Keep the last confirmed report during a network interruption. */ }
+}, 60000);
+</script>{% endif %}
+{% endblock %}
