@@ -45,6 +45,7 @@ from app.services.neoscorpion import (
     visible_neoscorpion_menu_items,
 )
 from app.services.neoscorpion_dispatch_planning import assignment_mission_timing
+from app.services.neoscorpion_quick_fuel import calculate_quick_fuel
 from app.services.neoscorpion_spear_calibration import LiveCalibration
 from app.services.parking_plan import set_tail_hot
 from app.services.permission_rules import ensure_default_permission_rules
@@ -85,9 +86,84 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertEqual(gallons_to_lbs(100, 6.7), 670)
         self.assertEqual(lbs_to_gallons(670, 6.7), 100)
 
+    def test_quick_fuel_supported_tails_and_incomplete_inputs(self):
+        expected = {"N123UP": ("A300", 6), "N456UP": ("B757", 3),
+                    "N367UP": ("B767ER", 3), "N567UP": ("B747-400", 7),
+                    "N667UP": ("B747-8", 7)}
+        for tail, (aircraft_type, tank_count) in expected.items():
+            with self.subTest(tail=tail):
+                result = calculate_quick_fuel(self.gateway, {"tail_number": tail})
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["aircraft_type"], aircraft_type)
+                self.assertEqual(len(result["tank_rows"]), tank_count)
+                self.assertIsNone(result["totals"]["planned"])
+                self.assertIsNone(result["totals"]["estimated_gallons"])
+        for tail in ("", "N000UP", "?456UP", "N4"):
+            self.assertFalse(calculate_quick_fuel(self.gateway, {"tail_number": tail})["ok"])
+
+    def test_quick_fuel_reuses_planning_apu_and_configured_density_without_writes(self):
+        db.session.add_all([
+            NeoScorpionSettings(gateway_id=self.gateway.id, fuel_density_lbs_per_gallon=5),
+            NeoScorpionAircraftFuelSetting(gateway_id=self.gateway.id, aircraft_type="B757",
+                apu_rate_thousand_lbs_per_hour=Decimal("0.4")),
+        ])
+        db.session.commit()
+        form = {"tail_number": "N456UP", "required_fuel": "30.0",
+                "remaining_left": "5.0", "remaining_ctr": "5.0", "remaining_right": "5.0",
+                "actual_left": "10.0", "actual_ctr": "10.0", "actual_right": "10.0",
+                "apu_running": "no", "transfer_fuel_gallons": "3000"}
+        result = calculate_quick_fuel(self.gateway, form)
+        self.assertEqual(result["totals"]["remaining"], "15.0")
+        self.assertEqual(result["totals"]["planned"], "30.0")
+        self.assertEqual(result["totals"]["actual"], "30.0")
+        self.assertEqual(result["totals"]["neo_fuel"], "30.0")
+        self.assertEqual(result["totals"]["uplift"], "15.0")
+        self.assertEqual(result["totals"]["estimated_gallons"], 3000)
+        self.assertEqual(result["totals"]["transfer_gallons"], 3000)
+        self.assertFalse(db.session.new or db.session.dirty)
+
+        apu_form = {**form, "apu_running": "yes", "apu_source_tank_code": "ctr",
+                    "departure_local": "2026-06-25T14:00"}
+        automatic = calculate_quick_fuel(self.gateway, apu_form,
+                                         now_utc=datetime(2026, 6, 25, 18))
+        self.assertEqual(automatic["apu"]["automatic"], "0.4")
+        self.assertEqual(automatic["totals"]["fuel_load"], "30.4")
+        self.assertEqual(automatic["totals"]["neo_fuel"], "29.6")
+        self.assertEqual(automatic["totals"]["estimated_gallons"], 3080)
+        missing_time = calculate_quick_fuel(self.gateway, {**apu_form, "departure_local": ""})
+        self.assertIsNone(missing_time["totals"]["planned"])
+        self.assertIsNone(missing_time["totals"]["estimated_gallons"])
+        self.assertTrue(any("departure time" in issue for issue in missing_time["issues"]))
+        past_time = calculate_quick_fuel(self.gateway, {**apu_form,
+                    "departure_local": "2026-06-25T12:00"},
+                    now_utc=datetime(2026, 6, 25, 18))
+        self.assertIsNone(past_time["totals"]["planned"])
+        self.assertTrue(any("Departure has passed" in issue for issue in past_time["issues"]))
+        manual = calculate_quick_fuel(self.gateway, {**apu_form, "departure_local": "",
+                    "apu_override_enabled": "1", "apu_override_allowance": "0.55"})
+        self.assertEqual(manual["apu"]["allowance"], "0.6")
+        self.assertEqual(manual["totals"]["fuel_load"], "30.6")
+        self.assertEqual(manual["totals"]["estimated_gallons"], 3110)
+
+    def test_quick_fuel_route_is_available_to_watcher_without_a_sort_and_does_not_write(self):
+        self._login_approved_user(role="watcher")
+        page = self.client.get("/neoscorpion/quick-fuel")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"data-quick-fuel", page.data)
+        self.assertIn(b"Quick Fuel", page.data)
+        response = self.client.post("/neoscorpion/quick-fuel/calculate",
+            data={"tail_number": "N456UP", "required_fuel": "30.0", "apu_running": "no",
+                  "remaining_left": "5.0", "remaining_ctr": "5.0", "remaining_right": "5.0"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["totals"]["required"], "30.0")
+        self.assertEqual(NeoScorpionFuelAssignment.query.count(), 0)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
+        self.assertEqual(SortDateMission.query.count(), 0)
+
     def test_unauthenticated_users_cannot_access_neoscorpion_pages(self):
         for path in (
             "/neoscorpion",
+            "/neoscorpion/quick-fuel",
             "/neoscorpion/fuel-dispatch",
             "/neoscorpion/fueler",
             "/neoscorpion/truck-manager",
@@ -120,6 +196,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"data-node-desktop-dashboard", dashboard.data)
         self.assertIn(b'data-node-dashboard="scorpion"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="dispatch"', dashboard.data)
+        self.assertIn(b'data-node-dashboard-tile="quick-fuel"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="fueler"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="trucks"', dashboard.data)
         self.assertIn(b'data-node-dashboard-tile="settings"', dashboard.data)
@@ -142,6 +219,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             labels,
             [
                 "Dashboard",
+                "Quick Fuel",
                 "Fuel Dispatch",
                 "Fueling Board",
                 "Truck Manager",
@@ -159,6 +237,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             )
         ]
         self.assertNotIn("Hanzo", restricted)
+        self.assertIn("Quick Fuel", [item.label for item in visible_neoscorpion_menu_items(lambda _permission: False)])
 
     def test_mobile_topbar_uses_complete_short_labels_without_ellipsis(self):
         self._login_approved_user(role="master")

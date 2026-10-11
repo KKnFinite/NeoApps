@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Quick Fuel | NeoScorpion{% endblock %}
+
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-fueler-screen neoscorpion-quick-fuel" aria-label="NeoScorpion Quick Fuel">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
+        {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
+        {% include "neonodes/neoscorpion/_brand_title.html" %}
+        {% endwith %}
+        <h1>Quick Fuel</h1>
+    </header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+    <article class="neoscorpion-fueler-card" data-quick-fuel data-calculate-url="{{ url_for('neoscorpion.quick_fuel_calculate') }}">
+        <header class="neoscorpion-fueler-mission-head"><div><span>STANDALONE CALCULATOR</span><strong>QUICK FUEL</strong></div><small>No mission, assignment, truck, or fuel event is changed.</small></header>
+        <form class="neoscorpion-fueler-form" data-quick-fuel-form autocomplete="off">
+            {{ csrf_field() }}
+            <div class="neoscorpion-quick-fuel-setup">
+                <label>Tail Number<input name="tail_number" data-quick-tail maxlength="12" autocomplete="off" placeholder="AIRCRAFT TAIL" aria-label="Tail Number"></label>
+                <label>Required Fuel Load · K LBS<input name="required_fuel" inputmode="decimal" placeholder="K LBS" aria-label="Required Fuel Load"></label>
+                <label>Departure · {{ gateway.code }} local (optional)<input name="departure_local" type="datetime-local" aria-label="Departure local date and time"></label>
+                <button type="button" class="action-button" data-quick-clear>CLEAR / NEW AIRCRAFT</button>
+            </div>
+            <p class="neoscorpion-helper" data-quick-aircraft>Enter a supported tail number to load its tank layout.</p>
+            <div class="neoscorpion-apu-controls" data-quick-controls hidden>
+                <label>APU Running<select name="apu_running" aria-label="APU Running"><option value="">Not Confirmed</option><option value="no">No</option><option value="yes">Yes</option></select></label>
+                <label data-quick-apu-source hidden>APU Source Tank<select name="apu_source_tank_code" aria-label="APU Source Tank"><option value="">Select tank</option></select></label>
+                <label data-quick-manual-toggle hidden>Manual APU Allowance<select name="apu_override_enabled" aria-label="Manual APU Allowance"><option value="0">Use recommended</option><option value="1">Use manual</option></select></label>
+                <label data-quick-manual-value hidden>Manual APU · K LBS<input name="apu_override_allowance" inputmode="decimal" placeholder="K LBS" aria-label="Manual APU allowance"></label>
+            </div>
+            <p class="neoscorpion-helper" data-quick-apu-reference hidden></p>
+            <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="Quick Fuel tank readings" data-quick-tanks hidden>
+                <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row"><span role="columnheader">Tank</span><span role="columnheader">Remaining</span><span role="columnheader">Planned</span><span role="columnheader">Actual</span></div>
+                <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row" data-quick-total-row><strong role="rowheader">TOTAL</strong><strong role="cell" data-quick-total="remaining">—</strong><strong role="cell" data-quick-total="planned">—</strong><strong role="cell" data-quick-total="actual">—</strong></div>
+            </div>
+            <dl class="neoscorpion-fuel-totals" data-quick-totals hidden>
+                <div><dt>Required Fuel</dt><dd data-quick-total="required">—</dd></div>
+                <div><dt>APU Allowance</dt><dd data-quick-total="apu">—</dd></div>
+                <div class="neoscorpion-fuel-total-primary"><dt>Fuel Load</dt><dd data-quick-total="fuel_load">—</dd></div>
+                <div><dt>Uplift Required</dt><dd data-quick-total="uplift">—</dd></div>
+                <div><dt>Estimated Gallons</dt><dd data-quick-total="estimated_gallons">—</dd></div>
+                <div class="neoscorpion-fuel-total-primary"><dt>Neo Fuel</dt><dd data-quick-total="neo_fuel">—</dd></div>
+            </dl>
+            <label data-quick-transfer hidden>Transfer Fuel · GAL<input name="transfer_fuel_gallons" inputmode="numeric" placeholder="GAL" aria-label="Transfer Fuel gallons"></label>
+            <p class="neoscorpion-helper" data-quick-transfer-output hidden>TRANSFER FUEL —</p>
+            <div class="neoscorpion-calculation-warning" data-quick-issues role="status" aria-live="polite">Enter a tail number to begin.</div>
+        </form>
+    </article>
+</section>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION, scorpion='20261001-fuel-display-no-k-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_quick_fuel.js', v=config.STATIC_ASSET_VERSION, scorpion='20261010-quick-fuel-v1') }}"></script>
+{% endblock %}

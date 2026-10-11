@@ -281,13 +281,14 @@ def lbs_to_gallons(lbs, density_lbs_per_gallon):
 class NeoScorpionMenuItem:
     label: str
     endpoint: str
-    permission: str
+    permission: str | None
     key: str
     active: bool = False
 
 
 NEOSCORPION_MENU = (
     NeoScorpionMenuItem("Dashboard", "neoscorpion.index", "neoscorpion.dashboard.view", "dashboard"),
+    NeoScorpionMenuItem("Quick Fuel", "neoscorpion.quick_fuel", None, "quick-fuel"),
     NeoScorpionMenuItem("Fuel Dispatch", "neoscorpion.fuel_dispatch", "neoscorpion.fuel_dispatch.view", "dispatch"),
     NeoScorpionMenuItem("Fueling Board", "neoscorpion.fueling_board", "neoscorpion.fueling_board.view", "fueling-board"),
     NeoScorpionMenuItem(
@@ -307,7 +308,7 @@ NEOSCORPION_MENU = (
 def visible_neoscorpion_menu_items(user_can_func, current_endpoint=None):
     items = []
     for item in NEOSCORPION_MENU:
-        if not user_can_func(item.permission):
+        if item.permission and not user_can_func(item.permission):
             continue
         items.append(
             NeoScorpionMenuItem(

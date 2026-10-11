@@ -63,6 +63,7 @@ from app.services.neoscorpion_assets import (
     set_nightly_fuel_island_count,
     update_nightly_truck,
 )
+from app.services.neoscorpion_quick_fuel import calculate_quick_fuel
 from app.services.neoscorpion_dispatch_checks import DispatcherCheckConflict, save_dispatcher_check
 from app.services.permission_rules import (
     permission_access,
@@ -139,6 +140,22 @@ def index():
 @gateway_node_required("scorpion")
 def index_slash():
     return redirect(url_for("neoscorpion.index"))
+
+
+@bp.get("/quick-fuel")
+@gateway_node_required("scorpion")
+def quick_fuel():
+    return render_template(
+        "neonodes/neoscorpion/quick_fuel.html",
+        gateway=get_current_gateway(),
+    )
+
+
+@bp.post("/quick-fuel/calculate")
+@gateway_node_required("scorpion")
+def quick_fuel_calculate():
+    # Calculator only: no Sort, assignment, fuel event, or inventory write.
+    return _json_no_store(calculate_quick_fuel(get_current_gateway(), request.form))
 
 
 @bp.route("/fuel-dispatch", methods=["GET", "POST"])
@@ -1781,7 +1798,7 @@ def _run_fuel_interruption_action(action, success_message, no_change_message):
 
 
 def _visible_neoscorpion_internal_menu():
-    preload_permission_rules(item.permission for item in NEOSCORPION_MENU)
+    preload_permission_rules(item.permission for item in NEOSCORPION_MENU if item.permission)
     return visible_neoscorpion_menu_items(user_can, request.endpoint)
 
 

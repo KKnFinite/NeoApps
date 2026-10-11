@@ -451,6 +451,22 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     font-weight: 950;
 }
 
+.neoscorpion-quick-fuel [hidden] { display: none !important; }
+.neoscorpion-quick-fuel > .neoscorpion-fueler-card { max-width: 1050px; margin-inline: auto; }
+.neoscorpion-quick-fuel .neoscorpion-fueler-form { grid-template-columns: minmax(0, 1fr); }
+.neoscorpion-quick-fuel-setup { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.neoscorpion-quick-fuel-setup > label:first-child input,
+.neoscorpion-quick-fuel-setup > label:nth-child(2) input { font-size: 1.1rem; font-weight: 900; min-height: 44px; }
+.neoscorpion-quick-fuel-setup > .action-button { align-self: end; min-height: 44px; }
+.neoscorpion-quick-fuel [data-quick-controls] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.neoscorpion-quick-fuel [data-quick-transfer] { max-width: 220px; }
+.neoscorpion-quick-fuel [data-quick-issues] { margin: 0; }
+@media (max-width: 600px) {
+    .neoscorpion-quick-fuel-setup,
+    .neoscorpion-quick-fuel [data-quick-controls] { grid-template-columns: minmax(0, 1fr); }
+    .neoscorpion-quick-fuel > .neoscorpion-fueler-card { min-width: 0; }
+}
+
 .neoscorpion-fueler-truck {
     color: #ffd21a !important;
     font-size: .82rem !important;
