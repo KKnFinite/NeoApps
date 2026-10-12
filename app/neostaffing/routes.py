@@ -70,6 +70,10 @@ STAFFING_SCREEN_ITEMS = (
     ("Requests", "neostaffing.change_requests", CHANGE_REQUEST_VIEW_PERMISSION, "Change queue", False, True),
     ("Notifications", "neostaffing.staffing_notifications", CHANGE_REQUEST_VIEW_PERMISSION, "Operational alerts", False, True),
     ("Bulk Change", "neostaffing.bulk_change", BULK_CHANGE_PERMISSION, "Session change workspace", False, True),
+    ("Employee Records", "neostaffing.employee_records", PEOPLE_VIEW_PERMISSION, "Employee documentation", False, True),
+    ("Timecards", "neostaffing.timecards", PEOPLE_VIEW_PERMISSION, "Employee hours", False, True),
+    ("Accountability", "neostaffing.accountability", PEOPLE_VIEW_PERMISSION, "Discipline tracker", False, True),
+    ("Vacation Selection", "neostaffing.vacation_selection", VACATION_SELECTION_VIEW_PERMISSION, "Vacation calendars", False, True),
 )
 STAFFING_UNDER_CONSTRUCTION_ENDPOINTS = frozenset(
     endpoint for _label, endpoint, _permission, _description, _priority, under_construction

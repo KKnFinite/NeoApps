@@ -15,10 +15,39 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services import neostaffing as staffing_service
+from app.services import neostaffing_bulk_change as bulk_change_service
 from app.services.password_policy import set_user_password
 
 
 class NeoStaffingDataFoundationTest(unittest.TestCase):
+    def test_employee_id_label_rejected_in_create_edit_bulk_and_staging(self):
+        from types import SimpleNamespace
+
+        _, _, _, area = self._hierarchy()
+        values = {
+            "employee_id": "A12345", "first_name": "Test", "last_name": "Worker",
+            "seniority_date": "2020-01-02", "classification": "part_time",
+        }
+        person = staffing_service.create_person(values)
+        db.session.commit()
+
+        for malformed in ("Employee ID 12345", "employee id: 12345", "EMP ID #12345"):
+            with self.subTest(malformed=malformed):
+                bad = {**values, "employee_id": malformed}
+                with self.assertRaisesRegex(ValueError, "without an Employee ID label"):
+                    staffing_service.create_person(bad)
+                with self.assertRaisesRegex(ValueError, "without an Employee ID label"):
+                    staffing_service.update_person(person, bad)
+                with self.assertRaisesRegex(ValueError, "without an Employee ID label"):
+                    staffing_service.create_people_batch([bad], area)
+                with self.assertRaisesRegex(ValueError, "without an Employee ID label"):
+                    bulk_change_service._normalize_person_field("employee_id", malformed, None)
+                with self.assertRaisesRegex(ValueError, "without an Employee ID label"):
+                    bulk_change_service._normalize_new_person({**bad, "work_area_unit_id": ""}, SimpleNamespace())
+                self.assertEqual(person.employee_id, "A12345")
+        self.assertEqual(staffing_service.validate_employee_id(" FT-Combo42 "), "FT-Combo42")
+        self.assertEqual(StaffingPerson.query.count(), 1)
+
     def test_bulk_assignment_batches_lookup_and_flush_for_assign_move_clear(self):
         _sort, _operation, department, first = self._hierarchy()
         second = staffing_service.create_unit({

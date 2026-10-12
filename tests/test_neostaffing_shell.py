@@ -134,7 +134,8 @@ class StaffingShellTest(unittest.TestCase):
 
     def test_navigation_exact_order_desktop_split_and_mobile_links(self):
         endpoints=['people','org_chart','attendance','reports','shift_flow','settings',
-                   'staffing_groups','change_requests','staffing_notifications','bulk_change']
+                   'staffing_groups','change_requests','staffing_notifications','bulk_change',
+                   'employee_records','timecards','accountability','vacation_selection']
         with self.app.test_request_context():
             expected=[url_for('neostaffing.'+endpoint) for endpoint in endpoints]
         desktop=self.navigation()
@@ -153,7 +154,9 @@ class StaffingShellTest(unittest.TestCase):
     def test_navigation_preserves_each_permission_gate_on_both_surfaces(self):
         gates={'neostaffing.staffing_groups.view':['staffing_groups'],
                'neostaffing.change_requests.view':['change_requests','staffing_notifications'],
-               'neostaffing.bulk_change.use':['bulk_change']}
+               'neostaffing.bulk_change.use':['bulk_change'],
+               'neostaffing.people.view':['people','attendance','shift_flow','employee_records','timecards','accountability'],
+               'neostaffing.vacation_selection.view':['vacation_selection']}
         for desktop in (True,False):
             all_links=self.nav_links(self.navigation(desktop=desktop))
             for permission,endpoints in gates.items():
@@ -181,10 +184,11 @@ class StaffingShellTest(unittest.TestCase):
         self.assertEqual(mobile.count('UNDER CONSTRUCTION'),1)
         self.assertEqual(self.nav_links(rail),self.nav_links(mobile))
 
-    def test_construction_heading_disappears_when_all_four_permissions_denied(self):
+    def test_construction_heading_disappears_when_all_eight_links_denied(self):
         denied={'neostaffing.staffing_groups.view', 'neostaffing.change_requests.view',
-                'neostaffing.bulk_change.use'}
+                'neostaffing.bulk_change.use', 'neostaffing.people.view',
+                'neostaffing.vacation_selection.view'}
         for desktop in (True,False):
             html=self.navigation(desktop=desktop,denied=denied)
             self.assertNotIn('UNDER CONSTRUCTION',html)
-            self.assertEqual(len(self.nav_links(html)),6)
+            self.assertEqual(len(self.nav_links(html)),3)

@@ -2232,7 +2232,7 @@ def create_people_batch(rows, work_area):
 
 
 def _person_values(values):
-    employee_id = _required_text(values.get("employee_id"), "Employee ID")
+    employee_id = validate_employee_id(values.get("employee_id"))
     first_name = _normalize_person_name(values.get("first_name"), "First name")
     last_name = _normalize_person_name(values.get("last_name"), "Last name")
     seniority_date = _parse_date(values.get("seniority_date"), "Seniority date")
@@ -2259,6 +2259,17 @@ def _person_values(values):
         "phone_number": phone_number,
         "active": active,
     }
+
+
+_EMPLOYEE_ID_LABEL = re.compile(r"^(?:employee|emp)\s+(?:id|number|no\.?|#)(?:\s|[:#-]|$)", re.IGNORECASE)
+
+
+def validate_employee_id(value):
+    """Reject pasted field labels without restricting legitimate alphanumeric IDs."""
+    employee_id = _required_text(value, "Employee ID")
+    if _EMPLOYEE_ID_LABEL.match(employee_id):
+        raise ValueError("Enter only the Employee ID, without an Employee ID label.")
+    return employee_id
 
 
 def _apply_person_values(person, person_values):

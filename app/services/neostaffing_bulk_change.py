@@ -1536,7 +1536,7 @@ def _normalize_new_person(values, bundle):
         "work_area_unit_id", values.get("work_area_unit_id"), bundle
     )
     return {
-        "employee_id": _required_text(values.get("employee_id"), "Employee ID"),
+        "employee_id": staffing_service.validate_employee_id(values.get("employee_id")),
         "first_name": _required_text(values.get("first_name"), "First name"),
         "last_name": _required_text(values.get("last_name"), "Last name"),
         "seniority_date": _date_text(values.get("seniority_date")),
@@ -1549,7 +1549,9 @@ def _normalize_new_person(values, bundle):
 
 
 def _normalize_person_field(field, value, bundle):
-    if field in {"employee_id", "first_name", "last_name"}:
+    if field == "employee_id":
+        return staffing_service.validate_employee_id(value)
+    if field in {"first_name", "last_name"}:
         return _required_text(value, _field_label(field))
     if field == "seniority_date":
         return _date_text(value)
