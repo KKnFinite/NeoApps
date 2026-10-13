@@ -99,6 +99,16 @@
         </section>
 
         <section class="tunnel-panel tunnel-counts-panel" aria-label="Ballmat counts">
+            <section class="tunnel-driver-routing" aria-label="Driver routing">
+                <h2>DRIVER ROUTING</h2>
+                <div class="tunnel-driver-routing-rows">
+                    {% for wave_key, wave_label in [('first', '1ST WAVE'), ('second', '2ND WAVE')] %}
+                    {% set route = state.routing.routes[wave_key] %}
+                    <span>{{ wave_label }}</span>
+                    <strong data-tunnel-driver-route="{{ wave_key }}">{{ 'ROUTING ' ~ route.direction|upper if route.display_state == 'route' else route.display_message }}</strong>
+                    {% endfor %}
+                </div>
+            </section>
             <h2 class="tunnel-mobile-section-title">Ballmat Counts</h2>
             <div class="tunnel-ballmat-grid">
                 {% for side_key in ["east", "west"] %}
@@ -475,6 +485,8 @@
         const routing = state.routing || {};
         setEditableValue(offsetInput, routing.west_offset ?? 0);
         Object.entries(routing.routes || {}).forEach(([waveKey, route]) => {
+            setText(`[data-tunnel-driver-route="${waveKey}"]`,
+                route.display_state === "route" ? `ROUTING ${route.direction.toUpperCase()}` : route.display_message);
             const override = route?.override || "auto";
             routeOverrideInputs
                 .filter((input) => input.dataset.tunnelRouteOverrideInput === waveKey)

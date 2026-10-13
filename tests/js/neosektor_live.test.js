@@ -33,6 +33,39 @@ test('live_counts: render canonical routing directions and lifecycle messages', 
     assert.equal(src.includes('driver_routing_state'), false);
 });
 
+test('tunnel_conductor: canonical routing readout updates without changing pending sliders', () => {
+    const src = source('tunnel_conductor');
+    const labels = new Map(['first', 'second'].map(key => [key, {textContent: ''}]));
+    const slider = {value: 'pending', dataset: {tunnelRouteOverrideInput: 'first'}};
+    const context = {
+        root: {querySelector(selector) { return labels.get(selector.match(/data-tunnel-driver-route="(.*?)"/)?.[1]); }},
+        spotterModes: null, dischargeControls: null, offsetInput: null,
+        setEditableValue() {}, routeOverrideInputs: [slider],
+        routeOverridePositions: {auto: '1', east: '2', west: '0'},
+        hasPending: () => true, bayPriorityInputs: [], settingInputs: [],
+    };
+    vm.createContext(context);
+    const setter = src.match(/    const setText = \(selector, value\) => \{[\s\S]*?\n    \};/)[0];
+    const renderer = src.match(/    const applyState = \(state\) => \{[\s\S]*?\n    \};/)[0];
+    vm.runInContext(`${setter}\n${renderer}\nthis.render = applyState;`, context);
+    for (const [display_state, display_message] of [
+        ['route', ''], ['not_arrived', '1ST WAVE NOT ARRIVED'],
+        ['all_in', '1ST WAVE ALL IN'], ['pending', 'PENDING'], ['all_up', 'ALL UP'],
+    ]) {
+        for (const direction of ['east', 'west']) {
+            context.render({routing: {routes: {
+                first: {direction, display_state, display_message, override: direction},
+                second: {direction, display_state, display_message, override: direction},
+            }}, ballmat_routing: {first: 'WRONG', second: 'WRONG'}});
+            for (const label of labels.values()) {
+                assert.equal(label.textContent, display_state === 'route' ? `ROUTING ${direction.toUpperCase()}` : display_message);
+            }
+            assert.equal(slider.value, 'pending');
+        }
+    }
+    assert.equal([...src.matchAll(/NeoLiveUpdates\.create\(/g)].length, 1);
+});
+
 // Execute each real template's poll wiring, not a copy of its guards/callbacks.
 function harness(name) {
     const calls = [], events = [];
