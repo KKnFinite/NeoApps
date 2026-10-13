@@ -670,10 +670,10 @@
         const editor = form.querySelector("[data-dispatch-apu-editor]");
         if (effective) {
             if (effectiveLbs === null || effectiveLbs === undefined) {
-                effective.textContent = "-";
+                effective.textContent = "APU: -";
             } else {
                 const thousands = Number(effectiveLbs) / 1000;
-                effective.textContent = `APU ${thousands.toFixed(1)}K`;
+                effective.textContent = `APU: ${thousands.toFixed(1)}`;
             }
         }
         if (enabled) enabled.value = payload.apu_override_enabled ? "1" : "0";

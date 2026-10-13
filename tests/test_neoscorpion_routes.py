@@ -221,11 +221,11 @@ class NeoScorpionRoutesTest(unittest.TestCase):
             labels,
             [
                 "Dashboard",
-                "Quick Fuel",
                 "Fuel Dispatch",
                 "Fueling Board",
                 "Truck Manager",
                 "Fueler",
+                "Quick Fuel",
                 "Reports",
                 "Fuel History",
                 "Hanzo",
