@@ -23,7 +23,7 @@
 {% for row in nodes %}{% set person=row.person %}
 <li class="staffing-reporting-branch" data-reporting-person="{{ person.id }}">
 <a class="staffing-reporting-card" href="{{ url_for('neostaffing.org_chart', unit_id=management.selected_unit.id if management.selected_unit else none, person_id=person.id) }}" {% if management.selected_person and management.selected_person.id==person.id %}aria-current="page"{% endif %}>
-<strong>{{ person.full_name }}</strong><span>{{ classification_labels[person.classification] }}</span><small>{{ person.employee_id }}</small>
+<strong>{{ person.full_name }}</strong><span>{{ classification_labels[person.classification] }}</span><small>Employee ID · {{ person.employee_id }}</small>
 {% if row.mismatch %}<small>STRUCTURE MISMATCH</small>{% endif %}
 {% for label in management.management_scope_labels.get(person.id, []) %}<span class="org-person-assignment">{{ label }}</span>{% else %}<span>No active management assignment</span>{% endfor %}
 </a>
@@ -39,8 +39,8 @@
 {% with scope=selected, scope_endpoint='neostaffing.org_chart', scope_all_label='ALL MANAGEMENT', scope_sorts=sorts, scope_sort_id=management.selected_sort.id if management.selected_sort else '', scope_hierarchy=management.scope_hierarchy %}{% include 'neostaffing/_scope_rail.html' %}{% endwith %}
 <main class="neostaffing-org-main">
 <header class="neostaffing-org-header"><div><h1 id="staffing-org-title">ORG CHART</h1><p>Management / Reports To{% if selected %} · {{ unit_path(selected) }}{% endif %}</p></div></header>
-<section class="staffing-reporting-chart" aria-label="Management reporting hierarchy">
-{% if management.scope_tree %}{{ reporting_tree(management.scope_tree) }}{% else %}<p class="muted">No active management assigned to this scope.</p>{% endif %}
+<section class="staffing-reporting-chart" aria-label="Management reporting hierarchy" tabindex="0" data-org-chart-viewport>
+{% if management.scope_tree %}<div class="staffing-reporting-canvas" data-org-forest><svg class="staffing-reporting-connectors" data-org-connectors aria-hidden="true" focusable="false"></svg>{{ reporting_tree(management.scope_tree) }}</div>{% else %}<p class="muted">No active management assigned to this scope.</p>{% endif %}
 </section>
 {% include 'neostaffing/_org_reporting_inspector.html' %}
 {% if can_edit_structure %}<details class="staffing-structure-secondary"><summary>STRUCTURE ACTIONS</summary>
@@ -51,4 +51,5 @@
 </details>{% endif %}
 </main>
 </section>
+<script defer src="{{ url_for('static', filename='js/neostaffing_org_layout.js', v='20261012-top-down-v1') }}"></script>
 {% endblock %}
