@@ -1,6 +1,7 @@
 from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
+from types import SimpleNamespace
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -29,6 +30,7 @@ from app.services.neoscorpion import (
     fuel_report_context,
     mark_ready_for_fuel,
     mark_fueler_off,
+    confirm_fueler_truck_on,
     end_fuel_work_early,
     reopen_fueler_off,
     resume_held_fuel_assignment,
@@ -62,6 +64,7 @@ from app.services.neoscorpion_assets import (
     select_nightly_truck,
     set_nightly_fuel_island_count,
     update_nightly_truck,
+    verify_nightly_truck_inventory,
 )
 from app.services.neoscorpion_quick_fuel import calculate_quick_fuel
 from app.services.neoscorpion_dispatch_checks import DispatcherCheckConflict, save_dispatcher_check
@@ -711,7 +714,7 @@ def manage_nightly_assets():
     action = (request.form.get("action") or "").strip()
     compact_truck_card = (
         request.form.get("dispatch_truck_card") == "1"
-        and action in {"mark_topping_off", "complete_top_off", "mark_sumped"}
+        and action in {"mark_topping_off", "complete_top_off", "mark_sumped", "verify_inventory"}
     )
     # The compact Fuel Dispatch cards explicitly opt into the JSON contract.
     # Do not depend on optional fetch headers here: a missing or altered header
@@ -1006,7 +1009,7 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
     }, status)
 
 
-def _fuel_data_request(assignment_id, *, dispatcher=False, off=False):
+def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=False):
     gateway = get_current_gateway()
     can_view, can_edit = _fuel_data_permissions(dispatcher)
     if request.method == "GET":
@@ -1026,7 +1029,17 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False):
     form = request.form.copy()
     form["assignment_id"] = str(assignment_id)
     try:
-        if off:
+        if truck_on:
+            if dispatcher:
+                raise ValueError("Only the assigned Fueler can confirm TRUCK ON.")
+            changed, revision, _work = confirm_fueler_truck_on(
+                gateway, current_user, assignment_id,
+                expected_cycle=form.get("expected_cycle"),
+                expected_tail=form.get("expected_tail"),
+                expected_truck_id=form.get("expected_truck_id"),
+            )
+            result = SimpleNamespace(changed=changed, revision=revision)
+        elif off:
             result = mark_fueler_off(gateway, current_user, assignment_id,
                 dispatcher=dispatcher, expected=_fueler_expected(form, required=True))
             _fueler_off_automation(gateway, result, assignment_id)
@@ -1056,6 +1069,12 @@ def fueler_assignment_data(assignment_id):
 @gateway_node_required("scorpion")
 def fueler_assignment_off(assignment_id):
     return _fuel_data_request(assignment_id, off=True)
+
+
+@bp.post("/fueler/assignments/<int:assignment_id>/on")
+@gateway_node_required("scorpion")
+def fueler_assignment_on(assignment_id):
+    return _fuel_data_request(assignment_id, truck_on=True)
 
 
 @bp.route("/fuel-dispatch/fueler-data/<int:assignment_id>", methods=["GET", "POST"])
@@ -1221,6 +1240,7 @@ def truck_manager():
                         "fuel truck",
                     ),
                     request.form.get("current_gallons"),
+                    changed_by_user=current_user,
                 )
                 flash("FUEL TRUCK MARKED SUMPED.", "success")
             elif action == "deactivate_truck":
@@ -1842,6 +1862,13 @@ def _apply_nightly_asset_action(gateway, operation, form):
             current_gallons=form.get("current_gallons"),
             changed_by_user=current_user,
         )
+    if action == "verify_inventory":
+        return verify_nightly_truck_inventory(
+            operation,
+            _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
+            form.get("current_gallons"),
+            changed_by_user=current_user,
+        )
     if action == "mark_topping_off":
         return mark_nightly_truck_topping_off(
             operation,
@@ -1853,12 +1880,14 @@ def _apply_nightly_asset_action(gateway, operation, form):
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             form.get("current_gallons"),
+            changed_by_user=current_user,
         )
     if action == "mark_sumped":
         return mark_nightly_truck_sumped(
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             form.get("current_gallons"),
+            changed_by_user=current_user,
         )
     if action == "remove_truck":
         return remove_nightly_truck(

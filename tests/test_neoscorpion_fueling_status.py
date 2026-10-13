@@ -10,7 +10,7 @@ from sqlalchemy import event, inspect
 from app.extensions import db
 from app.models import (NeoScorpionCallDispatchAck, NeoScorpionFuelTankState, NeoScorpionFuelWorkState,
     NeoScorpionSettings, NeoScorpionSortAssetState, NeoScorpionFuelingEvent, SortDateMission,
-    SortDateParkingAssignment)
+    SortDateParkingAssignment, NeoScorpionSortTruck, NeoScorpionTruckInventoryAudit)
 from app.services import neoscorpion as service
 from app.services.neoscorpion_fueling_status import fueling_status, fob_assessment, status_color, STAGE_COLORS
 from app.services.neoscorpion_call_dispatch import call_dispatch_alert
@@ -360,6 +360,144 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assertEqual(self.assignment.transfer_fuel_gallons,2687)
         self.assertEqual(NeoScorpionFuelingEvent.query.one().transfer_fuel_gallons,2687)
         self.assertEqual(service.fuel_dispatch_context(self.gateway)["nightly_trucks"][0]["selection"].current_gallons,7313)
+
+    def _off_physical_transfer(self, gallons):
+        truck = self.fixture._nightly_truck()
+        self.assignment.assigned_fueler_user_id = self.fueler.id
+        self.assignment.assigned_truck_id = truck.id
+        db.session.commit()
+        service.save_fueler_entry(self.gateway, self.fueler, dict(
+            assignment_id=self.assignment.id, apu_running="no",
+            remaining_left="6", remaining_ctr="0", remaining_right="6",
+            actual_left="15", actual_ctr="0", actual_right="15",
+            transfer_fuel_gallons=str(gallons), notes=""))
+        db.session.commit()
+        service.mark_fueler_off(self.gateway, self.fueler, self.assignment.id)
+        db.session.commit()
+        return NeoScorpionSortTruck.query.filter_by(fuel_truck_id=truck.id).one()
+
+    def test_off_completion_accepts_insufficient_truck_reading_without_negative_inventory(self):
+        selection = self._off_physical_transfer(2687)
+        selection.current_gallons = 100
+        db.session.commit()
+        self.assertTrue(self.row()["normal_completion_ready"])
+        completed = service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.commit()
+        self.assertTrue(completed.changed)
+        self.assertEqual(NeoScorpionFuelingEvent.query.one().transfer_fuel_gallons, 2687)
+        self.assertEqual(selection.current_gallons, 100)
+        self.assertFalse(selection.inventory_verified)
+        audit = NeoScorpionTruckInventoryAudit.query.one()
+        self.assertEqual((audit.prior_recorded_gallons, audit.transfer_fuel_gallons,
+                          audit.actor_user_id, audit.fueling_event_id),
+                         (100, 2687, self.dispatcher.id, completed.fueling_event.id))
+        self.assertFalse(service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id).changed)
+        db.session.commit()
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 1)
+        self.assertEqual(NeoScorpionTruckInventoryAudit.query.count(), 1)
+        from app.services.neoscorpion_assets import verify_nightly_truck_inventory
+        verify_nightly_truck_inventory(self.operation, selection.fuel_truck_id, 2000,
+                                        changed_by_user=self.dispatcher)
+        db.session.commit()
+        self.assertTrue(selection.inventory_verified)
+        self.assertEqual(selection.current_gallons, 2000)
+        self.assertEqual(NeoScorpionTruckInventoryAudit.query.count(), 2)
+
+    def test_unknown_truck_inventory_does_not_block_valid_aircraft_completion(self):
+        selection = self._off_physical_transfer(2687)
+        selection.status = "topping_off"
+        selection.current_gallons = None
+        db.session.commit()
+        self.assertTrue(self.row()["normal_completion_ready"])
+        service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.commit()
+        self.assertIsNone(selection.current_gallons)
+        self.assertFalse(selection.inventory_verified)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 1)
+
+    def test_legacy_unconfirmed_on_is_not_fabricated_performance_start(self):
+        self._off_physical_transfer(2687)
+        work = NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=self.assignment.id).one()
+        self.assertIsNotNone(work.on_at_utc)
+        work.confirmed_on_at_utc = None
+        db.session.commit()
+        service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.commit()
+        self.assertIsNone(NeoScorpionFuelingEvent.query.one().started_at_utc)
+
+    def test_inventory_discrepancy_completion_rolls_back_with_event_failure(self):
+        selection = self._off_physical_transfer(2687)
+        selection.current_gallons = 100
+        db.session.commit()
+        with patch.object(service, "_populate_fueling_event_snapshot", side_effect=RuntimeError("event failure")):
+            with self.assertRaisesRegex(RuntimeError, "event failure"):
+                service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.rollback()
+        db.session.expire_all()
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
+        self.assertEqual(NeoScorpionTruckInventoryAudit.query.count(), 0)
+        self.assertTrue(selection.inventory_verified)
+        self.assertEqual(selection.current_gallons, 100)
+        self.assertIsNone(self.assignment.completed_at_utc)
+
+    def test_manual_on_is_event_and_performance_start_without_remaining_first(self):
+        truck = self.fixture._nightly_truck()
+        self.assignment.assigned_fueler_user_id = self.fueler.id
+        self.assignment.assigned_truck_id = truck.id
+        db.session.commit()
+        start = datetime.utcnow().replace(microsecond=0)
+        service.confirm_fueler_truck_on(self.gateway, self.fueler, self.assignment.id,
+            expected_cycle=1, expected_tail=self.mission.assigned_tail_number,
+            expected_truck_id=truck.id, now_utc=start)
+        db.session.commit()
+        service.save_fueler_entry(self.gateway, self.fueler, dict(
+            assignment_id=self.assignment.id, apu_running="no",
+            remaining_left="6", remaining_ctr="0", remaining_right="6",
+            actual_left="15", actual_ctr="0", actual_right="15",
+            transfer_fuel_gallons="2687", notes=""), now_utc=start+timedelta(minutes=2))
+        db.session.commit()
+        service.mark_fueler_off(self.gateway, self.fueler, self.assignment.id,
+                                now_utc=start+timedelta(minutes=12))
+        db.session.commit()
+        service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id,
+                                           now_utc=start+timedelta(minutes=13))
+        db.session.commit()
+        event = NeoScorpionFuelingEvent.query.one()
+        self.assertEqual(event.started_at_utc, start)
+        self.assertEqual(event.ended_at_utc, start+timedelta(minutes=12))
+        self.assertEqual(self.assignment.transfer_fuel_gallons, 2687)
+
+    def test_repeated_physical_jobs_on_unverified_truck_keep_all_events_without_balance_fiction(self):
+        selection = self._off_physical_transfer(2687)
+        selection.current_gallons = 100
+        db.session.commit()
+        service.complete_fueled_assignment(self.gateway, self.dispatcher, self.assignment.id)
+        db.session.commit()
+        mission = self.fixture._mission("UPS902", "N492UP", 25000, 10)
+        assignment = self.fixture._assignment(mission, truck=selection.fuel_truck)
+        assignment.assigned_fueler_user_id = self.fueler.id
+        db.session.commit()
+        start = datetime.utcnow().replace(microsecond=0)
+        service.confirm_fueler_truck_on(self.gateway, self.fueler, assignment.id,
+            expected_cycle=1, expected_tail="N492UP", expected_truck_id=selection.fuel_truck_id,
+            now_utc=start)
+        db.session.commit()
+        service.save_fueler_entry(self.gateway, self.fueler, dict(
+            assignment_id=assignment.id, apu_running="no",
+            remaining_left="6", remaining_ctr="0", remaining_right="6",
+            actual_left="15", actual_ctr="0", actual_right="15",
+            transfer_fuel_gallons="500", notes=""), now_utc=start+timedelta(minutes=1))
+        db.session.commit()
+        service.mark_fueler_off(self.gateway, self.fueler, assignment.id,
+                                now_utc=start+timedelta(minutes=10))
+        db.session.commit()
+        service.complete_fueled_assignment(self.gateway, self.dispatcher, assignment.id,
+                                           now_utc=start+timedelta(minutes=11))
+        db.session.commit()
+        self.assertEqual(selection.current_gallons, 100)
+        self.assertFalse(selection.inventory_verified)
+        self.assertEqual(sorted(e.transfer_fuel_gallons for e in NeoScorpionFuelingEvent.query.all()), [500, 2687])
+        self.assertEqual(NeoScorpionTruckInventoryAudit.query.filter_by(action="discrepancy").count(), 2)
 
     def test_changed_fuel_apu_density_threshold_realert_inclusive_boundaries(self):
         self.assignment.assigned_fueler_user_id = self.fueler.id

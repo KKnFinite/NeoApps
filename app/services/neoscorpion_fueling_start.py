@@ -18,7 +18,7 @@ def truck_start_gate(record, records, releases, settings, *, at):
     # An ON from another mission is a commitment until its recorded release;
     # future resource selections without ON are not physical activity.
     for other in records:
-        start = other["confirmed_on"] or other["on"]
+        start = other.get("manual_on") or other["confirmed_on"] or other["on"]
         if (other["id"] == record["id"] or other["truck_id"] != truck_id
                 or start is None):
             continue
@@ -29,7 +29,7 @@ def truck_start_gate(record, records, releases, settings, *, at):
             return dict(result, reason="TRUCK STILL FUELING")
     past = [other for other in records if other["id"] != record["id"]
             and other["truck_id"] == truck_id and other["release"] is not None
-            and other["release"] <= at and (other["on"] or other["confirmed_on"])]
+            and other["release"] <= at and (other["on"] or other["confirmed_on"] or other.get("manual_on"))]
     past.extend(event for event in releases if event["id"] != record["id"]
                 and event["truck_id"] == truck_id and event["release"] <= at)
     if past:
@@ -53,10 +53,15 @@ def truck_start_gate(record, records, releases, settings, *, at):
 def fueling_start_state(record, records, releases, settings, *, now):
     now = utc_naive(now)
     gate = truck_start_gate(record, records, releases, settings, at=now)
-    start = record["confirmed_on"] or record["on"]
+    manual = record.get("manual_on")
+    start = manual or record["confirmed_on"] or record["on"]
     trusted = False
     premature = False
-    if start is not None and start <= now:
+    if manual is not None and manual <= now:
+        # A Fueler's explicit physical confirmation outranks predicted travel,
+        # but only while attached to this exact current truck/cycle segment.
+        trusted = True
+    elif start is not None and start <= now:
         provenance = record["assigned_at"] is None or record["assigned_at"] <= start + timedelta(seconds=1)
         historical = truck_start_gate({**record, "truck_available": True}, records, releases, settings, at=start)
         premature = bool(not provenance or (record["confirmed_on"] is None and record.get("premature_readings", False))

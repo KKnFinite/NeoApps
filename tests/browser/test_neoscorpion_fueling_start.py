@@ -125,11 +125,12 @@ class FuelingStartBrowserTest(unittest.TestCase):
                 fixture().ready(page,"/neoscorpion/fueler")
                 card=page.locator('[data-fuel-data-card]').first
                 expect(card.locator('[data-assigned-truck-status]')).to_have_text('ARRIVAL UNCONFIRMED')
-                card.locator('[data-fuel-planning-form] button[type="submit"]').click()
-                expect(card.locator('[data-fuel-data-status]')).to_contain_text('Saved',timeout=15000)
+                card.locator('[data-truck-on-form] button').click()
+                expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('CONFIRMED',timeout=15000)
+                self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth+1'))
                 with fixture.app.app_context():
                     work=db.session.get(NeoScorpionFuelWorkState,works[1])
-                    self.assertEqual(work.on_at_utc,clock[0]); self.assertEqual(work.confirmed_on_at_utc,clock[0])
+                    self.assertEqual(work.manual_on_at_utc,clock[0]); self.assertIsNone(work.on_at_utc)
                     self.assertEqual(db.session.get(NeoScorpionFuelWorkState,works[0]).on_at_utc,clock[0]-timedelta(minutes=23))
                 for width in (1440,390):
                     page.set_viewport_size({"width":width,"height":950})

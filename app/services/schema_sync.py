@@ -12,6 +12,7 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "DATETIME",
+        "inventory_verified": "BOOLEAN NOT NULL DEFAULT 1",
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
@@ -185,6 +186,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neoscorpion_fuel_work_states": {
         "confirmed_on_at_utc": "DATETIME",
+        "manual_on_at_utc": "DATETIME",
+        "manual_on_by_user_id": "INTEGER",
+        "manual_on_truck_id": "INTEGER",
+        "manual_on_cycle_number": "INTEGER",
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "DATETIME",
         "apu_allowance_lbs": "INTEGER",
@@ -272,6 +277,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 POSTGRES_OPTIONAL_COLUMNS = {
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
+        "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
@@ -426,6 +432,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "neoscorpion_fuel_work_states": {
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "TIMESTAMP",
+        "manual_on_at_utc": "TIMESTAMP",
+        "manual_on_by_user_id": "INTEGER",
+        "manual_on_truck_id": "INTEGER",
+        "manual_on_cycle_number": "INTEGER",
         "confirmed_on_at_utc": "TIMESTAMP",
         "apu_allowance_lbs": "INTEGER",
         "automatic_apu_allowance_lbs": "INTEGER",
@@ -1164,7 +1174,7 @@ def _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names):
             "WHERE type = 'table' AND name = 'neoscorpion_fuel_audit_entries'"
         )
     ).scalar() or ""
-    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "cancel_defuel", "unassign_truck")):
+    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "cancel_defuel", "unassign_truck", "truck_on")):
         return False
 
     all_tables = set(inspector.get_table_names())
@@ -1397,6 +1407,7 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
         and "cancel_uplift" in constraint_definition
         and "cancel_defuel" in constraint_definition
         and "unassign_truck" in constraint_definition
+        and "truck_on" in constraint_definition
     ):
         return
     db.session.execute(
@@ -1422,7 +1433,8 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
                     'end_early',
                     'cancel_uplift',
                     'cancel_defuel',
-                    'unassign_truck'
+                    'unassign_truck',
+                    'truck_on'
                 )
             )
             """
@@ -1733,6 +1745,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoScorpionFuelAssignment,
         NeoScorpionFuelingEvent,
         NeoScorpionFuelingEventTankSnapshot,
+        NeoScorpionTruckInventoryAudit,
         NeoScorpionFuelCycleHistory,
         NeoScorpionFuelTankState,
         NeoScorpionFuelTruck,
@@ -1823,6 +1836,7 @@ def _create_missing_application_tables(existing_table_names):
         NeoScorpionFuelTankState,
         NeoScorpionFuelingEvent,
         NeoScorpionFuelingEventTankSnapshot,
+        NeoScorpionTruckInventoryAudit,
         NeoScorpionFuelCycleHistory,
         NeoScorpionFuelAuditEntry,
         NeoScorpionAircraftFuelSetting,

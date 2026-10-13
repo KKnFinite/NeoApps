@@ -19,6 +19,7 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
     NeoScorpionFuelingEventTankSnapshot,
+    NeoScorpionTruckInventoryAudit,
     NeoScorpionFuelCycleHistory,
     NeoScorpionFuelTankState,
     NeoScorpionSortAssetState,
@@ -39,7 +40,7 @@ from app.neonodes.neorain.services import (
     eligible_neorain_load_planners,
 )
 from app.services.neoscorpion_fueling_status import fueling_status, fob_assessment, utc_naive
-from app.services.neoscorpion_fueling_start import fueling_start_state
+from app.services.neoscorpion_fueling_start import fueling_start_state, truck_start_gate
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.live_screen_refresh import live_screen_refresh_value
@@ -948,8 +949,8 @@ def hanzo_context(gateway):
         )
         work = row["fuel_work_state"]
         row["hanzo_on_time"] = (
-            format_local_hhmm(work.on_at_utc, timezone_name)
-            if work and work.on_at_utc else "—"
+            format_local_hhmm(row["fueling_effective_on_utc"], timezone_name)
+            if row.get("fueling_effective_on_utc") else "—"
         )
         row["hanzo_off_time"] = (
             format_local_hhmm(work.off_at_utc, timezone_name)
@@ -1081,7 +1082,8 @@ def _attach_fueler_truck_status(rows, assignments, work_states, parking, selecti
         mission = assignment.sort_date_mission
         tail = _normalize_tail(mission.assigned_tail_number)
         work = work_states.get((assignment.id, tail))
-        if (assignment.assigned_truck_id is None or work is None or work.on_at_utc is None
+        if (assignment.assigned_truck_id is None or work is None or
+                (work.on_at_utc is None and work.manual_on_at_utc is None)
                 or _assignment_finished(assignment, work)
                 or assignment.review_status == "complete"
                 or mission.fuel_status in {"complete", "fob", "fuel_on_board"}
@@ -2522,7 +2524,8 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
     )
     transfer_changed = assignment.transfer_fuel_gallons != target_transfer_gallons
     confirm_on = False
-    if submitted_nonnull_remaining and assignment.assigned_fueler_user_id is not None:
+    if (submitted_nonnull_remaining and assignment.assigned_fueler_user_id is not None
+            and not (fuel_work_state and fuel_work_state.manual_on_at_utc)):
         if assignment.assigned_truck_id is not None and target_fob_lbs is not None:
             all_assignments = _assignments_by_mission(operation)
             works = _fuel_work_states_by_assignment_tail(all_assignments.values())
@@ -2658,6 +2661,70 @@ def mark_ready_for_fuel(gateway, user, assignment_id, *, now_utc=None):
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return FuelInterruptionResult(True, int(asset_state.revision), assignment, None)
+
+
+def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
+                            expected_tail, expected_truck_id, now_utc=None):
+    """Record a Fueler's physical arrival once for this cycle and truck segment."""
+    operation = current_sort_operation(gateway)
+    if operation is None:
+        raise ValueError("No current sort operation is available for TRUCK ON.")
+    now_utc = now_utc or datetime.utcnow()
+    operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
+    assignment, mission = _locked_current_fuel_assignment(
+        operation, assignment_id, action_label="TRUCK ON",
+    )
+    if assignment.assigned_fueler_user_id != user.id:
+        raise ValueError("This fuel assignment belongs to another Fueler.")
+    if expected_cycle is None or expected_tail is None or expected_truck_id is None:
+        raise ValueError("Refresh before confirming TRUCK ON.")
+    _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
+    if str(assignment.assigned_truck_id or "") != str(expected_truck_id or ""):
+        raise ValueError("Assigned truck changed. Refresh before TRUCK ON.")
+    work = _locked_current_fuel_work_state(assignment, mission)
+    _validate_fueler_work_access(assignment, mission, work)
+    if work and work.off_at_utc is not None:
+        raise ValueError("Fueler is already OFF for this cycle.")
+    if assignment.assigned_truck_id is None:
+        raise ValueError("Assign a truck before TRUCK ON.")
+    _validate_nightly_truck_assignment(gateway, operation, assignment.assigned_truck_id)
+    cycle = int(assignment.current_cycle_number or 1)
+    if (work and work.manual_on_at_utc is not None
+            and work.manual_on_cycle_number == cycle
+            and work.manual_on_truck_id == assignment.assigned_truck_id):
+        return False, int(asset_state.revision if asset_state else 0), work
+
+    assignments = _assignments_by_mission(operation)
+    works = _fuel_work_states_by_assignment_tail(assignments.values())
+    selections = {item.fuel_truck_id: item for item in NeoScorpionSortTruck.query.filter_by(
+        sort_date_operation_id=operation.id).all()}
+    records, releases = _fuel_start_records(operation, assignments.values(), works,
+                                            _parking_by_tail(operation), selections)
+    record = next(item for item in records if item["id"] == assignment.id)
+    settings = effective_spear_settings(NeoScorpionSettings.query.filter_by(
+        gateway_id=gateway.id).first())
+    gate = truck_start_gate(record, records, releases, settings, at=now_utc)
+    # A deliberate physical arrival can override an estimate, not a confirmed
+    # resource conflict or an unavailable truck.
+    if gate["reason"] in {"TRUCK STILL FUELING", "TRUCK UNAVAILABLE", "Needs Fueler", "Needs Truck"}:
+        raise ValueError(gate["reason"])
+    if work is None:
+        work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id,
+                                        tail_number=_normalize_tail(mission.assigned_tail_number))
+        db.session.add(work)
+    work.manual_on_at_utc = now_utc
+    work.manual_on_by_user_id = user.id
+    work.manual_on_truck_id = assignment.assigned_truck_id
+    work.manual_on_cycle_number = cycle
+    work.truck_segment_started_at_utc = now_utc
+    db.session.flush()
+    _new_fuel_audit(operation, assignment, user, "truck_on", "manual_on_at_utc",
+                    None, now_utc.isoformat(),
+                    f"Fueler confirmed truck {assignment.assigned_truck_id} physically ON for cycle {cycle}.",
+                    fuel_work_state=work, now_utc=now_utc)
+    asset_state = record_nightly_operational_change(asset_state, operation.id)
+    db.session.flush()
+    return True, int(asset_state.revision), work
 
 
 def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=False, expected=None):
@@ -2915,7 +2982,7 @@ def _unstarted_follow_up_cycle(assignment, state):
     return bool(
         assignment and int(assignment.current_cycle_number or 1) > 1
         and assignment.transfer_fuel_gallons in (None, 0)
-        and state and state.on_at_utc is None and state.off_at_utc is None
+        and state and state.on_at_utc is None and state.manual_on_at_utc is None and state.off_at_utc is None
         and state.ended_early_at_utc is None and state.apu_running is None
         and state.truck_segment_started_at_utc is None
         and all(tank.actual_lbs is None for tank in state.tank_states)
@@ -3265,6 +3332,10 @@ def start_follow_up_fuel_cycle(
 
     fuel_work_state.on_at_utc = None
     fuel_work_state.confirmed_on_at_utc = None
+    fuel_work_state.manual_on_at_utc = None
+    fuel_work_state.manual_on_by_user_id = None
+    fuel_work_state.manual_on_truck_id = None
+    fuel_work_state.manual_on_cycle_number = None
     fuel_work_state.apu_running = None
     fuel_work_state.apu_confirmed_at_utc = None
     fuel_work_state.apu_allowance_lbs = None
@@ -3861,6 +3932,11 @@ def swap_assignment_truck(
         )
         assignment.transfer_fuel_gallons = None
     assignment.assigned_truck_id = replacement_truck_id
+    if fuel_work_state is not None:
+        fuel_work_state.manual_on_at_utc = None
+        fuel_work_state.manual_on_by_user_id = None
+        fuel_work_state.manual_on_truck_id = None
+        fuel_work_state.manual_on_cycle_number = None
     if fuel_work_state is not None and _fuel_work_has_begun(
         fuel_work_state,
         assignment,
@@ -3930,6 +4006,10 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
     assignment.transfer_fuel_gallons = None
     if work is not None:
         work.truck_segment_started_at_utc = None
+        work.manual_on_at_utc = None
+        work.manual_on_by_user_id = None
+        work.manual_on_truck_id = None
+        work.manual_on_cycle_number = None
     _clear_hold_after_explicit_resolution(gateway, operation, assignment, mission, work)
     audit = _new_fuel_audit(operation, assignment, user, "unassign_truck", "assigned_truck_id",
         old_truck_id, None, "Dispatcher unassigned the fuel truck.", fuel_work_state=work, now_utc=now_utc)
@@ -4375,6 +4455,7 @@ def _validated_tail_swap_inherited_measurement(
         or _normalize_tail(fuel_work_state.tail_number) != current_tail
         or assignment.transfer_fuel_gallons not in (None, 0)
         or fuel_work_state.on_at_utc is not None
+        or fuel_work_state.manual_on_at_utc is not None
         or fuel_work_state.off_at_utc is not None
         or fuel_work_state.ended_early_at_utc is not None
         or fuel_work_state.apu_running is not None
@@ -4524,10 +4605,10 @@ def _close_current_truck_segment(
     if truck_row is None:
         raise ValueError("The assigned truck is missing from tonight's assets.")
     nightly_truck, fuel_truck = truck_row
-    if nightly_truck.current_gallons is None:
-        raise ValueError("The assigned truck's current gallons are unknown.")
     cycle_type = _assignment_cycle_type(assignment)
     if cycle_type == "defuel":
+        if not nightly_truck.inventory_verified or nightly_truck.current_gallons is None:
+            raise ValueError("Verify truck gallons before completing DEFUEL capacity accounting.")
         post_transfer_gallons = nightly_truck.current_gallons + transfer_gallons
         if (
             fuel_truck.capacity_gallons is not None
@@ -4535,9 +4616,11 @@ def _close_current_truck_segment(
         ):
             raise ValueError("DEFUEL T/F would exceed the assigned truck's capacity.")
     else:
-        if transfer_gallons > nightly_truck.current_gallons:
-            raise ValueError("T/F exceeds the assigned truck's current gallons.")
-        post_transfer_gallons = nightly_truck.current_gallons - transfer_gallons
+        reliable = nightly_truck.inventory_verified and nightly_truck.current_gallons is not None
+        discrepancy = not reliable or transfer_gallons > nightly_truck.current_gallons
+        post_transfer_gallons = (
+            nightly_truck.current_gallons - transfer_gallons if not discrepancy else None
+        )
 
     sequence_number = max(
         (event.sequence_number for event in existing_events),
@@ -4553,9 +4636,12 @@ def _close_current_truck_segment(
         event_type=cycle_type,
         cycle_number=int(assignment.current_cycle_number or 1),
         started_at_utc=(
-            fuel_work_state.truck_segment_started_at_utc
-            or fuel_work_state.confirmed_on_at_utc
-            or fuel_work_state.on_at_utc
+            fuel_work_state.manual_on_at_utc
+            or (fuel_work_state.confirmed_on_at_utc if (
+                fuel_work_state.confirmed_on_at_utc is not None
+                and (fuel_work_state.truck_segment_started_at_utc is None
+                     or fuel_work_state.confirmed_on_at_utc >= fuel_work_state.truck_segment_started_at_utc)
+            ) else None)
         ),
         ended_at_utc=ended_at_utc,
         transfer_fuel_gallons=transfer_gallons,
@@ -4569,7 +4655,25 @@ def _close_current_truck_segment(
         tank_states,
     )
     db.session.add(fueling_event)
-    nightly_truck.current_gallons = post_transfer_gallons
+    if cycle_type != "defuel" and discrepancy:
+        db.session.flush()
+        db.session.add(NeoScorpionTruckInventoryAudit(
+            sort_date_operation_id=operation.id,
+            fuel_truck_id=fuel_truck.id,
+            fuel_assignment_id=assignment.id,
+            fueling_event_id=fueling_event.id,
+            action="discrepancy",
+            prior_recorded_gallons=nightly_truck.current_gallons,
+            transfer_fuel_gallons=transfer_gallons,
+            reason=("Recorded truck gallons unknown" if nightly_truck.current_gallons is None else
+                    "Recorded truck gallons already unverified" if not nightly_truck.inventory_verified else
+                    "Physical T/F exceeds recorded truck gallons"),
+            actor_user_id=changed_by_user.id,
+            created_at=datetime.utcnow(),
+        ))
+        nightly_truck.inventory_verified = False
+    else:
+        nightly_truck.current_gallons = post_transfer_gallons
     if cycle_type == "defuel":
         nightly_truck.status = "needs_sump"
         hold_active_assignments_for_truck(
@@ -5606,11 +5710,14 @@ def _fuel_rows(
                 or (
                     assignment.assigned_truck_id is not None
                     and nightly_truck_state is not None
-                    and nightly_truck_state.current_gallons is not None
                     and assignment.transfer_fuel_gallons is not None
                     and assignment.transfer_fuel_gallons > 0
-                    and assignment.transfer_fuel_gallons
-                    <= nightly_truck_state.current_gallons
+                    and (cycle_type != "defuel" or (
+                        nightly_truck_state.inventory_verified
+                        and nightly_truck_state.current_gallons is not None
+                        and (assignment.assigned_truck.capacity_gallons is None or
+                             nightly_truck_state.current_gallons + assignment.transfer_fuel_gallons
+                             <= assignment.assigned_truck.capacity_gallons)))
                 )
             )
         )
@@ -5647,12 +5754,16 @@ def _fuel_rows(
             or assignment.transfer_fuel_gallons <= 0
         ):
             normal_completion_reason = "Positive T/F required."
-        elif movement_status == "moved" and nightly_truck_state.current_gallons is None:
-            normal_completion_reason = "Truck gallons unknown."
-        elif movement_status == "moved" and (
-            assignment.transfer_fuel_gallons > nightly_truck_state.current_gallons
+        elif cycle_type == "defuel" and movement_status == "moved" and (
+            not nightly_truck_state.inventory_verified or nightly_truck_state.current_gallons is None
         ):
-            normal_completion_reason = "Insufficient truck gallons."
+            normal_completion_reason = "Verify truck gallons for DEFUEL capacity."
+        elif cycle_type == "defuel" and movement_status == "moved" and (
+            assignment.assigned_truck.capacity_gallons is not None
+            and nightly_truck_state.current_gallons + assignment.transfer_fuel_gallons
+            > assignment.assigned_truck.capacity_gallons
+        ):
+            normal_completion_reason = "DEFUEL exceeds truck capacity."
         else:
             normal_completion_reason = ""
 
@@ -5718,8 +5829,8 @@ def _fuel_rows(
                 "tank_rows": tank_rows,
                 "planned_ready": remaining_readings_complete,
                 "on_time": (
-                    format_local_hhmm(fuel_work_state.on_at_utc, mission.timezone)
-                    if fuel_work_state and fuel_work_state.on_at_utc
+                    format_local_hhmm(fuel_work_state.manual_on_at_utc or fuel_work_state.on_at_utc, mission.timezone)
+                    if fuel_work_state and (fuel_work_state.manual_on_at_utc or fuel_work_state.on_at_utc)
                     else "-"
                 ),
                 "off_time": (
@@ -5934,7 +6045,7 @@ def _fuel_rows(
                 ),
                 "truck_remaining_fuel": (
                     nightly_truck_state.current_gallons
-                    if nightly_truck_state is not None
+                    if nightly_truck_state is not None and nightly_truck_state.inventory_verified
                     else None
                 ),
                 "projected_truck_gallons": None,
@@ -5957,7 +6068,7 @@ def _fuel_rows(
     if nightly_truck_states_by_truck_id is not None:
         projections = project_truck_remaining(
             {
-                truck_id: truck_state.current_gallons
+                truck_id: (truck_state.current_gallons if truck_state.inventory_verified else None)
                 for truck_id, truck_state in nightly_truck_states_by_truck_id.items()
                 if truck_state.status != "needs_sump"
             },
@@ -6209,13 +6320,16 @@ def _dispatch_recommendation_truck_candidates(
     for row in rows:
         assignment = row["assignment"]
         if assignment and assignment.assigned_truck_id is not None:
-            candidates_by_mission_id[row["mission"].id] = truck_candidates
+            state = nightly_truck_states_by_truck_id.get(assignment.assigned_truck_id)
+            candidates_by_mission_id[row["mission"].id] = (
+                truck_candidates if state is not None and state.inventory_verified else ()
+            )
             continue
         eligible = []
         for truck in truck_candidates:
             truck_id = truck["id"]
             state = nightly_truck_states_by_truck_id.get(truck_id)
-            if state is None or state.current_gallons is None:
+            if state is None or state.current_gallons is None or not state.inventory_verified:
                 continue
             candidate_key = ("recommendation", row["mission"].id, truck_id)
             ordered_demands = []
@@ -6243,7 +6357,7 @@ def _dispatch_recommendation_truck_candidates(
                         )
             projection = project_truck_remaining(
                 {
-                    selected_truck_id: selected_state.current_gallons
+                    selected_truck_id: (selected_state.current_gallons if selected_state.inventory_verified else None)
                     for selected_truck_id, selected_state in (
                         nightly_truck_states_by_truck_id.items()
                     )
@@ -6297,6 +6411,9 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
         work = work_states.get((assignment.id, tail))
         on = utc_naive(work.on_at_utc) if work else None
         confirmed = utc_naive(work.confirmed_on_at_utc) if work else None
+        manual = (utc_naive(work.manual_on_at_utc) if work and
+                  work.manual_on_cycle_number == int(assignment.current_cycle_number or 1) and
+                  work.manual_on_truck_id == assignment.assigned_truck_id else None)
         tanks = {tank.tank_code: tank for tank in work.tank_states} if work else {}
         layout = tank_layout_for_tail(tail)
         complete = bool(layout) and all(code in tanks and tanks[code].remaining_lbs is not None for code, _ in layout)
@@ -6312,6 +6429,7 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
         truck = assignment.assigned_truck
         records.append(dict(id=assignment.id, truck_id=assignment.assigned_truck_id,
             fueler_id=assignment.assigned_fueler_user_id, on=on, confirmed_on=confirmed,
+            manual_on=manual,
             release=utc_naive((work.off_at_utc or work.ended_early_at_utc) if work else None)
                 or utc_naive(assignment.completed_at_utc or assignment.fuel_on_board_at_utc),
             assigned_at=utc_naive(assigned_at), remaining_complete=complete, remaining_at_on=at_on,
@@ -6341,17 +6459,27 @@ def _attach_fueling_start_state(rows, operation, assignments, work_states, parki
         assignment, work = row.get("assignment"), row.get("fuel_work_state")
         if not assignment:
             continue
+        record = by_id[assignment.id]
         state = states[assignment.id]
         fob_check = bool(assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
                          and row.get("fob_likely"))
         if fob_check and work and work.on_at_utc:
             state.update(on_trusted=True, on_active=True, effective_on=work.confirmed_on_at_utc or work.on_at_utc)
-        if work and work.on_at_utc and (row.get("is_off") or row.get("administratively_complete")):
-            # Historical OFF/completion is authoritative; preserve its ON display.
-            state.update(on_trusted=True, on_active=True, effective_on=work.confirmed_on_at_utc or work.on_at_utc)
+        confirmed_segment_on = (work.confirmed_on_at_utc if work and work.confirmed_on_at_utc
+                                and (work.truck_segment_started_at_utc is None
+                                     or work.confirmed_on_at_utc >= work.truck_segment_started_at_utc)
+                                else None)
+        if work and (record.get("manual_on") or confirmed_segment_on) and (row.get("is_off") or row.get("administratively_complete")):
+            # A historical OFF is preserved, but does not authenticate an
+            # uncertain legacy ON for timing or performance calculations.
+            state.update(on_trusted=True, on_active=True,
+                         effective_on=record.get("manual_on") or confirmed_segment_on)
         row.update(fueling_on_trusted=state["on_trusted"], fueling_on_active=state["on_active"], fueling_effective_on_utc=state["effective_on"],
                    truck_start_reason=state["reason"], truck_travel_origin=state["origin"],
                    truck_travel_until=state["arrival"].isoformat()+"Z" if state["arrival"] else "")
+        row["manual_on_confirmed"] = bool(record.get("manual_on"))
+        row["on_time"] = (format_local_hhmm(state["effective_on"], row["mission"].timezone)
+                          if state["effective_on"] else "-")
         occupants = [record for record in records if record["truck_id"] == assignment.assigned_truck_id
                      and record["truck_id"] is not None and record["release"] is None
                      and states[record["id"]]["on_trusted"]]
@@ -6416,7 +6544,7 @@ def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
         truck = nightly["truck"]
         selection = nightly["selection"]
         projection_row = projections_by_truck_id.get(truck.id)
-        current_gallons = selection.current_gallons
+        current_gallons = selection.current_gallons if selection.inventory_verified else None
         projected_gallons = (
             projection_row["projected_truck_gallons"]
             if projection_row is not None
@@ -6435,7 +6563,10 @@ def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
                 "capacity_gallons": truck.capacity_gallons,
                 "capacity_display": _gallons_display(truck.capacity_gallons),
                 "current_gallons": current_gallons,
-                "current_display": _gallons_display(current_gallons),
+                "last_recorded_gallons": selection.current_gallons,
+                "current_display": (_gallons_display(current_gallons) if selection.inventory_verified
+                                    else "UNVERIFIED · LAST " + _gallons_display(selection.current_gallons)),
+                "inventory_verified": selection.inventory_verified,
                 "current_percent": _capacity_percent(current_gallons, truck.capacity_gallons),
                 "current_gauge_percent": _gauge_percent(
                     _capacity_percent(current_gallons, truck.capacity_gallons)
@@ -6497,7 +6628,7 @@ def _attach_dispatch_truck_activity(
         current = by_truck.get(truck_id, ())
         visual.update(activity_label="STATUS UNKNOWN", activity_travel_until="",
                       activity_travel_origin="")
-        physically_active = [record for record in current if record["on"] is not None]
+        physically_active = [record for record in current if record.get("manual_on") is not None or record["on"] is not None]
         if physically_active:
             if len(physically_active) != 1:
                 continue

@@ -61,7 +61,7 @@ def fueling_status(row, *, now=None, threshold=30):
         stage = "fob-ready"
     elif work and work.off_at_utc:
         stage = "off"
-    elif work and work.on_at_utc and row.get("fueling_on_active", row.get("fueling_on_trusted", True)):
+    elif work and (getattr(work, "manual_on_at_utc", None) or work.on_at_utc) and row.get("fueling_on_active", row.get("fueling_on_trusted", True)):
         stage = "fueling"
     elif fueler and not truck and not row.get("fob_likely"):
         stage, detail = "ready", "Needs Truck"

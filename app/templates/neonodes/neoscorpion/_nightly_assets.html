@@ -127,10 +127,18 @@
                     <dl>
                         <div><dt>Max Capacity</dt><dd>{{ row.truck.capacity_gallons if row.truck.capacity_gallons is not none else '-' }} gal</dd></div>
                         <div><dt>Starting</dt><dd>{{ row.selection.starting_gallons if row.selection.starting_gallons is not none else '-' }} gal</dd></div>
-                        <div><dt>Current</dt><dd>{{ row.selection.current_gallons if row.selection.current_gallons is not none else '-' }} gal</dd></div>
+                        <div><dt>Current</dt><dd>{% if row.selection.inventory_verified %}{{ row.selection.current_gallons if row.selection.current_gallons is not none else '-' }} gal{% else %}UNVERIFIED · last {{ row.selection.current_gallons if row.selection.current_gallons is not none else 'unknown' }} gal{% endif %}</dd></div>
                     </dl>
 
                     {% if can_manage_assets %}
+                    {% if not row.selection.inventory_verified and row.selection.status not in ('topping_off', 'needs_sump') %}
+                    <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
+                        <input type="hidden" name="action" value="verify_inventory">
+                        <input type="hidden" name="fuel_truck_id" value="{{ row.truck.id }}">
+                        <label>Verified actual gallons<input name="current_gallons" inputmode="numeric" min="0" required></label>
+                        <button class="action-button" type="submit">VERIFY INVENTORY</button>
+                    </form>
+                    {% endif %}
                     {% if row.selection.status != "needs_sump" and row.selection.status != "topping_off" %}
                     <form class="neoscorpion-assets-truck-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}">
                         <input type="hidden" name="action" value="update_truck">

@@ -138,6 +138,10 @@
             status(card, "Save Fuel Entry before MARK OFF.");
             return;
         }
+        if (form.matches("[data-truck-on-form]") && hasDirty(card)) {
+            status(card, "Save or cancel unsaved Fuel Entry before TRUCK ON.");
+            return;
+        }
         const apuEditor = card.querySelector("[data-apu-editor-form]");
         if (form.matches("[data-fuel-planning-form]") && apuEditor && hasDirty(apuEditor)) {
             status(card, "Save or cancel the APU edit first.");
@@ -162,6 +166,11 @@
             // still decide eligibility; a refresh or timer never submits this.
             form.querySelectorAll('[data-fuel-reading="remaining"]').forEach(control => {
                 body.set(control.name, control.value);
+            });
+        }
+        if (form.matches("[data-truck-on-form]")) {
+            ["expected_cycle", "expected_tail", "expected_truck_id"].forEach(name => {
+                body.set(name, form.elements[name].value);
             });
         }
         if (body.has("apu_override_enabled") || body.has("apu_override_allowance")) body.set("apu_override_present", "1");

@@ -127,6 +127,21 @@
                         <dd>{{ row.off_time }}</dd>
                     </div>
                 </dl>
+                {% if not dispatcher_panel|default(false) and row.assignment and row.assigned_truck and not row.is_off %}
+                <div class="neoscorpion-truck-on-row">
+                    {% if row.manual_on_confirmed %}
+                    <strong>ON {{ row.on_time }} · CONFIRMED</strong>
+                    {% elif can_edit and not row.fueler_work_blocked %}
+                    <form method="post" action="{{ url_for('neoscorpion.fueler_assignment_on', assignment_id=row.assignment.id) }}" data-truck-on-form>
+                        {{ csrf_field() }}
+                        <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}">
+                        <input type="hidden" name="expected_tail" value="{{ row.tail_number }}">
+                        <input type="hidden" name="expected_truck_id" value="{{ row.assigned_truck.id }}">
+                        <button class="action-button" type="submit">TRUCK ON</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endif %}
                 {% if can_edit and row.assignment and not row.is_off and not row.fueler_work_blocked %}
                 <form
                     action="{{ fuel_data_url }}"

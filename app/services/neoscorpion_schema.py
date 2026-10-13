@@ -13,6 +13,7 @@ from app.models import (
     NeoScorpionFuelAuditEntry,
     NeoScorpionFuelingEvent,
     NeoScorpionFuelingEventTankSnapshot,
+    NeoScorpionTruckInventoryAudit,
     NeoScorpionFuelCycleHistory,
     NeoScorpionFuelTankState,
     NeoScorpionFuelerNickname,
@@ -47,6 +48,7 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionAircraftFuelSetting,
     NeoScorpionFuelingEvent,
     NeoScorpionFuelingEventTankSnapshot,
+    NeoScorpionTruckInventoryAudit,
     NeoScorpionFuelCycleHistory,
     NeoScorpionFuelAuditEntry,
     NeoScorpionDispatcherCheck,
@@ -56,6 +58,7 @@ NEOSCORPION_MODEL_TABLES = (
 NEOSCORPION_ADDITIVE_COLUMNS = {
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
+        "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
     },
     "neoscorpion_settings": {
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
@@ -103,6 +106,10 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
     },
     "neoscorpion_fuel_work_states": {
         "confirmed_on_at_utc": "TIMESTAMP",
+        "manual_on_at_utc": "TIMESTAMP",
+        "manual_on_by_user_id": "INTEGER",
+        "manual_on_truck_id": "INTEGER",
+        "manual_on_cycle_number": "INTEGER",
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "TIMESTAMP",
         "apu_allowance_lbs": "INTEGER",
@@ -172,6 +179,7 @@ NEOSCORPION_CHECK_CONSTRAINTS = (
             "cancel_uplift",
             "cancel_defuel",
             "unassign_truck",
+            "truck_on",
         ),
     ),
 )

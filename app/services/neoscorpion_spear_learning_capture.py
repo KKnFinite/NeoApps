@@ -259,7 +259,7 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
             {
                 "id": work.id,
                 "tail_number": _tail(work.tail_number),
-                "on_at_utc": _iso(work.on_at_utc),
+                "on_at_utc": _iso(getattr(work, "manual_on_at_utc", None) or work.on_at_utc),
                 "off_at_utc": _iso(work.off_at_utc),
                 "ended_early_at_utc": _iso(work.ended_early_at_utc),
                 "apu_running": work.apu_running,

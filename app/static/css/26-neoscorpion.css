@@ -511,6 +511,17 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     overflow-wrap: anywhere;
 }
 
+.neoscorpion-truck-on-row {
+    display: flex;
+    align-items: center;
+    min-height: 2.25rem;
+    margin: .4rem 0;
+    color: #ffd21a;
+    font-size: .82rem;
+}
+.neoscorpion-truck-on-row form { margin: 0; }
+.neoscorpion-truck-on-row .action-button { padding: .45rem .8rem; }
+
 
 /* Fueler mobile density: compact assignment state, wrap APU readouts inside
    their own tile, and keep APU choice controls operationally sized. */

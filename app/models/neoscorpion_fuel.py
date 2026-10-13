@@ -223,6 +223,9 @@ class NeoScorpionSortTruck(db.Model):
     status = db.Column(db.String(32), nullable=False)
     starting_gallons = db.Column(db.Integer, nullable=True)
     current_gallons = db.Column(db.Integer, nullable=True)
+    # The last recorded reading is retained when a physical transfer proves it
+    # cannot be trusted. It is never offered to automated fuel planning then.
+    inventory_verified = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     top_off_sent_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
@@ -256,6 +259,10 @@ class NeoScorpionFuelWorkState(db.Model):
     on_at_utc = db.Column(db.DateTime, nullable=True)
     # A validated physical/FOB-check start; legacy ON stays intact for history.
     confirmed_on_at_utc = db.Column(db.DateTime, nullable=True)
+    manual_on_at_utc = db.Column(db.DateTime, nullable=True)
+    manual_on_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    manual_on_truck_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=True)
+    manual_on_cycle_number = db.Column(db.Integer, nullable=True)
     apu_running = db.Column(db.Boolean, nullable=True)
     apu_confirmed_at_utc = db.Column(db.DateTime, nullable=True)
     apu_allowance_lbs = db.Column(db.Integer, nullable=True)
@@ -296,6 +303,7 @@ class NeoScorpionFuelWorkState(db.Model):
 
     fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
     off_by_user = db.relationship("User", foreign_keys=[off_by_user_id])
+    manual_on_by_user = db.relationship("User", foreign_keys=[manual_on_by_user_id])
     ended_early_by_user = db.relationship(
         "User",
         foreign_keys=[ended_early_by_user_id],
@@ -628,6 +636,26 @@ class NeoScorpionFuelingEvent(db.Model):
         return normalized
 
 
+class NeoScorpionTruckInventoryAudit(db.Model):
+    __tablename__ = "neoscorpion_truck_inventory_audits"
+    __table_args__ = (
+        db.CheckConstraint("action IN ('discrepancy', 'verified')", name="ck_neoscorpion_inventory_audit_action"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    sort_date_operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id"), nullable=False, index=True)
+    fuel_truck_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=False, index=True)
+    fuel_assignment_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_assignments.id"), nullable=True)
+    fueling_event_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fueling_events.id"), nullable=True)
+    action = db.Column(db.String(16), nullable=False)
+    prior_recorded_gallons = db.Column(db.Integer, nullable=True)
+    transfer_fuel_gallons = db.Column(db.Integer, nullable=True)
+    confirmed_gallons = db.Column(db.Integer, nullable=True)
+    reason = db.Column(db.Text, nullable=False)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
 class NeoScorpionFuelingEventTankSnapshot(db.Model):
     __tablename__ = "neoscorpion_fueling_event_tank_snapshots"
     __table_args__ = (
@@ -670,7 +698,7 @@ class NeoScorpionFuelAuditEntry(db.Model):
         db.CheckConstraint(
             "action IN ('reopen_off', 'correct_actual', 'auto_hold', "
             "'resume_hold', 'swap_fueler', 'swap_truck', 'confirm_tail', "
-            "'end_early', 'cancel_uplift', 'cancel_defuel', 'unassign_truck')",
+            "'end_early', 'cancel_uplift', 'cancel_defuel', 'unassign_truck', 'truck_on')",
             name="ck_neoscorpion_fuel_audit_entry_action",
         ),
     )

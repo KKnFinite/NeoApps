@@ -252,7 +252,9 @@ def build_resource_calendars(
                 )
                 unknown.setdefault((resource_type, resource_id), []).append(item)
             continue
-        actual_start = getattr(work_state, "on_at_utc", None) if work_state else None
+        actual_start = (
+            getattr(work_state, "manual_on_at_utc", None) or getattr(work_state, "on_at_utc", None)
+        ) if work_state else None
         if actual_start is not None:
             start_utc = actual_start
             start_source = "actual_on"

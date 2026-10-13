@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.extensions import db
-from app.models import NeoScorpionFuelWorkState, NeoScorpionFuelTankState, SortDateParkingAssignment
+from app.models import NeoScorpionFuelWorkState, NeoScorpionFuelTankState, NeoScorpionFuelAuditEntry, NeoScorpionTruckInventoryAudit, SortDateParkingAssignment
 from app.services import neoscorpion as service
 from app.services.neoscorpion_fueling_start import fueling_start_state
 from app.services.neoscorpion_spear import SpearSettings
@@ -36,6 +36,91 @@ class FuelingStartHotfixTest(unittest.TestCase):
 
     def readings(self):
         return dict(remaining_left="12.0", remaining_ctr="0.0", remaining_right="0.0", apu_running="no")
+
+    def confirm(self, now=None):
+        result = service.confirm_fueler_truck_on(
+            self.gateway, self.fueler, self.assignment.id,
+            expected_cycle=self.assignment.current_cycle_number,
+            expected_tail=self.mission.assigned_tail_number,
+            expected_truck_id=self.truck.id,
+            now_utc=now or self.now,
+        )
+        db.session.commit()
+        return result
+
+    def test_manual_truck_on_before_readings_is_atomic_persistent_and_idempotent(self):
+        self.prepare()
+        changed, _revision, work = self.confirm()
+        self.assertTrue(changed)
+        self.assertEqual(work.manual_on_at_utc, self.now)
+        self.assertEqual(work.manual_on_by_user_id, self.fueler.id)
+        self.assertIsNone(work.on_at_utc)
+        self.assertEqual(self.row()["dispatch_status_key"], "fueling")
+        self.assertEqual(self.row()["fueling_effective_on_utc"], self.now)
+        self.assertTrue(self.row()["manual_on_confirmed"])
+        self.assertFalse(self.confirm(now=self.now+timedelta(minutes=1))[0])
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action="truck_on").count(), 1)
+        self.save(now=self.now+timedelta(minutes=2), **self.readings())
+        db.session.expire_all()
+        work = NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=self.assignment.id).one()
+        self.assertEqual(work.manual_on_at_utc, self.now)
+        self.assertEqual(self.row(self.now+timedelta(minutes=3))["fueling_effective_on_utc"], self.now)
+
+    def test_manual_on_overrides_inferred_on_and_predicted_travel_not_busy_truck(self):
+        self.prepare()
+        work = self.save(**self.readings()).fuel_work_state
+        self.assertEqual(work.on_at_utc, self.now)
+        confirmed = self.now+timedelta(minutes=5)
+        self.confirm(now=confirmed)
+        self.assertEqual(self.row(confirmed)["fueling_effective_on_utc"], confirmed)
+        self.assertEqual(work.on_at_utc, self.now)
+        self.assertEqual(work.manual_on_at_utc, confirmed)
+
+    def test_manual_on_respects_busy_unavailable_and_stale_assignment(self):
+        self.prepare()
+        previous, previous_work = self.previous()
+        with self.assertRaisesRegex(ValueError, "STILL FUELING"):
+            self.confirm()
+        db.session.rollback()
+        previous_work.off_at_utc = self.now
+        db.session.commit()
+        self.assertTrue(self.row()["truck_start_reason"].startswith("COMING FROM"))
+        self.assertTrue(self.confirm()[0])  # Physical confirmation beats estimated travel.
+        self.assertEqual(self.row()["truck_start_reason"], "")
+        selection = service.NeoScorpionSortTruck.query.filter_by(fuel_truck_id=self.truck.id).one()
+        selection.status = "topping_off"
+        db.session.commit()
+        self.assignment.current_cycle_number += 1
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "topping off"):
+            self.confirm()
+        db.session.rollback()
+        selection.status = "available"
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "Refresh"):
+            service.confirm_fueler_truck_on(self.gateway, self.fueler, self.assignment.id,
+                expected_cycle=1, expected_tail=self.mission.assigned_tail_number,
+                expected_truck_id=self.truck.id, now_utc=self.now+timedelta(minutes=2))
+
+    def test_truck_on_route_is_fueler_only_and_repeated_request_does_not_reset_time(self):
+        self.prepare()
+        url = f"/neoscorpion/fueler/assignments/{self.assignment.id}/on"
+        data = dict(expected_cycle=1, expected_tail=self.mission.assigned_tail_number,
+                    expected_truck_id=self.truck.id)
+        self.login(self.dispatcher)
+        denied = self.client.post(url, data=data, headers={"Accept": "application/json"})
+        self.assertNotEqual(denied.status_code, 200)
+        self.login(self.fueler)
+        first = self.client.post(url, data=data, headers={"Accept": "application/json"})
+        self.assertEqual(first.status_code, 200)
+        self.assertTrue(first.json["ok"])
+        work = NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=self.assignment.id).one()
+        first_time = work.manual_on_at_utc
+        repeated = self.client.post(url, data=data, headers={"Accept": "application/json"})
+        self.assertEqual(repeated.status_code, 200)
+        self.assertTrue(repeated.json["ok"])
+        self.assertEqual(work.manual_on_at_utc, first_time)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action="truck_on").count(), 1)
 
     def row(self, now=None):
         assignments = service._assignments_by_mission(self.operation)
@@ -162,6 +247,10 @@ class FuelingStartHotfixTest(unittest.TestCase):
         self.assertTrue(NeoScorpionFuelWorkState.__table__.c.confirmed_on_at_utc.nullable)
         for mapping in (NEOSCORPION_ADDITIVE_COLUMNS, LOCAL_SQLITE_OPTIONAL_COLUMNS, POSTGRES_OPTIONAL_COLUMNS):
             self.assertIn("confirmed_on_at_utc", mapping["neoscorpion_fuel_work_states"])
+            for field in ("manual_on_at_utc", "manual_on_by_user_id", "manual_on_truck_id", "manual_on_cycle_number"):
+                self.assertIn(field, mapping["neoscorpion_fuel_work_states"])
+            self.assertIn("inventory_verified", mapping["neoscorpion_sort_trucks"])
+        self.assertEqual(NeoScorpionTruckInventoryAudit.__tablename__, "neoscorpion_truck_inventory_audits")
 
     def test_unavailable_truck_and_missing_fueler_cannot_start(self):
         self.prepare()

@@ -18,6 +18,7 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelWorkState,
     NeoScorpionFuelAuditEntry,
+    NeoScorpionTruckInventoryAudit,
     NeoScorpionFuelerNickname,
     NeoScorpionFuelTruck,
     NeoScorpionSortAssetState,
@@ -469,6 +470,8 @@ def update_nightly_truck(
     _validate_truck_state(truck, final_status, final_starting, final_current)
 
     final_values = (final_status, final_starting, final_current)
+    if not nightly_truck.inventory_verified and final_current != nightly_truck.current_gallons:
+        raise ValueError("Use VERIFY INVENTORY to confirm new actual truck gallons.")
     if _truck_values(nightly_truck) == final_values:
         return _unchanged(state)
     if nightly_truck.status == "topping_off" and final_status == "available":
@@ -545,7 +548,10 @@ def mark_nightly_truck_topping_off(
     active_assignment_ids = [assignment.id for assignment in active_assignments]
     if active_assignment_ids and NeoScorpionFuelWorkState.query.filter(
         NeoScorpionFuelWorkState.fuel_assignment_id.in_(active_assignment_ids),
-        NeoScorpionFuelWorkState.on_at_utc.is_not(None),
+        db.or_(
+            NeoScorpionFuelWorkState.manual_on_at_utc.is_not(None),
+            NeoScorpionFuelWorkState.on_at_utc.is_not(None),
+        ),
         NeoScorpionFuelWorkState.off_at_utc.is_(None),
         NeoScorpionFuelWorkState.ended_early_at_utc.is_(None),
     ).first() is not None:
@@ -560,7 +566,43 @@ def mark_nightly_truck_topping_off(
     return _changed(state)
 
 
-def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons):
+def _verify_inventory(locked_operation, nightly_truck, current_gallons, user, reason, *, now_utc=None):
+    if user is not None:
+        db.session.add(NeoScorpionTruckInventoryAudit(
+            sort_date_operation_id=locked_operation.id,
+            fuel_truck_id=nightly_truck.fuel_truck_id,
+            action="verified",
+            prior_recorded_gallons=nightly_truck.current_gallons,
+            confirmed_gallons=current_gallons,
+            reason=reason,
+            actor_user_id=user.id,
+            created_at=now_utc or datetime.utcnow(),
+        ))
+    nightly_truck.current_gallons = current_gallons
+    nightly_truck.inventory_verified = True
+
+
+def verify_nightly_truck_inventory(operation, fuel_truck, current_gallons, *,
+                                   changed_by_user, now_utc=None):
+    if current_gallons is None or str(current_gallons).strip() == "":
+        raise ValueError("Enter newly verified actual truck gallons.")
+    value = _validate_gallons(current_gallons, "Current gallons")
+    locked_operation, state = _lock_operation_and_state(operation)
+    truck = _truck_for_operation(locked_operation, fuel_truck)
+    selection = _selected_truck(locked_operation.id, truck.id)
+    _validate_truck_state(truck, selection.status, selection.starting_gallons, value)
+    if selection.status in {"topping_off", "needs_sump"}:
+        raise ValueError("Use the Top Off Complete or MARK SUMPED confirmation.")
+    if selection.inventory_verified and selection.current_gallons == value:
+        return _unchanged(state)
+    _verify_inventory(locked_operation, selection, value, changed_by_user,
+                      "Dispatcher confirmed a new physical truck inventory reading.", now_utc=now_utc)
+    state = _record_change(state, locked_operation.id)
+    db.session.flush()
+    return _changed(state)
+
+
+def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons, *, changed_by_user=None, now_utc=None):
     if current_gallons is None or str(current_gallons).strip() == "":
         raise ValueError("Enter current gallons to complete the top off.")
     current_gallons = _validate_gallons(current_gallons, "Current gallons")
@@ -577,13 +619,14 @@ def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons):
         current_gallons,
     )
     nightly_truck.status = "available"
-    nightly_truck.current_gallons = current_gallons
+    _verify_inventory(locked_operation, nightly_truck, current_gallons, changed_by_user,
+                      "Top Off Complete confirmed a new physical truck reading.", now_utc=now_utc)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
 
 
-def mark_nightly_truck_sumped(operation, fuel_truck, current_gallons):
+def mark_nightly_truck_sumped(operation, fuel_truck, current_gallons, *, changed_by_user=None, now_utc=None):
     if current_gallons is None or str(current_gallons).strip() == "":
         raise ValueError("Enter confirmed current gallons after sumping.")
     current_gallons = _validate_gallons(current_gallons, "Current gallons")
@@ -603,7 +646,8 @@ def mark_nightly_truck_sumped(operation, fuel_truck, current_gallons):
         current_gallons,
     )
     nightly_truck.status = "available"
-    nightly_truck.current_gallons = current_gallons
+    _verify_inventory(locked_operation, nightly_truck, current_gallons, changed_by_user,
+                      "MARK SUMPED confirmed a new physical truck reading.", now_utc=now_utc)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)

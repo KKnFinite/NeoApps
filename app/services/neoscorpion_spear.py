@@ -317,6 +317,7 @@ def build_spear_plan(
         and not item["truck"].is_out_of_service
         and item["truck"].capacity_gallons is not None
         and item["selection"].current_gallons is not None
+        and getattr(item["selection"], "inventory_verified", True)
     }
     truck_state = {
         identifier: _ResourceState(now_utc, spear_settings.truck_begins_at)
@@ -688,7 +689,7 @@ def _occupied_truck_recommendations(
         if not feasible:
             continue
         work = row.get("fuel_work_state")
-        if getattr(work, "on_at_utc", None) is not None:
+        if getattr(work, "manual_on_at_utc", None) is not None or getattr(work, "on_at_utc", None) is not None:
             finish = active_fueling_finish(row, operation, planning_settings)
         elif row.get("work_has_begun"):
             finish = None
@@ -1071,6 +1072,8 @@ def _truck_constraint_notes(truck_rows):
             notes.append(f"Truck {number}: capacity missing hard constraint")
         elif getattr(selection, "current_gallons", None) is None:
             notes.append(f"Truck {number}: current gallons missing hard constraint")
+        elif not getattr(selection, "inventory_verified", True):
+            notes.append(f"Truck {number}: inventory unverified hard constraint")
     return tuple(notes[:3])
 
 
@@ -1356,9 +1359,9 @@ def active_fueling_finish(row, operation, planning_settings):
     Without a complete timing model we deliberately return unknown.
     """
     work = row.get("fuel_work_state")
-    if work is None or work.on_at_utc is None or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
+    if work is None or (getattr(work, "manual_on_at_utc", None) is None and work.on_at_utc is None) or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
         return None
-    start = row.get("fueling_effective_on_utc") or work.on_at_utc
+    start = row.get("fueling_effective_on_utc") or getattr(work, "manual_on_at_utc", None) or work.on_at_utc
     timing = _spear_timing(row, operation, planning_settings)
     if not getattr(timing, "available", False) or timing.total_duration_minutes is None:
         return None
@@ -1372,14 +1375,14 @@ def active_fueler_off(row, operation, planning_settings):
     dispatcher-completion finishing are separate milestones, not pumping.
     """
     work = row.get("fuel_work_state")
-    if work is None or work.on_at_utc is None or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
+    if work is None or (getattr(work, "manual_on_at_utc", None) is None and work.on_at_utc is None) or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
         return None
     rate = _decimal_or_none(planning_settings.pump_rate_for(row.get("detailed_aircraft_type")))
     if rate is None or not rate.is_finite() or rate <= 0:
         return None
     # Recorded ON supplies the start anchor for physical work, even if arrival
     # timestamps/ETD are missing. This local adapter never changes mission data.
-    start = row.get("fueling_effective_on_utc") or work.on_at_utc
+    start = row.get("fueling_effective_on_utc") or getattr(work, "manual_on_at_utc", None) or work.on_at_utc
     timing = _spear_timing({**row, "arrival_mission": SimpleNamespace(
         actual_block_in_datetime_utc=start,
     )}, operation, planning_settings)

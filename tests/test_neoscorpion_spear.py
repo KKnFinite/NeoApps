@@ -108,6 +108,13 @@ def _plan(rows, *, trucks=None, fuelers=None, settings=None):
 
 
 class NeoScorpionSpearPlanningTest(unittest.TestCase):
+    def test_unverified_truck_gallons_are_not_automated_fuel_availability(self):
+        truck = _truck()
+        truck["selection"].inventory_verified = False
+        plan = _plan([_row(100)], trucks=(truck,))
+        self.assertFalse(plan.steps)
+        self.assertIn("NO ELIGIBLE TRUCK", plan.unavailable_by_mission_id[100])
+
     def commitment(self, *, fueler=1, truck=10, **values):
         return SimpleNamespace(id=7, assigned_fueler_user_id=fueler, assigned_truck_id=truck,
             operational_status='active', completed_at_utc=None, fuel_on_board_at_utc=None, **values)
