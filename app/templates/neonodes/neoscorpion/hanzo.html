@@ -4,7 +4,6 @@
 
 {% block content %}
 {% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
-{% from "neonodes/neoscorpion/_fueler_card.html" import fuel_tank_total_row %}
 <section
     class="neoscorpion-shell neoscorpion-screen neoscorpion-hanzo"
     aria-label="NeoScorpion Hanzo"
@@ -75,7 +74,12 @@
                         <span role="cell">{{ tank.actual_display or '-' }}</span>
                     </div>
                     {% endfor %}
-                    {{ fuel_tank_total_row(row) }}
+                    <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-total" role="row">
+                        <strong role="rowheader">TOTAL</strong>
+                        <strong role="cell">{{ row.remaining_total_display if row.remaining_total_display != "INCOMPLETE" else "-" }}</strong>
+                        <strong role="cell">{{ row.planned_total_display if row.planned_total_display != "INCOMPLETE" else "-" }}</strong>
+                        <strong role="cell">{{ row.actual_total_display if row.actual_total_display != "INCOMPLETE" else "-" }}</strong>
+                    </div>
                 </div>
                 {% endif %}
             </article>
