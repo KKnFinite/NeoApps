@@ -635,7 +635,7 @@ def live_counts_context(gateway, sort_date=None, sort_name=None, *, bundle=None)
         "operational_settings": state["operational_settings"],
         "integration": state["integration"],
         "refresh_status": state["refresh"],
-        "ballmat_routing": state["ballmat_routing"],
+        "routing": state["routing"],
     }
 
 

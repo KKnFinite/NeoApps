@@ -5,6 +5,89 @@
     font-synthesis: none;
     font-variant-numeric: tabular-nums;
 }
+
+/* Live Counts owns Board View geometry, including persisted pre-paint entry.
+   Leave other nodes and the normal desktop/mobile shell unchanged. */
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page) {
+    --operational-topbar-height: 0px;
+    --operational-sidebar-width: 0px;
+    --motherbrain-side-nav-width: 0px;
+    margin: 0;
+    padding: 0;
+}
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page) > .shell {
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+}
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page) > .shell > .content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 100dvh;
+    height: auto;
+    margin: 0;
+    /* Only the existing 28px exit control needs top clearance. */
+    padding: 40px 12px 12px;
+    gap: 0;
+    box-sizing: border-box;
+}
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page) #sektor-live-display {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    overflow: visible;
+}
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page) #neosektor-live-counts-panel {
+    flex: 1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+    overflow: visible;
+}
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page)
+    :is(.operational-node-topbar, .operational-topbar, .operational-desktop-sidebar,
+        .operational-mobile-header, .operational-mobile-bottom-nav, .neo-mobile-navigation,
+        #sektor-live-display > .neosektor-standalone-header) { display: none !important; }
+:is(body.blueprint-neosektor.neosektor-live-counts-page.operational-board-view,
+    html.operational-board-view-boot body.blueprint-neosektor.neosektor-live-counts-page) .operational-board-exit {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    width: 28px;
+    height: 28px;
+    z-index: 1100;
+}
 #neosektor-live-counts-panel :is(h2, h3, strong, button, a, .wave-metric-label, .counter-card > span, .bay-heading > span) {
     font-family: inherit;
     font-weight: 600;

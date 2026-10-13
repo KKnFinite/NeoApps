@@ -8,6 +8,31 @@ const source = name => fs.readFileSync(path.join(root, `app/templates/neonodes/n
 const helper = fs.readFileSync(path.join(root, 'app/static/js/neosektor_live.js'), 'utf8');
 const names = ['live_counts', 'tunnel_conductor', 'ballmat', 'driver_routing', 'discharge'];
 
+test('live_counts: render canonical routing directions and lifecycle messages', () => {
+    const src = source('live_counts');
+    const labels = new Map(['first', 'second'].map(key => [key, {textContent: '', classList: {toggle() {}}}]));
+    const context = {root: {querySelector(selector) {
+        return labels.get(selector.match(/data-live-route="(.*?)"/)?.[1]);
+    }}};
+    vm.createContext(context);
+    const setter = src.match(/    const setText = \(selector, value\) => \{[\s\S]*?\n    \};/)[0];
+    const renderer = src.match(/    const applyState = \(state\) => \{[\s\S]*?\n    \};/)[0];
+    vm.runInContext(`${setter}\n${renderer}\nthis.render = applyState;`, context);
+    for (const [display_state, display_message] of [
+        ['route', ''], ['not_arrived', '1ST WAVE NOT ARRIVED'],
+        ['all_in', '1ST WAVE ALL IN'], ['pending', 'PENDING'], ['all_up', 'ALL UP'],
+    ]) {
+        context.render({routing: {routes: {
+            first: {direction: 'east', display_state, display_message},
+            second: {direction: 'west', display_state, display_message},
+        }}, ballmat_routing: {first: 'WRONG', second: 'WRONG'}});
+        assert.equal(labels.get('first').textContent, display_state === 'route' ? 'ROUTING EAST' : display_message);
+        assert.equal(labels.get('second').textContent, display_state === 'route' ? 'ROUTING WEST' : display_message);
+    }
+    assert.equal([...src.matchAll(/NeoLiveUpdates\.create\(/g)].length, 1);
+    assert.equal(src.includes('driver_routing_state'), false);
+});
+
 // Execute each real template's poll wiring, not a copy of its guards/callbacks.
 function harness(name) {
     const calls = [], events = [];
