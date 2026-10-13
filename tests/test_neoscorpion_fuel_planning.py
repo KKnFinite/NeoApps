@@ -9,6 +9,8 @@ from app.models import (
     GatewayNodeRole,
     NeoNode,
     NeoScorpionFuelAssignment,
+    NeoScorpionFuelerNickname,
+    NeoScorpionFuelTruck,
     NeoScorpionFuelTankState,
     NeoScorpionFuelWorkState,
     NeoScorpionSortAssetState,
@@ -20,6 +22,7 @@ from app.models import (
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
 from app.services.neoscorpion import (
+    _hanzo_fuel_short,
     complete_fueled_assignment,
     fueler_context,
     hanzo_context,
@@ -460,14 +463,17 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
 
-    def test_hanzo_renders_existing_plan_read_only_and_keeps_incomplete_reasons(self):
+    def test_hanzo_renders_existing_plan_read_only_without_status_area(self):
         operation, mission, assignment = self._assignment()
         self._login()
 
         incomplete = self.client.get("/neoscorpion/hanzo")
         self.assertEqual(incomplete.status_code, 200)
         self.assertIn(b"NEO HANZO PLAN", incomplete.data)
-        self.assertIn(b"Awaiting fuel readings", incomplete.data)
+        self.assertIn(b"FUELING INFORMATION", incomplete.data)
+        self.assertIn(b"<dt>Truck</dt><dd>\xe2\x80\x94</dd>", incomplete.data)
+        self.assertNotIn(b"neoscorpion-hanzo-status", incomplete.data)
+        self.assertNotIn(b"neoscorpion-fuel-status-chip", incomplete.data)
         # Account/CSRF and context controls belong to the shared shell. Hanzo's
         # actual content, rather than the whole document, is read-only.
         hanzo_content = incomplete.data.split(b'neoscorpion-hanzo"', 1)[1].split(b'</section>', 1)[0]
@@ -487,7 +493,8 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
         )
         db.session.commit()
         rendered = self.client.get("/neoscorpion/hanzo")
-        self.assertIn(b"Fuel Load", rendered.data)
+        self.assertIn(b"<dt>Required</dt>", rendered.data)
+        self.assertIn(b"<dt>Neo Fuel</dt>", rendered.data)
         self.assertIn(b"Planned Total", rendered.data)
         self.assertIn(b"<dt>Effective APU Allowance</dt><dd>0.0</dd>", rendered.data)
         self.assertIn(b"LEFT", rendered.data)
@@ -507,6 +514,55 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
             "Fuel calculation not configured for this aircraft type yet.",
         )
         self.assertEqual(operation.id, mission.sort_date_operation_id)
+
+    def test_hanzo_fueling_identity_timing_and_required_warning(self):
+        _operation, mission, assignment = self._assignment()
+        truck = NeoScorpionFuelTruck(
+            gateway_id=self.gateway.id, truck_number="422808", capacity_gallons=20000,
+        )
+        db.session.add(truck)
+        db.session.flush()
+        assignment.assigned_truck_id = truck.id
+        db.session.add(NeoScorpionFuelerNickname(
+            gateway_id=self.gateway.id, user_id=self.user.id,
+            nickname="JAKE", nickname_key="jake",
+        ))
+        db.session.commit()
+        self._login()
+        blank = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
+        self.assertIn("JAKE", blank)
+        self.assertIn("422808", blank)
+        self.assertIn("<dt>On</dt><dd>—</dd>", blank)
+        self.assertIn("<dt>Off</dt><dd>—</dd>", blank)
+        self.assertNotIn('class="is-fuel-short"', blank)
+
+        work = NeoScorpionFuelWorkState(
+            fuel_assignment_id=assignment.id, tail_number="N412UP",
+            on_at_utc=datetime(2026, 8, 18, 7, 15),
+            off_at_utc=datetime(2026, 8, 18, 7, 40),
+            apu_running=False, apu_allowance_lbs=0,
+        )
+        db.session.add(work)
+        db.session.commit()
+        row = hanzo_context(self.gateway)["rows"][0]
+        self.assertEqual(row["hanzo_on_time"], "02:15")
+        self.assertEqual(row["hanzo_off_time"], "02:40")
+        assignment.completed_at_utc = datetime(2026, 8, 18, 7, 45)
+        db.session.commit()
+        completed = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
+        self.assertIn("JAKE", completed)
+        self.assertIn("<dt>Off</dt><dd>02:40</dd>", completed)
+        assignment.completed_at_utc = None
+        assignment.assigned_fueler_user_id = None
+        assignment.assigned_truck_id = None
+        db.session.commit()
+        unassigned = self.client.get("/neoscorpion/hanzo").get_data(as_text=True)
+        self.assertIn("<dt>Fueler</dt><dd>—</dd>", unassigned)
+        self.assertIn("<dt>Truck</dt><dd>—</dd>", unassigned)
+        for neo, required, expected in ((49999, 50000, True), (50000, 50000, False),
+                                        (50001, 50000, False), (None, 50000, False)):
+            self.assertEqual(_hanzo_fuel_short(required, neo), expected)
+        self.assertFalse(_hanzo_fuel_short(None, 50000))
 
     def test_source_aware_fueler_workflow_preserves_source_through_off(self):
         _operation, _mission, assignment = self._assignment()

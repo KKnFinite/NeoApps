@@ -342,7 +342,7 @@ class NeoScorpionLiveRefreshTest(unittest.TestCase):
         self.assertTrue(panel_payload["ok"])
         self.assertEqual(panel_payload["operation_id"], operation.id)
         self.assertEqual(panel_payload["revision"], 3)
-        self.assertIn('<section class="neoscorpion-panel">', panel_payload["html"])
+        self.assertIn('<section class="neoscorpion-panel" data-assignment-alert-threshold-minutes="30">', panel_payload["html"])
         self.assertNotIn("<html", panel_payload["html"])
 
         with open(

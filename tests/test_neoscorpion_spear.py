@@ -869,14 +869,13 @@ class NeoScorpionSpearSettingsTest(unittest.TestCase):
             NeoScorpionSettings.query.filter_by(gateway_id=self.gateway.id).first()
         )
 
-    def test_teach_spear_is_visible_but_disabled_while_learning_is_off(self):
+    def test_teach_spear_placeholder_is_removed_without_changing_learning_settings(self):
         root = Path(__file__).resolve().parents[1]
         template = (root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html").read_text(encoding="utf-8")
         settings_template = (root / "app/templates/neonodes/neoscorpion/spear_settings.html").read_text(encoding="utf-8")
 
-        self.assertIn("TEACH SPEAR", template)
-        self.assertIn("LEARNING OFF", template)
-        self.assertIn("SPEAR Learning Capture is not enabled yet.", template)
+        self.assertNotIn("TEACH SPEAR", template)
+        self.assertNotIn("neoscorpion-teach-spear", template)
         self.assertIn("LEARNING VAULT NOT CONFIGURED", settings_template)
 
     def test_vault_test_button_uses_its_own_form(self):

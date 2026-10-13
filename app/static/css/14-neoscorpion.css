@@ -793,10 +793,36 @@
     text-align: right;
 }
 
-.neoscorpion-hanzo-status {
-    margin: 1rem 0 0;
-    color: var(--node-scorpion-primary);
+.neoscorpion-hanzo-identity dd.is-fuel-short {
+    color: #ff6666;
+    font-weight: 900;
 }
+
+.neoscorpion-hanzo-fueling {
+    margin: 0 0 .75rem;
+    padding: .55rem .7rem;
+    border: 1px solid rgba(var(--node-scorpion-primary-rgb), .28);
+    border-radius: .4rem;
+    background: rgba(8, 12, 18, .7);
+}
+
+.neoscorpion-hanzo-fueling h2 {
+    margin: 0 0 .4rem;
+    color: var(--node-scorpion-primary);
+    font-size: .72rem;
+    letter-spacing: .07em;
+}
+
+.neoscorpion-hanzo-fueling dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .3rem .7rem;
+    margin: 0;
+}
+
+.neoscorpion-hanzo-fueling dl > div { display: flex; justify-content: space-between; gap: .35rem; min-width: 0; }
+.neoscorpion-hanzo-fueling dt { color: var(--text-muted); font-size: .7rem; text-transform: uppercase; }
+.neoscorpion-hanzo-fueling dd { margin: 0; min-width: 0; overflow-wrap: anywhere; text-align: right; font-size: .76rem; font-weight: 800; }
 
 .neoscorpion-hanzo-totals {
     margin-bottom: 1rem;
@@ -910,6 +936,7 @@
 .neoscorpion-truck-status {
     font-weight: 700;
 }
+.neoscorpion-truck-activity { max-width: 62%; text-align: right; font-size: .67rem; line-height: 1.1; overflow-wrap: anywhere; }
 
 .neoscorpion-truck-visual-card--needs_sump .neoscorpion-truck-status,
 .neoscorpion-truck-visual-card.is-short .neoscorpion-truck-status,
@@ -1118,27 +1145,6 @@
     margin-left: auto;
     color: #e5b962;
     letter-spacing: .08em;
-}
-
-.neoscorpion-teach-spear {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 4px;
-    border: 1px solid #385367;
-    border-radius: 3px;
-    background: #10202c;
-    color: #91a4b0;
-    padding: 2px 5px;
-    font-size: .52rem;
-    font-weight: 900;
-    letter-spacing: .05em;
-    cursor: not-allowed;
-}
-
-.neoscorpion-teach-spear small {
-    color: #d2a65f;
-    font-size: .48rem;
 }
 
 .neoscorpion-spear-fleet-status {

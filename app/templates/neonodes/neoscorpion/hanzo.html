@@ -3,7 +3,6 @@
 {% block title %}Hanzo | NeoScorpion{% endblock %}
 
 {% block content %}
-{% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
 <section
     class="neoscorpion-shell neoscorpion-screen neoscorpion-hanzo"
     aria-label="NeoScorpion Hanzo"
@@ -44,12 +43,18 @@
                     <div><dt>Aircraft Type</dt><dd>{{ row.aircraft_type }}</dd></div>
                     <div><dt>Parking Position</dt><dd>{{ row.parking_position }}</dd></div>
                     <div><dt>ETD</dt><dd>{{ row.departure_time or '-' }}</dd></div>
-                    <div><dt>Fuel Load</dt><dd>{{ row.required_fuel_display or '-' }}</dd></div>
+                    <div><dt>Required</dt><dd class="{% if row.hanzo_fuel_short %}is-fuel-short{% endif %}">{{ row.required_fuel_display or '—' }}</dd></div>
+                    <div><dt>Neo Fuel</dt><dd class="{% if row.hanzo_fuel_short %}is-fuel-short{% endif %}">{{ row.neo_fuel_display if row.neo_fuel_available else '—' }}</dd></div>
                 </dl>
-                {{ fuel_status(row) }}
-                {% if row.hanzo_status %}
-                <p class="neoscorpion-hanzo-status">{{ row.hanzo_status }}</p>
-                {% else %}
+                <section class="neoscorpion-hanzo-fueling" aria-label="Fueling information">
+                    <h2>FUELING INFORMATION</h2>
+                    <dl>
+                        <div><dt>Fueler</dt><dd>{{ row.hanzo_fueler_name }}</dd></div>
+                        <div><dt>Truck</dt><dd>{{ row.assigned_truck.truck_number if row.assigned_truck else '—' }}</dd></div>
+                        <div><dt>On</dt><dd>{{ row.hanzo_on_time }}</dd></div>
+                        <div><dt>Off</dt><dd>{{ row.hanzo_off_time }}</dd></div>
+                    </dl>
+                </section>
                 <dl class="neoscorpion-fuel-totals neoscorpion-hanzo-totals">
                     <div class="neoscorpion-fuel-total-primary"><dt>Planned Total</dt><dd>{{ row.planned_total_display }}</dd></div>
                     <div><dt>Effective APU Allowance</dt><dd>{{ row.apu_allowance_display }}</dd></div>
@@ -57,7 +62,6 @@
                     <div><dt>APU Source Tank</dt><dd>{{ row.apu_source_tank_label }}</dd></div>
                     {% endif %}
                 </dl>
-                {% endif %}
                 {% if row.tank_rows %}
                 <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.aircraft_type }} fuel tank readings (K-lbs)">
                     <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">

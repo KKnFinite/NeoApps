@@ -1,5 +1,6 @@
 import unittest
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from sqlalchemy import event, inspect, text
@@ -24,7 +25,11 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
-from app.services.neoscorpion import fuel_dispatch_context, settings_context
+from app.services.neoscorpion import (
+    _attach_dispatch_truck_activity,
+    fuel_dispatch_context,
+    settings_context,
+)
 from app.services.neoscorpion_dispatch_planning import (
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
     estimate_fuel_demand_gallons,
@@ -304,6 +309,56 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertEqual(visuals["24"]["status_label"], "Topping Off")
         self.assertEqual(visuals["25"]["status_label"], "Needs Sump")
 
+    def test_truck_badges_prioritize_physical_activity_and_honest_location(self):
+        def assignment(number):
+            return SimpleNamespace(id=number, operational_status="active", review_status="pending",
+                                   sort_date_mission=SimpleNamespace(fuel_status="waiting"))
+
+        def record(number, *, on=None, parking="-", release=None):
+            return {"id": number, "truck_id": 1, "on": on, "parking": parking, "release": release}
+
+        def badge(records=(), releases=(), status="available", state=None):
+            visual = {"truck_id": 1}
+            with patch("app.services.neoscorpion.fueling_start_state", return_value=state or
+                       {"on_trusted": False, "arrival": None, "origin": "", "reason": ""}):
+                _attach_dispatch_truck_activity(
+                    [visual], [assignment(item["id"]) for item in records],
+                    {"records": records, "releases": releases},
+                    {1: SimpleNamespace(status=status)}, None,
+                    now_utc=datetime(2026, 8, 18, 4),
+                )
+            return visual
+
+        self.assertEqual(badge()["activity_label"], "IDLE")
+        self.assertEqual(badge(status="topping_off")["activity_label"], "TOPPING OFF")
+        self.assertEqual(badge(status="needs_sump")["activity_label"], "NEEDS SUMP")
+        self.assertEqual(badge(status="unavailable_oos")["activity_label"], "OOS")
+        self.assertEqual(badge([record(1, parking="B6")])["activity_label"], "PREASSIGNED · B6")
+        active = {"on_trusted": True, "arrival": None, "origin": "", "reason": ""}
+        self.assertEqual(badge([record(1, on=datetime(2026, 8, 18, 3), parking="A4"),
+                                record(2, parking="B6")], state=active)["activity_label"], "FUELING · A4")
+        self.assertEqual(badge([record(1, on=datetime(2026, 8, 18, 3), parking="A4")],
+                               state=active)["activity_label"], "FUELING · A4")
+        self.assertEqual(badge([record(1, on=datetime(2026, 8, 18, 3), parking="-")],
+                               state=active)["activity_label"], "FUELING · LOCATION UNKNOWN")
+        self.assertEqual(badge([record(1, on=datetime(2026, 8, 18, 3), parking="A4"),
+                                record(2, on=datetime(2026, 8, 18, 3), parking="B6")],
+                               state=active)["activity_label"], "STATUS UNKNOWN")
+        self.assertEqual(badge([record(1, on=datetime(2026, 8, 18, 3), parking="A4")])
+                         ["activity_label"], "STATUS UNKNOWN")
+        arrival = datetime(2026, 8, 18, 4, 10)
+        travel = {"on_trusted": False, "arrival": arrival, "origin": "ALPHA",
+                  "reason": "COMING FROM ALPHA · ~10 MIN"}
+        self.assertIn("COMING FROM ALPHA", badge([record(1, parking="B6")], state=travel)
+                      ["activity_label"])
+        self.assertEqual(badge([record(1, parking="B6")], state=travel)
+                         ["activity_travel_until"], "2026-08-18T04:10:00Z")
+        self.assertEqual(badge(releases=[record(9, parking="E8", release=datetime(2026, 8, 18, 2))])
+                         ["activity_label"], "IDLE · LAST E8")
+        self.assertEqual(badge(releases=[record(9, parking="E8", release=datetime(2026, 8, 18, 2)),
+                                         record(10, parking="A4", release=datetime(2026, 8, 18, 2))])
+                         ["activity_label"], "STATUS UNKNOWN")
+
     def test_load_planning_output_uses_neo_and_final_a300_center_actual(self):
         a300 = self._mission("UPS0952", "N160UP", 70_000, 1, destination="MHR")
         assignment = self._assignment(a300)
@@ -371,6 +426,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             rows["UPS777"]["load_planning_output"],
             "UPS777 SDF N412UP NEO > 50.0",
         )
+
         self._login_user("load_planning_simulator", "simulator")
         rendered = self.client.get("/neoscorpion/fuel-dispatch")
         self.assertIn(
@@ -399,6 +455,49 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             b'data-copy-value="UPS0952',
             rendered_incomplete.data,
         )
+
+    def test_dispatch_a300_center_uses_measured_pounds_only(self):
+        a300 = self._mission("UPS550", "N160UP", 70000, 1)
+        assignment = self._assignment(a300)
+        work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id, tail_number="N160UP")
+        db.session.add(work)
+        db.session.flush()
+        center = NeoScorpionFuelTankState(fuel_work_state_id=work.id, tank_code="ctr", actual_lbs=400)
+        db.session.add(center)
+        other = self._mission("UPS551", "N412UP", 50000, 2)
+        self._assignment(other)
+        db.session.commit()
+        self._login_user("center_readout", "simulator")
+
+        def row_html(mission):
+            html = self.client.get("/neoscorpion/fuel-dispatch/live-panel").get_json()["html"]
+            return html.split(f'data-dispatch-mission-id="{mission.id}"', 1)[1].split("</tr>", 1)[0]
+
+        self.assertIn("Center fuel: CF 400", row_html(a300))
+        self.assertNotIn("Center fuel:", row_html(other))
+        center.actual_lbs = None
+        db.session.commit()
+        self.assertIn("Center fuel: CF -", row_html(a300))
+
+    def test_inline_spear_hides_only_after_complete_or_fob(self):
+        mission = self._mission("UPS552", "N412UP", 50000, 1)
+        assignment = self._assignment(mission)
+        db.session.commit()
+        self._login_user("spear_visibility", "simulator")
+
+        def row_html():
+            html = self.client.get("/neoscorpion/fuel-dispatch/live-panel").get_json()["html"]
+            return html.split(f'data-dispatch-mission-id="{mission.id}"', 1)[1].split("</tr>", 1)[0]
+
+        self.assertIn("data-spear-tail-indicator", row_html())
+        assignment.fuel_on_board_at_utc = datetime(2026, 8, 18, 4)
+        db.session.commit()
+        self.assertNotIn("data-spear-tail-indicator", row_html())
+        assignment.fuel_on_board_at_utc = None
+        assignment.completed_at_utc = datetime(2026, 8, 18, 4)
+        mission.fuel_status = "complete"
+        db.session.commit()
+        self.assertNotIn("data-spear-tail-indicator", row_html())
 
     def test_dispatch_get_renders_planning_copy_and_performs_no_writes(self):
         self._login_user("dispatch_simulator", "simulator")
@@ -444,7 +543,9 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         # Includes current/prior-date scope selection and the current SPEAR
         # calibration/history contract plus one display-cycle history query.
         # These remain batch reads for 150 rows.
-        self.assertEqual(len(statements), 27)
+        # Same 35 reads with read-only truck activity enrichment disabled;
+        # the older 27-read expectation predates the current planning paths.
+        self.assertEqual(len(statements), 35)
         self.assertEqual(sum("FROM neoscorpion_fuel_cycle_history " in sql for sql in statements), 1)
         for table in ("neoscorpion_fuel_assignments", "neoscorpion_fuel_work_states",
                       "neoscorpion_spear_calibration_resets"):

@@ -758,9 +758,13 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         row["selection"].fuel_truck_id: row["selection"]
         for row in asset_context["nightly_trucks"]
     }
+    parking = _parking_by_tail(operation)
+    start_evidence = {}
     rows = _fuel_rows(
         operation,
         missions,
+        parking_by_tail=parking,
+        start_evidence=start_evidence,
         fuel_trucks=trucks,
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
@@ -813,6 +817,10 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         asset_context["nightly_trucks"],
         rows,
         timezone_name=gateway_timezone(gateway),
+    )
+    _attach_dispatch_truck_activity(
+        truck_visuals, assignments_by_mission.values(),
+        start_evidence, nightly_truck_states_by_truck_id, settings,
     )
     _attach_dispatch_mission_truck_visuals(
         rows,
@@ -930,8 +938,26 @@ def hanzo_context(gateway):
             _attach_fueling_timing(rows, operation, settings)
     except Exception:
         current_app.logger.exception("Hanzo fueling timing unavailable.")
+    nicknames = fueler_nicknames(gateway, (row["assigned_fueler"] for row in rows))
+    timezone_name = gateway_timezone(gateway)
     for row in rows:
         row["hanzo_status"] = _hanzo_planning_status(row)
+        row["hanzo_fueler_name"] = (
+            operational_fueler_name(row["assigned_fueler"], nicknames)
+            if row["assigned_fueler"] else "—"
+        )
+        work = row["fuel_work_state"]
+        row["hanzo_on_time"] = (
+            format_local_hhmm(work.on_at_utc, timezone_name)
+            if work and work.on_at_utc else "—"
+        )
+        row["hanzo_off_time"] = (
+            format_local_hhmm(work.off_at_utc, timezone_name)
+            if work and work.off_at_utc else "—"
+        )
+        row["hanzo_fuel_short"] = _hanzo_fuel_short(
+            row["required_fuel_lbs"], row["neo_fuel_lbs"]
+        )
     return {
         "operation": operation,
         "rows": rows,
@@ -5148,6 +5174,7 @@ def _fuel_rows(
     assignments_by_mission=None,
     fuel_work_states_by_assignment_tail=None,
     parking_by_tail=None,
+    start_evidence=None,
     nightly_truck_states_by_truck_id=None,
     fueling_event_cycle_keys=None,
     apu_rates_by_aircraft_type=None,
@@ -5779,6 +5806,7 @@ def _fuel_rows(
                 ),
                 "neo_fuel_available": neo_fuel_lbs is not None,
                 "neo_fuel_lbs": neo_fuel_lbs,
+                "center_actual_lbs": center_actual_lbs,
                 "fuel_on_board_complete": fuel_on_board_complete,
                 "fuel_on_board_ready": fuel_on_board_ready,
                 "fuel_on_board_reason": fuel_on_board_reason,
@@ -5970,7 +5998,8 @@ def _fuel_rows(
             )
     if assignments:
         _attach_fueling_start_state(rows, operation, assignments, fuel_work_states, parking,
-                                   start_selections, status_settings, now=now_utc)
+                                   start_selections, status_settings, now=now_utc,
+                                   evidence=start_evidence)
     return rows
 
 
@@ -6300,8 +6329,10 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
     return records, releases
 
 
-def _attach_fueling_start_state(rows, operation, assignments, work_states, parking, selections, settings, *, now):
+def _attach_fueling_start_state(rows, operation, assignments, work_states, parking, selections, settings, *, now, evidence=None):
     records, releases = _fuel_start_records(operation, assignments.values(), work_states, parking, selections)
+    if evidence is not None:
+        evidence.update(records=records, releases=releases)
     by_id = {record["id"]: record for record in records}
     spear_settings = effective_spear_settings(settings)
     states = {record["id"]:fueling_start_state(record, records, releases, spear_settings, now=now)
@@ -6361,6 +6392,11 @@ def _hanzo_planning_status(row):
     if any(tank["planned_lbs"] is None for tank in row["tank_rows"]):
         return "Awaiting fuel readings"
     return ""
+
+
+def _hanzo_fuel_short(required_fuel_lbs, neo_fuel_lbs):
+    return (required_fuel_lbs is not None and neo_fuel_lbs is not None
+            and neo_fuel_lbs < required_fuel_lbs)
 
 
 def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
@@ -6428,6 +6464,79 @@ def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
             }
         )
     return visuals
+
+
+def _attach_dispatch_truck_activity(
+    visuals, assignments, evidence, selections, settings,
+    *, now_utc=None,
+):
+    """Expose current-sort physical activity without treating future work as location."""
+    if not visuals:
+        return
+    assignments = list(assignments)
+    records, releases = evidence.get("records", ()), evidence.get("releases", ())
+    eligible_ids = {
+        assignment.id for assignment in assignments
+        if assignment.operational_status == "active"
+        and assignment.review_status != "complete"
+        and assignment.sort_date_mission.fuel_status != "complete"
+    }
+    by_truck = {}
+    for record in records:
+        if record["id"] in eligible_ids and record["release"] is None and record["truck_id"] is not None:
+            by_truck.setdefault(record["truck_id"], []).append(record)
+    released_by_truck = {}
+    for record in (*records, *releases):
+        if record["truck_id"] is not None and record["release"] is not None:
+            released_by_truck.setdefault(record["truck_id"], []).append(record)
+    now = now_utc or datetime.utcnow()
+    travel_settings = effective_spear_settings(settings)
+    for visual in visuals:
+        truck_id = visual["truck_id"]
+        selection = selections.get(truck_id)
+        current = by_truck.get(truck_id, ())
+        visual.update(activity_label="STATUS UNKNOWN", activity_travel_until="",
+                      activity_travel_origin="")
+        physically_active = [record for record in current if record["on"] is not None]
+        if physically_active:
+            if len(physically_active) != 1:
+                continue
+            record = physically_active[0]
+            state = fueling_start_state(record, records, releases, travel_settings, now=now)
+            if state["on_trusted"] and selection and selection.status == "available":
+                visual["activity_label"] = (
+                    f"FUELING · {record['parking']}" if record["parking"] != "-"
+                    else "FUELING · LOCATION UNKNOWN"
+                )
+            continue
+        if len(current) > 1:
+            continue
+        record = current[0] if current else None
+        if selection is None:
+            continue
+        if selection.status == "topping_off":
+            visual["activity_label"] = "TOPPING OFF"
+        elif selection.status == "needs_sump":
+            visual["activity_label"] = "NEEDS SUMP"
+        elif selection.status == "unavailable_oos":
+            visual["activity_label"] = "OOS"
+        elif selection.status == "available" and record:
+            state = fueling_start_state(record, records, releases, travel_settings, now=now)
+            if state["arrival"] and state["origin"]:
+                visual["activity_label"] = state["reason"]
+                visual["activity_travel_until"] = state["arrival"].isoformat() + "Z"
+                visual["activity_travel_origin"] = state["origin"]
+            elif not state["reason"] and record["parking"] != "-":
+                visual["activity_label"] = f"PREASSIGNED · {record['parking']}"
+        elif selection.status == "available":
+            past = released_by_truck.get(truck_id, ())
+            if not past:
+                visual["activity_label"] = "IDLE"
+                continue
+            latest = max(item["release"] for item in past)
+            locations = {item["parking"] for item in past if item["release"] == latest}
+            if len(locations) == 1 and "-" not in locations:
+                visual["activity_label"] = f"IDLE · LAST {next(iter(locations))}"
 
 
 def _attach_dispatch_mission_truck_visuals(rows, truck_visuals):
