@@ -17,6 +17,8 @@
     <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-off" data-fuel-status-secondary title="Fueler OFF at {{ row.off_time }}">OFF {{ row.off_time }}</small>
     {% elif dispatcher and row.dispatch_status_key == 'fueling' and row.fueler_off_estimate_display is defined and row.fuel_status_secondary not in critical_secondary %}
     <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-estimate neoscorpion-dispatch-size-small" data-fuel-status-secondary data-fueler-off-estimate="{{ row.fueler_off_estimate_utc }}" data-fueler-off-clock="{{ row.fueler_off_estimate_clock }}" title="{{ row.fueler_off_estimate_display }}"><span data-fueler-off-estimate-text>{{ row.fueler_off_estimate_display }}</span></small>
+    {% elif dispatcher and row.truck_travel_until and row.dispatch_status_key in ['assigned', 'ready'] and row.fuel_status_secondary not in critical_secondary %}
+    <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-estimate neoscorpion-dispatch-size-small" data-fuel-status-secondary data-truck-travel-until="{{ row.truck_travel_until }}" data-truck-travel-origin="{{ row.truck_travel_origin }}" title="{{ row.truck_start_reason }}"><span data-fueler-off-estimate-text>{{ row.truck_start_reason }}</span></small>
     {% elif row.fuel_status_secondary %}
     {% set secondary = {
         'Needs Fueler': 'Needs Fueler', 'Needs Truck': 'Needs Truck',
@@ -24,7 +26,9 @@
         'Fuel direction discrepancy': 'FUEL DIRECTION',
         'Dispatcher review requested': 'REVIEW REQUEST',
         'FOB CHECK': 'FOB CHECK', 'FOB LIKELY': 'FOB LIKELY',
-        'TAIL SWAP · advisory': 'TAIL SWAP'
+        'TAIL SWAP · advisory': 'TAIL SWAP',
+        'TRUCK STILL FUELING': 'TRUCK STILL FUELING', 'TRUCK UNAVAILABLE': 'TRUCK UNAVAILABLE',
+        'TRUCK LOCATION UNKNOWN': 'TRUCK LOCATION UNKNOWN', 'ARRIVAL UNCONFIRMED': 'ARRIVAL UNCONFIRMED'
     }.get(row.fuel_status_secondary, 'SEE DETAILS') if dispatcher else row.fuel_status_secondary %}
     <small class="neoscorpion-fuel-status-warning" data-fuel-status-secondary title="{{ row.fuel_status_secondary }}">{{ secondary }}</small>
     {% endif %}

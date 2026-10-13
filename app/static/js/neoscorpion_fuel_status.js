@@ -12,6 +12,11 @@
         if (finish <= now) return "EST OFF OVERDUE";
         return `EST OFF ${clock} · ~${Math.ceil((finish - now) / 60000)} MIN`;
     };
+    const travelText = (arrival, origin, now) => {
+        if (!Number.isFinite(arrival) || !origin) return "TRUCK LOCATION UNKNOWN";
+        if (arrival <= now) return "ARRIVAL UNCONFIRMED";
+        return `COMING FROM ${origin} · ~${Math.ceil((arrival - now) / 60000)} MIN`;
+    };
     const update = () => {
         const now = Date.now();
         document.querySelectorAll("[data-fuel-status]").forEach(element => {
@@ -34,8 +39,18 @@
                 }
             }
         });
+        document.querySelectorAll("[data-truck-travel-until]").forEach(element => {
+            const text = travelText(Date.parse(element.dataset.truckTravelUntil), element.dataset.truckTravelOrigin, now);
+            const label = element.querySelector("[data-fueler-off-estimate-text]") || element;
+            if (label.textContent !== text) label.textContent = text;
+            if (element.title !== text) element.title = text;
+            if (label !== element) {
+                const scale = String(Math.min(1, element.clientWidth / Math.max(1, label.scrollWidth)));
+                if (label.style.getPropertyValue("--off-estimate-scale") !== scale) label.style.setProperty("--off-estimate-scale", scale);
+            }
+        });
     };
-    if (typeof module !== "undefined" && module.exports) module.exports = {colorFor, estimateText};
+    if (typeof module !== "undefined" && module.exports) module.exports = {colorFor, estimateText, travelText};
     if (typeof document === "undefined") return;
     // New live fragments and Fueler Data dialogs use the same clock treatment.
     let queued = false;

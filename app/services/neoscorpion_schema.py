@@ -102,6 +102,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fuel_work_states": {
+        "confirmed_on_at_utc": "TIMESTAMP",
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "TIMESTAMP",
         "apu_allowance_lbs": "INTEGER",

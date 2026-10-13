@@ -184,6 +184,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "confirmed_on_at_utc": "DATETIME",
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "DATETIME",
         "apu_allowance_lbs": "INTEGER",
@@ -425,6 +426,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "neoscorpion_fuel_work_states": {
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "TIMESTAMP",
+        "confirmed_on_at_utc": "TIMESTAMP",
         "apu_allowance_lbs": "INTEGER",
         "automatic_apu_allowance_lbs": "INTEGER",
         "apu_override_enabled": "BOOLEAN NOT NULL DEFAULT FALSE",

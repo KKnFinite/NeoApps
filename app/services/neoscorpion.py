@@ -38,7 +38,8 @@ from app.neonodes.neorain.services import (
     effective_neorain_load_planner,
     eligible_neorain_load_planners,
 )
-from app.services.neoscorpion_fueling_status import fueling_status, fob_assessment
+from app.services.neoscorpion_fueling_status import fueling_status, fob_assessment, utc_naive
+from app.services.neoscorpion_fueling_start import fueling_start_state
 from app.services.parking_aircraft import resolve_parking_aircraft_type_from_tail
 from app.services.operation_lifecycle import current_existing_operational_sort_operations
 from app.services.live_screen_refresh import live_screen_refresh_value
@@ -967,12 +968,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         )
         .filter(
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
-            NeoScorpionFuelAssignment.review_status != "complete",
             SortDateMission.mission_type == "departure",
-            db.or_(
-                SortDateMission.fuel_status.is_(None),
-                SortDateMission.fuel_status != "complete",
-            ),
         )
         .order_by(SortDateMission.planned_datetime_utc, SortDateMission.flight_number)
         .all()
@@ -982,7 +978,9 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
     visible_assignments = [assignment for assignment in assignments
                            if (assignment.assigned_fueler_user_id is not None if dispatcher
                                else assignment.assigned_fueler_user_id == user.id)
-                           and (assignment_id is None or assignment.id == assignment_id)]
+                           and (assignment_id is None or assignment.id == assignment_id)
+                           and assignment.review_status != "complete"
+                           and assignment.sort_date_mission.fuel_status != "complete"]
     missions = [assignment.sort_date_mission for assignment in visible_assignments if assignment.sort_date_mission]
     assignments_by_mission = {
         assignment.sort_date_mission_id: assignment for assignment in assignments
@@ -993,6 +991,12 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         apu_rates_by_aircraft_type,
         lateral_imbalance_limits_by_aircraft_type,
     ) = _effective_aircraft_fuel_configuration(gateway.id)
+    truck_ids = {assignment.assigned_truck_id for assignment in visible_assignments
+                 if assignment.assigned_truck_id is not None}
+    selections = (NeoScorpionSortTruck.query.filter(
+        NeoScorpionSortTruck.sort_date_operation_id == operation.id,
+        NeoScorpionSortTruck.fuel_truck_id.in_(truck_ids),
+    ).all() if truck_ids else [])
     rows = _fuel_rows(
         operation,
         missions,
@@ -1009,6 +1013,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
         ),
         status_settings=settings,
         parking_by_tail=parking,
+        nightly_truck_states_by_truck_id={item.fuel_truck_id:item for item in selections},
         assignments_by_mission=assignments_by_mission,
         fuel_work_states_by_assignment_tail=fuel_work_states,
         apu_rates_by_aircraft_type=apu_rates_by_aircraft_type,
@@ -1016,12 +1021,6 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False):
             lateral_imbalance_limits_by_aircraft_type
         ),
     )
-    truck_ids = {assignment.assigned_truck_id for assignment in visible_assignments
-                 if assignment.assigned_truck_id is not None}
-    selections = (NeoScorpionSortTruck.query.filter(
-        NeoScorpionSortTruck.sort_date_operation_id == operation.id,
-        NeoScorpionSortTruck.fuel_truck_id.in_(truck_ids),
-    ).all() if truck_ids else [])
     _attach_fueler_truck_status(rows, assignments, fuel_work_states, parking, selections,
                                timezone_name=gateway_timezone(gateway))
     try:
@@ -1081,6 +1080,8 @@ def _attach_fueler_truck_status(rows, assignments, work_states, parking, selecti
             status = "CURRENTLY TOPPING OFF"
             sent_time = (format_local_hhmm(selection.top_off_sent_at_utc, timezone_name)
                          if selection.top_off_sent_at_utc else "")
+        if not topping_off:
+            status = row.get("truck_current_activity", status)
         row["assigned_truck_current_status"] = status
         row["assigned_truck_top_off_sent_time"] = sent_time
 
@@ -1962,6 +1963,9 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
             changed = True
             assignment_changed = True
             if field_name == "assigned_truck_id":
+                if getattr(current_user, "id", None):
+                    _new_fuel_audit(operation, assignment, current_user, "swap_truck", field_name,
+                        old_value, value, "Dispatcher recorded the truck assignment.", now_utc=now_utc)
                 change_messages.append(
                     f"Truck: {_resource_change_label(old_value)} -> "
                     f"{_resource_change_label(value)}"
@@ -1974,7 +1978,7 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
             if fuel_work_state.off_at_utc is not None:
                 raise ValueError("REOPEN OFF before assigning a new truck.")
             assignment.transfer_fuel_gallons = None
-            fuel_work_state.truck_segment_started_at_utc = now_utc
+            # Assignment is not physical arrival or a new truck segment.
     if "apu_override_present" in form:
         confirmed_tail = _normalize_tail(mission.assigned_tail_number)
         fuel_work_state = _locked_fuel_work_state_for_tail(
@@ -2132,6 +2136,7 @@ def fueler_edit_state(assignment, mission, work, tail, tanks):
         "cycle": int(assignment.current_cycle_number or 1),
         "tail": _normalize_tail(mission.assigned_tail_number),
         "assigned_fueler_user_id": assignment.assigned_fueler_user_id,
+        "assigned_truck_id": assignment.assigned_truck_id,
         "apu_running": work.apu_running if work else None,
         "apu_source_tank_code": work.apu_source_tank_code if work else None,
         "apu_override_enabled": bool(work and work.apu_override_enabled),
@@ -2163,7 +2168,7 @@ def _fueler_expected(form, *, required=False):
 def _check_fueler_expected(expected, current, requested):
     if expected is None:
         return
-    for key in ("operation_id", "mission_id", "cycle", "tail", "assigned_fueler_user_id"):
+    for key in ("operation_id", "mission_id", "cycle", "tail", "assigned_fueler_user_id", "assigned_truck_id"):
         if key not in expected or expected[key] != current[key]:
             raise FuelerDataConflict()
     for key, value in requested.items():
@@ -2206,6 +2211,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         "cycle": int(assignment.current_cycle_number or 1),
         "tail": _normalize_tail(mission.assigned_tail_number),
         "assigned_fueler_user_id": assignment.assigned_fueler_user_id,
+        "assigned_truck_id": assignment.assigned_truck_id,
     }, {})
     tail_number = _normalize_tail(mission.assigned_tail_number if mission else "")
     if not tail_number:
@@ -2489,6 +2495,31 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         )
     )
     transfer_changed = assignment.transfer_fuel_gallons != target_transfer_gallons
+    confirm_on = False
+    if submitted_nonnull_remaining and assignment.assigned_fueler_user_id is not None:
+        if assignment.assigned_truck_id is not None and target_fob_lbs is not None:
+            all_assignments = _assignments_by_mission(operation)
+            works = _fuel_work_states_by_assignment_tail(all_assignments.values())
+            selections = {item.fuel_truck_id: item for item in NeoScorpionSortTruck.query.filter_by(
+                sort_date_operation_id=operation.id).all()}
+            records, releases = _fuel_start_records(operation, all_assignments.values(), works,
+                                                    _parking_by_tail(operation), selections)
+            record = next(item for item in records if item["id"] == assignment.id)
+            start = fueling_start_state(record, records, releases,
+                effective_spear_settings(NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()), now=now_utc)
+            confirm_on = start["can_start"] and start["requires_confirmation"]
+        elif assignment.assigned_truck_id is None and (fuel_work_state is None or fuel_work_state.on_at_utc is None):
+            allowance = target_apu_allowance_lbs
+            departure = mission.eta_datetime_utc or mission.planned_datetime_utc
+            if target_apu_running is None and departure is not None:
+                allowance = calculate_apu_allowance_lbs(departure, operation.window_minutes, now_utc,
+                                                       _effective_apu_rate(gateway.id, aircraft_type))
+            check = fob_assessment(required=mission.planned_fuel_load,
+                inbound=tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
+                remaining=target_fob_lbs, actual=target_actual_lbs, apu_allowance=allowance,
+                apu_confirmed=target_apu_running is not None, apu_source_valid=True,
+                transfer=target_transfer_gallons, cycle_type=_assignment_cycle_type(assignment))
+            confirm_on = check["fob_likely"]
     changed = (
         tank_changed
         or apu_changed
@@ -2496,6 +2527,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         or apu_override_changed
         or tail_changed
         or transfer_changed
+        or confirm_on
     )
     revision = int(asset_state.revision if asset_state else 0)
     if not changed:
@@ -2506,7 +2538,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state=fuel_work_state,
         )
 
-    if tank_changed or apu_changed or apu_source_changed or apu_override_changed:
+    if tank_changed or apu_changed or apu_source_changed or apu_override_changed or confirm_on:
         if fuel_work_state is None:
             fuel_work_state = NeoScorpionFuelWorkState(
                 fuel_assignment_id=assignment.id,
@@ -2538,11 +2570,14 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state.apu_allowance_lbs = target_apu_allowance_lbs
         if apu_changed or apu_source_changed:
             fuel_work_state.apu_source_tank_code = target_apu_source_tank_code
-        if (
-            fuel_work_state.on_at_utc is None
-            and submitted_nonnull_remaining
-        ):
-            fuel_work_state.on_at_utc = now_utc
+        if confirm_on:
+            # Only this valid save confirms arrival/start. GETs and clocks never
+            # create milestones. Preserve legacy ON even when it was premature.
+            if fuel_work_state.on_at_utc is None:
+                fuel_work_state.on_at_utc = now_utc
+            fuel_work_state.confirmed_on_at_utc = now_utc
+            if assignment.assigned_truck_id is not None:
+                fuel_work_state.truck_segment_started_at_utc = now_utc
 
     if tail_changed or tank_changed:
         if tail_fuel_state is None:
@@ -2701,6 +2736,18 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
         raise ValueError(
             "Enter positive T/F before OFF, or unassign the unused truck for FOB."
         )
+    if assignment.assigned_truck_id is not None:
+        assignments = _assignments_by_mission(operation)
+        works = _fuel_work_states_by_assignment_tail(assignments.values())
+        selections = {item.fuel_truck_id:item for item in NeoScorpionSortTruck.query.filter_by(
+            sort_date_operation_id=operation.id).all()}
+        records, releases = _fuel_start_records(operation, assignments.values(), works,
+                                                _parking_by_tail(operation), selections)
+        record = next(item for item in records if item["id"] == assignment.id)
+        start = fueling_start_state(record, records, releases,
+            effective_spear_settings(NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()), now=now_utc)
+        if not start["on_active"]:
+            raise ValueError("Save complete Remaining readings after the released truck arrives before MARK OFF.")
 
     fuel_work_state.off_at_utc = now_utc
     fuel_work_state.off_by_user_id = user.id
@@ -3191,6 +3238,7 @@ def start_follow_up_fuel_cycle(
     mission.fuel_completed_at_utc = None
 
     fuel_work_state.on_at_utc = None
+    fuel_work_state.confirmed_on_at_utc = None
     fuel_work_state.apu_running = None
     fuel_work_state.apu_confirmed_at_utc = None
     fuel_work_state.apu_allowance_lbs = None
@@ -4219,6 +4267,7 @@ def _new_fuel_audit(
         changed_by_user_id=user.id,
         created_at=now_utc or datetime.utcnow(),
     )
+    entry.fuel_assignment = assignment
     db.session.add(entry)
     return entry
 
@@ -4479,6 +4528,7 @@ def _close_current_truck_segment(
         cycle_number=int(assignment.current_cycle_number or 1),
         started_at_utc=(
             fuel_work_state.truck_segment_started_at_utc
+            or fuel_work_state.confirmed_on_at_utc
             or fuel_work_state.on_at_utc
         ),
         ended_at_utc=ended_at_utc,
@@ -5116,6 +5166,10 @@ def _fuel_rows(
         if assignments_by_mission is None
         else assignments_by_mission
     )
+    start_selections = nightly_truck_states_by_truck_id
+    if start_selections is None:
+        start_selections = {selection.fuel_truck_id: selection for selection in
+            NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}
     arrivals = _arrivals_by_tail(operation)
     arrival_presence = arrival_presence_by_tail(operation)
     if fuel_trucks is None:
@@ -5914,6 +5968,9 @@ def _fuel_rows(
                 if projection.gallons is not None
                 else "INCOMPLETE"
             )
+    if assignments:
+        _attach_fueling_start_state(rows, operation, assignments, fuel_work_states, parking,
+                                   start_selections, status_settings, now=now_utc)
     return rows
 
 
@@ -6190,6 +6247,98 @@ def _fuel_work_states_by_assignment_tail(assignments):
         (state.fuel_assignment_id, _normalize_tail(state.tail_number)): state
         for state in work_states
     }
+
+
+def _fuel_start_records(operation, assignments, work_states, parking, selections):
+    """Bounded current-sort evidence shared by the save gate and live views."""
+    assignments = list(assignments)
+    audits = db.session.query(NeoScorpionFuelAuditEntry.fuel_assignment_id,
+        NeoScorpionFuelAuditEntry.new_value, NeoScorpionFuelAuditEntry.created_at).filter(
+        NeoScorpionFuelAuditEntry.sort_date_operation_id == operation.id,
+        NeoScorpionFuelAuditEntry.field_name == "assigned_truck_id",
+    ).all()
+    dates = {}
+    for audit in audits:
+        key = (audit.fuel_assignment_id, audit.new_value)
+        dates[key] = max(dates.get(key, audit.created_at), audit.created_at)
+    records = []
+    for assignment in assignments:
+        mission = assignment.sort_date_mission
+        tail = _normalize_tail(mission.assigned_tail_number)
+        work = work_states.get((assignment.id, tail))
+        on = utc_naive(work.on_at_utc) if work else None
+        confirmed = utc_naive(work.confirmed_on_at_utc) if work else None
+        tanks = {tank.tank_code: tank for tank in work.tank_states} if work else {}
+        layout = tank_layout_for_tail(tail)
+        complete = bool(layout) and all(code in tanks and tanks[code].remaining_lbs is not None for code, _ in layout)
+        at_on = bool(on and complete and all(tanks[code].created_at is not None
+            and utc_naive(tanks[code].created_at) <= on + timedelta(seconds=1) for code, _ in layout))
+        premature_readings = bool(on and layout and any(code not in tanks or
+            (tanks[code].created_at is not None and utc_naive(tanks[code].created_at) > on + timedelta(seconds=1))
+            for code, _ in layout))
+        assigned_at = dates.get((assignment.id, str(assignment.assigned_truck_id))) or assignment.created_at
+        if work and confirmed is None and work.truck_segment_started_at_utc and not dates.get((assignment.id, str(assignment.assigned_truck_id))):
+            assigned_at = max(assigned_at, work.truck_segment_started_at_utc) if assigned_at else work.truck_segment_started_at_utc
+        selection = selections.get(assignment.assigned_truck_id)
+        truck = assignment.assigned_truck
+        records.append(dict(id=assignment.id, truck_id=assignment.assigned_truck_id,
+            fueler_id=assignment.assigned_fueler_user_id, on=on, confirmed_on=confirmed,
+            release=utc_naive((work.off_at_utc or work.ended_early_at_utc) if work else None)
+                or utc_naive(assignment.completed_at_utc or assignment.fuel_on_board_at_utc),
+            assigned_at=utc_naive(assigned_at), remaining_complete=complete, remaining_at_on=at_on,
+            premature_readings=premature_readings,
+            parking=parking.get(tail, ("-", False))[0],
+            truck_available=bool(selection and selection.status == "available" and truck
+                                 and truck.is_active and not truck.is_out_of_service)))
+    releases = [dict(id=event.fuel_assignment_id, truck_id=event.fuel_truck_id,
+                    release=utc_naive(event.ended_at_utc), parking=parking.get(_normalize_tail(event.tail_number), ("-", False))[0])
+                for event in db.session.query(NeoScorpionFuelingEvent.fuel_assignment_id,
+                    NeoScorpionFuelingEvent.fuel_truck_id, NeoScorpionFuelingEvent.ended_at_utc,
+                    NeoScorpionFuelingEvent.tail_number).filter(
+                    NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
+                    NeoScorpionFuelingEvent.ended_at_utc.isnot(None)).all()]
+    return records, releases
+
+
+def _attach_fueling_start_state(rows, operation, assignments, work_states, parking, selections, settings, *, now):
+    records, releases = _fuel_start_records(operation, assignments.values(), work_states, parking, selections)
+    by_id = {record["id"]: record for record in records}
+    spear_settings = effective_spear_settings(settings)
+    states = {record["id"]:fueling_start_state(record, records, releases, spear_settings, now=now)
+              for record in records}
+    for row in rows:
+        assignment, work = row.get("assignment"), row.get("fuel_work_state")
+        if not assignment:
+            continue
+        state = states[assignment.id]
+        fob_check = bool(assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
+                         and row.get("fob_likely"))
+        if fob_check and work and work.on_at_utc:
+            state.update(on_trusted=True, on_active=True, effective_on=work.confirmed_on_at_utc or work.on_at_utc)
+        if work and work.on_at_utc and (row.get("is_off") or row.get("administratively_complete")):
+            # Historical OFF/completion is authoritative; preserve its ON display.
+            state.update(on_trusted=True, on_active=True, effective_on=work.confirmed_on_at_utc or work.on_at_utc)
+        row.update(fueling_on_trusted=state["on_trusted"], fueling_on_active=state["on_active"], fueling_effective_on_utc=state["effective_on"],
+                   truck_start_reason=state["reason"], truck_travel_origin=state["origin"],
+                   truck_travel_until=state["arrival"].isoformat()+"Z" if state["arrival"] else "")
+        occupants = [record for record in records if record["truck_id"] == assignment.assigned_truck_id
+                     and record["truck_id"] is not None and record["release"] is None
+                     and states[record["id"]]["on_trusted"]]
+        activity = ""
+        if len(occupants) == 1:
+            position = occupants[0]["parking"]
+            activity = (f"CURRENTLY FUELING ON {position}" if position and position != "-"
+                        else "CURRENTLY FUELING · LOCATION UNKNOWN")
+        elif occupants or state["reason"] == "TRUCK STILL FUELING":
+            activity = "CURRENT STATUS UNKNOWN"
+        elif state["arrival"]:
+            activity = state["reason"]
+        row["truck_current_activity"] = activity
+        row["on_time"] = format_local_hhmm(state["effective_on"], row["mission"].timezone) if state["effective_on"] else "-"
+        if assignment.assigned_truck_id is not None and not state["on_trusted"] and not row.get("is_off"):
+            row["off_ready"] = False
+            row["off_reason"] = "Confirm truck arrival and save complete Remaining readings before OFF."
+        row.update(fueling_status(row, now=now, threshold=getattr(settings, "red_assignment_alert_threshold_minutes", 30)))
 
 
 def format_display_thousands(value):
@@ -6489,6 +6638,7 @@ def _assignments_by_mission(operation):
             sort_date_operation_id=operation.id,
         )
         .options(
+            joinedload(NeoScorpionFuelAssignment.sort_date_mission),
             joinedload(NeoScorpionFuelAssignment.assigned_fueler),
             joinedload(NeoScorpionFuelAssignment.assigned_truck),
         )

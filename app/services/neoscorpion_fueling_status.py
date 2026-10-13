@@ -61,8 +61,10 @@ def fueling_status(row, *, now=None, threshold=30):
         stage = "fob-ready"
     elif work and work.off_at_utc:
         stage = "off"
-    elif work and work.on_at_utc:
+    elif work and work.on_at_utc and row.get("fueling_on_active", row.get("fueling_on_trusted", True)):
         stage = "fueling"
+    elif fueler and not truck and not row.get("fob_likely"):
+        stage, detail = "ready", "Needs Truck"
     else:
         missing = []
         if str(row.get("arrival_status", "")).casefold() not in {"arrived", "on ground"}:
@@ -82,6 +84,9 @@ def fueling_status(row, *, now=None, threshold=30):
             detail = "Needs Fueler" if not fueler else "Needs Truck"
             if not fueler and not truck and not row.get("fob_likely"):
                 detail = "Needs Fueler / Truck"
+    movement = row.get("truck_start_reason")
+    if stage in {"assigned", "ready"} and truck and movement:
+        detail = movement
     fob_check = bool(row.get("fob_likely") and fueler and not truck and stage in {"assigned", "fueling"})
     if row.get("fob_likely") and stage not in {"fob-ready", "fob", "complete"}:
         warnings.append("FOB CHECK" if fob_check else "FOB LIKELY")

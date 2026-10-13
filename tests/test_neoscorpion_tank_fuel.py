@@ -208,7 +208,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
                     expected_labels[tail_number],
                 )
 
-    def test_first_remaining_stamps_on_once_and_exact_noop_does_not_commit(self):
+    def test_partial_remaining_does_not_stamp_on_and_exact_noop_does_not_commit(self):
         operation, _mission, assignment = self._assignment("N412UP")
 
         first = save_fueler_entry(
@@ -218,7 +218,7 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
         )
         self.assertTrue(first.changed)
         self.assertEqual(first.revision, 1)
-        self.assertIsNotNone(first.fuel_work_state.on_at_utc)
+        self.assertIsNone(first.fuel_work_state.on_at_utc)
         original_on = first.fuel_work_state.on_at_utc
         db.session.commit()
 

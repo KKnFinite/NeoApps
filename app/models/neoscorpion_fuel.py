@@ -254,6 +254,8 @@ class NeoScorpionFuelWorkState(db.Model):
     )
     tail_number = db.Column(db.String(32), nullable=False)
     on_at_utc = db.Column(db.DateTime, nullable=True)
+    # A validated physical/FOB-check start; legacy ON stays intact for history.
+    confirmed_on_at_utc = db.Column(db.DateTime, nullable=True)
     apu_running = db.Column(db.Boolean, nullable=True)
     apu_confirmed_at_utc = db.Column(db.DateTime, nullable=True)
     apu_allowance_lbs = db.Column(db.Integer, nullable=True)

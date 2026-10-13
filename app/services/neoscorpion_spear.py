@@ -1356,12 +1356,13 @@ def active_fueling_finish(row, operation, planning_settings):
     Without a complete timing model we deliberately return unknown.
     """
     work = row.get("fuel_work_state")
-    if work is None or work.on_at_utc is None or work.off_at_utc is not None:
+    if work is None or work.on_at_utc is None or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
         return None
+    start = row.get("fueling_effective_on_utc") or work.on_at_utc
     timing = _spear_timing(row, operation, planning_settings)
     if not getattr(timing, "available", False) or timing.total_duration_minutes is None:
         return None
-    return _utc_naive(work.on_at_utc) + timedelta(minutes=float(timing.total_duration_minutes))
+    return _utc_naive(start) + timedelta(minutes=float(timing.total_duration_minutes))
 
 
 def active_fueler_off(row, operation, planning_settings):
@@ -1371,20 +1372,21 @@ def active_fueler_off(row, operation, planning_settings):
     dispatcher-completion finishing are separate milestones, not pumping.
     """
     work = row.get("fuel_work_state")
-    if work is None or work.on_at_utc is None or work.off_at_utc is not None:
+    if work is None or work.on_at_utc is None or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
         return None
     rate = _decimal_or_none(planning_settings.pump_rate_for(row.get("detailed_aircraft_type")))
     if rate is None or not rate.is_finite() or rate <= 0:
         return None
     # Recorded ON supplies the start anchor for physical work, even if arrival
     # timestamps/ETD are missing. This local adapter never changes mission data.
+    start = row.get("fueling_effective_on_utc") or work.on_at_utc
     timing = _spear_timing({**row, "arrival_mission": SimpleNamespace(
-        actual_block_in_datetime_utc=work.on_at_utc,
+        actual_block_in_datetime_utc=start,
     )}, operation, planning_settings)
     pump_minutes = _decimal_or_none(getattr(timing, "pump_minutes", None))
     if pump_minutes is None or not pump_minutes.is_finite() or pump_minutes < 0:
         return None
-    return _utc_naive(work.on_at_utc) + timedelta(minutes=float(pump_minutes))
+    return _utc_naive(start) + timedelta(minutes=float(pump_minutes))
 
 
 def _risk(finish, departure):

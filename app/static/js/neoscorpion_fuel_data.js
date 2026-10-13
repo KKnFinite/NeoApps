@@ -156,6 +156,14 @@
         controls(form).forEach(control => {
             if (control.value !== baselines.get(control)) body.set(control.name, control.value);
         });
+        if (form.matches("[data-fuel-planning-form]")) {
+            // A deliberate SAVE can confirm physical start after travel even
+            // when Remaining was entered earlier. Server guards/version checks
+            // still decide eligibility; a refresh or timer never submits this.
+            form.querySelectorAll('[data-fuel-reading="remaining"]').forEach(control => {
+                body.set(control.name, control.value);
+            });
+        }
         if (body.has("apu_override_enabled") || body.has("apu_override_allowance")) body.set("apu_override_present", "1");
         card.dataset.fuelDataBusy = "true";
         const enabled = Array.from(card.querySelectorAll("input, select, textarea, button")).filter(control => !control.disabled);

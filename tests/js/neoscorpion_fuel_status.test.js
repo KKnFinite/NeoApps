@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {colorFor, estimateText} = require("../../app/static/js/neoscorpion_fuel_status.js");
+const {colorFor, estimateText, travelText} = require("../../app/static/js/neoscorpion_fuel_status.js");
 const now = Date.parse("2026-10-09T03:00:00Z");
 test("urgency crosses threshold as the clock passes without changing stage", () => {
     for (const stage of ["pending", "ready", "assigned", "off", "fob-ready"]) {
@@ -30,4 +30,11 @@ test("physical OFF countdown changes with the clock and never shows negative min
     assert.equal(estimateText(finish, "23:46", finish), "EST OFF OVERDUE");
     assert.equal(estimateText(finish, "23:46", finish+60000), "EST OFF OVERDUE");
     assert.equal(estimateText(NaN, "", now), "TIMING UNKNOWN");
+});
+test("travel countdown never confirms physical arrival or creates ON", () => {
+    assert.equal(travelText(now+120000, "ALPHA", now), "COMING FROM ALPHA · ~2 MIN");
+    assert.equal(travelText(now+120000, "ALPHA", now+60001), "COMING FROM ALPHA · ~1 MIN");
+    assert.equal(travelText(now, "ALPHA", now), "ARRIVAL UNCONFIRMED");
+    assert.equal(travelText(now, "ALPHA", now+60000), "ARRIVAL UNCONFIRMED");
+    assert.equal(travelText(NaN, "", now), "TRUCK LOCATION UNKNOWN");
 });

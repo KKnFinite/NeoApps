@@ -296,6 +296,11 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         source_work = NeoScorpionFuelWorkState(fuel_assignment_id=source.id,tail_number="N492UP")
         db.session.add(source_work); db.session.flush()
         source_truck = self.fixture._nightly_truck()
+        self.assignment.assigned_truck_id = source_truck.id
+        active_work = NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=self.assignment.id).one()
+        active_work.confirmed_on_at_utc = active_work.on_at_utc
+        db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id,
+            tail_number="N492UP", ramp_code="B", position_code="B07", lane_number=1))
         for sequence in (1,2,3):
             db.session.add(NeoScorpionFuelingEvent(sort_date_operation_id=self.operation.id,
                 fuel_assignment_id=source.id, fuel_work_state_id=source_work.id, tail_number="N492UP",
