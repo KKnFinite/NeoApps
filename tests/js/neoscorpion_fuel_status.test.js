@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {colorFor} = require("../../app/static/js/neoscorpion_fuel_status.js");
+const {colorFor, estimateText} = require("../../app/static/js/neoscorpion_fuel_status.js");
 const now = Date.parse("2026-10-09T03:00:00Z");
 test("urgency crosses threshold as the clock passes without changing stage", () => {
     for (const stage of ["pending", "ready", "assigned", "off", "fob-ready"]) {
@@ -21,4 +21,13 @@ test("terminal states stay green and review stays red regardless of ETD", () => 
         assert.equal(colorFor("fob", etd, 30, NaN, now), "green");
         assert.equal(colorFor("review", etd, 30, NaN, now), "red");
     }
+});
+test("physical OFF countdown changes with the clock and never shows negative minutes", () => {
+    const finish = now + 12 * 60000;
+    assert.equal(estimateText(finish, "23:46", now), "EST OFF 23:46 · ~12 MIN");
+    assert.equal(estimateText(finish, "23:46", now+60001), "EST OFF 23:46 · ~11 MIN");
+    assert.equal(estimateText(finish, "23:46", finish-1), "EST OFF 23:46 · ~1 MIN");
+    assert.equal(estimateText(finish, "23:46", finish), "EST OFF OVERDUE");
+    assert.equal(estimateText(finish, "23:46", finish+60000), "EST OFF OVERDUE");
+    assert.equal(estimateText(NaN, "", now), "TIMING UNKNOWN");
 });

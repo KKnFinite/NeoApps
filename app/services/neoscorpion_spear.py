@@ -1364,6 +1364,29 @@ def active_fueling_finish(row, operation, planning_settings):
     return _utc_naive(work.on_at_utc) + timedelta(minutes=float(timing.total_duration_minutes))
 
 
+def active_fueler_off(row, operation, planning_settings):
+    """Physical OFF projection from the shared pump duration, for display only.
+
+    ON already marks physical work starting. Ready-to-ON setup and OFF-to-
+    dispatcher-completion finishing are separate milestones, not pumping.
+    """
+    work = row.get("fuel_work_state")
+    if work is None or work.on_at_utc is None or work.off_at_utc is not None:
+        return None
+    rate = _decimal_or_none(planning_settings.pump_rate_for(row.get("detailed_aircraft_type")))
+    if rate is None or not rate.is_finite() or rate <= 0:
+        return None
+    # Recorded ON supplies the start anchor for physical work, even if arrival
+    # timestamps/ETD are missing. This local adapter never changes mission data.
+    timing = _spear_timing({**row, "arrival_mission": SimpleNamespace(
+        actual_block_in_datetime_utc=work.on_at_utc,
+    )}, operation, planning_settings)
+    pump_minutes = _decimal_or_none(getattr(timing, "pump_minutes", None))
+    if pump_minutes is None or not pump_minutes.is_finite() or pump_minutes < 0:
+        return None
+    return _utc_naive(work.on_at_utc) + timedelta(minutes=float(pump_minutes))
+
+
 def _risk(finish, departure):
     if finish is None or departure is None:
         return "TIMING UNKNOWN"

@@ -293,6 +293,21 @@
     max-width: 100%;
     text-align: center;
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-estimate {
+    position: relative;
+    width: 100%;
+    height: 1.3em;
+    line-height: 1.3;
+}
+.neoscorpion-fuel-status-estimate > [data-fueler-off-estimate-text] {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: max-content;
+    font: inherit;
+    white-space: nowrap;
+    transform: translateX(-50%) scaleX(var(--off-estimate-scale, .45));
+}
 .neoscorpion-dispatch-spear-detail .neoscorpion-spear-why ol { margin: 2px 0 0 16px; padding: 0; }
 .neoscorpion-dispatch-spear-detail .neoscorpion-teach-spear { width: 100%; margin-top: 6px; }
 .neoscorpion-dispatch-combobox { position:relative; width:100%; min-width:0; }

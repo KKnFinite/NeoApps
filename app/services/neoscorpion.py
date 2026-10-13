@@ -1,4 +1,5 @@
 import json
+from math import ceil
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
@@ -65,6 +66,7 @@ from app.services.neoscorpion_spear import (
     build_spear_plan,
     _current_resource_owners,
     active_fueling_finish,
+    active_fueler_off,
     effective_spear_settings,
     first_automatic_step,
     priority_rows,
@@ -72,6 +74,7 @@ from app.services.neoscorpion_spear import (
 )
 from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services.neoscorpion_spear_calibration import (
+    MINIMUM_ACTIVE_SAMPLES,
     build_live_calibration,
     calibration_summary,
     calibrated_planning_settings,
@@ -467,6 +470,7 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
         context["fueling_performance"] = _fueling_performance_context(
             context, gateway, nicknames, planning_settings=configured_planning_settings,
         )
+        _attach_dispatch_off_estimates(context, gateway, configured_planning_settings, live_calibrations)
     return context
 
 
@@ -493,6 +497,54 @@ def _attach_fueling_timing(rows, operation, settings, planning=None, calibration
     for row in rows:
         row["fueling_predicted_finish_utc"] = active_fueling_finish(row, operation, effective)
         row.update(fueling_status(row, threshold=getattr(settings, "red_assignment_alert_threshold_minutes", 30)))
+
+
+def _attach_dispatch_off_estimates(context, gateway, planning, calibrations, *, now_utc=None):
+    """Decorate Dispatch only; never feed these estimates back into SPEAR."""
+    for row in context["rows"]:
+        row.update(fueler_off_estimate_utc="", fueler_off_estimate_clock="", fueler_off_estimate_display="")
+    if not any(row["dispatch_status_key"] == "fueling" for row in context["rows"]):
+        return
+    now = now_utc or datetime.utcnow()
+    timezone_name = gateway_timezone(gateway)
+    mode = context["spear_settings"].live_calibration_mode
+    effective = calibrated_planning_settings(planning, calibrations, mode=mode)
+    performance = context.get("fueling_performance", {})
+    profiles = {kind: {item["id"]: item for item in performance.get(kind, ())}
+                for kind in ("fuelers", "trucks")}
+    for row in context["rows"]:
+        if row["dispatch_status_key"] != "fueling":
+            continue
+        off_planning = effective
+        assignment = row.get("assignment")
+        if mode == "apply" and assignment:
+            supported = [profile for kind, resource_id in (
+                ("fuelers", assignment.assigned_fueler_user_id),
+                ("trucks", assignment.assigned_truck_id),
+            ) if (profile := profiles[kind].get(resource_id))
+                and profile["jobs"] >= MINIMUM_ACTIVE_SAMPLES
+                and profile["prof"] is not None and profile["prof"] > 0]
+            baseline = planning.pump_rate_for(row.get("detailed_aircraft_type"))
+            if supported and baseline is not None and baseline > 0:
+                # PROF is relative to configured pump rates. Use the slower
+                # supported resource profile once, replacing (not multiplying)
+                # the aircraft calibration: their observed jobs can overlap.
+                rate = Decimal(baseline) * Decimal(min(item["prof"] for item in supported)) / Decimal(100)
+                off_planning = SimpleNamespace(
+                    setup_minutes=effective.setup_minutes,
+                    finishing_minutes=effective.finishing_minutes,
+                    pump_rate_for=lambda _type, rate=rate: rate,
+                    setup_for=getattr(effective, "setup_for", lambda _type: effective.setup_minutes),
+                    finishing_for=getattr(effective, "finishing_for", lambda _type: effective.finishing_minutes),
+                )
+        finish = active_fueler_off(row, context["operation"], off_planning)
+        clock = format_local_hhmm(finish, timezone_name) if finish else ""
+        row["fueler_off_estimate_utc"] = finish.isoformat() + "Z" if finish else ""
+        row["fueler_off_estimate_clock"] = clock
+        row["fueler_off_estimate_display"] = (
+            "TIMING UNKNOWN" if finish is None else "EST OFF OVERDUE" if finish <= now
+            else f"EST OFF {clock} · ~{ceil((finish - now).total_seconds() / 60)} MIN"
+        )
 
 
 def _ready_to_assign(row):
