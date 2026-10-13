@@ -4,6 +4,7 @@
 
 {% block content %}
 {% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
+{% from "neonodes/neoscorpion/_fueler_card.html" import fuel_tank_total_row %}
 <section
     class="neoscorpion-shell neoscorpion-screen neoscorpion-hanzo"
     aria-label="NeoScorpion Hanzo"
@@ -57,10 +58,24 @@
                     <div><dt>APU Source Tank</dt><dd>{{ row.apu_source_tank_label }}</dd></div>
                     {% endif %}
                 </dl>
-                <div class="neoscorpion-hanzo-tanks" aria-label="Planned fuel by tank">
+                {% endif %}
+                {% if row.tank_rows %}
+                <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.aircraft_type }} fuel tank readings (K-lbs)">
+                    <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
+                        <span role="columnheader">Tank</span>
+                        <span role="columnheader">Remaining</span>
+                        <span role="columnheader">Planned</span>
+                        <span role="columnheader">Actual</span>
+                    </div>
                     {% for tank in row.tank_rows %}
-                    <div><span>{{ tank.label }}</span><strong>{{ tank.planned_display }}</strong></div>
+                    <div class="neoscorpion-fuel-tank-row" role="row">
+                        <strong role="rowheader">{{ tank.label }}</strong>
+                        <span role="cell">{{ tank.remaining_display or '-' }}</span>
+                        <span class="neoscorpion-planned-value" role="cell">{{ tank.planned_display }}</span>
+                        <span role="cell">{{ tank.actual_display or '-' }}</span>
+                    </div>
                     {% endfor %}
+                    {{ fuel_tank_total_row(row) }}
                 </div>
                 {% endif %}
             </article>
