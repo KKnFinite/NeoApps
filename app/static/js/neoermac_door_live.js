@@ -683,7 +683,12 @@
             return;
         }
 
-        const value = input.value.trim();
+        const value = toggle.checked ? "" : window.NeoAppsClockTime.normalizeInput(input);
+        if (value === null) {
+            setCardError(card, "Use HH:MM.");
+            setCardStatus(card, "", "");
+            return;
+        }
         if (!toggle.checked && value && !hhmmPattern.test(value)) {
             setCardError(card, "Use HH:MM.");
             setCardStatus(card, "", "");
@@ -807,29 +812,12 @@
             input.dataset.pullBound = 'true';
             input.addEventListener("input", () => {
                 input.dataset.localDirty = "true";
-                const digits = input.value.replace(/\D/g, "").slice(0, 4);
-                if (digits.length >= 3) {
-                    input.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
-                } else {
-                    input.value = digits;
-                }
-                if (!input.value || hhmmPattern.test(input.value)) {
-                    const card = input.closest("[data-door-destination-card]");
-                    if (card) {
-                        setCardError(card, "");
-                    }
-                    scheduleSave(input);
-                } else if (input.value.length >= 5) {
-                    const card = input.closest("[data-door-destination-card]");
-                    if (card) {
-                        setCardError(card, "Use HH:MM.");
-                        setCardStatus(card, "", "");
-                    }
-                }
+                const card = input.closest("[data-door-destination-card]");
+                if (card) setCardError(card, "");
             });
 
             input.addEventListener("blur", () => {
-                if (!input.value || hhmmPattern.test(input.value)) {
+                if (window.NeoAppsClockTime.normalizeInput(input) !== null) {
                     scheduleSave(input, 0);
                 } else {
                     const card = input.closest("[data-door-destination-card]");

@@ -11,15 +11,15 @@
         <input
             class="neorain-milestone-input"
             type="text"
-            value="{{ displayed_value|replace(':', '') }}"
+            value="{{ displayed_value }}"
             inputmode="numeric"
-            maxlength="4"
+            maxlength="5"
             placeholder="HHMM"
             aria-label="{{ label }} for {{ row.flight_number or 'departure mission' }}"
             aria-describedby="neorain-milestone-error-{{ row.mission_id }}-{{ field }}"
             data-neorain-hhmm
             data-neorain-field="{{ field }}"
-            data-neorain-saved-value="{{ displayed_value|replace(':', '') }}"
+            data-neorain-saved-value="{{ displayed_value }}"
             {% if row.no_return or row.status == 'CANCELLED' %}disabled{% endif %}
         >
         <output id="neorain-milestone-error-{{ row.mission_id }}-{{ field }}" class="neorain-milestone-message" data-neorain-milestone-message aria-live="polite" hidden></output>

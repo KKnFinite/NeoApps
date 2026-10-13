@@ -99,7 +99,7 @@
         if (stamp) {
             const form = stamp.closest("form");
             const input = form.elements[stamp.dataset.subzeroDeiceStamp];
-            input.value = operationalHHMM();
+            input.value = window.NeoAppsClockTime.normalize(operationalHHMM());
             input.dispatchEvent(new Event("input", {bubbles: true}));
             return;
         }

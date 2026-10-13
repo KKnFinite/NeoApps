@@ -16,6 +16,8 @@ async function mutation(clock = '22:00', original = '', expected = clock) {
       assert.deepEqual(body.commands,[{id:3,version:7,segments:[{start:expected,end:'02:10'}]}]);
       return new Promise(done=>resolve=done);
     }};
+  context.document.addEventListener = () => {};
+  vm.runInNewContext(fs.readFileSync('app/static/js/clock_time.js','utf8'),context);
   vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_timecards.js','utf8'),context);
   events.input({target:{closest:()=>row}});
   const event = {target:{closest:key=>key === '[data-save-times]' ? {} : null}};
@@ -63,10 +65,13 @@ function bulkClock(typed, expected) {
   const root = {dataset:{}, addEventListener:(name, fn)=>events[name]=fn,
     querySelector:key=>key === '[data-bulk-start]' ? start : key === '[data-bulk-end]' ? end : status,
     querySelectorAll:()=>[row]};
-  vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_timecards.js','utf8'), {document:{querySelector:()=>root}});
+  const context = {document:{querySelector:()=>root,addEventListener(){}},window:{}};
+  vm.runInNewContext(fs.readFileSync('app/static/js/clock_time.js','utf8'), context);
+  vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_timecards.js','utf8'), context);
   events.click({target:{closest:key=>key === '[data-bulk-times]' ? {} : null}});
   assert.equal(startRow.value, expected);
   if (expected !== undefined) { assert.equal(endRow.value,'00:30'); assert.equal(start.value,expected); }
   else assert.match(status.textContent,/Use HHMM/);
 }
 bulkClock('2315', '23:15'); bulkClock('0712', '07:12'); bulkClock('2401'); bulkClock('1267');
+bulkClock('930', '09:30');

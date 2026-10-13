@@ -97,7 +97,6 @@
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
     const mutationUrl = root?.dataset.mutationUrl;
-    const validHhmm = /^(?:[01]\d|2[0-3])[0-5]\d$/;
     const displayFields = [
         "status",
         "ramp_load_complete",
@@ -124,7 +123,7 @@
         editor?.classList.toggle("is-saving", state === "saving");
     };
 
-    const rawTime = (value) => String(value || "").replace(":", "");
+    const rawTime = (value) => String(value || "");
 
     const missionViews = (missionId) => Array.from(root.querySelectorAll(
         "[data-neorain-mission-id]"
@@ -207,14 +206,14 @@
 
     const saveInput = async (input, { advance = false } = {}) => {
         if (input.dataset.neorainSaving === "true" || input.dataset.neorainStale === "true") return;
-        const value = input.value;
+        const value = window.NeoAppsClockTime.normalizeInput(input);
+        if (value === null) {
+            focusWithError(input, "Use a valid HH:MM time.");
+            return;
+        }
         const savedValue = input.dataset.neorainSavedValue || "";
         if (value === savedValue) {
             input.dataset.neorainDirty = "false";
-            return;
-        }
-        if (value && !validHhmm.test(value)) {
-            focusWithError(input, "Use four-digit HHMM.");
             return;
         }
 
@@ -356,29 +355,11 @@
             input.removeAttribute("data-neorain-stale");
             input.dataset.neorainDirty = input.value !== (input.dataset.neorainSavedValue || "") ? "true" : "false";
             setMessage(input);
-            if (input.value.length === 4) {
-                if (validHhmm.test(input.value)) {
-                    saveInput(input, { advance: true });
-                } else {
-                    if (input.dataset.neorainMobileHhmm !== undefined) {
-                        input.value = "";
-                        input.dataset.neorainDirty = "false";
-                    }
-                    focusWithError(input, "Use four-digit HHMM.");
-                }
-            }
+            if (/^[0-9]{4}$/.test(input.value)) saveInput(input, { advance: true });
         });
         input.addEventListener("blur", () => {
             if (input.dataset.neorainStale === "true") return;
-            if (!input.value && input.value !== (input.dataset.neorainSavedValue || "")) {
-                saveInput(input);
-            } else if (input.value && !validHhmm.test(input.value)) {
-                if (input.dataset.neorainMobileHhmm !== undefined) {
-                    input.value = "";
-                    input.dataset.neorainDirty = "false";
-                }
-                focusWithError(input, "Use four-digit HHMM.");
-            }
+            if (input.value !== (input.dataset.neorainSavedValue || "")) saveInput(input);
         });
     });
     root.addEventListener("click", (event) => {

@@ -714,7 +714,14 @@ def sort_timeline():
         denied = _permission_guard(SORT_TIMELINE_EDIT_PERMISSION)
         if denied:
             return denied
-        _settings, month_key = save_sort_timeline_from_form(gateway, request.form)
+        try:
+            _settings, month_key = save_sort_timeline_from_form(gateway, request.form)
+        except ValueError as error:
+            db.session.rollback()
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return jsonify({"error": str(error)}), 400
+            flash(str(error), "error")
+            return redirect(url_for("neomotherbrain.sort_timeline", month=month_key))
         db.session.commit()
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             context = sort_timeline_context(gateway, month_key)

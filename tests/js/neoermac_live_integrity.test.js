@@ -177,11 +177,13 @@ function doorSaves() {
         return originals[selector.includes('pure')?'pure':'mix'];
     }};
     const context={window:{neoErmacBeginPullSave:()=>order.beginSave(),neoErmacEndPullSave:t=>order.endSave(t)},
+        document:{addEventListener(){}},
         FormData,fieldWrites:new WeakMap(),saveSequences:new WeakMap(),saveUrl:'/save',root:{querySelector(){return {value:'D1'};}},
         findActualInput:(c,k)=>inputs[k],findNoPullToggle:(c,k)=>toggles[k],scopeInput:{value:'0'},hhmmPattern:/^\d\d:\d\d$/,
         setCardError(c,error){if(error)errors.push(error);},setCardStatus(){},
         applyCardState(c,state,key,submitted,paint){originals[key].value=state.original;paints.push({key,paint});},
         fetch(url,options){const d=deferred();requests.push({options,resolve(payload,ok=true){d.resolve({ok,json:async()=>payload});}});return d.promise;}};
+    vm.runInNewContext(fs.readFileSync('app/static/js/clock_time.js','utf8'),context);
     vm.runInNewContext(source+'\nwindow.save=savePull;',context);
     return {context,card,inputs,originals,requests,paints,errors,save:key=>context.window.save(card,key)};
 }

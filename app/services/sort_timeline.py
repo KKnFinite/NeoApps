@@ -874,15 +874,9 @@ def add_month(month_start):
 
 
 def time_value(value):
-    if isinstance(value, time):
-        return value
-    value = str(value or "").strip()
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%H:%M").time()
-    except ValueError:
-        return None
+    from app.services.clock_time import parse_clock_time
+
+    return parse_clock_time(value)
 
 
 def format_time(value):
@@ -934,11 +928,9 @@ def _save_sort_settings(settings, gateway, form):
 def _replace_special_poll_times(sort_setting, gateway, raw_times, raw_deletions):
     deleted_times = {time_value(value) for value in raw_deletions}
     deleted_times.discard(None)
-    poll_times = {
-        time_value(value)
-        for value in raw_times
-        if time_value(value) and time_value(value) not in deleted_times
-    }
+    poll_times = {time_value(value) for value in raw_times}
+    poll_times.discard(None)
+    poll_times.difference_update(deleted_times)
 
     SortTimelineSpecialPollTime.query.filter_by(
         sort_setting_id=sort_setting.id,

@@ -1,7 +1,6 @@
 import hashlib
 import json
-import re
-from datetime import datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, literal, select, union_all
@@ -23,7 +22,6 @@ PRETREAT_REFRESH_KEY = "neosubzero.pretreat"
 DEFAULT_PRETREAT_REASON = "Pretreat"
 SURFACE_AREAS = ("wings_only", "wings_tail", "entire_aircraft")
 SURFACE_LABELS = {"wings_only": "Wings Only", "wings_tail": "Wings + Tail", "entire_aircraft": "Entire Aircraft"}
-_HHMM = re.compile(r"^\d{4}$")
 _OPERATION_UNSET = object()
 
 
@@ -159,10 +157,14 @@ def subzero_refresh_status(gateway, operation, screen_key):
 
 
 def _parse_hhmm(value, operation, mission):
-    raw = str(value or "").strip()
-    if not raw: return None
-    if not _HHMM.fullmatch(raw) or int(raw[:2]) > 23 or int(raw[2:]) > 59: raise NeoSubZeroPretreatError("Times must use valid four-digit HHMM values.")
-    local = sort_datetime_for_local_time(operation.sort_date, operation.sort_name, time(int(raw[:2]), int(raw[2:])))
+    from app.services.clock_time import parse_clock_time
+
+    try:
+        clock = parse_clock_time(value)
+    except ValueError as exc:
+        raise NeoSubZeroPretreatError("Times must use valid HH:MM values.") from exc
+    if clock is None: return None
+    local = sort_datetime_for_local_time(operation.sort_date, operation.sort_name, clock)
     timezone = ZoneInfo(mission.timezone or "America/Chicago")
     return local.replace(tzinfo=timezone).astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 

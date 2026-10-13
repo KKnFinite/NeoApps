@@ -45,10 +45,8 @@
             return { wire: text, display: text };
         }
         if (field === "js_in") {
-            const value = /^[0-9]{4}$/.test(text)
-                ? text.slice(0, 2) + ":" + text.slice(2)
-                : text;
-            if (value && !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value)) {
+            const value = window.NeoAppsClockTime.normalize(text);
+            if (value === null) {
                 throw new Error("Use military HH:MM (00:00–23:59).");
             }
             return { wire: value, display: value };

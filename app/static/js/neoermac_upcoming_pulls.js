@@ -102,9 +102,8 @@
             refreshAfterEdit();
             return;
         }
-        const value = /^\d{4}$/.test(input.value)
-            ? `${input.value.slice(0, 2)}:${input.value.slice(2)}` : input.value;
-        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+        const value = window.NeoAppsClockTime.normalizeInput(input, false);
+        if (value === null) {
             feedback(input, "Use HHMM (0000–2359)");
             return;
         }

@@ -14,12 +14,14 @@ function setup(workspace='sektor', area='ebm') {
     querySelectorAll:key=>key==='input, button'?controls:[]};
   const root={dataset:{nodeWorkspace:workspace,nodeArea:area},querySelectorAll:()=>[row]};
   const unload={}; let deliver, timer;
-  vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_node_times.js','utf8'), {
+  const context = {
     setTimeout:fn=>{timer=fn;return 1;}, clearTimeout:()=>{timer=null;},
-    document:{querySelector:key=>key.includes('data-timecards')?root:{content:'csrf'},createElement:()=>({})},
+    document:{querySelector:key=>key.includes('data-timecards')?root:{content:'csrf'},createElement:()=>({}),addEventListener(){}},
     window:{location:{href:'/fixture'},addEventListener:(key,fn)=>unload[key]=fn},
     fetch:(url,options)=>{calls.push({url,body:JSON.parse(options.body),headers:options.headers});return new Promise(resolve=>deliver=resolve);}
-  });
+  };
+  vm.runInNewContext(fs.readFileSync('app/static/js/clock_time.js','utf8'), context);
+  vm.runInNewContext(fs.readFileSync('app/static/js/neostaffing_node_times.js','utf8'), context);
   return {events,calls,status,controls,start,end,row,parts,unload,
     flush:()=>timer?.(),
     respond:async(ok,body)=>{deliver({ok,json:async()=>body});await tick();}};
@@ -47,7 +49,7 @@ function setup(workspace='sektor', area='ebm') {
   const secondStart={value:'01:00',dataset:{original:'2026-09-13T01:00:00-05:00'}};
   const secondEnd={value:'0230',dataset:{original:'2026-09-13T02:00:00-05:00'}};
   multiple.parts.push({querySelector:key=>key==='[data-start]'?secondStart:secondEnd});
-  multiple.events.input(); multiple.flush();
+  multiple.events.input({target:{matches:()=>false}}); multiple.flush();
   assert.equal(multiple.calls[0].body.commands[0].segments.length,2);
   assert.deepEqual(multiple.calls[0].body.commands[0].segments[1],{start:'2026-09-13T01:00:00-05:00',end:'02:30'});
   const removed=setup();removed.start.dataset.original='2026-09-12T22:30:00-05:00';
@@ -56,6 +58,8 @@ function setup(workspace='sektor', area='ebm') {
   assert.deepEqual(removed.calls[0].body.commands[0].segments,[]);
   const f=setup();f.end.value='9999';f.events.change({target:f.end});
   assert.equal(f.calls.length,0);assert.match(f.status.textContent,/valid/);
+  const partial=setup();partial.start.value='05';partial.events.input({target:partial.start});partial.flush();
+  assert.equal(partial.calls.length,0);
   const seconds=setup();seconds.start.value='01:00:00';seconds.events.change({target:seconds.start});
   assert.equal(seconds.calls.length,0);assert.match(seconds.status.textContent,/valid/);
   let warned=false;f.unload.beforeunload({preventDefault:()=>warned=true});assert.ok(warned);

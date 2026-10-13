@@ -6,7 +6,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function setup() {
     const pending = [], rootEvents = {}, boardEvents = {}, timers = [];
-    const doc = {activeElement: null};
+    const doc = {activeElement: null, addEventListener() {}};
     const buttons = ['east', 'west', 'both'].map(side => ({dataset: {upcomingSideButton: side},
         setAttribute(name, value) { this[name] = value; }, closest() {return this;}}));
     const panels = ['west', 'east', 'both'].map(side => ({dataset: {upcomingSide: side}, hidden: side !== 'west'}));
@@ -33,6 +33,7 @@ function setup() {
         }}},
         fetch(url, options) {return new Promise(resolve => pending.push({url: String(url), options,
             resolve: (payload, ok=true) => resolve({ok, json: async () => payload})}));}};
+    vm.runInNewContext(fs.readFileSync('app/static/js/clock_time.js', 'utf8'), context);
     vm.runInNewContext(fs.readFileSync('app/static/js/neoermac_upcoming_pulls.js', 'utf8'), context);
     return {pending, doc, input, status, board, panels, buttons, timers, poll,
         side(name) {rootEvents.click({target:buttons.find(b=>b.dataset.upcomingSideButton === name)});},
@@ -111,7 +112,7 @@ test('blank blur abandons an edit and resumes normal polling', async () => {
     h.pending[0].resolve(state('r1'));await tick();assert.equal(h.board.replacements.length,1);
 });
 
-for (const [typed, saved] of [['2315', '23:15'], ['0030', '00:30'], ['0712', '07:12']]) {
+for (const [typed, saved] of [['2315', '23:15'], ['0030', '00:30'], ['0712', '07:12'], ['712', '07:12']]) {
     test(`HHMM ${typed} normalizes before the existing save and refresh`, async () => {
         const h = setup(); h.change(typed);
         assert.equal(h.pending[0].options.body.value, saved);
@@ -120,7 +121,7 @@ for (const [typed, saved] of [['2315', '23:15'], ['0030', '00:30'], ['0712', '07
         assert.equal(h.board.replacements.length, 1);
     });
 }
-for (const typed of ['2401', '2965', '1267', '712', 'abcd']) {
+for (const typed of ['2401', '2965', '1267', 'abcd', '12']) {
     test(`invalid HHMM ${typed} does not save`, () => {
         const h = setup(); h.change(typed);
         assert.equal(h.pending.length, 0);

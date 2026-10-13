@@ -1730,11 +1730,10 @@ def _labelize(value):
 
 
 def _parse_optional_time(value):
-    value = str(value or "").strip()
-    if not value:
-        return None
+    from app.services.clock_time import parse_clock_time
+
     try:
-        return datetime.strptime(value, "%H:%M").time().replace(second=0, microsecond=0)
+        return parse_clock_time(value)
     except ValueError as exc:
         raise ValueError("Actual pull times must use HH:MM format.") from exc
 

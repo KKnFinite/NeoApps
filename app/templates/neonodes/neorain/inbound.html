@@ -482,18 +482,15 @@
         } catch (_) { message.textContent = "Unable to save inclusion."; message.hidden = false; }
         finally { delete button.dataset.neorainSaving; delete row.dataset.neorainLateInclusionSaving; }
     });
-    const validHhmm = /^(?:[01]\d|2[0-3])[0-5]\d$/;
     const setBlockInMessage = (input, text = "") => {
         const output = input.closest("[data-neorain-mobile-time]")?.querySelector("[data-neorain-inbound-hhmm-message]");
         if (output) { output.textContent = text; output.hidden = !text; }
     };
     const saveBlockIn = async (input) => {
         if (input.dataset.neorainSaving === "true" || input.dataset.neorainStale === "true") return;
-        const value = input.value;
+        const value = window.NeoAppsClockTime.normalizeInput(input);
+        if (value === null) { setBlockInMessage(input, "Use a valid HH:MM time."); return; }
         if (value === (input.dataset.neorainSavedValue || "")) { input.dataset.neorainDirty = "false"; return; }
-        if (value && !validHhmm.test(value)) {
-            input.value = ""; input.dataset.neorainDirty = "false"; setBlockInMessage(input, "Use four-digit HHMM."); input.focus({preventScroll: true}); return;
-        }
         const row = input.closest("[data-neorain-inbound-row]");
         if (!row?.dataset.missionId || !row.dataset.missionVersion) return;
         const submittedValue = value;
@@ -506,15 +503,15 @@
                 throw new Error(payload.error || "Unable to save Block-In.");
             }
             applyRow(row.dataset.neorainMissionId, payload.row);
-            if (input.value === submittedValue) { const saved = String(payload.row?.block_in || "").replace(":", ""); input.value = saved; input.dataset.neorainSavedValue = saved; input.dataset.neorainDirty = "false"; input.removeAttribute("data-neorain-stale"); setBlockInMessage(input); input.closest("[data-neorain-mobile-time-editor]").hidden = true; }
+            if (input.value === submittedValue) { const saved = String(payload.row?.block_in || ""); input.value = saved; input.dataset.neorainSavedValue = saved; input.dataset.neorainDirty = "false"; input.removeAttribute("data-neorain-stale"); setBlockInMessage(input); input.closest("[data-neorain-mobile-time-editor]").hidden = true; }
             if (payload.late_summary) root.dispatchEvent(new CustomEvent("neorain:late-summary", {detail: {lateSummary: payload.late_summary}}));
             if (payload.revision) root.dispatchEvent(new CustomEvent("neorain:inbound-revision", { detail: { revision: payload.revision } }));
         } catch (error) { setBlockInMessage(input, error.message || "Unable to save Block-In."); input.focus({preventScroll: true}); }
         finally { input.disabled = false; input.dataset.neorainSaving = "false"; }
     };
     root.querySelectorAll("[data-neorain-inbound-hhmm]").forEach((input) => {
-        input.addEventListener("input", () => { input.removeAttribute("data-neorain-stale"); input.dataset.neorainDirty = input.value !== (input.dataset.neorainSavedValue || "") ? "true" : "false"; setBlockInMessage(input); if (input.value.length === 4) saveBlockIn(input); });
-        input.addEventListener("blur", () => { if (input.dataset.neorainStale === "true") return; if (!input.value && input.value !== (input.dataset.neorainSavedValue || "")) saveBlockIn(input); else if (input.value && !validHhmm.test(input.value)) { input.value = ""; input.dataset.neorainDirty = "false"; setBlockInMessage(input, "Use four-digit HHMM."); input.focus({preventScroll: true}); } });
+        input.addEventListener("input", () => { input.removeAttribute("data-neorain-stale"); input.dataset.neorainDirty = input.value !== (input.dataset.neorainSavedValue || "") ? "true" : "false"; setBlockInMessage(input); if (/^[0-9]{4}$/.test(input.value)) saveBlockIn(input); });
+        input.addEventListener("blur", () => { if (input.dataset.neorainStale !== "true" && input.value !== (input.dataset.neorainSavedValue || "")) saveBlockIn(input); });
     });
 })();
 </script>

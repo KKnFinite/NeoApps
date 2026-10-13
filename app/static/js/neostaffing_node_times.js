@@ -9,10 +9,7 @@
     if (pending || dirty.size) { event.preventDefault(); event.returnValue = ''; }
   });
   function clock(value) {
-    let text = value.trim();
-    if (/^\d{3,4}$/.test(text)) { text = text.padStart(4, '0'); text = `${text.slice(0, 2)}:${text.slice(2)}`; }
-    const match = /^(\d{2}):(\d{2})$/.exec(text);
-    return match && +match[1] < 24 && +match[2] < 60 ? text : null;
+    return window.NeoAppsClockTime.normalize(value, false);
   }
   for (const row of root.querySelectorAll('[data-timecard-id]')) {
     const container = row.querySelector('[data-time-segments]');
@@ -73,8 +70,9 @@
         blocked = true; notice(error.message || 'Save failed. Reload before trying again.', true);
       } finally { busy = false; pending--; controls(blocked); }
     }
-    row.addEventListener('input', () => {
+    row.addEventListener('input', event => {
       dirty.add(row); notice('Not saved'); clearTimeout(timer);
+      if (event.target.matches('[data-start], [data-end]')) return;
       timer = setTimeout(save, 400);
     });
     row.addEventListener('change', event => { if (event.target.matches('[data-start], [data-end]')) { dirty.add(row); save(); } });

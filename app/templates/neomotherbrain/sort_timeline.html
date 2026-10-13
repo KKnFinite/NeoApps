@@ -8,7 +8,7 @@
     name="{{ name }}"
     value="{{ format_timeline_time(value) if value else '' }}"
     inputmode="numeric"
-    pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    pattern="(?:[0-9][0-5][0-9]|(?:[01][0-9]|2[0-3]):?[0-5][0-9])"
     maxlength="5"
     placeholder="HH:MM"
     autocomplete="off"
@@ -234,7 +234,7 @@
                                 name="{{ sort_name }}_special_poll_time"
                                 value="{{ format_timeline_time(special_time.poll_time_local) }}"
                                 inputmode="numeric"
-                                pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                                pattern="(?:[0-9][0-5][0-9]|(?:[01][0-9]|2[0-3]):?[0-5][0-9])"
                                 maxlength="5"
                                 placeholder="HH:MM"
                                 autocomplete="off"
@@ -256,7 +256,7 @@
                                 name="{{ sort_name }}_special_poll_time"
                                 value=""
                                 inputmode="numeric"
-                                pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                                pattern="(?:[0-9][0-5][0-9]|(?:[01][0-9]|2[0-3]):?[0-5][0-9])"
                                 maxlength="5"
                                 placeholder="HH:MM"
                                 autocomplete="off"
@@ -299,6 +299,15 @@
         if (!form) {
             return;
         }
+        const clocks = [...form.querySelectorAll("[data-military-time]")];
+        if (clocks.some((input) => input === document.activeElement)) {
+            setStatus("FINISH TIME ENTRY TO SAVE", "pending");
+            return;
+        }
+        if (clocks.some((input) => window.NeoAppsClockTime.normalizeInput(input) === null)) {
+            setStatus("INVALID TIME — USE HH:MM", "error");
+            return;
+        }
         if (saveController) {
             saveController.abort();
         }
@@ -314,10 +323,10 @@
                 },
                 signal: saveController.signal,
             });
-            if (!response.ok) {
-                throw new Error("Auto-save failed");
-            }
             const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || "Auto-save failed");
+            }
             updatePreviewMetrics(payload);
             markSpecialRowsSaved();
             clearDeleteMarkers();
@@ -326,7 +335,7 @@
             if (error.name === "AbortError") {
                 return;
             }
-            setStatus("SAVE FAILED", "error");
+            setStatus(error.message || "SAVE FAILED", "error");
         }
     };
 
@@ -379,7 +388,7 @@
                 name="${sortName}_special_poll_time"
                 value=""
                 inputmode="numeric"
-                pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                pattern="(?:[0-9][0-5][0-9]|(?:[01][0-9]|2[0-3]):?[0-5][0-9])"
                 maxlength="5"
                 placeholder="HH:MM"
                 autocomplete="off"
@@ -458,7 +467,11 @@
 
     if (form) {
         form.addEventListener("input", (event) => {
-            if (event.target.matches("input[type='number'], [data-military-time]")) {
+            if (event.target.matches("[data-military-time]")) {
+                event.target.setCustomValidity("");
+                event.target.removeAttribute("aria-invalid");
+                setStatus("FINISH TIME ENTRY TO SAVE", "pending");
+            } else if (event.target.matches("input[type='number']")) {
                 queueSave(150);
             } else if (event.target.matches("input[type='text']")) {
                 queueSave(450);
@@ -467,6 +480,20 @@
 
         form.addEventListener("change", (event) => {
             if (event.target.matches("input, select, textarea")) {
+                if (event.target.matches("[data-military-time]")
+                    && window.NeoAppsClockTime.normalizeInput(event.target) === null) {
+                    setStatus("INVALID TIME — USE HH:MM", "error");
+                    return;
+                }
+                queueSave(0);
+            }
+        });
+
+        form.addEventListener("focusout", (event) => {
+            if (!event.target.matches("[data-military-time]")) return;
+            if (window.NeoAppsClockTime.normalizeInput(event.target) === null) {
+                setStatus("INVALID TIME — USE HH:MM", "error");
+            } else {
                 queueSave(0);
             }
         });

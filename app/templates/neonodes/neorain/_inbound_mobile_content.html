@@ -6,7 +6,7 @@
         <span data-neorain-display="block_in">{{ row.block_in or row.eta_sta or '-' }}</span>
     </button>
     <div class="neorain-mobile-time-editor" data-neorain-mobile-time-editor hidden>
-        <input type="text" inputmode="numeric" maxlength="4" placeholder="HHMM" aria-label="Block-In for {{ row.flight_number }}" data-neorain-inbound-hhmm data-neorain-mobile-hhmm data-neorain-saved-value="{{ row.block_in|replace(':', '') }}" value="{{ row.block_in|replace(':', '') }}">
+        <input type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" aria-label="Block-In for {{ row.flight_number }}" data-neorain-inbound-hhmm data-neorain-mobile-hhmm data-neorain-saved-value="{{ row.block_in }}" value="{{ row.block_in }}">
         <output data-neorain-inbound-hhmm-message aria-live="polite" hidden></output>
     </div>
     {% else %}

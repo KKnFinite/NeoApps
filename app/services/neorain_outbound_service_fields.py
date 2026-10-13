@@ -1,12 +1,9 @@
 """Operator-editable Rain Outbound details independent of Google/Neo milestones."""
 import re
-from datetime import time
 
 from app.models import NeoRainOutboundServiceState
 
 _SERVICE_FIELDS = frozenset({"meal", "jump", "js_in"})
-_HHMM = re.compile(r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
-_HHMM_COMPACT = re.compile(r"^(?:[01][0-9]|2[0-3])[0-5][0-9]$")
 
 
 class NeoRainOutboundServiceFieldError(ValueError):
@@ -56,11 +53,12 @@ def parse_outbound_service_field(field, value):
         return None
     if not isinstance(value, str):
         raise NeoRainOutboundServiceFieldError("JS In must use 24-hour HH:MM.")
-    if _HHMM_COMPACT.fullmatch(value):
-        value = value[:2] + ":" + value[2:]
-    if not _HHMM.fullmatch(value):
-        raise NeoRainOutboundServiceFieldError("JS In must use 24-hour HH:MM.")
-    return time(int(value[:2]), int(value[3:]))
+    from app.services.clock_time import parse_clock_time
+
+    try:
+        return parse_clock_time(value)
+    except ValueError as exc:
+        raise NeoRainOutboundServiceFieldError("JS In must use 24-hour HH:MM.") from exc
 
 
 def current_outbound_service_value(state, field):

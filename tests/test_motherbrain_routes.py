@@ -1071,6 +1071,49 @@ class MotherBrainRoutesTest(unittest.TestCase):
         self.assertNotIn(b"NeoAppsTimeInputs", response.data)
         self.assertNotIn(b'type="time"', response.data)
 
+    def test_sort_timeline_compact_times_and_dynamic_special_poll_persist(self):
+        self._add_matrix_cell("monday", "night")
+        response = self.client.post(
+            "/motherbrain/sort-timeline",
+            data=self._sort_timeline_form_data(
+                night_sort_start="0500", night_polling_start="930",
+                night_special_poll_time=["500", "21:00"],
+            ),
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 200)
+        setting = SortTimelineSortSetting.query.filter_by(sort_name="night").one()
+        self.assertEqual(setting.sort_window_start_local, time(5, 0))
+        self.assertEqual(setting.polling_start_local, time(9, 30))
+        page = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+        self.assertIn(b'value="05:00"', page.data)
+        self.assertIn(b'value="09:30"', page.data)
+        self.assertIn(b'value="21:00"', page.data)
+        self.assertEqual(
+            sorted(row.poll_time_local for row in SortTimelineSpecialPollTime.query.filter_by(sort_name="night").all()),
+            [time(5, 0), time(21, 0)],
+        )
+
+    def test_sort_timeline_invalid_partial_time_cannot_clear_saved_value(self):
+        self._add_matrix_cell("monday", "night")
+        initial = self._sort_timeline_form_data(
+            night_sort_start="05:00", night_special_poll_time=["09:30"],
+        )
+        self.assertEqual(self.client.post("/motherbrain/sort-timeline", data=initial).status_code, 302)
+        invalid = self._sort_timeline_form_data(
+            night_sort_start="05", night_special_poll_time=["09:30"],
+        )
+        response = self.client.post(
+            "/motherbrain/sort-timeline", data=invalid,
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 400)
+        setting = SortTimelineSortSetting.query.filter_by(sort_name="night").one()
+        self.assertEqual(setting.sort_window_start_local, time(5, 0))
+        page = self.client.get("/motherbrain/sort-timeline?month=2026-06")
+        self.assertIn(b'value="05:00"', page.data)
+        self.assertIn(b'value="09:30"', page.data)
+
     def test_sort_timeline_special_poll_delete_persists(self):
         self._add_matrix_cell("monday", "night")
         self.client.post(

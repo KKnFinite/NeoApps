@@ -536,16 +536,16 @@ class NeoRainOutboundTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b'data-mutation-url="/neorain/outbound/milestone"', response.data)
                 self.assertIn(b'inputmode="numeric"', response.data)
-                self.assertIn(b'maxlength="4"', response.data)
+                self.assertIn(b'maxlength="5"', response.data)
                 self.assertIn(b'placeholder="HHMM"', response.data)
                 self.assertIn(
                     f'data-mission-version="{entity_version(mission)}"'.encode(),
                     response.data,
                 )
                 for field, value in (
-                    ("ramp_load_complete", b'value="0137"'),
-                    ("crew_load_complete", b'value="0145"'),
-                    ("official_block_out", b'value="0155"'),
+                    ("ramp_load_complete", b'value="01:37"'),
+                    ("crew_load_complete", b'value="01:45"'),
+                    ("official_block_out", b'value="01:55"'),
                 ):
                     self.assertIn(f'data-neorain-field="{field}"'.encode(), response.data)
                     self.assertIn(value, response.data)
@@ -909,7 +909,7 @@ class NeoRainOutboundTest(unittest.TestCase):
                 "/neorain/inbound/block-in",
                 json={
                     "mission_id": mission.id,
-                    "value": "12:34",
+                    "value": "24:00",
                     "expected_version": entity_version(mission),
                 },
             )

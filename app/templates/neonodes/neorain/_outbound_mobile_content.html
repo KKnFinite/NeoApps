@@ -3,7 +3,7 @@
 <div class="neorain-mobile-time" data-neorain-mobile-time>
     {% if can_edit_timestamp_milestones %}
     <button type="button" class="neorain-mobile-time-display" data-neorain-mobile-time-open {% if row.no_return or row.status == 'CANCELLED' %}disabled{% endif %}><span data-neorain-display="{{ field }}">{{ row[field] or '-' }}</span></button>
-    <div class="neorain-mobile-time-editor" data-neorain-mobile-time-editor hidden><input type="text" inputmode="numeric" maxlength="4" placeholder="HHMM" aria-label="{{ label }} for {{ row.flight_number }}" data-neorain-hhmm data-neorain-mobile-hhmm data-neorain-field="{{ field }}" data-neorain-saved-value="{{ row[field]|replace(':', '') }}" value="{{ row[field]|replace(':', '') }}"><output data-neorain-milestone-message aria-live="polite" hidden></output></div>
+    <div class="neorain-mobile-time-editor" data-neorain-mobile-time-editor hidden><input type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" aria-label="{{ label }} for {{ row.flight_number }}" data-neorain-hhmm data-neorain-mobile-hhmm data-neorain-field="{{ field }}" data-neorain-saved-value="{{ row[field] }}" value="{{ row[field] }}"><output data-neorain-milestone-message aria-live="polite" hidden></output></div>
     {% else %}<span data-neorain-display="{{ field }}">{{ row[field] or '-' }}</span>{% endif %}
 </div>
 {%- endmacro %}

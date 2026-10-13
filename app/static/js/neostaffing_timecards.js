@@ -10,9 +10,7 @@
   root.addEventListener('click', async event => {
     if (event.target.closest('[data-bulk-times]')) {
       const clock = input => {
-        let value = input.value.trim();
-        if (/^\d{4}$/.test(value)) value = `${value.slice(0, 2)}:${value.slice(2)}`;
-        return !value || /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null;
+        return window.NeoAppsClockTime.normalize(input.value);
       };
       const startInput = root.querySelector('[data-bulk-start]');
       const endInput = root.querySelector('[data-bulk-end]');

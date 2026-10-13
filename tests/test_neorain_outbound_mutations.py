@@ -82,7 +82,7 @@ class NeoRainOutboundMutationTest(unittest.TestCase):
         )
 
     def test_invalid_hhmm_is_rejected(self):
-        for raw_value in ("2560", "1267", "123", "12:34", "abcd"):
+        for raw_value in ("2560", "1267", "12", "abcd"):
             with self.subTest(raw_value=raw_value):
                 with self.assertRaises(NeoRainMilestoneError):
                     mutate_neorain_departure_milestone(
@@ -92,6 +92,17 @@ class NeoRainOutboundMutationTest(unittest.TestCase):
                         raw_value,
                     )
         self.assertIsNone(self.mission.ramp_load_completed_at_utc)
+
+    def test_shorthand_and_colon_times_use_existing_operational_date(self):
+        for raw_value in ("237", "02:37"):
+            with self.subTest(raw_value=raw_value):
+                mutate_neorain_departure_milestone(
+                    self.mission, self.operation, "ramp_load_complete", raw_value,
+                )
+                self.assertEqual(
+                    utc_to_local_naive(self.mission.ramp_load_completed_at_utc, self.mission.timezone),
+                    datetime(2026, 6, 19, 2, 37),
+                )
 
     def test_three_milestones_use_canonical_values_and_block_out_is_not_departed(self):
         mutate_neorain_departure_milestone(

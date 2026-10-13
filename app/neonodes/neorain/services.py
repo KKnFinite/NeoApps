@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
-from datetime import datetime, time
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, literal, select, union_all
@@ -65,7 +64,6 @@ NEORAIN_INBOUND_REFRESH_KEY = "neorain.inbound"
 _OPERATION_UNSET = object()
 NEORAIN_MILESTONE_SOURCE = "neorain"
 _UNOWNED_SOURCES = {"", "unknown"}
-_HHMM_INPUT_PATTERN = re.compile(r"^\d{4}$")
 _RAIN_MILESTONES = {
     "ramp_load_complete": {
         "label": "Ramp Load Complete",
@@ -185,7 +183,7 @@ def neorain_inbound_revision(gateway, *, operation=_OPERATION_UNSET):
 def mutate_neorain_departure_milestone(mission, operation, field, value):
     """Mutate one Rain-owned departure fact without committing the transaction.
 
-    Timestamp inputs are strict operational HHMM values; an empty string clears
+    Timestamp inputs are validated local clock values; an empty string clears
     only a NeoRain-owned timestamp. No Return is a separate explicit boolean
     action so changing a factual timestamp never silently reverses departure.
     """
@@ -250,7 +248,7 @@ def neorain_departure_milestone_value(mission, field):
 def mutate_neorain_arrival_block_in(mission, operation, value):
     """Stage one NeoRain-owned Block-In correction without committing.
 
-    The mobile board uses the same operational HHMM/date-resolution rule as the
+    The mobile board uses the same operational clock/date-resolution rule as the
     departure milestones. Existing non-Rain facts stay protected.
     """
     if mission is None or operation is None:
@@ -355,19 +353,16 @@ def _mutate_no_return(mission, value):
 
 
 def _parse_operational_hhmm(value, operation, field_label):
-    if value is None or (isinstance(value, str) and not value.strip()):
+    from app.services.clock_time import parse_clock_time
+
+    try:
+        clock = parse_clock_time(value)
+    except ValueError as exc:
+        raise NeoRainMilestoneError(f"{field_label} is not a valid time.") from exc
+    if clock is None:
         return None
-    raw_value = str(value).strip()
-    if not _HHMM_INPUT_PATTERN.fullmatch(raw_value):
-        raise NeoRainMilestoneError(
-            f"{field_label} must use four-digit HHMM time."
-        )
-    hour = int(raw_value[:2])
-    minute = int(raw_value[2:])
-    if hour > 23 or minute > 59:
-        raise NeoRainMilestoneError(f"{field_label} is not a valid time.")
     _local_value, timestamp_utc = _parse_optional_live_datetime(
-        time(hour, minute),
+        clock,
         operation,
         field_label,
     )

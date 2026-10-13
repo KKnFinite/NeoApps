@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from app import create_app
 from app.extensions import db
 from app.models import Gateway, NeoSubZeroPretreatState, SortDateMission, SortDateOperation, SortDateParkingAssignment, SortDateTailState
-from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON, NeoSubZeroPretreatError, mutate_pretreat, pretreat_context, pretreat_reason, pretreat_revision
+from app.neonodes.neosubzero.services import DEFAULT_PRETREAT_REASON, NeoSubZeroPretreatError, _parse_hhmm, mutate_pretreat, pretreat_context, pretreat_reason, pretreat_revision
 from app.services.permission_rules import DEFAULT_PERMISSION_RULES
 from flask import render_template
 from app.neonodes.neosubzero.services import SURFACE_LABELS
@@ -50,6 +50,13 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         mutate_pretreat(self.operation, self.departure, "save_treatment", values, state); db.session.flush()
         tail_state = SortDateTailState.query.filter_by(tail_number="T1").one(); self.assertTrue(tail_state.pretreat_status); self.assertEqual(state.notes,"done")
         values["pass2_end"] = ""; mutate_pretreat(self.operation, self.departure, "save_treatment", values, state); self.assertFalse(tail_state.pretreat_status)
+
+    def test_compact_and_colon_pretreat_times_share_operational_date(self):
+        expected = _parse_hhmm("0930", self.operation, self.departure)
+        self.assertEqual(_parse_hhmm("930", self.operation, self.departure), expected)
+        self.assertEqual(_parse_hhmm("09:30", self.operation, self.departure), expected)
+        with self.assertRaises(NeoSubZeroPretreatError):
+            _parse_hhmm("2360", self.operation, self.departure)
 
     def test_revision_changes_with_shared_pretreat_state(self):
         before = pretreat_revision(self.gateway, self.operation)

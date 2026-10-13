@@ -225,10 +225,10 @@
     </select>
 </label>
 <label>Start
-    <span><input name="pass{{ pass_number }}_start" value="{{ start|replace(':', '') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if locked %}readonly{% endif %}><button type="button" data-subzero-deice-stamp="pass{{ pass_number }}_start" {% if locked %}hidden{% endif %}>NOW</button></span>
+    <span><input name="pass{{ pass_number }}_start" value="{{ start }}" inputmode="numeric" maxlength="5" placeholder="HH:MM" data-clock-time {% if locked %}readonly{% endif %}><button type="button" data-subzero-deice-stamp="pass{{ pass_number }}_start" {% if locked %}hidden{% endif %}>NOW</button></span>
 </label>
 <label>End
-    <span><input name="pass{{ pass_number }}_end" value="{{ end|replace(':', '') }}" inputmode="numeric" maxlength="4" placeholder="HHMM" {% if locked or not start %}readonly{% endif %}><button type="button" data-subzero-deice-stamp="pass{{ pass_number }}_end" {% if locked or not start %}hidden{% endif %}>NOW</button></span>
+    <span><input name="pass{{ pass_number }}_end" value="{{ end }}" inputmode="numeric" maxlength="5" placeholder="HH:MM" data-clock-time {% if locked or not start %}readonly{% endif %}><button type="button" data-subzero-deice-stamp="pass{{ pass_number }}_end" {% if locked or not start %}hidden{% endif %}>NOW</button></span>
 </label>
 {% endmacro %}
 

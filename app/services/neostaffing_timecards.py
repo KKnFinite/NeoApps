@@ -194,10 +194,11 @@ def parse_timestamp(value, zone):
 
 def clock_value(value):
     """Normalize compact entry before canonical date/overnight/DST validation."""
+    from app.services.clock_time import normalize_clock_time
+
     text = str(value or "").strip()
-    if re.fullmatch(r"\d{3,4}", text):
-        text = text.zfill(4)
-        return f"{text[:2]}:{text[2:]}"
+    if re.fullmatch(r"\d{3,4}|\d{2}:\d{2}", text):
+        return normalize_clock_time(text)
     return text
 
 

@@ -39,6 +39,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_org_explorer.css', v='20261012-top-down-v1') }}">
     {% endif %}
     <script defer src="{{ url_for('static', filename='js/interaction_states.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    <script src="{{ url_for('static', filename='js/clock_time.js', v='20261013-1') }}"></script>
     {% if is_neostaffing_page or request.endpoint in ['neosektor.manage_employees', 'neoermac.manage_employees'] %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_live_cleanup.css', v='20260918-mobile-ui') }}">
     {% endif %}
