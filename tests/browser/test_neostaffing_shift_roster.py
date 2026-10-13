@@ -109,6 +109,59 @@ class ShiftRosterBrowserTest(unittest.TestCase):
         context.unroute_all(behavior='ignoreErrors')
         browser.close()
 
+    def test_two_setup_colors_editor_updates_and_real_drop_at_desktop_and_mobile_widths(self):
+        browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
+        try:
+            for width in (1920,390):
+                context = browser.new_context(viewport={'width':width,'height':900},is_mobile=width==390,has_touch=width==390)
+                page = context.new_page();helper=self.fixture();helper.login(page);helper.ready(page,'/neostaffing/shift-flow')
+                pid=self.ids['GREEN'];card=page.locator(f'[data-roster-person="{pid}"]')
+                original_door=card.get_attribute('data-final-door')
+                if width==390:
+                    page.locator('[data-roster-search]').fill('Grace Door')
+                expect(page.locator('.shift-setup-legend')).to_contain_text('Door Setup')
+                expect(page.locator('.shift-setup-legend')).to_contain_text('Ballmat Setup')
+                background=card.evaluate('el=>getComputedStyle(el).backgroundColor')
+                counts=lambda:page.locator('[data-roster-count]').all_text_contents()
+                original_counts=counts()
+                for setup,kind,label,color in [('Door 32','door','Door Setup','rgb(116, 236, 230)'),
+                    ('West Ballmat','ballmat','Ballmat Setup','rgb(188, 147, 245)'),
+                    ('','', 'No Setup',None)]:
+                    card.click()
+                    page.locator('[data-employee-editor] [name="shift_flow_setup_work_area_id"]').select_option(
+                        str(self.area_ids[setup]) if setup else '')
+                    page.locator('[data-employee-editor] button[type="submit"]').click()
+                    expect(page.locator('[data-employee-editor]')).not_to_be_visible()
+                    strip=card.locator('[data-setup-strip]')
+                    expect(strip).to_have_attribute('data-setup-type',kind)
+                    expect(strip).to_have_attribute('title',label)
+                    expect(strip).to_have_attribute('aria-label',label)
+                    self.assertEqual(card.evaluate('el=>getComputedStyle(el).backgroundColor'),background)
+                    self.assertEqual(counts(),original_counts)
+                    if not kind:
+                        expect(strip).to_be_hidden();continue
+                    expect(strip).to_be_visible()
+                    self.assertEqual(strip.evaluate('el=>getComputedStyle(el).backgroundColor'),color)
+                    box,card_box=strip.bounding_box(),card.bounding_box()
+                    self.assertAlmostEqual(box['width'],4,delta=.1)
+                    self.assertAlmostEqual(box['height'],card_box['height'],delta=1)
+                    self.assertAlmostEqual(box['x']+box['width'],card_box['x']+card_box['width'],delta=1)
+                    if width==1920:
+                        other_door=str(self.area_ids['Door 34' if original_door==str(self.area_ids['Door 32']) else 'Door 32'])
+                        for destination in (other_door,original_door):
+                            with page.expect_response(lambda response:response.url.endswith('/final-door')) as response:
+                                card.drag_to(page.locator(f'[data-final-door-target="{destination}"]'))
+                            self.assertEqual(response.value.status,200)
+                            self.assertEqual(response.value.json()['setup_type'],kind)
+                            expect(strip).to_have_attribute('data-setup-type',kind)
+                            expect(strip).to_have_attribute('title',label)
+                        self.assertEqual(counts(),original_counts)
+                    if kind=='ballmat':page.screenshot(path=str(self.evidence/f'setup-colors-{width}.png'),full_page=True)
+                self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'),width+1)
+                context.close()
+        finally:
+            browser.close()
+
     def test_real_drop_editor_and_responsive_roster(self):
         browser = self.fixture.pw.chromium.launch(channel=os.environ.get('NEO_BROWSER_CHANNEL'))
         context = browser.new_context(viewport={'width':1920, 'height':1080})
@@ -351,7 +404,7 @@ class ShiftRosterBrowserTest(unittest.TestCase):
             if pid not in setup_people:
                 expect(strip).to_be_hidden()
                 continue
-            expect(strip).to_be_visible(); expect(strip).to_have_attribute('title', 'Setup assigned')
+            expect(strip).to_be_visible(); expect(strip).to_have_attribute('title', 'Door Setup')
             self.assertEqual(strip.inner_text(), '', 'Setup has no text badge')
             box, card_box = strip.bounding_box(), card.bounding_box()
             self.assertGreaterEqual(box['width'],3); self.assertLessEqual(box['width'],4)

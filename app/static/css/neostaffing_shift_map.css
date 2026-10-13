@@ -124,7 +124,12 @@
 .shift-door-column header strong { color:#e7ffff; font-size:16px; }
 .shift-door-column header span { color:#5ee1cd; font-size:12px; }
 .shift-door-person { position:relative; display:block; padding:8px 7px; color:#d9eeee; font-size:12px; line-height:1.4; overflow-wrap:anywhere; border-bottom:1px solid #183338; }
-.shift-setup-indicator { position:absolute; top:0; right:0; bottom:0; width:4px; border-radius:0 2px 2px 0; background:#74ece6; }
+.shift-door-roster { --shift-setup-door:#74ece6; --shift-setup-ballmat:#bc93f5; }
+.shift-setup-indicator { position:absolute; top:0; right:0; bottom:0; width:4px; border-radius:0 2px 2px 0; background:var(--shift-setup-door); }
+.shift-setup-indicator[data-setup-type="ballmat"], .shift-setup-key[data-setup-type="ballmat"] { background:var(--shift-setup-ballmat); }
+.shift-setup-legend { display:flex; flex-wrap:wrap; gap:6px 14px; margin:0 0 8px; color:#98b5b7; font-size:.7rem; }
+.shift-setup-legend > span { display:inline-flex; align-items:center; gap:6px; }
+.shift-setup-key { display:inline-block; width:4px; height:12px; border-radius:2px; background:var(--shift-setup-door); }
 .shift-door-person.is-discharge { background:#285f8c; }
 .shift-door-person.is-at-door { background:#2c704e; }
 .shift-door-person.is-wave-1 { background:#82752e; color:#fff; }

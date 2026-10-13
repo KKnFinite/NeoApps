@@ -215,7 +215,7 @@ test('Needs Assignment drop moves immediately, preserves existing fields and add
     assert.equal(b.plannedCount.textContent,'4');assert.equal(b.ballmatTotal.textContent,'3');assert.equal(b.headerBallmatTotal.textContent,'3');
     assert.deepEqual(b.ballmatSides.east.nodes['[data-ballmat-people]'].children.map(row=>row.dataset.ballmatPerson),['2','3']);
     b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',
-        flow_warning:'Ballmat transition is missing.',has_setup:true,previous_ballmat_side:'west',ballmat_side:'east'})});await tick();
+        flow_warning:'Ballmat transition is missing.',has_setup:true,setup_type:'door',previous_ballmat_side:'west',ballmat_side:'east'})});await tick();
     assert.equal(b.needs.dataset.finalDoor,'2');assert.equal(b.needs.dataset.flowVersion,'new:8');
     assert.equal(b.needsReason.parent,null);assert.equal(b.eastCount.textContent,'3');assert.equal(b.westCount.textContent,'1');
     assert.equal(b.ballmatTotal.textContent,'4');
@@ -387,19 +387,35 @@ test('optimistic and accepted drops sort exact color groups then names, while Ba
     b.card.dataset.flowColor='at-door';b.start();b.drop(b.destination);
     const ids=()=>people.children.map(p=>p.dataset.rosterPerson);
     assert.deepEqual(ids(),['3','100','42','101','2','102',...expected.slice(3)]);
-    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',has_setup:true})});await tick();
+    b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',has_setup:true,setup_type:'door'})});await tick();
     assert.deepEqual(ids(),['3','100','101','2','102',...expected.slice(3,6),'106','42','107','108',...expected.slice(9)]);
     assert.equal(b.card.dataset.flowColor,'wave-2');assert.equal(b.card.nodes['[data-setup-strip]'].hidden,false);
     assert.deepEqual(b.ballmatSides.west.nodes['[data-ballmat-people]'].children.map(p=>p.dataset.ballmatPerson),['42']);
 });
 
 test('Setup strip is reconciled independently of the flow background and retained on failed saves', async()=>{
-    const b=dropBoard();b.card.nodes['[data-setup-strip]'].hidden=false;b.start();b.drop(b.destination);
+    const b=dropBoard();b.card.nodes['[data-setup-strip]'].hidden=false;
+    b.card.nodes['[data-setup-strip]'].dataset.setupType='ballmat';
+    b.card.nodes['[data-setup-strip]'].title='Ballmat Setup';b.start();b.drop(b.destination);
     b.requests[0].resolve({ok:false,json:async()=>({error:'Failed'})});await tick();
     assert.equal(b.card.nodes['[data-setup-strip]'].hidden,false);assert.equal(b.card.dataset.flowColor,'wave-2');
+    assert.equal(b.card.nodes['[data-setup-strip]'].dataset.setupType,'ballmat');
+    assert.equal(b.card.nodes['[data-setup-strip]'].title,'Ballmat Setup');
     b.start();b.drop(b.destination);
     b.requests[1].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',flow_color:'wave-2',has_setup:false})});await tick();
     assert.equal(b.card.nodes['[data-setup-strip]'].hidden,true);assert.ok(b.card.classList.values.has('is-wave-2'));
+});
+
+test('successful save updates Setup type and tooltip from authoritative payload', async()=>{
+    for (const [type, label] of [['door','Door Setup'],['ballmat','Ballmat Setup'],['','No Setup']]) {
+        const b=dropBoard();b.start();b.drop(b.destination);
+        b.requests[0].resolve({ok:true,json:async()=>({ok:true,final_door_work_area_id:2,plan_version:'new:8',
+            flow_color:'wave-2',has_setup:!!type,setup_type:type})});await tick();
+        const strip=b.card.nodes['[data-setup-strip]'];
+        assert.equal(strip.dataset.setupType,type);assert.equal(strip.hidden,!type);
+        assert.equal(strip.title,label);assert.equal(strip['aria-label'],label);
+        assert.equal(b.card.dataset.flowColor,'wave-2');
+    }
 });
 
 test('Discharge-start card retains blue after a Final Door drop, without stale wave tint', async()=>{

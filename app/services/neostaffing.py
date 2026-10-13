@@ -1182,8 +1182,10 @@ def _shift_flow_roster_status(plan, home, allowed_ids):
             issues.append("Ballmat wave / cleanup transition is missing or invalid.")
         elif home_type != SHIFT_FLOW_BALLMAT and transition is not None:
             issues.append("Ballmat transition does not match Start Area.")
+    setup_type = ({SHIFT_FLOW_DOOR: "door", SHIFT_FLOW_BALLMAT: "ballmat"}.get(
+        shift_work_area_type(plan.setup_work_area), "") if plan and plan.setup_work_area_id else "")
     return {"flow_color": color, "flow_warning": " ".join(issues) if final_id else "",
-            "has_setup": bool(plan and plan.setup_work_area_id)}
+            "has_setup": bool(plan and plan.setup_work_area_id), "setup_type": setup_type}
 
 
 def _shift_flow_door_roster(matrix):

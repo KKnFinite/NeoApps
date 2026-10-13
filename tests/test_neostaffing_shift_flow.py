@@ -14,6 +14,33 @@ from app.services import neostaffing as staffing_service
 
 
 class ShiftFlowTest(unittest.TestCase):
+    def test_setup_indicator_uses_actual_setup_not_start_or_final_door(self):
+        import re
+        from flask import render_template
+        areas = self._configure_final_composite()
+        expected = {}
+        for start in (areas['Door 34'], areas['West Ballmat']):
+            for setup, kind in ((None, ''), (areas['Door 21'], 'door'),
+                                (areas['West Ballmat'], 'ballmat'), (areas['East Ballmat'], 'ballmat')):
+                person = self._person('SETUP-TYPE-'+str(len(expected)))
+                self._plan(person, self._values(start=start, final=areas['Door 34'], setup=setup,
+                    transition='2' if start==areas['West Ballmat'] else ''), start)
+                expected[person.id] = kind
+        db.session.commit()
+        context = staffing_service.shift_flow_context()
+        for row in context['flow_map']['door_roster']['columns'][0]['rows']:
+            self.assertEqual(row['setup_type'], expected[row['person'].id])
+        with self.app.test_request_context('/neostaffing/shift-flow'):
+            html = render_template('neostaffing/_shift_flow_map.html', shift_flow=context,
+                can_edit_shift_flow=False, shift_work_area_type=staffing_service.shift_work_area_type)
+        for pid, content in re.findall(r'<a\b[^>]*data-roster-person="(\d+)"[^>]*>(.*?)</a>', html, re.S):
+            strip = re.search(r'<span[^>]*data-setup-strip[^>]*></span>', content).group(0)
+            kind = expected[int(pid)]
+            self.assertIn('data-setup-type="'+kind+'"', strip)
+            self.assertIn('title="'+{'door':'Door Setup','ballmat':'Ballmat Setup','':'No Setup'}[kind]+'"', strip)
+            self.assertEqual(' hidden' in strip, not bool(kind))
+        self.assertIn('aria-label="Setup indicator legend"', html)
+
     def test_final_roster_groups_colors_then_last_and_first_names_and_renders_setup_strip(self):
         import re
         from flask import render_template
@@ -46,9 +73,9 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([int(pid) for pid, _content in cards], expected)
         for pid, content in cards:
             strip = re.search(r'<span[^>]*data-setup-strip[^>]*></span>', content).group(0)
-            self.assertIn('title="Setup assigned"', strip)
+            self.assertIn('title="'+('Door Setup' if has_setup[int(pid)] else 'No Setup')+'"', strip)
             self.assertEqual(' hidden' not in strip, has_setup[int(pid)])
-            self.assertNotIn('Setup assigned', re.sub(r'<[^>]+>', '', content))
+            self.assertNotIn('Door Setup', re.sub(r'<[^>]+>', '', content))
 
     def test_final_roster_resorts_after_existing_editor_changes_color_and_setup(self):
         areas = self._configure_final_composite()
@@ -70,6 +97,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([r['person'].id for r in updated], [moved.id, green.id, blue.id])
         self.assertEqual(updated[0]['flow_color'], 'at-door')
         self.assertFalse(updated[0]['has_setup'])
+        self.assertEqual(updated[0]['setup_type'], '')
         values = self._values(start=self.discharge, final=areas['Door 34'], setup=areas['Door 21'])
         values['expected_version'] = self._revision(plan)
         staffing_service.save_shift_flow_plan(moved, values, areas['Door 34']); db.session.commit()
@@ -77,6 +105,7 @@ class ShiftFlowTest(unittest.TestCase):
         self.assertEqual([r['person'].id for r in updated], [green.id, blue.id, moved.id])
         self.assertEqual(updated[-1]['flow_color'], 'discharge')
         self.assertTrue(updated[-1]['has_setup'])
+        self.assertEqual(updated[-1]['setup_type'], 'door')
 
     def test_green_drop_moves_home_final_and_matching_setup_and_stays_green(self):
         areas = self._configure_final_composite()

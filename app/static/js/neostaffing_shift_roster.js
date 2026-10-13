@@ -306,7 +306,14 @@
             card.dataset.flowColor = payload.flow_color || '';
             ['discharge','at-door','wave-1','wave-2','cleanup'].forEach(color => card.classList.toggle(`is-${color}`, payload.flow_color === color));
             const setupStrip = card.querySelector('[data-setup-strip]');
-            if (setupStrip) setupStrip.hidden = !payload.has_setup;
+            if (setupStrip) {
+                const type = ['door', 'ballmat'].includes(payload.setup_type) ? payload.setup_type : '';
+                const label = {door:'Door Setup', ballmat:'Ballmat Setup'}[type] || 'No Setup';
+                setupStrip.dataset.setupType = type;
+                setupStrip.hidden = !type;
+                setupStrip.title = label;
+                setupStrip.setAttribute('aria-label', label);
+            }
             const warning = card.querySelector('[data-flow-warning]');
             warning.hidden = !payload.flow_warning;
             warning.title = payload.flow_warning || '';

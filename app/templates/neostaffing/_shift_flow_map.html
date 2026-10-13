@@ -1,7 +1,7 @@
 {% macro employee(entry, editable, draggable=false) -%}
 <a class="shift-door-person{% if entry.flow_color %} is-{{ entry.flow_color }}{% endif %}" data-roster-person="{{ entry.person.id }}" data-person-name="{{ entry.person.full_name }}" data-person-last="{{ entry.person.last_name.casefold() }}" data-person-first="{{ entry.person.first_name.casefold() }}" data-ballmat-start="{{ 'true' if shift_work_area_type(entry.assignment.work_area) == 'Ballmat' else 'false' }}" data-flow-color="{{ entry.flow_color }}" data-final-door="{{ entry.plan.final_door_work_area_id if entry.plan else '' }}" data-flow-version="{{ entry.version }}" href="{{ url_for('neostaffing.shift_flow', person_id=entry.person.id) }}"{% if editable and draggable %} draggable="true"{% endif %}>
   {{ entry.person.full_name }}<span class="shift-flow-warning" data-flow-warning role="img"{% if not entry.flow_warning %} hidden{% endif %} title="{{ entry.flow_warning }}" aria-label="Incomplete Shift Flow: {{ entry.flow_warning }}">!</span>
-  {% if draggable %}<span class="shift-setup-indicator" data-setup-strip role="img" title="Setup assigned" aria-label="Setup assigned"{% if not entry.has_setup %} hidden{% endif %}></span>{% endif %}
+  {% if draggable %}{% set setup_label = {'door': 'Door Setup', 'ballmat': 'Ballmat Setup'}.get(entry.setup_type, 'No Setup') %}<span class="shift-setup-indicator" data-setup-strip data-setup-type="{{ entry.setup_type }}" role="img" title="{{ setup_label }}" aria-label="{{ setup_label }}"{% if not entry.setup_type %} hidden{% endif %}></span>{% endif %}
 </a>
 {%- endmacro %}
 {% set roster = shift_flow.flow_map.door_roster %}
@@ -18,6 +18,7 @@
   </div>
   {% if roster.warnings %}<details class="shift-staffing-warnings"><summary>SHIFT CONFIGURATION · {{ roster.warnings|length }} issues</summary>{% for warning in roster.warnings %}<p>{{ warning }}</p>{% endfor %}</details>{% endif %}
   <h2 id="final-door-roster-title">FINAL DOOR <small><span data-roster-total-count>{{ roster.count }}</span> employees</small></h2>
+  <div class="shift-setup-legend" aria-label="Setup indicator legend"><span><i class="shift-setup-key" data-setup-type="door" aria-hidden="true"></i>Door Setup</span><span><i class="shift-setup-key" data-setup-type="ballmat" aria-hidden="true"></i>Ballmat Setup</span><span>No Setup · no strip</span></div>
   <div class="shift-roster-scroll" tabindex="0" role="region" aria-label="Shift rosters" data-roster-scroll>
   <div class="shift-roster-layout">
   <section aria-labelledby="final-door-roster-title">
