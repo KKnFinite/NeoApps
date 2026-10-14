@@ -25,7 +25,10 @@ class DispatchOrderBrowserTest(unittest.TestCase):
     def test_webkit_dense_roster_toggle_changes_visible_order(self):
         self.exercise_browser("webkit",dense=True)
 
-    def exercise_browser(self, engine, dense=False):
+    def test_primary_row_height_completed_dimming_and_refresh(self):
+        self.exercise_browser("chromium",visual=True)
+
+    def exercise_browser(self, engine, dense=False, visual=False):
         Fixture=fixtures.MobileDrawerBrowserTest
         Fixture.setUpClass(); browser=None
         Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"]=1000
@@ -84,6 +87,53 @@ class DispatchOrderBrowserTest(unittest.TestCase):
                 rows=page.locator('.neoscorpion-dispatch-primary-row[data-dispatch-mission-id]:not([data-cycle-history])')
                 order=lambda:rows.evaluate_all('els=>els.map(el=>Number(el.dataset.dispatchMissionId))')
                 self.assertEqual(order(),ids)
+                if visual:
+                    completed=page.locator(f'tr[data-dispatch-mission-id="{ids[3]}"]')
+                    active=page.locator(f'tr[data-dispatch-mission-id="{ids[0]}"]')
+                    for width in (1440,1366,390,375):
+                        page.set_viewport_size({"width":width,"height":844})
+                        height=104 if width<=760 else 140
+                        self.assertEqual(rows.evaluate_all('els=>els.map(el=>Math.round(el.getBoundingClientRect().height))'),[height]*4)
+                        # A longer ordinary status message remains fully visible,
+                        # without growing this mission relative to its neighbors.
+                        active.locator('.neoscorpion-fuel-status').evaluate('el=>{let warning=el.querySelector(".neoscorpion-fuel-status-warning");if(!warning){warning=document.createElement("small");warning.className="neoscorpion-fuel-status-warning";el.append(warning);}warning.textContent="Confirm fuel direction before completion";}')
+                        self.assertEqual(active.locator('.neoscorpion-fuel-status-warning').evaluate('el=>getComputedStyle(el).whiteSpace'),'normal')
+                        self.assertTrue(active.locator('.neoscorpion-fuel-status-warning').evaluate('el=>el.scrollWidth<=el.clientWidth+1'))
+                        self.assertEqual(rows.evaluate_all('els=>els.map(el=>Math.round(el.getBoundingClientRect().height))'),[height]*4)
+                        self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                        self.assertEqual(completed.evaluate('el=>getComputedStyle(el).backgroundColor'),'rgb(9, 10, 12)')
+                        self.assertIn('brightness(0.9)',completed.locator('td').first.evaluate('el=>getComputedStyle(el).filter'))
+                        self.assertEqual(active.locator('td').first.evaluate('el=>getComputedStyle(el).filter'),'none')
+                        self.assertEqual(rows.first.evaluate('el=>Array.from(el.children).filter(td=>getComputedStyle(td).display!=="none").length'),5 if width<=760 else 16)
+                        for control in active.locator('button, input:not([type="hidden"]), .neoscorpion-fuel-status-warning').all():
+                            if control.is_visible():
+                                self.assertTrue(control.evaluate('el=>{const r=el.getBoundingClientRect(),cell=el.closest("td").getBoundingClientRect();return r.top>=cell.top-1&&r.bottom<=cell.bottom+1&&r.left>=cell.left-1&&r.right<=cell.right+1;}'))
+                        self.assertLess(page.locator('[data-cycle-history]').first.bounding_box()['height'],height)
+                        page.locator('[data-dispatch-sort-mode="etd"]').click()
+                        self.assertEqual(order(),[ids[2],ids[1],ids[0],ids[3]])
+                        self.assertEqual(completed.evaluate('el=>getComputedStyle(el).backgroundColor'),'rgb(9, 10, 12)')
+                        page.locator('[data-dispatch-sort-mode="arrival"]').click()
+                        if width>760:
+                            completed.hover()
+                            self.assertEqual(completed.evaluate('el=>getComputedStyle(el).backgroundColor'),'rgb(17, 18, 22)')
+                            page.mouse.move(0,0)
+                        page.locator('.neoscorpion-table-wrap--sticky').screenshot(path=str(Fixture.evidence/f'dispatch-row-visual-{width}.png'))
+                    with Fixture.app.app_context():
+                        old=db.session.get(NeoScorpionFuelAssignment,assignments[3])
+                        old.completed_at_utc=None; old.review_status="pending"
+                        db.session.get(SortDateMission,ids[3]).fuel_status="waiting"
+                        new=db.session.get(NeoScorpionFuelAssignment,assignments[2])
+                        new.completed_at_utc=at; new.review_status="complete"
+                        db.session.get(SortDateMission,ids[2]).fuel_status="complete"
+                        NeoScorpionSortAssetState.query.filter_by(sort_date_operation_id=operation_id).one().revision+=1
+                        db.session.commit()
+                    expect(rows.last).to_have_attribute('data-dispatch-mission-id',str(ids[2]),timeout=15000)
+                    expect(completed).not_to_have_class(__import__('re').compile('is-complete'))
+                    self.assertEqual(completed.locator('td').first.evaluate('el=>getComputedStyle(el).filter'),'none')
+                    self.assertEqual(rows.last.evaluate('el=>getComputedStyle(el).backgroundColor'),'rgb(9, 10, 12)')
+                    self.assertEqual(rows.evaluate_all('els=>els.map(el=>Math.round(el.getBoundingClientRect().height))'),[104]*4)
+                    self.assertFalse(errors,errors)
+                    return
                 sort_etd=page.locator('[data-dispatch-sort-mode="etd"]')
                 sort_arrival=page.locator('[data-dispatch-sort-mode="arrival"]')
                 if dense:
