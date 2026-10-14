@@ -1,0 +1,33 @@
+{% if operation and can_edit %}
+<details class="neorain-mission-tools">
+  <summary>FLIGHT / TAIL TOOLS</summary>
+  <a class="neorain-add-flight" href="{{ url_for('neorain.mission_new', board='inbound' if request.endpoint == 'neorain.inbound' else 'outbound') }}">{{ 'ADD ARRIVAL' if request.endpoint == 'neorain.inbound' else 'ADD DEPARTURE' }}</a>
+  {% for mission in operation.missions if mission.mission_source == 'manual' and not mission.master_flight_schedule_id and mission.mission_type == ('arrival' if request.endpoint == 'neorain.inbound' else 'departure') %}
+  <a class="neorain-add-flight" href="{{ url_for('neorain.mission_edit', board='inbound' if mission.mission_type == 'arrival' else 'outbound', mission_id=mission.id) }}">EDIT {{ mission.flight_number }}</a>
+  {% endfor %}
+  {% if request.endpoint == 'neorain.outbound' %}
+  <form method="post" action="{{ url_for('neorain.tail_action') }}">
+    <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="action" value="add_spare">
+    <label>Spare tail <input name="tail_number" required maxlength="32"></label>
+    <label>Aircraft <select name="aircraft_type"><option>757</option><option>767</option><option>A300</option><option>Other</option></select></label>
+    <label>Parking <input name="parking_position" maxlength="8"></label><button>ADD SPARE</button>
+  </form>
+  {% for item in rain_tail_tools(operation) %}
+  <form method="post" action="{{ url_for('neorain.tail_action') }}">
+    <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="tail_number" value="{{ item.tail.tail_number }}"><input type="hidden" name="expected_version" value="{{ item.version }}">
+    <strong>{{ item.tail.tail_number }} · {{ item.tail.operational_status|upper }}</strong>
+    <button name="action" value="{{ 'clear_hot' if item.tail.operational_status == 'hot' else 'hot' }}">{{ 'CLEAR HOT' if item.tail.operational_status == 'hot' else 'MARK HOT' }}</button>
+    <button name="action" value="{{ 'clear_spare' if item.tail.operational_status == 'spare' else 'spare' }}">{{ 'CLEAR SPARE' if item.tail.operational_status == 'spare' else 'MARK SPARE' }}</button>
+  </form>
+  {% endfor %}{% endif %}
+</details>
+<style>
+.neorain-mission-tools {padding:8px 0; font-size:.75rem;}
+.neorain-mission-tools summary {cursor:pointer; color:var(--node-highlight); margin-bottom:8px;}
+.neorain-mission-tools form {display:flex; flex-wrap:wrap; align-items:end; gap:6px; margin:8px 0;}
+.neorain-mission-tools label {display:grid; min-width:0;}
+.neorain-mission-tools input,.neorain-mission-tools select,.neorain-mission-tools button {max-width:100%; min-height:32px; background:#101722; color:#fff; border:1px solid rgba(var(--node-rgb),.45); padding:5px; font:inherit;}
+.neorain-mission-tools input {width:130px;}
+.neorain-mission-tools a {display:inline-block; margin:3px;}
+</style>
+{% endif %}

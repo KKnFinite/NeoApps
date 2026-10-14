@@ -463,6 +463,10 @@ DEFAULT_PERMISSION_RULES = (
         "watcher",
         "View NeoRain nightly Rainrock recap.",
     ),
+    ('neorain.inbound.sta.edit', 'operator', 'Edit current-sort arrival STA overrides.'),
+    ('neorain.inbound.block_in.edit', 'operator', 'Correct current-sort actual Block-In.'),
+    ('neorain.outbound.etd.edit', 'operator', 'Edit current-sort estimated departure without changing STD.'),
+    ('neorain.outbound.milestones.edit', 'operator', 'Edit current-sort outbound operational overrides.'),
     (
         "neorain.rainrock.edit",
         "operator",

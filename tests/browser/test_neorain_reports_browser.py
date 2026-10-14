@@ -41,7 +41,7 @@ class NeoRainReportBrowserTest(TestCase):
                     sort_date_operation_id=operation.id, sort_date=operation.sort_date,
                     gateway_code="RFD", sort_name="Night", mission_type="departure",
                     mission_source="master", wave="1", flight_number="UPS07831",
-                    origin="RFD", destination="SDF", timezone="UTC",
+                    origin="RFD", destination="SDF", timezone="America/Chicago",
                     planned_datetime_utc=datetime(2026, 10, 11, 1, 0),
                     actual_block_out_datetime_utc=datetime(2026, 10, 11, 1, 11),
                     departure_status="departed", assigned_tail_number="N7831UP",
@@ -57,7 +57,7 @@ class NeoRainReportBrowserTest(TestCase):
                 arrival = SortDateMission(sort_date_operation_id=operation.id,
                     sort_date=operation.sort_date, gateway_code="RFD", sort_name="Night",
                     mission_type="arrival", mission_source="manual", wave="1",
-                    flight_number="UPS1487", origin="SDF", destination="RFD", timezone="UTC",
+                    flight_number="UPS1487", origin="SDF", destination="RFD", timezone="America/Chicago",
                     planned_datetime_utc=datetime(2026,10,11,1),
                     actual_block_in_datetime_utc=datetime(2026,10,11,0,50),
                     arrival_status="arrived", late_metrics_included_override=False)
@@ -68,11 +68,11 @@ class NeoRainReportBrowserTest(TestCase):
                 user = User(username="rain_browser", email="rain_browser@example.test",
                             first_name="Rain", last_name="Browser", full_name="Rain Browser",
                             employee_id="RAIN-BROWSER", email_verified_at=datetime.utcnow(),
-                            role="operator", is_active=True)
+                            role="simulator", is_active=True)
                 set_user_password(user, "TestPassword123!")
                 db.session.add(user)
                 db.session.flush()
-                backfill_default_gateway_node_roles(user, role="operator")
+                backfill_default_gateway_node_roles(user, role="simulator")
                 db.session.commit()
                 operation_id = operation.id
             server = make_server("127.0.0.1", 0, app, threaded=True)
@@ -121,9 +121,32 @@ class NeoRainReportBrowserTest(TestCase):
                                        side_effect=lambda gateway: db.session.get(SortDateOperation, operation_id)), \
                                  patch('app.neonodes.neorain.routes.current_neorain_outbound_operation',
                                        side_effect=lambda gateway: db.session.get(SortDateOperation, operation_id)), \
+                                 patch('app.neonodes.neorain.mission_routes.current_neorain_outbound_operation',
+                                       side_effect=lambda gateway: db.session.get(SortDateOperation, operation_id)), \
                                  patch('app.neonodes.neorain.routes.neorain_inbound_refresh_status',
                                        return_value={'auto_refresh_enabled': True, 'live_screen_refresh_interval_ms': 5000}):
                                 page.goto(base + '/neorain/inbound')
+                                errors=[]
+                                page.on('pageerror', lambda error: errors.append(str(error)))
+                                sta=page.locator('[data-rain-override-field="sta"]:visible').first
+                                sta.locator('[data-rain-override-open]').click()
+                                clock=sta.locator('[data-rain-override-time]')
+                                for raw,display in (('0000','00:00'),('0235','02:35'),('2359','23:59')):
+                                    with page.expect_response(lambda response: '/neorain/override' in response.url and response.request.method=='POST') as result:
+                                        clock.fill(raw)
+                                    self.assertEqual(result.value.status,200,result.value.text())
+                                    expect(sta.locator('[data-rain-override-readout]')).to_have_text('STA '+display)
+                                    expect(sta.locator('[data-rain-override-message]')).to_contain_text('SAVED')
+                                clock.fill('2460')
+                                expect(sta.locator('[data-rain-override-message]')).to_have_text('Invalid time.')
+                                expect(sta.locator('[data-rain-override-readout]')).to_have_text('STA 23:59')
+                                clock.fill('023')
+                                expect(sta).to_have_attribute('data-rain-override-dirty','true')
+                                with page.expect_response(lambda response: '/neorain/override' in response.url and response.request.method=='POST') as result:
+                                    sta.locator('[data-rain-override-reset]').click()
+                                self.assertEqual(result.value.status,200)
+                                expect(sta.locator('[data-rain-override-source]')).to_have_text('UPSTREAM')
+                                self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
                                 crew = page.locator('[data-neorain-crew-collapse]')
                                 self.assertFalse(crew.evaluate('el => el.open'))
                                 crew.locator('summary').click()
@@ -152,6 +175,37 @@ class NeoRainReportBrowserTest(TestCase):
                                 expect(page.locator('[data-neorain-inbound-live]')).to_have_attribute(
                                     'data-neorain-refresh-deferred', 'true', timeout=15000)
                                 self.assertEqual(printer.input_value(), 'UNSAVED-PRINTER')
+                                self.assertEqual(errors,[])
+                                page.unroute('**/neorain/inbound/revision?*')
+                                page.goto(base+'/neorain/outbound')
+                                self.assertEqual(errors,[],f'Width {width}: {errors}')
+                                if page.locator('[data-neorain-mobile-board="outbound"]').is_visible():
+                                    page.locator('[data-neorain-mobile-row-open]').first.click()
+                                etd=page.locator('[data-rain-override-field="etd"]:visible').first
+                                self.assertGreater(page.locator('[data-rain-override-field="etd"]:visible').count(),0,f'Width {width}, errors {errors}, details '+str(page.locator('[data-neorain-mobile-inline-detail]').evaluate_all('els=>els.map(e=>({hidden:e.hidden,text:e.textContent}))')))
+                                self.assertEqual(etd.locator('[data-rain-override-open]').count(),1,etd.inner_text())
+                                etd.locator('[data-rain-override-open]').click()
+                                with page.expect_response(lambda response:'/neorain/override' in response.url and response.request.method=='POST') as result:
+                                    etd.locator('[data-rain-override-time]').fill('0235')
+                                self.assertEqual(result.value.status,200,result.value.text())
+                                expect(etd.locator('[data-rain-override-readout]')).to_have_text('ETD 02:35')
+                                expect(etd.locator('[data-rain-override-source]')).to_contain_text('NEO_ONLY')
+                                self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                                self.assertEqual(errors,[])
+                                page.goto(base+'/neorain/inbound/missions/new')
+                                self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                                page.locator('[name="flight_number"]').fill('UPS900'+str(width))
+                                page.locator('[name="origin"]').fill('SDF')
+                                page.locator('[name="assigned_tail_number"]').fill('N438UP')
+                                page.locator('[name="planned_time_local_hour"]').fill('02')
+                                page.locator('[name="planned_time_local_minute"]').fill('35')
+                                page.locator('form.operation-form button[type="submit"]').last.click()
+                                expect(page).to_have_url(base+'/neorain/inbound')
+                                expect(page.locator('[data-neorain-inbound-row]').filter(has_text='UPS900'+str(width)).first).to_be_attached()
+                                if width in (1920,390):
+                                    page.evaluate('document.fonts.ready')
+                                    page.wait_for_timeout(350)
+                                    page.screenshot(path=f'instance/neorain-{width}-validation.png',full_page=True)
                             context.close()
                     finally:
                         browser.close()

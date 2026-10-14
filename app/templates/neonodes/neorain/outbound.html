@@ -21,10 +21,11 @@
             <h1 id="neorain-outbound-title">OUTBOUND</h1>
         </div>
         <strong>{% if operation %}{{ gateway.code }} · {{ operation.sort_name|upper }} · {{ operation.sort_date.strftime('%m/%d/%y') }}{% else %}NO CURRENT SORT{% endif %}</strong>
-        {% if operation and can_edit %}<a class="neorain-add-flight" href="{{ url_for('neomotherbrain.new_mission', operation_id=operation.id, mission_type='departure', return_to='neorain.outbound') }}">ADD FLIGHT</a>{% endif %}
+        {% if operation and can_edit %}<a class="neorain-add-flight" href="{{ url_for('neorain.mission_new', board='outbound') }}">ADD DEPARTURE</a>{% endif %}
         <button type="button" class="neorain-board-collapse" data-neorain-board-collapse aria-expanded="true" aria-controls="neorain-board-support">HIDE TOP</button>
     </header>
     <div id="neorain-board-support" class="neorain-board-support" data-neorain-board-support>
+    {% include 'neonodes/neorain/_mission_tools.html' %}
     <section class="neorain-outbound-late-summary" aria-label="Outbound aircraft statistics" data-neorain-late-summary>
         <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
         <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
@@ -37,6 +38,7 @@
 </section>
 {% include "neonodes/neorain/_delay_panel_shared.html" %}
 {% include "neonodes/neorain/_board_layout_shared.html" %}
+{% include "neonodes/neorain/_override_assets.html" %}
 {% if can_edit_service_fields %}
 <script defer src="{{ url_for('static', filename='js/neorain_outbound_service_fields.js', v=config.STATIC_ASSET_VERSION, ui='20261008-service-fields-v1') }}"></script>
 {% endif %}
@@ -54,7 +56,7 @@
         });
     };
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-service-field][data-neorain-service-dirty='true'], [data-neorain-service-field][data-neorain-service-saving='true']"
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-service-field][data-neorain-service-dirty='true'], [data-neorain-service-field][data-neorain-service-saving='true'], [data-rain-override-dirty='true']"
     ));
     root.addEventListener("neorain:revision", (event) => {
         const nextRevision = event.detail?.revision;

@@ -10,6 +10,8 @@
     </div>
 
     <form class="operation-form" method="post">
+        {% if neorain_form %}<input type="hidden" name="operation_id" value="{{ operation.id }}">
+        <label><span>Parking (optional)</span><input name="parking_position" maxlength="8" placeholder="Leave unchanged"></label>{% endif %}
         {% if return_endpoint %}
         <input type="hidden" name="return_to" value="{{ return_endpoint }}">
         {% endif %}

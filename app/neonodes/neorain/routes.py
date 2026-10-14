@@ -51,10 +51,6 @@ from app.services.google_rain_integration_mode import (
     NEO_PRIMARY_GOOGLE_MIRROR,
     rain_integration_mode,
 )
-from app.services.google_rain_sheets import (
-    GoogleRainWriterError,
-    write_google_rain_departure_milestone,
-)
 from app.services.neorain_outbound_service_fields import (
     NeoRainOutboundServiceFieldError,
     apply_outbound_service_value,
@@ -121,7 +117,19 @@ NEORAIN_PAGES = (
 
 @bp.context_processor
 def inject_neorain_navigation():
-    return {"neorain_menu_items": _visible_neorain_menu_items}
+    from app.neonodes.neorain.mission_routes import tail_tools_context
+    from app.neonodes.neorain.override_routes import can_edit_field
+    from app.models import NeoRainMissionOverride
+    cache = {}
+    def state(mission_id, field):
+        if 'rows' not in cache:
+            operation = current_neorain_outbound_operation(get_current_gateway())
+            cache['rows'] = {(row.sort_date_mission_id,row.field):row for row in
+                NeoRainMissionOverride.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
+        row = cache['rows'].get((mission_id,field))
+        return {'label': 'NEO · '+row.sync_status if row and row.active else 'UPSTREAM', 'detail':row.sync_detail or '' if row else ''}
+    return {"neorain_menu_items": _visible_neorain_menu_items, "rain_tail_tools": tail_tools_context,
+            'can_edit_override_field':can_edit_field, 'rain_override_state':state}
 
 
 @bp.route("")
@@ -392,86 +400,8 @@ def inbound_late_inclusion():
 @bp.route("/inbound/block-in", methods=["POST"])
 @gateway_node_required("rain")
 def inbound_block_in():
-    """Save one current-sort arrival Block-In for the mobile compact board."""
-    page = _neorain_page("neorain.inbound")
-    access = permission_access(page[2], page[3])
-    if not access["can_edit"]:
-        return _json_error("access_denied", "Edit access denied.", 403)
-    payload = request.get_json(silent=True)
-    expected_keys = {"mission_id", "value", "expected_version"}
-    if not isinstance(payload, dict) or set(payload) != expected_keys:
-        return _json_error(
-            "invalid_request",
-            "Provide only mission_id, value, and expected_version.",
-            400,
-        )
-    mission_id = _positive_integer(payload.get("mission_id"))
-    expected_version = str(payload.get("expected_version") or "").strip()
-    if mission_id is None or not expected_version:
-        return _json_error(
-            "invalid_request", "Provide a valid current arrival mission version.", 400
-        )
-    gateway = get_current_gateway()
-    operation = current_neorain_outbound_operation(gateway)
-    if operation is None or operation.gateway_id != gateway.id:
-        return _json_error("no_current_sort", "No current sort.", 409)
-    mission = (
-        SortDateMission.query.filter_by(
-            id=mission_id,
-            sort_date_operation_id=operation.id,
-            gateway_code=gateway.code,
-            mission_type="arrival",
-        )
-        .populate_existing()
-        .with_for_update()
-        .one_or_none()
-    )
-    if mission is None:
-        return _json_error(
-            "mission_not_found", "Arrival mission is not in the current sort.", 404
-        )
-    conflict = version_conflict(mission, expected_version)
-    if conflict:
-        row = neorain_inbound_row(mission, operation)
-        db.session.rollback()
-        return jsonify(
-            {
-                "ok": False,
-                "code": "stale_version",
-                "error": conflict["message"],
-                "row": row,
-            }
-        ), 409
-    try:
-        result = mutate_neorain_arrival_block_in(mission, operation, payload["value"])
-    except NeoRainMilestoneError as exc:
-        db.session.rollback()
-        status = 409 if "owned by" in str(exc).lower() else 400
-        return _json_error(
-            "ownership_conflict" if status == 409 else "invalid_block_in",
-            str(exc),
-            status,
-        )
-    try:
-        if result["changed"]:
-            db.session.commit()
-        else:
-            db.session.rollback()
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception(
-            "NeoRain Block-In save failed safely: mission_id=%s", mission_id
-        )
-        return _json_error("save_failed", "NeoRain could not save Block-In.", 500)
-    return jsonify(
-        {
-            "ok": True,
-            "changed": result["changed"],
-            "row": neorain_inbound_row(mission, operation),
-            "late_summary": neorain_inbound_late_summary(operation),
-            "revision": neorain_inbound_revision(gateway, operation=operation),
-        }
-    )
+    from app.neonodes.neorain.override_routes import handle_override
+    return handle_override(default_field='block_in')
 
 
 @bp.route("/outbound")
@@ -653,173 +583,8 @@ def outbound_service_field():
 @bp.route("/outbound/milestone", methods=["POST"])
 @gateway_node_required("rain")
 def outbound_milestone():
-    """Mutate one current-sort Rain milestone under the configured authority mode."""
-    page = _neorain_page("neorain.outbound")
-    access = permission_access(page[2], page[3])
-    if not access["can_edit"]:
-        return _json_error("access_denied", "Edit access denied.", 403)
-
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return _json_error("invalid_request", "A JSON milestone request is required.", 400)
-    expected_keys = {"mission_id", "field", "value", "expected_version"}
-    unexpected_keys = set(payload) - expected_keys
-    if unexpected_keys or not expected_keys.issubset(payload):
-        return _json_error(
-            "invalid_request",
-            "Provide only mission_id, field, value, and expected_version.",
-            400,
-        )
-    expected_version = str(payload.get("expected_version") or "").strip()
-    if not expected_version:
-        return _json_error(
-            "invalid_request",
-            "Provide the current mission version.",
-            400,
-        )
-
-    field = str(payload.get("field") or "").strip().lower()
-    if field not in NEORAIN_MUTABLE_MILESTONE_FIELDS:
-        return _json_error(
-            "unsupported_field",
-            "Choose a valid NeoRain milestone.",
-            400,
-        )
-    mission_id = _positive_integer(payload.get("mission_id"))
-    if mission_id is None:
-        return _json_error("invalid_mission", "Choose a valid departure mission.", 400)
-
-    gateway = get_current_gateway()
-    operation = current_neorain_outbound_operation(gateway)
-    if operation is None or operation.gateway_id != gateway.id:
-        return _json_error("no_current_sort", "No current sort.", 409)
-
-    mission_query = SortDateMission.query.filter_by(
-        id=mission_id,
-        sort_date_operation_id=operation.id,
-        gateway_code=gateway.code,
-        mission_type="departure",
-    )
-    mode = rain_integration_mode(gateway, operation.sort_name)
-    if mode != GOOGLE_PRIMARY:
-        mission_query = mission_query.populate_existing().with_for_update()
-    mission = mission_query.one_or_none()
-    if mission is None:
-        return _json_error(
-            "mission_not_found",
-            "Departure mission is not in the current sort.",
-            404,
-        )
-
-    if mode == GOOGLE_PRIMARY:
-        return _json_error(
-            "google_primary",
-            "Google Rain is authoritative for outbound milestones.",
-            409,
-        )
-
-    conflict = version_conflict(mission, expected_version)
-    if conflict:
-        row = neorain_outbound_row(mission, operation)
-        db.session.rollback()
-        return jsonify(
-            {
-                "ok": False,
-                "code": "stale_version",
-                "error": conflict["message"],
-                "row": row,
-            }
-        ), 409
-
-    previous_value = neorain_departure_milestone_value(mission, field)
-    try:
-        mutation = mutate_neorain_departure_milestone(
-            mission,
-            operation,
-            field,
-            payload.get("value"),
-        )
-    except NeoRainMilestoneError as exc:
-        db.session.rollback()
-        status_code = 409 if "owned" in str(exc).lower() else 400
-        error_code = "ownership_conflict" if status_code == 409 else "invalid_milestone"
-        return _json_error(error_code, str(exc), status_code)
-
-    if mode == NEO_PRIMARY_GOOGLE_MIRROR:
-        try:
-            write_google_rain_departure_milestone(
-                mission,
-                field,
-                mutation["value"],
-                operation=operation,
-            )
-        except GoogleRainWriterError as exc:
-            db.session.rollback()
-            current_app.logger.warning(
-                "NeoRain Google mirror rejected: mission_id=%s field=%s code=%s",
-                mission_id,
-                field,
-                exc.code,
-            )
-            return _json_error(
-                "google_mirror_failed",
-                "Google Rain could not be updated. Neo was not changed.",
-                502,
-            )
-        except Exception as exc:
-            db.session.rollback()
-            current_app.logger.error(
-                "NeoRain Google mirror failed safely: mission_id=%s field=%s error=%s",
-                mission_id,
-                field,
-                type(exc).__name__,
-            )
-            return _json_error(
-                "google_mirror_failed",
-                "Google Rain could not be updated. Neo was not changed.",
-                502,
-            )
-    elif mode != NEO_ONLY:
-        db.session.rollback()
-        return _json_error("invalid_mode", "NeoRain authority mode is invalid.", 409)
-
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        current_app.logger.exception(
-            "NeoRain milestone commit failed safely: mission_id=%s field=%s error=%s",
-            mission_id,
-            field,
-            type(exc).__name__,
-        )
-        if mode == NEO_PRIMARY_GOOGLE_MIRROR:
-            _restore_google_rain_milestone(
-                mission,
-                operation,
-                field,
-                previous_value,
-            )
-        return _json_error(
-            "save_failed",
-            "NeoRain could not save the milestone.",
-            500,
-        )
-
-    row = neorain_outbound_row(mission, operation)
-    return jsonify(
-        {
-            "ok": True,
-            "mode": mode,
-            "changed": mutation["changed"],
-            "field": field,
-            "source": mutation["source"],
-            "version": entity_version(mission),
-            "row": row,
-            "late_summary": neorain_outbound_late_summary(operation),
-            "revision": neorain_outbound_revision(gateway, operation=operation),
-        }
-    )
+    from app.neonodes.neorain.override_routes import handle_override
+    return handle_override()
 
 
 @bp.route("/outbound/fuel-reviewed", methods=["POST"])
@@ -865,94 +630,8 @@ def outbound_fuel_reviewed():
 @bp.route("/outbound/late-inclusion", methods=["POST"])
 @gateway_node_required("rain")
 def outbound_late_inclusion():
-    """Persist one current-sort departure's Neo-only late-metrics override."""
-    page = _neorain_page("neorain.outbound")
-    access = permission_access(page[2], page[3])
-    if not access["can_edit"]:
-        return _json_error("access_denied", "Edit access denied.", 403)
-
-    payload = request.get_json(silent=True)
-    expected_keys = {"mission_id", "included", "expected_version"}
-    if (
-        not isinstance(payload, dict)
-        or set(payload) != expected_keys
-        or type(payload.get("included")) is not bool
-    ):
-        return _json_error(
-            "invalid_request",
-            "Provide only mission_id, included, and expected_version.",
-            400,
-        )
-    expected_version = str(payload["expected_version"] or "").strip()
-    if not expected_version:
-        return _json_error(
-            "invalid_request", "Provide the current mission version.", 400
-        )
-    mission_id = _positive_integer(payload["mission_id"])
-    if mission_id is None:
-        return _json_error("invalid_mission", "Choose a valid departure mission.", 400)
-
-    gateway = get_current_gateway()
-    operation = current_neorain_outbound_operation(gateway)
-    if operation is None or operation.gateway_id != gateway.id:
-        return _json_error("no_current_sort", "No current sort.", 409)
-    mission = (
-        SortDateMission.query.filter_by(
-            id=mission_id,
-            sort_date_operation_id=operation.id,
-            gateway_code=gateway.code,
-            mission_type="departure",
-        )
-        .populate_existing()
-        .with_for_update()
-        .one_or_none()
-    )
-    if mission is None:
-        return _json_error(
-            "mission_not_found", "Departure mission is not in the current sort.", 404
-        )
-    conflict = version_conflict(mission, expected_version)
-    if conflict:
-        row = neorain_outbound_row(mission, operation)
-        db.session.rollback()
-        return jsonify(
-            {
-                "ok": False,
-                "code": "stale_version",
-                "error": conflict["message"],
-                "row": row,
-            }
-        ), 409
-
-    result = set_neorain_late_metrics_included(mission, payload["included"])
-    if result["changed"]:
-        try:
-            db.session.commit()
-        except Exception as exc:
-            db.session.rollback()
-            current_app.logger.exception(
-                "NeoRain late-inclusion commit failed safely: mission_id=%s error=%s",
-                mission_id,
-                type(exc).__name__,
-            )
-            return _json_error(
-                "save_failed", "NeoRain could not save late-metrics inclusion.", 500
-            )
-    row = neorain_outbound_row(mission, operation)
-    if not result["changed"]:
-        db.session.rollback()
-    return jsonify(
-        {
-            "ok": True,
-            "changed": result["changed"],
-            "late_metrics_included": result["included"],
-            "late_metrics_inclusion_source": result["source"],
-            "version": entity_version(mission),
-            "row": row,
-            "late_summary": neorain_outbound_late_summary(operation),
-            "revision": neorain_outbound_revision(gateway, operation=operation),
-        }
-    )
+    from app.neonodes.neorain.override_routes import handle_override
+    return handle_override(default_field='included')
 
 
 @bp.route("/load-planner-lineup", methods=["GET", "POST"])
@@ -1303,23 +982,6 @@ def _render_neorain_page(endpoint):
         can_view=access["can_view"],
         page_label=page[0],
     )
-
-
-def _restore_google_rain_milestone(mission, operation, field, previous_value):
-    try:
-        write_google_rain_departure_milestone(
-            mission,
-            field,
-            previous_value,
-            operation=operation,
-        )
-    except Exception as exc:
-        current_app.logger.error(
-            "NeoRain Google compensation failed: mission_id=%s field=%s error=%s",
-            mission.id,
-            field,
-            type(exc).__name__,
-        )
 
 
 def _positive_integer(value):

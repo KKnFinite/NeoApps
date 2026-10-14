@@ -1,0 +1,23 @@
+{% macro rain_time(row, field, label, value) -%}
+{% set state = rain_override_state(row.mission_id, field) %}
+<div class="rain-override" data-rain-override-mission="{{ row.mission_id }}" data-rain-override-field="{{ field }}" data-rain-override-version="{{ row.version }}">
+  <span data-rain-override-readout>{{ label }} {{ value or '-' }}</span>
+  {% if can_edit_override_field(field) and row.status != 'CANCELLED' %}
+  <button type="button" data-rain-override-open aria-label="Edit {{ label }} for {{ row.flight_number }}">✎</button>
+  <div data-rain-override-editor hidden>
+    <input type="text" inputmode="numeric" maxlength="4" placeholder="HHMM" aria-label="{{ label }} override for {{ row.flight_number }}" value="{{ (value or '')|replace(':','') }}" data-rain-override-time>
+    <button type="button" data-rain-override-reset>Reset to Google{{ ' / Master' if field == 'sta' else '' }}</button>
+  </div>{% endif %}
+  <small data-rain-override-source title="{{ state.detail }}">{{ state.label }}</small>
+  <output data-rain-override-message role="status" aria-live="polite"></output>
+</div>
+{%- endmacro %}
+{% macro rain_checkbox(row, field, label, value) -%}
+{% set state = rain_override_state(row.mission_id, field) %}
+<div class="rain-override" data-rain-override-mission="{{ row.mission_id }}" data-rain-override-field="{{ field }}" data-rain-override-version="{{ row.version }}">
+  <label><input type="checkbox" data-rain-override-checkbox data-saved="{{ 'true' if value else 'false' }}" {% if value %}checked{% endif %} {% if not can_edit_override_field(field) or row.status == 'CANCELLED' %}disabled{% endif %}>{{ label }}</label>
+  {% if can_edit_override_field(field) %}<button type="button" data-rain-override-reset aria-label="Reset {{ label }} to Google">Use Google</button>{% endif %}
+  <small data-rain-override-source title="{{ state.detail }}">{{ state.label }}</small>
+  <output data-rain-override-message role="status" aria-live="polite"></output>
+</div>
+{%- endmacro %}

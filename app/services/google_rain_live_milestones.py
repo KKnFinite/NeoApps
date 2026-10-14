@@ -168,6 +168,7 @@ def _fuel_only_result(row, mission):
 
 
 def _apply_row(operation, mission, row, *, authority_handoff=None):
+    from app.services.neorain_overrides import observe_import
     changed_fields = []
     warnings = []
     replace_neorain_owned = authority_handoff == NEO_TO_GOOGLE_AUTHORITY_HANDOFF
@@ -188,6 +189,10 @@ def _apply_row(operation, mission, row, *, authority_handoff=None):
             continue
 
         previous_timestamp = getattr(mission, timestamp_attr)
+        override_field = {'block':'official_block_out'}.get(row_key, row_key)
+        if observe_import(mission, override_field, {timestamp_attr:timestamp_utc, source_attr:GOOGLE_RAIN_SOURCE}):
+            warnings.append(f'Explicit Neo {override_field} override preserved.')
+            continue
         previous_source = _normalized_source(getattr(mission, source_attr))
         ownership = _apply_owned_timestamp(
             mission,
@@ -219,7 +224,15 @@ def _apply_row(operation, mission, row, *, authority_handoff=None):
             if _advance_departure_status(mission, target_status):
                 changed_fields.append("departure_status")
 
-    if row["no_return"] is not _MISSING:
+    if row.get('removed', _MISSING) is not _MISSING:
+        excluded = _google_checkbox_state(row['removed'])
+        if excluded is not None and not observe_import(mission, 'included', {'late_metrics_included_override':not excluded}):
+            mission.late_metrics_included_override = not excluded
+    imported_no_return = _google_checkbox_state(row['no_return']) if row['no_return'] is not _MISSING else None
+    protected_no_return = imported_no_return is not None and observe_import(mission, 'no_return', {
+            'departure_status':'departed' if imported_no_return else ('blocked_out' if mission.actual_block_out_datetime_utc else 'scheduled'),
+            'departure_status_source':GOOGLE_RAIN_SOURCE})
+    if row["no_return"] is not _MISSING and not protected_no_return:
         no_return = _google_checkbox_state(row["no_return"])
         if no_return is None:
             if authority_handoff is not None:
@@ -288,6 +301,16 @@ def _apply_owned_timestamp(
 ):
     current_timestamp = getattr(mission, timestamp_attr)
     current_source = _normalized_source(getattr(mission, source_attr))
+    # Explicit Neo presence was checked in _apply_row. Imported/displayed values
+    # alone do not acquire permanent Neo authority over this Rain field.
+    from app.services.neorain_overrides import FIELDS
+    covered = any(timestamp_attr == attrs[0] for direction, attrs in FIELDS.values() if direction == 'departure')
+    if covered:
+        if current_timestamp != incoming_utc or current_source != GOOGLE_RAIN_SOURCE:
+            setattr(mission, timestamp_attr, incoming_utc)
+            setattr(mission, source_attr, GOOGLE_RAIN_SOURCE if incoming_utc is not None else 'unknown')
+            return 'changed'
+        return 'unchanged'
     rain_owned = _rain_handoff_owned_source(
         current_source,
         include_neorain=replace_neorain_owned,
@@ -461,6 +484,7 @@ def _normalize_row(supplied_row):
             supplied_row, "crew_load_complete", "c_lc", "C-LC", "N"
         ),
         "block": _first_supplied(supplied_row, "block", "BLOCK", "O"),
+        "removed": _first_supplied(supplied_row, "removed", "REM", "Q"),
         "no_return": _first_supplied(
             supplied_row,
             "no_return",

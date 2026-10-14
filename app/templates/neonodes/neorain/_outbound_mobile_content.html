@@ -1,23 +1,8 @@
+{% from "neonodes/neorain/_override_controls.html" import rain_time, rain_checkbox with context %}
 {% if operation and rows %}
-{% macro milestone_control(row, field, label) -%}
-<div class="neorain-mobile-time" data-neorain-mobile-time>
-    {% if can_edit_timestamp_milestones %}
-    <button type="button" class="neorain-mobile-time-display" data-neorain-mobile-time-open {% if row.no_return or row.status == 'CANCELLED' %}disabled{% endif %}><span data-neorain-display="{{ field }}">{{ row[field] or '-' }}</span></button>
-    <div class="neorain-mobile-time-editor" data-neorain-mobile-time-editor hidden><input type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" aria-label="{{ label }} for {{ row.flight_number }}" data-neorain-hhmm data-neorain-mobile-hhmm data-neorain-field="{{ field }}" data-neorain-saved-value="{{ row[field] }}" value="{{ row[field] }}"><output data-neorain-milestone-message aria-live="polite" hidden></output></div>
-    {% else %}<span data-neorain-display="{{ field }}">{{ row[field] or '-' }}</span>{% endif %}
-</div>
-{%- endmacro %}
+{% macro milestone_control(row, field, label) -%}{{ rain_time(row, field, label, row[field]) }}{%- endmacro %}
 
-{% macro inclusion_control(row) -%}
-<div class="neorain-mobile-inclusion" data-neorain-late-inclusion-cell>
-    {% if can_edit %}
-    <button type="button" class="neorain-late-inclusion-control" data-neorain-late-inclusion-toggle data-neorain-included="{{ 'true' if row.late_metrics_included else 'false' }}" {% if row.no_return or row.status == 'CANCELLED' %}disabled{% endif %}>{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</button>
-    <output class="neorain-late-inclusion-message" data-neorain-late-inclusion-message aria-live="polite" hidden></output>
-    {% else %}
-    <span data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</span>
-    {% endif %}
-</div>
-{%- endmacro %}
+{% macro inclusion_control(row) -%}{{ rain_checkbox(row, 'included', 'Include', row.late_metrics_included) }}{%- endmacro %}
 
 {% macro delay_info_mobile(row) -%}
 <details class="neorain-mobile-detail-delay" data-neorain-mobile-delay>
@@ -110,7 +95,7 @@
                     <div><dt>TAIL</dt><dd>{{ row.tail or '-' }}</dd></div>
                     <div><dt>DESTINATION</dt><dd>{{ row.destination or '-' }}</dd></div>
                     <div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
-                    <div><dt>STD/ETD</dt><dd>{{ row.planned_time or '-' }}</dd></div>
+                    <div><dt>STD</dt><dd>{{ row.planned_time or '-' }}{{ rain_time(row, 'etd', 'ETD', row.etd) }}</dd></div>
                     <div><dt>LOAD PLANNER</dt><dd>{{ row.load_planner or 'UNASSIGNED' }}</dd></div>
                     <div><dt>MEAL</dt><dd class="neorain-mobile-service-field">
                         {% if can_edit_service_fields %}
@@ -132,13 +117,13 @@
                     </dd></div>
                     <div><dt>NEO FUEL</dt><dd>{{ row.neo_fuel_display or '-' }}</dd></div>
                     <div><dt>CENTER FUEL</dt><dd>{{ row.center_fuel_display or '-' }}{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% if can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}{% endif %}</dd></div>
-                    <div><dt>eLMAC</dt><dd>{{ row.elmac or '-' }}</dd></div>
+                <div><dt>eLMAC</dt><dd>{{ rain_time(row, 'elmac', 'eLMAC', row.elmac) }}</dd></div>
                     <div><dt>RAMP LC</dt><dd data-neorain-display="ramp_load_complete">{{ row.ramp_load_complete or '-' }}</dd></div>
                     <div><dt>CREW LC</dt><dd data-neorain-display="crew_load_complete">{{ row.crew_load_complete or '-' }}</dd></div>
                     <div><dt>BLOCK-OUT</dt><dd data-neorain-display="official_block_out">{{ row.official_block_out or '-' }}</dd></div>
                     <div><dt>+/-</dt><dd data-neorain-display="departure_variance">{{ row.departure_variance }}</dd></div>
                     <div><dt>INCLUSION</dt><dd data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</dd></div>
-                    <div><dt>NO RETURN</dt><dd><span data-neorain-display="no_return">{{ row.no_return or '-' }}</span>{% if can_edit_timestamp_milestones %}<div class="neorain-no-return-editor" data-neorain-no-return-editor><button type="button" class="neorain-no-return-control" data-neorain-no-return-action="set" {% if row.no_return or row.status == 'CANCELLED' %}hidden{% endif %}>SET NO RETURN</button><button type="button" class="neorain-no-return-control" data-neorain-no-return-action="reverse" {% if not row.no_return or row.status == 'CANCELLED' %}hidden{% endif %} {% if row.no_return %}disabled{% endif %}>REVERSE</button><button type="button" class="neorain-no-return-control" data-neorain-no-return-edit {% if not row.no_return and row.status != 'CANCELLED' %}hidden{% endif %}>EDIT</button><output data-neorain-no-return-message aria-live="polite" hidden></output></div>{% endif %}</dd></div>
+                <div><dt>No Return</dt><dd>{{ rain_checkbox(row, 'no_return', 'No Return', row.no_return) }}</dd></div>
                 </dl>
                 {{ delay_info_mobile(row) }}
             </div>

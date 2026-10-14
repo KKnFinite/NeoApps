@@ -5525,12 +5525,15 @@ def _render_mission_form(operation, form, mode, mission=None, conflict=None):
         ),
         original_values=original_values,
         return_endpoint=return_endpoint,
+        neorain_form=request.endpoint in ('neorain.mission_new', 'neorain.mission_edit'),
     )
 
 
 def _new_mission_return_endpoint(operation, mission_type):
     """Allow the canonical mission form to return to its Rain board safely."""
     endpoint = request.values.get("return_to", "")
+    if request.endpoint in ('neorain.mission_new', 'neorain.mission_edit'):
+        return 'neorain.inbound' if mission_type == 'arrival' else 'neorain.outbound'
     expected = {
         "arrival": "neorain.inbound",
         "departure": "neorain.outbound",
@@ -5724,21 +5727,8 @@ def _raise_for_duplicate_operation_flight_number(
     mission,
     scope_to_mission_type=False,
 ):
-    with db.session.no_autoflush:
-        duplicate_query = SortDateMission.query.filter(
-            SortDateMission.sort_date_operation_id == operation.id,
-            func.upper(SortDateMission.flight_number) == mission.flight_number.upper(),
-        )
-        if scope_to_mission_type:
-            duplicate_query = duplicate_query.filter(
-                SortDateMission.mission_type == mission.mission_type
-            )
-
-        if mission.id:
-            duplicate_query = duplicate_query.filter(SortDateMission.id != mission.id)
-
-        if duplicate_query.first():
-            raise ValueError("A mission with this flight number already exists in this operation.")
+    from app.services.mission_identity import reject_duplicate_flight
+    reject_duplicate_flight(operation, mission)
 
 
 def _sync_tail_state_and_crew_slots(

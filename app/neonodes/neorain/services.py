@@ -839,6 +839,8 @@ def _inbound_row(mission, parking_by_tail, departures_by_tail=None, ground_time_
         "origin": _text(mission.origin),
         "parking": parking_by_tail.get(_tail_key(mission.assigned_tail_number), ""),
         "eta_sta": format_local_hhmm(effective, mission.timezone or None),
+        "sta": format_local_hhmm(mission.planned_datetime_utc, mission.timezone or None),
+        "eta": format_local_hhmm(mission.eta_datetime_utc, mission.timezone or None),
         "status": _normalized_status(mission.arrival_status or "scheduled").replace("_", " ").upper(),
         "block_in": format_local_hhmm(mission.actual_block_in_datetime_utc, mission.timezone or None),
         "arrival_variance": _arrival_variance(mission),
@@ -1064,6 +1066,7 @@ def _outbound_row(
         "destination": _text(mission.destination),
         "parking": parking_by_tail.get(_tail_key(mission.assigned_tail_number), ""),
         "planned_time": _time_value(planned),
+        "etd": format_local_hhmm(mission.eta_datetime_utc, timezone_name) or _time_value(planned),
         "status": status.replace("_", " ").upper(),
         "load_planner": planner.full_name if planner else "UNASSIGNED",
         "load_planner_contact": neorain_load_planner_contact_values(

@@ -39,6 +39,7 @@ GOOGLE_RAIN_OUTBOUND_RANGE_SPECS = (
     ("crew_load_complete", "Outbound!N3:N50", 1),
     ("block", "Outbound!O3:O50", 1),
     ("no_return", "Outbound!S3:S50", 1),
+    ("removed", "Outbound!Q3:Q50", 1),
 )
 GOOGLE_RAIN_OUTBOUND_IDENTITY_RANGE_SPECS = (
     ("flight_number", "Outbound!A3:A50", 1),
@@ -96,6 +97,7 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
     crew_load_complete_rows = _padded_rows(values[7], row_count, 1)
     block_rows = _padded_rows(values[8], row_count, 1)
     no_return_rows = _padded_rows(values[9], row_count, 1)
+    removed_rows = _padded_rows(values[10] if len(values) > 10 else [], row_count, 1)
 
     rows = []
     for offset in range(row_count):
@@ -136,6 +138,7 @@ def read_google_rain_outbound_milestones(config=None, client_factory=None):
                 "crew_load_complete": crew_load_complete,
                 "block": block,
                 "no_return": no_return,
+                "removed": _cell(removed_rows[offset], 0),
             }
         )
     return rows

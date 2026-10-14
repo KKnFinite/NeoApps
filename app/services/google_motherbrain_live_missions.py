@@ -282,9 +282,14 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
     _update_link_snapshot(link, row, applied_at)
 
     if planned_local is not None:
-        mission.planned_datetime_local = planned_local
-        mission.planned_datetime_utc = planned_utc
-        mission.planned_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        from app.services.neorain_overrides import observe_import
+        protected = mission_type == 'arrival' and observe_import(mission, 'sta', {
+            'planned_datetime_local':planned_local, 'planned_datetime_utc':planned_utc,
+            'planned_source':GOOGLE_MOTHERBRAIN_MISSION_SOURCE})
+        if not protected:
+            mission.planned_datetime_local = planned_local
+            mission.planned_datetime_utc = planned_utc
+            mission.planned_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
 
     if mission_type == "arrival":
         warnings = _apply_inbound_state(
@@ -480,8 +485,11 @@ def _apply_inbound_state(
             mission.eta_datetime_utc = operational_utc
             mission.eta_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
     elif proposed_status == "arrived" and operational_utc is not None:
-        mission.actual_block_in_datetime_utc = operational_utc
-        mission.actual_block_in_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
+        from app.services.neorain_overrides import observe_import
+        if not observe_import(mission, 'block_in', {'actual_block_in_datetime_utc':operational_utc,
+                'actual_block_in_source':GOOGLE_MOTHERBRAIN_MISSION_SOURCE}):
+            mission.actual_block_in_datetime_utc = operational_utc
+            mission.actual_block_in_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
     return warnings
 
 

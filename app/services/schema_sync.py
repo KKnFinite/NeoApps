@@ -691,6 +691,8 @@ def sync_database_schema(app):
     from app.services.neostaffing_employee_id_schema import sync_staffing_employee_id_schema
 
     sync_staffing_employee_id_schema()
+    from app.services.mission_identity import sync_mission_identity_schema
+    sync_mission_identity_schema(db.session.connection())
     _sync_neoermac_legacy_defaults_postgres(inspector, table_names)
     _sync_staffing_people_employee_status_postgres(table_names)
     _sync_staffing_leadership_level_constraint_postgres(table_names)
@@ -1769,6 +1771,9 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
 
 
 def _create_missing_application_tables(existing_table_names):
+    from app.models import NeoRainMissionOverride, NeoRainOverrideAudit
+    NeoRainMissionOverride.__table__.create(bind=db.session.connection(), checkfirst=True)
+    NeoRainOverrideAudit.__table__.create(bind=db.session.connection(), checkfirst=True)
     from app.models import NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit
     from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent
     # Parent tables already exist on production; create these after the normal

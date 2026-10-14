@@ -1,19 +1,6 @@
+{% from "neonodes/neorain/_override_controls.html" import rain_time with context %}
 {% if operation and rows %}
-{% macro block_in_control(row) -%}
-<div class="neorain-mobile-time" data-neorain-mobile-time>
-    {% if can_edit %}
-    <button type="button" class="neorain-mobile-time-display" data-neorain-mobile-time-open {% if row.status == 'CANCELLED' %}disabled{% endif %}>
-        <span data-neorain-display="block_in">{{ row.block_in or row.eta_sta or '-' }}</span>
-    </button>
-    <div class="neorain-mobile-time-editor" data-neorain-mobile-time-editor hidden>
-        <input type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" aria-label="Block-In for {{ row.flight_number }}" data-neorain-inbound-hhmm data-neorain-mobile-hhmm data-neorain-saved-value="{{ row.block_in }}" value="{{ row.block_in }}">
-        <output data-neorain-inbound-hhmm-message aria-live="polite" hidden></output>
-    </div>
-    {% else %}
-    <span data-neorain-display="block_in">{{ row.block_in or row.eta_sta or '-' }}</span>
-    {% endif %}
-</div>
-{%- endmacro %}
+{% macro block_in_control(row) -%}{{ rain_time(row, 'block_in', 'BLOCK-IN', row.block_in) }}{%- endmacro %}
 
 {% macro inclusion_control(row) -%}
 <div class="neorain-mobile-inclusion" data-neorain-late-inclusion-cell>
@@ -91,7 +78,7 @@
         {% set late_class = 'neorain-row--late' if (row.arrival_variance|int) >= 1 else '' %}
         <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
             <div class="neorain-mobile-mission-grid">
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>
+                <div><button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>{{ rain_time(row, 'sta', 'STA', row.sta) }}</div>
                 <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.origin or '-' }}</span></button>
                 {{ block_in_control(row) }}
                 <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="status">{{ row.status }}</span></button>

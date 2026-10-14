@@ -1,0 +1,14 @@
+<style>
+.rain-override {min-width:0; font:inherit; position:relative;}
+.rain-override [hidden] {display:none!important;}
+.rain-override button {border:1px solid rgba(var(--node-rgb),.4); background:#101722; color:var(--node-highlight); border-radius:3px; padding:3px 5px; font:inherit; cursor:pointer;}
+.rain-override [data-rain-override-editor] {display:flex; flex-wrap:wrap; gap:3px; margin-top:4px;}
+.rain-override input[type=text] {width:60px; min-width:0; padding:4px; background:#101722; color:#fff; border:1px solid var(--node-highlight); font:inherit;}
+.rain-override label {display:flex; gap:3px; align-items:center; flex-wrap:wrap;}
+.rain-override small,.rain-override output {display:block; font-size:.52rem; overflow-wrap:anywhere;}
+.rain-override output:empty {display:none;}
+.rain-override.is-error output {color:#f2a3aa;}
+.rain-override small {color:#b9c4d0;}
+@media (max-width:900px) {.rain-override {font-size:.6rem;} .rain-override [data-rain-override-reset] {font-size:.55rem;}}
+</style>
+<script defer src="{{ url_for('static',filename='js/neorain_overrides.js',v='20261014-overrides-v1') }}"></script>

@@ -1,4 +1,5 @@
 from app.models.auth_rate_limit_state import AuthRateLimitState
+from app.models.neorain_mission_override import NeoRainMissionOverride, NeoRainOverrideAudit
 from app.models.crew import Crew
 from app.models.flight_api_review_item import FlightApiReviewItem
 from app.models.gateway import Gateway

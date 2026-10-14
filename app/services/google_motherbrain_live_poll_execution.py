@@ -36,6 +36,7 @@ from app.services.google_rain_rollover_gate import gate_google_rain_rollover_row
 from app.services.google_rain_sheets import read_google_rain_outbound_milestones
 from app.services.google_rain_integration_mode import (
     GOOGLE_PRIMARY,
+    NEO_ONLY,
     rain_integration_mode,
 )
 from app.services.operation_lifecycle import ensure_operational_sort_operations
@@ -246,7 +247,7 @@ def _run_google_rain_best_effort(
         fuel_google = rain_fuel_data_source(
             gateway or operation.gateway, operation.sort_name
         ) == RAIN_FUEL_SOURCE_GOOGLE
-        if mode != GOOGLE_PRIMARY and not fuel_google:
+        if mode == NEO_ONLY and not fuel_google:
             return {
                 "status": "skipped_neo_authoritative",
                 "mode": mode,
@@ -264,7 +265,7 @@ def _run_google_rain_best_effort(
             operation,
             rows=rollover["rows"],
             now=now,
-            apply_milestones=(mode == GOOGLE_PRIMARY),
+            apply_milestones=(mode != NEO_ONLY),
         )
         db.session.commit()
         return {

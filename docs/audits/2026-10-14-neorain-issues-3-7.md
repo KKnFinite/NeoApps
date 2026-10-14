@@ -126,3 +126,8 @@ activity before deployment; do not fabricate that check. Commit/push only a safe
 coherent validated release, allow autoDeploy, and verify exact SHA LIVE and health.
 Render workspace `tea-d79io9p4tr6s73cuk1bg`, service `srv-d8buq2mgvqtc73e375j0`.
 Report every issue's true completion status and any remaining safety blockers.
+# Latest continuation
+
+The newer one-shot contract supersedes this audit's earlier retry/outbox proposal.
+See `2026-10-14-neorain-release.md` for the implemented Neo authority/mission
+controls, validation, and the explicitly withheld live Google writers.
