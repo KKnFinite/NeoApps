@@ -20,19 +20,13 @@
         <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
     </div>
     {% include "neonodes/neoscorpion/_nightly_assets.html" %}
-    {% for row in rows %}{% for segment in row.outstanding_segments|default([]) %}
-    <section class="neoscorpion-panel" aria-label="Outstanding original aircraft work">
-        <div class="neoscorpion-panel-head"><strong>{{ row.mission.flight_number }} · ORIGINAL {{ segment.tail_number }} · SEGMENT {{ segment.id }}/{{ segment.physical_sequence_number }}</strong></div>
-        {% if can_edit %}
-        <button type="button" class="action-button" data-fuel-data-open="{{ url_for('neoscorpion.dispatch_fueler_data', assignment_id=row.assignment.id, physical_work_id=segment.id, physical_sequence=segment.physical_sequence_number) }}">ORIGINAL AIRCRAFT FUELER DATA</button>
-        <details><summary>END ORIGINAL SEGMENT EARLY</summary><form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_end_early') }}">
-            {{ csrf_field() }}<input type="hidden" name="assignment_id" value="{{ row.assignment.id }}"><input type="hidden" name="physical_work_id" value="{{ segment.id }}"><input type="hidden" name="physical_sequence" value="{{ segment.physical_sequence_number }}">
-            <label>Reason<input name="end_early_reason" required></label><button class="action-button" type="submit">END ORIGINAL SEGMENT EARLY</button>
-        </form></details>
-        {% endif %}
-        <p class="neoscorpion-helper">Original aircraft work remains independent of the replacement mission.{% if segment.physical_transfer_review %} LEGACY T/F ALLOCATION REQUIRES DISPATCHER REVIEW.{% endif %}</p>
-    </section>
-    {% endfor %}{% endfor %}
+    {# Mobile hides inline DETAILS; retain recovery only for real physical work,
+       not ordinary waiting/preparation records. Desktop uses mission DETAILS. #}
+    {% for row in rows %}{% with outstanding_details=row.outstanding_segment_details|default([])|selectattr('physical_work')|list %}
+    {% if outstanding_details %}<details class="neoscorpion-dispatch-mobile-only" data-mobile-prior-work="{{ row.mission.id }}">
+        <summary>{{ row.mission.flight_number }} · PRIOR PHYSICAL WORK</summary>
+        {% include "neonodes/neoscorpion/_outstanding_work.html" %}
+    </details>{% endif %}{% endwith %}{% endfor %}
     {% if operation %}
     <div class="neoscorpion-dispatch-insights" aria-label="SPEAR and fueling performance">
     <section class="neoscorpion-dispatch-insights-spear" aria-label="SPEAR">
@@ -224,6 +218,7 @@
                 <tr id="{{ detail_row_id }}" class="neoscorpion-dispatch-detail-row" data-dispatch-sort-group="{{ row.mission.id }}" data-neoscorpion-dispatch-detail-row hidden>
                     <td colspan="16"><div class="neoscorpion-dispatch-detail-grid">
                         <section><strong>FLIGHT DATA</strong><dl><div><dt>Aircraft Type</dt><dd>{{ row.aircraft_type if row.aircraft_type and row.aircraft_type != "UNKNOWN" else "-" }}</dd></div><div><dt>FOB</dt><dd>{{ row.fob_display or '-' }}</dd></div><div><dt>ON / OFF</dt><dd>{{ row.on_time }} / {{ row.off_time }}</dd></div><div><dt>Estimated Fuel</dt><dd>{{ row.estimated_fuel_display }}{% if row.estimated_fuel_source == 'fallback' %} · {{ row.estimated_fuel_source_label }}{% endif %}</dd></div><div><dt>Projected Truck</dt><dd class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</dd></div></dl></section>
+                        {% include "neonodes/neoscorpion/_outstanding_work.html" %}
                         <section><strong>LOAD PLANNING</strong><div class="neoscorpion-dispatch-detail-stack">{% if row.load_planning_ready %}<span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span><button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>{% else %}<span>{{ row.load_planning_placeholder }}</span>{% endif %}<span data-dispatch-load-planner>Load Planner: {{ row.load_planner_name }}</span></div></section>
                         {% if can_edit and row.assignment %}
                         <section class="neoscorpion-dispatch-detail-actions">

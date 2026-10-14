@@ -85,8 +85,10 @@ def fueling_status(row, *, now=None, threshold=30):
             if not fueler and not truck and not row.get("fob_likely"):
                 detail = "Needs Fueler / Truck"
     movement = row.get("truck_start_reason")
+    if stage in {"pending", "assigned", "ready"} and truck and movement == "TRUCK STILL FUELING":
+        warnings.append("WAITING FOR TRUCK · TRUCK STILL FUELING")
     if stage in {"assigned", "ready"} and truck and movement:
-        detail = movement
+        detail = "WAITING FOR TRUCK · TRUCK STILL FUELING" if movement == "TRUCK STILL FUELING" else movement
     fob_check = bool(row.get("fob_likely") and fueler and not truck and stage in {"assigned", "fueling"})
     if row.get("fob_likely") and stage not in {"fob-ready", "fob", "complete"}:
         warnings.append("FOB CHECK" if fob_check else "FOB LIKELY")

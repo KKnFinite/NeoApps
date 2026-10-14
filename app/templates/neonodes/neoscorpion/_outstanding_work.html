@@ -1,0 +1,19 @@
+{% set outstanding_details=outstanding_details|default(row.outstanding_segment_details) %}
+{% if outstanding_details %}
+<section data-outstanding-work><strong>PRIOR WORK / REVIEW</strong>
+{% for detail in outstanding_details %}{% set segment=detail.work %}
+{% set label='ORIGINAL AIRCRAFT' if detail.original_aircraft else 'PREVIOUS VISIT' if detail.physical_work else 'PRIOR PREPARATION' %}
+<details data-prior-work-id="{{ segment.id }}"><summary>{{ label }} {{ segment.tail_number }} · SEGMENT {{ segment.id }}/{{ segment.physical_sequence_number }}</summary>
+{% if can_edit %}
+<button type="button" class="action-button" data-fuel-data-open="{{ url_for('neoscorpion.dispatch_fueler_data', assignment_id=row.assignment.id, physical_work_id=segment.id, physical_sequence=segment.physical_sequence_number) }}">{{ label }} FUELER DATA</button>
+{% if detail.physical_work %}
+<details><summary>END {{ 'ORIGINAL SEGMENT' if detail.original_aircraft else 'PREVIOUS VISIT' }} EARLY</summary>
+<form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_end_early') }}">
+{{ csrf_field() }}<input type="hidden" name="assignment_id" value="{{ row.assignment.id }}"><input type="hidden" name="physical_work_id" value="{{ segment.id }}"><input type="hidden" name="physical_sequence" value="{{ segment.physical_sequence_number }}">
+<label>Reason<input name="end_early_reason" required></label><button class="action-button" type="submit">END {{ 'ORIGINAL SEGMENT' if detail.original_aircraft else 'PREVIOUS VISIT' }} EARLY</button>
+</form></details>
+{% endif %}{% endif %}
+<p class="neoscorpion-helper">{% if detail.original_aircraft %}Earlier-tail work remains independent of the current mission.{% elif detail.physical_work %}Previous same-aircraft visit retains its own readings and physical milestones.{% else %}Retained preparation readings; this record does not prove physical fueling.{% endif %}{% if segment.physical_transfer_review %} LEGACY T/F ALLOCATION REQUIRES DISPATCHER REVIEW.{% endif %}</p>
+</details>
+{% endfor %}</section>
+{% endif %}

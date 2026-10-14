@@ -6965,6 +6965,15 @@ def _attach_fueling_start_state(rows, operation, assignments, work_states, parki
         row["outstanding_segments"] = [item for item in all_work(work_states)
             if item.fuel_assignment_id == assignment.id and (item.id != assignment.active_work_state_id or item.tail_number != row["tail_number"])
             and item.physical_sequence_number is not None and item.physical_finalized_at_utc is None]
+        # Preparation records also have visit IDs. An older ID is not proof
+        # that another aircraft was fueled; retain exact recovery identities.
+        row["outstanding_segment_details"] = [dict(
+            work=item,
+            original_aircraft=_normalize_tail(item.tail_number) != _normalize_tail(row["tail_number"]),
+            physical_work=bool(item.manual_on_at_utc or item.confirmed_on_at_utc or item.on_at_utc
+                or item.off_at_utc or item.ended_early_at_utc or item.physical_transfer_gallons
+                or item.physical_transfer_review),
+        ) for item in row["outstanding_segments"]]
         row["pending_segment_fuelers"] = [item.physical_fueler_user_id for item in row["outstanding_segments"]
             if item.off_at_utc is not None and item.ended_early_at_utc is None]
         row["physical_segment_resources"] = [
