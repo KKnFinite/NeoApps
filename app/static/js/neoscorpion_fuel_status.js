@@ -7,10 +7,11 @@
         if (stage === "fueling" && Number.isFinite(etd) && Number.isFinite(finish) && Math.max(finish, now) > etd - 20 * 60000) return "red";
         return stageColors[stage] || "gray";
     };
-    const estimateText = (finish, clock, now) => {
+    const estimateText = (finish, clock, now, difference = null, source = "BASELINE") => {
         if (!Number.isFinite(finish) || !clock) return "TIMING UNKNOWN";
-        if (finish <= now) return "EST OFF OVERDUE";
-        return `EST OFF ${clock} · ~${Math.ceil((finish - now) / 60000)} MIN`;
+        const count = Math.ceil(Math.abs(finish - now) / 60000);
+        const delta = Number.isFinite(difference) ? ` ${difference > 0 ? "+" : ""}${difference}m PROF` : "";
+        return `EST OFF ${clock} (${finish <= now ? "overdue" : "in"} ${count}m)${delta}${source === "BASELINE" ? " · BASELINE" : ""}`;
     };
     const travelText = (arrival, origin, now) => {
         if (!Number.isFinite(arrival) || !origin) return "TRUCK LOCATION UNKNOWN";
@@ -25,7 +26,8 @@
             if (element.dataset.fuelStatusColor !== color) element.dataset.fuelStatusColor = color;
             const estimate = element.querySelector("[data-fueler-off-estimate]");
             if (element.dataset.fuelStatus === "fueling" && estimate) {
-                const text = estimateText(Date.parse(estimate.dataset.fuelerOffEstimate), estimate.dataset.fuelerOffClock, now);
+                const text = estimateText(Date.parse(estimate.dataset.fuelerOffEstimate), estimate.dataset.fuelerOffClock, now,
+                    estimate.dataset.profDifference === "" ? null : Number(estimate.dataset.profDifference), estimate.dataset.offSource);
                 const label = estimate.querySelector("[data-fueler-off-estimate-text]");
                 if (!label) return;
                 if (label.textContent !== text) label.textContent = text;

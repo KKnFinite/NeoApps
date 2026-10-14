@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
+from sqlalchemy.orm import joinedload
+from app.services.neoscorpion_prof import event_math, minutes as timeline_minutes
 
 from app.extensions import db
 from app.models import (
@@ -19,7 +21,7 @@ from app.models import (
 
 
 CALIBRATION_SCHEMA_VERSION = "v1"
-SPEAR_ALGORITHM_VERSION = "spear-v1"
+SPEAR_ALGORITHM_VERSION = "spear-v3-physical"
 MINIMUM_ACTIVE_SAMPLES = 3
 BASELINE_WEIGHT = Decimal("3")
 METRICS = (
@@ -30,6 +32,8 @@ METRICS = (
     "truck_travel_minutes",
     "fueler_travel_minutes",
     "top_off_minutes",
+    "service_minutes", "actual_wrapup_minutes", "assignment_lead_minutes",
+    "preparation_minutes", "off_prediction_error_minutes",
 )
 
 
@@ -224,12 +228,14 @@ def calibration_review_payload(operation, calibrations):
 def _canonical_observations(operation_id, row_by_assignment_id):
     events = (
         NeoScorpionFuelingEvent.query.join(NeoScorpionFuelAssignment)
+        .options(joinedload(NeoScorpionFuelingEvent.fuel_assignment))
         .filter(
             NeoScorpionFuelingEvent.sort_date_operation_id == operation_id,
             NeoScorpionFuelingEvent.started_at_utc.is_not(None),
             NeoScorpionFuelingEvent.ended_at_utc.is_not(None),
         )
         .order_by(NeoScorpionFuelingEvent.ended_at_utc.asc())
+        .limit(5000)
         .all()
     )
     output = []
@@ -240,16 +246,12 @@ def _canonical_observations(operation_id, row_by_assignment_id):
         assignment = event.fuel_assignment
         observed_at = _utc_naive(event.ended_at_utc)
         aircraft_type = row.get("detailed_aircraft_type") or "UNKNOWN"
-        exclusion = getattr(assignment, "hold_reason", None) or None
-        if event.transfer_fuel_gallons and event.transfer_fuel_gallons > 0:
-            minutes = _minutes_between(event.started_at_utc, event.ended_at_utc)
-            if minutes and minutes > 0:
-                output.append(CalibrationObservation(
-                    "pump_rate", aircraft_type,
-                    Decimal(event.transfer_fuel_gallons) / minutes, observed_at,
-                    assignment.id, assignment.sort_date_mission_id, "Completed fuel event",
-                    exclusion,
-                ))
+        math = event_math(event)
+        exclusion = "; ".join(math["fueler_reasons"]) or None
+        if math["actual_minutes"] is not None:
+            output.append(CalibrationObservation(
+                "service_minutes", aircraft_type, math["actual_minutes"], observed_at,
+                assignment.id, assignment.sort_date_mission_id, "Physical ON to OFF service (not mechanical pump rate)", exclusion))
         ready = getattr(assignment, "ready_for_fuel_at_utc", None)
         ready = _utc_naive(ready)
         started_at = _utc_naive(event.started_at_utc)
@@ -258,20 +260,25 @@ def _canonical_observations(operation_id, row_by_assignment_id):
             setup_minutes = _minutes_between(ready, started_at)
             if setup_minutes is not None:
                 output.append(CalibrationObservation(
-                    "setup_minutes", aircraft_type, setup_minutes, observed_at,
+                    "preparation_minutes", aircraft_type, setup_minutes, observed_at,
                     assignment.id, assignment.sort_date_mission_id, "Ready for Fuel to fuel start",
                     exclusion,
                 ))
-        completed = getattr(assignment, "completed_at_utc", None)
-        completed = _utc_naive(completed)
-        if completed and ended_at and completed >= ended_at:
-            wrap_minutes = _minutes_between(ended_at, completed)
-            if wrap_minutes is not None:
-                output.append(CalibrationObservation(
-                    "finishing_minutes", aircraft_type, wrap_minutes, completed,
-                    assignment.id, assignment.sort_date_mission_id, "Fuel end to completion",
-                    exclusion,
-                ))
+        if math["wrap_minutes"] is not None:
+            output.append(CalibrationObservation("actual_wrapup_minutes", aircraft_type,
+                math["wrap_minutes"], math["actuals_at"] or observed_at, assignment.id,
+                assignment.sort_date_mission_id, "OFF to final valid Actual readings; separate from administrative delay", exclusion))
+        lead = _decimal(math["facts"].get("lead_minutes"))
+        if lead is not None:
+            output.append(CalibrationObservation("assignment_lead_minutes", aircraft_type,
+                lead, observed_at, assignment.id, assignment.sort_date_mission_id,
+                "Recorded assignment lead; policy allowance is not observed preparation", exclusion))
+        for forecast in math["facts"].get("forecasts", []):
+            error = timeline_minutes(forecast.get("likely"), event.ended_at_utc)
+            if error is not None:
+                output.append(CalibrationObservation("off_prediction_error_minutes", aircraft_type,
+                    error, observed_at, assignment.id, assignment.sort_date_mission_id,
+                    "Immutable prediction known before OFF versus observed physical OFF", exclusion))
     return output
 
 

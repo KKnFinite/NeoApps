@@ -185,7 +185,7 @@ class SpearCalibrationObservationTest(unittest.TestCase):
         self.assignment.ready_for_fuel_at_utc = datetime(2026, 9, 3, 4, 35)
         first = NeoScorpionFuelingEvent.query.one()
         initial = build_live_calibration(self.operation, _Settings(), rows)
-        self.assertEqual(initial[("pump_rate", "B757")].samples, 1)
+        self.assertEqual(initial[("service_minutes", "B757")].samples, 1)
         for sequence in (2, 3):
             db.session.add(NeoScorpionFuelingEvent(
                 sort_date_operation_id=self.operation.id, fuel_assignment_id=self.assignment.id,
@@ -193,15 +193,17 @@ class SpearCalibrationObservationTest(unittest.TestCase):
                 tail_number=first.tail_number, sequence_number=sequence,
                 started_at_utc=first.started_at_utc, ended_at_utc=first.ended_at_utc,
                 transfer_fuel_gallons=first.transfer_fuel_gallons,
+                fueler_user_id=first.fueler_user_id,
+                performance_snapshot=first.performance_snapshot,
             ))
         db.session.commit()
         observed = build_live_calibration(self.operation, _Settings(), rows)
-        pump = observed[("pump_rate", "B757")]
-        self.assertTrue(pump.active)
+        pump = observed[("service_minutes", "B757")]
+        self.assertFalse(pump.active)  # Effective service duration is not a mechanical pump-rate setting.
         self.assertEqual(pump.samples, 3)
-        self.assertEqual(pump.observed, Decimal("30"))
-        self.assertEqual(pump.effective, Decimal("65"))
-        self.assertEqual(pump.recommendation_using("observe"), Decimal("100"))
+        self.assertEqual(pump.observed, Decimal("40"))
+        self.assertIsNone(pump.effective)
+        self.assertIsNone(pump.recommendation_using("observe"))
         review = calibration_review_payload(self.operation, observed)
         with patch('app.services.neoscorpion_spear.require_learning_vault'):
             for mode, learning, automation in (("apply", True, False), ("observe", True, False), ("apply", False, False), ("observe", False, True)):

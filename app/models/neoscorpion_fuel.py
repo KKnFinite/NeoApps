@@ -226,6 +226,8 @@ class NeoScorpionSortTruck(db.Model):
     # The last recorded reading is retained when a physical transfer proves it
     # cannot be trusted. It is never offered to automated fuel planning then.
     inventory_verified = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    inventory_epoch = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    inventory_pending_epoch = db.Column(db.Integer, nullable=True)
     top_off_sent_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
@@ -244,8 +246,8 @@ class NeoScorpionFuelWorkState(db.Model):
     __table_args__ = (
         db.UniqueConstraint(
             "fuel_assignment_id",
-            "tail_number",
-            name="uq_neoscorpion_fuel_work_state_assignment_tail",
+            "visit_number",
+            name="uq_scorpion_work_assignment_visit",
         ),
     )
 
@@ -256,6 +258,8 @@ class NeoScorpionFuelWorkState(db.Model):
         nullable=False,
     )
     tail_number = db.Column(db.String(32), nullable=False)
+    # NULL identifies pre-segment legacy containers, never a new operational visit.
+    visit_number = db.Column(db.Integer, nullable=True)
     on_at_utc = db.Column(db.DateTime, nullable=True)
     # A validated physical/FOB-check start; legacy ON stays intact for history.
     confirmed_on_at_utc = db.Column(db.DateTime, nullable=True)
@@ -263,6 +267,23 @@ class NeoScorpionFuelWorkState(db.Model):
     manual_on_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     manual_on_truck_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=True)
     manual_on_cycle_number = db.Column(db.Integer, nullable=True)
+    actuals_received_at_utc = db.Column(db.DateTime, nullable=True)
+    preparation_received_at_utc = db.Column(db.DateTime, nullable=True)
+    completion_ready_at_utc = db.Column(db.DateTime, nullable=True)
+    off_inventory_epoch = db.Column(db.Integer, nullable=True)
+    performance_context = db.Column(db.JSON, nullable=True)
+    # The row's primary key is permanent physical visit identity. It is never
+    # reset/recycled; event sequence remains compatible with historical events.
+    physical_sequence_number = db.Column(db.Integer, nullable=True)
+    physical_cycle_number = db.Column(db.Integer, nullable=True)
+    physical_cycle_type = db.Column(db.String(16), nullable=True)
+    physical_truck_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=True, index=True)
+    physical_fueler_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    physical_required_fuel_lbs = db.Column(db.Integer, nullable=True)
+    physical_transfer_gallons = db.Column(db.Integer, nullable=True)
+    physical_finalized_at_utc = db.Column(db.DateTime, nullable=True)
+    physical_finalized_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    physical_transfer_review = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     apu_running = db.Column(db.Boolean, nullable=True)
     apu_confirmed_at_utc = db.Column(db.DateTime, nullable=True)
     apu_allowance_lbs = db.Column(db.Integer, nullable=True)
@@ -301,7 +322,9 @@ class NeoScorpionFuelWorkState(db.Model):
         onupdate=datetime.utcnow,
     )
 
-    fuel_assignment = db.relationship("NeoScorpionFuelAssignment")
+    fuel_assignment = db.relationship("NeoScorpionFuelAssignment", foreign_keys=[fuel_assignment_id])
+    physical_truck = db.relationship("NeoScorpionFuelTruck", foreign_keys=[physical_truck_id])
+    physical_fueler = db.relationship("User", foreign_keys=[physical_fueler_user_id])
     off_by_user = db.relationship("User", foreign_keys=[off_by_user_id])
     manual_on_by_user = db.relationship("User", foreign_keys=[manual_on_by_user_id])
     ended_early_by_user = db.relationship(
@@ -398,6 +421,11 @@ class NeoScorpionFuelAssignment(db.Model):
         index=True,
     )
     assigned_fueler_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    active_work_state_id = db.Column(db.Integer, db.ForeignKey(
+        "neoscorpion_fuel_work_states.id", name="fk_scorpion_assignment_current_work", use_alter=True), nullable=True)
+    fueler_assigned_at_utc = db.Column(db.DateTime, nullable=True)
+    truck_assigned_at_utc = db.Column(db.DateTime, nullable=True)
+    resource_assignment_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     assigned_truck_id = db.Column(
         db.Integer,
         db.ForeignKey("neoscorpion_fuel_trucks.id"),
@@ -597,6 +625,7 @@ class NeoScorpionFuelingEvent(db.Model):
     )
     started_at_utc = db.Column(db.DateTime, nullable=True)
     ended_at_utc = db.Column(db.DateTime, nullable=True)
+    performance_snapshot = db.Column(db.JSON, nullable=True)
     transfer_fuel_gallons = db.Column(db.Integer, nullable=True)
     fueler_user_id = db.Column(
         db.Integer,
@@ -698,7 +727,8 @@ class NeoScorpionFuelAuditEntry(db.Model):
         db.CheckConstraint(
             "action IN ('reopen_off', 'correct_actual', 'auto_hold', "
             "'resume_hold', 'swap_fueler', 'swap_truck', 'confirm_tail', "
-            "'end_early', 'cancel_uplift', 'cancel_defuel', 'unassign_truck', 'truck_on')",
+            "'end_early', 'cancel_uplift', 'cancel_defuel', 'unassign_truck', 'truck_on', "
+            "'segment_transfer', 'segment_transfer_review', 'segment_transfer_review_required')",
             name="ck_neoscorpion_fuel_audit_entry_action",
         ),
     )
@@ -776,6 +806,7 @@ class NeoScorpionSettings(db.Model):
     fob_difference_threshold_lbs = db.Column(db.Integer, nullable=True)
     tf_vs_estimated_threshold_lbs = db.Column(db.Integer, nullable=True)
     assignment_setup_minutes = db.Column(db.Numeric(8, 2), nullable=True)
+    advance_setup_window_minutes = db.Column(db.Integer, nullable=True)
     assignment_finishing_minutes = db.Column(db.Numeric(8, 2), nullable=True)
     assignment_eta_safety_buffer_minutes = db.Column(
         db.Numeric(8, 2),

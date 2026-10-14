@@ -274,7 +274,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.work(actual=None).on_at_utc = datetime.utcnow()
         row = self.row()
         self.assertEqual(row["fuel_status_color"], "yellow")
-        self.assertIn("TIMING UNKNOWN", row["fuel_status_warnings"])
+        self.assertNotIn("TIMING UNKNOWN", row["fuel_status_warnings"])
         self.arrival.actual_block_in_datetime_utc = datetime.utcnow()-timedelta(minutes=10)
         self.mission.eta_datetime_utc = datetime.utcnow()+timedelta(minutes=10)
         row = self.row()
@@ -284,7 +284,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assertEqual(other["fuel_status_color"], row["fuel_status_color"])
         self.assertEqual(other["dispatch_status_label"], "FUELING")
 
-    def test_apply_timing_includes_completed_observations_in_all_views(self):
+    def test_unverified_legacy_completed_events_do_not_adjust_forecasts_in_any_view(self):
         self.assignment.assigned_fueler_user_id = self.fueler.id
         self.mission.planned_fuel_load = 50000
         self.arrival.actual_block_in_datetime_utc = datetime.utcnow()-timedelta(minutes=10)
@@ -310,7 +310,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         observed = self.row()["fueling_predicted_finish_utc"]
         self.settings.spear_live_calibration_mode = "apply"
         dispatch = self.row()
-        self.assertNotEqual(observed,dispatch["fueling_predicted_finish_utc"])
+        self.assertEqual(observed,dispatch["fueling_predicted_finish_utc"])
         fueler = service.fueler_context(self.gateway,self.fueler)["rows"][0]
         hanzo = next(r for r in service.hanzo_context(self.gateway)["rows"] if r["mission"].id==self.mission.id)
         self.assertEqual(dispatch["fueling_predicted_finish_utc"],fueler["fueling_predicted_finish_utc"])
@@ -352,7 +352,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         self.assertIsNone(self.row()["call_dispatch_alert"])
         service.mark_fueler_off(self.gateway,self.fueler,self.assignment.id)
         db.session.commit()
-        self.assertEqual(self.row()["dispatch_status_key"],"off")
+        self.assertEqual(self.row()["dispatch_status_key"],"complete")
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
         db.session.commit()
         self.assertEqual(self.row()["dispatch_status_key"],"complete")
@@ -372,7 +372,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
             actual_left="15", actual_ctr="0", actual_right="15",
             transfer_fuel_gallons=str(gallons), notes=""))
         db.session.commit()
-        service.mark_fueler_off(self.gateway, self.fueler, self.assignment.id)
+        service.mark_fueler_off(self.gateway, self.fueler, self.assignment.id, defer_completion=True)
         db.session.commit()
         return NeoScorpionSortTruck.query.filter_by(fuel_truck_id=truck.id).one()
 
@@ -436,7 +436,7 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         db.session.expire_all()
         self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
         self.assertEqual(NeoScorpionTruckInventoryAudit.query.count(), 0)
-        self.assertTrue(selection.inventory_verified)
+        self.assertFalse(selection.inventory_verified)  # Physical OFF remains unresolved after failed completion.
         self.assertEqual(selection.current_gallons, 100)
         self.assertIsNone(self.assignment.completed_at_utc)
 
@@ -477,7 +477,10 @@ class FuelingStatusIntegrationTest(unittest.TestCase):
         assignment = self.fixture._assignment(mission, truck=selection.fuel_truck)
         assignment.assigned_fueler_user_id = self.fueler.id
         db.session.commit()
-        start = datetime.utcnow().replace(microsecond=0)
+        # This is a subsequent physical job: flooring the wall clock could
+        # place its ON before the first job's sub-second OFF and randomly
+        # exercise a genuine busy-truck rejection instead of inventory reuse.
+        start = max(datetime.utcnow(), NeoScorpionFuelingEvent.query.one().ended_at_utc) + timedelta(seconds=1)
         service.confirm_fueler_truck_on(self.gateway, self.fueler, assignment.id,
             expected_cycle=1, expected_tail="N492UP", expected_truck_id=selection.fuel_truck_id,
             now_utc=start)

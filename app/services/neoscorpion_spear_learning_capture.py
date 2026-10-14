@@ -17,6 +17,7 @@ from app.models import (
     SortDateParkingAssignment,
 )
 from app.services.neoscorpion_learning_vault import export_learning_record
+from app.services.neoscorpion_prof import event_math
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
         .all()
     )
     work_ids = [row.id for row in work_states]
+    works_by_id={work.id:work for work in work_states}
     tank_states = (
         NeoScorpionFuelTankState.query.filter(
             NeoScorpionFuelTankState.fuel_work_state_id.in_(work_ids)
@@ -150,11 +152,13 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
         exclusion_reasons.append("assignment_not_active")
     if confirmed_tail != tail:
         exclusion_reasons.append("tail_not_confirmed")
-    if len(work_states) > 1:
-        exclusion_reasons.append("multiple_tail_work_states")
+    if len(work_states) > 1 and any(work.physical_sequence_number is None for work in work_states):
+        exclusion_reasons.append("multiple_legacy_work_states")
+    if any(work.physical_sequence_number is not None and work.physical_finalized_at_utc is None for work in work_states):
+        exclusion_reasons.append("pending_physical_segments")
     if any(row.ended_early_at_utc is not None for row in work_states):
         exclusion_reasons.append("ended_early")
-    if audit_actions:
+    if any(action in {"auto_hold", "end_early", "reopen_off", "correct_actual"} for action in audit_actions):
         exclusion_reasons.append("correction_or_interruption_history")
 
     is_fob = assignment.fuel_on_board_at_utc is not None
@@ -162,7 +166,11 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
         if assignment.transfer_fuel_gallons not in (None, 0):
             exclusion_reasons.append("fob_with_transfer")
     else:
-        current_work = next((row for row in work_states if _tail(row.tail_number) == tail), None)
+        if assignment.active_work_state_id is not None:
+            current_work = works_by_id.get(assignment.active_work_state_id)
+        else:
+            candidates=[row for row in work_states if row.visit_number is None and _tail(row.tail_number)==tail]
+            current_work=candidates[0] if len(candidates)==1 else None
         if current_work is None:
             exclusion_reasons.append("missing_current_tail_work")
         elif current_work.off_at_utc is None:
@@ -173,6 +181,8 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
             exclusion_reasons.append("missing_fueling_event")
 
     for event in events:
+        if event_math(event)["fueler_reasons"]:
+            exclusion_reasons.append("unverified_operational_timeline")
         if event.started_at_utc is None or event.ended_at_utc is None:
             exclusion_reasons.append("incomplete_event_timing")
         if event.fueler_user_id is None:
@@ -181,8 +191,9 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
             exclusion_reasons.append("missing_event_transfer")
         if event.neo_fuel_lbs is None:
             exclusion_reasons.append("missing_event_fuel_measurement")
-        if _tail(event.tail_number) != tail:
-            exclusion_reasons.append("event_tail_mismatch")
+        owner=works_by_id.get(event.fuel_work_state_id)
+        if owner is None or _tail(event.tail_number) != _tail(owner.tail_number):
+            exclusion_reasons.append("event_segment_identity_mismatch")
         event_tanks = tanks_by_event.get(event.id, [])
         if not event_tanks or any(
             tank["remaining_lbs"] is None or tank["actual_lbs"] is None
@@ -194,7 +205,10 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
     terminal_at = assignment.fuel_on_board_at_utc or assignment.completed_at_utc
 
     return {
-        "schema_version": "spear-learning/v1",
+        "schema_version": "spear-learning/v2",
+        "operational_timelines": [dict(event_id=event.id, facts=event.performance_snapshot or {},
+            fueler_prof=event_math(event)["fueler_prof"], truck_prof=event_math(event)["truck_prof"],
+            exclusions=list(event_math(event)["fueler_reasons"])) for event in events],
         "record_type": "completed_fuel_outcome",
         "captured_at_utc": _iso(terminal_at),
         "training_eligible": not exclusion_reasons,

@@ -14,8 +14,13 @@
 
 {% set fuel_data_url = url_for('neoscorpion.dispatch_fueler_data' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_data', assignment_id=row.assignment.id) %}
 {% set fuel_off_url = url_for('neoscorpion.dispatch_fueler_off' if dispatcher_panel|default(false) else 'neoscorpion.fueler_assignment_off', assignment_id=row.assignment.id) %}
-            <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}" data-fuel-data-card data-dispatcher-panel="{{ 'true' if dispatcher_panel|default(false) else 'false' }}" data-edit-baseline='{{ row.edit_baseline|tojson }}'>
+{% if row.physical_work_id %}
+{% set fuel_data_url = fuel_data_url ~ '?physical_work_id=' ~ row.physical_work_id ~ '&physical_sequence=' ~ row.physical_sequence %}
+{% set fuel_off_url = fuel_off_url ~ '?physical_work_id=' ~ row.physical_work_id ~ '&physical_sequence=' ~ row.physical_sequence %}
+{% endif %}
+            <article class="neoscorpion-fueler-card" data-fuel-assignment-id="{{ row.assignment.id }}" data-physical-work-id="{{ row.physical_work_id or '' }}" data-fuel-card-key="{{ row.assignment.id }}:{{ row.fuel_work_state.id if row.fuel_work_state else row.tail_number }}:{{ row.physical_sequence or '' }}" data-fuel-data-card data-dispatcher-panel="{{ 'true' if dispatcher_panel|default(false) else 'false' }}" data-edit-baseline='{{ row.edit_baseline|tojson }}'>
                 <p class="neoscorpion-save-status" data-fuel-data-status role="status" aria-live="polite"></p>
+                {% if row.is_source_segment %}<p class="neoscorpion-calculation-warning">PRIOR PHYSICAL VISIT · SEGMENT {{ row.physical_work_id }} / {{ row.physical_sequence }} · Finalizing this work does not complete the current visit.</p>{% endif %}
                 {% if row.assignment_update_pending and not dispatcher_panel|default(false) %}
                 <div class="neoscorpion-assignment-update" data-assignment-update-notice role="status">
                     <strong>ASSIGNMENT UPDATED</strong>
@@ -39,7 +44,7 @@
                         </div>
                     </div>
                     <div>
-                        <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | {{ row.departure_time or '-' }}</small>
+                        <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | ETD {{ row.departure_time or '-' }} · {% if row.is_off %}TRUCK OFF {{ row.off_time }}{% else %}100 PROF OFF {{ row.fueler_off_goal|default('UNKNOWN') }}{% endif %}</small>
                         <small class="neoscorpion-fueler-truck">TRUCK {{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}{% if row.assigned_truck and row.assigned_truck.vendor_driver_name %}<span class="neoscorpion-fueler-truck-vendor"> · {{ row.assigned_truck.vendor_driver_name }}</span>{% endif %}</small>
                         {% if row.assigned_truck_current_status %}
                         <small class="neoscorpion-fueler-truck-status" data-assigned-truck-status{% if row.truck_travel_until %} data-truck-travel-until="{{ row.truck_travel_until }}" data-truck-travel-origin="{{ row.truck_travel_origin }}"{% endif %}>{{ row.assigned_truck_current_status }}</small>
@@ -72,7 +77,7 @@
                             <span class="neoscorpion-apu-collapsed"><strong data-apu-allowance-output>{% if row.apu_running is none %}NOT CONFIRMED{% elif row.apu_running is sameas false %}USING 0.0 · APU OFF{% else %}USING {{ row.apu_allowance_display }} {{ "MANUAL" if row.apu_override_enabled else "RECOMMENDED" }}{% endif %}</strong>
                             {% if row.apu_running is sameas true %}
                             <small>RECOMMENDED {{ row.automatic_apu_allowance_display }}</small>
-                            {% if can_edit and not row.is_off and not row.fueler_work_blocked %}
+                            {% if can_edit and not row.fueler_work_blocked %}
                             <form class="neoscorpion-apu-editor-form" method="post" action="{{ fuel_data_url }}" data-apu-editor-form>
                                 {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
                         <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
@@ -127,22 +132,39 @@
                         <dd>{{ row.off_time }}</dd>
                     </div>
                 </dl>
-                {% if not dispatcher_panel|default(false) and row.assignment and row.assigned_truck and not row.is_off %}
+                {% if row.assignment and row.assigned_truck %}
                 <div class="neoscorpion-truck-on-row">
                     {% if row.manual_on_confirmed %}
                     <strong>ON {{ row.on_time }} · CONFIRMED</strong>
-                    {% elif can_edit and not row.fueler_work_blocked %}
+                    {% elif not row.is_source_segment and not dispatcher_panel|default(false) and can_edit and not row.is_off and not row.fueler_work_blocked %}
                     <form method="post" action="{{ url_for('neoscorpion.fueler_assignment_on', assignment_id=row.assignment.id) }}" data-truck-on-form>
                         {{ csrf_field() }}
                         <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}">
                         <input type="hidden" name="expected_tail" value="{{ row.tail_number }}">
                         <input type="hidden" name="expected_truck_id" value="{{ row.assigned_truck.id }}">
+                        <input type="hidden" name="expected_work_ref" value="{{ row.edit_baseline.work_ref or '' }}">
                         <button class="action-button" type="submit">TRUCK ON</button>
+                    </form>
+                    {% endif %}
+                    {% if row.is_off %}<strong>TRUCK OFF {{ row.off_time }} · CONFIRMED</strong>
+                    {% elif can_edit and row.off_ready %}
+                    <form method="post" action="{{ fuel_off_url }}" class="neoscorpion-fueler-off-form">
+                        {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
+                        <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+                        <button class="action-button" type="submit">TRUCK OFF</button>
                     </form>
                     {% endif %}
                 </div>
                 {% endif %}
-                {% if can_edit and row.assignment and not row.is_off and not row.fueler_work_blocked %}
+                {% if row.physical_finalized and not row.administratively_complete %}<p class="neoscorpion-helper">This visit is finalized. A new physical visit requires its own record.</p>
+                {% elif row.is_off and not row.administratively_complete %}<p class="neoscorpion-helper">Truck released. Save outstanding final readings/APU/T/F to complete this mission.</p>{% endif %}
+                {% if row.is_off and not row.is_source_segment and can_edit and not dispatcher_panel|default(false) and not row.fueler_work_blocked %}
+                <form method="post" action="{{ url_for('neoscorpion.fueler_new_visit',assignment_id=row.assignment.id) }}" data-new-visit-form>{{ csrf_field() }}
+                    <button class="action-button" type="submit">NEW TRUCK VISIT</button>
+                    <small>Preserves this visit and its outstanding final data.</small>
+                </form>
+                {% endif %}
+                {% if can_edit and row.assignment and not row.fueler_work_blocked and not row.physical_finalized %}
                 <form
                     action="{{ fuel_data_url }}"
                     method="post"
@@ -157,6 +179,7 @@
                     data-planned-departure-utc="{{ row.planned_departure_utc }}"
                     data-window-minutes="{{ row.operation_window_minutes }}"
                 >
+                    {% if row.physical_transfer_review and dispatcher_panel|default(false) %}<label>Legacy segment T/F verification reason<input name="segment_review_reason" required></label>{% endif %}
                     {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
                         <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                     <input type="hidden" name="apu_override_present" value="1">
@@ -185,10 +208,10 @@
                             <span>RECOMMENDED APU <strong data-apu-automatic-output>{{ row.automatic_apu_allowance_display }}</strong></span>
                             <button class="action-button neoscorpion-apu-use-recommended" type="button" data-apu-use-recommended>USE RECOMMENDED</button>
                             <div class="neoscorpion-apu-manual" data-apu-override-value-wrap>
-                                <label for="apu-manual-{{ row.assignment.id }}">MANUAL APU, K LBS</label>
+                                <label for="apu-manual-{{ row.assignment.id }}-{{ row.physical_work_id or row.tail_number }}">MANUAL APU, K LBS</label>
                                 <div class="neoscorpion-apu-manual-row">
                                     <input
-                                        id="apu-manual-{{ row.assignment.id }}"
+                                        id="apu-manual-{{ row.assignment.id }}-{{ row.physical_work_id or row.tail_number }}"
                                         class="neoscorpion-inline-input"
                                         name="apu_override_allowance"
                                         value="{{ row.apu_override_allowance_display if row.apu_override_enabled else '' }}"
@@ -271,20 +294,12 @@
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
                     <div><dt>Notes</dt><dd>{{ row.tail_fuel_state.notes if row.tail_fuel_state and row.tail_fuel_state.notes else '-' }}</dd></div>
                 </dl>
-                {% if can_edit and row.is_off %}
-                <p class="neoscorpion-calculation-warning">Fuel work is OFF. A dispatcher must REOPEN OFF before editing.</p>
-                {% elif can_edit and row.fueler_work_blocked %}
-                <p class="neoscorpion-calculation-warning">Fuel entry and MARK OFF are blocked until dispatcher review is complete.</p>
+                {% if can_edit and row.fueler_work_blocked %}
+                <p class="neoscorpion-calculation-warning">Fuel entry and TRUCK OFF are blocked until dispatcher review is complete.</p>
                 {% endif %}
                 {% endif %}
                 {% if can_edit and row.assignment %}
-                    {% if row.off_ready %}
-                    <form method="post" action="{{ fuel_off_url }}" class="neoscorpion-fueler-off-form">
-                        {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
-                        <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
-                        <button class="action-button" type="submit">MARK OFF</button>
-                    </form>
-                    {% elif not row.is_off and not row.fueler_work_blocked %}
+                    {% if not row.off_ready and not row.is_off and not row.fueler_work_blocked %}
                     <p class="neoscorpion-calculation-warning">{{ row.off_reason }}</p>
                     {% endif %}
                 {% endif %}

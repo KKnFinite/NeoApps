@@ -481,6 +481,11 @@ def update_nightly_truck(
     if nightly_truck.status != "needs_sump" and final_status == "needs_sump":
         raise ValueError("NEEDS SUMP is set only by a completed defuel.")
 
+    inventory_changed = final_current != nightly_truck.current_gallons
+    if inventory_changed:
+        _assert_inventory_measurement_safe(locked_operation.id, truck.id)
+        _verify_inventory(locked_operation, nightly_truck, final_current, changed_by_user,
+                          "Dispatcher entered a new confirmed truck reading.", now_utc=now_utc)
     _set_truck_values(nightly_truck, *final_values)
     if final_status != "available":
         _hold_assignments_for_truck_status(
@@ -540,6 +545,7 @@ def mark_nightly_truck_topping_off(
         raise ValueError("Truck is unavailable / OOS.")
     if nightly_truck.status == "topping_off":
         return _unchanged(state)
+    _assert_inventory_measurement_safe(locked_operation.id, truck.id)
     active_assignments = _active_assignments_for_resource(
         locked_operation.id,
         NeoScorpionFuelAssignment.assigned_truck_id,
@@ -566,6 +572,25 @@ def mark_nightly_truck_topping_off(
     return _changed(state)
 
 
+def _assert_inventory_measurement_safe(operation_id, truck_id):
+    active = NeoScorpionFuelWorkState.query.join(NeoScorpionFuelAssignment,
+        NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id).join(
+        SortDateMission,SortDateMission.id == NeoScorpionFuelAssignment.sort_date_mission_id).filter(
+        NeoScorpionFuelAssignment.sort_date_operation_id == operation_id,
+        NeoScorpionFuelWorkState.off_at_utc.is_(None), NeoScorpionFuelWorkState.ended_early_at_utc.is_(None),
+        db.or_(
+            db.and_(NeoScorpionFuelWorkState.manual_on_truck_id == truck_id,NeoScorpionFuelWorkState.manual_on_at_utc.is_not(None)),
+            db.and_(NeoScorpionFuelWorkState.performance_context["truck_id"].as_integer() == truck_id,
+                    NeoScorpionFuelWorkState.performance_context["on_source"].as_string() == "trusted automatic",
+                    NeoScorpionFuelWorkState.confirmed_on_at_utc.is_not(None)),
+            db.and_(NeoScorpionFuelAssignment.assigned_truck_id == truck_id,
+                    NeoScorpionFuelWorkState.tail_number == SortDateMission.assigned_tail_number,
+                    NeoScorpionFuelWorkState.on_at_utc.is_not(None)),
+        )).first()
+    if active:
+        raise ValueError("Truck is actively fueling. Record physical TRUCK OFF before verifying inventory or TOP OFF.")
+
+
 def _verify_inventory(locked_operation, nightly_truck, current_gallons, user, reason, *, now_utc=None):
     if user is not None:
         db.session.add(NeoScorpionTruckInventoryAudit(
@@ -579,7 +604,9 @@ def _verify_inventory(locked_operation, nightly_truck, current_gallons, user, re
             created_at=now_utc or datetime.utcnow(),
         ))
     nightly_truck.current_gallons = current_gallons
-    nightly_truck.inventory_verified = True
+    nightly_truck.inventory_verified = current_gallons is not None
+    nightly_truck.inventory_epoch = int(nightly_truck.inventory_epoch or 0) + 1
+    nightly_truck.inventory_pending_epoch = None
 
 
 def verify_nightly_truck_inventory(operation, fuel_truck, current_gallons, *,
@@ -590,6 +617,7 @@ def verify_nightly_truck_inventory(operation, fuel_truck, current_gallons, *,
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
     selection = _selected_truck(locked_operation.id, truck.id)
+    _assert_inventory_measurement_safe(locked_operation.id, truck.id)
     _validate_truck_state(truck, selection.status, selection.starting_gallons, value)
     if selection.status in {"topping_off", "needs_sump"}:
         raise ValueError("Use the Top Off Complete or MARK SUMPED confirmation.")
@@ -732,6 +760,15 @@ def _active_assignments_for_resource(
         query = query.filter(
             NeoScorpionFuelAssignment.id != int(exclude_assignment_id)
         )
+    if getattr(field, "key", None) == "assigned_truck_id":
+        released = db.session.query(NeoScorpionFuelWorkState.id).filter(
+            NeoScorpionFuelWorkState.fuel_assignment_id == NeoScorpionFuelAssignment.id,
+            db.or_(NeoScorpionFuelWorkState.id == NeoScorpionFuelAssignment.active_work_state_id,
+                   db.and_(NeoScorpionFuelAssignment.active_work_state_id.is_(None), NeoScorpionFuelWorkState.visit_number.is_(None))),
+            NeoScorpionFuelWorkState.tail_number == SortDateMission.assigned_tail_number,
+            NeoScorpionFuelWorkState.off_at_utc.is_not(None),
+        ).correlate(NeoScorpionFuelAssignment, SortDateMission).exists()
+        query = query.filter(~released)
     return query.with_for_update().all()
 
 
@@ -771,7 +808,7 @@ def _lock_operation_and_state(operation):
     # The always-present operation row serializes both first state creation and
     # every later child/revision mutation for this operational scope.
     locked_operation = (
-        SortDateOperation.query.filter_by(id=operation_id).with_for_update().first()
+        SortDateOperation.query.filter_by(id=operation_id).with_for_update().populate_existing().first()
     )
     if locked_operation is None:
         raise ValueError("Select an existing sort operation.")
@@ -780,6 +817,7 @@ def _lock_operation_and_state(operation):
             sort_date_operation_id=locked_operation.id
         )
         .with_for_update()
+        .populate_existing()
         .first()
     )
     return locked_operation, state

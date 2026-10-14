@@ -28,6 +28,7 @@ class FuelerDataTest(unittest.TestCase):
     _assignment = fixtures.NeoScorpionFuelerOffTest._assignment
     _add_user = fixtures.NeoScorpionFuelerOffTest._add_user
     _save_complete = fixtures.NeoScorpionFuelerOffTest._save_complete
+    _physical_truck = fixtures.NeoScorpionFuelerOffTest._physical_truck
     _form = staticmethod(fixtures.NeoScorpionFuelerOffTest._form)
 
     def client_for(self, user):
@@ -142,7 +143,7 @@ class FuelerDataTest(unittest.TestCase):
                     estimate = f'ESTIMATED GALLONS: {row["estimated_fuel_display"].upper()}'
                     self.assertEqual(page.count(estimate), 1)
                     self.assertLess(page.index('>TOTAL</strong>'), page.index(estimate))
-                    self.assertLess(page.index(estimate), page.index('<dt>T/F</dt>' if readonly else '<label>T/F'))
+                    self.assertLess(page.index(estimate), page.index('<label>T/F'))  # OFF remains editable until complete.
                     self.assertNotIn('name="estimated_fuel', page)
 
     def test_missing_estimated_gallons_does_not_block_fuel_entry(self):
@@ -187,10 +188,10 @@ class FuelerDataTest(unittest.TestCase):
                     cells = re.findall(r'<strong role="(?:rowheader|cell)">([^<]+)</strong>', total.group(1))
                     self.assertEqual(cells, ['TOTAL', row['remaining_total_display'], row['planned_total_display'], row['actual_total_display']])
                     self.assertEqual(page.count('neoscorpion-fuel-tank-total'), 1)
-                    self.assertLess(total.end(), page.index('<dt>T/F</dt>' if readonly else '<label>T/F'))
-                    self.assertEqual('name="remaining_left"' in page, not readonly)
+                    self.assertLess(total.end(), page.index('<label>T/F'))
+                    self.assertIn('name="remaining_left"', page)
                     if '<html' in page:
-                        self.assertIn('scorpion=20260930-fueler-grid-alignment-v1', page)
+                        self.assertIn('neoscorpion_fuel_planning.js', page)
 
     def test_both_actors_share_canonical_data_without_owner_change(self):
         self.setup_assignment()
@@ -220,6 +221,10 @@ class FuelerDataTest(unittest.TestCase):
         different = self.save(self.dispatch, self.dispatch_url, stale, remaining_left='10')
         self.assertEqual(different.status_code, 200)
         already = self.save(self.dispatch, self.dispatch_url, stale, notes='Fueler note')
+        # Another writer allocated physical work since this empty-work form.
+        # Even identical data may not silently target the new segment.
+        self.assertEqual(already.status_code, 409)
+        already = self.save(self.dispatch, self.dispatch_url, self.baseline(), notes='Fueler note')
         self.assertEqual(already.status_code, 200)
         self.assertEqual(self.baseline()['notes'], 'Fueler note')
 
@@ -235,6 +240,7 @@ class FuelerDataTest(unittest.TestCase):
     def test_dispatcher_off_actor_and_spear_failure_isolation(self):
         self.setup_assignment()
         self._save_complete(self.assignment)
+        self._physical_truck(self.assignment)
         db.session.commit()
         expected = self.baseline()
         with patch('app.neonodes.neoscorpion.routes.effective_spear_settings') as settings, patch(
@@ -248,18 +254,23 @@ class FuelerDataTest(unittest.TestCase):
         self.assertEqual(work.off_by_user_id, self.dispatcher.id)
         self.assertEqual(self.assignment.assigned_fueler_user_id, self.user.id)
         self.assertNotEqual(self.assignment.review_status, 'complete')
-        self.assertNotIn('data-fuel-planning-form', response.json['html'])
+        self.assertIn('data-fuel-planning-form', response.json['html'])
         self.assertNotIn('data-apu-editor-form', response.json['html'])
 
-    def test_off_stale_data_cannot_finalize_and_uses_normal_validation(self):
+    def test_off_reading_edits_do_not_block_physical_release_but_stale_cycle_rejected(self):
         self.setup_assignment()
         self.assertEqual(self.save(self.dispatch, self.dispatch_url + '/off', self.baseline()).status_code, 400)
         self._save_complete(self.assignment)
+        self._physical_truck(self.assignment)
         db.session.commit()
         expected = self.baseline()
         self.assertEqual(self.save(self.fueler, self.fueler_url, expected, actual_left='11').status_code, 200)
+        self.assertEqual(self.save(self.dispatch, self.dispatch_url + '/off', expected).status_code, 200)
+        original=NeoScorpionFuelWorkState.query.one().off_at_utc
+        self.assertIsNotNone(original)
+        self.assignment.current_cycle_number=2; db.session.commit()
         self.assertEqual(self.save(self.dispatch, self.dispatch_url + '/off', expected).status_code, 409)
-        self.assertIsNone(NeoScorpionFuelWorkState.query.one().off_at_utc)
+        self.assertEqual(NeoScorpionFuelWorkState.query.one().off_at_utc,original)
 
     def test_permissions_and_fueler_ownership(self):
         self.setup_assignment()

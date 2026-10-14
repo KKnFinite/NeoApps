@@ -134,14 +134,18 @@
         if (!card) return;
         event.preventDefault();
         if (card.dataset.fuelDataBusy === "true") return;
-        if (form.matches(".neoscorpion-fueler-off-form") && hasDirty(card)) {
-            status(card, "Save Fuel Entry before MARK OFF.");
+        if (form.matches("[data-new-visit-form]") && hasDirty(card)) {
+            status(card, "Save existing fuel entry before starting another visit.");
             return;
         }
-        if (form.matches("[data-truck-on-form]") && hasDirty(card)) {
-            status(card, "Save or cancel unsaved Fuel Entry before TRUCK ON.");
-            return;
-        }
+        const physicalAction = form.matches(".neoscorpion-fueler-off-form, [data-truck-on-form]");
+        const unsaved = physicalAction ? controls(card).filter(control => baselines.has(control)
+            && control.value !== baselines.get(control)).map(control => ({name: control.name, value: control.value,
+                scope: control.closest("[data-apu-editor-form]") ? "[data-apu-editor-form]" : "[data-fuel-planning-form]"})) : [];
+        const restoreUnsaved = scope => unsaved.forEach(item => {
+            const input = scope.querySelector(`${item.scope} [name="${item.name}"]`);
+            if (input) { input.value = item.value; input.dispatchEvent(new Event("input", {bubbles: true})); }
+        });
         const apuEditor = card.querySelector("[data-apu-editor-form]");
         if (form.matches("[data-fuel-planning-form]") && apuEditor && hasDirty(apuEditor)) {
             status(card, "Save or cancel the APU edit first.");
@@ -157,6 +161,7 @@
         }
         const body = new FormData();
         body.set("expected", card.dataset.editBaseline);
+        if (form.matches(".neoscorpion-fueler-off-form") && unsaved.length) body.set("completion_deferred", "1");
         controls(form).forEach(control => {
             if (control.value !== baselines.get(control)) body.set(control.name, control.value);
         });
@@ -169,7 +174,7 @@
             });
         }
         if (form.matches("[data-truck-on-form]")) {
-            ["expected_cycle", "expected_tail", "expected_truck_id"].forEach(name => {
+            ["expected_cycle", "expected_tail", "expected_truck_id", "expected_work_ref"].forEach(name => {
                 body.set(name, form.elements[name].value);
             });
         }
@@ -184,14 +189,17 @@
             });
             const payload = await response.json().catch(() => ({ok: false, error: "Unable to load Fueler Data. Reload and try again."}));
             acceptSaveResponse(response, payload, (state, message) => {
+                if (response.ok && physicalAction) message = `${form.matches(".neoscorpion-fueler-off-form") ? "TRUCK OFF" : "TRUCK ON"} recorded${unsaved.length ? " · Unsaved Fuel Entry kept" : ""}`;
                 if (dialog?.open && content.contains(card)) {
                     generation += 1; // Discard any older GET still in flight.
                     renderPanel(state, message);
+                    if (response.ok) restoreUnsaved(content);
                     refreshGate.reset();
                 } else if (card.isConnected) {
                     const holder = document.createElement("div");
                     holder.innerHTML = state.html || "";
                     initialize(holder);
+                    if (response.ok) restoreUnsaved(holder);
                     status(holder, message);
                     if (!state.html) holder.textContent = "Assignment is no longer active.";
                     card.replaceWith(...holder.childNodes);

@@ -18,6 +18,9 @@
             <strong>{{ gateway.code }}</strong>
         </div>
         <nav class="neoscorpion-report-grid" aria-label="NeoScorpion reports">
+            <a class="neoscorpion-report-card" href="{{ url_for('neoscorpion.prof_report') }}">
+                <strong>PROF Report</strong><span>Physical ON→OFF performance, setup policy, wrap-up, and complete per-job mathematics.</span>
+            </a>
             <a class="neoscorpion-report-card" href="{{ url_for('neoscorpion.fuel_report') }}">
                 <strong>Fuel Report</strong>
                 <span>Every physical fueling event for the current night: fuel, uplift and defuel.</span>

@@ -205,8 +205,9 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
                                                    ended_early_at_utc=None)
         plan = _plan([owner, _row(100)])
         self.assertEqual(plan.occupied_truck_next, {})
-        self.assertEqual(plan.steps[0].mission_id, 100)
-        self.assertTrue(plan.steps[0].automatic_eligible)
+        self.assertFalse(plan.steps)  # Fueler still owns post-OFF final data.
+        plan = _plan([owner, _row(100)], fuelers=(_fueler(1), _fueler(2)))
+        self.assertEqual((plan.steps[0].mission_id,plan.steps[0].fueler_id,plan.steps[0].truck_id),(100,2,10))
 
     def test_idle_truck_card_uses_plan_but_pends_unknown_timing(self):
         from app.services.neoscorpion import _attach_spear_plan
@@ -233,6 +234,9 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
                     setattr(assignment,'completed_at_utc' if boundary=='complete' else 'fuel_on_board_at_utc',NOW-timedelta(minutes=10))
                     owner['administratively_complete']=True
                 plan=_plan([owner,_row(100)])
+                if boundary == 'off':
+                    self.assertFalse(plan.steps)
+                    continue
                 self.assertEqual(len(plan.steps),1)
                 step=plan.steps[0]
                 self.assertEqual((step.mission_id,step.fueler_id,step.truck_id),(100,1,10))
@@ -255,6 +259,7 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         older = _row(98, assignment=self.commitment())
         older['parking_position'] = 'B06'
         older['fuel_work_state'] = SimpleNamespace(off_at_utc=NOW-timedelta(minutes=30))
+        older['administratively_complete'] = True
         newer = _row(99, assignment=self.commitment())
         newer['parking_position'] = 'D07'
         newer['assignment'].completed_at_utc = NOW-timedelta(minutes=5)

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}PROF Report | NeoScorpion{% endblock %}
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-prof-report">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">{% include "neonodes/neoscorpion/_brand_title.html" %}<h1>PROF Report</h1></header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+    <section class="neoscorpion-panel">
+        <form method="get" class="neoscorpion-prof-filters">
+            <label>Sort<select name="operation_id">{% for item in operations %}<option value="{{ item.id }}" {% if operation and item.id == operation.id %}selected{% endif %}>{{ item.sort_date }} · {{ item.sort_name }}</option>{% endfor %}</select></label>
+            <label>Fueler<select name="fueler_id"><option value="">ALL Fuelers</option>{% for id,name in fuelers.items() %}<option value="{{ id }}" {% if id == fueler_id %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+            <label>Truck<select name="truck_id"><option value="">ALL Trucks</option>{% for id,name in trucks.items() %}<option value="{{ id }}" {% if id == truck_id %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+            <button class="action-button">View</button><button class="action-button" name="format" value="csv">CSV</button>
+            <button class="action-button" type="button" data-prof-copy>COPY REPORT</button><small data-prof-copy-status role="status"></small>
+        </form>
+        {% if truncated %}<p class="neoscorpion-calculation-warning">This unusually large sort exceeds the 5,000-job report limit. Combined results below cover the displayed data only.</p>{% endif %}
+        <div class="neoscorpion-prof-summary">
+        {% for resource,summary in summaries.items() %}<article>
+            <strong>{{ resource|upper }} PROF {{ summary.prof if summary.prof is not none else '—' }} · {{ summary.jobs }} qualified jobs</strong>
+            <details><summary>Combined mathematics</summary>
+                <p>Expected: {{ summary.expected_components }} = {{ '%.2f'|format(summary.expected) }} min</p>
+                <p>Actual: {{ summary.actual_components }} = {{ '%.2f'|format(summary.actual) }} min</p>
+                <p>100 × {{ '%.2f'|format(summary.expected) }} ÷ {{ '%.2f'|format(summary.actual) }} = {{ summary.prof if summary.prof is not none else '—' }}</p>
+            </details>
+        </article>{% endfor %}
+        </div>
+        <p class="neoscorpion-helper">{{ count }} recorded segments. Times use the gateway timezone; physical durations use exact UTC seconds. Unknown historical facts remain excluded.</p>
+        {% for job in jobs %}<article class="neoscorpion-prof-job">
+            <h2>{{ job.columns.Flight }} · {{ job.columns.Tail }} · Truck {{ job.columns.Truck }}</h2>
+            <p>{{ job.columns.Fueler }} · {{ job.columns.Date }} {{ job.columns.Sort }} · Cycle {{ job.columns.Cycle }} / Segment {{ job.columns.Segment }}</p>
+            <strong>Fueler {{ job.columns['Fueler PROF'] }} PROF · Truck {{ job.columns['Truck PROF'] }} PROF</strong>
+            {% if job.columns.Exclusions != 'QUALIFIED' %}<p class="neoscorpion-calculation-warning">EXCLUDED / PARTIAL: {{ job.columns.Exclusions }}</p>{% endif %}
+            <dl>{% for key,value in job.columns.items() %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>
+        </article>{% else %}<p>No physical fueling events for this selection.</p>{% endfor %}
+        <nav class="neoscorpion-prof-pages">{% if page > 1 %}<a href="{{ url_for('neoscorpion.prof_report', operation_id=operation.id, fueler_id=fueler_id or '', truck_id=truck_id or '', page=page-1) }}">Previous</a>{% endif %}<span>Page {{ page }}</span>{% if has_next %}<a href="{{ url_for('neoscorpion.prof_report', operation_id=operation.id, fueler_id=fueler_id or '', truck_id=truck_id or '', page=page+1) }}">Next</a>{% endif %}</nav>
+        <textarea data-prof-copy-text hidden>{{ copy_text }}</textarea>
+    </section>
+</section>
+<script src="{{ url_for('static', filename='js/neoscorpion_prof_report.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+{% endblock %}

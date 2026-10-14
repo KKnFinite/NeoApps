@@ -1,5 +1,6 @@
+import json
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import inspect
@@ -12,6 +13,7 @@ from app.models import (
     NeoNode,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelAuditEntry,
+    NeoScorpionFuelingEvent,
     NeoScorpionFuelTankState,
     NeoScorpionFuelWorkState,
     NeoScorpionSettings,
@@ -338,9 +340,26 @@ class NeoScorpionFuelCorrectionTest(unittest.TestCase):
 
     def test_noop_correction_creates_no_audit_or_revision(self):
         operation, _mission, assignment = self._assignment()
-        self._save_tanks(assignment)
+        entered_at = datetime(2026, 8, 18, 4, 0)
+        saved = save_fueler_entry(self.gateway, self.fueler, self._fuel_form(assignment), now_utc=entered_at)
         db.session.commit()
         starting_revision = self._revision(operation)
+        entry = NeoScorpionFuelAuditEntry.query.one()
+        expected_values = {"actual_left": 11000, "actual_ctr": 10000, "actual_right": 10000,
+                           "remaining_left": 10000, "remaining_ctr": 10000, "remaining_right": 10000,
+                           "apu_running": False, "transfer_fuel_gallons": 150}
+        self.assertEqual((entry.action, entry.field_name), ("segment_transfer", "fuel_entry"))
+        self.assertEqual(entry.sort_date_operation_id, operation.id)
+        self.assertEqual(entry.fuel_assignment_id, assignment.id)
+        self.assertEqual(entry.fuel_work_state_id, saved.fuel_work_state.id)
+        self.assertEqual(assignment.active_work_state_id, saved.fuel_work_state.id)
+        self.assertEqual(saved.fuel_work_state.tail_number, "N412UP")
+        self.assertEqual(entry.changed_by_user_id, self.fueler.id)
+        self.assertEqual(entry.created_at, entered_at)
+        self.assertEqual(json.loads(entry.old_value), {key: None for key in expected_values})
+        self.assertEqual(json.loads(entry.new_value), expected_values)
+        original_entry = (entry.id, entry.old_value, entry.new_value, entry.created_at)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
         result = correct_fuel_actuals(
             self.gateway,
@@ -354,7 +373,50 @@ class NeoScorpionFuelCorrectionTest(unittest.TestCase):
         )
         self.assertFalse(result.changed)
         self.assertEqual(result.revision, starting_revision)
-        self.assertEqual(NeoScorpionFuelAuditEntry.query.count(), 0)
+        self.assertEqual(result.audit_entries, ())
+        db.session.commit()
+        retry = save_fueler_entry(self.gateway, self.fueler, self._fuel_form(assignment),
+                                 now_utc=entered_at + timedelta(minutes=1))
+        db.session.commit()
+        self.assertFalse(retry.changed)
+        self.assertEqual(self._revision(operation), starting_revision)
+        retained_entry = NeoScorpionFuelAuditEntry.query.one()
+        self.assertEqual((retained_entry.id, retained_entry.old_value, retained_entry.new_value, retained_entry.created_at),
+                         original_entry)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action="correct_actual").count(), 0)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
+
+    def test_changed_fuel_entry_audit_records_only_delta_and_duplicate_is_noop(self):
+        operation, _mission, assignment = self._assignment()
+        entered_at = datetime(2026, 8, 18, 4, 0)
+        first = save_fueler_entry(self.gateway, self.fueler, self._fuel_form(assignment), now_utc=entered_at)
+        db.session.commit()
+        changed_form = self._fuel_form(assignment, actual_left="12.0")
+        changed = save_fueler_entry(self.gateway, self.fueler, changed_form,
+                                   now_utc=entered_at + timedelta(minutes=1))
+        db.session.commit()
+        self.assertTrue(changed.changed)
+        entries = NeoScorpionFuelAuditEntry.query.order_by(NeoScorpionFuelAuditEntry.id).all()
+        self.assertEqual(len(entries), 2)
+        delta = entries[1]
+        self.assertEqual((delta.action, delta.field_name), ("segment_transfer", "fuel_entry"))
+        self.assertEqual(delta.fuel_assignment_id, assignment.id)
+        self.assertEqual(delta.fuel_work_state_id, first.fuel_work_state.id)
+        self.assertEqual(delta.sort_date_operation_id, operation.id)
+        self.assertEqual(delta.changed_by_user_id, self.fueler.id)
+        self.assertEqual(delta.created_at, entered_at + timedelta(minutes=1))
+        self.assertEqual(json.loads(delta.old_value), {"actual_left": 11000})
+        self.assertEqual(json.loads(delta.new_value), {"actual_left": 12000})
+        expected_ids = [entry.id for entry in entries]
+        revision = self._revision(operation)
+        retry = save_fueler_entry(self.gateway, self.fueler, changed_form,
+                                 now_utc=entered_at + timedelta(minutes=2))
+        db.session.commit()
+        self.assertFalse(retry.changed)
+        self.assertEqual(self._revision(operation), revision)
+        self.assertEqual([entry.id for entry in NeoScorpionFuelAuditEntry.query.order_by(NeoScorpionFuelAuditEntry.id)],
+                         expected_ids)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(), 0)
 
     def test_dispatcher_routes_commit_each_meaningful_action_once(self):
         _operation, _mission, assignment = self._assignment()

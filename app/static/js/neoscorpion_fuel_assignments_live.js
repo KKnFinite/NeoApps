@@ -122,6 +122,7 @@
             (control) => control.dataset.fuelerLiveBaseline !== control.value
         );
 
+    const cardKey = card => String(card.dataset.fuelCardKey || card.dataset.fuelAssignmentId || "");
     const capturePanelState = () => {
         const state = {
             scrollX: window.scrollX,
@@ -131,7 +132,7 @@
             focusName: null,
         };
         root.querySelectorAll("[data-fuel-assignment-id]").forEach((card) => {
-            const id = String(card.dataset.fuelAssignmentId || "");
+            const id = cardKey(card);
             if (!id) return;
             state.openDetails[id] = Array.from(card.querySelectorAll("details"))
                 .map((details, index) => details.open ? index : -1)
@@ -140,7 +141,7 @@
         const active = document.activeElement;
         const activeCard = active?.closest?.("[data-fuel-assignment-id]");
         if (activeCard && active?.name) {
-            state.focusAssignmentId = String(activeCard.dataset.fuelAssignmentId || "");
+            state.focusAssignmentId = cardKey(activeCard);
             state.focusName = active.name;
         }
         return state;
@@ -149,7 +150,7 @@
     const restorePanelState = (state) => {
         Object.entries(state.openDetails).forEach(([id, indexes]) => {
             const card = Array.from(root.querySelectorAll("[data-fuel-assignment-id]"))
-                .find((candidate) => String(candidate.dataset.fuelAssignmentId) === id);
+                .find((candidate) => cardKey(candidate) === id);
             if (!card) return;
             const details = Array.from(card.querySelectorAll("details"));
             indexes.forEach((index) => {
@@ -159,7 +160,7 @@
         if (state.focusAssignmentId && state.focusName) {
             const card = Array.from(root.querySelectorAll("[data-fuel-assignment-id]"))
                 .find((candidate) => (
-                    String(candidate.dataset.fuelAssignmentId) === state.focusAssignmentId
+                    cardKey(candidate) === state.focusAssignmentId
                 ));
             const control = card
                 ? Array.from(card.querySelectorAll("[name]"))

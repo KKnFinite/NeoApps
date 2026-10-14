@@ -59,12 +59,15 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "inventory_epoch": "INTEGER NOT NULL DEFAULT 0",
+        "inventory_pending_epoch": "INTEGER",
     },
     "neoscorpion_settings": {
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
+        "advance_setup_window_minutes": "INTEGER",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
         "spear_recommendations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -86,6 +89,10 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "max_lateral_imbalance_lbs": "INTEGER",
     },
     "neoscorpion_fuel_assignments": {
+        "active_work_state_id": "INTEGER REFERENCES neoscorpion_fuel_work_states(id)",
+        "fueler_assigned_at_utc": "TIMESTAMP",
+        "truck_assigned_at_utc": "TIMESTAMP",
+        "resource_assignment_by_user_id": "INTEGER",
         "fuel_on_board_at_utc": "TIMESTAMP",
         "fuel_on_board_by_user_id": "INTEGER",
         "ready_for_fuel_at_utc": "TIMESTAMP",
@@ -105,6 +112,22 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fuel_work_states": {
+        "visit_number": "INTEGER",
+        "actuals_received_at_utc": "TIMESTAMP",
+        "preparation_received_at_utc": "TIMESTAMP",
+        "completion_ready_at_utc": "TIMESTAMP",
+        "off_inventory_epoch": "INTEGER",
+        "performance_context": "JSON",
+        "physical_sequence_number": "INTEGER",
+        "physical_cycle_number": "INTEGER",
+        "physical_cycle_type": "VARCHAR(16)",
+        "physical_truck_id": "INTEGER REFERENCES neoscorpion_fuel_trucks(id)",
+        "physical_fueler_user_id": "INTEGER REFERENCES users(id)",
+        "physical_required_fuel_lbs": "INTEGER",
+        "physical_transfer_gallons": "INTEGER",
+        "physical_finalized_at_utc": "TIMESTAMP",
+        "physical_finalized_by_user_id": "INTEGER REFERENCES users(id)",
+        "physical_transfer_review": "BOOLEAN NOT NULL DEFAULT FALSE",
         "confirmed_on_at_utc": "TIMESTAMP",
         "manual_on_at_utc": "TIMESTAMP",
         "manual_on_by_user_id": "INTEGER",
@@ -126,6 +149,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "ended_early_reason": "TEXT",
     },
     "neoscorpion_fueling_events": {
+        "performance_snapshot": "JSON",
         "event_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
         "cycle_number": "INTEGER NOT NULL DEFAULT 1",
         "fueler_user_id": "INTEGER",
@@ -180,6 +204,9 @@ NEOSCORPION_CHECK_CONSTRAINTS = (
             "cancel_defuel",
             "unassign_truck",
             "truck_on",
+            "segment_transfer",
+            "segment_transfer_review",
+            "segment_transfer_review_required",
         ),
     ),
 )
@@ -224,6 +251,8 @@ def ensure_neoscorpion_production_schema(app):
             for model in NEOSCORPION_MODEL_TABLES:
                 model.__table__.create(bind=connection, checkfirst=True)
             _ensure_additive_columns(connection)
+            from app.services.neoscorpion_segment_schema import migrate_physical_segment_identity
+            migrate_physical_segment_identity(connection)
             _ensure_check_constraints(connection)
             _ensure_expression_check_constraints(connection)
             _verify_model_schema_contract(connection)

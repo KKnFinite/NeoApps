@@ -334,7 +334,7 @@ def _validate_review(payload, key, metadata=None):
     # not synthesize fields before hashing: their absence was part of that hash.
     if "operation_id" in payload or "spear_algorithm_version" in payload:
         require(identity(payload.get("operation_id")) and payload["operation_id"] == sort["operation_id"])
-        require(payload.get("spear_algorithm_version") == "spear-v1")
+        require(payload.get("spear_algorithm_version") in {"spear-v1", "spear-v3-physical"})
     require(isinstance(payload.get("calibrations"), list))
     for item in payload["calibrations"]:
         require(isinstance(item, dict) and set(item) == {"metric", "scope", "configured", "observed", "effective", "samples", "excluded_samples", "confidence"})
@@ -382,13 +382,33 @@ def _validate_learning_record(record):
             return False
 
     require(isinstance(record, dict))
+    version = record.get("schema_version")
     require(set(record) == {
         "schema_version", "record_type", "captured_at_utc",
         "training_eligible", "exclusion_reasons", "gateway", "sort",
         "assignment", "mission", "arrival", "parking", "work_states",
         "fuel_events", "audit_actions",
-    })
-    require(record["schema_version"] == "spear-learning/v1")
+    } | ({"operational_timelines"} if version == "spear-learning/v2" else set()))
+    require(version in {"spear-learning/v1", "spear-learning/v2"})
+    if version == "spear-learning/v2":
+        require(isinstance(record["operational_timelines"], list))
+        fact_keys = {"version", "aircraft_type", "fueler_id", "truck_id", "cycle", "fueler_assigned_at", "truck_assigned_at",
+                     "assignment_actor_id", "advance_window", "setup_minutes", "setup_allowance", "lead_minutes", "setup_reason",
+                     "pump_rate", "forecasts", "exclusions", "on_source", "on_at", "actuals_received_at", "inventory_epoch",
+                     "completion_ready_at", "completed_at", "preparation_completed_at",
+                     "physical_work_id", "physical_sequence", "physical_tail", "planned_departure_at", "required_fuel_lbs"}
+        for item in record["operational_timelines"]:
+            require(isinstance(item, dict) and set(item) == {"event_id", "facts", "fueler_prof", "truck_prof", "exclusions"})
+            require(positive_id(item["event_id"]))
+            require(isinstance(item["facts"], dict) and set(item["facts"]) <= fact_keys)
+            facts = item["facts"]
+            for field in ("fueler_assigned_at", "truck_assigned_at", "on_at", "actuals_received_at", "completion_ready_at", "completed_at", "preparation_completed_at"):
+                require(timestamp(facts.get(field)))
+            require(isinstance(facts.get("forecasts", []), list))
+            for prediction in facts.get("forecasts", []):
+                require(isinstance(prediction, dict) and set(prediction) == {"goal", "likely", "source", "samples", "gallons", "observed_at"})
+                require(all(timestamp(prediction[key]) for key in ("goal", "likely", "observed_at")))
+            require(isinstance(item["exclusions"], list) and all(isinstance(reason, str) for reason in item["exclusions"]))
     require(record["record_type"] == "completed_fuel_outcome")
     require(timestamp(record["captured_at_utc"]))
     require(type(record["training_eligible"]) is bool)
@@ -539,7 +559,7 @@ def _learning_key(record, checksum):
         f"gateway-{_safe_component(record['gateway']['id'])}/"
         f"sort-{_safe_component(sort['operation_id'])}/"
         f"assignment-{_safe_component(assignment_id)}/"
-        f"{checksum}-completed-fuel-outcome-v1.json.gz"
+        f"{checksum}-completed-fuel-outcome-{record['schema_version'].rsplit('/',1)[-1]}.json.gz"
     )
 
 
@@ -547,7 +567,7 @@ def _valid_learning_key(key):
     return bool(re.fullmatch(
         r"learning-record/\d{4}/\d{2}/\d{2}/gateway-[A-Za-z0-9_-]+/"
         r"sort-[A-Za-z0-9_-]+/assignment-[A-Za-z0-9_-]+/"
-        r"[0-9a-f]{64}-completed-fuel-outcome-v1\.json\.gz",
+        r"[0-9a-f]{64}-completed-fuel-outcome-v[12]\.json\.gz",
         str(key or ""),
     ))
 

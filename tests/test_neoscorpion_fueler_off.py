@@ -13,6 +13,8 @@ from app.models import (
     NeoScorpionFuelAssignment,
     NeoScorpionFuelTankState,
     NeoScorpionFuelWorkState,
+    NeoScorpionFuelTruck,
+    NeoScorpionSortTruck,
     NeoScorpionSettings,
     NeoScorpionSortAssetState,
     NeoScorpionTailFuelState,
@@ -23,7 +25,7 @@ from app.models import (
     User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
-from app.services.neoscorpion import mark_fueler_off, save_fueler_entry
+from app.services.neoscorpion import mark_fueler_off, save_fueler_entry, confirm_fueler_truck_on
 from app.services.password_policy import set_user_password
 from app.services.permission_rules import ensure_default_permission_rules
 from app.services.schema_sync import (
@@ -161,19 +163,17 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
             2,
         )
 
-    def test_valid_neo_fuel_requires_positive_tf_before_off_and_repeat_is_noop(self):
+    def test_physical_off_does_not_require_final_tf_and_repeat_is_noop(self):
         operation, _mission, assignment = self._assignment()
         saved = self._save_complete(assignment)
         self.assertEqual(saved.revision, 1)
         db.session.commit()
         self.assertEqual(assignment.transfer_fuel_gallons, 1)
+        self._physical_truck(assignment)
 
         assignment.transfer_fuel_gallons = None
         db.session.commit()
-        with self.assertRaisesRegex(ValueError, "positive T/F"):
-            mark_fueler_off(self.gateway, self.user, assignment.id)
-        db.session.rollback()
-        assignment.transfer_fuel_gallons = 1
+        mark_fueler_off(self.gateway, self.user, assignment.id)
         db.session.commit()
 
         self._login(self.user)
@@ -183,7 +183,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
                 data={"assignment_id": str(assignment.id)},
                 follow_redirects=False,
             )
-            self.assertEqual(commit.call_count, 1)
+            self.assertEqual(commit.call_count, 0)
         self.assertEqual(response.status_code, 302)
 
         work = NeoScorpionFuelWorkState.query.filter_by(
@@ -195,7 +195,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
         state = NeoScorpionSortAssetState.query.filter_by(
             sort_date_operation_id=operation.id
         ).one()
-        self.assertEqual(state.revision, 2)
+        self.assertEqual(state.revision, 3)
 
         repeated = mark_fueler_off(
             self.gateway,
@@ -204,7 +204,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
             now_utc=datetime(2026, 8, 18, 7, 30),
         )
         self.assertFalse(repeated.changed)
-        self.assertEqual(repeated.revision, 2)
+        self.assertEqual(repeated.revision, 3)
         self.assertEqual(repeated.fuel_work_state.off_at_utc, original_off_at)
 
         rendered = self.client.get("/neoscorpion/fueler")
@@ -216,6 +216,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
     def test_spear_auto_complete_failure_does_not_rollback_valid_off(self):
         _operation, mission, assignment = self._assignment()
         self._save_complete(assignment)
+        self._physical_truck(assignment)
         settings = NeoScorpionSettings.query.filter_by(
             gateway_id=self.gateway.id
         ).one()
@@ -279,7 +280,7 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
             self.assertEqual(commit.call_count, 0)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b">MARK OFF</button>", response.data)
+        self.assertNotIn(b">TRUCK OFF</button>", response.data)  # Truckless FOB has no physical truck action.
         work = NeoScorpionFuelWorkState.query.filter_by(
             fuel_assignment_id=assignment.id
         ).one()
@@ -336,6 +337,17 @@ class NeoScorpionFuelerOffTest(unittest.TestCase):
                 transfer_fuel_gallons="1",
             ),
         )
+
+    def _physical_truck(self, assignment):
+        truck=NeoScorpionFuelTruck(gateway_id=self.gateway.id,truck_number="PHYSICAL",capacity_gallons=10000)
+        db.session.add(truck); db.session.flush()
+        db.session.add(NeoScorpionSortTruck(sort_date_operation_id=assignment.sort_date_operation_id,
+            fuel_truck_id=truck.id,status="available",starting_gallons=1000,current_gallons=1000))
+        assignment.assigned_truck_id=truck.id
+        db.session.commit()
+        confirm_fueler_truck_on(self.gateway,self.user,assignment.id,expected_cycle=assignment.current_cycle_number,
+                               expected_tail=assignment.sort_date_mission.assigned_tail_number,expected_truck_id=truck.id)
+        db.session.commit()
 
     def _assignment(self, tail_number="N412UP"):
         day = date(2026, 8, 17)

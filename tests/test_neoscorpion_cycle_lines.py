@@ -4,7 +4,7 @@ from sqlalchemy import inspect
 
 from tests import test_neoscorpion_fuel_interruptions as fixture
 from app.extensions import db
-from app.models import NeoScorpionFuelCycleHistory, NeoScorpionFuelTankState, SortDateMission
+from app.models import NeoScorpionFuelCycleHistory, NeoScorpionFuelTankState, NeoScorpionFuelAuditEntry, SortDateMission
 from app.services import neoscorpion as service
 
 
@@ -44,7 +44,10 @@ class CycleLinesTest(unittest.TestCase):
         db.session.commit()
         self.assertEqual(assignment.current_cycle_number, 1)
         self.assertEqual(assignment.assigned_fueler_user_id, old_fueler)
-        self.assertEqual(assignment.transfer_fuel_gallons, 100)
+        self.assertIsNone(assignment.transfer_fuel_gallons)
+        audit=NeoScorpionFuelAuditEntry.query.filter_by(action="segment_transfer_review_required").one()
+        self.assertEqual(audit.old_value,"100")
+        self.assertTrue(db.session.get(service.NeoScorpionFuelWorkState,audit.fuel_work_state_id).physical_transfer_review)
         self.assertEqual(mission.planned_fuel_load, old_required)
         self.assertEqual(NeoScorpionFuelCycleHistory.query.count(), 0)
         self.assertEqual(SortDateMission.query.count(), 1)
@@ -62,7 +65,9 @@ class CycleLinesTest(unittest.TestCase):
             expected_cycle=1, expected_tail="N413UP",
         )
         db.session.commit()
-        self.assertIsNone(result.fuel_work_state)
+        self.assertIsNotNone(result.fuel_work_state)
+        self.assertEqual(result.fuel_work_state.tank_states,[])
+        self.assertIsNone(result.fuel_work_state.physical_transfer_gallons)
         row = next(r for r in service.fuel_dispatch_context(self.gateway)["rows"]
                    if r["mission"].id == mission.id)
         self.assertFalse(row["fuel_on_board_ready"])

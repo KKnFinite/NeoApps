@@ -133,6 +133,12 @@ class SpearLearningCaptureTest(unittest.TestCase):
             apu_running=False,
             apu_allowance_lbs=0,
             neo_fuel_lbs=48000,
+            performance_snapshot={"version":3,"aircraft_type":"B757","on_source":"trusted automatic",
+                "fueler_id":self.user.id,"truck_id":truck.id,"pump_rate":"100","setup_minutes":"8",
+                "setup_allowance":"8","advance_window":10,"lead_minutes":"0",
+                "fueler_assigned_at":"2026-09-03T04:30:00","truck_assigned_at":"2026-09-03T04:30:00",
+                "actuals_received_at":"2026-09-03T05:25:00","completed_at":"2026-09-03T05:30:00",
+                "forecasts":[],"exclusions":[]},
         )
         db.session.add(event)
         db.session.flush()

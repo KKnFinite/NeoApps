@@ -202,7 +202,7 @@ class FuelingStartHotfixTest(unittest.TestCase):
         finish = service.active_fueler_off(row, self.operation,
             service.assignment_planning_settings(self.gateway, settings=self.settings))
         self.assertAlmostEqual((finish-row["fueling_effective_on_utc"]).total_seconds()/60,
-                              row["planning_demand_gallons"]/300, places=5)
+                          10+row["planning_demand_gallons"]/300, places=5)
         row["fueling_on_trusted"] = False
         self.assertIsNone(service.active_fueler_off(row, self.operation,
             service.assignment_planning_settings(self.gateway, settings=self.settings)))
@@ -268,7 +268,7 @@ class FuelingStartHotfixTest(unittest.TestCase):
         self.prepare(); previous, previous_work = self.previous()
         work = self.save(**self.readings()).fuel_work_state
         self.save(actual_left="52",actual_ctr="0",actual_right="0",transfer_fuel_gallons="1000")
-        with self.assertRaisesRegex(ValueError, "released truck arrives"):
+        with self.assertRaisesRegex(ValueError, "TRUCK ON"):
             service.mark_fueler_off(self.gateway,self.fueler,self.assignment.id,now_utc=self.now)
         self.assertIsNone(work.off_at_utc)
         self.assertFalse(self.row()["off_ready"])

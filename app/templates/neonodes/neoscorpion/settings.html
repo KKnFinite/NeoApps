@@ -63,6 +63,9 @@
             <label>Setup Time, minutes
                 <input name="assignment_setup_minutes" value="{{ assignment_planning.setup_minutes if assignment_planning.setup_minutes is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
             </label>
+            <label>Advance Setup Window, minutes
+                <input name="advance_setup_window_minutes" value="{{ settings.advance_setup_window_minutes if settings and settings.advance_setup_window_minutes is not none else '' }}" inputmode="numeric" min="0" {% if not can_edit %}readonly{% endif %} placeholder="Not configured · full Setup Time">
+            </label>
             <label>Wrap-Up Time, minutes
                 <input name="assignment_finishing_minutes" value="{{ assignment_planning.finishing_minutes if assignment_planning.finishing_minutes is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
             </label>

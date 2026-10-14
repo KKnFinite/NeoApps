@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from app.extensions import db
 from app.models import NeoScorpionSettings, NeoScorpionSpearAuditEntry
 from app.services.neoscorpion_dispatch_planning import assignment_mission_timing, _assignment_finished
+from app.services.neoscorpion_spear_forecasts import physical_off_forecast
 from app.services.neoscorpion_learning_vault import require_learning_vault
 from app.services.neoscorpion_spear_calibration import calibrated_planning_settings
 from app.services.parking_rules import RAMP_OPTIONS, VALID_PARKING_POSITIONS
@@ -398,6 +399,9 @@ def build_spear_plan(
                     row, spear_settings, now_utc
                 ),
             )
+            if row.get("fueling_on_trusted") and row.get("fueling_effective_on_utc"):
+                start = row["fueling_effective_on_utc"]
+                finish = active_fueling_finish(row, operation, planning_settings)
             risk = _risk(finish, _departure_at(row))
             risks[mission_id] = risk
             _advance_resources(
@@ -1264,14 +1268,27 @@ def _current_resource_owners(rows):
     """Snapshot committed resources from bounded current-sort/cycle rows only."""
     fuelers, trucks = {}, {}
     for row in rows:
+        for fueler_id in row.get("pending_segment_fuelers", ()):
+            if fueler_id is not None:
+                fuelers.setdefault(fueler_id, set()).add(row["mission"].id)
         assignment = row.get("assignment")
-        if (assignment is None or row.get("administratively_complete")
-                or _assignment_finished(assignment, row.get("fuel_work_state"))):
+        if assignment is not None:
+            for fueler_id,truck_id in row.get("physical_segment_resources", ()):
+                if fueler_id is not None: fuelers.setdefault(fueler_id,set()).add(row["mission"].id)
+                if truck_id is not None: trucks.setdefault(truck_id,set()).add(row["mission"].id)
+        if (assignment is None or row.get("administratively_complete") or getattr(assignment,"completed_at_utc",None)
+                or getattr(assignment,"fuel_on_board_at_utc",None)):
             continue
+        work = row.get("fuel_work_state")
+        released = _assignment_finished(assignment, work)
         for owners, identifier in (
             (fuelers, getattr(assignment, "assigned_fueler_user_id", None)),
             (trucks, getattr(assignment, "assigned_truck_id", None)),
         ):
+            if released and owners is trucks:
+                continue
+            if getattr(work, "ended_early_at_utc", None):
+                continue
             if identifier is not None:
                 owners.setdefault(identifier, set()).add(row["mission"].id)
     return fuelers, trucks
@@ -1293,9 +1310,9 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
         assignment = row["assignment"]
         work = row.get("fuel_work_state")
         return _utc_naive(
-            getattr(assignment, "completed_at_utc", None)
+            getattr(work, "off_at_utc", None)
+            or getattr(assignment, "completed_at_utc", None)
             or getattr(assignment, "fuel_on_board_at_utc", None)
-            or getattr(work, "off_at_utc", None)
             or getattr(work, "ended_early_at_utc", None)
         )
 
@@ -1319,6 +1336,8 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
             (fueler_state, assignment.assigned_fueler_user_id),
             (truck_state, assignment.assigned_truck_id),
         ):
+            if mapping is fueler_state and not row.get("administratively_complete"):
+                continue
             if identifier in mapping:
                 mapping[identifier].ramp = ramp
                 mapping[identifier].location_source = "last_completed_assignment"
@@ -1353,43 +1372,14 @@ def _apply_demand(gallons_by_truck, truck_id, demand):
 
 
 def active_fueling_finish(row, operation, planning_settings):
-    """Use SPEAR's configured/calibrated duration for an already started job.
-
-    This is presentation only; it does not alter resource plans or automation.
-    Without a complete timing model we deliberately return unknown.
-    """
-    work = row.get("fuel_work_state")
-    if work is None or (getattr(work, "manual_on_at_utc", None) is None and work.on_at_utc is None) or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
-        return None
-    start = row.get("fueling_effective_on_utc") or getattr(work, "manual_on_at_utc", None) or work.on_at_utc
-    timing = _spear_timing(row, operation, planning_settings)
-    if not getattr(timing, "available", False) or timing.total_duration_minutes is None:
-        return None
-    return _utc_naive(start) + timedelta(minutes=float(timing.total_duration_minutes))
+    """Same physical OFF source used by Dispatch and Fueler, without wrap-up."""
+    if row.get("physical_off_forecast") is not None:
+        return row["physical_off_forecast"]["likely"]
+    return physical_off_forecast(row, planning_settings)["likely"]
 
 
 def active_fueler_off(row, operation, planning_settings):
-    """Physical OFF projection from the shared pump duration, for display only.
-
-    ON already marks physical work starting. Ready-to-ON setup and OFF-to-
-    dispatcher-completion finishing are separate milestones, not pumping.
-    """
-    work = row.get("fuel_work_state")
-    if work is None or (getattr(work, "manual_on_at_utc", None) is None and work.on_at_utc is None) or work.off_at_utc is not None or not row.get("fueling_on_trusted", True):
-        return None
-    rate = _decimal_or_none(planning_settings.pump_rate_for(row.get("detailed_aircraft_type")))
-    if rate is None or not rate.is_finite() or rate <= 0:
-        return None
-    # Recorded ON supplies the start anchor for physical work, even if arrival
-    # timestamps/ETD are missing. This local adapter never changes mission data.
-    start = row.get("fueling_effective_on_utc") or getattr(work, "manual_on_at_utc", None) or work.on_at_utc
-    timing = _spear_timing({**row, "arrival_mission": SimpleNamespace(
-        actual_block_in_datetime_utc=start,
-    )}, operation, planning_settings)
-    pump_minutes = _decimal_or_none(getattr(timing, "pump_minutes", None))
-    if pump_minutes is None or not pump_minutes.is_finite() or pump_minutes < 0:
-        return None
-    return _utc_naive(start) + timedelta(minutes=float(pump_minutes))
+    return active_fueling_finish(row, operation, planning_settings)
 
 
 def _risk(finish, departure):

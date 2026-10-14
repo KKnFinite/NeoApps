@@ -13,6 +13,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "DATETIME",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT 1",
+        "inventory_epoch": "INTEGER NOT NULL DEFAULT 0",
+        "inventory_pending_epoch": "INTEGER",
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
@@ -185,6 +187,22 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "visit_number": "INTEGER",
+        "actuals_received_at_utc": "DATETIME",
+        "preparation_received_at_utc": "DATETIME",
+        "completion_ready_at_utc": "DATETIME",
+        "off_inventory_epoch": "INTEGER",
+        "performance_context": "JSON",
+        "physical_sequence_number": "INTEGER",
+        "physical_cycle_number": "INTEGER",
+        "physical_cycle_type": "VARCHAR(16)",
+        "physical_truck_id": "INTEGER REFERENCES neoscorpion_fuel_trucks(id)",
+        "physical_fueler_user_id": "INTEGER REFERENCES users(id)",
+        "physical_required_fuel_lbs": "INTEGER",
+        "physical_transfer_gallons": "INTEGER",
+        "physical_finalized_at_utc": "TIMESTAMP",
+        "physical_finalized_by_user_id": "INTEGER REFERENCES users(id)",
+        "physical_transfer_review": "BOOLEAN NOT NULL DEFAULT FALSE",
         "confirmed_on_at_utc": "DATETIME",
         "manual_on_at_utc": "DATETIME",
         "manual_on_by_user_id": "INTEGER",
@@ -210,6 +228,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
+        "advance_setup_window_minutes": "INTEGER",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
         "spear_recommendations_enabled": "BOOLEAN NOT NULL DEFAULT 1",
@@ -241,6 +260,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "max_lateral_imbalance_lbs": "INTEGER",
     },
     "neoscorpion_fuel_assignments": {
+        "active_work_state_id": "INTEGER REFERENCES neoscorpion_fuel_work_states(id)",
+        "fueler_assigned_at_utc": "DATETIME",
+        "truck_assigned_at_utc": "DATETIME",
+        "resource_assignment_by_user_id": "INTEGER",
         "ready_for_fuel_at_utc": "DATETIME",
         "ready_for_fuel_by_user_id": "INTEGER",
         "fuel_on_board_at_utc": "DATETIME",
@@ -260,6 +283,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fueling_events": {
+        "performance_snapshot": "JSON",
         "event_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
         "cycle_number": "INTEGER NOT NULL DEFAULT 1",
         "fueler_user_id": "INTEGER",
@@ -278,6 +302,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "inventory_epoch": "INTEGER NOT NULL DEFAULT 0",
+        "inventory_pending_epoch": "INTEGER",
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
@@ -430,6 +456,22 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "visit_number": "INTEGER",
+        "actuals_received_at_utc": "TIMESTAMP",
+        "preparation_received_at_utc": "TIMESTAMP",
+        "completion_ready_at_utc": "TIMESTAMP",
+        "off_inventory_epoch": "INTEGER",
+        "performance_context": "JSON",
+        "physical_sequence_number": "INTEGER",
+        "physical_cycle_number": "INTEGER",
+        "physical_cycle_type": "VARCHAR(16)",
+        "physical_truck_id": "INTEGER REFERENCES neoscorpion_fuel_trucks(id)",
+        "physical_fueler_user_id": "INTEGER REFERENCES users(id)",
+        "physical_required_fuel_lbs": "INTEGER",
+        "physical_transfer_gallons": "INTEGER",
+        "physical_finalized_at_utc": "TIMESTAMP",
+        "physical_finalized_by_user_id": "INTEGER REFERENCES users(id)",
+        "physical_transfer_review": "BOOLEAN NOT NULL DEFAULT FALSE",
         "apu_running": "BOOLEAN",
         "apu_confirmed_at_utc": "TIMESTAMP",
         "manual_on_at_utc": "TIMESTAMP",
@@ -455,6 +497,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
+        "advance_setup_window_minutes": "INTEGER",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",
         "assignment_eta_safety_buffer_minutes": "NUMERIC(8, 2)",
         "spear_recommendations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -477,6 +520,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "max_lateral_imbalance_lbs": "INTEGER",
     },
     "neoscorpion_fuel_assignments": {
+        "active_work_state_id": "INTEGER REFERENCES neoscorpion_fuel_work_states(id)",
+        "fueler_assigned_at_utc": "TIMESTAMP",
+        "truck_assigned_at_utc": "TIMESTAMP",
+        "resource_assignment_by_user_id": "INTEGER",
         "ready_for_fuel_at_utc": "TIMESTAMP",
         "ready_for_fuel_by_user_id": "INTEGER",
         "fuel_on_board_at_utc": "TIMESTAMP",
@@ -496,6 +543,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fueling_events": {
+        "performance_snapshot": "JSON",
         "event_type": "VARCHAR(16) NOT NULL DEFAULT 'fuel'",
         "cycle_number": "INTEGER NOT NULL DEFAULT 1",
         "fueler_user_id": "INTEGER",
@@ -555,6 +603,12 @@ def sync_local_sqlite_schema(app):
             existing_columns.add(column_name)
 
     _sync_staffing_people_employee_status_sqlite(table_names)
+    from app.services.neoscorpion_segment_schema import migrate_physical_segment_identity
+    if migrate_physical_segment_identity(db.session.connection()):
+        # Subsequent compatibility inspectors use the engine. With SQLite's
+        # shared connection, close/rollback of an inspector must not undo the
+        # identity backfill after rebuilding the legacy table.
+        db.session.commit()
     _sync_sort_date_mission_status_constraints_sqlite(inspector, table_names)
     _create_google_mission_link_table()
     _create_google_live_poll_state_table()
@@ -645,6 +699,8 @@ def sync_database_schema(app):
     _create_google_live_poll_state_table()
     _sync_sort_date_tail_state_status_constraints_postgres(table_names)
     _sync_neoscorpion_fuel_audit_actions_postgres(table_names)
+    from app.services.neoscorpion_segment_schema import migrate_physical_segment_identity
+    migrate_physical_segment_identity(db.session.connection())
     _sync_neoscorpion_sort_truck_status_postgres(table_names)
     _sync_uld_request_unique_constraint_postgres(table_names)
     _backfill_motherbrain_parking_rule_defaults(table_names, table_columns)
@@ -1174,7 +1230,7 @@ def _sync_neoscorpion_fuel_audit_actions_sqlite(inspector, table_names):
             "WHERE type = 'table' AND name = 'neoscorpion_fuel_audit_entries'"
         )
     ).scalar() or ""
-    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "cancel_defuel", "unassign_truck", "truck_on")):
+    if all(f"'{action}'" in create_sql for action in ("end_early", "auto_hold", "cancel_uplift", "cancel_defuel", "unassign_truck", "truck_on", "segment_transfer", "segment_transfer_review", "segment_transfer_review_required")):
         return False
 
     all_tables = set(inspector.get_table_names())
@@ -1408,6 +1464,7 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
         and "cancel_defuel" in constraint_definition
         and "unassign_truck" in constraint_definition
         and "truck_on" in constraint_definition
+        and "segment_transfer_review_required" in constraint_definition
     ):
         return
     db.session.execute(
@@ -1434,7 +1491,10 @@ def _sync_neoscorpion_fuel_audit_actions_postgres(table_names):
                     'cancel_uplift',
                     'cancel_defuel',
                     'unassign_truck',
-                    'truck_on'
+                    'truck_on',
+                    'segment_transfer',
+                    'segment_transfer_review',
+                    'segment_transfer_review_required'
                 )
             )
             """

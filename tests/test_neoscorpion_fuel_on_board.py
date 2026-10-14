@@ -246,7 +246,7 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "positive T/F before OFF",
+            "physical TRUCK ON before TRUCK OFF",
         ):
             mark_fueler_off(
                 self.gateway,
@@ -270,9 +270,19 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self.assertIsNone(assignment.assigned_truck_id)
         self.assertIsNone(assignment.transfer_fuel_gallons)
 
+        # Unassignment allocates separate preparing work. Preserve the prior
+        # measurements, then explicitly confirm this truckless FOB check's
+        # Actuals instead of treating another visit's Actuals as new evidence.
+        current=db.session.get(NeoScorpionFuelWorkState,assignment.active_work_state_id)
+        self.assertTrue(all(t.actual_lbs is None for t in current.tank_states))
+        save_fueler_entry(self.gateway,self.fueler,self._fueler_form(assignment,apu_running="no",
+            remaining_left="10.0",actual_left="10.0",remaining_ctr="20.0",actual_ctr="20.0",
+            remaining_right="30.0",actual_right="30.0"))
+        db.session.commit()
+
         rows = fueler_context(self.gateway, self.fueler)["rows"]
         row = next(row for row in rows if row["assignment"].id == assignment.id)
-        self.assertTrue(row["off_ready"])
+        self.assertTrue(row["off_ready"],row["off_reason"])
         self.assertEqual(row["off_reason"], "")
 
         off = mark_fueler_off(

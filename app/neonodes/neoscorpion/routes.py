@@ -2,6 +2,8 @@ from flask import send_file, current_app, flash, jsonify, redirect, render_templ
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
 from types import SimpleNamespace
+import csv
+import io
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -31,6 +33,7 @@ from app.services.neoscorpion import (
     mark_ready_for_fuel,
     mark_fueler_off,
     confirm_fueler_truck_on,
+    begin_physical_visit,
     end_fuel_work_early,
     reopen_fueler_off,
     resume_held_fuel_assignment,
@@ -701,6 +704,8 @@ def fuel_dispatch_end_early():
             current_user,
             request.form.get("assignment_id"),
             request.form.get("end_early_reason"),
+            physical_work_id=request.form.get("physical_work_id"),
+            physical_sequence=request.form.get("physical_sequence"),
         ),
         "FUEL WORK ENDED EARLY.",
         "FUEL WORK WAS ALREADY ENDED EARLY.",
@@ -830,7 +835,10 @@ def fueler():
             flash(str(exc), "error")
             return _fueler_response(gateway, access, status_code=400)
         if result.changed:
+            terminal = bool(result.fuel_work_state and result.fuel_work_state.fuel_assignment.completed_at_utc)
             db.session.commit()
+            if terminal:
+                _capture_learning_after_commit(gateway, request.form.get("assignment_id"))
         if json_response:
             work_state = result.fuel_work_state
             return _json_no_store(
@@ -897,9 +905,9 @@ def fueler_off():
             request.form.get("assignment_id"),
         )
         flash(
-            "FUELER MARKED OFF · SPEAR COMPLETED ASSIGNMENT."
+            "TRUCK OFF RECORDED · MISSION COMPLETED."
             if spear_completed
-            else "FUELER MARKED OFF.",
+            else "TRUCK OFF RECORDED. Final data remains editable.",
             "success",
         )
         if spear_completion_error:
@@ -908,7 +916,7 @@ def fueler_off():
                 "warning",
             )
     else:
-        flash("FUELER WAS ALREADY OFF.", "info")
+        flash("TRUCK OFF WAS ALREADY RECORDED.", "info")
     return redirect(url_for("neoscorpion.fueler"))
 
 
@@ -948,37 +956,9 @@ def _backfill_learning_after_enable(gateway, operation_id):
 
 
 def _fueler_off_automation(gateway, result, assignment_id):
-    spear_completed = False
-    spear_completion_error = None
-    settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
-    if result.changed and effective_spear_settings(settings).automation_enabled:
-        try:
-            # Fueler OFF is canonical. Keep optional SPEAR completion isolated so
-            # any automation failure cannot roll back the valid OFF milestone.
-            with db.session.begin_nested():
-                completion = complete_fueled_assignment(
-                    gateway,
-                    current_user,
-                    assignment_id,
-                )
-                spear_completed = completion.changed
-                if completion.changed:
-                    operation = current_sort_operation(gateway)
-                    record_spear_completion(
-                        operation,
-                        completion.assignment,
-                        current_user,
-                    )
-        except ValueError as exc:
-            spear_completion_error = str(exc)
-        except Exception:
-            current_app.logger.exception(
-                "SPEAR auto-complete failed after canonical Fueler OFF."
-            )
-            spear_completion_error = (
-                "Automation failed safely. Dispatcher COMPLETE remains available."
-            )
-    return spear_completed, spear_completion_error
+    # Routine completion belongs to the canonical mutation, regardless of
+    # recommendation automation. There is no second completion attempt here.
+    return bool(result.fuel_work_state and result.fuel_work_state.fuel_assignment.completed_at_utc), None
 
 
 def _fuel_data_permissions(dispatcher):
@@ -996,7 +976,8 @@ def _fuel_data_permissions(dispatcher):
 def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status=200):
     _can_view, can_edit = _fuel_data_permissions(dispatcher)
     context = fueler_context(gateway, current_user, assignment_id=assignment_id,
-                             dispatcher=dispatcher)
+                             dispatcher=dispatcher, physical_work_id=request.args.get("physical_work_id"),
+                             physical_sequence=request.args.get("physical_sequence"))
     row = context["rows"][0] if context["rows"] else None
     return _json_no_store({
         "ok": error is None,
@@ -1009,14 +990,15 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
     }, status)
 
 
-def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=False):
+def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=False, new_visit=False):
     gateway = get_current_gateway()
     can_view, can_edit = _fuel_data_permissions(dispatcher)
     if request.method == "GET":
         if not can_view:
             return _json_no_store({"ok": False, "error": "Access denied."}, 403)
         context = fueler_context(gateway, current_user, assignment_id=assignment_id,
-                                 dispatcher=dispatcher)
+                                 dispatcher=dispatcher, physical_work_id=request.args.get("physical_work_id"),
+                                 physical_sequence=request.args.get("physical_sequence"))
         if not context["rows"]:
             return _json_no_store({"ok": False, "error": "Active assignment not found."}, 404)
         row = context["rows"][0]
@@ -1028,8 +1010,14 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
     form = request.form.copy()
     form["assignment_id"] = str(assignment_id)
+    if request.args.get("physical_work_id"):
+        form["physical_work_id"] = request.args.get("physical_work_id")
+        form["physical_sequence"] = request.args.get("physical_sequence", "")
     try:
-        if truck_on:
+        if new_visit:
+            result = begin_physical_visit(gateway,current_user,assignment_id,
+                expected=_fueler_expected(form,required=True),dispatcher=dispatcher)
+        elif truck_on:
             if dispatcher:
                 raise ValueError("Only the assigned Fueler can confirm TRUCK ON.")
             changed, revision, _work = confirm_fueler_truck_on(
@@ -1037,17 +1025,23 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
                 expected_cycle=form.get("expected_cycle"),
                 expected_tail=form.get("expected_tail"),
                 expected_truck_id=form.get("expected_truck_id"),
+                expected_work_ref=form.get("expected_work_ref"), require_work_ref=True,
             )
             result = SimpleNamespace(changed=changed, revision=revision)
         elif off:
             result = mark_fueler_off(gateway, current_user, assignment_id,
-                dispatcher=dispatcher, expected=_fueler_expected(form, required=True))
-            _fueler_off_automation(gateway, result, assignment_id)
+                dispatcher=dispatcher, expected=_fueler_expected(form, required=True),
+                defer_completion=form.get("completion_deferred") == "1",
+                physical_work_id=form.get("physical_work_id"), physical_sequence=form.get("physical_sequence"))
         else:
             result = save_fueler_entry(gateway, current_user, form,
                                       dispatcher=dispatcher, require_expected=True)
         if result.changed:
+            work = getattr(result, "fuel_work_state", None)
+            terminal = bool(work and work.fuel_assignment.completed_at_utc)
             db.session.commit()
+            if terminal:
+                _capture_learning_after_commit(gateway, assignment_id)
         else:
             db.session.rollback()
     except FuelerDataConflict as exc:
@@ -1075,6 +1069,12 @@ def fueler_assignment_off(assignment_id):
 @gateway_node_required("scorpion")
 def fueler_assignment_on(assignment_id):
     return _fuel_data_request(assignment_id, truck_on=True)
+
+
+@bp.post("/fueler/assignments/<int:assignment_id>/new-visit")
+@gateway_node_required("scorpion")
+def fueler_new_visit(assignment_id):
+    return _fuel_data_request(assignment_id, new_visit=True)
 
 
 @bp.route("/fuel-dispatch/fueler-data/<int:assignment_id>", methods=["GET", "POST"])
@@ -1641,6 +1641,43 @@ def fuel_report():
         can_view=access["can_view"],
         **context,
     )
+
+
+@bp.get("/reports/prof")
+@gateway_node_required("scorpion")
+def prof_report():
+    from app.models import SortDateOperation
+    from app.services.neoscorpion_prof import report_context
+    gateway = get_current_gateway()
+    if not user_can(HISTORY_VIEW_PERMISSION):
+        return "Access denied.", 403
+    choices = SortDateOperation.query.filter_by(gateway_id=gateway.id).order_by(
+        SortDateOperation.sort_date.desc(), SortDateOperation.id.desc()).limit(200).all()
+    current = current_sort_operation(gateway)
+    operation = current or (choices[0] if choices else None)
+    try:
+        if request.args.get("operation_id"):
+            operation = SortDateOperation.query.filter_by(id=int(request.args["operation_id"]), gateway_id=gateway.id).first()
+            if operation is None:
+                return "Sort not found for this gateway.", 404
+        fueler = int(request.args["fueler_id"]) if request.args.get("fueler_id") else None
+        truck = int(request.args["truck_id"]) if request.args.get("truck_id") else None
+        page = max(1, int(request.args.get("page", 1)))
+    except ValueError:
+        return "Invalid report selection.", 400
+    context = report_context(gateway, operation, fueler_id=fueler, truck_id=truck, page=page)
+    if request.args.get("format") == "csv":
+        output = io.StringIO(newline="")
+        rows = [job["columns"] for job in context["all_jobs"]]
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({key: "'"+value if isinstance(value,str) and value.startswith(("=","+","-","@")) else value for key,value in row.items()})
+        return send_file(io.BytesIO(output.getvalue().encode("utf-8-sig")), mimetype="text/csv",
+                         as_attachment=True, download_name=f"prof-{operation.sort_date if operation else 'empty'}.csv", max_age=0)
+    return render_template("neonodes/neoscorpion/prof_report.html", gateway=gateway,
+        operation=operation, operations=choices, fueler_id=fueler, truck_id=truck, **context)
 
 
 @bp.route("/history")

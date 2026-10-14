@@ -514,6 +514,8 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-truck-on-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    gap: .45rem;
     min-height: 2.25rem;
     margin: .4rem 0;
     color: #ffd21a;
@@ -521,6 +523,18 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 }
 .neoscorpion-truck-on-row form { margin: 0; }
 .neoscorpion-truck-on-row .action-button { padding: .45rem .8rem; }
+.neoscorpion-prof-filters { display:flex; flex-wrap:wrap; align-items:end; gap:.6rem; }
+.neoscorpion-prof-filters label { display:grid; gap:.25rem; min-width:0; flex:1 1 10rem; }
+.neoscorpion-prof-filters select { width:100%; min-width:0; background:#15171c; color:#ddd; padding:.65rem; border:1px solid #655b25; }
+.neoscorpion-prof-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin:1rem 0; }
+.neoscorpion-prof-summary article,.neoscorpion-prof-job { min-width:0; padding:.8rem; border:1px solid #514b2b; margin-bottom:.6rem; overflow-wrap:anywhere; }
+.neoscorpion-prof-job h2 { font-size:1rem; margin:0; }
+.neoscorpion-prof-job dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.45rem; font-size:.8rem; }
+.neoscorpion-prof-job dl div { min-width:0; }
+.neoscorpion-prof-job dt { color:#b4a875; }
+.neoscorpion-prof-job dd { margin:0; }
+.neoscorpion-prof-pages { display:flex; justify-content:center; gap:1rem; }
+@media(max-width:600px) { .neoscorpion-prof-summary { grid-template-columns:1fr; } .neoscorpion-prof-job dl { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 
 
 /* Fueler mobile density: compact assignment state, wrap APU readouts inside

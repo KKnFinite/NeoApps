@@ -24,11 +24,11 @@ test("terminal states stay green and review stays red regardless of ETD", () => 
 });
 test("physical OFF countdown changes with the clock and never shows negative minutes", () => {
     const finish = now + 12 * 60000;
-    assert.equal(estimateText(finish, "23:46", now), "EST OFF 23:46 · ~12 MIN");
-    assert.equal(estimateText(finish, "23:46", now+60001), "EST OFF 23:46 · ~11 MIN");
-    assert.equal(estimateText(finish, "23:46", finish-1), "EST OFF 23:46 · ~1 MIN");
-    assert.equal(estimateText(finish, "23:46", finish), "EST OFF OVERDUE");
-    assert.equal(estimateText(finish, "23:46", finish+60000), "EST OFF OVERDUE");
+    assert.equal(estimateText(finish, "23:46", now,3,"QUALIFIED SERVICE HISTORY"), "EST OFF 23:46 (in 12m) +3m PROF");
+    assert.equal(estimateText(finish, "23:46", now+60001,-2,"QUALIFIED SERVICE HISTORY"), "EST OFF 23:46 (in 11m) -2m PROF");
+    assert.equal(estimateText(finish, "23:46", finish-1,0,"QUALIFIED SERVICE HISTORY"), "EST OFF 23:46 (in 1m) 0m PROF");
+    assert.equal(estimateText(finish, "23:46", finish), "EST OFF 23:46 (overdue 0m) · BASELINE");
+    assert.equal(estimateText(finish, "23:46", finish+60000), "EST OFF 23:46 (overdue 1m) · BASELINE");
     assert.equal(estimateText(NaN, "", now), "TIMING UNKNOWN");
 });
 test("travel countdown never confirms physical arrival or creates ON", () => {
