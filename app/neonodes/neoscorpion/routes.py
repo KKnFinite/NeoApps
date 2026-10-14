@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from types import SimpleNamespace
 import csv
 import io
+from datetime import datetime
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
@@ -245,7 +246,7 @@ def fuel_dispatch_live_panel():
     )
     if not access["can_view"]:
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
-    context = fuel_dispatch_context(
+    context = _dispatch_presentation_context(
         gateway,
         include_asset_choices=access["can_edit"],
     )
@@ -1702,6 +1703,34 @@ def completed_fuel():
     return redirect(url_for("neoscorpion.history"))
 
 
+def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
+    # All projections, scheduling and SPEAR enrichment finish in their existing
+    # order. Sort a new list only for these two Dispatch render paths.
+    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices)
+    return {**context, "rows": sorted(context["rows"], key=_dispatch_presentation_key)}
+
+
+def _dispatch_presentation_key(row):
+    from app.services.neoscorpion_fueling_status import utc_naive
+    mission, assignment, arrival = row["mission"], row.get("assignment"), row.get("arrival_mission")
+    completed = row.get("dispatch_status_key") in {"complete", "fob"}
+    if completed:
+        stamp = (getattr(assignment, "completed_at_utc", None)
+                 or getattr(assignment, "fuel_on_board_at_utc", None)
+                 or getattr(mission, "fuel_completed_at_utc", None))
+        present = False
+    else:
+        stamp = (getattr(arrival, "actual_block_in_datetime_utc", None)
+                 or getattr(arrival, "eta_datetime_utc", None)
+                 or getattr(arrival, "planned_datetime_utc", None))
+        present = bool(getattr(arrival, "actual_block_in_datetime_utc", None)) or (
+            str(row.get("arrival_status") or "").strip().casefold() in {"on ground", "arrived"})
+    return (completed, stamp is None, not present if not completed else False,
+            utc_naive(stamp) or datetime.max,
+            utc_naive(mission.eta_datetime_utc or mission.planned_datetime_utc) or datetime.max,
+            mission.flight_number or "", mission.id)
+
+
 def _dispatch_response(gateway, access, status_code=200):
     response = render_template(
         "neonodes/neoscorpion/fuel_dispatch.html",
@@ -1710,7 +1739,7 @@ def _dispatch_response(gateway, access, status_code=200):
         can_edit=access["can_edit"],
         can_manage_assets=access["can_edit"],
         can_view_spear_settings=user_can(SETTINGS_VIEW_PERMISSION),
-        **fuel_dispatch_context(
+        **_dispatch_presentation_context(
             gateway,
             include_asset_choices=access["can_edit"],
         ),
