@@ -46,7 +46,11 @@ def google_value(mission, field, values):
             raise GoogleOverrideBlocked('A typed inclusion checkbox is required.')
         return not value  # Google Q TRUE = excluded.
     if field == 'no_return':
-        return values['departure_status'] == 'departed'
+        from app.services.departure_progress import DEPARTURE_STATUS_RANK
+        status = values.get('departure_status')
+        if not isinstance(status, str) or status not in DEPARTURE_STATUS_RANK:
+            raise GoogleOverrideBlocked('A confirmed No Return checkbox state is required; blank or unknown is not FALSE.')
+        return status == 'departed'
     attr = FIELDS[field][1][0]
     value = unpack(attr, values.get(attr))
     if not isinstance(value, datetime):
@@ -113,7 +117,12 @@ def certified_write(mission, field, values):
         raise GoogleOverrideBlocked('Manual-input contract changed during verification.')
     validate_manual_cell(observation_again['cell'], spill_owned=observation_again.get('spill_owned', True))
     adapter.write_input_once(book, tab, cell, value)
-    if adapter.read_input(book, tab, cell) != value:
+    readback = adapter.read_input(book, tab, cell)
+    if isinstance(value, bool):
+        confirmed = type(readback) is bool and readback is value
+    else:
+        confirmed = type(readback) in (int, float) and readback == value
+    if not confirmed:
         raise GoogleOverrideBlocked('Google readback did not confirm the value.')
     return f'{tab}!{cell}'
 

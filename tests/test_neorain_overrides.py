@@ -172,3 +172,24 @@ class RainOverrideTest(unittest.TestCase):
         self.assertEqual(cell_number('sta',50),'AB50')
         with self.assertRaises(GoogleOverrideBlocked):cell_number('sta',51)
         with self.assertRaises(GoogleOverrideBlocked):cell_number('block_in',54)
+
+    def test_no_return_missing_or_invalid_value_never_becomes_false_write(self):
+        for values in ({}, {'departure_status':None}, {'departure_status':''}, {'departure_status':'cancelled'}, {'departure_status':'unknown'}):
+            with self.assertRaises(GoogleOverrideBlocked):google_value(self.departure,'no_return',values)
+        self.assertIs(google_value(self.departure,'no_return',{'departure_status':'scheduled'}),False)
+        self.assertIs(google_value(self.departure,'no_return',{'departure_status':'loading'}),False)
+        self.assertIs(google_value(self.departure,'no_return',{'departure_status':'last_uld_enroute'}),False)
+        self.assertIs(google_value(self.departure,'no_return',{'departure_status':'departed'}),True)
+
+    def test_boolean_readback_must_be_boolean_not_numeric_zero(self):
+        from app.services.neorain_google_overrides import certified_write
+        row={'flight':'UPS0948','direction':'departure','gateway':'RFD','sort_date':self.operation.sort_date.isoformat(),'sort_name':self.operation.sort_name,'place':'SDF','tail':self.departure.assigned_tail_number,'row':17}
+        adapter=Mock(certified_fields={'included'})
+        adapter.permission_verified.return_value=True;adapter.read_identities.return_value=[row]
+        adapter.inspect_input.return_value={'manual_contract_verified':True,'spill_owned':False,'cell':{'userEnteredValue':{'boolValue':True}}}
+        self.app.config['NEORAIN_CERTIFIED_GOOGLE_ADAPTER']=adapter
+        for invalid in (0, '', 'FALSE', None):
+            adapter.read_input.return_value=invalid
+            with self.assertRaises(GoogleOverrideBlocked):certified_write(self.departure,'included',{'late_metrics_included_override':True})
+        adapter.read_input.return_value=False
+        certified_write(self.departure,'included',{'late_metrics_included_override':True})
