@@ -16,6 +16,12 @@
     } catch (_error) { /* Preference storage is optional. */ }
     applyDispatchSort(root);
     const dispatchScroll = initializeDispatchScroll(root);
+    root.addEventListener("submit", (event) => {
+        const button = event.submitter;
+        if (button?.getAttribute("formaction")?.endsWith("/fuel-dispatch/complete")) {
+            dispatchScroll.preserveCompletion(button);
+        }
+    }, true);
     root.addEventListener("click", (event) => {
         const button = event.target.closest("[data-dispatch-sort-mode]");
         if (!button) return;
@@ -145,6 +151,27 @@
     function initializeDispatchScroll(scope) {
         const storageKey = "neoapps.neoscorpion.fuel-dispatch.scroll.v3";
         const tableWrap = () => scope.querySelector(".neoscorpion-table-wrap--sticky");
+        let completionSnapshot = null;
+        let anchorStyle = null;
+        const suspendNativeAnchor = () => {
+            if (anchorStyle === null) anchorStyle = scope.style.overflowAnchor;
+            scope.style.overflowAnchor = "none";
+        };
+        const releaseNativeAnchor = () => window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                if (anchorStyle !== null) scope.style.overflowAnchor = anchorStyle;
+                anchorStyle = null;
+            });
+        });
+        const completionRestore = (saved, candidateScope = scope) => {
+            const anchor = saved.rowKey && candidateScope.querySelector(
+                `.neoscorpion-dispatch-table--compact tr[data-dispatch-row-key="${saved.rowKey}"]`);
+            if (saved.completing || (saved.anchorComplete === false && anchor?.classList.contains("is-complete"))) {
+                suspendNativeAnchor();
+                return {...saved, rowKey: null, completing: true};
+            }
+            return saved;
+        };
 
         // A cancelled uplift restores an earlier cycle key. Resolve only a
         // missing key to this mission's active row; existing history stays exact.
@@ -195,6 +222,7 @@
                 y: window.scrollY,
                 x: window.scrollX,
                 rowKey: anchor?.dataset.dispatchRowKey || null,
+                anchorComplete: anchor?.classList.contains("is-complete") || false,
                 windowMissionOffset: anchorRect?.top ?? null,
                 tableMissionOffset: (
                     anchorRect && wrapRect
@@ -209,6 +237,10 @@
 
         const applyRestore = (saved) => {
             if (!saved) return;
+            saved = completionRestore(saved);
+            if (saved.completing && document.activeElement?.closest(".is-complete")) {
+                document.activeElement.blur();
+            }
             restoreDetailRows(saved.openDetails);
             if (Number.isFinite(saved.y) || Number.isFinite(saved.x)) {
                 window.scrollTo({
@@ -250,6 +282,7 @@
                 applyRestore(saved);
                 window.requestAnimationFrame(() => {
                     applyRestore(saved);
+                    releaseNativeAnchor();
                     window.sessionStorage.removeItem(storageKey);
                 });
             } catch (_error) {
@@ -260,13 +293,22 @@
         restoreSession();
         return {
             snapshot,
+            prepareRefresh: completionRestore,
+            preserveCompletion(button) {
+                // Cache before native POST/redirect. pagehide must not replace
+                // this with an anchor pointing at the now-completed mission.
+                completionSnapshot = {...snapshot(), rowKey: null, completing: true};
+                button.blur();
+                suspendNativeAnchor();
+                this.preserve();
+            },
             restoreSnapshot(saved) {
                 applyRestore(saved);
-                window.requestAnimationFrame(() => applyRestore(saved));
+                window.requestAnimationFrame(() => { applyRestore(saved); releaseNativeAnchor(); });
             },
             preserve() {
                 try {
-                    window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot()));
+                    window.sessionStorage.setItem(storageKey, JSON.stringify(completionSnapshot || snapshot()));
                 } catch (_error) {
                     // Browser storage is an enhancement only.
                 }
@@ -543,7 +585,6 @@
         }
         if (reloading || hasUnsavedControls() || !panelUrl) return false;
         reloading = true;
-        const saved = dispatchScroll.snapshot();
         try {
             const response = await fetch(panelUrl, {
                 cache: "no-store",
@@ -567,6 +608,9 @@
             if (!nextPanel?.matches(".neoscorpion-panel") || !currentPanel) {
                 throw new Error("Fuel Dispatch refresh returned invalid content.");
             }
+            // A dispatcher may scroll while the panel request is in flight.
+            // Restore the working position at replacement, not request start.
+            const saved = dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
             currentPanel.replaceWith(nextPanel);
             applyDispatchSort(root);
             updateAssignmentAlerts(root);
