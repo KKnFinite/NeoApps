@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {colorFor, estimateText, travelText} = require("../../app/static/js/neoscorpion_fuel_status.js");
+const {colorFor, estimateText, estimateDetails, travelText} = require("../../app/static/js/neoscorpion_fuel_status.js");
 const now = Date.parse("2026-10-09T03:00:00Z");
 test("urgency crosses threshold as the clock passes without changing stage", () => {
     for (const stage of ["pending", "ready", "assigned", "off", "fob-ready"]) {
@@ -22,13 +22,14 @@ test("terminal states stay green and review stays red regardless of ETD", () => 
         assert.equal(colorFor("review", etd, 30, NaN, now), "red");
     }
 });
-test("physical OFF countdown changes with the clock and never shows negative minutes", () => {
+test("Dispatch uses compact OFF notes while full forecast detail remains available", () => {
     const finish = now + 12 * 60000;
-    assert.equal(estimateText(finish, "23:46", now,3,"QUALIFIED SERVICE HISTORY"), "EST OFF 23:46 (in 12m) +3m PROF");
-    assert.equal(estimateText(finish, "23:46", now+60001,-2,"QUALIFIED SERVICE HISTORY"), "EST OFF 23:46 (in 11m) -2m PROF");
-    assert.equal(estimateText(finish, "23:46", finish-1,0,"QUALIFIED SERVICE HISTORY"), "EST OFF 23:46 (in 1m) 0m PROF");
-    assert.equal(estimateText(finish, "23:46", finish), "EST OFF 23:46 (overdue 0m) · BASELINE");
-    assert.equal(estimateText(finish, "23:46", finish+60000), "EST OFF 23:46 (overdue 1m) · BASELINE");
+    assert.equal(estimateText(finish, "23:46", now,5), "OVER +5 MIN");
+    assert.equal(estimateText(finish, "23:46", now+60001,-2), "EST OFF 23:46");
+    assert.equal(estimateText(finish, "23:46", finish-1,0), "EST OFF 23:46");
+    assert.equal(estimateText(finish, "23:46", finish), "EST OFF 23:46");
+    assert.equal(estimateText(finish, "23:46", finish+60000), "EST OFF 23:46");
+    assert.equal(estimateDetails(finish,"23:46",now,5),"EST OFF 23:46 (in 12m) +5m PROF · BASELINE");
     assert.equal(estimateText(NaN, "", now), "TIMING UNKNOWN");
 });
 test("travel countdown never confirms physical arrival or creates ON", () => {

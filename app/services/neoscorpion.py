@@ -520,7 +520,7 @@ def _attach_fueling_timing(rows, operation, settings, planning=None, calibration
 def _attach_dispatch_off_estimates(context, gateway, planning, calibrations, *, now_utc=None):
     """Format the shared SPEAR physical OFF forecast for compact Dispatch."""
     for row in context["rows"]:
-        row.update(fueler_off_estimate_utc="", fueler_off_estimate_clock="", fueler_off_estimate_display="")
+        row.update(fueler_off_estimate_utc="", fueler_off_estimate_clock="", fueler_off_estimate_display="", fueler_off_status_note="")
     if not any(row["dispatch_status_key"] == "fueling" for row in context["rows"]):
         return
     now = now_utc or datetime.utcnow()
@@ -544,6 +544,8 @@ def _attach_dispatch_off_estimates(context, gateway, planning, calibrations, *, 
             "TIMING UNKNOWN" if finish is None else
             f"EST OFF {clock} ({'overdue ' if finish <= now else 'in '}{remaining}m){suffix}"
         )
+        row["fueler_off_status_note"] = ("TIMING UNKNOWN" if finish is None else
+            f"OVER +{difference} MIN" if difference is not None and difference > 0 else f"EST OFF {clock}")
 
 
 def _ready_to_assign(row):

@@ -52,6 +52,7 @@
     --dispatch-font-medium: .945rem;
     --dispatch-font-small: .79rem;
     --dispatch-row-height: 98px;
+    --dispatch-status-note-width: 88px;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-large { font-size: var(--dispatch-font-large) !important; }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-medium { font-size: var(--dispatch-font-medium) !important; }
@@ -76,7 +77,7 @@
 .neoscorpion-dispatch-table--compact th:nth-child(11) { width: 5%; }
 .neoscorpion-dispatch-table--compact th:nth-child(12) { width: 8%; }
 .neoscorpion-dispatch-table--compact th:nth-child(13) { width: 7%; }
-.neoscorpion-dispatch-table--compact th:nth-child(14) { width: 7%; }
+.neoscorpion-dispatch-table--compact th:nth-child(14) { width: 9%; }
 .neoscorpion-dispatch-table--compact th:nth-child(15) { width: 8%; }
 .neoscorpion-dispatch-table--compact th:nth-child(16) { width: 4%; }
 .neoscorpion-dispatch-table--compact .neoscorpion-inline-input,
@@ -212,7 +213,7 @@
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
 }
 
 /* Live Dispatch readability hotfix: enlarge row data without growing headers. */
@@ -331,31 +332,38 @@
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    width: min(100%, 68px);
+    width: min(100%, 80px);
     height: 25px;
     min-height: 25px;
     padding: 3px 2px;
     text-align: center;
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-status-cell [data-fuel-status-secondary] {
+.neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-status-cell [data-fuel-status-secondary] {
     display: block;
-    max-width: 100%;
+    width: min(calc(100% + 6px), var(--dispatch-status-note-width));
+    max-width: calc(100% + 6px);
+    margin-inline: 0;
+    align-self: center;
+    font-family: NeoFontPlain, var(--font-sans);
+    line-height: 1.1;
+    letter-spacing: 0;
     text-align: center;
+    text-wrap: balance;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+    overflow: visible;
+    text-overflow: clip;
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-estimate {
-    position: relative;
-    width: 100%;
-    height: 1.3em;
-    line-height: 1.3;
-}
-.neoscorpion-fuel-status-estimate > [data-fueler-off-estimate-text] {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    width: max-content;
+.neoscorpion-dispatch-table--compact [data-fuel-status-secondary] > :is(strong, span) {
     font: inherit;
-    white-space: nowrap;
-    transform: translateX(-50%) scaleX(var(--off-estimate-scale, .45));
+    letter-spacing: inherit;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: normal;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-off > span {
+    display: block;
 }
 .neoscorpion-dispatch-spear-detail .neoscorpion-spear-why ol { margin: 2px 0 0 16px; padding: 0; }
 .neoscorpion-dispatch-combobox { position:relative; width:100%; min-width:0; }
@@ -1077,7 +1085,6 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-fuel-status-warning { color: #e2c884; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .neoscorpion-fuel-status small { font-size: inherit; }
 .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status { font-size: 10px; }
-.neoscorpion-dispatch-table--compact .neoscorpion-fuel-status .neoscorpion-fuel-status-warning { font-size:8px; letter-spacing:-.2px; }
 .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 12px; padding: 5px 2px; font-weight: 900; letter-spacing: -.3px; }
 .neoscorpion-call-dispatch { display: flex; flex-direction: row; align-items: center; gap: 3px; color: #ff737f; font-weight: 800; width: 100%; white-space: nowrap; }
 .neoscorpion-call-dispatch > strong { font: 900 9px/1.25 var(--font-sans); letter-spacing: -.2px; white-space: nowrap; }
@@ -1085,7 +1092,6 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 @container fuel-status (max-width: 60px) {
     .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status-chip { font-size: 10px; padding: 5px 1px; letter-spacing: -.7px; }
     .neoscorpion-call-dispatch > strong { font-size: 7.5px; letter-spacing: -.4px; }
-    .neoscorpion-dispatch-table--compact .neoscorpion-fuel-status .neoscorpion-fuel-status-warning { font-size:7px; letter-spacing:-.7px; }
 }
 
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-fuel-status .neoscorpion-fuel-status-chip { color: var(--fuel-status-foreground); }
@@ -1119,6 +1125,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         --dispatch-font-medium: .65rem;
         --dispatch-font-small: .57rem;
         --dispatch-row-height: 73px;
+        --dispatch-status-note-width: 76px;
     }
     /* Positions are the canonical columns: Tail(2), Dest(4), ETD(5),
        Est Gal(13), Status(14). Apply to current and frozen history rows. */
@@ -1207,17 +1214,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         min-height: 25px;
         padding: 3px 1px;
     }
-    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact
-    .neoscorpion-fuel-status :is(.neoscorpion-fuel-status-warning, .neoscorpion-fuel-status-off) {
-        max-width: 100%;
-        font-size: .51rem;
-        line-height: 1.12;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-call-dispatch { justify-content: center; }
-    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-call-dispatch > strong { font-size: .48rem; }
 }
 
 /* Mobile-only condensed truck inventory: keep gallons, reserve projections,
