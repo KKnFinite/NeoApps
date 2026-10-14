@@ -13,6 +13,7 @@ from app.models import (
     StaffingPerson, StaffingUnit, StaffingWorkAssignment, User,
 )
 from app.services.access_control import ensure_default_gateway_and_nodes
+from app.services.neoscorpion_assets import record_nightly_operational_change
 from tests.browser.test_mobile_drawer import MobileDrawerBrowserTest as Fixture
 
 
@@ -111,13 +112,28 @@ class DispatchLoadPlannerBrowserTest(unittest.TestCase):
                     expect(detail.locator("[data-dispatch-load-planner] input, [data-dispatch-load-planner] select")).to_have_count(0)
                 copy = details[0].locator("[data-copy-value]")
                 original_copy = copy.get_attribute("data-copy-value")
-                self.assertEqual(original_copy, "UPS901 SDF N4LP0 NEO > 25.0")
+                self.assertEqual(original_copy, "UPS901 SDF N4LP0")
+                self.assertEqual(details[0].locator('.neoscorpion-load-planning-output').inner_text(), original_copy)
                 copy.click()
                 expect(copy).to_have_text("COPIED")
                 self.assertEqual(dispatch.evaluate("navigator.clipboard.readText()"), original_copy)
                 self.assertTrue(details[0].locator("[data-dispatch-load-planner]").evaluate("""name =>
                     name.getBoundingClientRect().top >= name.parentElement.querySelector('[data-copy-value]')
                         .getBoundingClientRect().bottom"""))
+
+                # Physical OFF alone above remains identification-only. The
+                # administrative completion projection arrives via live refresh.
+                with Fixture.app.app_context():
+                    completed = NeoScorpionFuelAssignment.query.filter_by(sort_date_mission_id=mission_ids[0]).one()
+                    completed.completed_at_utc = datetime.utcnow()
+                    record_nightly_operational_change(None, operation_id)
+                    db.session.commit()
+                original_copy = "UPS901 SDF N4LP0 NEO > 25.0"
+                expect(details[0].locator('.neoscorpion-load-planning-output')).to_have_text(original_copy, timeout=20000)
+                self.assertEqual(copy.get_attribute('data-copy-value'), original_copy)
+                copy.click()
+                expect(copy).to_have_text('COPIED')
+                self.assertEqual(dispatch.evaluate('navigator.clipboard.readText()'), original_copy)
 
                 rain = context.new_page()
                 Fixture().ready(rain, "/neorain/load-planner-lineup")
@@ -127,7 +143,7 @@ class DispatchLoadPlannerBrowserTest(unittest.TestCase):
                         ("master", master_ids[0], "", details[0], "UNASSIGNED"),
                         ("current_sort", mission_ids[3], "", details[3], "UNASSIGNED")):
                     rain.bring_to_front()
-                    form = rain.locator(f'form:has(input[name="assignment_scope"][value="{scope}"])'
+                    form = rain.locator(f'form:visible:has(input[name="assignment_scope"][value="{scope}"])'
                                         f':has(input[name="departure_id"][value="{departure_id}"])')
                     form.locator('select[name="planner_person_id"]').select_option(value)
                     with rain.expect_navigation(wait_until="domcontentloaded"):
@@ -142,7 +158,12 @@ class DispatchLoadPlannerBrowserTest(unittest.TestCase):
                     self.assertEqual(copy.get_attribute("data-copy-value"), original_copy)
                 dispatch.screenshot(path=str(Fixture.evidence / "dispatch-load-planner-desktop.png"), full_page=True)
                 dispatch.set_viewport_size({"width": 390, "height": 844})
-                expect(details[0].locator("[data-dispatch-load-planner]")).to_be_visible()
+                # The existing five-column mobile table hides inline DETAILS.
+                # Preserve that layout; verify copy data survives the breakpoint.
+                expect(details[0].locator('.neoscorpion-load-planning-output')).to_have_text(original_copy)
+                self.assertEqual(copy.get_attribute('data-copy-value'), original_copy)
+                expect(dispatch.locator('.neoscorpion-dispatch-primary-row').last).to_be_visible()
+                self.assertFalse(dispatch.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
                 dispatch.screenshot(path=str(Fixture.evidence / "dispatch-load-planner-mobile.png"), full_page=True)
                 self.assertTrue(any("live-panel" in url for _, url in requests))
                 self.assertFalse(any(method == "POST" for method, _ in requests), "Dispatch planner display is read-only")

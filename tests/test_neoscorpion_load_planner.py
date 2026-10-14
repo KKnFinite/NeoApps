@@ -129,7 +129,7 @@ class DispatchLoadPlannerTest(unittest.TestCase):
                               response.data.decode(), flags=re.S)
         self.assertEqual(len(sections), 2)
         assigned_section = next(section for section in sections if self.alex.full_name in section)
-        self.assertIn('data-copy-value="UPS901 SDF N4LP1 NEO &gt; 25.0"', assigned_section)
+        self.assertIn('data-copy-value="UPS901 SDF N4LP1"', assigned_section)
         self.assertLess(assigned_section.index('>COPY</button>'),
                         assigned_section.index('Load Planner: Alex Planner'))
         self.assertTrue(any('Load Planner: UNASSIGNED' in section for section in sections))

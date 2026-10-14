@@ -6003,12 +6003,14 @@ def _fuel_rows(
             and tank_states_by_code.get("ctr") is not None
             else None
         )
-        load_planning_output = None
+        load_planning_output = (
+            f"{mission.flight_number or '-'} {mission.destination or '-'} "
+            f"{tail_number or '-'}"
+        )
         load_planning_complete = bool(
             assignment
             and (
-                (fuel_work_state and fuel_work_state.off_at_utc)
-                or assignment.fuel_on_board_at_utc
+                assignment.fuel_on_board_at_utc
                 or assignment.completed_at_utc
             )
         )

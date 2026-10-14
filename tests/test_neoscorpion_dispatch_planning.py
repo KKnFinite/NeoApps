@@ -408,11 +408,15 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             )
         db.session.commit()
 
-        self.assertTrue(all(
-            not row["load_planning_ready"]
-            for row in fuel_dispatch_context(self.gateway)["rows"]
-        ))
+        initial = {row["mission"].flight_number: row for row in fuel_dispatch_context(self.gateway)["rows"]}
+        self.assertEqual(initial["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP")
+        self.assertTrue(all(row["load_planning_ready"] for row in initial.values()))
         work.off_at_utc = non_a300_work.off_at_utc = datetime(2026, 8, 18, 4, 30)
+        db.session.commit()
+        off_rows = {row["mission"].flight_number: row for row in fuel_dispatch_context(self.gateway)["rows"]}
+        self.assertEqual(off_rows["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP")
+        self.assertEqual(off_rows["UPS777"]["load_planning_output"], "UPS777 SDF N412UP")
+        assignment.completed_at_utc = non_a300_assignment.completed_at_utc = datetime(2026, 8, 18, 4, 35)
         db.session.commit()
         rows = {
             row["mission"].flight_number: row
@@ -449,10 +453,11 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             row["mission"].flight_number: row
             for row in fuel_dispatch_context(self.gateway)["rows"]
         }
-        self.assertFalse(refreshed["UPS0952"]["load_planning_ready"])
+        self.assertTrue(refreshed["UPS0952"]["load_planning_ready"])
+        self.assertEqual(refreshed["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP")
         rendered_incomplete = self.client.get("/neoscorpion/fuel-dispatch")
-        self.assertNotIn(
-            b'data-copy-value="UPS0952',
+        self.assertIn(
+            b'data-copy-value="UPS0952 MHR N160UP"',
             rendered_incomplete.data,
         )
 

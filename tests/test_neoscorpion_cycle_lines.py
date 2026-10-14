@@ -96,7 +96,8 @@ class CycleLinesTest(unittest.TestCase):
         self.assertEqual(sum(t.remaining_lbs for t in result.fuel_work_state.tank_states), 52000)
         self.assertTrue(all(t.actual_lbs is None for t in result.fuel_work_state.tank_states))
         row = next(r for r in service.fuel_dispatch_context(self.gateway)['rows'] if r['mission'].id == mission.id)
-        self.assertFalse(row['load_planning_ready'])
+        self.assertTrue(row['load_planning_ready'])
+        self.assertNotIn(' NEO > ', row['load_planning_output'])
         with self.assertRaisesRegex(ValueError, 'cycle changed'):
             service.start_follow_up_fuel_cycle(self.gateway, self.dispatcher, assignment.id,
                 'uplift', '60', None, None, expected_cycle=1)

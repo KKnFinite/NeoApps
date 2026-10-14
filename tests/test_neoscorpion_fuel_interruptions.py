@@ -660,7 +660,8 @@ class NeoScorpionFuelInterruptionTest(unittest.TestCase):
         self.assertEqual(row["work_tail_number"], "N413UP")
         self.assertEqual(row["actual_total_display"], "INCOMPLETE")
         self.assertFalse(row["neo_fuel_available"])
-        self.assertFalse(row["load_planning_ready"])
+        self.assertTrue(row["load_planning_ready"])
+        self.assertNotIn(" NEO > ", row["load_planning_output"])
         confirm_assignment_tail(
             self.gateway,
             self.dispatcher,
