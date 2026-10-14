@@ -6,6 +6,10 @@
     margin-bottom: 14px;
     overflow: hidden;
 }
+.neorain-crew-admin > summary {
+    padding:8px; cursor:pointer; color:var(--node-highlight);
+    font-size:.75rem; font-weight:800; min-height:36px;
+}
 
 .neorain-crew-admin-list {
     display: grid;
@@ -206,15 +210,13 @@
         <button type="button" class="neorain-board-collapse" data-neorain-board-collapse aria-expanded="true" aria-controls="neorain-board-support">HIDE TOP</button>
     </header>
     <div id="neorain-board-support" class="neorain-board-support" data-neorain-board-support>
-    <section class="neorain-outbound-late-summary" aria-label="Inbound late and staffing statistics" data-neorain-late-summary>
+    <section class="neorain-outbound-late-summary" aria-label="Inbound aircraft statistics" data-neorain-late-summary>
         <div><strong>1ST WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="first_wave.aircraft_late">{{ late_summary.first_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="first_wave.late_minutes">{{ late_summary.first_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="first_wave.average">{{ late_summary.first_wave.average }}</output></span></div>
         <div><strong>2ND WAVE</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="second_wave.aircraft_late">{{ late_summary.second_wave.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="second_wave.late_minutes">{{ late_summary.second_wave.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="second_wave.average">{{ late_summary.second_wave.average }}</output></span></div>
         <div data-neorain-summary-total><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
-        <div><strong>HUB</strong><span>ON PAYROLL <output>{{ staffing_summary.hub.on_payroll }}</output></span><span>WORKED <output>{{ staffing_summary.hub.worked }}</output></span></div>
-        <div><strong>RAMP</strong><span>ON PAYROLL <output>{{ staffing_summary.ramp.on_payroll }}</output></span><span>WORKED <output>{{ staffing_summary.ramp.worked }}</output></span></div>
     </section>
-    <section class="neorain-settings-panel neorain-crew-admin" aria-labelledby="crew-admin-title">
-        <header><div><h2 id="crew-admin-title">CREW ADMIN</h2><p>Current-sort nightly assignments.</p></div></header>
+    <details class="neorain-settings-panel neorain-crew-admin" data-neorain-crew-collapse data-crew-preference="{{ gateway.id }}:{{ current_user.id }}" aria-labelledby="crew-admin-title">
+        <summary id="crew-admin-title">CREW ADMIN · {{ crew_admin_assignments|length }} assigned · Show / Hide</summary>
         {% if operation %}
         <div class="neorain-crew-admin-list">
             {% for item in crew_admin_assignments %}
@@ -304,8 +306,23 @@
         {% else %}
         <p class="muted">No current sort.</p>
         {% endif %}
-    </section>
+    </details>
     </div>
+    <script>
+    (() => {
+      const panel = document.querySelector('[data-neorain-crew-collapse]');
+      const key = 'neorain:crew-admin:' + panel.dataset.crewPreference;
+      try { panel.open = localStorage.getItem(key) === 'open'; } catch (_) {}
+      panel.addEventListener('toggle', () => {
+        try { localStorage.setItem(key, panel.open ? 'open' : 'closed'); } catch (_) {}
+      });
+      for (const event of ['input', 'change']) {
+        panel.addEventListener(event, (e) => {
+          if (e.target.closest('form')) panel.dataset.neorainCrewDirty = 'true';
+        });
+      }
+    })();
+    </script>
     {% if not operation %}
     <p class="neorain-outbound-empty">No current sort.</p>
     {% elif not rows %}
@@ -377,7 +394,7 @@
     if (!root || !window.NeoLiveUpdates) return;
     let revision = root.dataset.inboundRevision || "";
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-inbound-hhmm][data-neorain-dirty='true'], [data-neorain-inbound-hhmm][data-neorain-saving='true'], [data-neorain-late-inclusion-saving='true']"
+        "[data-neorain-inbound-hhmm][data-neorain-dirty='true'], [data-neorain-inbound-hhmm][data-neorain-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-crew-dirty='true']"
     ));
     root.addEventListener("neorain:inbound-revision", (event) => {
         const nextRevision = event.detail?.revision;

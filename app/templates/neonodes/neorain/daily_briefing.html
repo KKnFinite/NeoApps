@@ -3,7 +3,7 @@
 {% block content %}
 {% include "neonodes/neorain/_report_style.html" %}
 <main class="rain-report">
-  <h1>DAILY BRIEFING</h1>
+  <header class="neorain-outbound-head"><div><p>NIGHTLY OPERATIONS</p><h1>DAILY BRIEFING</h1></div></header>
   {% include "neonodes/neorain/_report_sort_picker.html" %}
   {% if report %}<p>{{ operation.gateway_code }} · {{ operation.sort_name }} · {{ operation.sort_date }} · {{ report.google_status }}</p>{% endif %}
   <section class="rain-report-panel"><h2>Copy-ready nightly briefing</h2>

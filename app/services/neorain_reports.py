@@ -277,12 +277,14 @@ def report_context(operation, *, current=False):
         "scheduled": format_local_hhmm(m.planned_datetime_utc, m.timezone or None),
         "actual": format_local_hhmm(m.actual_block_in_datetime_utc, m.timezone or None),
         "variance": _variance(m.actual_block_in_datetime_utc, m.planned_datetime_utc),
+        "delay_details": tuple(sorted(m.delay_info_rows, key=lambda row: row.id)),
     } for m in inbound]
     outbound_rows = [{
         "flight": m.flight_number, "tail": m.assigned_tail_number, "place": m.destination,
         "scheduled": format_local_hhmm(m.planned_datetime_utc, m.timezone or None),
         "actual": format_local_hhmm(m.actual_block_out_datetime_utc, m.timezone or None),
         "variance": _variance(m.actual_block_out_datetime_utc, m.planned_datetime_utc),
+        "delay_details": tuple(sorted(m.delay_info_rows, key=lambda row: row.id)),
         "delays": tuple((row.code, row.notes or "") for row in sorted(m.delay_info_rows, key=lambda row: row.id)),
     } for m in outbound]
     inbound_summary = _inbound_late_summary(inbound)["total"]

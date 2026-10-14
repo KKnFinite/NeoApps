@@ -3,7 +3,7 @@
 {% block content %}
 {% include "neonodes/neorain/_report_style.html" %}
 <main class="rain-report">
-  <h1>RAINROCK</h1>
+  <header class="neorain-outbound-head"><div><p>NIGHTLY RECAP</p><h1>RAINROCK</h1></div></header>
   {% include "neonodes/neorain/_report_sort_picker.html" %}
   {% if report %}
   <p>{{ operation.gateway_code }} · {{ operation.sort_name }} · Operational reporting date {{ operation.sort_date }}</p>
@@ -13,42 +13,35 @@
     <div class="rain-report-grid">
       {% for key in ('planned_volume','actual_volume','smalls_percent','planned_fph','actual_fph') %}
       {% set item = report.fields[key] %}
-      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}{% if key == 'smalls_percent' and item.value is not none %}%{% endif %}</strong><small>{{ item.source }}</small></div>
+      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}{% if key == 'smalls_percent' and item.value is not none %}%{% endif %}</strong>{% if item.value is not none %}<small>{{ item.source }}</small>{% endif %}</div>
       {% endfor %}
     </div>
   </section>
   <section class="rain-report-panel">
-    <h2>Staffing — Hub / Shift</h2>
-    <div class="rain-report-grid">
-      {% for key in ('hub_planned_payroll','hub_actual_payroll','hub_planned_working','hub_actual_working') %}
-      {% set item = report.fields[key] %}
-      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}</strong><small>{{ item.source }}</small></div>
-      {% endfor %}
-    </div>
-    <h2>Ramp</h2>
-    <div class="rain-report-grid">
-      {% for key in ('ramp_planned_payroll','ramp_actual_payroll','ramp_planned_working','ramp_actual_working') %}
-      {% set item = report.fields[key] %}
-      <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}</strong><small>{{ item.source }}</small></div>
-      {% endfor %}
-    </div>
+    <h2>Staffing</h2>
+    <table class="rain-report-matrix" aria-label="Separate Hub / Shift and Ramp staffing">
+      <thead><tr><th>Population</th><th>Planned payroll</th><th>Actual payroll</th><th>Planned working</th><th>Actual working</th></tr></thead>
+      <tbody>{% for prefix, label in (('hub','Hub / Shift'),('ramp','Ramp')) %}
+      <tr><th scope="row">{{ label }}</th>{% for suffix in ('planned_payroll','actual_payroll','planned_working','actual_working') %}{% set item = report.fields[prefix ~ '_' ~ suffix] %}
+        <td><strong>{{ item.value if item.value is not none else '—' }}</strong>{% if item.value is not none %}<small title="{{ item.label }} source">{{ item.source }}</small>{% endif %}</td>
+      {% endfor %}</tr>{% endfor %}</tbody>
+    </table>
   </section>
   <section class="rain-report-panel">
     <h2>Aircraft lateness</h2>
     <p>Recorded actuals: inbound {{ report.recorded_inbound }}/{{ report.eligible_inbound }}, outbound {{ report.recorded_outbound }}/{{ report.eligible_outbound }}. Counts can remain provisional until all flights are recorded.</p>
-    <div class="rain-report-grid">
+    <table class="rain-report-matrix" aria-label="Inbound and outbound aircraft lateness">
+      <thead><tr><th>Aircraft</th><th>Late aircraft</th><th>Late minutes</th><th>Average</th></tr></thead><tbody>
       {% for side, summary in (('Inbound', report.inbound_late), ('Outbound', report.outbound_late)) %}
-      <div class="rain-report-metric"><span>{{ side }} late aircraft</span><strong>{{ summary.aircraft_late }}</strong></div>
-      <div class="rain-report-metric"><span>{{ side }} total late minutes</span><strong>{{ summary.late_minutes }}</strong></div>
-      <div class="rain-report-metric"><span>{{ side }} average late minutes</span><strong>{{ '%.1f'|format(summary.late_minutes / summary.aircraft_late) if summary.aircraft_late else '0.0' }}</strong></div>
+      <tr><th scope="row">{{ side }}</th><td><strong>{{ summary.aircraft_late }}</strong></td><td><strong>{{ summary.late_minutes }}</strong></td><td><strong>{{ '%.1f'|format(summary.late_minutes / summary.aircraft_late) if summary.aircraft_late else '0.0' }}</strong></td></tr>
       {% endfor %}
-    </div>
+    </tbody></table>
   </section>
   {% for heading, rows, location_label, scheduled_label, actual_label in (('Inbound aircraft', report.inbound_rows, 'Origin', 'Scheduled arrival', 'Actual Block-In'), ('Outbound aircraft', report.outbound_rows, 'Destination', 'Scheduled departure', 'Actual Block-Out')) %}
   <section class="rain-report-panel">
     <h2>{{ heading }}</h2>
-    <table class="rain-report-table"><thead><tr><th>Flight</th><th>Tail</th><th>{{ location_label }}</th><th>{{ scheduled_label }}</th><th>{{ actual_label }}</th><th>+/- min</th>{% if heading == 'Outbound aircraft' %}<th>Delay codes / notes</th>{% endif %}</tr></thead><tbody>
-    {% for row in rows %}<tr><td data-label="Flight">{{ row.flight or '—' }}</td><td data-label="Tail">{{ row.tail or '—' }}</td><td data-label="{{ location_label }}">{{ row.place or '—' }}</td><td data-label="{{ scheduled_label }}">{{ row.scheduled or '—' }}</td><td data-label="{{ actual_label }}">{{ row.actual or '—' }}</td><td data-label="+/- min">{{ row.variance }}</td>{% if heading == 'Outbound aircraft' %}<td data-label="Delay codes / notes">{% for code, note in row.delays %}<div>{{ code }} {{ note }}</div>{% endfor %}</td>{% endif %}</tr>{% else %}<tr><td colspan="7">No records for this Sort.</td></tr>{% endfor %}
+    <table class="rain-report-table"><thead><tr><th>Flight</th><th>Tail</th><th>{{ location_label }}</th><th>{{ scheduled_label }}</th><th>{{ actual_label }}</th><th>+/- min</th><th>Delay minutes / codes / notes</th></tr></thead><tbody>
+    {% for row in rows %}<tr><td data-label="Flight">{{ row.flight or '—' }}</td><td data-label="Tail">{{ row.tail or '—' }}</td><td data-label="{{ location_label }}">{{ row.place or '—' }}</td><td data-label="{{ scheduled_label }}">{{ row.scheduled or '—' }}</td><td data-label="{{ actual_label }}">{{ row.actual or '—' }}</td><td data-label="+/- min">{{ row.variance }}</td><td data-label="Delay minutes / codes / notes">{% for delay in row.delay_details %}<div class="rain-report-delay">{{ delay.minutes }} min · {{ delay.code }} · {{ delay.notes or '' }}</div>{% else %}—{% endfor %}</td></tr>{% else %}<tr><td colspan="7">No records for this Sort.</td></tr>{% endfor %}
     </tbody></table>
   </section>
   {% endfor %}

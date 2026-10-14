@@ -143,15 +143,21 @@
     }
 }
 @media (max-width: 900px) {
+    .neorain-mobile-inclusion > [data-neorain-display="late_metrics_included"] {
+        min-width: 0;
+        font-size: .5rem;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
     .neorain-board-collapse {
         min-height: 32px;
         font-size: .65rem;
     }
 }
-/* NeoRain's operational facts form five consistently aligned, compact cards. */
+/* Live boards show aircraft facts only; staffing remains in Rainrock. */
 .neorain-outbound-shell[data-neorain-board-page] .neorain-outbound-late-summary {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     margin: 0 0 10px;
     border: 0;

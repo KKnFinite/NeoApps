@@ -381,10 +381,10 @@ class NeoRainOutboundTest(unittest.TestCase):
             response = self.client.get("/neorain/outbound")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b">HUB<", response.data)
-        self.assertIn(b">RAMP<", response.data)
-        self.assertIn(b"ON PAYROLL", response.data)
-        self.assertIn(b"WORKED", response.data)
+        self.assertNotIn(b">HUB<", response.data)
+        self.assertNotIn(b">RAMP<", response.data)
+        self.assertNotIn(b"ON PAYROLL", response.data)
+        self.assertNotIn(b"WORKED", response.data)
 
     def test_revision_changes_for_mission_and_parking_changes_without_writes(self):
         operation = self._operation()
@@ -462,9 +462,9 @@ class NeoRainOutboundTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"No current sort.", response.data)
-        self.assertIn(b">HUB<", response.data)
-        self.assertIn(b">RAMP<", response.data)
-        self.assertIn(b"<output>0</output>", response.data)
+        self.assertNotIn(b">HUB<", response.data)
+        self.assertNotIn(b">RAMP<", response.data)
+        self.assertIn(b"data-neorain-summary-total", response.data)
 
     def test_google_primary_and_viewer_render_timestamp_milestones_read_only(self):
         operation = self._operation()

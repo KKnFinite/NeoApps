@@ -7,9 +7,22 @@ TEMPLATES = Path(__file__).resolve().parents[1] / "app" / "templates" / "neonode
 
 
 class NeoRainBoardLayoutTest(unittest.TestCase):
+    def test_aircraft_only_summaries_and_independent_collapsed_crew_admin(self):
+        inbound = (TEMPLATES / "inbound.html").read_text()
+        outbound = (TEMPLATES / "outbound.html").read_text()
+        for template in (inbound, outbound):
+            self.assertNotIn("staffing_summary.hub", template)
+            self.assertNotIn("staffing_summary.ramp", template)
+            self.assertIn("aircraft statistics", template)
+        self.assertIn('<details class="neorain-settings-panel neorain-crew-admin"', inbound)
+        self.assertIn('data-neorain-crew-collapse', inbound)
+        self.assertIn("localStorage.setItem(key", inbound)
+        self.assertIn('name="expected_version"', inbound)
+        self.assertIn('data-neorain-board-collapse', inbound)
+
     def test_summary_grid_and_board_exit_remain_consistent(self):
         common = (TEMPLATES / "_board_layout_shared.html").read_text()
-        self.assertIn("grid-template-columns: repeat(5, minmax(0, 1fr))", common)
+        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", common)
         self.assertIn("grid-template-columns: repeat(6, minmax(0, 1fr))", common)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr))", common)
         self.assertIn("font-size: 1.035rem", common)
