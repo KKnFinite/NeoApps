@@ -51,7 +51,7 @@
     --dispatch-font-large: 1.056rem;
     --dispatch-font-medium: .945rem;
     --dispatch-font-small: .79rem;
-    --dispatch-row-height: 140px;
+    --dispatch-row-height: 98px;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-large { font-size: var(--dispatch-font-large) !important; }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-size-medium { font-size: var(--dispatch-font-medium) !important; }
@@ -1118,7 +1118,7 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         --dispatch-font-large: .69rem;
         --dispatch-font-medium: .65rem;
         --dispatch-font-small: .57rem;
-        --dispatch-row-height: 104px;
+        --dispatch-row-height: 73px;
     }
     /* Positions are the canonical columns: Tail(2), Dest(4), ETD(5),
        Est Gal(13), Status(14). Apply to current and frozen history rows. */
