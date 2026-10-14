@@ -53,6 +53,8 @@
                         <div><dt>Truck</dt><dd>{{ row.assigned_truck.truck_number if row.assigned_truck else '—' }}</dd></div>
                         <div><dt>On</dt><dd>{{ row.hanzo_on_time }}</dd></div>
                         <div><dt>Off</dt><dd>{{ row.hanzo_off_time }}</dd></div>
+                        <div><dt>EST OFF</dt><dd data-hanzo-est-off>{{ row.hanzo_est_off_time }}</dd></div>
+                        <div><dt>ACTUAL OFF</dt><dd data-hanzo-actual-off>{{ row.hanzo_actual_off_time }}</dd></div>
                     </dl>
                 </section>
                 <dl class="neoscorpion-fuel-totals neoscorpion-hanzo-totals">

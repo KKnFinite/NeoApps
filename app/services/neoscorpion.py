@@ -894,6 +894,9 @@ def hanzo_context(gateway):
             format_local_hhmm(work.off_at_utc, timezone_name)
             if work and work.off_at_utc else "—"
         )
+        predicted_off = row.get("physical_off_forecast", {}).get("likely")
+        row["hanzo_est_off_time"] = format_local_hhmm(predicted_off, timezone_name) if predicted_off else "-"
+        row["hanzo_actual_off_time"] = format_local_hhmm(work.off_at_utc, timezone_name) if work and work.off_at_utc else "-"
         row["hanzo_fuel_short"] = _hanzo_fuel_short(
             row["required_fuel_lbs"], row["neo_fuel_lbs"]
         )

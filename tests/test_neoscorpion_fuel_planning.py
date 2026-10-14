@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -514,6 +515,33 @@ class NeoScorpionFuelPlanningTest(unittest.TestCase):
             "Fuel calculation not configured for this aircraft type yet.",
         )
         self.assertEqual(operation.id, mission.sort_date_operation_id)
+
+    def test_hanzo_estimated_and_actual_off_are_canonical_read_only_fields(self):
+        _operation, mission, assignment = self._assignment()
+        self._login()
+        blank = self.client.get('/neoscorpion/hanzo').get_data(as_text=True)
+        self.assertIn('<dt>EST OFF</dt><dd data-hanzo-est-off>-</dd>', blank)
+        self.assertIn('<dt>ACTUAL OFF</dt><dd data-hanzo-actual-off>-</dd>', blank)
+        def canonical_prediction(rows, *_args):
+            for row in rows:
+                row['physical_off_forecast'] = {'likely': datetime(2026, 8, 18, 7, 45)}
+        with patch('app.services.neoscorpion._attach_fueling_timing', side_effect=canonical_prediction):
+            row = hanzo_context(self.gateway)['rows'][0]
+            self.assertEqual(row['hanzo_est_off_time'], '02:45')
+            self.assertEqual(row['hanzo_actual_off_time'], '-')
+        work = NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id, tail_number='N412UP',
+                                       off_at_utc=datetime(2026, 8, 18, 7, 40))
+        db.session.add(work)
+        assignment.completed_at_utc = datetime(2026, 8, 18, 8, 30)
+        db.session.commit()
+        row = hanzo_context(self.gateway)['rows'][0]
+        self.assertEqual(row['hanzo_actual_off_time'], '02:40')
+        html = self.client.get('/neoscorpion/hanzo').get_data(as_text=True)
+        self.assertIn('<dt>ACTUAL OFF</dt><dd data-hanzo-actual-off>02:40</dd>', html)
+        self.assertNotIn('data-hanzo-actual-off>03:30', html)
+        work.off_at_utc = None
+        db.session.commit()
+        self.assertEqual(hanzo_context(self.gateway)['rows'][0]['hanzo_actual_off_time'], '-')
 
     def test_hanzo_fueling_identity_timing_and_required_warning(self):
         _operation, mission, assignment = self._assignment()
