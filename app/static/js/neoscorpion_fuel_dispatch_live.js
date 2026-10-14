@@ -10,7 +10,22 @@
     initializeDispatchDetails(root);
     initializeDispatchSelects(root);
     initializeDispatchApuEditors(root);
+    let dispatchSortMode = "arrival";
+    try {
+        if (window.localStorage.getItem(root.dataset.sortPreferenceKey) === "etd") dispatchSortMode = "etd";
+    } catch (_error) { /* Preference storage is optional. */ }
+    applyDispatchSort(root);
     const dispatchScroll = initializeDispatchScroll(root);
+    root.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-dispatch-sort-mode]");
+        if (!button) return;
+        const saved = dispatchScroll.snapshot();
+        dispatchSortMode = button.dataset.dispatchSortMode === "etd" ? "etd" : "arrival";
+        try { window.localStorage.setItem(root.dataset.sortPreferenceKey, dispatchSortMode); }
+        catch (_error) { /* Sorting still works without storage. */ }
+        applyDispatchSort(root);
+        dispatchScroll.restoreSnapshot(saved);
+    });
     const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
     let assignmentAlertTimer = null;
@@ -46,6 +61,39 @@
     }, {once: true});
     if (!window.NeoLiveUpdates) {
         return;
+    }
+
+    function applyDispatchSort(scope) {
+        scope.querySelectorAll("[data-dispatch-sort-mode]").forEach(button => {
+            button.setAttribute("aria-pressed", String(button.dataset.dispatchSortMode === dispatchSortMode));
+        });
+        const tbody = scope.querySelector(".neoscorpion-dispatch-table--compact tbody");
+        if (!tbody) return;
+        const groups = new Map();
+        Array.from(tbody.children).forEach(row => {
+            const id = row.dataset.dispatchSortGroup;
+            if (!id) return;
+            if (!groups.has(id)) groups.set(id, {rows: [], rank: Infinity});
+            const group = groups.get(id);
+            group.rows.push(row);
+            if (row.matches(".neoscorpion-dispatch-primary-row")) {
+                group.rank = Number(row.dataset[dispatchSortMode === "etd" ? "dispatchEtdRank" : "dispatchArrivalRank"]);
+            }
+        });
+        const focused = document.activeElement;
+        const selection = focused?.selectionStart;
+        const selectionEnd = focused?.selectionEnd;
+        Array.from(groups.values()).sort((a, b) => a.rank - b.rank).forEach(group => {
+            group.rows.forEach(row => {
+                // State-preserving moves retain focus, comboboxes and edits.
+                if (tbody.moveBefore) tbody.moveBefore(row, null);
+                else tbody.appendChild(row);
+            });
+        });
+        if (focused && document.activeElement !== focused && scope.contains(focused)) {
+            focused.focus({preventScroll: true});
+            if (typeof selection === "number") focused.setSelectionRange(selection, selectionEnd);
+        }
     }
 
     function initializeSpearSplash(scope) {
@@ -268,7 +316,7 @@
 
             const sync = () => {
                 const selected = select.options[select.selectedIndex];
-                trigger.textContent = selected?.textContent?.trim() || "Unassigned";
+                trigger.textContent = selected?.textContent?.trim() || "";
                 trigger.classList.toggle("is-unassigned", !select.value);
                 panel.querySelectorAll("[role='option']").forEach((option) => {
                     option.setAttribute("aria-selected", String(option.dataset.value === select.value));
@@ -281,6 +329,7 @@
                 choice.setAttribute("role", "option");
                 choice.dataset.value = option.value;
                 choice.textContent = option.textContent.trim();
+                if (!option.value) choice.setAttribute("aria-label", "Clear selection");
                 choice.addEventListener("click", () => {
                     select.value = option.value;
                     select.dispatchEvent(new Event("change", {bubbles: true}));
@@ -516,6 +565,7 @@
                 throw new Error("Fuel Dispatch refresh returned invalid content.");
             }
             currentPanel.replaceWith(nextPanel);
+            applyDispatchSort(root);
             updateAssignmentAlerts(root);
             adoptFingerprint(payload);
             root.dataset.spearPlanToken = payload.spear_plan_token || "";

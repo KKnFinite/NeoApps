@@ -1,4 +1,22 @@
 /* Solid working surface for Fuel Dispatch only, including Board View. */
+.neoscorpion-dispatch-sort {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin: .5rem 0;
+    font-size: .75rem;
+}
+.neoscorpion-dispatch-sort .action-button {
+    min-height: 32px;
+    padding: .3rem .6rem;
+    font-size: .75rem;
+    white-space: nowrap;
+}
+.neoscorpion-dispatch-sort [aria-pressed="true"] {
+    outline: 1px solid currentColor;
+    background: #443b0e;
+}
 .neoscorpion-screen[data-fuel-dispatch-live] > .neoscorpion-panel {
     background: #171405;
     min-width: 0;

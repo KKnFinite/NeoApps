@@ -7,6 +7,7 @@
     class="neoscorpion-shell neoscorpion-screen"
     aria-label="NeoScorpion Fuel Dispatch"
     data-fuel-dispatch-live
+    data-sort-preference-key="neoapps.scorpion.dispatch-sort.{{ gateway.id }}.{{ current_user.id }}"
     data-revision-url="{{ url_for('neoscorpion.fuel_dispatch_revision') }}"
     data-panel-url="{{ url_for('neoscorpion.fuel_dispatch_live_panel') }}"
     data-autosave-url="{{ url_for('neoscorpion.fuel_dispatch_autosave') }}"
@@ -57,5 +58,5 @@
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_planning.js', v=config.STATIC_ASSET_VERSION, scorpion='20261001-fuel-display-no-k-v1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_data.js', v=config.STATIC_ASSET_VERSION, scorpion='20261013-physical-prof-v3') }}"></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_fuel_assignments_copy.js', v=config.STATIC_ASSET_VERSION) }}"></script>
-<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v=config.STATIC_ASSET_VERSION, scorpion='20261013-actual-apu-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_fuel_dispatch_live.js', v=config.STATIC_ASSET_VERSION, scorpion='20261014-dispatch-sort-v1') }}"></script>
 {% endblock %}

@@ -1707,17 +1707,22 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
     # All projections, scheduling and SPEAR enrichment finish in their existing
     # order. Sort a new list only for these two Dispatch render paths.
     context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices)
-    return {**context, "rows": sorted(context["rows"], key=_dispatch_presentation_key)}
+    rows = [dict(row) for row in context["rows"]]
+    # Browser reorders existing DOM groups using ranks derived from full UTC
+    # timestamps, never formatted clock strings or operational planning order.
+    for mode in ("arrival", "etd"):
+        for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode))):
+            row[f"dispatch_{mode}_rank"] = rank
+    return {**context, "rows": sorted(rows, key=_dispatch_presentation_key)}
 
 
-def _dispatch_presentation_key(row):
+def _dispatch_presentation_key(row, mode="arrival"):
     from app.services.neoscorpion_fueling_status import utc_naive
-    mission, assignment, arrival = row["mission"], row.get("assignment"), row.get("arrival_mission")
+    mission, arrival = row["mission"], row.get("arrival_mission")
     completed = row.get("dispatch_status_key") in {"complete", "fob"}
-    if completed:
-        stamp = (getattr(assignment, "completed_at_utc", None)
-                 or getattr(assignment, "fuel_on_board_at_utc", None)
-                 or getattr(mission, "fuel_completed_at_utc", None))
+    etd = utc_naive(mission.eta_datetime_utc or mission.planned_datetime_utc)
+    if completed or mode == "etd":
+        stamp = etd
         present = False
     else:
         stamp = (getattr(arrival, "actual_block_in_datetime_utc", None)
@@ -1727,7 +1732,7 @@ def _dispatch_presentation_key(row):
             str(row.get("arrival_status") or "").strip().casefold() in {"on ground", "arrived"})
     return (completed, stamp is None, not present if not completed else False,
             utc_naive(stamp) or datetime.max,
-            utc_naive(mission.eta_datetime_utc or mission.planned_datetime_utc) or datetime.max,
+            etd or datetime.max,
             mission.flight_number or "", mission.id)
 
 

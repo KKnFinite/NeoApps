@@ -21,10 +21,18 @@ class DispatchOrderTest(unittest.TestCase):
     def ordered(self, rows):
         return [r["mission"].id for r in sorted(rows, key=_dispatch_presentation_key)]
 
-    def test_completed_and_fob_last_in_completion_chronology(self):
+    def test_completed_and_fob_last_by_etd_not_completion_time(self):
         at=datetime(2026,10,14,4)
-        rows=[row(1,status="complete",done=at),row(2),row(3,status="fob",done=at-timedelta(minutes=1))]
-        self.assertEqual(self.ordered(rows),[2,3,1])
+        rows=[row(1,status="complete",done=at,etd=at+timedelta(hours=2)),row(2),
+              row(3,status="fob",done=at+timedelta(minutes=1),etd=at),row(4,status="complete",done=at)]
+        self.assertEqual(self.ordered(rows),[2,3,1,4])
+
+    def test_etd_mode_midnight_missing_and_completed_last(self):
+        at=datetime(2026,10,13,23,55)
+        rows=[row(1,etd=at+timedelta(minutes=10)),row(2,etd=at),row(3),
+              row(4,status="fob",etd=at-timedelta(hours=1)),row(5,status="complete")]
+        self.assertEqual([r["mission"].id for r in sorted(rows,key=lambda r:_dispatch_presentation_key(r,"etd"))],
+                         [2,1,3,4,5])
 
     def test_actual_then_eta_then_schedule_and_midnight_not_etd(self):
         at=datetime(2026,10,13,23,55)
@@ -61,6 +69,9 @@ class DispatchOrderTest(unittest.TestCase):
             result=_dispatch_presentation_context(object(),include_asset_choices=True)
         self.assertEqual([r["mission"].id for r in result["rows"]],[2,1])
         self.assertEqual([r["mission"].id for r in context["rows"]],[1,2])
+        self.assertNotIn("dispatch_arrival_rank",context["rows"][0])
+        self.assertEqual([r["dispatch_arrival_rank"] for r in result["rows"]],[0,1])
+        self.assertEqual([r["dispatch_etd_rank"] for r in result["rows"]],[1,0])
         self.assertIs(result["truck_visuals"],context["truck_visuals"])
         self.assertIs(result["spear_plan"],context["spear_plan"])
         core.assert_called_once()
