@@ -13,7 +13,7 @@
         {% for item in board_rows %}
         {% set row = item.row %}
         <article class="neoscorpion-board-card{% if item.progress == 'REVIEW' %} is-review{% endif %}"
-            data-board-assignment-id="{{ row.assignment.id }}">
+            data-board-assignment-id="{{ row.assignment.id }}" data-board-work-key="{{ row.assignment.id }}:{{ row.physical_work_id or 'pending' }}:{{ row.cycle_number }}">
             <header class="neoscorpion-board-card-head">
                 <div><small>ETD</small><strong>{{ row.departure_time or '-' }}</strong></div>
                 <div class="neoscorpion-board-flight"><strong>{{ row.mission.flight_number or '-' }}</strong><span>{{ row.destination }}</span></div>
@@ -29,6 +29,7 @@
                 <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }}</dd></div>
                 <div><dt>EST. GALLONS</dt><dd>{{ row.estimated_fuel_display }}</dd></div>
             </dl>
+            {% include "neonodes/neoscorpion/_tank_readings.html" %}
             {% for exception in item.exceptions %}<p class="neoscorpion-board-exception">{{ exception }}</p>{% endfor %}
         </article>
         {% endfor %}

@@ -270,20 +270,7 @@
                 {% if row.tank_rows %}
                 {% if not row.planned_ready %}<p class="neoscorpion-helper">Enter all Remaining readings to calculate Planned fuel.</p>{% endif %}
                 <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
-                    <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
-                        <span role="columnheader">Tank</span>
-                        <span role="columnheader">Remaining</span>
-                        <span role="columnheader">Planned</span>
-                        <span role="columnheader">Actual</span>
-                    </div>
-                    {% for tank in row.tank_rows %}
-                    <div class="neoscorpion-fuel-tank-row" role="row">
-                        <strong role="rowheader">{{ tank.label }}</strong>
-                        <span role="cell">{{ tank.remaining_display or '-' }}</span>
-                        <span class="neoscorpion-planned-value" role="cell">{{ tank.planned_display }}</span>
-                        <span role="cell">{{ tank.actual_display or '-' }}</span>
-                    </div>
-                    {% endfor %}
+                    {% include "neonodes/neoscorpion/_tank_reading_rows.html" %}
                     {{ fuel_tank_total_row(row) }}
                 </div>
                 {% else %}

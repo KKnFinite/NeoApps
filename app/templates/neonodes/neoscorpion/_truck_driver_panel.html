@@ -1,0 +1,47 @@
+<section class="neoscorpion-panel neoscorpion-board-panel" data-fueling-board-panel>
+    <div class="neoscorpion-panel-head"><span>TRUCK DRIVER · {{ operation.sort_name|upper if operation else 'NO CURRENT SORT' }}</span><strong data-selected-driver-truck>{{ 'TRUCK ' ~ selected_driver_truck.truck_number if selected_driver_truck else 'SELECT YOUR TRUCK' }}</strong></div>
+    <div data-board-list class="neoscorpion-driver-groups">
+        <section data-board-work-key="driver-controls" data-driver-controls class="neoscorpion-driver-controls">
+        {% if operation %}
+        {% if can_select_driver_truck %}
+            <form method="post" action="{{ url_for('neoscorpion.truck_driver_assignment') }}" data-driver-form>
+                {{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}">
+                <input type="hidden" name="expected_driver_id" value="{{ current_user.id if selected_driver_truck else '' }}">
+                <input type="hidden" name="expected_driver_truck_id" value="{{ current_driver_truck_id or '' }}">
+                <label>YOUR TRUCK<select name="truck_id" data-driver-truck required>
+                    <option value="">Select Truck</option>
+                    {% for truck in driver_trucks %}{% set driver=drivers_by_truck_id.get(truck.id) %}
+                    <option value="{{ truck.id }}" data-driver-id="{{ driver.driver_user_id if driver and driver.driver_user_id else '' }}" {% if selected_driver_truck and selected_driver_truck.id==truck.id %}selected{% endif %}>{{ truck.truck_number }}{% if driver and driver.driver %} · {{ driver.driver.display_name }}{% endif %}</option>
+                    {% endfor %}
+                </select></label>
+                <button class="action-button" type="submit">SELECT TRUCK</button><button class="action-button" type="button" data-driver-reset>CANCEL</button><small data-driver-save-status role="status"></small>
+            </form>
+        {% else %}<p class="neoscorpion-helper">Truck selection requires Truck Driver edit permission.</p>{% endif %}
+        {% if can_manage_drivers %}
+            <details class="neoscorpion-driver-management"><summary>DISPATCHER · MANAGE DRIVERS</summary>
+            <form method="post" action="{{ url_for('neoscorpion.truck_driver_assignment') }}" data-driver-form data-driver-management>
+                {{ csrf_field() }}<input type="hidden" name="manage" value="1"><input type="hidden" name="operation_id" value="{{ operation.id }}">
+                <input type="hidden" name="expected_driver_id" value=""><input type="hidden" name="expected_driver_truck_id" value="">
+                <label>TRUCK<select name="truck_id" data-driver-truck required><option value="">Select Truck</option>
+                    {% for truck in driver_trucks %}{% set driver=drivers_by_truck_id.get(truck.id) %}<option value="{{ truck.id }}" data-driver-id="{{ driver.driver_user_id if driver and driver.driver_user_id else '' }}">{{ truck.truck_number }}{% if driver and driver.driver %} · {{ driver.driver.display_name }}{% endif %}</option>{% endfor %}
+                </select></label>
+                <label>DRIVER<select name="driver_user_id" data-driver-person><option value="">No driver / Clear</option>
+                    {% for driver in eligible_drivers %}{% set current=namespace(truck_id='') %}{% for truck_id,selection in drivers_by_truck_id.items() %}{% if selection.driver_user_id==driver.id %}{% set current.truck_id=truck_id %}{% endif %}{% endfor %}
+                    <option value="{{ driver.id }}" data-current-truck-id="{{ current.truck_id }}">{{ driver.display_name }}</option>{% endfor %}
+                </select></label>
+                <label class="neoscorpion-driver-override"><input type="checkbox" name="override" value="1"> Confirm dispatcher override</label>
+                <label>REASON<input name="reason" maxlength="240" placeholder="Required for an override"></label>
+                <button class="action-button" type="submit">SAVE DRIVER</button><button class="action-button" type="button" data-driver-reset>CANCEL</button><small data-driver-save-status role="status"></small>
+            </form></details>
+        {% endif %}
+        {% else %}<p class="neoscorpion-empty">No current sort. Driver selections begin with each sort's nightly roster.</p>{% endif %}
+        </section>
+        {% for key,label in [('current','CURRENT MISSION'),('upcoming','UPCOMING MISSIONS'),('previous','COMPLETED / PREVIOUS WORK')] %}
+        <section data-board-work-key="driver-{{ key }}" class="neoscorpion-driver-group"><h2>{{ label }}</h2>
+            {% for item in driver_groups[key] %}{% set row=item.row %}
+                {% include "neonodes/neoscorpion/_truck_driver_card.html" %}
+            {% else %}<p class="neoscorpion-empty">{{ 'No physically ON mission.' if key=='current' else 'No work in this section.' }}</p>{% endfor %}
+        </section>
+        {% endfor %}
+    </div>
+</section>

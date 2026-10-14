@@ -1,0 +1,22 @@
+{% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}
+<article class="neoscorpion-board-card" data-driver-mission="{{ row.mission.id }}" data-physical-work-id="{{ row.physical_work_id or '' }}">
+    <header class="neoscorpion-board-card-head">
+        <div><small>ETD</small><strong>{{ row.departure_time or '-' }}</strong></div>
+        <div class="neoscorpion-board-flight"><strong>{{ row.mission.flight_number }} · {{ row.destination }}</strong><span>{{ row.tail_number }} · {{ row.detailed_aircraft_type }}</span></div>
+        {{ fuel_status(row) }}
+    </header>
+    <dl class="neoscorpion-board-facts">
+        <div><dt>PARKING</dt><dd>{{ row.parking_position or '-' }}</dd></div>
+        <div><dt>FUELER</dt><dd>{{ item.fueler_name }}</dd></div>
+        <div><dt>EST. GALLONS</dt><dd>{{ row.estimated_fuel_display }}</dd></div>
+        <div><dt>FUEL LOAD</dt><dd>{{ row.required_fuel_display or '-' }}</dd></div>
+        <div><dt>NEO FUEL</dt><dd>{{ row.neo_fuel_display }}</dd></div>
+        <div><dt>APU</dt><dd>{{ 'UNKNOWN' if row.apu_running is none else 'OFF · 0' if row.apu_running is sameas false else 'ON · ' ~ (row.apu_allowance_display or 'INCOMPLETE') }}</dd></div>
+        <div><dt>T/F GALLONS</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }}</dd></div>
+        <div><dt>CYCLE / VISIT</dt><dd>{{ row.cycle_type_label }} · {{ row.physical_work_id or 'PREPARING' }}</dd></div>
+        <div><dt>TRUCK ON</dt><dd>{{ row.on_time }}</dd></div>
+        <div><dt>TRUCK OFF</dt><dd>{{ row.off_time }}</dd></div>
+    </dl>
+    {% if row.is_off and not row.administratively_complete %}<p class="neoscorpion-helper">Truck released · Mission awaits final data / Dispatcher COMPLETE.</p>{% endif %}
+    {% include "neonodes/neoscorpion/_tank_readings.html" %}
+</article>

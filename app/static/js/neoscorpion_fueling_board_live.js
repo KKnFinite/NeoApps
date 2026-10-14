@@ -30,17 +30,22 @@
             currentHead.replaceWith(nextHead);
         }
 
-        const existing = new Map(Array.from(currentList.querySelectorAll("[data-board-assignment-id]"))
-            .map((card) => [card.dataset.boardAssignmentId, card]));
-        const desired = Array.from(nextList.querySelectorAll("[data-board-assignment-id]"));
-        const nextIds = new Set(desired.map((card) => card.dataset.boardAssignmentId));
+        const key = card => card.dataset.boardWorkKey || card.dataset.boardAssignmentId;
+        const selector = ":scope > [data-board-work-key], :scope > [data-board-assignment-id]";
+        const existing = new Map(Array.from(currentList.querySelectorAll(selector))
+            .map((card) => [key(card), card]));
+        const desired = Array.from(nextList.querySelectorAll(selector));
+        const nextIds = new Set(desired.map(key));
         existing.forEach((card, id) => { if (!nextIds.has(id)) card.remove(); });
         currentList.querySelector("[data-board-empty]")?.remove();
 
         desired.forEach((nextCard, index) => {
-            const id = nextCard.dataset.boardAssignmentId;
+            const id = key(nextCard);
             let card = existing.get(id);
-            if (card && !card.isEqualNode(nextCard)) {
+            // Refresh work, but never replace a driver's unsaved selection.
+            const editing = id === "driver-controls" && card?.querySelector(
+                "[data-driver-form][data-driver-dirty='true'], [data-driver-form][data-driver-saving='true']");
+            if (card && !editing && !card.isEqualNode(nextCard)) {
                 card.replaceWith(nextCard);
                 card = nextCard;
             } else if (!card) {
@@ -57,14 +62,14 @@
         window.requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
     };
 
-    const poll = async () => {
+    const poll = async (force = false) => {
         const revisionResponse = await fetch(revisionUrl, {
             cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json"},
         });
         const latest = await revisionResponse.json().catch(() => ({}));
         if (!revisionResponse.ok || latest.ok !== true) throw new Error("Fueling Board status unavailable.");
         const observed = fingerprint(latest);
-        if (observed.operationId === operationId && observed.revision === revision) return;
+        if (force !== true && observed.operationId === operationId && observed.revision === revision) return;
 
         const panelResponse = await fetch(panelUrl, {
             cache: "no-store", credentials: "same-origin", headers: {Accept: "application/json"},
@@ -84,6 +89,12 @@
         root.dataset.operationId = operationId === "none" ? "" : operationId;
         root.dataset.revision = String(revision);
     };
+
+    if (root.hasAttribute?.("data-truck-driver")) {
+        document.addEventListener("neoscorpion:driver-selection-saved", () => poll(true).catch(() => {
+            if (status) status.textContent = "Live refresh unavailable; refresh to verify your truck selection.";
+        }));
+    }
 
     if (Number.isFinite(intervalMs) && intervalMs >= 5000) {
         const controller = window.NeoLiveUpdates.create({

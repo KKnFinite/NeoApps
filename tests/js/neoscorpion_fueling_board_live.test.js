@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function harness() {
+function harness(segmentKeys = false) {
     const cards = (ids, suffix = '') => ids.map(id => new Card(id, `${id}${suffix}`));
     class Card {
-        constructor(id, text) { this.dataset = {boardAssignmentId: id}; this.text = text; this.parent = null; }
+        constructor(id, text) { this.dataset = segmentKeys ? {boardAssignmentId: '7', boardWorkKey: `7:${id}`} : {boardAssignmentId: id}; this.text = text; this.parent = null; }
         isEqualNode(other) { return this.text === other.text; }
         remove() { if (this.parent) { const p = this.parent; p.children.splice(p.children.indexOf(this), 1); this.parent = null; } }
         replaceWith(next) { const p = this.parent, index = p.children.indexOf(this); this.parent = null; p.children[index] = next; next.parent = p; }
@@ -67,4 +67,17 @@ test('unchanged revision avoids a panel GET; changed revision reconciles only ch
     await stale;
     assert.equal(h.context.document.querySelector().dataset.revision, '2');
     assert.equal(h.currentList.children[1], h.stableA);
+});
+
+test('physical segment keys keep repeated-tail cards distinct during live reconciliation', async () => {
+    const h = harness(true);
+    const refresh = h.controller.poll();
+    h.requests[0].reply({ok: true, operation_id: 7, revision: 2});
+    await new Promise(resolve => setImmediate(resolve));
+    h.requests[1].reply({ok: true, operation_id: 7, revision: 2, html: 'segments'});
+    await refresh;
+    assert.deepEqual(h.currentList.children.map(card => card.dataset.boardWorkKey), ['7:b','7:a','7:c']);
+    assert.equal(h.currentList.children[1], h.stableA);
+    assert.equal(h.currentList.children.length, 3);
+    assert.equal(h.context.scrollY, 80);
 });

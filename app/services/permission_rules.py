@@ -371,6 +371,8 @@ DEFAULT_PERMISSION_RULES = (
         "watcher",
         "View the read-only current-sort NeoScorpion Fueling Board.",
     ),
+    ("neoscorpion.truck_driver.view", "watcher", "View current-sort truck missions and tank readings."),
+    ("neoscorpion.truck_driver.edit", "operator", "Select your own current-sort truck; no fueling edits."),
     (
         "neoscorpion.fuel_dispatch.edit",
         "simulator",
@@ -1283,6 +1285,8 @@ PERMISSION_RULE_ITEMS = (
             "view": "neoscorpion.fueling_board.view",
         },
     ),
+    ("scorpion", "neoscorpion.truck_driver", "Truck Driver", "Current-sort truck driver selection and read-only work.",
+     {"view": "neoscorpion.truck_driver.view", "edit": "neoscorpion.truck_driver.edit"}),
     (
         "scorpion",
         "neoscorpion.fueler",

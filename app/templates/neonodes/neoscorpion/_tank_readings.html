@@ -1,0 +1,7 @@
+{% if row.tank_rows %}
+<div class="neoscorpion-fuel-tank-grid neoscorpion-readonly-tanks" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings, K-lbs">
+    {% include "neonodes/neoscorpion/_tank_reading_rows.html" %}
+</div>
+{% else %}
+<p class="neoscorpion-helper">{{ row.fuel_configuration_message or 'Tank configuration unavailable.' }}</p>
+{% endif %}

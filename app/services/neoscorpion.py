@@ -297,6 +297,7 @@ NEOSCORPION_MENU = (
     NeoScorpionMenuItem("Dashboard", "neoscorpion.index", "neoscorpion.dashboard.view", "dashboard"),
     NeoScorpionMenuItem("Fuel Dispatch", "neoscorpion.fuel_dispatch", "neoscorpion.fuel_dispatch.view", "dispatch"),
     NeoScorpionMenuItem("Fueling Board", "neoscorpion.fueling_board", "neoscorpion.fueling_board.view", "fueling-board"),
+    NeoScorpionMenuItem("Truck Driver", "neoscorpion.truck_driver", "neoscorpion.truck_driver.view", "truck-driver"),
     NeoScorpionMenuItem(
         "Truck Manager",
         "neoscorpion.truck_manager",
@@ -902,7 +903,8 @@ def hanzo_context(gateway):
     }
 
 
-def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physical_work_id=None, physical_sequence=None):
+def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physical_work_id=None, physical_sequence=None,
+                   truck_id=None, include_completed=False):
     operation = current_sort_operation(gateway)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     refresh_setting = live_screen_refresh_value(
@@ -938,11 +940,12 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     # Inspect the same sort's other work without exposing those assignments in
     # this user's cards. Reuse this batch and its work states for truck status.
     visible_assignments = [assignment for assignment in assignments
-                           if (assignment.assigned_fueler_user_id is not None if dispatcher
+                           if (assignment.assigned_truck_id == truck_id if truck_id is not None else
+                               assignment.assigned_fueler_user_id is not None if dispatcher
                                else assignment.assigned_fueler_user_id == user.id)
                            and (assignment_id is None or assignment.id == assignment_id)
-                           and assignment.review_status != "complete"
-                           and assignment.sort_date_mission.fuel_status != "complete"]
+                           and (include_completed or (assignment.review_status != "complete"
+                           and assignment.sort_date_mission.fuel_status != "complete"))]
     missions = [assignment.sort_date_mission for assignment in assignments if assignment.sort_date_mission]
     assignments_by_mission = {
         assignment.sort_date_mission_id: assignment for assignment in assignments
@@ -952,7 +955,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     sources = []
     for work in all_work(fuel_work_states):
         owner = by_assignment[work.fuel_assignment_id]
-        if (work.physical_sequence_number is None or work.physical_finalized_at_utc is not None
+        if (work.physical_sequence_number is None or (work.physical_finalized_at_utc is not None and not include_completed)
                 or (work.id == owner.active_work_state_id and work.tail_number == _normalize_tail(owner.sort_date_mission.assigned_tail_number))
                 or (not dispatcher and work.physical_fueler_user_id != user.id)
                 or (assignment_id is not None and owner.id != assignment_id)):
@@ -1009,6 +1012,8 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
             row.update(fueling_status(row, threshold=getattr(settings, "red_assignment_alert_threshold_minutes", 30)))
     visible_ids = {assignment.id for assignment in visible_assignments}
     rows = [row for row in rows if row.get("assignment") and (row["assignment"].id in visible_ids or row.get("is_source_segment"))]
+    if truck_id is not None:
+        rows = [row for row in rows if row["assigned_truck"] and row["assigned_truck"].id == truck_id]
     if physical_work_id is not None:
         rows = [row for row in rows if row.get("physical_work_id") == _int_or_none(physical_work_id)
                 and str(row.get("physical_sequence")) == str(physical_sequence)]
@@ -6923,6 +6928,19 @@ def _attach_fueling_start_state(rows, operation, assignments, work_states, parki
         if not assignment:
             continue
         record_key = ("tail_segment", work.id) if row.get("is_source_segment") else assignment.id
+        if row.get("is_source_segment") and work.physical_finalized_at_utc:
+            # Read-only previous visits are not live resource occupations. Use
+            # only their recorded provenance; never today's assignment timing.
+            manual = work.manual_on_at_utc if (work.manual_on_truck_id == work.physical_truck_id
+                and work.manual_on_cycle_number == work.physical_cycle_number) else None
+            automatic = work.confirmed_on_at_utc if (work.performance_context or {}).get("on_source") == "trusted automatic" else None
+            effective = manual or automatic
+            row.update(fueling_on_trusted=bool(effective),fueling_on_active=bool(effective),
+                fueling_effective_on_utc=effective,manual_on_confirmed=bool(manual),
+                on_time=format_local_hhmm(effective,row["mission"].timezone) if effective else "-",
+                outstanding_segments=[],pending_segment_fuelers=[],physical_segment_resources=[],
+                truck_start_reason="",truck_travel_origin="",truck_travel_until="")
+            continue
         record = by_id[record_key]
         state = dict(states[record_key])
         fob_check = bool(assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None

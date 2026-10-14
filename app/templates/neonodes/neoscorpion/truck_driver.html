@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Truck Driver | NeoScorpion{% endblock %}
+{% block content %}
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-truck-driver" aria-label="NeoScorpion Truck Driver"
+    data-fueling-board-live data-truck-driver
+    data-revision-url="{{ url_for('neoscorpion.truck_driver_revision') }}"
+    data-panel-url="{{ url_for('neoscorpion.truck_driver_live_panel') }}"
+    data-operation-id="{{ operation.id if operation else '' }}" data-revision="{{ fuel_assignments_revision }}"
+    data-refresh-interval-ms="{{ fuel_assignments_refresh.effective_interval_ms }}">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title"><h1>Truck Driver</h1></header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+    {% include "neonodes/neoscorpion/_truck_driver_panel.html" %}
+    <p class="neoscorpion-board-refresh-status" data-fueling-board-refresh-status role="status" aria-live="polite"></p>
+</section>
+<script src="{{ url_for('static',filename='js/neoscorpion_truck_driver.js',v=config.STATIC_ASSET_VERSION) }}"></script>
+<script src="{{ url_for('static',filename='js/neoscorpion_fueling_board_live.js',v=config.STATIC_ASSET_VERSION,scorpion='20261014-driver-tanks-v1') }}"></script>
+{% endblock %}

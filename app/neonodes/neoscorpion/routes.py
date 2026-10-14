@@ -11,6 +11,7 @@ from app.extensions import db
 from app.models import NeoScorpionSettings
 from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
+from app.services.neoscorpion_drivers import DRIVER_VIEW, DRIVER_EDIT, change_driver, driver_context, driver_roster
 from app.services.neoscorpion import (
     acknowledge_fueler_assignment_update,
     autosave_dispatch_field,
@@ -1105,6 +1106,74 @@ def fueling_board():
     )
 
 
+def _driver_page_context(gateway):
+    manage = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)["can_edit"]
+    return dict(driver_context(gateway,current_user,manage=manage),gateway=gateway,can_manage_drivers=manage,
+        can_select_driver_truck=permission_access(DRIVER_VIEW,DRIVER_EDIT)["can_edit"])
+
+
+@bp.get("/truck-driver")
+@gateway_node_required("scorpion")
+def truck_driver():
+    if not permission_access(DRIVER_VIEW)["can_view"]:
+        return "Access denied.",403
+    return render_template("neonodes/neoscorpion/truck_driver.html",**_driver_page_context(get_current_gateway()))
+
+
+@bp.post("/truck-driver/assignment")
+@gateway_node_required("scorpion")
+def truck_driver_assignment():
+    gateway=get_current_gateway()
+    manage=request.form.get("manage") == "1"
+    access=(permission_access(FUEL_DISPATCH_VIEW_PERMISSION,FUEL_DISPATCH_EDIT_PERMISSION)
+            if manage else permission_access(DRIVER_VIEW,DRIVER_EDIT))
+    permitted=access["can_view"] and access["can_edit"]
+    if not permitted:
+        return _json_no_store({"ok":False,"error":"Access denied."},403)
+    try:
+        operation=current_sort_operation(gateway)
+        if not operation or str(operation.id)!=str(request.form.get("operation_id")):
+            raise ValueError("The current sort changed. Refresh before choosing a truck.")
+        if not {"expected_driver_id","expected_driver_truck_id"}.issubset(request.form):
+            raise ValueError("Refresh before choosing a truck.")
+        changed,revision=change_driver(gateway,operation,current_user,request.form.get("truck_id"),
+            request.form.get("driver_user_id") if manage else current_user.id,dispatcher=manage,
+            expected_driver_id=request.form.get("expected_driver_id"),
+            expected_driver_truck_id=request.form.get("expected_driver_truck_id"),
+            override=request.form.get("override") == "1",reason=request.form.get("reason"))
+        db.session.commit()
+    except (ValueError,TypeError,IntegrityError) as exc:
+        db.session.rollback()
+        error="Driver selection changed. Refresh and try again." if isinstance(exc,IntegrityError) else str(exc)
+        if request.accept_mimetypes.best == "application/json":
+            return _json_no_store({"ok":False,"error":error},409)
+        flash(error,"error")
+        return redirect(url_for("neoscorpion.truck_driver"))
+    if request.accept_mimetypes.best == "application/json":
+        return _json_no_store({"ok":True,"changed":changed,"revision":revision,"operation_id":operation.id})
+    return redirect(url_for("neoscorpion.truck_driver"))
+
+
+@bp.get("/truck-driver/live-panel")
+@gateway_node_required("scorpion")
+def truck_driver_live_panel():
+    if not permission_access(DRIVER_VIEW)["can_view"]:
+        return _json_no_store({"ok":False,"error":"Access denied."},403)
+    context=_driver_page_context(get_current_gateway())
+    operation=context["operation"]
+    return _json_no_store({"ok":True,"operation_id":operation.id if operation else None,
+        "revision":context["fuel_assignments_revision"],
+        "html":render_template("neonodes/neoscorpion/_truck_driver_panel.html",**context)})
+
+
+@bp.get("/truck-driver/revision")
+@gateway_node_required("scorpion")
+def truck_driver_revision():
+    if not permission_access(DRIVER_VIEW)["can_view"]:
+        return _json_no_store({"ok":False,"error":"Access denied."},403)
+    return _json_no_store({"ok":True,**fuel_assignments_live_revision(get_current_gateway())})
+
+
 @bp.get("/fueling-board/live-panel")
 @gateway_node_required("scorpion")
 def fueling_board_live_panel():
@@ -1691,7 +1760,8 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
     for mode in ("arrival", "etd"):
         for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode))):
             row[f"dispatch_{mode}_rank"] = rank
-    return {**context, "rows": sorted(rows, key=_dispatch_presentation_key)}
+    return {**context, "rows": sorted(rows, key=_dispatch_presentation_key),
+            **driver_roster(gateway,context.get("operation"))}
 
 
 def _dispatch_presentation_key(row, mode="arrival"):

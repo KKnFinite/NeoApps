@@ -102,6 +102,8 @@
                     <span class="neoscorpion-truck-status neoscorpion-truck-activity"{% if truck.activity_travel_until %} data-truck-travel-until="{{ truck.activity_travel_until }}" data-truck-travel-origin="{{ truck.activity_travel_origin }}"{% endif %}><span data-fueler-off-estimate-text>{{ truck.activity_label }}</span></span>
                 </header>
                 {% if truck.top_off_sent_time %}<small class="neoscorpion-truck-top-off-sent">TOP OFF SENT {{ truck.top_off_sent_time }}</small>{% endif %}
+                {% set driver = drivers_by_truck_id.get(truck.truck_id) %}
+                <small class="neoscorpion-truck-driver-name">DRIVER: {{ driver.driver.display_name if driver and driver.driver else '-' }}{% if can_edit %} · <a href="{{ url_for('neoscorpion.truck_driver') }}">MANAGE</a>{% endif %}</small>
                 <div class="neoscorpion-truck-visual-values">
                     <span>Current {{ truck.current_display }}{% if truck.current_percent is not none %} / {{ truck.current_percent }}%{% endif %}</span>
                     <span>{% if truck.projected_short %}SHORT {% endif %}Projected {% if truck.projected_incomplete or truck.projected_gallons is none %}—{% else %}{{ truck.projected_display }}{% if truck.projected_percent is not none %} / {{ truck.projected_percent }}%{% endif %}{% endif %}</span>

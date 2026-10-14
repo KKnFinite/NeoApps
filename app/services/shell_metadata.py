@@ -570,6 +570,8 @@ def _neoscorpion_labels(path):
         return "FUELING BOARD", "BOARD"
     if path.startswith("/neoscorpion/hanzo"):
         return "HANZO", "HANZO"
+    if path.startswith("/neoscorpion/truck-driver"):
+        return "TRUCK DRIVER", "TRUCK DRIVER"
     if path.startswith("/neoscorpion/fueler"):
         return "FUELER", "FUELER"
     if path.startswith("/neoscorpion/truck-manager"):

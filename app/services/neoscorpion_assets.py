@@ -161,7 +161,7 @@ def nightly_asset_context(
     }
 
 
-def eligible_nightly_fueler_users(gateway, *, active_users=None):
+def eligible_nightly_fueler_users(gateway, *, active_users=None, permission_key=FUEL_ASSIGNMENTS_PERMISSION):
     """Resolve Fuel Assignments access in two bounded collection queries."""
     if active_users is None:
         active_users = (
@@ -173,11 +173,11 @@ def eligible_nightly_fueler_users(gateway, *, active_users=None):
     if not users_by_id:
         return []
 
-    rule = get_permission_rule(FUEL_ASSIGNMENTS_PERMISSION)
+    rule = get_permission_rule(permission_key)
     minimum_role = (
         rule.minimum_role
         if rule is not None
-        else default_minimum_role(FUEL_ASSIGNMENTS_PERMISSION)
+        else default_minimum_role(permission_key)
     )
     minimum_level = ROLE_LEVELS.get(minimum_role, 0)
 
@@ -519,6 +519,10 @@ def remove_nightly_truck(operation, fuel_truck):
             "This truck is assigned to active fuel work. Swap or clear the assignment first."
         )
 
+    from app.models import NeoScorpionTruckDriver
+    if NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=locked_operation.id,
+            fuel_truck_id=truck_id).filter(NeoScorpionTruckDriver.driver_user_id.is_not(None)).first():
+        raise ValueError("Clear this truck's driver before removing it from tonight's roster.")
     db.session.delete(nightly_truck)
     state = _record_change(state, locked_operation.id)
     db.session.flush()

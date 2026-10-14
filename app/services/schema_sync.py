@@ -1769,6 +1769,7 @@ def _sync_uld_request_unique_constraint_postgres(table_names):
 
 
 def _create_missing_application_tables(existing_table_names):
+    from app.models import NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit
     from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent
     # Parent tables already exist on production; create these after the normal
     # registry below on fresh databases as well.
@@ -1951,7 +1952,8 @@ def _create_missing_application_tables(existing_table_names):
             continue
         model.__table__.create(bind=db.engine, checkfirst=True)
 
-    for model in (StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent):
+    for model in (NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
+                  StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent):
         model.__table__.create(bind=db.engine, checkfirst=True)
     from app.services.neostaffing_employee_record_schema import ensure_employee_record_delivery
     ensure_employee_record_delivery()

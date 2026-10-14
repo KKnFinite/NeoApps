@@ -6,6 +6,7 @@ from sqlalchemy import inspect, text
 
 from app.extensions import db
 from app.models import (
+    NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
     NeoScorpionDispatcherCheck,
     NeoScorpionCallDispatchAck,
     NeoScorpionAircraftFuelSetting,
@@ -43,6 +44,7 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionSortFueler,
     NeoScorpionSortTruck,
     NeoScorpionFuelAssignment,
+    NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
     NeoScorpionFuelWorkState,
     NeoScorpionFuelTankState,
     NeoScorpionAircraftFuelSetting,
