@@ -2737,7 +2737,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         elif not actuals_complete:
             fuel_work_state.actuals_received_at_utc = None
         _capture_physical_forecast(gateway, assignment, mission, fuel_work_state, now_utc)
-        _try_auto_complete(gateway, user, assignment, mission, fuel_work_state, now_utc)
+        _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return FuelerSaveResult(
@@ -3014,7 +3014,7 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
             selection.inventory_pending_epoch = selection.inventory_epoch
         selection.inventory_verified = False
     if not defer_completion:
-        _try_auto_complete(gateway, user, assignment, mission, fuel_work_state, now_utc)
+        _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return FuelerOffResult(
@@ -3091,7 +3091,12 @@ def _capture_physical_forecast(gateway, assignment, mission, work, now):
         current_app.logger.exception("SPEAR forecast capture unavailable; physical operation continues.")
 
 
-def _try_auto_complete(gateway, user, assignment, mission, work, now):
+def _try_finalize_retired_segment(gateway, user, assignment, mission, work, now):
+    # Only an independently addressed retired visit may finalize here. The
+    # current mission always awaits an explicit Dispatcher COMPLETE, even when
+    # its physical OFF and final readings are already valid.
+    if not getattr(assignment, "_detached_segment", False):
+        return False
     if not work.off_at_utc or assignment.completed_at_utc or assignment.assigned_truck_id is None:
         return False
     if classify_fuel_movement(assignment, work, tank_states=work.tank_states) == "not_moved":
@@ -4218,7 +4223,7 @@ def swap_assignment_truck(
     _copy_same_aircraft_preparation(old_work, fuel_work_state, tank_states)
     if old_work and old_work.off_at_utc:
         old_assignment, old_mission = _segment_views(assignment, mission, old_work)
-        _try_auto_complete(gateway, user, old_assignment, old_mission, old_work, now_utc)
+        _try_finalize_retired_segment(gateway, user, old_assignment, old_mission, old_work, now_utc)
         fueling_event = NeoScorpionFuelingEvent.query.filter_by(fuel_work_state_id=old_work.id).first()
     audit = _new_fuel_audit(
         operation,
@@ -4283,7 +4288,7 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
     _copy_same_aircraft_preparation(old_work, work, tanks)
     if old_work and old_work.off_at_utc:
         old_assignment, old_mission = _segment_views(assignment, mission, old_work)
-        _try_auto_complete(gateway, user, old_assignment, old_mission, old_work, now_utc)
+        _try_finalize_retired_segment(gateway, user, old_assignment, old_mission, old_work, now_utc)
         event = NeoScorpionFuelingEvent.query.filter_by(fuel_work_state_id=old_work.id).first()
     _clear_hold_after_explicit_resolution(gateway, operation, assignment, mission, work)
     audit = _new_fuel_audit(operation, assignment, user, "unassign_truck", "assigned_truck_id",

@@ -897,25 +897,9 @@ def fueler_off():
         flash(str(exc), "error")
         return _fueler_response(gateway, access, status_code=400)
 
-    spear_completed, spear_completion_error = _fueler_off_automation(
-        gateway, result, request.form.get("assignment_id"))
     if result.changed:
         db.session.commit()
-        _capture_learning_after_commit(
-            gateway,
-            request.form.get("assignment_id"),
-        )
-        flash(
-            "TRUCK OFF RECORDED · MISSION COMPLETED."
-            if spear_completed
-            else "TRUCK OFF RECORDED. Final data remains editable.",
-            "success",
-        )
-        if spear_completion_error:
-            flash(
-                f"SPEAR COULD NOT AUTO-COMPLETE: {spear_completion_error}",
-                "warning",
-            )
+        flash("TRUCK OFF RECORDED. Final data remains editable.", "success")
     else:
         flash("TRUCK OFF WAS ALREADY RECORDED.", "info")
     return redirect(url_for("neoscorpion.fueler"))
@@ -954,12 +938,6 @@ def _backfill_learning_after_enable(gateway, operation_id):
             "SPEAR current-sort learning backfill failed safely: operation_id=%s",
             operation_id,
         )
-
-
-def _fueler_off_automation(gateway, result, assignment_id):
-    # Routine completion belongs to the canonical mutation, regardless of
-    # recommendation automation. There is no second completion attempt here.
-    return bool(result.fuel_work_state and result.fuel_work_state.fuel_assignment.completed_at_utc), None
 
 
 def _fuel_data_permissions(dispatcher):

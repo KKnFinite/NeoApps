@@ -86,6 +86,8 @@ class DispatchReactivationTest(unittest.TestCase):
 
     def test_valid_followup_returns_completed_mission_to_unfinished(self):
         self.prepare(); self.save(self.start+timedelta(minutes=10),**self.final_data()); self.off()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
+        db.session.commit()
         other=self.fixture._mission("UPS902","N492UP",25000,2)
         db.session.commit()
         finished=_dispatch_presentation_context(self.gateway)["rows"]

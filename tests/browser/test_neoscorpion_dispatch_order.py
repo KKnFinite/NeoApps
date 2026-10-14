@@ -14,6 +14,18 @@ from tests.browser import test_mobile_drawer as fixtures
 
 class DispatchOrderBrowserTest(unittest.TestCase):
     def test_desktop_mobile_live_order_preserves_dirty_details_and_scroll(self):
+        self.exercise_browser("chromium")
+
+    def test_webkit_mobile_and_desktop_interactive_sort(self):
+        self.exercise_browser("webkit")
+
+    def test_dense_roster_toggle_changes_visible_order_without_scroll_jump(self):
+        self.exercise_browser("chromium",dense=True)
+
+    def test_webkit_dense_roster_toggle_changes_visible_order(self):
+        self.exercise_browser("webkit",dense=True)
+
+    def exercise_browser(self, engine, dense=False):
         Fixture=fixtures.MobileDrawerBrowserTest
         Fixture.setUpClass(); browser=None
         Fixture.app.config["LIVE_SCREEN_REFRESH_INTERVAL_MS"]=1000
@@ -32,15 +44,16 @@ class DispatchOrderBrowserTest(unittest.TestCase):
                 db.session.add(NeoScorpionSortTruck(sort_date_operation_id=operation.id,fuel_truck_id=truck.id,
                     status="available",starting_gallons=10000,current_gallons=10000))
                 ids=[]; assignments=[]
-                for i in range(4):
+                count=16 if dense else 4
+                for i in range(count):
                     mission=SortDateMission(sort_date_operation_id=operation.id,sort_date=operation.sort_date,
                         gateway_code=gateway.code,sort_name="night",mission_type="departure",mission_source="manual",
                         flight_number=f"UPS90{i}",origin=gateway.code,destination="SDF",assigned_tail_number=f"N49{i+1}UP",
-                        planned_datetime_utc=at+timedelta(hours=6-i),timezone="America/Chicago",
-                        planned_fuel_load=25000,fuel_status="complete" if i==3 else "waiting")
+                        planned_datetime_utc=at+timedelta(hours=count+2-i),timezone="America/Chicago",
+                        planned_fuel_load=25000,fuel_status="complete" if i==count-1 else "waiting")
                     db.session.add(mission); db.session.flush()
                     assignment=NeoScorpionFuelAssignment(sort_date_operation_id=operation.id,sort_date_mission_id=mission.id,
-                        completed_at_utc=at if i==3 else None,review_status="complete" if i==3 else "pending")
+                        completed_at_utc=at if i==count-1 else None,review_status="complete" if i==count-1 else "pending")
                     db.session.add(assignment); db.session.flush()
                     if i==0:
                         assignment.current_cycle_number=3
@@ -53,26 +66,46 @@ class DispatchOrderBrowserTest(unittest.TestCase):
                                     fueler="Historical Fueler",truck="Historical Truck",dispatch_status_label="COMPLETE",
                                     tank_rows=[])))
                     ids.append(mission.id); assignments.append(assignment.id)
-                    if i<2:
+                    if i<2 or (dense and i<count-1):
                         db.session.add(SortDateMission(sort_date_operation_id=operation.id,sort_date=operation.sort_date,
                             gateway_code=gateway.code,sort_name="night",mission_type="arrival",mission_source="manual",
                             flight_number=f"UPS80{i}",origin="SDF",destination=gateway.code,assigned_tail_number=mission.assigned_tail_number,
                             actual_block_in_datetime_utc=at-timedelta(hours=2) if i==0 else None,
-                            eta_datetime_utc=at-timedelta(hours=1) if i==1 else None,arrival_status="scheduled"))
+                            eta_datetime_utc=at-timedelta(hours=1) if i==1 else at+timedelta(minutes=i) if dense else None,arrival_status="scheduled"))
                 db.session.commit(); operation_id,actor_id,truck_id,gateway_id=operation.id,actor.id,truck.id,gateway.id
             with patch("app.services.neoscorpion.current_existing_operational_sort_operations",
                        side_effect=lambda gateway,now=None:[db.session.get(SortDateOperation,operation_id)]):
-                browser=Fixture.pw.chromium.launch()
+                browser=getattr(Fixture.pw,engine).launch()
                 page=browser.new_page(viewport={"width":1440,"height":950})
+                errors=[]; page.on("pageerror",lambda error:errors.append(str(error)))
                 Fixture().login(page)
                 page.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1','seen')")
                 Fixture().ready(page,"/neoscorpion/fuel-dispatch")
-                errors=[]; page.on("pageerror",lambda error:errors.append(str(error)))
                 rows=page.locator('.neoscorpion-dispatch-primary-row[data-dispatch-mission-id]:not([data-cycle-history])')
                 order=lambda:rows.evaluate_all('els=>els.map(el=>Number(el.dataset.dispatchMissionId))')
                 self.assertEqual(order(),ids)
                 sort_etd=page.locator('[data-dispatch-sort-mode="etd"]')
                 sort_arrival=page.locator('[data-dispatch-sort-mode="arrival"]')
+                if dense:
+                    wrap=page.locator('.neoscorpion-table-wrap--sticky')
+                    visible=lambda:wrap.evaluate('el=>Array.from(el.querySelectorAll("tr[data-dispatch-mission-id]")).find(row=>row.getBoundingClientRect().bottom>el.getBoundingClientRect().top+el.querySelector("thead").getBoundingClientRect().height)?.dataset.dispatchMissionId')
+                    self.assertGreater(wrap.evaluate('el=>el.scrollHeight-el.clientHeight'),100)
+                    sort_etd.click()
+                    self.assertEqual(order(),list(reversed(ids[:-1]))+[ids[-1]])
+                    self.assertEqual(visible(),str(ids[-2]))
+                    self.assertEqual(wrap.evaluate('el=>el.scrollTop'),0)
+                    sort_arrival.click()
+                    self.assertEqual(visible(),str(ids[0]))
+                    sort_etd.click()
+                    self.assertEqual(visible(),str(ids[-2]))
+                    page.set_viewport_size({"width":390,"height":844})
+                    sort_arrival.click()
+                    self.assertEqual(order(),ids)
+                    sort_etd.click()
+                    self.assertEqual(order(),list(reversed(ids[:-1]))+[ids[-1]])
+                    self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                    self.assertFalse(errors,errors)
+                    return
                 pref=page.locator('[data-fuel-dispatch-live]').get_attribute('data-sort-preference-key')
                 self.assertTrue(pref.endswith(f'.{gateway_id}.{actor_id}'))
                 target=page.locator(f'tr[data-dispatch-mission-id="{ids[0]}"]').first

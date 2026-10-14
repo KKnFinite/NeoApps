@@ -99,6 +99,14 @@ class OperationalTimelineTest(unittest.TestCase):
         self.off(at=self.start+timedelta(minutes=14))
         self.assertEqual(self.work.off_at_utc,self.start+timedelta(minutes=12))
         self.save(self.start+timedelta(minutes=15),**self.final_data())
+        self.assertIsNone(self.assignment.completed_at_utc)
+        ready=service.fuel_dispatch_context(self.gateway)["rows"][0]
+        self.assertEqual(ready["dispatch_status_key"],"off")
+        self.assertTrue(ready["normal_completion_ready"])
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            now_utc=self.start+timedelta(minutes=15))
+        db.session.commit()
         self.assertEqual(self.assignment.completed_at_utc,self.start+timedelta(minutes=15))
         self.assertEqual(self.selection.current_gallons,7000)
         self.assertTrue(self.selection.inventory_verified)
@@ -119,6 +127,14 @@ class OperationalTimelineTest(unittest.TestCase):
         self.save(self.start+timedelta(minutes=10),**self.final_data())
         self.assertIsNone(self.assignment.completed_at_utc)
         self.off()
+        self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        ready=service.fuel_dispatch_context(self.gateway)["rows"][0]
+        self.assertEqual(ready["dispatch_status_key"],"off")
+        self.assertTrue(ready["normal_completion_ready"])
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            now_utc=self.start+timedelta(minutes=12))
+        db.session.commit()
         math = event_math(NeoScorpionFuelingEvent.query.one())
         self.assertEqual((math["wrap_minutes"],math["admin_minutes"]),(0,0))
         self.assertEqual(math["fueler_prof"],150)
@@ -265,18 +281,33 @@ class OperationalTimelineTest(unittest.TestCase):
         self.assertEqual(self.selection.current_gallons,7000)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
 
-    def test_learning_failure_after_committed_automatic_completion_does_not_undo_work(self):
-        self.prepare(); self.off()
+    def test_fueler_off_and_actuals_require_dispatcher_complete_with_spear_enabled(self):
+        self.prepare()
+        self.settings.spear_automation_enabled=True
         self.settings.spear_learning_capture_enabled=True; db.session.commit()
         self.login(self.fueler)
         import json
+        response=self.client.post("/neoscorpion/fueler/off",data={"assignment_id":self.assignment.id},follow_redirects=True)
+        self.assertEqual(response.status_code,200)
+        self.assertIn(b"TRUCK OFF RECORDED",response.data)
+        self.assertNotIn(b"MISSION COMPLETED",response.data)
+        self.assertIsNone(self.assignment.completed_at_utc)
         baseline=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        with patch("app.neonodes.neoscorpion.routes.capture_completed_learning_outcome",side_effect=RuntimeError("Vault unavailable")):
+        with patch("app.neonodes.neoscorpion.routes.capture_completed_learning_outcome") as capture:
             response=self.client.post(f"/neoscorpion/fueler/assignments/{self.assignment.id}",
                 data={"expected":json.dumps(baseline),**self.final_data()},headers={"Accept":"application/json"})
+            capture.assert_not_called()
         self.assertEqual(response.status_code,200)
-        self.assertTrue(response.json["closed"])
+        self.assertFalse(response.json["closed"])
+        self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        form=dict(assignment_id=self.assignment.id,expected_work_ref=self.work.id)
+        self.assertEqual(self.client.post("/neoscorpion/fuel-dispatch/complete",data=form).status_code,403)
+        self.login(self.dispatcher)
+        self.assertEqual(self.client.post("/neoscorpion/fuel-dispatch/complete",data=form).status_code,302)
         self.assertIsNotNone(self.assignment.completed_at_utc)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+        self.assertEqual(self.client.post("/neoscorpion/fuel-dispatch/complete",data=form).status_code,302)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
 
     def test_hold_invalid_data_and_legacy_on_cannot_force_completion_or_off(self):
@@ -391,6 +422,8 @@ class OperationalTimelineTest(unittest.TestCase):
 
     def _exercise_returning_tail(self,different_truck=False):
         self.prepare(); self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            now_utc=self.start+timedelta(minutes=12)); db.session.commit()
         original_id, original_sequence = self.work.id, self.work.physical_sequence_number
         original_on, original_off = self.work.manual_on_at_utc, self.work.off_at_utc
         self.mission.assigned_tail_number="N492UP"; db.session.commit()
@@ -429,6 +462,9 @@ class OperationalTimelineTest(unittest.TestCase):
         self.save(self.start+timedelta(minutes=22),
             **{**self.final_data(),"actual_left":"14","actual_right":"14","transfer_fuel_gallons":"2000"})
         self.off(at=self.start+timedelta(minutes=30))
+        self.assertIsNone(self.assignment.completed_at_utc)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            now_utc=self.start+timedelta(minutes=30)); db.session.commit()
         completion=self.assignment.completed_at_utc
         self.assertIsNotNone(completion)
         self.assertEqual(new_a.manual_on_at_utc,self.start+timedelta(minutes=20))

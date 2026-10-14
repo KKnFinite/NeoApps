@@ -24,7 +24,10 @@
         try { window.localStorage.setItem(root.dataset.sortPreferenceKey, dispatchSortMode); }
         catch (_error) { /* Sorting still works without storage. */ }
         applyDispatchSort(root);
-        dispatchScroll.restoreSnapshot(saved);
+        // An intentional sort must expose the new order at the same scroll
+        // offset, not scroll back to the former first mission and conceal it.
+        // Automatic live refresh still restores its mission anchor separately.
+        dispatchScroll.restoreSnapshot({...saved, rowKey: null});
     });
     const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
