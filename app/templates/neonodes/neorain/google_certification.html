@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Google Certification | NeoRain{% endblock %}
+{% block content %}
+<section class="neorain-outbound-shell">
+  <h1>GOOGLE CERTIFICATION</h1>
+  <p>Grandmaster read-only diagnostic using the existing server Google connection. These buttons cannot write flight data or enable a writer.</p>
+  <div class="cert-buttons">{% for field in fields %}<button type="button" data-cert-field="{{ field }}">CHECK {{ field|replace('_',' ')|upper }}</button>{% endfor %}</div>
+  <pre id="cert-result" role="status" aria-live="polite">Select a field. No automatic checks or writes.</pre>
+</section>
+<style>.cert-buttons{display:flex;flex-wrap:wrap;gap:6px}.cert-buttons button{background:#101722;color:var(--node-highlight);border:1px solid var(--node-highlight);padding:8px;font:inherit}#cert-result{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem}</style>
+<script>(()=>{document.querySelectorAll('[data-cert-field]').forEach(button=>button.addEventListener('click',async()=>{
+  const buttons=document.querySelectorAll('[data-cert-field]'),output=document.querySelector('#cert-result');
+  buttons.forEach(b=>b.disabled=true);output.textContent='Checking existing runtime connection (read only)…';
+  try{const response=await fetch('{{ url_for("neorain.google_certification") }}?field='+encodeURIComponent(button.dataset.certField),{credentials:'same-origin',cache:'no-store'});
+    if(!response.ok)throw new Error('Diagnostic access failed.');output.textContent=JSON.stringify(await response.json(),null,2);
+  }catch(error){output.textContent=error.message;}finally{buttons.forEach(b=>b.disabled=false);}
+}));})();</script>
+{% endblock %}

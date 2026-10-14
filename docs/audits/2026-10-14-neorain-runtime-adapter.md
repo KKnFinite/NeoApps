@@ -1,0 +1,133 @@
+# NeoRain #7 — existing runtime connection, diagnostic and write safety
+
+Starting local HEAD b657f20a4f8b6b55d7cfc0becff5cab507bc5521 is preserved.
+Starting origin/production 2c05915a78754fa51de4742597227471a50ed61b.
+Latest issue #7 credential correction and complete prior body/comment reviewed.
+
+## Authentication reuse
+
+No new credential system, secret copy, ZEUS credential requirement or SSH
+prerequisite. RuntimeGoogleAdapter uses the existing `_credential_json` and
+`_parse_service_account_json` dedicated-or-fallback loader and
+`_create_gspread_writer` from google_motherbrain_sheets. It requests existing
+Sheets write scopes. A separate read-only Drive metadata scope, using the same
+credential source and existing gspread creation helper, asks Google for the
+authenticated principal's effective `capabilities.canEdit` per allowlisted book.
+NeoSektor's loader/writer and credential environment are unchanged.
+
+## Read-only production diagnostic
+
+`/neorain/google-certification`, also linked from Settings for Grandmaster.
+Login, active gateway Rain access AND global Grandmaster authority are required.
+GET only. `?field=sta` (or one of the other seven approved fields) performs a
+bounded manual check. Other parameters, arbitrary books/cells and ETD are rejected.
+No automatic checks on page load. Requests are cached for 30 seconds per field/
+gateway to avoid repeated accidental Google calls. HTTP response is private,
+no-store. Provider exceptions are sanitized, never returned or logged verbatim.
+
+It reports effective account/source, whether it matches NeoSektor's fallback
+account, requested scope, authenticated workbook-read outcome, effective canEdit,
+protection counts and manual/formula/generated/unproven-blank counts. It returns
+no keys, tokens, raw credentials, employee/flight rows or protection editor lists.
+It cannot write data, create Google flights, change permissions or enable writers.
+Protected ranges are read directly through the runtime service account rather
+than relying on the connector's reduced metadata response. Named-range protections,
+sheet protections and unprotected holes are resolved conservatively.
+
+Production results are NOT yet observed: the Chrome runtime tab is signed out.
+Sign in with the existing account and run this secured diagnostic after safe
+deployment. No demand for new credentials or SSH is appropriate.
+
+## Bounded adapter and the actual remaining write blocker
+
+The runtime adapter implements allowlisted workbook/cell access, exact bounded
+identity reads, canonical flight-number normalization, distinct row ordering,
+MotherBrain date and full mission manifest/tail/route/planned-time cross-checks,
+effective permissions, named/sheet protection inspection and typed readback.
+Blank CellData is NOT promoted to a proven non-spill input. Metadata errors,
+denied/unresolved protection, merges/generated cells and date/identity conflicts
+fail closed. ETD remains Neo-only.
+
+**No operational field is certified/enabled.** None may be enabled by a Boolean
+configuration toggle. Ordinary Google Sheets updates cannot condition an A1 write
+on the previously inspected flight and formula still being unchanged. Concurrent
+collaborators can reorder/change a flight or insert a formula between GET and
+update. A transaction batching changes is not a comparison against an earlier
+read. No verified Google-side flight/row/formula fence exists in the current
+workbook contracts. A reread is not claimed as an atomic guarantee.
+
+This is distinct from authentication and affects all eight approved fields:
+
+| Field | Exact approved input | Status |
+|---|---|---|
+| STA | MotherBrain Inbound AB4:AB50 | BLOCKED: write fence; blank/spill contract; isolated write proof |
+| Block-In | Reptile Sim Unload T4:T53 | BLOCKED: write fence and isolated write proof |
+| eLMAC | Reptile Sim Load M4:M53 | BLOCKED: write fence and isolated write proof |
+| Ramp LC | Rain Outbound M3:M50 | BLOCKED: write fence and isolated write proof |
+| Crew LC | Rain Outbound N3:N50 | BLOCKED: write fence and isolated write proof |
+| Block-Out | Rain Outbound O3:O50 | BLOCKED: write fence and isolated write proof |
+| Include/Exclude | Rain Outbound Q3:Q50 | BLOCKED: write fence and isolated write proof |
+| No Return | Rain Outbound S3:S50 | BLOCKED: write fence and isolated write proof |
+
+Runtime permission/protection observations remain to be collected, independently
+of the structural write fence. Earlier 26/26 Block-In and 25/25 eLMAC propagation
+evidence is retained; no operational Google values/formulas were touched again.
+No destructive integration test or unauthorized isolated target was used.
+
+Google reference: spreadsheets.batchUpdate request body and collaborative-update
+semantics: https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/batchUpdate
+ProtectedRange requestingUserCanEdit/unprotectedRanges:
+https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/sheets#ProtectedRange
+
+## One-shot result integrity
+
+Neo still commits first. Once a write is attempted, transport timeout, missing
+readback or wrong typed readback now records UNCERTAIN, not NOT_WRITTEN. No retry
+or replay occurs. Explicitly blocked preflight remains NOT_WRITTEN. Failed
+preflight I/O remains FAILED. No database/schema changes. Prior typed readback
+and absent No Return safety commit remains included.
+
+## Validation and release gate
+
+33 focused Python tests passed: shared credential fallback/dedicated identities,
+scope requests, real gspread HTTPClient with GET-only mocked transport/timeouts,
+unchanged NeoSektor input writer, all approved bounds, named/sheet protections,
+unproven blanks/formulas/generated cells, reordered/normalized/missing/duplicate/
+stale identities, protected GET-only diagnostic, exception sanitization/cache,
+one-shot UNCERTAIN/no retry, existing overrides and mission controls.
+Chromium diagnostic integration passed at 1440×900, 1920×1080, 390×844 and 375×568,
+with no POSTs, JS errors or page horizontal overflow. Compileall, inline JS syntax
+and diff-check passed. These are isolated fixtures, NOT production Google writes.
+
+Deployment requires fresh operational safety confirmation, requested but not yet
+received. Synthetic isolated workbook/range authorization was requested, not yet
+received. Do not infer either from absent replies. Production diagnostic execution
+requires ordinary existing NeoApps sign-in, also requested. No secrets requested.
+
+## Copyable continuation prompt
+
+Continue #7 in Z:\DevProj\NeoApps, main only. Fetch/reconcile; preserve local
+runtime-adapter/diagnostic implementation, b657f20a safety commit, completed #3–#6,
+overrides, artwork and protected stashes. Read this audit and latest issue #7.
+
+Use existing production Google credentials; do not request new ZEUS secrets or
+SSH. After confirming deployment is operationally safe, deploy the tested
+read-only diagnostic and verify exact SHA LIVE/health. Use the signed-in
+Grandmaster Chrome session at /neorain/google-certification to collect effective
+account/scopes/canEdit/protection evidence. Do not bypass authentication.
+
+All operational writers remain disabled because no Google-side flight/row/formula
+write fence is verified. Do not replace that with read-before-write and call it
+atomic. Establish a safe contract, obtaining owner approval for any new Google
+architecture/formula/permission changes before implementing them. The ordinary
+Sheets API batch is atomic only within its own requests, not relative to earlier
+GET observations. Keep each uncertifiable field disabled and report its reason.
+
+Obtain explicit isolated test workbook/range authorization; use synthetic data
+only and the existing runtime service account for actual write/readback proof.
+Approved operational ranges remain MB Inbound AB4:AB50; Reptile Sim Unload T4:T53
+and Sim Load M4:M53; Rain Outbound M/N/O/Q/S3:50. No ETD writer. Preserve Neo-first,
+typed FALSE, no blank/reset writes, no automatic retries/reassertions/Google flight
+creation. Keep UNCERTAIN for ambiguous post-send outcomes. Run focused tests,
+push only safe validated changes and verify exact-SHA Render LIVE. Report all
+field statuses and actual evidence without equating mocks with Google success.

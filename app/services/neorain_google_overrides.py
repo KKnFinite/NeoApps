@@ -32,6 +32,10 @@ class GoogleOverrideBlocked(ValueError):
     pass
 
 
+class GoogleWriteUncertain(GoogleOverrideBlocked):
+    """A write may have reached Google; never retry or claim NOT_WRITTEN."""
+
+
 def cell_number(field, row):
     _book, _tab, col, start, end, _flight = APPROVED[field]
     if type(row) is not int or not start <= row <= end:
@@ -95,6 +99,11 @@ def certified_write(mission, field, values):
     if field not in APPROVED:
         raise GoogleOverrideBlocked('No approved Google destination for this field.')
     adapter = current_app.config.get('NEORAIN_CERTIFIED_GOOGLE_ADAPTER')
+    if adapter is None:
+        from app.services.neorain_google_runtime import RuntimeGoogleAdapter, RACE_REASON
+        adapter = RuntimeGoogleAdapter(current_app.config)
+        if field not in adapter.certified_fields:
+            raise GoogleOverrideBlocked(RACE_REASON)
     if adapter is None or field not in getattr(adapter, 'certified_fields', ()):
         raise GoogleOverrideBlocked('Manual input protection, sort mapping and service-account write permission are not certified for this range.')
     book, tab, _col, _start, _end, _flight = APPROVED[field]
@@ -116,14 +125,22 @@ def certified_write(mission, field, values):
     if not observation_again.get('manual_contract_verified'):
         raise GoogleOverrideBlocked('Manual-input contract changed during verification.')
     validate_manual_cell(observation_again['cell'], spill_owned=observation_again.get('spill_owned', True))
-    adapter.write_input_once(book, tab, cell, value)
-    readback = adapter.read_input(book, tab, cell)
+    try:
+        adapter.write_input_once(book, tab, cell, value)
+    except GoogleOverrideBlocked:
+        raise
+    except Exception:
+        raise GoogleWriteUncertain('Google write result is uncertain. No automatic retry.') from None
+    try:
+        readback = adapter.read_input(book, tab, cell)
+    except Exception:
+        raise GoogleWriteUncertain('Google readback unavailable after write. No automatic retry.') from None
     if isinstance(value, bool):
         confirmed = type(readback) is bool and readback is value
     else:
         confirmed = type(readback) in (int, float) and readback == value
     if not confirmed:
-        raise GoogleOverrideBlocked('Google readback did not confirm the value.')
+        raise GoogleWriteUncertain('Google readback did not confirm the value. No automatic retry.')
     return f'{tab}!{cell}'
 
 
@@ -150,6 +167,8 @@ def attempt_once(override_id, generation):
         else:
             destination = certified_write(mission, row.field, row.value)
             row.sync_status, row.sync_detail = 'SYNCED', destination
+    except GoogleWriteUncertain as exc:
+        row.sync_status, row.sync_detail = 'UNCERTAIN', str(exc)[:300]
     except GoogleOverrideBlocked as exc:
         row.sync_status, row.sync_detail = 'NOT_WRITTEN', str(exc)[:300]
     except Exception:

@@ -1,5 +1,11 @@
 # NeoRain #7 certification continuation — BLOCKED, no writers enabled
 
+Credential-access prerequisite correction: new ZEUS secrets and Render SSH are
+NOT required. The continuation in `2026-10-14-neorain-runtime-adapter.md` reuses
+the established production connection through a Grandmaster-only diagnostic.
+The historical access notes below describe the earlier attempt, not a new
+credential requirement.
+
 Starting local/remote/production: 2c05915a78754fa51de4742597227471a50ed61b.
 Latest issue #7 and its comment were read completely. Range approvals and the
 one-shot contract remain unchanged. No completed #3–#6 functionality was rebuilt.

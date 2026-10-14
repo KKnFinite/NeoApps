@@ -10,6 +10,7 @@
             <h1 id="neorain-settings-title">SETTINGS</h1>
         </div>
     </header>
+    {% if current_user.role == 'grandmaster' %}<a href="{{ url_for('neorain.google_certification') }}">GOOGLE CERTIFICATION · READ ONLY</a>{% endif %}
 
     <section class="neorain-settings-panel" aria-labelledby="neorain-ground-time-title">
         <header><div><h2 id="neorain-ground-time-title">GROUND TIME THRESHOLD</h2><p>Flag connected arrivals below this gateway threshold.</p></div></header>
