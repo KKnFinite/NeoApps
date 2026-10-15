@@ -1,5 +1,40 @@
 # NeoRain #7 — existing runtime connection, diagnostic and write safety
 
+## Continuation: write-fence investigation (2026-10-14)
+
+The owner confirms all eight production diagnostic results were collected and
+existing credentials/workbook write permissions are verified. Do NOT repeat the
+credential audit or treat the historical pending-access notes below as current.
+The initial diagnostic/safety release is LIVE at 76bffea06f1336418b632fd51b90fa3f77e70a0e,
+Render dep-db81uuvlk1mc7399lvug, with HTTP 200 health.
+
+Google's Sheets MCP Developer Preview now documents `writeControl.requiredRevisionId`:
+https://developers.google.com/workspace/sheets/api/reference/mcp/tools_list/update_spreadsheet
+The public endpoint's actual tools/list schema confirms that request field.
+This is distinct from gspread's ordinary Sheets REST batchUpdate and is a
+potential server-enforced comparison, not another read-before-write workaround.
+However, get_spreadsheet's documented output is generic JSON and documents no
+read-snapshot revision field. A Drive version/ETag must not be guessed as one.
+Google also requires Developer Preview access and Sheets MCP API enablement.
+
+A temporary, non-blocking deployment-bootstrap probe makes one fixed, bounded
+read-only MCP get_spreadsheet call (MotherBrain Inbound AB4, no grid contents).
+It reports only availability/status, never returned revision, credentials,
+flight data, or provider exception bodies. It has bounded OAuth and API timeouts,
+no write request, no fallback writer, no automatic activation, no app startup
+hook and cannot fail schema bootstrap. Remove the temporary bootstrap call after
+collecting the capability evidence. This is not another credential audit.
+
+Even an available revision remains CANDIDATE_ONLY until isolated Google tests
+prove stale-revision rejection on reorder, formula insertion and concurrent
+changes. Formula-driven cross-workbook identity changes must be covered too;
+do not assume upstream recalculation necessarily changes a local write revision.
+Blank targets still need an independently verified manual/non-spill contract.
+All eight operational writers remain disabled; ETD remains Neo-only.
+
+Local validation: 30 write-safety/authority/probe tests and 13 probe/startup tests
+passed (4 probe tests overlap). No operational Google cell was modified.
+
 Starting local HEAD b657f20a4f8b6b55d7cfc0becff5cab507bc5521 is preserved.
 Starting origin/production 2c05915a78754fa51de4742597227471a50ed61b.
 Latest issue #7 credential correction and complete prior body/comment reviewed.
