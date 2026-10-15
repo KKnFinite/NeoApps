@@ -35,6 +35,39 @@ All eight operational writers remain disabled; ETD remains Neo-only.
 Local validation: 30 write-safety/authority/probe tests and 13 probe/startup tests
 passed (4 probe tests overlap). No operational Google cell was modified.
 
+### Actual conditional-endpoint result and release decision
+
+Production execution at 2026-10-15T01:11:24.800Z returned HTTP 403 from
+`https://sheetsmcp.googleapis.com/mcp/v1` for the fixed read-only tool call.
+`revision_snapshot_available=false`, `operational_writes=0`. Evidence: Render
+deployment dep-db82ftrrjlhs73cndig0 at 66e17143f3bd30381230178aa7c3d65bb41c45b5,
+which built, bootstrapped and reached LIVE. This is an unavailable separate
+revision-conditional endpoint, NOT a failure of the already confirmed ordinary
+Sheets credentials/workbook access. No repeat credential audit was performed.
+
+The sanitized response does not establish whether the cause is disabled Sheets
+MCP API, Developer Preview eligibility, service-account support or another API
+access restriction. Do not invent that reason from a bare 403. Project/API owner
+must establish access to this conditional endpoint; no new key or SSH is needed.
+Its get_spreadsheet response must then prove a usable snapshot revision, followed
+by isolated stale-write/reorder/formula-insertion tests. No fallback to ordinary
+unconditional Sheets values.update is permitted.
+
+The temporary bootstrap invocation was removed immediately after this evidence;
+normal deployment bootstrap has no Google probe dependency. The bounded helper
+and its synthetic tests remain available for an explicitly requested later check.
+
+All eight operational writers remain BLOCKED: no verified server-side write
+fence. Blank-looking inputs additionally remain unproven until formula/spill
+ownership is established at the same protected snapshot. No isolated Google
+write/readback or concurrent-mutation success is claimed. Existing Neo-first,
+one-shot/no-retry, zero blank/reset writes and ETD independence are unchanged.
+
+If this conditional API cannot be made available, a different Google-side
+keyed/protected input design may be required. Existing approval of eight input
+ranges does NOT authorize changing operational formulas, ranges or permissions;
+submit the concrete design for separate owner approval before such changes.
+
 Starting local HEAD b657f20a4f8b6b55d7cfc0becff5cab507bc5521 is preserved.
 Starting origin/production 2c05915a78754fa51de4742597227471a50ed61b.
 Latest issue #7 credential correction and complete prior body/comment reviewed.

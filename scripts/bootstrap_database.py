@@ -110,11 +110,6 @@ def main():
     print(f"Grandmaster node roles: {result['grandmaster_role_count']}")
     print(f"Password source: {password_status}")
 
-    # Temporary release investigation: bounded GET-equivalent MCP read only.
-    # It cannot enable writers, mutate sheets or fail the database bootstrap.
-    from app.services.neorain_google_revision_probe import report_deployment_revision_probe
-    report_deployment_revision_probe(app.config)
-
 
 def _dispose_bootstrap_engine(app):
     from app.extensions import db
