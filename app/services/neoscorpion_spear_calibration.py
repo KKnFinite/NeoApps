@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
 from sqlalchemy.orm import joinedload
-from app.services.neoscorpion_prof import event_math, minutes as timeline_minutes
+from app.services.neoscorpion_prof import event_math, minutes as timeline_minutes, timestamp
 
 from app.extensions import db
 from app.models import (
@@ -21,7 +21,7 @@ from app.models import (
 
 
 CALIBRATION_SCHEMA_VERSION = "v1"
-SPEAR_ALGORITHM_VERSION = "spear-v3-physical"
+SPEAR_ALGORITHM_VERSION = "spear-v4-resource-aware"
 MINIMUM_ACTIVE_SAMPLES = 3
 BASELINE_WEIGHT = Decimal("3")
 METRICS = (
@@ -252,23 +252,29 @@ def _canonical_observations(operation_id, row_by_assignment_id):
             output.append(CalibrationObservation(
                 "service_minutes", aircraft_type, math["actual_minutes"], observed_at,
                 assignment.id, assignment.sort_date_mission_id, "Physical ON to OFF service (not mechanical pump rate)", exclusion))
-        ready = getattr(assignment, "ready_for_fuel_at_utc", None)
+        resources=math['facts'].get('resource_timing') or {}
+        ready = (resources.get('fueler_available_preparation_at') if math['facts'].get('version')==4 else
+                 getattr(assignment, "ready_for_fuel_at_utc", None))
+        if isinstance(ready,str):
+            ready=timestamp(ready)
         ready = _utc_naive(ready)
         started_at = _utc_naive(event.started_at_utc)
         ended_at = _utc_naive(event.ended_at_utc)
-        if ready and started_at and started_at >= ready:
-            setup_minutes = _minutes_between(ready, started_at)
+        preparation_end=timestamp(resources.get('preparation_ready_at')) if math['facts'].get('version')==4 else started_at
+        if ready and preparation_end and started_at and ready <= preparation_end <= started_at:
+            setup_minutes = _minutes_between(ready, preparation_end)
             if setup_minutes is not None:
                 output.append(CalibrationObservation(
                     "preparation_minutes", aircraft_type, setup_minutes, observed_at,
-                    assignment.id, assignment.sort_date_mission_id, "Ready for Fuel to fuel start",
+                    assignment.id, assignment.sort_date_mission_id, "Available preparation opportunity to recorded readiness (not measured active labor)" if math['facts'].get('version')==4 else "Ready for Fuel to fuel start",
                     exclusion,
                 ))
         if math["wrap_minutes"] is not None:
             output.append(CalibrationObservation("actual_wrapup_minutes", aircraft_type,
                 math["wrap_minutes"], math["actuals_at"] or observed_at, assignment.id,
                 assignment.sort_date_mission_id, "OFF to final valid Actual readings; separate from administrative delay", exclusion))
-        lead = _decimal(math["facts"].get("lead_minutes"))
+        lead = (timeline_minutes(math['facts'].get('fueler_assigned_at'),math['facts'].get('truck_assigned_at'))
+                if math['facts'].get('version')==4 else _decimal(math["facts"].get("lead_minutes")))
         if lead is not None:
             output.append(CalibrationObservation("assignment_lead_minutes", aircraft_type,
                 lead, observed_at, assignment.id, assignment.sort_date_mission_id,

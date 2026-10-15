@@ -482,13 +482,15 @@ def _attach_fueling_timing(rows, operation, settings, planning=None, calibration
     planning = planning or assignment_planning_settings(operation.gateway, settings=settings)
     spear = spear or effective_spear_settings(settings)
     jobs = load_observation_jobs(operation.gateway_id)
+    from app.services.neoscorpion_resource_timing import attach_resource_evidence
+    attach_resource_evidence(rows,operation,settings,planning,datetime.utcnow())
     for row in rows:
         prediction = physical_off_forecast(row, planning, settings=settings, jobs=jobs, mode=spear.live_calibration_mode)
         row["physical_off_forecast"] = prediction
     from app.services.neoscorpion_spear import _parking_ramp, _travel_minutes
     for row in rows:
         assignment = row.get("assignment")
-        if assignment is None or row.get("fueling_effective_on_utc") or row.get("truck_start_reason") != "TRUCK STILL FUELING":
+        if row.get('resource_timing') is not None or assignment is None or row.get("fueling_effective_on_utc") or row.get("truck_start_reason") != "TRUCK STILL FUELING":
             continue
         occupied = [other for other in rows if other.get("assignment") and other["assignment"].id != assignment.id
                     and other["assignment"].assigned_truck_id == assignment.assigned_truck_id
@@ -2699,6 +2701,8 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state.apu_allowance_lbs = target_apu_allowance_lbs
         if apu_changed or apu_source_changed:
             fuel_work_state.apu_source_tank_code = target_apu_source_tank_code
+        _capture_resource_data_milestones(assignment, fuel_work_state, tank_layout, tank_states_by_code, now_utc,
+                                          preparation_only=True)
         if confirm_on:
             # Only this valid save confirms arrival/start. GETs and clocks never
             # create milestones. Preserve legacy ON even when it was premature.
@@ -2707,7 +2711,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state.confirmed_on_at_utc = now_utc
             if assignment.assigned_truck_id is not None:
                 fuel_work_state.truck_segment_started_at_utc = now_utc
-            _snapshot_physical_start(gateway, assignment, mission, fuel_work_state, now_utc, source="trusted automatic")
+            _snapshot_physical_start(gateway, assignment, mission, fuel_work_state, now_utc, source="trusted automatic", actor=user)
 
     if tail_changed or tank_changed:
         if tail_fuel_state is None:
@@ -2762,6 +2766,8 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state.actuals_received_at_utc = now_utc
         elif not actuals_complete:
             fuel_work_state.actuals_received_at_utc = None
+        _capture_resource_data_milestones(assignment, fuel_work_state, tank_layout, tank_states_by_code, now_utc,
+                                          data_changed=bool(entry_changes))
         _capture_physical_forecast(gateway, assignment, mission, fuel_work_state, now_utc)
         _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
@@ -2858,7 +2864,7 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     work.manual_on_truck_id = assignment.assigned_truck_id
     work.manual_on_cycle_number = cycle
     work.truck_segment_started_at_utc = now_utc
-    _snapshot_physical_start(gateway, assignment, mission, work, now_utc, source="manual")
+    _snapshot_physical_start(gateway, assignment, mission, work, now_utc, source="manual", actor=user)
     _capture_physical_forecast(gateway, assignment, mission, work, now_utc)
     db.session.flush()
     _new_fuel_audit(operation, assignment, user, "truck_on", "manual_on_at_utc",
@@ -3042,6 +3048,8 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
         if selection.inventory_verified:
             selection.inventory_pending_epoch = selection.inventory_epoch
         selection.inventory_verified = False
+        from app.services.neoscorpion_resource_timing import record_truck_availability
+        record_truck_availability(selection,assignment.assigned_truck,user,'physical_off',now_utc)
     if not defer_completion:
         _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
@@ -3053,7 +3061,39 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
     )
 
 
-def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source):
+def _capture_resource_data_milestones(assignment, work, layout, tanks, now, *, preparation_only=False, data_changed=False):
+    """Performance evidence only; never OFF, COMPLETE, inventory or permission changes."""
+    facts=dict(work.performance_context or {})
+    if facts.get('version') == 3:
+        return  # Do not add new-policy milestones to an already-started v3 job.
+    prepared=bool(layout and all(code in tanks and tanks[code].remaining_lbs is not None for code,_ in layout)
+        and work.apu_running is not None and _effective_apu_allowance_lbs(work) is not None
+        and _apu_source_is_valid(work,layout))
+    identity=dict(fueler_id=assignment.assigned_fueler_user_id,tail=work.tail_number,
+                  assigned_at=prof_iso(assignment.fueler_assigned_at_utc))
+    old=facts.get('preparation_evidence') or {}
+    if prepared:
+        if any(old.get(key) != value for key,value in identity.items()) or not old.get('at'):
+            facts['preparation_evidence']={**identity,'at':prof_iso(now)}
+    else:
+        facts.pop('preparation_evidence',None)
+    if not preparation_only:
+        actuals=bool(layout and all(code in tanks and tanks[code].actual_lbs is not None for code,_ in layout))
+        direction=_cycle_direction_evidence(assignment,work,list(tanks.values()))
+        ready=bool(prepared and actuals and work.actuals_received_at_utc
+            and direction in {'expected','equal'} and assignment.operational_status != 'hold_review'
+            and not work.ended_early_at_utc and assignment.transfer_fuel_gallons is not None
+            and assignment.transfer_fuel_gallons > 0)
+        if ready:
+            old_ready=facts.get('fueler_data_ready') or {}
+            if data_changed or not old_ready.get('at') or any(old_ready.get(k) != v for k,v in identity.items()):
+                facts['fueler_data_ready']={**identity,'at':prof_iso(now),'source':'validated_fueler_save'}
+        else:
+            facts.pop('fueler_data_ready',None)
+    work.performance_context=facts
+
+
+def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source, actor=None):
     if _normalize_tail(assignment.confirmed_tail_number) not in ("", work.tail_number):
         assignment.transfer_fuel_gallons = work.physical_transfer_gallons
     _bind_physical_segment(assignment, mission, work)
@@ -3064,8 +3104,29 @@ def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source)
     on_physical_start(db.session.get(SortDateOperation, assignment.sort_date_operation_id), work)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     previous = work.performance_context or {}
-    facts = policy_snapshot(assignment, settings, assignment_planning_settings(gateway, settings=settings),
-                            detailed_aircraft_type_for_tail(mission.assigned_tail_number))
+    if assignment.assigned_truck_id:
+        from app.services.neoscorpion_resource_timing import record_truck_availability
+        selection=NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=assignment.sort_date_operation_id,
+            fuel_truck_id=assignment.assigned_truck_id).one()
+        record_truck_availability(selection,db.session.get(NeoScorpionFuelTruck,assignment.assigned_truck_id),
+            actor,'physical_on',now)
+    planning=assignment_planning_settings(gateway, settings=settings)
+    from app.services.neoscorpion_resource_timing import snapshot_resources
+    if previous.get('version') == 3:
+        facts=dict(previous)  # An in-flight v3 policy does not migrate mid-job.
+    else:
+        try:
+            with db.session.begin_nested():
+                resources=snapshot_resources(gateway,assignment,mission,work,settings,planning,now)
+        except Exception:
+            current_app.logger.exception('Resource-aware PROF evidence unavailable for physical work %s; fueling continues.',work.id)
+            resources=dict(work_id=work.id,on_at=prof_iso(now),setup_allowance=str(planning.setup_minutes) if planning.setup_minutes is not None else None,
+                setup_reason='Full setup; resource evidence capture unavailable',
+                truck_reasons=['Resource evidence capture unavailable'],fueler_reasons=['Resource evidence capture unavailable'])
+        facts = policy_snapshot(assignment, settings, planning,
+                                detailed_aircraft_type_for_tail(mission.assigned_tail_number), resources=resources)
+    for key in ('preparation_evidence','fueler_data_ready'):
+        if key in previous:facts[key]=previous[key]
     facts.update(on_source=source, on_at=prof_iso(now), forecasts=previous.get("forecasts", []),
                  exclusions=previous.get("exclusions", []),
                  planned_departure_at=prof_iso(mission.planned_datetime_utc),
@@ -5096,6 +5157,13 @@ def _close_current_truck_segment(
     )
     db.session.add(fueling_event)
     facts = dict(fuel_work_state.performance_context or {})
+    if facts.get('version') == 4:
+        from app.services.neoscorpion_resource_timing import finalized_resources, truck_interval
+        resources=finalized_resources(facts.get('resource_timing') or {},fuel_work_state,datetime.utcnow())
+        interval=truck_interval(resources,fueling_event.started_at_utc,fueling_event.ended_at_utc)
+        resources['excluded_wait_intervals']=interval['excluded_wait_intervals']
+        resources['excluded_wait_minutes']=str(interval['excluded_wait_minutes'])
+        facts['resource_timing']=resources
     exclusions = list(facts.get("exclusions", []))
     if fuel_work_state.off_at_utc is None or fuel_work_state.ended_early_at_utc:
         exclusions.append("Interrupted truck segment")
@@ -5104,6 +5172,9 @@ def _close_current_truck_segment(
     facts.update(actuals_received_at=prof_iso(fuel_work_state.actuals_received_at_utc),
                  preparation_completed_at=prof_iso(fuel_work_state.preparation_received_at_utc),
                  exclusions=exclusions, inventory_epoch=fuel_work_state.off_inventory_epoch)
+    if facts.get('version') == 4:
+        from app.services.neoscorpion_resource_timing import fueler_work_end
+        facts['fueler_work_end_at']=prof_iso(fueler_work_end(fuel_work_state))
     facts.update(physical_work_id=fuel_work_state.id, physical_sequence=sequence_number,
                  physical_tail=fuel_work_state.tail_number)
     fueling_event.performance_snapshot = facts
@@ -5153,6 +5224,8 @@ def _close_current_truck_segment(
                 actor_user_id=changed_by_user.id, created_at=datetime.utcnow()))
     if cycle_type == "defuel":
         nightly_truck.status = "needs_sump"
+        from app.services.neoscorpion_resource_timing import record_truck_availability
+        record_truck_availability(nightly_truck,fuel_truck,changed_by_user,'defuel_needs_sump',ended_at_utc)
         hold_active_assignments_for_truck(
             operation,
             fuel_truck,
@@ -5271,18 +5344,22 @@ def save_truck(gateway, form, user=None):
         truck = NeoScorpionFuelTruck(gateway_id=gateway.id, truck_number=truck_number)
         db.session.add(truck)
 
+    availability_scope=None
+    if truck.id:
+        current_operation=current_sort_operation(gateway)
+        if current_operation is not None:
+            availability_scope=lock_nightly_asset_scope_for_mutation(current_operation)
+        truck=NeoScorpionFuelTruck.query.filter_by(id=truck.id).with_for_update().populate_existing().one()
     became_blocked = bool(
         truck.id
         and not truck.is_out_of_service
         and form.get("is_out_of_service") == "1"
     )
     interruption_scope = None
+    availability_changed=(not truck.id or truck.is_active != (form.get('is_active')=='1')
+                          or truck.is_out_of_service != (form.get('is_out_of_service')=='1'))
     if became_blocked:
-        current_operation = current_sort_operation(gateway)
-        if current_operation is not None:
-            interruption_scope = lock_nightly_asset_scope_for_mutation(
-                current_operation
-            )
+        interruption_scope=availability_scope
     truck.truck_number = truck_number
     truck.description = (form.get("description") or "").strip()
     if 'capacity_gallons' in form:
@@ -5304,6 +5381,9 @@ def save_truck(gateway, form, user=None):
         truck.vendor_driver_name = (form.get("vendor_driver_name") or "").strip()
     truck.is_active = form.get("is_active") == "1"
     truck.is_out_of_service = form.get("is_out_of_service") == "1"
+    if availability_changed:
+        from app.services.neoscorpion_resource_timing import record_master_availability
+        record_master_availability(truck,user,'master_settings',datetime.utcnow())
     if interruption_scope is not None:
         operation, asset_state = interruption_scope
         held_count = hold_active_assignments_for_truck(
@@ -5331,7 +5411,10 @@ def deactivate_truck(gateway, form, user=None):
             interruption_scope = lock_nightly_asset_scope_for_mutation(
                 current_operation
             )
+    truck=NeoScorpionFuelTruck.query.filter_by(id=truck.id).with_for_update().populate_existing().one()
     truck.is_active = False
+    from app.services.neoscorpion_resource_timing import record_master_availability
+    record_master_availability(truck,user,'master_deactivated',datetime.utcnow())
     if interruption_scope is not None:
         operation, asset_state = interruption_scope
         held_count = hold_active_assignments_for_truck(
@@ -6923,7 +7006,7 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
         premature_readings = bool(on and layout and any(code not in tanks or
             (tanks[code].created_at is not None and utc_naive(tanks[code].created_at) > on + timedelta(seconds=1))
             for code, _ in layout))
-        assigned_at = dates.get((assignment.id, str(assignment.assigned_truck_id))) or assignment.created_at
+        assigned_at = assignment.truck_assigned_at_utc or dates.get((assignment.id, str(assignment.assigned_truck_id))) or assignment.created_at
         if work and confirmed is None and work.truck_segment_started_at_utc and not dates.get((assignment.id, str(assignment.assigned_truck_id))):
             assigned_at = max(assigned_at, work.truck_segment_started_at_utc) if assigned_at else work.truck_segment_started_at_utc
         selection = selections.get(assignment.assigned_truck_id)

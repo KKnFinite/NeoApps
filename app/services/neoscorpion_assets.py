@@ -419,6 +419,8 @@ def select_nightly_truck(
             return _unchanged(state)
         raise ValueError('Truck already configured tonight. Use its dedicated status or inventory controls.')
 
+    from app.services.neoscorpion_resource_timing import record_truck_availability
+    record_truck_availability(nightly_truck,truck,changed_by_user,'nightly_setup',now_utc or datetime.utcnow())
     if status != "available":
         _hold_assignments_for_truck_status(
             locked_operation.id,
@@ -476,6 +478,8 @@ def update_nightly_truck(
         _verify_inventory(locked_operation, nightly_truck, final_current, changed_by_user,
                           "Dispatcher entered a new confirmed truck reading.", now_utc=now_utc)
     _set_truck_values(nightly_truck, *final_values)
+    from app.services.neoscorpion_resource_timing import record_truck_availability
+    record_truck_availability(nightly_truck,truck,changed_by_user,'nightly_status_update',now_utc or datetime.utcnow())
     if final_status != "available":
         _hold_assignments_for_truck_status(
             locked_operation.id,
@@ -582,6 +586,8 @@ def mark_nightly_truck_topping_off(
         gallons=nightly_truck.current_gallons, inventory_verified=departure_verified,
         inventory_epoch=nightly_truck.inventory_epoch, actor_user_id=changed_by_user.id if changed_by_user else None,
         driver_name=driver_name(locked_operation.gateway, locked_operation, truck.id)))
+    from app.services.neoscorpion_resource_timing import record_truck_availability
+    record_truck_availability(nightly_truck,truck,changed_by_user,'top_off_sent',nightly_truck.top_off_sent_at_utc)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
@@ -681,6 +687,8 @@ def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons, *, ch
     nightly_truck.status = "available"
     _verify_inventory(locked_operation, nightly_truck, current_gallons, changed_by_user,
                       "Top Off Complete confirmed a new physical truck reading.", now_utc=returned_at)
+    from app.services.neoscorpion_resource_timing import record_truck_availability
+    record_truck_availability(nightly_truck,truck,changed_by_user,'top_off_returned',returned_at)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
@@ -708,6 +716,8 @@ def mark_nightly_truck_sumped(operation, fuel_truck, current_gallons, *, changed
     nightly_truck.status = "available"
     _verify_inventory(locked_operation, nightly_truck, current_gallons, changed_by_user,
                       "MARK SUMPED confirmed a new physical truck reading.", now_utc=now_utc)
+    from app.services.neoscorpion_resource_timing import record_truck_availability
+    record_truck_availability(nightly_truck,truck,changed_by_user,'sumped',now_utc or datetime.utcnow())
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)

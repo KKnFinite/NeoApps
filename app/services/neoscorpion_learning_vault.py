@@ -334,7 +334,7 @@ def _validate_review(payload, key, metadata=None):
     # not synthesize fields before hashing: their absence was part of that hash.
     if "operation_id" in payload or "spear_algorithm_version" in payload:
         require(identity(payload.get("operation_id")) and payload["operation_id"] == sort["operation_id"])
-        require(payload.get("spear_algorithm_version") in {"spear-v1", "spear-v3-physical"})
+        require(payload.get("spear_algorithm_version") in {"spear-v1", "spear-v3-physical", "spear-v4-resource-aware"})
     require(isinstance(payload.get("calibrations"), list))
     for item in payload["calibrations"]:
         require(isinstance(item, dict) and set(item) == {"metric", "scope", "configured", "observed", "effective", "samples", "excluded_samples", "confidence"})
@@ -388,20 +388,65 @@ def _validate_learning_record(record):
         "training_eligible", "exclusion_reasons", "gateway", "sort",
         "assignment", "mission", "arrival", "parking", "work_states",
         "fuel_events", "audit_actions",
-    } | ({"operational_timelines"} if version == "spear-learning/v2" else set()))
-    require(version in {"spear-learning/v1", "spear-learning/v2"})
-    if version == "spear-learning/v2":
+    } | ({"operational_timelines"} if version in {"spear-learning/v2","spear-learning/v3"} else set()))
+    require(version in {"spear-learning/v1", "spear-learning/v2","spear-learning/v3"})
+    if version in {"spear-learning/v2","spear-learning/v3"}:
         require(isinstance(record["operational_timelines"], list))
         fact_keys = {"version", "aircraft_type", "fueler_id", "truck_id", "cycle", "fueler_assigned_at", "truck_assigned_at",
                      "assignment_actor_id", "advance_window", "setup_minutes", "setup_allowance", "lead_minutes", "setup_reason",
                      "pump_rate", "forecasts", "exclusions", "on_source", "on_at", "actuals_received_at", "inventory_epoch",
                      "completion_ready_at", "completed_at", "preparation_completed_at",
                      "physical_work_id", "physical_sequence", "physical_tail", "planned_departure_at", "required_fuel_lbs"}
+        if version == 'spear-learning/v3':
+            fact_keys |= {'resource_timing','preparation_evidence','fueler_data_ready','fueler_work_end_at'}
         for item in record["operational_timelines"]:
             require(isinstance(item, dict) and set(item) == {"event_id", "facts", "fueler_prof", "truck_prof", "exclusions"})
             require(positive_id(item["event_id"]))
             require(isinstance(item["facts"], dict) and set(item["facts"]) <= fact_keys)
             facts = item["facts"]
+            if facts.get('version') == 4:
+                require(version == 'spear-learning/v3')
+                resources=facts.get('resource_timing')
+                require(isinstance(resources,dict))
+                allowed_resources={'work_id','observed_at','on_at','truck_previous_work_id','truck_previous_release_at',
+                    'truck_assigned_at','truck_eligible_start_at','previous_ramp','destination_ramp','parking',
+                    'parking_observed_at','parking_assignment_at','travel_per_ramp_move','expected_travel_minutes',
+                    'fueler_previous_work_id','fueler_previous_off_at','fueler_previous_release_at','fueler_release_source',
+                    'fueler_available_preparation_at','preparation_ready_at','preparation_qualified','truck_readiness_at',
+                    'lead_minutes','setup_allowance','setup_reason','truck_reasons','fueler_reasons','waiting_note',
+                    'aircraft_access_at','aircraft_access_source','aircraft_staging_at','staging_source','incoming_early_staging_minutes',
+                    'final_observed_at','at_on_fueler_release_at','excluded_wait_intervals','excluded_wait_minutes',
+                    'intervening_top_off_event_id','sump_release_audit_id',
+                    'availability_evidence','availability_base_start_at','availability_continuity'}
+                require(set(resources) <= allowed_resources and positive_id(resources.get('work_id')))
+                for key,value in resources.items():
+                    if key.endswith('_at'):require(timestamp(value))
+                    elif key.endswith('_id'):require(optional_id(value))
+                    elif key in {'truck_reasons','fueler_reasons'}:
+                        require(isinstance(value,list) and all(isinstance(v,str) and len(v)<=256 for v in value))
+                    elif key == 'excluded_wait_intervals':
+                        require(isinstance(value,list) and len(value)<=2)
+                        for interval in value:
+                            require(isinstance(interval,dict) and set(interval)=={'start','end','minutes','reason','previous_work_id'})
+                            require(timestamp(interval['start']) and timestamp(interval['end']) and positive_id(interval['previous_work_id']))
+                            require(isinstance(interval['minutes'],str) and bool(re.fullmatch(r'\d+(\.\d+)?',interval['minutes'])))
+                            require(isinstance(interval['reason'],str) and len(interval['reason'])<=256)
+                    elif key == 'availability_evidence':
+                        require(isinstance(value,list) and len(value)<=10002)
+                        for observation in value:
+                            require(isinstance(observation,dict) and set(observation)<= {'at','available','status','actor_id','source','is_active','is_out_of_service','scope'})
+                            require(timestamp(observation.get('at')) and type(observation.get('available')) is bool and optional_id(observation.get('actor_id')))
+                            require(observation.get('scope') in {'nightly','master'})
+                            require(isinstance(observation.get('source'),str) and len(observation['source'])<=80)
+                    else:
+                        require(value is None or type(value) in {int,bool} or isinstance(value,str) and len(value)<=256)
+                for key in ('preparation_evidence','fueler_data_ready'):
+                    if key in facts:
+                        evidence=facts[key]
+                        require(isinstance(evidence,dict) and set(evidence)<= {'fueler_id','tail','assigned_at','at','source'})
+                        require(optional_id(evidence.get('fueler_id')) and timestamp(evidence.get('assigned_at')) and timestamp(evidence.get('at')))
+                        require(isinstance(evidence.get('tail'),str) and bool(re.fullmatch(r'[A-Z0-9-]{1,32}',evidence['tail'])))
+                require(timestamp(facts.get('fueler_work_end_at')))
             for field in ("fueler_assigned_at", "truck_assigned_at", "on_at", "actuals_received_at", "completion_ready_at", "completed_at", "preparation_completed_at"):
                 require(timestamp(facts.get(field)))
             require(isinstance(facts.get("forecasts", []), list))
@@ -567,7 +612,7 @@ def _valid_learning_key(key):
     return bool(re.fullmatch(
         r"learning-record/\d{4}/\d{2}/\d{2}/gateway-[A-Za-z0-9_-]+/"
         r"sort-[A-Za-z0-9_-]+/assignment-[A-Za-z0-9_-]+/"
-        r"[0-9a-f]{64}-completed-fuel-outcome-v[12]\.json\.gz",
+        r"[0-9a-f]{64}-completed-fuel-outcome-v[123]\.json\.gz",
         str(key or ""),
     ))
 

@@ -183,6 +183,8 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
     for event in events:
         if event_math(event)["fueler_reasons"]:
             exclusion_reasons.append("unverified_operational_timeline")
+        if (event.performance_snapshot or {}).get('version') == 4 and event_math(event)['truck_reasons']:
+            exclusion_reasons.append('unverified_resource_availability')
         if event.started_at_utc is None or event.ended_at_utc is None:
             exclusion_reasons.append("incomplete_event_timing")
         if event.fueler_user_id is None:
@@ -205,10 +207,11 @@ def build_completed_learning_record(gateway, operation, assignment, mission):
     terminal_at = assignment.fuel_on_board_at_utc or assignment.completed_at_utc
 
     return {
-        "schema_version": "spear-learning/v2",
+        "schema_version": "spear-learning/v3" if any((e.performance_snapshot or {}).get('version')==4 for e in events) else "spear-learning/v2",
         "operational_timelines": [dict(event_id=event.id, facts=event.performance_snapshot or {},
             fueler_prof=event_math(event)["fueler_prof"], truck_prof=event_math(event)["truck_prof"],
-            exclusions=list(event_math(event)["fueler_reasons"])) for event in events],
+            exclusions=list(dict.fromkeys([*event_math(event)["fueler_reasons"],
+                *(event_math(event)['truck_reasons'] if (event.performance_snapshot or {}).get('version')==4 else ())]))) for event in events],
         "record_type": "completed_fuel_outcome",
         "captured_at_utc": _iso(terminal_at),
         "training_eligible": not exclusion_reasons,

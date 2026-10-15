@@ -23,7 +23,7 @@
             </details>
         </article>{% endfor %}
         </div>
-        <p class="neoscorpion-helper">{{ count }} recorded segments. Times use the gateway timezone; physical durations use exact UTC seconds. Unknown historical facts remain excluded.</p>
+        <p class="neoscorpion-helper">{{ count }} recorded segments. Times use the gateway timezone; durations use exact UTC seconds. v3 retains physical ON→OFF Truck PROF. v4 uses travel + pumping over eligible time minus proven waiting; Fueler PROF remains physical ON→OFF. Mixed totals sum each job's original expected and actual components, never average scores. Unknown facts remain excluded.</p>
         {% for job in jobs %}<article class="neoscorpion-prof-job">
             <h2>{{ job.columns.Flight }} · {{ job.columns.Tail }} · Truck {{ job.columns.Truck }}</h2>
             <p>{{ job.columns.Fueler }} · {{ job.columns.Date }} {{ job.columns.Sort }} · Cycle {{ job.columns.Cycle }} / Segment {{ job.columns.Segment }}</p>

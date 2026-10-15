@@ -21,6 +21,7 @@ def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observ
     if row.get("fueling_on_trusted") is False and row.get("fueling_effective_on_utc") is not None:
         return result
     facts = getattr(work, "performance_context", None) or {}
+    if facts.get('version') not in {3,4}:facts={}
     if facts.get("exclusions"):
         return result  # Swapped/interrupted identities cannot define a PROF goal.
     aircraft = row.get("detailed_aircraft_type")
@@ -28,11 +29,35 @@ def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observ
     allowance = number(facts.get("setup_allowance")) if facts else setup_allowance(
         getattr(assignment, "fueler_assigned_at_utc", None), getattr(assignment, "truck_assigned_at_utc", None),
         getattr(settings, "advance_setup_window_minutes", None), planning.setup_minutes)[0]
+    resources=facts.get('resource_timing') if facts.get('version')==4 else row.get('resource_timing')
+    if resources is not None:
+        allowance=number(resources.get('setup_allowance'))
     gallons = number(getattr(assignment, "transfer_fuel_gallons", None) if getattr(assignment, "transfer_fuel_gallons", None) is not None
                      else row.get("planning_demand_gallons"))
     if rate is None or rate <= 0 or allowance is None or gallons is None or gallons <= 0:
         return result
     start = row.get("fueling_effective_on_utc")
+    if resources is not None and start is not None and resources.get('fueler_reasons'):
+        return dict(result,source='RESOURCE TIMING UNKNOWN')
+    if resources is not None and start is None:
+        if resources.get('forecast_uncertainty'):
+            return dict(result,source=resources['forecast_uncertainty'])
+        eligible=timestamp(resources.get('truck_eligible_start_at'))
+        travel=number(resources.get('expected_travel_minutes'))
+        available=timestamp(resources.get('fueler_available_preparation_at'))
+        access=timestamp(resources.get('aircraft_access_at'))
+        blocking=[reason for reason in resources.get('truck_reasons',()) if 'after ON' not in reason]
+        if not eligible or travel is None or not available or not access or blocking or resources.get('fueler_reasons'):
+            return dict(result,source='RESOURCE TIMING UNKNOWN')
+        # Travel is included once before physical ON, never in ON-anchored
+        # service duration or the Fueler's physical 100 PROF denominator.
+        start=max(eligible+timedelta(minutes=float(travel)),available,access)
+        prepared=timestamp(resources.get('preparation_ready_at'))
+        window=number(getattr(settings,'advance_setup_window_minutes',None))
+        if resources.get('prospective'):
+            allowance=number(planning.setup_minutes)
+            if prepared and prepared <= start and window is not None and (start-available).total_seconds() >= float(window*60):
+                allowance=Decimal(0)
     if start is None:
         # A preassignment is not physical arrival. Use recorded readiness and
         # actual release/travel evidence, never the time this page was rendered.
@@ -52,9 +77,13 @@ def physical_off_forecast(row, planning, *, settings=None, jobs=(), mode="observ
         start = max(ready, assigned, timestamp(row.get("truck_travel_until", "").replace("Z", "")) or assigned,
                     row.get("forecast_truck_available_at") or assigned, row.get("forecast_fueler_available_at") or assigned)
     expected = allowance + gallons/rate
+    if resources is not None:
+        result['physical_start']=start
     result["goal"] = start + timedelta(seconds=float(expected*60))
     weighted, weight_total, sample_count = Decimal(3), Decimal(3), 0
     for job in jobs:
+        if (facts.get('version')==4 or resources is not None) and job['facts'].get('version') != 4:
+            continue  # Assignment-only v3 setup credit is not v4 calibration.
         if job["fueler_reasons"] or job["expected_fueler"] is None or job["expected_fueler"] <= 0:
             continue
         e = job["event"]

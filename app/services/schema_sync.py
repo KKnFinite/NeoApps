@@ -10,12 +10,14 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 }
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
+    'neoscorpion_fuel_trucks': {'availability_history': 'JSON'},
     'neoscorpion_truck_drivers': {'manual_name': "VARCHAR(120) NOT NULL DEFAULT ''"},
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "DATETIME",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT 1",
         "inventory_epoch": "INTEGER NOT NULL DEFAULT 0",
         "inventory_pending_epoch": "INTEGER",
+        "availability_history": "JSON",
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",
@@ -301,12 +303,14 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
+    'neoscorpion_fuel_trucks': {'availability_history': 'JSON'},
     'neoscorpion_truck_drivers': {'manual_name': "VARCHAR(120) NOT NULL DEFAULT ''"},
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
         "inventory_epoch": "INTEGER NOT NULL DEFAULT 0",
         "inventory_pending_epoch": "INTEGER",
+        "availability_history": "JSON",
     },
     "neosektor_sort_states": {
         "back_pickup_mask": "INTEGER NOT NULL DEFAULT 0",

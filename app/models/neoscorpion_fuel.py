@@ -84,6 +84,7 @@ class NeoScorpionFuelTruck(db.Model):
     vendor_driver_name = db.Column(db.String(120), nullable=False, default="")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     is_out_of_service = db.Column(db.Boolean, nullable=False, default=False)
+    availability_history = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
@@ -228,6 +229,8 @@ class NeoScorpionSortTruck(db.Model):
     inventory_verified = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     inventory_epoch = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     inventory_pending_epoch = db.Column(db.Integer, nullable=True)
+    # Future-only resource evidence; old rows remain NULL, never backfilled.
+    availability_history = db.Column(db.JSON, nullable=True)
     top_off_sent_at_utc = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(

@@ -194,13 +194,13 @@ def effective_spear_settings(settings):
             settings.spear_do_not_top_off_above_percent or 70
         ),
         truck_minutes_per_ramp_move=Decimal(
-            settings.spear_truck_minutes_per_ramp_move or 2
+            settings.spear_truck_minutes_per_ramp_move if settings.spear_truck_minutes_per_ramp_move is not None else 2
         ),
         fueler_begins_at=_ramp(settings.spear_fueler_begins_at),
         truck_begins_at=_ramp(settings.spear_truck_begins_at),
         truck_after_top_off=_ramp(settings.spear_truck_after_top_off),
         incoming_early_staging_minutes=int(
-            settings.spear_incoming_early_staging_minutes or 15
+            settings.spear_incoming_early_staging_minutes if settings.spear_incoming_early_staging_minutes is not None else 15
         ),
         recalculation_interval_minutes=int(
             settings.spear_recalculation_interval_minutes or 2
@@ -399,13 +399,16 @@ def build_spear_plan(
                     row, spear_settings, now_utc
                 ),
             )
-            if row.get("fueling_on_trusted") and row.get("fueling_effective_on_utc"):
+            if row.get('resource_timing') is not None and row.get('physical_off_forecast') is not None:
+                start=row['physical_off_forecast'].get('physical_start')
+                finish=row['physical_off_forecast']['likely']
+            elif row.get("fueling_on_trusted") and row.get("fueling_effective_on_utc"):
                 start = row["fueling_effective_on_utc"]
                 finish = active_fueling_finish(row, operation, planning_settings)
             risk = _risk(finish, _departure_at(row))
             risks[mission_id] = risk
             _advance_resources(
-                fueler_state[assigned_fueler], truck_state[assigned_truck], ramp, finish
+                fueler_state[assigned_fueler], truck_state[assigned_truck], ramp, finish, finishing_minutes=timing.finishing_minutes
             )
             _apply_demand(truck_gallons, assigned_truck, demand)
             continue
@@ -580,7 +583,7 @@ def build_spear_plan(
             )
         )
         risks[mission_id] = risk
-        _advance_resources(fueler_state[fueler_id], truck_state[truck_id], ramp, finish)
+        _advance_resources(fueler_state[fueler_id], truck_state[truck_id], ramp, finish, finishing_minutes=timing.finishing_minutes)
         truck_gallons[truck_id] = projected
 
     occupied_truck_next = _occupied_truck_recommendations(
@@ -710,7 +713,7 @@ def _occupied_truck_recommendations(
             continue
         forecast_fuelers[fueler_id] = replace(fueler_state[fueler_id])
         forecast_trucks[truck_id] = replace(truck_state[truck_id])
-        _advance_resources(forecast_fuelers[fueler_id], forecast_trucks[truck_id], ramp, finish)
+        _advance_resources(forecast_fuelers[fueler_id], forecast_trucks[truck_id], ramp, finish, finishing_minutes=timing.finishing_minutes)
         gallons_after_current[truck_id] = remaining
 
     planned_missions = {step.mission_id for step in steps}
@@ -1237,7 +1240,7 @@ def _schedule_pair(
     *,
     staging_allowed_at_utc,
 ):
-    truck_arrival = truck.available_at + timedelta(
+    truck_arrival = max(truck.available_at,staging_allowed_at_utc) + timedelta(
         minutes=float(_travel_minutes(truck.ramp, ramp, settings.truck_minutes_per_ramp_move))
     )
     fueler_arrival = fueler.available_at + timedelta(
@@ -1247,7 +1250,7 @@ def _schedule_pair(
     fueler_ready = max(fueler_arrival, staging_allowed_at_utc)
     start = max(truck_ready, fueler_ready, timing.aircraft_ready_utc or truck_ready)
     finish = (
-        start + timedelta(minutes=float(timing.total_duration_minutes))
+        start + timedelta(minutes=float(timing.total_duration_minutes-(timing.finishing_minutes or 0)))
         if timing.total_duration_minutes is not None
         else None
     )
@@ -1255,20 +1258,20 @@ def _schedule_pair(
 
 
 def _staging_allowed_at(row, settings, now_utc):
+    from app.services.neoscorpion_resource_timing import aircraft_evidence, stamp
     arrival = row.get("arrival_mission")
-    if arrival is None or arrival.actual_block_in_datetime_utc is not None:
-        return now_utc
-    eta = _utc_naive(arrival.eta_datetime_utc or arrival.planned_datetime_utc)
-    if eta is None:
-        return now_utc
-    return eta - timedelta(minutes=settings.incoming_early_staging_minutes)
+    evidence=aircraft_evidence(arrival,None,settings.incoming_early_staging_minutes)
+    return stamp(evidence['aircraft_staging_at']) or now_utc
 
 
 def _current_resource_owners(rows):
     """Snapshot committed resources from bounded current-sort/cycle rows only."""
     fuelers, trucks = {}, {}
+    from app.services.neoscorpion_resource_timing import fueler_work_end
     for row in rows:
-        for fueler_id in row.get("pending_segment_fuelers", ()):
+        outstanding=row.get('outstanding_segments')
+        pending=(item.physical_fueler_user_id for item in outstanding if fueler_work_end(item) is None) if outstanding is not None else row.get('pending_segment_fuelers',())
+        for fueler_id in pending:
             if fueler_id is not None:
                 fuelers.setdefault(fueler_id, set()).add(row["mission"].id)
         assignment = row.get("assignment")
@@ -1287,6 +1290,8 @@ def _current_resource_owners(rows):
         ):
             if released and owners is trucks:
                 continue
+            if released and owners is fuelers and fueler_work_end(work) is not None:
+                continue
             if getattr(work, "ended_early_at_utc", None):
                 continue
             if identifier is not None:
@@ -1294,18 +1299,19 @@ def _current_resource_owners(rows):
     return fuelers, trucks
 
 
-def _advance_resources(fueler, truck, ramp, finish):
+def _advance_resources(fueler, truck, ramp, finish, *, finishing_minutes=0):
     for state in (fueler, truck):
         if finish is not None:
-            state.available_at = finish
+            state.available_at = finish+timedelta(minutes=float(finishing_minutes or 0)) if state is fueler else finish
         state.ramp = ramp
         state.workload += 1
-        state.location_source = "current_assignment"
-        state.location_confidence = "high"
+        state.location_source = "planned_assignment"
+        state.location_confidence = "projected"
         state.location_recorded_at_utc = finish
 
 
 def _adopt_completed_locations(rows, fueler_state, truck_state):
+    from app.services.neoscorpion_resource_timing import fueler_work_end, stamp
     def released_at(row):
         assignment = row["assignment"]
         work = row.get("fuel_work_state")
@@ -1328,21 +1334,25 @@ def _adopt_completed_locations(rows, fueler_state, truck_state):
         ),
     )
     for row in completed:
-        ramp = _parking_ramp(row.get("parking_position"))
+        work=row.get('fuel_work_state')
+        facts=getattr(work,'performance_context',None) or {}
+        ramp = _parking_ramp((facts.get('resource_timing') or {}).get('parking'))
         if ramp not in SPEAR_RAMP_ORDER:
             continue
         assignment = row["assignment"]
         for mapping, identifier in (
-            (fueler_state, assignment.assigned_fueler_user_id),
-            (truck_state, assignment.assigned_truck_id),
+            (fueler_state, getattr(work,'physical_fueler_user_id',None) or assignment.assigned_fueler_user_id),
+            (truck_state, getattr(work,'physical_truck_id',None) or assignment.assigned_truck_id),
         ):
-            if mapping is fueler_state and not row.get("administratively_complete"):
+            end=fueler_work_end(work) if mapping is fueler_state else released_at(row)
+            if end is None:
                 continue
             if identifier in mapping:
                 mapping[identifier].ramp = ramp
-                mapping[identifier].location_source = "last_completed_assignment"
+                mapping[identifier].location_source = "last_confirmed_fueler_work_end" if mapping is fueler_state else "last_physical_release"
                 mapping[identifier].location_confidence = "high"
-                mapping[identifier].location_recorded_at_utc = released_at(row)
+                mapping[identifier].location_recorded_at_utc = end
+                mapping[identifier].available_at=max(mapping[identifier].available_at,end)
 
 
 def _location_provenance(state):

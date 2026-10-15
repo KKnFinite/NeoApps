@@ -227,9 +227,11 @@ def build_resource_calendars(
             continue
         work_state = _record_value(record, "work_state")
         if _assignment_finished(assignment, work_state):
+            from app.services.neoscorpion_resource_timing import fueler_work_end
             if (getattr(work_state, "off_at_utc", None) and not getattr(assignment, "completed_at_utc", None)
                     and not getattr(assignment, "fuel_on_board_at_utc", None)
-                    and getattr(assignment, "assigned_fueler_user_id", None) is not None):
+                    and getattr(assignment, "assigned_fueler_user_id", None) is not None
+                    and fueler_work_end(work_state) is None):
                 identifier = assignment.assigned_fueler_user_id
                 unknown.setdefault(("fueler", identifier), []).append(UnknownResourceCommitment(
                     "fueler", identifier, assignment_id, getattr(assignment, "sort_date_mission_id", None),
