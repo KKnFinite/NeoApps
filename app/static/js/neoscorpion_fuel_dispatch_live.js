@@ -10,10 +10,12 @@
     initializeDispatchDetails(root);
     initializeDispatchSelects(root);
     initializeDispatchApuEditors(root);
-    let dispatchSortMode = "arrival";
-    try {
-        if (window.localStorage.getItem(root.dataset.sortPreferenceKey) === "etd") dispatchSortMode = "etd";
-    } catch (_error) { /* Preference storage is optional. */ }
+    let dispatchSortMode = root.dataset.sortMode === "arrival" ? "arrival" : "etd";
+    let arrivedFirst = root.dataset.arrivedFirst !== "0";
+    let preferenceVersion = Number(root.dataset.preferenceVersion || 0);
+    let preferenceSaving = false;
+    let preferenceQueued = false;
+    let preferenceMessage = "";
     applyDispatchSort(root);
     const dispatchScroll = initializeDispatchScroll(root);
     root.addEventListener("submit", (event) => {
@@ -23,18 +25,43 @@
         }
     }, true);
     root.addEventListener("click", (event) => {
-        const button = event.target.closest("[data-dispatch-sort-mode]");
+        const button = event.target.closest("[data-dispatch-sort-mode], [data-dispatch-arrived-first]");
         if (!button) return;
         const saved = dispatchScroll.snapshot();
-        dispatchSortMode = button.dataset.dispatchSortMode === "etd" ? "etd" : "arrival";
-        try { window.localStorage.setItem(root.dataset.sortPreferenceKey, dispatchSortMode); }
-        catch (_error) { /* Sorting still works without storage. */ }
+        if (button.hasAttribute("data-dispatch-sort-mode")) dispatchSortMode = button.dataset.dispatchSortMode === "arrival" ? "arrival" : "etd";
+        else arrivedFirst = button.dataset.dispatchArrivedFirst === "1";
+        preferenceMessage = "SAVING…";
         applyDispatchSort(root);
         // An intentional sort must expose the new order at the same scroll
         // offset, not scroll back to the former first mission and conceal it.
         // Automatic live refresh still restores its mission anchor separately.
         dispatchScroll.restoreSnapshot({...saved, rowKey: null});
+        saveSortPreferences();
     });
+    async function saveSortPreferences() {
+        if (preferenceSaving) { preferenceQueued = true; return; }
+        preferenceSaving = true;
+        preferenceMessage = "SAVING…";
+        renderSortControls(root);
+        try {
+            const body = new URLSearchParams({secondary_sort: dispatchSortMode,
+                arrived_first: arrivedFirst ? "1" : "0", expected_version: String(preferenceVersion),
+                csrf_token: document.querySelector('meta[name="csrf-token"]')?.content || ""});
+            const response = await fetch(root.dataset.sortPreferencesUrl, {method: "POST", body,
+                credentials: "same-origin", headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}});
+            const payload = await response.json().catch(() => ({}));
+            if (payload.preferences) preferenceVersion = payload.preferences.version;
+            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Unable to save sorting preferences.");
+            preferenceMessage = "SAVED";
+        } catch (error) {
+            preferenceMessage = `NOT SAVED: ${error.message || "Connection failed. Select again to retry."}`;
+            preferenceQueued = false;
+        } finally {
+            preferenceSaving = false;
+            renderSortControls(root);
+            if (preferenceQueued) { preferenceQueued = false; saveSortPreferences(); }
+        }
+    }
     const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
     let assignmentAlertTimer = null;
@@ -72,27 +99,40 @@
         return;
     }
 
-    function applyDispatchSort(scope) {
+    function renderSortControls(scope) {
         scope.querySelectorAll("[data-dispatch-sort-mode]").forEach(button => {
             button.setAttribute("aria-pressed", String(button.dataset.dispatchSortMode === dispatchSortMode));
         });
+        scope.querySelectorAll("[data-dispatch-arrived-first]").forEach(button => {
+            button.setAttribute("aria-pressed", String((button.dataset.dispatchArrivedFirst === "1") === arrivedFirst));
+        });
+        const status = scope.querySelector("[data-dispatch-preference-status]");
+        if (status) { status.textContent = preferenceMessage; status.classList.toggle("is-error", preferenceMessage.startsWith("NOT SAVED")); }
+    }
+
+    function applyDispatchSort(scope) {
+        renderSortControls(scope);
         const tbody = scope.querySelector(".neoscorpion-dispatch-table--compact tbody");
         if (!tbody) return;
         const groups = new Map();
         Array.from(tbody.children).forEach(row => {
             const id = row.dataset.dispatchSortGroup;
             if (!id) return;
-            if (!groups.has(id)) groups.set(id, {rows: [], rank: Infinity});
+            if (!groups.has(id)) groups.set(id, {rows: [], rank: Infinity, completed: false, present: false});
             const group = groups.get(id);
             group.rows.push(row);
             if (row.matches(".neoscorpion-dispatch-primary-row")) {
                 group.rank = Number(row.dataset[dispatchSortMode === "etd" ? "dispatchEtdRank" : "dispatchArrivalRank"]);
+                group.completed = row.classList.contains("is-complete");
+                group.present = row.classList.contains("is-arrived") || row.classList.contains("is-on-ground");
             }
         });
         const focused = document.activeElement;
         const selection = focused?.selectionStart;
         const selectionEnd = focused?.selectionEnd;
-        Array.from(groups.values()).sort((a, b) => a.rank - b.rank).forEach(group => {
+        Array.from(groups.values()).sort((a, b) => Number(a.completed) - Number(b.completed)
+            || (arrivedFirst && !a.completed ? Number(b.present) - Number(a.present) : 0)
+            || a.rank - b.rank).forEach(group => {
             group.rows.forEach(row => {
                 // State-preserving moves retain focus, comboboxes and edits.
                 if (tbody.moveBefore) tbody.moveBefore(row, null);
@@ -575,7 +615,7 @@
     const reloadPage = async () => {
         // Protect personal saves from markup replacement without making them
         // operational dirty controls or delaying SPEAR automation.
-        if (dispatcherCheckSaving > 0) {
+        if (dispatcherCheckSaving > 0 || preferenceSaving) {
             pendingFuelDataRefresh = true;
             return false;
         }
@@ -597,7 +637,7 @@
             }
             // Input may have become dirty while the network request was in
             // flight. Never replace live operator typing with fetched markup.
-            if (hasUnsavedControls() || dispatcherCheckSaving > 0) {
+            if (hasUnsavedControls() || dispatcherCheckSaving > 0 || preferenceSaving) {
                 pendingFuelDataRefresh = true;
                 return false;
             }
@@ -612,6 +652,12 @@
             // Restore the working position at replacement, not request start.
             const saved = dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
             currentPanel.replaceWith(nextPanel);
+            const preferences = nextPanel.querySelector("[data-dispatch-preferences]");
+            if (preferences && Number(preferences.dataset.preferenceVersion || 0) >= preferenceVersion && !preferenceMessage.startsWith("NOT SAVED")) {
+                dispatchSortMode = preferences.dataset.sortMode === "arrival" ? "arrival" : "etd";
+                arrivedFirst = preferences.dataset.arrivedFirst !== "0";
+                preferenceVersion = Number(preferences.dataset.preferenceVersion || 0);
+            }
             applyDispatchSort(root);
             updateAssignmentAlerts(root);
             adoptFingerprint(payload);

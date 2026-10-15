@@ -19,7 +19,7 @@ def row(identifier, arrival=None, *, status="assigned", present="Scheduled", etd
 
 class DispatchOrderTest(unittest.TestCase):
     def ordered(self, rows):
-        return [r["mission"].id for r in sorted(rows, key=_dispatch_presentation_key)]
+        return [r["mission"].id for r in sorted(rows, key=lambda row:_dispatch_presentation_key(row,'arrival'))]
 
     def test_completed_and_fob_last_by_etd_not_completion_time(self):
         at=datetime(2026,10,14,4)
@@ -44,11 +44,11 @@ class DispatchOrderTest(unittest.TestCase):
         rows[0]["arrival_mission"].actual_block_in_datetime_utc=at.replace(tzinfo=timezone.utc)
         self.assertEqual(self.ordered(rows),[1,2,3])
 
-    def test_confirmed_present_priority_but_unknown_after_known(self):
+    def test_primary_present_group_unknown_after_known_within_group(self):
         at=datetime(2026,10,14,1)
         known=lambda t: Item(actual_block_in_datetime_utc=None,eta_datetime_utc=t,planned_datetime_utc=None)
         self.assertEqual(self.ordered([row(1,known(at)),row(2,known(at+timedelta(minutes=1)),present="Arrived"),
-                                     row(3,present="On Ground")]),[2,1,3])
+                                     row(3,present="On Ground")]),[2,3,1])
 
     def test_etd_flight_id_tiebreakers_and_reactivation(self):
         at=datetime(2026,10,14,1)
@@ -63,7 +63,7 @@ class DispatchOrderTest(unittest.TestCase):
 
     def test_only_final_presentation_copies_rows_not_projection_or_plan(self):
         at=datetime(2026,10,14,1)
-        rows=[row(1),row(2,Item(actual_block_in_datetime_utc=at))]
+        rows=[row(1),row(2,Item(actual_block_in_datetime_utc=at),present='Arrived')]
         context=dict(rows=rows,truck_visuals=object(),spear_plan=object())
         with patch("app.neonodes.neoscorpion.routes.fuel_dispatch_context",return_value=context) as core:
             result=_dispatch_presentation_context(object(),include_asset_choices=True)
@@ -75,6 +75,22 @@ class DispatchOrderTest(unittest.TestCase):
         self.assertIs(result["truck_visuals"],context["truck_visuals"])
         self.assertIs(result["spear_plan"],context["spear_plan"])
         core.assert_called_once()
+
+    def test_primary_off_is_pure_time_and_completed_use_selected_secondary(self):
+        at=datetime(2026,10,14,1)
+        arrival=lambda n:Item(actual_block_in_datetime_utc=None,eta_datetime_utc=at+timedelta(minutes=n),planned_datetime_utc=None)
+        rows=[row(1,arrival(3),etd=at,present='Scheduled'),
+              row(2,arrival(2),etd=at+timedelta(minutes=3),present='Arrived'),
+              row(3,arrival(1),etd=at+timedelta(minutes=2),present='On Ground'),
+              row(4,arrival(8),etd=at-timedelta(hours=1),status='complete'),
+              row(5,arrival(7),etd=at,status='fob')]
+        order=lambda mode,primary:[r['mission'].id for r in sorted(rows,key=lambda r:_dispatch_presentation_key(r,mode,primary))]
+        self.assertEqual(order('etd',True),[3,2,1,4,5])
+        self.assertEqual(order('etd',False),[1,3,2,4,5])
+        self.assertEqual(order('arrival',True),[3,2,1,5,4])
+        self.assertEqual(order('arrival',False),[3,2,1,5,4])
+        rows[0]['mission'].eta_datetime_utc=at+timedelta(minutes=10)
+        self.assertEqual(order('etd',False),[3,2,1,4,5])
 
 
 class DispatchReactivationTest(unittest.TestCase):

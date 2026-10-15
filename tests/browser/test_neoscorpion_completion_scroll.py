@@ -75,9 +75,12 @@ class CompletionScrollBrowserTest(unittest.TestCase):
                     row=page.locator(f'tr[data-dispatch-mission-id="{mid}"]')
                     wrap=page.locator('.neoscorpion-table-wrap--sticky')
                     wrap.scroll_into_view_if_needed()
-                    wrap.evaluate('(el,id)=>{const row=el.querySelector(`[data-dispatch-mission-id="${id}"]`);const offset=el.querySelector("thead").getBoundingClientRect().height+8;el.scrollTop+=row.getBoundingClientRect().top-el.getBoundingClientRect().top-offset;el.scrollLeft=50;}',mid)
+                    # Keep the real click below the existing truck-control strip,
+                    # not at its overlapping lower edge. Still midway in a long roster.
+                    wrap.evaluate('(el,id)=>{const row=el.querySelector(`[data-dispatch-mission-id="${id}"]`);const offset=el.querySelector("thead").getBoundingClientRect().height+120;el.scrollTop+=row.getBoundingClientRect().top-el.getBoundingClientRect().top-offset;el.scrollLeft=50;}',mid)
                     before=wrap.evaluate('el=>({top:el.scrollTop,left:el.scrollLeft})')
                     if index<2:
+                        page.screenshot(path=str(Fixture.evidence/f'completion-profile-before-{index}.png'))
                         box=row.get_by_role('button',name='COMPLETE',exact=True).bounding_box()
                         self.assertIsNotNone(box)
                         self.assertTrue(0 < box['y']+box['height']/2 < 900)

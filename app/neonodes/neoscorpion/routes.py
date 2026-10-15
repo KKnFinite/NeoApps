@@ -198,6 +198,27 @@ def fuel_dispatch():
     return _dispatch_response(gateway, access)
 
 
+@bp.post('/fuel-dispatch/preferences')
+@gateway_node_required('scorpion')
+def fuel_dispatch_preferences():
+    from app.services.neoscorpion_dispatch_preferences import (
+        dispatch_preferences, save_dispatch_preferences, DispatchPreferenceConflict)
+    if not permission_access(FUEL_DISPATCH_VIEW_PERMISSION)['can_view']:
+        return _json_no_store({'ok': False, 'error': 'Access denied.'}, 403)
+    gateway = get_current_gateway()
+    try:
+        preferences = save_dispatch_preferences(gateway, current_user, request.form)
+        db.session.commit()
+    except DispatchPreferenceConflict as exc:
+        db.session.rollback()
+        return _json_no_store({'ok': False, 'error': str(exc),
+            'preferences': dispatch_preferences(gateway, current_user)}, 409)
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({'ok': False, 'error': str(exc)}, 400)
+    return _json_no_store({'ok': True, 'preferences': preferences})
+
+
 @bp.post("/fuel-dispatch/check")
 @gateway_node_required("scorpion")
 def fuel_dispatch_check():
@@ -1792,8 +1813,10 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
     rows = [dict(row) for row in context["rows"]]
     # Browser reorders existing DOM groups using ranks derived from full UTC
     # timestamps, never formatted clock strings or operational planning order.
+    from app.services.neoscorpion_dispatch_preferences import dispatch_preferences
+    preferences = dispatch_preferences(gateway, current_user)
     for mode in ("arrival", "etd"):
-        for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode))):
+        for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode, False))):
             row[f"dispatch_{mode}_rank"] = rank
     from app.models import NeoScorpionVendorRequest, NeoScorpionSortTruck, NeoScorpionFuelingEvent
     from sqlalchemy import func
@@ -1812,24 +1835,23 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
             visual['inventory_epoch']=selection.inventory_epoch if selection else None
             visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
             visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
-    return {**context, 'vendor_pending_by_truck':pending, "rows": sorted(rows, key=_dispatch_presentation_key), **roster}
+    return {**context, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
+        "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
 
 
-def _dispatch_presentation_key(row, mode="arrival"):
+def _dispatch_presentation_key(row, mode="etd", arrived_first=True):
     from app.services.neoscorpion_fueling_status import utc_naive
     mission, arrival = row["mission"], row.get("arrival_mission")
     completed = row.get("dispatch_status_key") in {"complete", "fob"}
     etd = utc_naive(mission.eta_datetime_utc or mission.planned_datetime_utc)
-    if completed or mode == "etd":
+    if mode == "etd":
         stamp = etd
-        present = False
     else:
         stamp = (getattr(arrival, "actual_block_in_datetime_utc", None)
                  or getattr(arrival, "eta_datetime_utc", None)
                  or getattr(arrival, "planned_datetime_utc", None))
-        present = bool(getattr(arrival, "actual_block_in_datetime_utc", None)) or (
-            str(row.get("arrival_status") or "").strip().casefold() in {"on ground", "arrived"})
-    return (completed, stamp is None, not present if not completed else False,
+    present = str(row.get('arrival_status') or '').strip().casefold() in {'arrived', 'on ground'}
+    return (completed, not present if arrived_first and not completed else False, stamp is None,
             utc_naive(stamp) or datetime.max,
             etd or datetime.max,
             mission.flight_number or "", mission.id)

@@ -171,10 +171,18 @@
     {% elif not rows %}
     <p class="neoscorpion-empty">No outbound departure missions are available for this sort.</p>
     {% else %}
-    <div class="neoscorpion-dispatch-sort" role="group" aria-label="Sort missions by">
-        <span>SORT BY:</span>
-        <button type="button" class="action-button" data-dispatch-sort-mode="arrival" aria-pressed="true">TAIL ARRIVAL</button>
-        <button type="button" class="action-button" data-dispatch-sort-mode="etd" aria-pressed="false">ETD</button>
+    <div class="neoscorpion-dispatch-sort" data-dispatch-preferences data-sort-mode="{{ dispatch_preferences.secondary_sort }}" data-arrived-first="{{ '1' if dispatch_preferences.arrived_first else '0' }}" data-preference-version="{{ dispatch_preferences.version }}">
+        <div role="group" aria-label="Primary sort Arrived First">
+            <span>PRIMARY SORT: ARRIVED FIRST</span>
+            <button type="button" class="action-button" data-dispatch-arrived-first="1" aria-pressed="{{ 'true' if dispatch_preferences.arrived_first else 'false' }}">ON</button>
+            <button type="button" class="action-button" data-dispatch-arrived-first="0" aria-pressed="{{ 'false' if dispatch_preferences.arrived_first else 'true' }}">OFF</button>
+        </div>
+        <div role="group" aria-label="Secondary sort">
+            <span>SECONDARY SORT:</span>
+            <button type="button" class="action-button" data-dispatch-sort-mode="etd" aria-pressed="{{ 'true' if dispatch_preferences.secondary_sort == 'etd' else 'false' }}">ETD</button>
+            <button type="button" class="action-button" data-dispatch-sort-mode="arrival" aria-pressed="{{ 'true' if dispatch_preferences.secondary_sort == 'arrival' else 'false' }}">TAIL ARRIVAL</button>
+        </div>
+        <span data-dispatch-preference-status role="status" aria-live="polite"></span>
     </div>
     <div class="neoscorpion-table-wrap neoscorpion-table-wrap--sticky">
         <table class="neoscorpion-dispatch-table neoscorpion-dispatch-table--compact">
@@ -197,12 +205,12 @@
                     </td>
                     <td class="neoscorpion-dispatch-tail">
                         {% if editable %}<form id="{{ assignment_form_id }}" method="post" action="{{ url_for('neoscorpion.fuel_dispatch_assignment') }}" data-dispatch-assignment-form><input type="hidden" name="mission_id" value="{{ row.mission.id }}"><input type="hidden" name="assignment_id" value="{{ row.assignment.id if row.assignment else '' }}"><input type="hidden" name="expected_work_ref" value="{{ row.assignment.active_work_state_id if row.assignment and row.assignment.active_work_state_id else '' }}"><input type="hidden" name="expected_assigned_fueler_user_id" value="{{ row.assignment.assigned_fueler_user_id if row.assignment and row.assignment.assigned_fueler_user_id else '' }}"><input type="hidden" name="expected_assigned_truck_id" value="{{ row.assignment.assigned_truck_id if row.assignment and row.assignment.assigned_truck_id else '' }}"></form>{% endif %}
-                        <strong class="neoscorpion-dispatch-size-large">{{ row.tail_number }}</strong>
+                        <strong class="neoscorpion-dispatch-size-large neoscorpion-dispatch-arrival-text">{{ row.tail_number }}</strong>
                         {% if not row.administratively_complete and not row.fuel_on_board_complete %}{{ spear_indicator(row) }}{% endif %}
                     </td>
-                    <td class="neoscorpion-dispatch-arrival"><strong class="neoscorpion-dispatch-size-large">{{ row.arrival_eta }}</strong><small class="neoscorpion-dispatch-arrival-secondary neoscorpion-dispatch-size-small">{{ row.arrival_status }}</small></td>
-                    <td class="neoscorpion-dispatch-flight"><strong class="neoscorpion-dispatch-size-large">{{ row.destination }}</strong><small class="neoscorpion-dispatch-arrival-secondary neoscorpion-dispatch-size-small">{{ row.mission.flight_number }}</small></td>
-                    <td class="neoscorpion-dispatch-etd-parking"><strong class="neoscorpion-dispatch-size-large">{{ row.parking_position or '-' }}</strong><small class="neoscorpion-dispatch-arrival-secondary neoscorpion-dispatch-size-small">{{ row.departure_time or '-' }}</small></td>
+                    <td class="neoscorpion-dispatch-arrival"><strong class="neoscorpion-dispatch-size-large neoscorpion-dispatch-arrival-text">{{ row.arrival_eta }}</strong><small class="neoscorpion-dispatch-arrival-secondary neoscorpion-dispatch-size-small neoscorpion-dispatch-arrival-text">{{ row.arrival_status }}</small></td>
+                    <td class="neoscorpion-dispatch-flight"><strong class="neoscorpion-dispatch-size-large neoscorpion-dispatch-arrival-text">{{ row.destination }}</strong><small class="neoscorpion-dispatch-arrival-secondary neoscorpion-dispatch-size-small neoscorpion-dispatch-arrival-text">{{ row.mission.flight_number }}</small></td>
+                    <td class="neoscorpion-dispatch-etd-parking"><strong class="neoscorpion-dispatch-size-large neoscorpion-dispatch-arrival-text">{{ row.parking_position or '-' }}</strong><small class="neoscorpion-dispatch-arrival-secondary neoscorpion-dispatch-size-small neoscorpion-dispatch-arrival-text">{{ row.departure_time or '-' }}</small></td>
                     <td class="neoscorpion-dispatch-inbound">{% if editable and row.cycle_number == 1 %}<input form="{{ assignment_form_id }}" class="neoscorpion-inline-input neoscorpion-dispatch-fuel-input neoscorpion-dispatch-size-large" name="inbound_fuel" value="{{ row.inbound_fuel_display }}" inputmode="decimal" aria-label="Inbound Fuel for {{ row.tail_number }}" data-dispatch-autosave data-autosave-field="inbound_fuel" data-mission-id="{{ row.mission.id }}" data-saved-value="{{ row.inbound_fuel_display }}"><small class="neoscorpion-save-status neoscorpion-dispatch-size-small" data-autosave-status aria-live="polite"></small>{% else %}<strong class="neoscorpion-dispatch-size-large">{{ row.inbound_fuel_display or '-' }}</strong>{% endif %}<small class="neoscorpion-dispatch-secondary neoscorpion-dispatch-size-small{% if not row.measured_inbound_fuel_display %} is-empty{% endif %}"{% if not row.measured_inbound_fuel_display %} aria-hidden="true"{% endif %}>{% if row.measured_inbound_fuel_display %}FOB {{ row.measured_inbound_fuel_display }}{% else %}&nbsp;{% endif %}</small></td>
                     <td class="neoscorpion-dispatch-required neoscorpion-dispatch-size-large">{% if editable %}<input form="{{ assignment_form_id }}" class="neoscorpion-inline-input neoscorpion-dispatch-fuel-input neoscorpion-dispatch-size-large" name="required_fuel" value="{{ row.required_fuel_display }}" inputmode="decimal" aria-label="Fuel Load for {{ row.mission.flight_number }}" data-dispatch-autosave data-autosave-field="required_fuel" data-mission-id="{{ row.mission.id }}" data-saved-value="{{ row.required_fuel_display }}"><small class="neoscorpion-save-status neoscorpion-dispatch-size-small" data-autosave-status aria-live="polite"></small>{% else %}<span class="neoscorpion-dispatch-size-large">{{ row.required_fuel_display or '-' }}</span>{% endif %}</td>
                     <td><strong data-dispatch-neo-fuel class="neoscorpion-dispatch-size-large{% if row.neo_fuel_excess_alert %} is-neo-fuel-excess{% endif %}">{{ row.neo_fuel_display if row.neo_fuel_available else '-' }}</strong>{% if row.detailed_aircraft_type == 'A300' %}<small class="neoscorpion-dispatch-center-fuel neoscorpion-dispatch-size-small">CF {{ '{:,}'.format(row.center_actual_lbs) if row.center_actual_lbs is not none else '-' }}</small>{% endif %}</td>
