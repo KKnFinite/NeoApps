@@ -462,6 +462,9 @@ def _is_public_asset_request():
 
 
 def register_request_guards(app):
+    from app.services.neoscorpion_vendors import vendor_request_boundary
+    app.before_request(vendor_request_boundary)
+
     @app.before_request
     def retire_legacy_flight_api_auto_poll_client():
         """Reject obsolete browser drivers before authentication or Neon access."""
@@ -1033,6 +1036,7 @@ def register_blueprints(app):
     from app.neonodes.neosektor import bp as neosektor_bp
     from app.neonodes.neoscorpion import bp as neoscorpion_bp
     from app.neostaffing import bp as neostaffing_bp
+    from app.neonodes.neoscorpion.vendor_routes import bp as scorpion_vendor_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(google_motherbrain_bp)
@@ -1044,6 +1048,7 @@ def register_blueprints(app):
     app.register_blueprint(neosektor_bp, url_prefix="/neosektor")
     app.register_blueprint(neoscorpion_bp, url_prefix="/neoscorpion")
     app.register_blueprint(neostaffing_bp, url_prefix="/neostaffing")
+    app.register_blueprint(scorpion_vendor_bp, url_prefix="/neoscorpion/driver")
 
 
 def _fallback_chicago_datetime(utc_datetime):

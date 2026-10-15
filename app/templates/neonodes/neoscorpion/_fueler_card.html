@@ -45,7 +45,7 @@
                     </div>
                     <div>
                         <small>{{ row.mission.flight_number }} | {{ row.parking_position }} | ETD {{ row.departure_time or '-' }} · {% if row.is_off %}TRUCK OFF {{ row.off_time }}{% else %}100 PROF OFF {{ row.fueler_off_goal|default('UNKNOWN') }}{% endif %}</small>
-                        <small class="neoscorpion-fueler-truck">TRUCK {{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}{% if row.assigned_truck and row.assigned_truck.vendor_driver_name %}<span class="neoscorpion-fueler-truck-vendor"> · {{ row.assigned_truck.vendor_driver_name }}</span>{% endif %}</small>
+                        <small class="neoscorpion-fueler-truck">TRUCK {{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}{% if row.assigned_truck %}<span class="neoscorpion-fueler-truck-vendor"> · {{ row.truck_driver_name|default('UNKNOWN') }}</span>{% endif %}</small>
                         {% if row.assigned_truck_current_status %}
                         <small class="neoscorpion-fueler-truck-status" data-assigned-truck-status{% if row.truck_travel_until %} data-truck-travel-until="{{ row.truck_travel_until }}" data-truck-travel-origin="{{ row.truck_travel_origin }}"{% endif %}>{{ row.assigned_truck_current_status }}</small>
                         {% if row.assigned_truck_top_off_sent_time %}<small class="neoscorpion-fueler-truck-status" data-assigned-truck-top-off-sent>TOP OFF SENT {{ row.assigned_truck_top_off_sent_time }}</small>{% endif %}
@@ -289,5 +289,8 @@
                     {% if not row.off_ready and not row.is_off and not row.fueler_work_blocked %}
                     <p class="neoscorpion-calculation-warning">{{ row.off_reason }}</p>
                     {% endif %}
+                {% endif %}
+                {% if can_edit and row.truck_verification_available %}
+                <details class="scorpion-optional-verification"><summary>OPTIONAL TRUCK FUEL CHECK · SKIP</summary><form method="post" action="{{ url_for('scorpion_vendor.fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ row.assignment.sort_date_operation_id }}"><input type="hidden" name="truck_id" value="{{ row.assigned_truck.id }}"><label>Actual current truck gallons<input name="gallons" inputmode="numeric" required></label><button class="action-button">SUBMIT READING</button><button class="action-button" type="button" data-fuel-verification-skip>SKIP</button></form></details>
                 {% endif %}
             </article>

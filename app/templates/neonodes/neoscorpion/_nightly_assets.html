@@ -9,6 +9,7 @@
             {{ nightly_asset_readiness_label }}
         </strong>
     </summary>
+    {% if can_edit %}<p><a class="action-button" href="{{ url_for('scorpion_vendor.manage') }}">DRIVERS · INVITES / TONIGHT / CLAIMS</a></p>{% endif %}
 
     {% if not operation %}
     <p class="neoscorpion-empty">A current SortDateOperation is required before tonight's assets can be selected.</p>
@@ -150,14 +151,7 @@
                                 <option value="unavailable_oos" {% if row.selection.status == "unavailable_oos" %}selected{% endif %}>Unavailable / OOS</option>
                             </select>
                         </label>
-                        <label>
-                            Starting Gallons
-                            <input name="starting_gallons" value="{{ row.selection.starting_gallons if row.selection.starting_gallons is not none else '' }}" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %}>
-                        </label>
-                        <label>
-                            Current Gallons
-                            <input name="current_gallons" value="{{ row.selection.current_gallons if row.selection.current_gallons is not none else '' }}" inputmode="numeric" min="0" {% if row.truck.capacity_gallons is not none %}max="{{ row.truck.capacity_gallons }}"{% endif %}>
-                        </label>
+                        <small>Correct Current Gallons directly on the Dispatch truck card.</small>
                         <button class="action-button neoscorpion-save-button" type="submit">Save Truck</button>
                     </form>
                     {% endif %}
@@ -202,10 +196,6 @@
                         <option value="available">Available</option>
                         <option value="unavailable_oos">Unavailable / OOS</option>
                     </select>
-                </label>
-                <label>
-                    Starting Gallons
-                    <input name="starting_gallons" inputmode="numeric" min="0">
                 </label>
                 <label>
                     Current Gallons

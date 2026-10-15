@@ -384,8 +384,8 @@ def select_nightly_truck(
     status = _validate_truck_status(status)
     if status == "needs_sump":
         raise ValueError("NEEDS SUMP is set only by a completed defuel.")
-    starting_gallons = _validate_gallons(starting_gallons, "Starting gallons")
     current_gallons = _validate_gallons(current_gallons, "Current gallons")
+    starting_gallons = current_gallons  # Capture one opening reading on first selection.
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
     _validate_truck_state(
@@ -409,22 +409,15 @@ def select_nightly_truck(
         )
         db.session.add(nightly_truck)
     else:
+        # Opening gallons are historical, not another live inventory input.
+        starting_gallons = nightly_truck.starting_gallons
         if _truck_values(nightly_truck) == (
             status,
             starting_gallons,
             current_gallons,
         ):
             return _unchanged(state)
-        if nightly_truck.status == "needs_sump":
-            raise ValueError("Use MARK SUMPED to return this truck to service.")
-        if nightly_truck.status == "topping_off" and status == "available":
-            raise ValueError("Use Top Off Complete to make this truck available.")
-        _set_truck_values(
-            nightly_truck,
-            status,
-            starting_gallons,
-            current_gallons,
-        )
+        raise ValueError('Truck already configured tonight. Use its dedicated status or inventory controls.')
 
     if status != "available":
         _hold_assignments_for_truck_status(
@@ -457,11 +450,7 @@ def update_nightly_truck(
     final_status = (
         nightly_truck.status if status is _UNSET else _validate_truck_status(status)
     )
-    final_starting = (
-        nightly_truck.starting_gallons
-        if starting_gallons is _UNSET
-        else _validate_gallons(starting_gallons, "Starting gallons")
-    )
+    final_starting = nightly_truck.starting_gallons  # Permanent opening snapshot.
     final_current = (
         nightly_truck.current_gallons
         if current_gallons is _UNSET
@@ -596,6 +585,8 @@ def _assert_inventory_measurement_safe(operation_id, truck_id):
 
 
 def _verify_inventory(locked_operation, nightly_truck, current_gallons, user, reason, *, now_utc=None):
+    from app.services.neoscorpion_inventory import expire_pending
+    expire_pending(locked_operation, nightly_truck.fuel_truck_id, reason='confirmed_inventory_reading', actor=user)
     if user is not None:
         db.session.add(NeoScorpionTruckInventoryAudit(
             sort_date_operation_id=locked_operation.id,

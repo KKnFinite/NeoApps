@@ -82,7 +82,7 @@
     </section>
     </div>
     {% endif %}
-    {% if operation and truck_visuals %}
+    </div>{% if operation and truck_visuals %}
     <aside class="neoscorpion-truck-visual-panel" aria-label="Tonight's fuel truck capacity">
         <header>
             <strong>TRUCK FUEL STATUS</strong>
@@ -97,7 +97,8 @@
                 </header>
                 {% if truck.top_off_sent_time %}<small class="neoscorpion-truck-top-off-sent">TOP OFF SENT {{ truck.top_off_sent_time }}</small>{% endif %}
                 {% set driver = drivers_by_truck_id.get(truck.truck_id) %}
-                <small class="neoscorpion-truck-driver-name">DRIVER: {{ driver.driver.display_name if driver and driver.driver else '-' }}{% if can_edit %} · <a href="{{ url_for('neoscorpion.truck_driver') }}">MANAGE</a>{% endif %}</small>
+                <small class="neoscorpion-truck-driver-name">DRIVER: {{ truck.driver_name|default('UNKNOWN') }}{% if can_edit %} · <a href="{{ url_for('scorpion_vendor.manage') }}">MANAGE</a>{% endif %}</small>
+                {% include 'neonodes/neoscorpion/_truck_inventory_controls.html' %}
                 <div class="neoscorpion-truck-visual-values">
                     <span>Current {{ truck.current_display }}{% if truck.current_percent is not none %} / {{ truck.current_percent }}%{% endif %}</span>
                     <span>{% if truck.projected_short %}SHORT {% endif %}Projected {% if truck.projected_incomplete or truck.projected_gallons is none %}—{% else %}{{ truck.projected_display }}{% if truck.projected_percent is not none %} / {{ truck.projected_percent }}%{% endif %}{% endif %}</span>
@@ -165,7 +166,6 @@
         </div>
     </aside>
     {% endif %}
-    </div>
     {% if not operation %}
     <p class="neoscorpion-empty">No current SortDateOperation is available for Fuel Dispatch.</p>
     {% elif not rows %}

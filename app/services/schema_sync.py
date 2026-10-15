@@ -10,6 +10,7 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 }
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
+    'neoscorpion_truck_drivers': {'manual_name': "VARCHAR(120) NOT NULL DEFAULT ''"},
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "DATETIME",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT 1",
@@ -224,6 +225,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "ended_early_reason": "TEXT",
     },
     "neoscorpion_settings": {
+        'truck_fuel_discrepancy_threshold_gallons': 'INTEGER NOT NULL DEFAULT 1000',
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
@@ -299,6 +301,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
+    'neoscorpion_truck_drivers': {'manual_name': "VARCHAR(120) NOT NULL DEFAULT ''"},
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -493,6 +496,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "ended_early_reason": "TEXT",
     },
     "neoscorpion_settings": {
+        'truck_fuel_discrepancy_threshold_gallons': 'INTEGER NOT NULL DEFAULT 1000',
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
@@ -1774,7 +1778,8 @@ def _create_missing_application_tables(existing_table_names):
     from app.models import NeoRainMissionOverride, NeoRainOverrideAudit
     NeoRainMissionOverride.__table__.create(bind=db.session.connection(), checkfirst=True)
     NeoRainOverrideAudit.__table__.create(bind=db.session.connection(), checkfirst=True)
-    from app.models import NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit
+    from app.models import (NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit, NeoScorpionVendorAccount,
+        NeoScorpionVendorNight, NeoScorpionVendorRequest, NeoScorpionVendorAudit, NeoScorpionInventoryReading)
     from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent
     # Parent tables already exist on production; create these after the normal
     # registry below on fresh databases as well.
@@ -1958,6 +1963,8 @@ def _create_missing_application_tables(existing_table_names):
         model.__table__.create(bind=db.engine, checkfirst=True)
 
     for model in (NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
+                  NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
+                  NeoScorpionVendorAudit, NeoScorpionInventoryReading,
                   StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent):
         model.__table__.create(bind=db.engine, checkfirst=True)
     from app.services.neostaffing_employee_record_schema import ensure_employee_record_delivery

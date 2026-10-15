@@ -154,6 +154,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
 
     def test_additive_bootstrap_is_idempotent_without_historical_rewrite(self):
         self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         original=self.work.manual_on_at_utc
         original_event=NeoScorpionFuelingEvent.query.one()
         event_id, work_id=original_event.id,self.work.id
@@ -202,6 +203,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def legacy_live_visit(self, cycle=2, proven_on=True):
         """Recreate a closed event owner reused by the old mutable slot schema."""
         self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         original_id=self.work.id
         original_event_id=NeoScorpionFuelingEvent.query.one().id
         # The pre-Batch-3 schema reused this same row on a follow-up cycle.
@@ -277,6 +279,8 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
             segment_review_reason="Verified receipt belongs to the later 1200-gallon visit"),
             dispatcher=True,now_utc=self.start+timedelta(minutes=31))
         db.session.commit()
+        events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
         self.assertEqual([(e.fuel_work_state_id,e.transfer_fuel_gallons) for e in events],
                          [(original_id,3000),(live_id,1200)])

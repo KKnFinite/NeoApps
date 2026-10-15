@@ -11,6 +11,14 @@ BREVO_SMTP_EMAIL_URL = "https://api.brevo.com/v3/smtp/email"
 BREVO_SMTP_EMAIL_HOST = "api.brevo.com"
 
 
+def send_vendor_invitation(user, token):
+    link = _absolute_url(f'/neoscorpion/driver/invitation/{token}')
+    return _send_transactional_email(to_email=user.email, to_name=user.display_name,
+        subject='NeoScorpion vendor driver invitation',
+        html_content=f'<p>Your individual vendor invitation expires in 24 hours.</p><p><a href="{escape(link)}">Register</a></p><p>Dispatcher approval is required for each sort.</p>',
+        text_content=f'Register within 24 hours: {link}\nDispatcher approval is required for each sort.')
+
+
 def send_email_verification(user, token):
     verification_url = _absolute_url(f"/verify-email/{token}")
     expiration = _email_verification_expiration_copy()

@@ -197,6 +197,7 @@ class OperationalTimelineTest(unittest.TestCase):
     def _verify_follow_up(self,kind,required,actual):
             with self.subTest(kind=kind):
                 self.prepare(); self.save(self.start+timedelta(minutes=10),**self.final_data()); self.off()
+                service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
                 original=NeoScorpionFuelingEvent.query.one().performance_snapshot.copy()
                 at=self.start+timedelta(minutes=20)
                 service.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,kind,required,
@@ -227,6 +228,7 @@ class OperationalTimelineTest(unittest.TestCase):
                 db.session.commit()
                 self.save(at+timedelta(minutes=8),apu_running="no",actual_left=actual,actual_ctr="0",actual_right=actual,transfer_fuel_gallons="1493")
                 self.off(at=at+timedelta(minutes=10))
+                service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
                 events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
                 self.assertEqual(len(events),2)
                 self.assertEqual(events[0].performance_snapshot,original)
@@ -370,6 +372,9 @@ class OperationalTimelineTest(unittest.TestCase):
         db.session.commit()
         self.save(self.start+timedelta(minutes=18),**{**self.final_data(),"transfer_fuel_gallons":"2000"})
         self.off(at=self.start+timedelta(minutes=25))
+        events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
+        self.assertEqual([(e.tail_number,e.transfer_fuel_gallons) for e in events],[("N491UP",3000)])
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
         self.assertEqual([(e.tail_number,e.transfer_fuel_gallons) for e in events],[("N491UP",3000),("N492UP",2000)])
         self.assertEqual(self.selection.current_gallons,5000)
@@ -612,6 +617,7 @@ class OperationalTimelineTest(unittest.TestCase):
 
     def test_sqlite_legacy_identity_migration_preserves_event_and_tank_foreign_keys(self):
         self.prepare(); self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         work_id=self.work.id
         event_id=NeoScorpionFuelingEvent.query.one().id
         db.session.execute(text("UPDATE neoscorpion_fuel_assignments SET active_work_state_id=NULL"))

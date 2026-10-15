@@ -13,6 +13,7 @@ class NeoScorpionTruckDriver(db.Model):
     sort_date_operation_id = db.Column(db.Integer, db.ForeignKey("sort_date_operations.id"), nullable=False)
     fuel_truck_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=False)
     driver_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    manual_name = db.Column(db.String(120), nullable=False, default='', server_default='')
     changed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     driver = db.relationship("User", foreign_keys=[driver_user_id])

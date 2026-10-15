@@ -79,7 +79,7 @@ class NeoScorpionFuelTruck(db.Model):
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=True, index=True)
     truck_number = db.Column(db.String(40), nullable=False, index=True)
     description = db.Column(db.String(160), nullable=False, default="")
-    capacity_gallons = db.Column(db.Integer, nullable=True)
+    capacity_gallons = db.Column(db.Integer, nullable=True, default=10000)
     remaining_fuel_gallons = db.Column(db.Integer, nullable=True)
     vendor_driver_name = db.Column(db.String(120), nullable=False, default="")
     is_active = db.Column(db.Boolean, nullable=False, default=True)
@@ -799,6 +799,7 @@ class NeoScorpionSettings(db.Model):
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=True, index=True)
     fuel_density_lbs_per_gallon = db.Column(db.Float, nullable=True, default=6.7)
     neo_fuel_excess_alert_gallons = db.Column(db.Integer, nullable=False, default=500, server_default="500")
+    truck_fuel_discrepancy_threshold_gallons = db.Column(db.Integer, nullable=False, default=1000, server_default='1000')
     planning_inbound_fuel_fallback_lbs = db.Column(db.Integer, nullable=True)
     red_assignment_alert_threshold_minutes = db.Column(
         db.Integer, nullable=False, default=30, server_default="30"

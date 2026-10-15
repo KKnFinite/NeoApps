@@ -6,6 +6,8 @@ from sqlalchemy import inspect, text
 
 from app.extensions import db
 from app.models import (
+    NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
+    NeoScorpionVendorAudit, NeoScorpionInventoryReading,
     NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
     NeoScorpionDispatcherCheck,
     NeoScorpionCallDispatchAck,
@@ -55,9 +57,12 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionFuelAuditEntry,
     NeoScorpionDispatcherCheck,
     NeoScorpionCallDispatchAck,
+    NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
+    NeoScorpionVendorAudit, NeoScorpionInventoryReading,
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
+    'neoscorpion_truck_drivers': {'manual_name': "VARCHAR(120) NOT NULL DEFAULT ''"},
     "neoscorpion_sort_trucks": {
         "top_off_sent_at_utc": "TIMESTAMP",
         "inventory_verified": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -65,6 +70,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "inventory_pending_epoch": "INTEGER",
     },
     "neoscorpion_settings": {
+        'truck_fuel_discrepancy_threshold_gallons': 'INTEGER NOT NULL DEFAULT 1000',
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",

@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>NeoScorpion Driver</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neofontplain.css',v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/14-neoscorpion.css',v='vendor-20261015') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/26-neoscorpion.css',v='vendor-20261015') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neoscorpion_vendor.css',v='20261015') }}"></head>
+<body class="vendor-driver"><main><header><h1>NeoScorpion</h1><small>VENDOR DRIVER</small></header>
+{% if current_user.is_authenticated %}<nav><a href="{{ url_for('scorpion_vendor.my_truck') }}">MY TRUCK</a><a href="{{ url_for('scorpion_vendor.live') }}">LIVE OPERATION</a><a href="{{ url_for('scorpion_vendor.account') }}">MY ACCOUNT</a></nav>{% endif %}
+{% for category,message in get_flashed_messages(with_categories=true) %}<p role="status">{{ message }}</p>{% endfor %}
+{% block content %}{% endblock %}</main><script src="{{ url_for('static',filename='js/neoscorpion_vendor.js',v='20261015') }}" defer></script></body></html>

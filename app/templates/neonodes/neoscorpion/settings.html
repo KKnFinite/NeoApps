@@ -11,6 +11,7 @@
         <h1>Settings</h1>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+    <a class="action-button" href="{{ url_for('neoscorpion.truck_manager') }}">FUEL TRUCKS · PERMANENT CAPACITY</a>
 
     <a class="neoscorpion-panel neoscorpion-settings-link-card" href="{{ url_for('neoscorpion.spear_settings') }}">
         <div class="neoscorpion-panel-head">
@@ -35,6 +36,9 @@
             </label>
             <label>Neo Fuel Excess Alert (gallons)
                 <input type="number" name="neo_fuel_excess_alert_gallons" value="{{ settings.neo_fuel_excess_alert_gallons }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label>Truck Fuel Discrepancy Approval Threshold (gallons)
+                <input type="number" name="truck_fuel_discrepancy_threshold_gallons" value="{{ settings.truck_fuel_discrepancy_threshold_gallons|default(1000) }}" min="0" step="1" {% if not can_edit %}readonly{% endif %}>
             </label>
             <label>Planning Inbound Fuel Fallback, K lbs
                 <input name="planning_inbound_fuel_fallback" value="{{ planning_inbound_fallback_display }}" inputmode="decimal" min="0" {% if not can_edit %}readonly{% endif %}>

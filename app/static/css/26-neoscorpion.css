@@ -443,6 +443,19 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     overflow: auto;
 }
 
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-panel{display:block;flex:0 0 auto;max-height:290px;overflow:auto;margin:0}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-list{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;align-items:stretch}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card{flex:0 0 350px;display:flex;flex-direction:column;gap:2px;max-height:none;padding:6px;font-size:11px;line-height:1.15}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card :is(header,strong,small,span,label){font-size:11px;line-height:1.15}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card :is(form,.neoscorpion-truck-spear){margin:0;gap:3px}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-values{margin:0}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-spear{display:flex;flex-wrap:wrap;align-items:center}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-calculation-warning{letter-spacing:normal;font-weight:normal}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card :is(input,button){font-size:11px;min-height:23px;padding:2px 5px;line-height:1.15}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card input{background:#28271f;color:#f0e9cf;border:1px solid #81743e}
+body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card .neoscorpion-truck-gauges{margin:0;gap:3px}
+.scorpion-inventory-inline{display:flex;flex-wrap:wrap;gap:4px;align-items:end;margin:4px 0}.scorpion-inventory-inline input{width:95px;max-width:100%;background:#292719;color:#fff;border:1px solid #8a762d}.scorpion-inventory-pending{font-size:12px;display:grid;gap:3px}.scorpion-inventory-pending form{display:flex;gap:5px}
+
 body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-table--compact {
     width: 100%;
 }

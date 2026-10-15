@@ -1,0 +1,3 @@
+{% extends 'neonodes/neoscorpion/vendor_base.html' %}{% block content %}<h2>MY ACCOUNT</h2><p>{{ current_user.display_name }}</p><p>{{ current_user.email }}</p><p>Gateway: {{ account.gateway.code }}</p>
+<p>Account: {{ 'ENABLED' if account.enabled else 'DISABLED' }}</p><p>Tonight: {{ night.status|upper if night else 'AWAITING DISPATCHER APPROVAL' }}{% if not operation %} · NO ACTIVE SORT{% endif %}</p>
+<form method="post" action="{{ url_for('auth.logout') }}">{{ csrf_field() }}<button>SIGN OUT</button></form>{% endblock %}

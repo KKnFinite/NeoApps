@@ -1022,12 +1022,25 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     if physical_work_id is not None:
         rows = [row for row in rows if row.get("physical_work_id") == _int_or_none(physical_work_id)
                 and str(row.get("physical_sequence")) == str(physical_sequence)]
+    verification_by_truck = {}
+    from app.models import NeoScorpionTruckDriver
+    from app.services.neoscorpion_vendors import driver_name
+    driver_records = {d.fuel_truck_id:d for d in NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=operation.id).all()}
+    driver_names = {}
     for row in rows:
         work = row["fuel_work_state"]
         row["edit_baseline"] = fueler_edit_state(
             row["assignment"], row["mission"], work, row["tail_fuel_state"],
             work.tank_states if work else [],
         )
+        from app.services.neoscorpion_inventory import verification_available
+        truck = row.get('assigned_truck')
+        if truck and truck.id not in driver_names:
+            driver_names[truck.id] = driver_name(gateway,operation,truck.id,driver_records)
+        row['truck_driver_name'] = driver_names.get(truck.id,'UNKNOWN') if truck else 'UNKNOWN'
+        if row.get('is_off') and truck and truck.id not in verification_by_truck:
+            verification_by_truck[truck.id] = verification_available(operation, truck.id)
+        row['truck_verification_available'] = bool(row.get('is_off') and truck and verification_by_truck.get(truck.id))
     return {
         "operation": operation,
         "rows": rows,
@@ -2719,6 +2732,9 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         tail_fuel_state.notes = target_notes
 
     assignment.transfer_fuel_gallons = target_transfer_gallons
+    if transfer_changed and fuel_work_state:
+        from app.services.neoscorpion_inventory import on_transfer_entry
+        on_transfer_entry(operation, assignment, fuel_work_state, user)
     if source_work is not None and not assignment._detached_segment:
         assignment._parent_assignment.transfer_fuel_gallons = target_transfer_gallons
     if fuel_work_state is not None:
@@ -3014,6 +3030,9 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
                 NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()), at=now_utc)["reason"] == "TRUCK STILL FUELING":
             raise ValueError("TRUCK STILL FUELING on a conflicting mission; dispatcher review required.")
 
+    from app.services.neoscorpion_inventory import expire_pending
+    if fuel_work_state.physical_truck_id:
+        expire_pending(operation, fuel_work_state.physical_truck_id, next_work_id=fuel_work_state.id, reason='next_physical_off', actor=user)
     fuel_work_state.off_at_utc = now_utc
     fuel_work_state.off_by_user_id = user.id
     if assignment.assigned_truck_id is not None:
@@ -3041,6 +3060,8 @@ def _snapshot_physical_start(gateway, assignment, mission, work, now, *, source)
     db.session.flush()
     if assignment.assigned_truck_id is not None:
         _lock_physical_truck_start(assignment.assigned_truck_id,work.id)
+    from app.services.neoscorpion_inventory import on_physical_start
+    on_physical_start(db.session.get(SortDateOperation, assignment.sort_date_operation_id), work)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     previous = work.performance_context or {}
     facts = policy_snapshot(assignment, settings, assignment_planning_settings(gateway, settings=settings),
@@ -4520,6 +4541,10 @@ def end_fuel_work_early(
         fuel_work_state.physical_finalized_at_utc = now_utc
         fuel_work_state.physical_finalized_by_user_id = user.id
     assignment.transfer_fuel_gallons = None
+    from app.services.neoscorpion_inventory import expire_pending
+    if fuel_work_state.physical_truck_id:
+        expire_pending(operation, fuel_work_state.physical_truck_id,
+            next_work_id=fuel_work_state.id, reason='next_physical_end_early', actor=user)
     fuel_work_state.ended_early_at_utc = now_utc
     fuel_work_state.ended_early_by_user_id = user.id
     fuel_work_state.ended_early_reason = reason
@@ -5013,6 +5038,9 @@ def _close_current_truck_segment(
     cycle_type = _assignment_cycle_type(assignment)
     covered_by_new_reading = (fuel_work_state.off_inventory_epoch is not None
                              and nightly_truck.inventory_epoch != fuel_work_state.off_inventory_epoch)
+    from app.services.neoscorpion_inventory import transfer_covered, expire_pending
+    covered_by_new_reading = transfer_covered(operation, nightly_truck, fuel_work_state, covered_by_new_reading)
+    expire_pending(operation, fuel_truck.id, next_work_id=fuel_work_state.id, reason='physical_transfer_posting', actor=changed_by_user)
     if cycle_type == "defuel":
         if (not (nightly_truck.inventory_verified or nightly_truck.inventory_pending_epoch == nightly_truck.inventory_epoch)
                 or nightly_truck.current_gallons is None):
@@ -5257,9 +5285,23 @@ def save_truck(gateway, form, user=None):
             )
     truck.truck_number = truck_number
     truck.description = (form.get("description") or "").strip()
-    truck.capacity_gallons = _int_or_none(form.get("capacity_gallons"))
-    truck.remaining_fuel_gallons = _int_or_none(form.get("remaining_fuel_gallons"))
-    truck.vendor_driver_name = (form.get("vendor_driver_name") or "").strip()
+    if 'capacity_gallons' in form:
+        text_capacity = str(form.get('capacity_gallons') or '').strip()
+        if text_capacity and not re.fullmatch(r'\d{1,9}', text_capacity):
+            raise ValueError('Truck capacity must be positive whole gallons.')
+        capacity = int(text_capacity) if text_capacity else None
+        if capacity is None and not truck.id:
+            capacity = 10000
+        if capacity is not None and capacity <= 0:
+            raise ValueError('Truck capacity must be positive whole gallons.')
+        if capacity is not None:
+            truck.capacity_gallons = capacity
+    elif truck.capacity_gallons is None and not truck.id:
+        truck.capacity_gallons = 10000
+    if 'remaining_fuel_gallons' in form:
+        truck.remaining_fuel_gallons = _int_or_none(form.get("remaining_fuel_gallons"))
+    if 'vendor_driver_name' in form:
+        truck.vendor_driver_name = (form.get("vendor_driver_name") or "").strip()
     truck.is_active = form.get("is_active") == "1"
     truck.is_out_of_service = form.get("is_out_of_service") == "1"
     if interruption_scope is not None:
@@ -5305,6 +5347,10 @@ def deactivate_truck(gateway, form, user=None):
 
 
 def save_settings(gateway, form):
+    if 'truck_fuel_discrepancy_threshold_gallons' in form:
+        threshold_text = str(form.get('truck_fuel_discrepancy_threshold_gallons',''))
+        if not re.fullmatch(r'\d{1,9}', threshold_text):
+            raise ValueError('Truck fuel discrepancy threshold must be nonnegative whole gallons.')
     settings = ensure_neoscorpion_settings(gateway)
     old_density = settings.fuel_density_lbs_per_gallon
     old_excess_threshold = settings.neo_fuel_excess_alert_gallons
@@ -5315,6 +5361,8 @@ def save_settings(gateway, form):
         if len(submitted_excess) > 10 or int(submitted_excess) > 2147483647:
             raise ValueError("Neo Fuel Excess Alert is too large.")
         settings.neo_fuel_excess_alert_gallons = int(submitted_excess)
+    if 'truck_fuel_discrepancy_threshold_gallons' in form:
+        settings.truck_fuel_discrepancy_threshold_gallons = int(threshold_text)
     submitted_threshold = str(form.get("red_assignment_alert_threshold_minutes", "")).strip()
     if not re.fullmatch(r"[0-9]+", submitted_threshold):
         raise ValueError("Red assignment alert threshold must be a nonnegative whole number of minutes.")

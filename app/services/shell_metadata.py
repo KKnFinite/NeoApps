@@ -137,7 +137,7 @@ def resolve_shell_metadata(
 
     is_neoermac_page = is_authenticated_app and blueprint == "neoermac"
     is_neosektor_page = is_authenticated_app and blueprint == "neosektor"
-    is_neoscorpion_page = is_authenticated_app and blueprint == "neoscorpion"
+    is_neoscorpion_page = is_authenticated_app and (blueprint == "neoscorpion" or endpoint == 'scorpion_vendor.manage')
     is_neoreptile_page = is_authenticated_app and blueprint == "neoreptile"
     is_neosubzero_page = is_authenticated_app and blueprint == "neosubzero"
     is_neorain_page = is_authenticated_app and blueprint == "neorain"
@@ -418,7 +418,7 @@ def resolve_shell_metadata(
     uses_mobile_chrome = is_authenticated_app and not is_neosektor_driver_page
 
     return {
-        "page_stylesheets": page_stylesheets(blueprint),
+        "page_stylesheets": page_stylesheets('neoscorpion' if is_neoscorpion_page else blueprint),
         # Inline operational page controllers consume this API while parsing.
         # Alert/Staffing helpers have independent, smaller asset contracts.
         "uses_live_update_controller": bool(is_authenticated_app and blueprint in (

@@ -1,0 +1,11 @@
+{% extends 'neonodes/neoscorpion/vendor_base.html' %}{% block content %}
+<h2>MY TRUCK</h2><div data-vendor-live>
+<h3>{{ 'TRUCK ' ~ selected_driver_truck.truck_number if selected_driver_truck else 'NO APPROVED TRUCK' }}</h3>
+{% if selection %}<p>{{ selection.current_gallons if selection.current_gallons is not none else '—' }} GAL · {{ 'VERIFIED' if selection.inventory_verified else 'UNVERIFIED' }}</p>{% endif %}
+{% for pending in driver_requests %}<p>{{ pending.kind|upper }} · TRUCK {{ pending.truck.truck_number }} · PENDING APPROVAL</p>{% endfor %}
+{% for key,label in [('current','CURRENT MISSION'),('upcoming','UPCOMING MISSIONS'),('previous','PREVIOUS WORK')] %}<section><h2>{{ label }}</h2>{% for item in driver_groups[key] %}{% set row=item.row %}{% include 'neonodes/neoscorpion/_truck_driver_card.html' %}{% else %}<p>None.</p>{% endfor %}</section>{% endfor %}
+</div>
+<details><summary>REQUEST / CHANGE TRUCK</summary><form method="post">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><label>Truck<select name="truck_id" required>{% for truck in available_trucks %}<option value="{{ truck.id }}">{{ truck.truck_number }}</option>{% endfor %}</select></label><label>Current gallons (only for a truck not yet configured)<input name="gallons" inputmode="numeric"></label><button>REQUEST DISPATCH APPROVAL</button></form></details>
+{% if selection %}<form method="post">{{ csrf_field() }}<input type="hidden" name="action" value="disconnect"><input type="hidden" name="operation_id" value="{{ operation.id }}"><button>DISCONNECT DRIVER</button></form>
+{% if verification_available %}<details><summary>OPTIONAL FUEL VERIFICATION · SKIP</summary><p>Only between TRUCK OFF and the next ON. Skip by leaving this closed.</p><form method="post" action="{{ url_for('scorpion_vendor.fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="truck_id" value="{{ selected_driver_truck.id }}"><label>Actual current gallons<input name="gallons" inputmode="numeric" required></label><button>SUBMIT READING</button><button type="button" data-fuel-verification-skip>SKIP</button></form></details>{% endif %}{% endif %}
+<div data-vendor-refresh data-revision-url="{{ url_for('scorpion_vendor.revision') }}"></div>{% endblock %}

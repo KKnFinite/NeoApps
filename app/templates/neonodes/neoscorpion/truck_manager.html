@@ -24,13 +24,7 @@
                 <input name="truck_number" required placeholder="TRUCK 12">
             </label>
             <label>Capacity (gal)
-                <input name="capacity_gallons" inputmode="numeric">
-            </label>
-            <label>Remaining (gal)
-                <input name="remaining_fuel_gallons" inputmode="numeric">
-            </label>
-            <label>Vendor Driver
-                <input name="vendor_driver_name" placeholder="Non-login vendor driver">
+                <input name="capacity_gallons" value="10000" inputmode="numeric">
             </label>
             <label>Description
                 <input name="description">
@@ -50,12 +44,6 @@
                 </label>
                 <label>Capacity (gal)
                     <input name="capacity_gallons" value="{{ truck.capacity_gallons if truck.capacity_gallons is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <label>Remaining (gal)
-                    <input name="remaining_fuel_gallons" value="{{ truck.remaining_fuel_gallons if truck.remaining_fuel_gallons is not none else '' }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <label>Vendor Driver
-                    <input name="vendor_driver_name" value="{{ truck.vendor_driver_name }}" {% if not can_edit %}readonly{% endif %}>
                 </label>
                 <label>Description
                     <input name="description" value="{{ truck.description }}" {% if not can_edit %}readonly{% endif %}>

@@ -57,8 +57,7 @@ class DriverAndTanksBrowserTest(unittest.TestCase):
                 board.set_viewport_size({'width':390,'height':844})
                 Fixture().ready(board,'/neoscorpion/fueling-board')
                 expect(board.locator('[data-tank-code=left] [role=cell]').first).to_have_text('-')
-                page.locator('.neoscorpion-driver-management summary').click()
-                page.locator('input[name=reason]').fill('Pending vehicle handover')
+                self.assertEqual(page.locator('.neoscorpion-driver-management').count(),0)
                 # Save through the actual authenticated Fueler endpoint.
                 with Fixture.app.app_context():
                     context=service.fueler_context(db.session.get(type(gateway),gateway_id),db.session.get(User,actor_id))
@@ -71,7 +70,6 @@ class DriverAndTanksBrowserTest(unittest.TestCase):
                 for screen in (page,board):
                     expect(screen.locator('[data-tank-code=left] [role=cell]').last).to_have_text('15.0',timeout=15000)
                     expect(screen.locator('[data-tank-code=ctr] [role=cell]').last).not_to_have_text('-')
-                expect(page.locator('input[name=reason]')).to_have_value('Pending vehicle handover')
                 for screen in (page,board):
                     for width in (1440,390,375):
                         screen.set_viewport_size({'width':width,'height':844})
@@ -82,16 +80,17 @@ class DriverAndTanksBrowserTest(unittest.TestCase):
                         self.assertTrue(screen.locator('.neoscorpion-fuel-status-chip').evaluate('el=>el.scrollWidth<=el.clientWidth+1'))
                         screen.screenshot(path=str(Fixture.evidence/f'driver-tanks-{screen==page}-{width}.png'),full_page=True)
                 page.reload(); expect(page.locator('[data-selected-driver-truck]')).to_have_text('TRUCK 422808')
-                page.locator('.neoscorpion-driver-management summary').click()
-                manage=page.locator('[data-driver-management]')
-                manage.locator('[name=truck_id]').select_option(str(truck_id))
-                manage.locator('[name=driver_user_id]').select_option('')
+                Fixture().ready(page,'/neoscorpion/driver/manage')
+                manage=page.locator('[data-vendor-driver-assignment]').first
+                manage.locator('[name=user_id]').select_option('')
                 manage.get_by_role('button',name='SAVE DRIVER').click()
+                Fixture().ready(page,'/neoscorpion/truck-driver')
                 expect(page.locator('[data-selected-driver-truck]')).to_have_text('SELECT YOUR TRUCK',timeout=15000)
-                page.locator('.neoscorpion-driver-management summary').click()
-                manage.locator('[name=truck_id]').select_option(str(truck_id))
-                manage.locator('[name=driver_user_id]').select_option(str(actor_id))
+                Fixture().ready(page,'/neoscorpion/driver/manage')
+                manage=page.locator('[data-vendor-driver-assignment]').first
+                manage.locator('[name=user_id]').select_option(str(actor_id))
                 manage.get_by_role('button',name='SAVE DRIVER').click()
+                Fixture().ready(page,'/neoscorpion/truck-driver')
                 expect(page.locator('[data-selected-driver-truck]')).to_have_text('TRUCK 422808',timeout=15000)
                 device=browser.new_context(viewport={'width':390,'height':844}).new_page()
                 Fixture().login(device); Fixture().ready(device,'/neoscorpion/truck-driver')

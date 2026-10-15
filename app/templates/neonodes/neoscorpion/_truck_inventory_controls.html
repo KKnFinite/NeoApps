@@ -1,0 +1,9 @@
+{% if can_edit and operation %}
+<form method="post" action="{{ url_for('scorpion_vendor.manage_inventory') }}" class="scorpion-inventory-inline">
+{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="action" value="correct"><input type="hidden" name="truck_id" value="{{ truck.truck_id }}"><input type="hidden" name="expected_epoch" value="{{ truck.inventory_epoch }}"><input type="hidden" name="expected_posting_id" value="{{ truck.inventory_posting_id }}">
+<label>CURRENT GAL <input name="gallons" inputmode="numeric" required aria-label="Correct current gallons for truck {{ truck.truck_number }}"></label><button class="action-button">CORRECT</button>
+</form>
+{% for pending in vendor_pending_by_truck.get(truck.truck_id,[]) %}
+<div class="scorpion-inventory-pending"><strong>FUEL APPROVAL · {{ pending.gallons }} GAL</strong><small>Neo {{ pending.calculated_gallons if pending.calculated_gallons is not none else 'UNKNOWN' }} · Difference {{ (pending.gallons-pending.calculated_gallons)|abs if pending.calculated_gallons is not none else 'UNKNOWN' }} · {{ pending.user.display_name }}</small>
+<form method="post" action="{{ url_for('scorpion_vendor.manage_inventory') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="request_id" value="{{ pending.id }}"><input type="hidden" name="version" value="{{ pending.version }}"><button class="action-button" name="action" value="approve">APPROVE</button><button class="action-button" name="action" value="deny">DENY</button></form></div>
+{% endfor %}{% endif %}

@@ -1108,7 +1108,7 @@ def fueling_board():
 
 def _driver_page_context(gateway):
     manage = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)["can_edit"]
-    return dict(driver_context(gateway,current_user,manage=manage),gateway=gateway,can_manage_drivers=manage,
+    return dict(driver_context(gateway,current_user,manage=manage),gateway=gateway,can_manage_drivers=False,
         can_select_driver_truck=permission_access(DRIVER_VIEW,DRIVER_EDIT)["can_edit"])
 
 
@@ -1760,8 +1760,24 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
     for mode in ("arrival", "etd"):
         for rank, row in enumerate(sorted(rows, key=lambda row: _dispatch_presentation_key(row, mode))):
             row[f"dispatch_{mode}_rank"] = rank
-    return {**context, "rows": sorted(rows, key=_dispatch_presentation_key),
-            **driver_roster(gateway,context.get("operation"))}
+    from app.models import NeoScorpionVendorRequest, NeoScorpionSortTruck, NeoScorpionFuelingEvent
+    from sqlalchemy import func
+    from app.services.neoscorpion_vendors import driver_name
+    operation=context.get('operation')
+    roster=driver_roster(gateway,operation)
+    pending={}
+    if operation:
+        for item in NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,kind='fuel',status='pending').all():
+            pending.setdefault(item.fuel_truck_id,[]).append(item)
+        selections={s.fuel_truck_id:s for s in NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id).all()}
+        postings=dict(db.session.query(NeoScorpionFuelingEvent.fuel_truck_id,func.max(NeoScorpionFuelingEvent.id)).filter_by(
+            sort_date_operation_id=operation.id).group_by(NeoScorpionFuelingEvent.fuel_truck_id).all())
+        for visual in context.get('truck_visuals',[]):
+            selection=selections.get(visual['truck_id'])
+            visual['inventory_epoch']=selection.inventory_epoch if selection else None
+            visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
+            visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
+    return {**context, 'vendor_pending_by_truck':pending, "rows": sorted(rows, key=_dispatch_presentation_key), **roster}
 
 
 def _dispatch_presentation_key(row, mode="arrival"):
@@ -1968,7 +1984,7 @@ def _apply_nightly_asset_action(gateway, operation, form):
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             status=form.get("status"),
-            starting_gallons=form.get("starting_gallons"),
+            starting_gallons=form.get("current_gallons"),
             current_gallons=form.get("current_gallons"),
             changed_by_user=current_user,
         )
@@ -1977,8 +1993,6 @@ def _apply_nightly_asset_action(gateway, operation, form):
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             status=form.get("status"),
-            starting_gallons=form.get("starting_gallons"),
-            current_gallons=form.get("current_gallons"),
             changed_by_user=current_user,
         )
     if action == "verify_inventory":

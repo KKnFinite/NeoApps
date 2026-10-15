@@ -40,9 +40,17 @@ def change_driver(gateway, operation, actor, truck_id, driver_id, *, dispatcher=
         NeoScorpionFuelTruck.is_active.is_(True)).first()
     if not truck:
         raise ValueError("Choose a truck from this sort's nightly roster.")
-    if driver_id and not eligible_nightly_fueler_users(gateway, permission_key=DRIVER_EDIT,
-            active_users=User.query.filter_by(id=driver_id,is_active=True).all()):
-        raise ValueError("Choose an active driver with Truck Driver selection access in this gateway.")
+    if driver_id:
+        from app.models import NeoScorpionVendorAccount
+        from app.services.neoscorpion_vendors import require_approved
+        vendor = db.session.get(NeoScorpionVendorAccount, driver_id)
+        if vendor:
+            if not dispatcher:
+                raise ValueError('Vendor truck claims require dispatcher approval.')
+            require_approved(vendor, operation)
+        elif not eligible_nightly_fueler_users(gateway, permission_key=DRIVER_EDIT,
+                active_users=User.query.filter_by(id=driver_id,is_active=True).all()):
+            raise ValueError("Choose an active driver with Truck Driver selection access in this gateway.")
     target = NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=operation.id,
         fuel_truck_id=truck_id).with_for_update().populate_existing().first()
     previous = target.driver_user_id if target else None
@@ -69,7 +77,7 @@ def change_driver(gateway, operation, actor, truck_id, driver_id, *, dispatcher=
         db.session.add(NeoScorpionTruckDriverAudit(sort_date_operation_id=operation.id,
             fuel_truck_id=item.fuel_truck_id, previous_driver_user_id=item.driver_user_id,
             driver_user_id=value, changed_by_user_id=actor.id, reason=explanation, created_at=now))
-        item.driver_user_id=value; item.changed_by_user_id=actor.id; item.updated_at=now
+        item.driver_user_id=value; item.manual_name=''; item.changed_by_user_id=actor.id; item.updated_at=now
 
     if own and own.fuel_truck_id != truck_id:
         set_driver(own, None, reason or "Driver switched vehicles.")
