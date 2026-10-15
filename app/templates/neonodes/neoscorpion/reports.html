@@ -18,6 +18,9 @@
             <strong>{{ gateway.code }}</strong>
         </div>
         <nav class="neoscorpion-report-grid" aria-label="NeoScorpion reports">
+            <a class="neoscorpion-report-card" href="{{ url_for('neoscorpion.truck_rolldown') }}">
+                <strong>Truck Rolldown</strong><span>Chronological truck activity, physical visits, inventory evidence and TOP OFF roundtrips.</span>
+            </a>
             <a class="neoscorpion-report-card" href="{{ url_for('neoscorpion.prof_report') }}">
                 <strong>PROF Report</strong><span>Physical ON→OFF performance, setup policy, wrap-up, and complete per-job mathematics.</span>
             </a>

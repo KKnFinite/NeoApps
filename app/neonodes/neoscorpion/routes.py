@@ -1728,6 +1728,41 @@ def prof_report():
         operation=operation, operations=choices, fueler_id=fueler, truck_id=truck, **context)
 
 
+@bp.get("/reports/truck-rolldown")
+@gateway_node_required("scorpion")
+def truck_rolldown():
+    from app.models import SortDateOperation
+    from app.services.neoscorpion_rolldown import report_context
+    gateway = get_current_gateway()
+    if not user_can(HISTORY_VIEW_PERMISSION):
+        return "Access denied.", 403
+    choices = SortDateOperation.query.filter_by(gateway_id=gateway.id).order_by(
+        SortDateOperation.sort_date.desc(), SortDateOperation.id.desc()).limit(200).all()
+    operation = current_sort_operation(gateway) or (choices[0] if choices else None)
+    try:
+        if request.args.get("operation_id"):
+            operation = SortDateOperation.query.filter_by(id=int(request.args['operation_id']),gateway_id=gateway.id).first()
+            if operation is None:
+                return "Sort not found for this gateway.", 404
+        truck_id = int(request.args['truck_id']) if request.args.get('truck_id') else None
+        context = report_context(gateway, operation, truck_id=truck_id)
+    except ValueError as exc:
+        return str(exc), 400
+    if request.args.get('format') == 'csv':
+        output = io.StringIO(newline='')
+        rows = context['export_rows']
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({key:"'"+value if isinstance(value,str) and value.startswith(('=','+','-','@')) else value
+                                 for key,value in row.items()})
+        return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')),mimetype='text/csv',
+                         as_attachment=True,download_name=f'truck-rolldown-{operation.sort_date if operation else "empty"}.csv',max_age=0)
+    return render_template('neonodes/neoscorpion/truck_rolldown.html', gateway=gateway,
+        operation=operation, operations=choices, truck_id=truck_id, **context)
+
+
 @bp.route("/history")
 @gateway_node_required("scorpion")
 def history():

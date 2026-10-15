@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from app.extensions import db
 from app.models import (
     NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
-    NeoScorpionVendorAudit, NeoScorpionInventoryReading,
+    NeoScorpionVendorAudit, NeoScorpionInventoryReading, NeoScorpionTopOffEvent,
     NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
     NeoScorpionDispatcherCheck,
     NeoScorpionCallDispatchAck,
@@ -58,7 +58,7 @@ NEOSCORPION_MODEL_TABLES = (
     NeoScorpionDispatcherCheck,
     NeoScorpionCallDispatchAck,
     NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
-    NeoScorpionVendorAudit, NeoScorpionInventoryReading,
+    NeoScorpionVendorAudit, NeoScorpionInventoryReading, NeoScorpionTopOffEvent,
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {

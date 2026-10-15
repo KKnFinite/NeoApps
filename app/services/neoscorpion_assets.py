@@ -560,6 +560,28 @@ def mark_nightly_truck_topping_off(
 
     nightly_truck.status = "topping_off"
     nightly_truck.top_off_sent_at_utc = now_utc or datetime.utcnow()
+    from app.models import NeoScorpionTopOffEvent
+    from app.services.neoscorpion_vendors import driver_name
+    from app.services.neoscorpion_inventory import transfer_covered
+    pending_work = NeoScorpionFuelWorkState.query.join(NeoScorpionFuelAssignment,
+        NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id).filter(
+            NeoScorpionFuelAssignment.sort_date_operation_id == locked_operation.id,
+            NeoScorpionFuelWorkState.physical_finalized_at_utc.is_(None),
+            db.or_(NeoScorpionFuelWorkState.off_at_utc.is_not(None), NeoScorpionFuelWorkState.ended_early_at_utc.is_not(None)),
+            db.or_(NeoScorpionFuelWorkState.physical_truck_id == truck.id,
+                db.and_(NeoScorpionFuelWorkState.physical_truck_id.is_(None), NeoScorpionFuelAssignment.assigned_truck_id == truck.id))).all()
+    # A pre-transfer baseline is not a measured departure balance while an
+    # uncovered, already-OFF transfer still awaits posting. Snapshot uncertainty
+    # without changing inventory or its existing reconciliation behavior.
+    departure_verified = bool(nightly_truck.inventory_verified) and all(
+        transfer_covered(locked_operation, nightly_truck, work,
+            work.off_inventory_epoch is not None and work.off_inventory_epoch != nightly_truck.inventory_epoch)
+        for work in pending_work)
+    db.session.add(NeoScorpionTopOffEvent(sort_date_operation_id=locked_operation.id,
+        fuel_truck_id=truck.id, kind='sent', occurred_at_utc=nightly_truck.top_off_sent_at_utc,
+        gallons=nightly_truck.current_gallons, inventory_verified=departure_verified,
+        inventory_epoch=nightly_truck.inventory_epoch, actor_user_id=changed_by_user.id if changed_by_user else None,
+        driver_name=driver_name(locked_operation.gateway, locked_operation, truck.id)))
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)
@@ -641,9 +663,24 @@ def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons, *, ch
         nightly_truck.starting_gallons,
         current_gallons,
     )
+    from app.models import NeoScorpionTopOffEvent
+    from app.services.neoscorpion_vendors import driver_name
+    sent = NeoScorpionTopOffEvent.query.filter_by(sort_date_operation_id=locked_operation.id,
+        fuel_truck_id=truck.id, kind='sent', occurred_at_utc=nightly_truck.top_off_sent_at_utc).order_by(
+            NeoScorpionTopOffEvent.id.desc()).first()
+    returned_at = now_utc or datetime.utcnow()
+    if sent and returned_at < sent.occurred_at_utc:
+        raise ValueError('TOP OFF return cannot precede its sent time.')
+    # A legacy in-progress trip has no new SENT snapshot. Record the genuine
+    # future RETURN, but never fabricate a previous sent timestamp or balance.
+    db.session.add(NeoScorpionTopOffEvent(sort_date_operation_id=locked_operation.id,
+        fuel_truck_id=truck.id, kind='returned', sent_event_id=sent.id if sent else None,
+        occurred_at_utc=returned_at, gallons=current_gallons, inventory_verified=True,
+        inventory_epoch=nightly_truck.inventory_epoch+1, actor_user_id=changed_by_user.id if changed_by_user else None,
+        driver_name=driver_name(locked_operation.gateway, locked_operation, truck.id)))
     nightly_truck.status = "available"
     _verify_inventory(locked_operation, nightly_truck, current_gallons, changed_by_user,
-                      "Top Off Complete confirmed a new physical truck reading.", now_utc=now_utc)
+                      "Top Off Complete confirmed a new physical truck reading.", now_utc=returned_at)
     state = _record_change(state, locked_operation.id)
     db.session.flush()
     return _changed(state)

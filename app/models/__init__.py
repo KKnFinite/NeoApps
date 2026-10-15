@@ -75,6 +75,7 @@ from app.models.neoscorpion_fuel import (
 )
 from app.models.neo_node import NeoNode
 from app.models.neoscorpion_driver import NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit
+from app.models.neoscorpion_top_off import NeoScorpionTopOffEvent
 from app.models.neoscorpion_vendor import (NeoScorpionVendorAccount, NeoScorpionVendorNight,
     NeoScorpionVendorRequest, NeoScorpionVendorAudit, NeoScorpionInventoryReading)
 from app.models.permission_rule import PermissionRule
@@ -143,7 +144,7 @@ from app.models.user_token import UserToken
 
 __all__ = [
     "NeoScorpionVendorAccount", "NeoScorpionVendorNight", "NeoScorpionVendorRequest",
-    "NeoScorpionVendorAudit", "NeoScorpionInventoryReading",
+    "NeoScorpionVendorAudit", "NeoScorpionInventoryReading", "NeoScorpionTopOffEvent",
     "User",
     "AuthRateLimitState",
     "UserToken",

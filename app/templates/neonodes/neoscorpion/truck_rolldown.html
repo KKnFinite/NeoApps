@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% macro value(n) %}{{ '{:,.2f}'.format(n) if n is number and n is not integer else '{:,}'.format(n) if n is integer else 'Unavailable' }}{% endmacro %}
+{% macro totals(s) %}
+<dl class="rolldown-totals">
+    <div><dt>Starting gallons</dt><dd>{{ value(s.starting) }}</dd></div>
+    <div><dt>Current / ending gallons</dt><dd>{{ value(s.ending) }} · {{ 'VERIFIED' if s.verified else 'UNVERIFIED' }}</dd></div>
+    <div><dt>Physical visits started</dt><dd>{{ s.visits }}</dd></div>
+    <div><dt>Recorded physical duration</dt><dd>{{ value(s.physical_minutes) }} min{% if s.duration_unknown %} · PARTIAL / unknown intervals{% endif %}</dd></div>
+    <div><dt>Uplift / defuel gallons posted</dt><dd>{{ value(s.uplift) }} / {{ value(s.defuel) }}{% if s.transfer_unknown %} · PARTIAL{% endif %}</dd></div>
+    <div><dt>Recorded TOP OFF trips sent</dt><dd>{{ s.top_off_visits }}</dd></div>
+    <div><dt>Known TOP OFF gallons added</dt><dd>{{ value(s.top_off_added) }}{% if s.top_off_unknown %} · PARTIAL / missing departure reading{% endif %}</dd></div>
+    <div><dt>Verified baseline adjustments (signed)</dt><dd>{{ value(s.adjustments) }}{% if s.adjustment_unknown %} · PARTIAL / unknown previous balance{% endif %}</dd></div>
+    <div><dt>Time out of service</dt><dd>Unavailable · historical boundaries not recorded</dd></div>
+</dl>
+{% endmacro %}
+{% block title %}Truck Rolldown | NeoScorpion{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoscorpion_rolldown.css', v=config.STATIC_ASSET_VERSION) }}">
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-rolldown">
+    <header class="neoscorpion-screen-head mobile-shell-duplicate-title">{% include "neonodes/neoscorpion/_brand_title.html" %}<h1>Truck Rolldown</h1></header>
+    {% include "neonodes/neoscorpion/_menu.html" %}
+    <section class="neoscorpion-panel">
+        <h1>Truck Rolldown</h1>
+        <form method="get" class="neoscorpion-prof-filters">
+            <label>Sort / operation<select name="operation_id">{% for item in operations %}<option value="{{ item.id }}" {% if operation and item.id == operation.id %}selected{% endif %}>{{ item.sort_date }} · {{ item.sort_name }} · #{{ item.id }}</option>{% endfor %}</select></label>
+            <label>Truck<select name="truck_id"><option value="">ALL TRUCKS</option>{% for id,name in trucks.items() %}<option value="{{ id }}" {% if id == truck_id %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+            <button class="action-button">View</button><button class="action-button" name="format" value="csv">CSV</button>
+            <button class="action-button" type="button" data-prof-copy>COPY REPORT</button><small data-prof-copy-status role="status"></small>
+        </form>
+        <p class="neoscorpion-helper">{{ gateway.code }} · {{ operation.sort_date if operation else 'No sort' }} · {{ operation.sort_name if operation else '' }}. Local dates and times; chronological UTC ordering.</p>
+        <p class="neoscorpion-helper">Read-only evidence, not a simulated balance. Missing historical balances, parking snapshots, driver identities and OOS boundaries remain unavailable. Flight/destination refer to the linked mission. Pending, denied and expired requests are not fuel movements. TOP OFF history is complete only from capture rollout; older trips may have only a confirmed return reading.</p>
+        {% if truncated %}<p role="alert">PARTIAL REPORT: a source exceeds 10,000 records. Totals and export cover loaded evidence only.</p>{% endif %}
+        {% if not truck_id and summaries %}<section class="rolldown-summary"><h2>ALL TRUCKS · Fleet totals</h2>{{ totals(fleet) }}</section>{% endif %}
+        {% for s in summaries %}<section class="rolldown-summary" data-truck-summary="{{ s.truck }}"><h2>TRUCK {{ s.truck }} · {{ s.status|replace('_',' ')|upper }}</h2><p>Latest recorded driver: {{ s.driver }}</p>{{ totals(s) }}</section>{% endfor %}
+        <h2>Chronological activity / inventory ledger</h2>
+        {% for event in events %}<article class="rolldown-event" data-rolldown-source="{{ event.source }}">
+            <header><strong>{{ event.columns.Event }} · TRUCK {{ event.columns.Truck }}</strong><time>{{ event.columns.Time }}</time></header>
+            <dl>{% for key,value in event.columns.items() %}{% if key not in ['Event','Truck','Time'] %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endif %}{% endfor %}</dl>
+        </article>{% else %}<p>No truck history for this selection.</p>{% endfor %}
+        <textarea data-prof-copy-text hidden>{{ copy_text }}</textarea>
+    </section>
+</section>
+<script src="{{ url_for('static', filename='js/neoscorpion_prof_report.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+{% endblock %}

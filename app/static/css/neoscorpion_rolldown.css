@@ -1,0 +1,19 @@
+.neoscorpion-rolldown { min-width: 0; }
+.neoscorpion-rolldown .neoscorpion-panel { min-width: 0; }
+.neoscorpion-rolldown h1 { font-size: var(--neo-font-large, 1.35rem); }
+.neoscorpion-rolldown h2 { font-size: var(--neo-font-medium, 1rem); }
+.rolldown-summary { padding: .6rem 0; border-bottom: 1px solid #484129; }
+.rolldown-totals, .rolldown-event dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .4rem .8rem; margin: .5rem 0; }
+.rolldown-totals div, .rolldown-event dl div { min-width: 0; overflow-wrap: anywhere; }
+.neoscorpion-rolldown dt { color: #aaa791; font-size: .75rem; }
+.neoscorpion-rolldown dd { margin: .15rem 0 0; font-size: .85rem; }
+.rolldown-event { padding: .8rem 0; border-bottom: 1px solid #484129; }
+.rolldown-event header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem; }
+.rolldown-event time { color: #d5c173; font-size: .8rem; }
+.neoscorpion-rolldown select { max-width: 100%; min-width: 0; }
+@media(max-width: 700px) {
+    .rolldown-totals, .rolldown-event dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .neoscorpion-rolldown .neoscorpion-prof-filters { display: flex; flex-wrap: wrap; }
+    .neoscorpion-rolldown .neoscorpion-prof-filters label { min-width: 0; flex: 1 1 100%; }
+    .rolldown-event header strong { overflow-wrap: anywhere; }
+}
