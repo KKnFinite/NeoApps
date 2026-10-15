@@ -1989,6 +1989,15 @@ def _apply_nightly_asset_action(gateway, operation, form):
             changed_by_user=current_user,
         )
     if action == "update_truck":
+        # An already-open pre-release browser still submits the retired input.
+        # Never report its edited balance as saved while silently ignoring it.
+        if "current_gallons" in form:
+            from app.models import NeoScorpionSortTruck
+            selected=NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id,
+                fuel_truck_id=_positive_form_id(form.get("fuel_truck_id"),"fuel truck")).first()
+            stored=str(selected.current_gallons) if selected and selected.current_gallons is not None else ''
+            if str(form.get('current_gallons') or '').strip() != stored:
+                raise ValueError('Current Gallons corrections moved to the Dispatch truck card. Refresh before correcting the balance.')
         return update_nightly_truck(
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),

@@ -314,3 +314,14 @@ class VendorWorkflowTest(TestCase):
         inventory.correct_baseline(self.gateway,self.operation,self.dispatcher,self.truck.id,14000,self.selection.inventory_epoch);db.session.commit()
         self.assertEqual(self.selection.status,'topping_off')
         self.assertEqual(self.selection.starting_gallons,10000)
+
+    def test_old_asset_form_never_silently_discards_a_balance_edit(self):
+        self.prepare();self.login(self.dispatcher)
+        form=dict(action='update_truck',fuel_truck_id=self.truck.id,status='available',current_gallons='5500',starting_gallons='1')
+        response=self.client.post('/neoscorpion/fuel-dispatch/assets',data=form,follow_redirects=True)
+        self.assertEqual(response.status_code,200)
+        self.assertIn(b'corrections moved',response.data)
+        self.assertEqual(self.selection.current_gallons,10000)
+        response=self.client.post('/neoscorpion/fuel-dispatch/assets',data={**form,'current_gallons':'10000'})
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(self.selection.starting_gallons,10000)
