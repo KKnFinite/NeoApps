@@ -24,6 +24,12 @@ class PendingPostgresTest(unittest.TestCase):
     queue=cases.PendingUpliftTest.queue
     edit=cases.PendingUpliftTest.edit
     complete_parent=cases.PendingUpliftTest.complete_parent
+    login=cases.PendingUpliftTest.login
+    complete_apu_parent=cases.PendingUpliftTest.complete_apu_parent
+    test_postgres_apu_shortfall_promotes=cases.PendingUpliftTest.test_apu_shortfall_below_target_promotes_without_false_review
+    test_postgres_existing_apu_review_retry=cases.PendingUpliftTest.test_existing_false_review_can_retry_after_fix_without_reposting_parent
+    test_postgres_net_target_and_missing_apu=cases.PendingUpliftTest.test_net_target_equality_and_missing_apu_still_preserve_completed_parent
+    test_postgres_apu_reserve=cases.PendingUpliftTest.test_apu_shortfall_reserve_uses_net_fuel_not_raw_actual
     test_postgres_promotion_exact_parent_history=cases.PendingUpliftTest.test_promotes_exact_parent_actuals_resets_evidence_and_posts_inventory_once
     test_postgres_resource_review_and_retry=cases.PendingUpliftTest.test_unavailable_resource_retains_completed_parent_then_correct_retry
     test_postgres_cancel_promoted_cycle=cases.PendingUpliftTest.test_cancellation_after_promotion_uses_existing_cycle_rollback

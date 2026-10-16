@@ -1,5 +1,6 @@
 """Queued uplift leaves active work untouched and promotes only verified completion."""
 import unittest
+from contextlib import nullcontext
 from datetime import timedelta
 from unittest.mock import patch
 from app.extensions import db
@@ -36,6 +37,58 @@ class PendingUpliftTest(unittest.TestCase):
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off();self.submit()
         result=fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=16))
         db.session.commit();return result
+    def complete_apu_parent(self,*,defer=False):
+        data=self.final_data()
+        data.update(actual_left='17.62',actual_right='17.62',apu_running='yes',apu_source_tank_code='left',
+            apu_override_present='1',apu_override_enabled='1',apu_override_allowance='0.56')
+        self.save(self.start+timedelta(minutes=10),**data);self.off();self.submit()
+        with patch.object(pending,'_attempt_promotion') if defer else nullcontext():
+            fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=16))
+        db.session.commit()
+    def test_apu_shortfall_below_target_promotes_without_false_review(self):
+        self.mission.planned_fuel_load=34800;db.session.commit()
+        self.queue('34.8');old_id=self.work.id
+        self.complete_apu_parent()
+        self.assertEqual(self.pending.status,'promoted',self.pending.review_reason)
+        self.assertIsNone(self.pending.review_reason);self.assertEqual(self.assignment.current_cycle_number,2)
+        event=NeoScorpionFuelingEvent.query.one()
+        self.assertEqual(event.neo_fuel_lbs,34680);self.assertEqual(event.apu_allowance_lbs,560)
+        self.assertEqual(event.fuel_work_state_id,old_id)
+        fresh=db.session.get(NeoScorpionFuelWorkState,self.assignment.active_work_state_id)
+        self.assertEqual({t.tank_code:t.remaining_lbs for t in fresh.tank_states},{'left':17620,'ctr':0,'right':17620})
+        self.assertTrue(all(t.actual_lbs is None for t in fresh.tank_states))
+        self.assertIsNone(fresh.apu_running);self.assertIsNone(fresh.on_at_utc);self.assertIsNone(fresh.off_at_utc)
+        self.assertEqual(self.selection.current_gallons,7000)
+        history=NeoScorpionFuelCycleHistory.query.one()
+        self.assertEqual(history.snapshot['required_fuel_lbs'],34800)
+        self.assertEqual(history.snapshot['neo_fuel_lbs'],34680)
+    def test_existing_false_review_can_retry_after_fix_without_reposting_parent(self):
+        self.queue('34.8');self.complete_apu_parent(defer=True)
+        self.pending.status='review';self.pending.review_reason='Verified final fuel already meets or exceeds the pending TOTAL target; review required.'
+        db.session.commit();physical=(self.work.manual_on_at_utc,self.work.off_at_utc,self.work.physical_finalized_at_utc)
+        self.edit(action='retry')
+        self.assertEqual(self.pending.status,'promoted',self.pending.review_reason)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1);self.assertEqual(self.selection.current_gallons,7000)
+        self.assertEqual((self.work.manual_on_at_utc,self.work.off_at_utc,self.work.physical_finalized_at_utc),physical)
+        self.login(self.dispatcher)
+        response=self.client.get('/neoscorpion/fuel-dispatch/live-panel')
+        self.assertEqual(response.status_code,200)
+        self.assertNotIn('PENDING UPLIFT — REVIEW REQUIRED',response.json['html'])
+    def test_net_target_equality_and_missing_apu_still_preserve_completed_parent(self):
+        self.queue('34.68');self.complete_apu_parent()
+        self.assertEqual(self.pending.status,'review');self.assertIn('Neo Fuel already meets or exceeds',self.pending.review_reason)
+        self.assertIsNotNone(self.assignment.completed_at_utc);self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+        self.edit(target='34.8')
+        with patch.object(fuel,'_effective_apu_allowance_lbs',return_value=None):self.edit(action='retry')
+        self.assertEqual(self.pending.status,'review');self.assertIn('APU data',self.pending.review_reason)
+        self.assertEqual(self.assignment.current_cycle_number,1);self.assertEqual(self.selection.current_gallons,7000)
+    def test_apu_shortfall_reserve_uses_net_fuel_not_raw_actual(self):
+        self.queue('34.8');self.complete_apu_parent(defer=True)
+        reserve=fuel.effective_spear_settings(self.settings).minimum_truck_reserve_gallons
+        self.selection.current_gallons=reserve;db.session.commit()
+        self.edit(action='retry')
+        self.assertEqual(self.pending.status,'review');self.assertIn('reserve',self.pending.review_reason)
+        self.assertIsNotNone(self.assignment.completed_at_utc);self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
     def test_edit_pending_while_on_never_changes_active_work_or_counts(self):
         self.queue();original=(self.assignment.current_cycle_number,self.assignment.assigned_truck_id,self.assignment.assigned_fueler_user_id,self.mission.planned_fuel_load,self.work.manual_on_at_utc,self.work.off_at_utc,self.selection.current_gallons)
         self.save(self.start+timedelta(minutes=2),notes='Current physical note',remaining_left='6',remaining_ctr='0',remaining_right='6',apu_running='no')

@@ -54,16 +54,24 @@ class PendingBrowserTest(unittest.TestCase):
                         dispatch.wait_for_timeout(1800);expect(pending.locator('[name="required_fuel"]')).to_have_value('42')
                         pending.locator('button[value="save"]').click()
                         expect(pending.locator('[name="required_fuel"]')).to_have_value('42')
+                        target=34800 if engine.name=='webkit' else 42000
+                        if engine.name=='webkit':
+                            pending.locator('[name="required_fuel"]').fill('34.8');pending.locator('button[value="save"]').click()
+                            expect(pending.locator('[name="required_fuel"]')).to_have_value('34.8')
                         for width in (1440,600,390):
                             dispatch.set_viewport_size({'width':width,'height':844});expect(pending).to_be_visible()
                             self.assertFalse(dispatch.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
                         with F.app.app_context():
                             self.assertEqual(db.session.get(SortDateMission,mid).planned_fuel_load,25000)
                             self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).count(),0)
-                        page.bring_to_front();card.locator('[name="apu_running"]').select_option('no')
+                        page.bring_to_front();card.locator('[name="apu_running"]').select_option('yes' if engine.name=='webkit' else 'no')
+                        if engine.name=='webkit':
+                            card.locator('[name="apu_source_tank_code"]').select_option('left')
+                            card.locator('[name="apu_override_allowance"]').fill('0.56')
+                            card.locator('[data-apu-use-manual]').click()
                         for code in ('left','ctr','right'):
                             card.locator(f'[name="remaining_{code}"]').fill('0' if code=='ctr' else '6')
-                            card.locator(f'[name="actual_{code}"]').fill('0' if code=='ctr' else '15')
+                            card.locator(f'[name="actual_{code}"]').fill('0' if code=='ctr' else ('17.62' if engine.name=='webkit' else '15'))
                         card.locator('[name="transfer_fuel_gallons"]').fill('3000');card.locator('[data-fuel-planning-form] button[type="submit"]').click()
                         expect(card.locator('[data-fuel-data-status]')).to_contain_text('Saved')
                         card.locator('.neoscorpion-fueler-off-form button').click();expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('TRUCK OFF')
@@ -78,10 +86,17 @@ class PendingBrowserTest(unittest.TestCase):
                         detail=dispatch.locator(f'#neoscorpion-dispatch-detail-{mid}-2');expect(detail).to_be_visible()
                         with F.app.app_context():
                             a=db.session.get(NeoScorpionFuelAssignment,aid);self.assertEqual(a.current_cycle_number,2)
-                            self.assertEqual(db.session.get(SortDateMission,mid).planned_fuel_load,42000)
+                            self.assertEqual(db.session.get(SortDateMission,mid).planned_fuel_load,target)
                             work=db.session.get(NeoScorpionFuelWorkState,a.active_work_state_id)
                             self.assertTrue(all(t.actual_lbs is None for t in work.tank_states));self.assertIsNone(work.manual_on_at_utc)
                             self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).count(),1)
+                            if engine.name=='webkit':self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).one().neo_fuel_lbs,34680)
+                        for width in (1440,390):
+                            dispatch.set_viewport_size({'width':width,'height':900})
+                            expect(row).not_to_contain_text('REVIEW REQUIRED')
+                            self.assertFalse(dispatch.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                            dispatch.screenshot(path=str(F.evidence / f'uplift-apu-{engine.name}-{width}.png'),full_page=True)
+                        dispatch.set_viewport_size({'width':1440,'height':900})
                         cancel=detail.locator('form[action$="/cancel-uplift"] button[type="submit"]');expect(cancel).to_be_visible();dispatch.once('dialog',lambda dialog:dialog.accept());cancel.click()
                         expect(row).to_have_class(__import__('re').compile('is-complete'),timeout=20000)
                         self.assertFalse(dispatch.evaluate('document.documentElement.scrollWidth>innerWidth+1'))

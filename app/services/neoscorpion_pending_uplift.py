@@ -115,7 +115,14 @@ def _promote(gateway,user,operation,assignment,mission,p,now):
     if not layout or any(code not in actual or actual[code] is None for code,_ in layout):
         raise ValueError('Verified final Actual readings are missing for this aircraft layout.')
     actual={code:actual[code] for code,_ in layout}
-    if p.required_fuel_lbs<=sum(actual.values()):raise ValueError('Verified final fuel already meets or exceeds the pending TOTAL target; review required.')
+    # Required Fuel is a net Neo Fuel target. Raw Actual includes the completed
+    # visit's APU allowance and can exceed the target while Neo Fuel is short.
+    verified_neo_fuel_lbs=fuel._fuel_work_calculation(layout,{t.tank_code:t for t in tanks},
+        work.apu_running,fuel._effective_apu_allowance_lbs(work))[4]
+    if verified_neo_fuel_lbs is None or not fuel._apu_source_is_valid(work,layout):
+        raise ValueError('Verified final Neo Fuel and applicable APU data are required before uplift.')
+    if p.required_fuel_lbs<=verified_neo_fuel_lbs:
+        raise ValueError('Verified final Neo Fuel already meets or exceeds the pending TOTAL target; review required.')
     parent_events=NeoScorpionFuelingEvent.query.filter_by(fuel_work_state_id=work.id,cycle_number=p.parent_cycle_number).all()
     if not parent_events:raise ValueError('A completed physical fueling event is required before uplift.')
     if NeoScorpionFuelingEvent.query.filter(NeoScorpionFuelingEvent.sort_date_operation_id==operation.id,
@@ -135,7 +142,7 @@ def _promote(gateway,user,operation,assignment,mission,p,now):
         from app.services.neoscorpion_dispatch_planning import estimate_fuel_demand_gallons
         settings=NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
         density=settings.fuel_density_lbs_per_gallon if settings else fuel.DEFAULT_FUEL_DENSITY_LBS_PER_GALLON
-        demand=estimate_fuel_demand_gallons(p.required_fuel_lbs,None,density,measured_fob_lbs=sum(actual.values())).gallons
+        demand=estimate_fuel_demand_gallons(p.required_fuel_lbs,None,density,measured_fob_lbs=verified_neo_fuel_lbs).gallons
         reserve=fuel.effective_spear_settings(settings).minimum_truck_reserve_gallons
         if demand is None or selection.current_gallons-demand<reserve:
             raise ValueError('Proposed truck lacks the estimated uplift fuel and configured reserve; top off or select another truck.')
