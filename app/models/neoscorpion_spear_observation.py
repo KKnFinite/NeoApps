@@ -35,3 +35,30 @@ def protect_observation(_mapper, _connection, row):
                  'assignment_id', 'cycle_number', 'payload', 'created_at'):
         if inspect(row).attrs[name].history.has_changes():
             raise ValueError('SPEAR observation evidence is immutable.')
+
+
+class NeoScorpionSpearFleetObservation(db.Model):
+    """Fleet actions have their own identity; never manufacture an aircraft assignment."""
+    __tablename__ = 'neoscorpion_spear_fleet_observations'
+    __table_args__ = (
+        db.UniqueConstraint('audit_id', 'kind', name='uq_spear_fleet_audit_kind'),
+        db.Index('ix_spear_fleet_delivery', 'gateway_id', 'delivered_at', 'retry_at'),
+    )
+    id = db.Column(db.String(32), primary_key=True)
+    kind = db.Column(db.String(20), nullable=False)
+    audit_id = db.Column(db.Integer, db.ForeignKey('neoscorpion_spear_audit_entries.id'), nullable=False)
+    sent_event_id = db.Column(db.Integer, db.ForeignKey('neoscorpion_top_off_events.id'), nullable=False, index=True)
+    gateway_id = db.Column(db.Integer, db.ForeignKey('gateways.id'), nullable=False)
+    payload = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    retry_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    delivered_at = db.Column(db.DateTime)
+    vault_key = db.Column(db.String(512))
+
+
+@event.listens_for(NeoScorpionSpearFleetObservation, 'before_update')
+def protect_fleet_observation(_mapper, _connection, row):
+    for name in ('kind', 'audit_id', 'sent_event_id', 'gateway_id', 'payload', 'created_at'):
+        if inspect(row).attrs[name].history.has_changes():
+            raise ValueError('SPEAR fleet observation evidence is immutable.')

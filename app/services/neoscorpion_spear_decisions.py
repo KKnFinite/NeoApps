@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.extensions import db
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation as Observation
+from app.models.neoscorpion_spear_observation import NeoScorpionSpearFleetObservation as FleetObservation
 from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services.neoscorpion_spear_learning import SPEAR_ALGORITHM_VERSION, TEACH_SPEAR_REASON_CODES
 
@@ -232,9 +233,11 @@ def validate_record(record):
     keys = {'schema_version','record_type','id','gateway_id','operation_id','mission_id','assignment_id',
             'cycle_number','captured_at','training_eligible','payload'}
     if (not isinstance(record, dict) or set(record) != keys or record['schema_version'] != VERSION
-            or record['record_type'] not in ('decision','outcome','reason') or record['training_eligible'] is not False):
+            or record['record_type'] not in ('decision','outcome','reason','fleet','fleet_outcome') or record['training_eligible'] is not False):
         raise ValueError('Invalid SPEAR decision record contract.')
     for key in ('gateway_id','operation_id','mission_id','assignment_id','cycle_number'):
+        if record['record_type'] in ('fleet','fleet_outcome') and key in ('mission_id','assignment_id','cycle_number') and record[key] is None:
+            continue
         if type(record[key]) is not int or record[key] <= 0:
             raise ValueError('Invalid SPEAR decision identity.')
     if len(record['id']) != 32 or not all(c in '0123456789abcdef' for c in record['id']):
@@ -244,7 +247,9 @@ def validate_record(record):
         raise ValueError('Invalid SPEAR decision evidence size.')
     required = {'decision': {'action','actor_id','before','selected','work_id','tail','original_spear','reference_state','comparison'},
                 'outcome': {'decision_id','event_ids','qualified','exclusions','comparison_conclusion'},
-                'reason': {'decision_id','actor_id','reason','note'}}
+                'reason': {'decision_id','actor_id','reason','note'},
+                'fleet': {'audit_id','sent_event_id','actor_id','before','original_spear','reference_state','executed_step'},
+                'fleet_outcome': {'decision_id','audit_id','sent_event_id','returned_event_id','minutes','gallons','qualified','exclusions'}}
     if set(record['payload']) != required[record['record_type']]:
         raise ValueError('Invalid SPEAR observation payload.')
     payload = record['payload']
@@ -276,11 +281,81 @@ def validate_record(record):
                 or not isinstance(payload['event_ids'], list) or not all(identifier(v) for v in payload['event_ids'])
                 or not isinstance(payload['exclusions'], list) or not all(isinstance(v,str) for v in payload['exclusions'])):
             raise ValueError('Invalid SPEAR outcome observation.')
-    else:
+    elif record['record_type'] == 'reason':
         if (not identifier(payload['actor_id']) or not isinstance(payload['decision_id'], str)
                 or payload['reason'] not in (*TEACH_SPEAR_REASON_CODES, None)
                 or (payload['note'] is not None and (not isinstance(payload['note'],str) or len(payload['note']) > 1000))):
             raise ValueError('Invalid supplementary decision reason.')
+    else:
+        if not identifier(payload['audit_id']) or not identifier(payload['sent_event_id']):
+            raise ValueError('Invalid fleet-action identity.')
+        if record['record_type'] == 'fleet':
+            if (not identifier(payload['actor_id']) or payload['reference_state'] not in {'current','stale','missing','invalid'}
+                    or not isinstance(payload['executed_step'],dict) or payload['executed_step'].get('action_type') != 'top_off'):
+                raise ValueError('Invalid approved fleet action.')
+        elif (not identifier(payload['returned_event_id']) or type(payload['qualified']) is not bool
+                or type(payload['gallons']) is not int or payload['gallons'] < 0
+                or not isinstance(payload['minutes'],(int,float)) or payload['minutes'] <= 0
+                or not isinstance(payload['exclusions'],list)):
+            raise ValueError('Invalid fleet outcome.')
+
+
+def observe_fleet(gateway, operation, audit, step, actor, before):
+    """Approved TOP OFF evidence is independent of aircraft fueling assignments."""
+    from app.models import NeoScorpionTopOffEvent
+    try:
+        with db.session.begin_nested():
+            if not enabled(gateway.id):
+                return
+            sent = db.session.scalars(select(NeoScorpionTopOffEvent).where(
+                NeoScorpionTopOffEvent.sort_date_operation_id == operation.id,
+                NeoScorpionTopOffEvent.fuel_truck_id == step.truck_id, NeoScorpionTopOffEvent.kind == 'sent')
+                .order_by(NeoScorpionTopOffEvent.id.desc()).limit(1)).first()
+            if not sent:
+                return
+            evidence,state = _reference(request.form.get('spear_decision_reference'),gateway,actor,before,datetime.utcnow())
+            identifier=uuid4().hex
+            record=dict(schema_version=VERSION,record_type='fleet',id=identifier,gateway_id=gateway.id,
+                operation_id=operation.id,mission_id=step.mission_id,assignment_id=None,cycle_number=None,
+                captured_at=_plain(datetime.utcnow()),training_eligible=False,payload=_plain(dict(audit_id=audit.id,
+                    sent_event_id=sent.id,actor_id=actor.id,before=before,original_spear=evidence,
+                    reference_state=state,executed_step=asdict(step))))
+            validate_record(record)
+            db.session.add(FleetObservation(id=identifier,kind='fleet',audit_id=audit.id,
+                sent_event_id=sent.id,gateway_id=gateway.id,payload=record))
+            db.session.flush()
+    except Exception:
+        current_app.logger.exception('SPEAR fleet learning capture deferred safely')
+
+
+def reconcile_fleet(gateway_id):
+    from sqlalchemy.orm import aliased
+    from sqlalchemy import exists
+    from app.models import NeoScorpionTopOffEvent
+    sent=aliased(NeoScorpionTopOffEvent)
+    returned=aliased(NeoScorpionTopOffEvent)
+    outcome=aliased(FleetObservation)
+    rows=db.session.execute(select(FleetObservation,sent,returned)
+        .join(sent,sent.id==FleetObservation.sent_event_id)
+        .join(returned,returned.sent_event_id==sent.id)
+        .where(FleetObservation.gateway_id==gateway_id,FleetObservation.kind=='fleet',
+            ~exists(select(outcome.id).where(outcome.audit_id==FleetObservation.audit_id,outcome.kind=='fleet_outcome')))
+        .order_by(FleetObservation.created_at).limit(20)).all()
+    for decision,start,end in rows:
+        minutes=(end.occurred_at_utc-start.occurred_at_utc).total_seconds()/60
+        if minutes <= 0 or end.gallons is None:
+            continue
+        exclusions=[] if start.inventory_verified and end.inventory_verified and minutes <= 240 else ['unqualified_roundtrip']
+        identifier=uuid4().hex
+        record={**decision.payload,'id':identifier,'record_type':'fleet_outcome','captured_at':_plain(end.occurred_at_utc),
+            'payload':dict(decision_id=decision.id,audit_id=decision.audit_id,sent_event_id=start.id,
+                returned_event_id=end.id,minutes=minutes,gallons=end.gallons,qualified=not exclusions,exclusions=exclusions)}
+        validate_record(record)
+        with db.session.begin_nested():
+            db.session.add(FleetObservation(id=identifier,kind='fleet_outcome',audit_id=decision.audit_id,
+                sent_event_id=start.id,gateway_id=gateway_id,payload=record))
+            db.session.flush()
+    db.session.commit()
 
 
 def reconcile(gateway_id, *, limit=40):
@@ -343,18 +418,23 @@ def drain(gateway_id, *, limit=3):
     if not enabled(gateway_id):
         return 0
     reconcile(gateway_id)
+    reconcile_fleet(gateway_id)
     now = datetime.utcnow()
     rows = db.session.scalars(select(Observation).where(Observation.gateway_id == gateway_id,
         Observation.delivered_at.is_(None), Observation.retry_at <= now)
         .order_by(Observation.created_at, Observation.id).limit(limit).with_for_update(skip_locked=True)).all()
-    ids = [item.id for item in rows]
+    fleet = db.session.scalars(select(FleetObservation).where(FleetObservation.gateway_id == gateway_id,
+        FleetObservation.delivered_at.is_(None), FleetObservation.retry_at <= now)
+        .order_by(FleetObservation.created_at,FleetObservation.id).limit(limit).with_for_update(skip_locked=True)).all()
+    rows = sorted([*rows,*fleet],key=lambda item:(item.created_at,item.id))[:limit]
+    ids = [(type(item),item.id) for item in rows]
     for item in rows:
         item.attempts += 1
         item.retry_at = now + timedelta(seconds=min(3600, 30 * 2 ** min(item.attempts, 6)))
     db.session.commit()  # Claim bounded work before any external I/O; retry leases survive crashes.
     delivered = 0
-    for identifier in ids:
-        item = db.session.get(Observation, identifier)
+    for model,identifier in ids:
+        item = db.session.get(model, identifier)
         try:
             saved = export_decision_record(item.payload)
             item.vault_key = saved['key']

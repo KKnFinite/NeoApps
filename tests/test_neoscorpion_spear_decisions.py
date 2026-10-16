@@ -110,6 +110,39 @@ class SpearDecisionTest(unittest.TestCase):
         self.assertEqual(len(client.objects),1)
         self.assertTrue(first['key'].startswith('decision-observation/v1/'))
 
+    def test_approved_top_off_has_fleet_identity_and_exact_return_without_fabricated_assignment(self):
+        from dataclasses import replace, asdict
+        from app.models import NeoScorpionTopOffEvent, NeoScorpionFuelAssignment
+        from app.models.neoscorpion_spear_observation import NeoScorpionSpearFleetObservation as Fleet
+        from app.services.neoscorpion_spear import record_spear_execution
+        plan=planning._plan([planning._row(demand=2500)],trucks=(planning._truck(current=600,capacity=4000),))
+        step=replace(plan.steps[0],mission_id=self.mission.id,truck_id=self.assignment.assigned_truck_id)
+        count=NeoScorpionFuelAssignment.query.count()
+        sent=NeoScorpionTopOffEvent(sort_date_operation_id=self.operation.id,fuel_truck_id=step.truck_id,
+            kind='sent',occurred_at_utc=self.now,inventory_verified=True,inventory_epoch=1,actor_user_id=self.user.id)
+        db.session.add(sent);db.session.flush()
+        audit=record_spear_execution(self.operation,step,self.user,automatic=False)
+        raw=self.reference(recommendation=decisions._plain(asdict(step)))
+        with self.fixture.app.test_request_context('/neoscorpion/fuel-dispatch/spear-action',method='POST',
+                data={'spear_decision_reference':raw}):
+            decisions.observe_fleet(self.gateway,self.operation,audit,step,self.user,self.before)
+        db.session.commit()
+        original=Fleet.query.filter_by(kind='fleet').one()
+        self.assertIsNone(original.payload['assignment_id'])
+        self.assertEqual(original.payload['payload']['sent_event_id'],sent.id)
+        self.assertEqual(NeoScorpionFuelAssignment.query.count(),count)
+        db.session.add(NeoScorpionTopOffEvent(sort_date_operation_id=self.operation.id,fuel_truck_id=step.truck_id,
+            kind='returned',sent_event_id=sent.id,occurred_at_utc=self.now+timedelta(minutes=40),gallons=9000,
+            inventory_verified=True,inventory_epoch=2,actor_user_id=self.user.id))
+        db.session.commit()
+        decisions.reconcile_fleet(self.gateway.id)
+        outcome=Fleet.query.filter_by(kind='fleet_outcome').one()
+        self.assertEqual(outcome.payload['payload']['decision_id'],original.id)
+        self.assertEqual(outcome.payload['payload']['minutes'],40)
+        self.assertEqual(outcome.payload['payload']['gallons'],9000)
+        decisions.reconcile_fleet(self.gateway.id)
+        self.assertEqual(Fleet.query.count(),2)
+
     def test_original_recommendation_survives_actual_changed_selection(self):
         reference = self.reference()
         expected_truck = self.assignment.assigned_truck_id

@@ -51,3 +51,11 @@ Vault/DB outages can leave evidence queued or (if the local capture savepoint it
 fails) unavailable, while canonical Dispatch proceeds. No historical recommendations
 are fabricated. Uncertain visits, interruptions or timing remain excluded from
 qualified comparisons. Phase 1 does not change the fleet planning algorithm.
+
+
+Approved TOP OFF decisions use `neoscorpion_spear_fleet_observations`, never a fabricated
+FuelAssignment. The same bounded worker exports `fleet` and `fleet_outcome` variants
+of the decision envelope (assignment/cycle are null when inapplicable). The original
+rendered reference and canonical SPEAR audit are retained, along with the exact
+append-only TOP OFF SENT event ID. Reconciliation joins RETURN by that SENT identity,
+not truck/time guesses, and preserves the original prediction and measured outcome.

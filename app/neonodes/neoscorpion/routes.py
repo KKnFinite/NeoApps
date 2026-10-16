@@ -1644,6 +1644,11 @@ def fuel_dispatch_spear_action():
                 request.form.get('dispatcher_approval'), current_user.id, operation.id, plan, step)
             if not approved_top_off:
                 raise ValueError('TOP OFF SENT requires a current Dispatcher approval.')
+            from app.services.neoscorpion_assets import lock_nightly_asset_scope_for_mutation
+            from app.services.neoscorpion_spear_decisions import prepare_scope
+            operation, locked_assets = lock_nightly_asset_scope_for_mutation(operation)
+            source_row = next((row for row in context['rows'] if row['mission'].id == step.mission_id), None)
+            fleet_before = prepare_scope(operation, source_row['mission'], source_row.get('assignment'), locked_assets.revision) if source_row else dict(operation_id=operation.id,mission_id=step.mission_id)
         assignment_id = None
 
         def assign_action(selected_step):
@@ -1697,9 +1702,12 @@ def fuel_dispatch_spear_action():
         if step.action_type == "assign":
             assignment_id = result.assignment.id
         if changed:
-            record_spear_execution(
+            spear_audit = record_spear_execution(
                 operation, step, current_user, automatic=automatic, assignment_id=assignment_id
             )
+            if step.action_type == 'top_off':
+                from app.services.neoscorpion_spear_decisions import observe_fleet
+                observe_fleet(gateway, operation, spear_audit, step, current_user, fleet_before)
             db.session.commit()
         if json_response:
             return _json_no_store({"ok": True, "changed": changed})
