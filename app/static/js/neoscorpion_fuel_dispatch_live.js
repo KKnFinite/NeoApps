@@ -671,6 +671,7 @@
             updateAssignmentAlerts(root);
             adoptFingerprint(payload);
             root.dataset.spearPlanToken = payload.spear_plan_token || "";
+            root.dataset.spearAutomaticReference = payload.spear_automatic_reference || "";
             root.dataset.spearAutomationEnabled = payload.spear_automation_enabled ? "true" : "false";
             spearRenderedAt = Date.now();
             initializeDispatchSelects(root);
@@ -1104,6 +1105,7 @@
             const body = new FormData();
             body.set("execution_mode", "automatic");
             body.set("plan_token", root.dataset.spearPlanToken);
+            body.set("spear_decision_reference", root.dataset.spearAutomaticReference || "");
             try {
                 const response = await fetch(spearActionUrl, {
                     method: "POST",

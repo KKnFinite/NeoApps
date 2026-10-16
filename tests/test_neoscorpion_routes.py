@@ -503,7 +503,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         failures = (
             (
                 "recommendations",
-                "app.services.neoscorpion._attach_dispatch_assignment_recommendations",
+                "app.services.neoscorpion._attach_spear_plan",
                 RuntimeError("recommendation fixture failure"),
             ),
             (

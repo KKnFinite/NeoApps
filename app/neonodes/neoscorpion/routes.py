@@ -280,6 +280,7 @@ def fuel_dispatch_live_panel():
             "operation_id": operation.id if operation else None,
             "revision": int(context.get("nightly_asset_revision") or 0),
             "spear_plan_token": spear_plan.token if spear_plan else "",
+            "spear_automatic_reference": context.get("spear_automatic_reference", ""),
             "spear_automation_enabled": bool(
                 context["spear_settings"].automation_enabled
                 and context["spear_automatic_available"]
@@ -1636,6 +1637,13 @@ def fuel_dispatch_spear_action():
         )
         if step is None:
             raise ValueError("SPEAR recommendation is no longer available.")
+        approved_top_off = False
+        if step.action_type == 'top_off':
+            from app.services.neoscorpion_spear import validate_top_off_approval
+            approved_top_off = not automatic and validate_top_off_approval(
+                request.form.get('dispatcher_approval'), current_user.id, operation.id, plan, step)
+            if not approved_top_off:
+                raise ValueError('TOP OFF SENT requires a current Dispatcher approval.')
         assignment_id = None
 
         def assign_action(selected_step):
@@ -1673,6 +1681,7 @@ def fuel_dispatch_spear_action():
                     "assigned_fueler_user_id": str(selected_step.fueler_id or ""),
                     "assigned_truck_id": str(selected_step.truck_id or ""),
                     "review_status": "assigned",
+                    "spear_decision_reference": request.form.get("spear_decision_reference"),
                 },
             )
 
@@ -1682,7 +1691,7 @@ def fuel_dispatch_spear_action():
             )
 
         result = execute_spear_step(
-            step, assign_action=assign_action, top_off_action=top_off_action
+            step, assign_action=assign_action, top_off_action=top_off_action, dispatcher_approved=approved_top_off
         )
         changed = result.changed
         if step.action_type == "assign":
@@ -2134,3 +2143,39 @@ def _positive_form_id(value, label):
     if value <= 0:
         raise ValueError(f"Select a valid {label}.")
     return value
+
+
+@bp.after_request
+def _spear_learning_delivery(response):
+    # Background only, bounded and rate limited; no external I/O in the request.
+    if getattr(current_user, 'is_authenticated', False):
+        try:
+            from app.services.neoscorpion_spear_decisions import schedule_delivery
+            gateway = get_current_gateway()
+            if gateway:
+                schedule_delivery(current_app._get_current_object(), gateway.id)
+        except Exception:
+            current_app.logger.warning('SPEAR learning retry scheduling deferred safely')
+    return response
+
+
+@bp.post('/fuel-dispatch/spear-decision-reason')
+@gateway_node_required('scorpion')
+def spear_decision_reason():
+    if not user_can(FUEL_DISPATCH_VIEW_PERMISSION) or not user_can(FUEL_DISPATCH_EDIT_PERMISSION):
+        return 'Access denied.', 403
+    gateway = get_current_gateway()
+    from app.services.neoscorpion_spear_decisions import add_reason
+    try:
+        from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation
+        observation = db.session.get(NeoScorpionSpearObservation, request.form.get('decision_id'))
+        operation = current_sort_operation(gateway)
+        if not operation or not observation or observation.operation_id != operation.id:
+            raise ValueError('Decision is outside the current sort.')
+        add_reason(gateway, current_user, observation.id, request.form.get('reason'), request.form.get('note'))
+        db.session.commit()
+        flash('Optional SPEAR decision note saved.', 'success')
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), 'error')
+    return redirect(url_for('neoscorpion.fuel_dispatch'))

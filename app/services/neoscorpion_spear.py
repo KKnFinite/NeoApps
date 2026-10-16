@@ -7,6 +7,8 @@ import hashlib
 import json
 import re
 from types import SimpleNamespace
+from flask import current_app
+from itsdangerous import URLSafeTimedSerializer, BadSignature
 
 from app.extensions import db
 from app.models import NeoScorpionSettings, NeoScorpionSpearAuditEntry
@@ -162,16 +164,39 @@ class _ResourceState:
 
 
 def first_automatic_step(plan):
-    return next((step for step in plan.steps if step.automatic_eligible), None)
+    return next((step for step in plan.steps if step.automatic_eligible and step.action_type != "top_off"), None)
 
 
-def execute_spear_step(step, *, assign_action, top_off_action):
+def execute_spear_step(step, *, assign_action, top_off_action, dispatcher_approved=False):
     """Route one verified recommendation through a caller's canonical workflow."""
     if step.action_type == "top_off":
+        if not dispatcher_approved:
+            raise ValueError("TOP OFF SENT requires Dispatcher approval.")
         return top_off_action(step)
     if step.action_type == "assign":
         return assign_action(step)
     raise ValueError("Unsupported SPEAR action.")
+
+
+def attach_top_off_approvals(context, actor_id):
+    """Manual rendered actions get an actor/plan-bound approval; automation never does."""
+    plan = context.get('spear_plan')
+    for truck in context.get('truck_visuals', ()):
+        truck['spear_top_off_approval'] = ''
+        step = truck.get('spear_recommendation')
+        if plan and step and step.action_type == 'top_off' and actor_id:
+            truck['spear_top_off_approval'] = URLSafeTimedSerializer(current_app.secret_key,
+                salt='spear-top-off-approval-v1').dumps([actor_id, context['operation'].id,
+                    plan.token, step.mission_id, step.truck_id])
+
+
+def validate_top_off_approval(raw, actor_id, operation_id, plan, step):
+    try:
+        approved = URLSafeTimedSerializer(current_app.secret_key,
+            salt='spear-top-off-approval-v1').loads(raw or '', max_age=1200)
+        return approved == [actor_id, operation_id, plan.token, step.mission_id, step.truck_id]
+    except BadSignature:
+        return False
 
 
 def effective_spear_settings(settings):
@@ -414,10 +439,10 @@ def build_spear_plan(
             continue
 
         fueler_ids = tuple(identifier for identifier in
-            ((assigned_fueler,) if fueler_valid else tuple(fuelers))
+            ((assigned_fueler,) if fueler_valid else () if assigned_fueler is not None and assigned_truck is None else tuple(fuelers))
             if not occupied_fuelers.get(identifier, set()) - {mission_id})
         truck_ids = tuple(identifier for identifier in
-            ((assigned_truck,) if truck_valid else tuple(usable_trucks))
+            ((assigned_truck,) if truck_valid else () if assigned_truck is not None and assigned_fueler is None else tuple(usable_trucks))
             if not occupied_trucks.get(identifier, set()) - {mission_id})
         candidates = []
         top_off_candidates = []
@@ -502,7 +527,7 @@ def build_spear_plan(
                 SpearPlanStep(
                     "top_off", mission_id, mission.flight_number or "-", ramp,
                     truck_id, str(truck.truck_number), None, "", None, None,
-                    "AT RISK", "Protect reserve before future assignment",
+                    "AT RISK", "Protect reserve before future assignment", automatic_eligible=False,
                     truck_location_provenance=_location_provenance(
                         truck_state[truck_id]
                     ),
@@ -556,6 +581,7 @@ def build_spear_plan(
                     and timing is not None
                     and timing.total_duration_minutes is not None
                     and _departure_at(row) is not None
+                    and not invalid_sent_resource
                     and not bool(row.get("work_has_begun"))
                     and fueler_state[fueler_id].workload == 0
                     and truck_state[truck_id].workload == 0
@@ -951,6 +977,7 @@ def _assignment_explanation(
             {
                 "rank": rank,
                 "fueler_id": candidate["fueler_id"],
+                "truck_id": candidate["truck_id"],
                 "truck_number": str(truck.truck_number),
                 "fueler_name": _fueler_name(fueler),
                 "complete": _display_time(candidate["finish"], mission),

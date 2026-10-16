@@ -6,6 +6,7 @@ from sqlalchemy import inspect, text
 
 from app.extensions import db
 from app.models import (
+    NeoScorpionSpearObservation,
     NeoScorpionPendingUplift,
     NeoScorpionDispatchPreference,
     NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
@@ -38,6 +39,7 @@ NEOSCORPION_SCHEMA_LOCK_KEY = 7_483_327_341_912
 NEOSCORPION_SCHEMA_LOCK_TIMEOUT = "5s"
 
 NEOSCORPION_MODEL_TABLES = (
+    NeoScorpionSpearObservation,
     NeoScorpionDispatchPreference,
     NeoScorpionTailFuelState,
     NeoScorpionFuelTruck,

@@ -102,6 +102,33 @@ def export_learning_record(record, _config=None):
     return {"key": key, "checksum": checksum, "already_saved": False}
 
 
+def export_decision_record(record, _config=None):
+    """Separate validated contract; completed-outcome v1/v2/v3 remain unchanged."""
+    from app.services.neoscorpion_spear_decisions import validate_record
+    validate_record(record)
+    config = _require_r2_config(_config)
+    body = _canonical_json(record)
+    checksum = hashlib.sha256(body).hexdigest()
+    key = (f"decision-observation/v1/{record['gateway_id']}/{record['operation_id']}/"
+           f"{record['id']}/{checksum}.json.gz")
+    client = _r2_client(config)
+    try:
+        client.head_object(Bucket=config['bucket'], Key=key)
+        return {'key': key, 'checksum': checksum, 'already_saved': True}
+    except Exception as exc:
+        status = getattr(exc, 'response', {}).get('ResponseMetadata', {}).get('HTTPStatusCode')
+        if status != 404:
+            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    try:
+        client.put_object(Bucket=config['bucket'], Key=key, Body=gzip.compress(body),
+            ContentType='application/json', ContentEncoding='gzip',
+            Metadata={'schema-version': record['schema_version'], 'record-type': record['record_type'],
+                      'checksum': checksum, 'training-eligible': 'false'})
+    except Exception as exc:
+        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    return {'key': key, 'checksum': checksum, 'already_saved': False}
+
+
 def list_learning_records(*, limit=50, _config=None):
     config = _require_r2_config(_config)
     try:

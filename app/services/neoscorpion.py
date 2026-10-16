@@ -85,11 +85,8 @@ from app.services.neoscorpion_spear_calibration import (
 from app.services.neoscorpion_dispatch_planning import (
     _assignment_finished,
     DEFAULT_PLANNING_INBOUND_FALLBACK_LBS,
-    assignment_mission_timing,
-    build_resource_calendars,
     estimate_fuel_demand_gallons,
     project_truck_remaining,
-    recommend_assignment_resources,
 )
 from app.services.time_display import format_local_hhmm
 from app.services.gateway_matrix import gateway_timezone
@@ -403,22 +400,6 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
         # A savepoint keeps a provider/ORM failure from contaminating the manual
         # context assembly; the fallback below still rolls back and rebuilds.
         with db.session.begin_nested():
-            _attach_dispatch_assignment_recommendations(
-                context["rows"],
-                operation=context["operation"],
-                gateway=gateway,
-                settings=context["settings"],
-                nightly_assignment_fuelers=context["nightly_assignment_fuelers"],
-                operational_names={
-                    user.id: operational_fueler_name(user, nicknames)
-                    for user in context["nightly_assignment_fuelers"]
-                },
-                nightly_assignment_trucks=context["nightly_assignment_trucks"],
-                nightly_truck_states_by_truck_id=context[
-                    "nightly_truck_states_by_truck_id"
-                ],
-                now_utc=datetime.utcnow(),
-            )
             stage = "live calibration"
             configured_planning_settings = assignment_planning_settings(
                 gateway, settings=context["settings"]
@@ -475,6 +456,14 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
             context, gateway, nicknames, planning_settings=configured_planning_settings,
         )
         _attach_dispatch_off_estimates(context, gateway, configured_planning_settings, live_calibrations)
+    from app.services.neoscorpion_spear import attach_top_off_approvals
+    attach_top_off_approvals(context, getattr(current_user, "id", None))
+    from app.services.neoscorpion_spear_decisions import attach_references
+    try:
+        with db.session.begin_nested():
+            attach_references(context, gateway)
+    except Exception:
+        current_app.logger.warning("SPEAR rendered learning evidence unavailable", exc_info=True)
     return context
 
 
@@ -1815,6 +1804,8 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
         .first()
     )
     _check_dispatch_segment_reference(assignment,form)
+    from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
+    spear_before = scope(operation, mission, assignment, asset_state.revision)
     assignment_created = assignment is None
     current_fueler_id = assignment.assigned_fueler_user_id if assignment else None
     current_truck_id = assignment.assigned_truck_id if assignment else None
@@ -2085,6 +2076,10 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
 
     if changed or assignment_created:
         db.session.flush()
+    if resource_change_requested:
+        action = 'unassignment' if requested_fueler_id is None or requested_truck_id is None else ('initial_assignment' if assignment_created or not (current_fueler_id or current_truck_id) else 'reassignment')
+        observe(gateway, assignment, spear_before, action, now=now_utc,
+            reference=form.get('spear_decision_reference'))
     return DispatchSaveResult(
         assignment=assignment,
         changed=changed or assignment_created,
@@ -3613,6 +3608,8 @@ def start_follow_up_fuel_cycle(
         assignment_id,
         action_label=f"START {cycle_type.upper()}",
     )
+    from app.services.neoscorpion_spear_decisions import prepare_scope, observe
+    spear_before = prepare_scope(operation, mission, assignment, asset_state.revision)
     _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
     from app.services.neoscorpion_pending_uplift import outstanding
     queued=outstanding(assignment.id,lock=True)
@@ -3805,6 +3802,8 @@ def start_follow_up_fuel_cycle(
 
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    if fueler_user_id is not None or fuel_truck_id is not None:
+        observe(gateway, assignment, spear_before, 'initial_assignment', actor=user, now=now_utc)
     return FuelCycleStartResult(
         changed=True,
         revision=int(asset_state.revision),
@@ -4273,6 +4272,8 @@ def swap_assignment_fueler(
         assignment_id,
         action_label="FUELER SWAP",
     )
+    from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
+    spear_before = scope(operation, mission, assignment, asset_state.revision)
     _validate_precompletion_assignment(assignment, mission, "FUELER SWAP")
     replacement_user_id = _int_or_none(replacement_user_id)
     if replacement_user_id is None:
@@ -4323,6 +4324,7 @@ def swap_assignment_fueler(
     )
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    observe(gateway, assignment, spear_before, 'fueler_swap', actor=user, now=now_utc)
     return FuelInterruptionResult(
         True,
         int(asset_state.revision),
@@ -4350,6 +4352,8 @@ def swap_assignment_truck(
         assignment_id,
         action_label="TRUCK SWAP",
     )
+    from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
+    spear_before = scope(operation, mission, assignment, asset_state.revision)
     _validate_precompletion_assignment(assignment, mission, "TRUCK SWAP")
     replacement_truck_id = _int_or_none(replacement_truck_id)
     if replacement_truck_id is None:
@@ -4408,6 +4412,7 @@ def swap_assignment_truck(
     )
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    observe(gateway, assignment, spear_before, 'truck_swap', actor=user, now=now_utc)
     return FuelInterruptionResult(
         True,
         int(asset_state.revision),
@@ -4426,6 +4431,8 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
     now_utc = now_utc or datetime.utcnow()
     operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
     assignment, mission = _locked_current_fuel_assignment(operation, assignment_id, action_label="UNASSIGN TRUCK")
+    from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
+    spear_before = scope(operation, mission, assignment, asset_state.revision)
     if expected_cycle is None or expected_tail is None:
         raise ValueError("Refresh before unassigning the truck.")
     _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
@@ -4447,6 +4454,7 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
             "Dispatcher cleared the truck before physical ON; preparation preserved.",fuel_work_state=work,now_utc=now_utc)
         asset_state=record_nightly_operational_change(asset_state,operation.id)
         db.session.flush()
+        observe(gateway, assignment, spear_before, 'unassignment', actor=user, now=now_utc)
         return FuelInterruptionResult(True,int(asset_state.revision),assignment,work)
     tanks = _locked_tank_states(work)
     events = _locked_fueling_events(work)
@@ -4471,6 +4479,7 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
     _record_assigned_fueler_update(assignment, ("Truck: UNASSIGNED",), now_utc=now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    observe(gateway, assignment, spear_before, 'unassignment', actor=user, now=now_utc)
     return FuelInterruptionResult(True, int(asset_state.revision), assignment, work,
         fueling_event=event, audit_entries=(audit,))
 
@@ -6764,19 +6773,15 @@ def _fuel_rows(
     return rows
 
 
-_DISPATCH_RECOMMENDATION_REASON_LABELS = {
-    "no_feasible_pair": "NO FEASIBLE PAIR",
-    "deadline_at_risk": "DEADLINE AT RISK",
-    "no_eligible_fueler": "NO ELIGIBLE FUELER",
-    "no_eligible_truck": "NO ELIGIBLE TRUCK",
-}
-
-
 def _attach_spear_plan(rows, truck_visuals, plan):
     """Decorate the existing bounded dispatch rows/cards with the fleet plan."""
     rows_by_mission_id = {row["mission"].id: row for row in rows}
     for row in rows:
         mission_id = row["mission"].id
+        row["assignment_recommendation"] = None
+        row["assignment_recommendation_display"] = None
+        row["assignment_recommendation_time_display"] = None
+        row["assignment_recommendation_reason_display"] = None
         row["spear_step"] = None
         row["spear_risk"] = plan.risks_by_mission_id.get(mission_id)
         row["spear_ready"] = (
@@ -6805,7 +6810,18 @@ def _attach_spear_plan(rows, truck_visuals, plan):
         visual["spear_advisory_only"] = False
     for step in plan.steps:
         if step.mission_id in rows_by_mission_id:
-            rows_by_mission_id[step.mission_id]["spear_step"] = step
+            target = rows_by_mission_id[step.mission_id]
+            target["spear_step"] = step
+            if step.action_type == "assign" and step.fueler_id and step.truck_id:
+                target["assignment_recommendation"] = SimpleNamespace(
+                    available=not step.requires_resource_release, fueler_id=step.fueler_id,
+                    truck_id=step.truck_id, feasible_start_utc=step.projected_start_at_utc,
+                    predicted_finish_utc=step.projected_complete_at_utc)
+                target["assignment_recommendation_display"] = f"{step.fueler_name} / Truck {step.truck_number}"
+                target["assignment_recommendation_time_display"] = (
+                    f"{format_local_hhmm(step.projected_start_at_utc, getattr(target['mission'], 'timezone', None))} - "
+                    f"{format_local_hhmm(step.projected_complete_at_utc, getattr(target['mission'], 'timezone', None))}")
+
         visual = visuals_by_truck_id.get(step.truck_id)
         if (visual is not None and visual["spear_recommendation"] is None
                 and step.truck_id not in plan.occupied_truck_next):
@@ -6849,180 +6865,6 @@ def _attach_spear_plan(rows, truck_visuals, plan):
                 "NEXT PENDING · MISSION DATA" if plan.waiting_for_data_count else
                 "NEXT UNAVAILABLE"
             )
-
-
-def _attach_dispatch_assignment_recommendations(
-    rows,
-    *,
-    operation,
-    gateway,
-    settings,
-    nightly_assignment_fuelers,
-    operational_names,
-    nightly_assignment_trucks,
-    nightly_truck_states_by_truck_id,
-    now_utc,
-):
-    """Attach advisory assignment recommendations from the already-loaded dispatch set."""
-    for row in rows:
-        row["assignment_recommendation"] = None
-        row["assignment_recommendation_display"] = None
-        row["assignment_recommendation_time_display"] = None
-        row["assignment_recommendation_reason_display"] = None
-
-    planning_settings = assignment_planning_settings(gateway, settings=settings)
-    resource_calendars = build_resource_calendars(
-        (
-            {
-                "assignment": row["assignment"],
-                "mission": row["mission"],
-                "work_state": row["fuel_work_state"],
-                "aircraft_type": row["detailed_aircraft_type"],
-                "planning_demand_gallons": row["planning_demand_gallons"],
-            }
-            for row in rows
-            if row["assignment"] is not None
-        ),
-        operation=operation,
-        planning_settings=planning_settings,
-        now_utc=now_utc,
-    )
-    occupied_fuelers, occupied_trucks = _current_resource_owners(rows)
-    fueler_candidates = tuple(
-        {
-            "id": fueler.id,
-            "sort_key": "\x00".join(
-                (
-                    (fueler.last_name or "").casefold(),
-                    (fueler.first_name or "").casefold(),
-                    (fueler.username or "").casefold(),
-                )
-            ),
-        }
-        for fueler in nightly_assignment_fuelers
-    )
-    truck_candidates = tuple(
-        {
-            "id": truck.id,
-            "sort_key": str(truck.truck_number or ""),
-        }
-        for truck in nightly_assignment_trucks
-    )
-    fueler_names = operational_names
-    truck_numbers = {
-        truck.id: truck.truck_number for truck in nightly_assignment_trucks
-    }
-    candidate_trucks_by_mission_id = _dispatch_recommendation_truck_candidates(
-        rows,
-        truck_candidates=truck_candidates,
-        nightly_truck_states_by_truck_id=nightly_truck_states_by_truck_id,
-    )
-
-    for row in rows:
-        timing = assignment_mission_timing(
-            mission=row["mission"],
-            operation=operation,
-            aircraft_type=row["detailed_aircraft_type"],
-            planning_demand_gallons=row["planning_demand_gallons"],
-            planning_settings=planning_settings,
-        )
-        recommendation = recommend_assignment_resources(
-            assignment=row["assignment"],
-            mission_timing=timing,
-            fueler_candidates=tuple(candidate for candidate in fueler_candidates
-                if not occupied_fuelers.get(candidate["id"], set()) - {row["mission"].id}),
-            truck_candidates=tuple(candidate for candidate in candidate_trucks_by_mission_id[row["mission"].id]
-                if not occupied_trucks.get(candidate["id"], set()) - {row["mission"].id}),
-            resource_calendars=resource_calendars,
-            now_utc=now_utc,
-        )
-        row["assignment_recommendation"] = recommendation
-        if recommendation.available:
-            parts = []
-            assignment = row["assignment"]
-            if not (assignment and assignment.assigned_fueler_user_id is not None):
-                parts.append(fueler_names.get(recommendation.fueler_id, "Fueler"))
-            if not (assignment and assignment.assigned_truck_id is not None):
-                parts.append(
-                    f"Truck {truck_numbers.get(recommendation.truck_id, recommendation.truck_id)}"
-                )
-            row["assignment_recommendation_display"] = " · ".join(parts)
-            row["assignment_recommendation_time_display"] = (
-                f"{format_local_hhmm(recommendation.feasible_start_utc, row['mission'].timezone)}"
-                f"–{format_local_hhmm(recommendation.predicted_finish_utc, row['mission'].timezone)}"
-            )
-        else:
-            row["assignment_recommendation_reason_display"] = (
-                _DISPATCH_RECOMMENDATION_REASON_LABELS.get(
-                    recommendation.unavailable_reason
-                )
-            )
-
-
-def _dispatch_recommendation_truck_candidates(
-    rows,
-    *,
-    truck_candidates,
-    nightly_truck_states_by_truck_id,
-):
-    """Use the established ordered truck projection for each advisory candidate."""
-    candidates_by_mission_id = {}
-    for row in rows:
-        assignment = row["assignment"]
-        if assignment and assignment.assigned_truck_id is not None:
-            state = nightly_truck_states_by_truck_id.get(assignment.assigned_truck_id)
-            candidates_by_mission_id[row["mission"].id] = (
-                truck_candidates if state is not None and state.inventory_verified else ()
-            )
-            continue
-        eligible = []
-        for truck in truck_candidates:
-            truck_id = truck["id"]
-            state = nightly_truck_states_by_truck_id.get(truck_id)
-            if state is None or state.current_gallons is None or not state.inventory_verified:
-                continue
-            candidate_key = ("recommendation", row["mission"].id, truck_id)
-            ordered_demands = []
-            for candidate_row in rows:
-                candidate_assignment = candidate_row["assignment"]
-                if candidate_row is row:
-                    ordered_demands.append(
-                        (candidate_key, truck_id, row["planning_demand_gallons"])
-                    )
-                if (
-                    candidate_assignment is not None
-                    and candidate_assignment.assigned_truck_id is not None
-                    and not candidate_row["administratively_complete"]
-                ):
-                    assigned_state = nightly_truck_states_by_truck_id.get(
-                        candidate_assignment.assigned_truck_id
-                    )
-                    if assigned_state is not None and assigned_state.status != "needs_sump":
-                        ordered_demands.append(
-                            (
-                                candidate_row["mission"].id,
-                                candidate_assignment.assigned_truck_id,
-                                candidate_row["planning_demand_gallons"],
-                            )
-                        )
-            projection = project_truck_remaining(
-                {
-                    selected_truck_id: (selected_state.current_gallons if selected_state.inventory_verified else None)
-                    for selected_truck_id, selected_state in (
-                        nightly_truck_states_by_truck_id.items()
-                    )
-                    if selected_state.status != "needs_sump"
-                },
-                ordered_demands,
-            ).get(candidate_key)
-            if (
-                projection is not None
-                and projection.gallons is not None
-                and not projection.short
-            ):
-                eligible.append(truck)
-        candidates_by_mission_id[row["mission"].id] = tuple(eligible)
-    return candidates_by_mission_id
 
 
 def _fuel_work_states_by_assignment_tail(assignments):
