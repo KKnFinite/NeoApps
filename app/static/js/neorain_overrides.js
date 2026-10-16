@@ -49,6 +49,7 @@
           note(root, action === 'reset' ? 'Reset saved.' : 'Saved.');
         }
       } catch (error) {
+        if (sequence !== root._rainSequence) return;
         note(root, error.message, true);
         const checkbox = root.querySelector('[data-rain-override-checkbox]');
         if (checkbox) { checkbox.checked = checkbox.dataset.saved === 'true'; delete root.dataset.rainOverrideDirty; }
@@ -58,26 +59,33 @@
     const next = (queues.get(id) || Promise.resolve()).then(work, work);
     queues.set(id, next);
   };
+  // One reset action for the selected field; no controls repeated in each row.
+  let selected = null;
+  const tools = document.querySelector('[data-rain-reset-tools]');
+  const choose = root => {
+    selected = root;
+    if (!tools) return;
+    const button = tools.querySelector('[data-rain-reset-selected]');
+    button.disabled = !root;
+    const label = root ? root.getAttribute('aria-label') : '';
+    tools.querySelector('[data-rain-reset-selection]').textContent = label;
+    button.title = root ? 'Reset ' + label + ' to Google' : 'Select a time or checkbox to reset it to Google';
+  };
+  document.addEventListener('focusin', event => {
+    if (event.target.matches('[data-rain-override-time], [data-rain-override-checkbox]') && !event.target.disabled) {
+      choose(event.target.closest('[data-rain-override-mission]'));
+    } else if (!event.target.closest('[data-rain-reset-tools]')) choose(null);
+  });
   document.addEventListener('click', event => {
-    const root = event.target.closest('[data-rain-override-mission]');
-    if (!root) return;
-    if (event.target.closest('[data-rain-override-open]')) {
-      const editor = root.querySelector('[data-rain-override-editor]');
-      editor.hidden = !editor.hidden;
-      root.querySelector('[data-rain-override-open]').setAttribute('aria-expanded', String(!editor.hidden));
-      if (!editor.hidden) {
-        const input = editor.querySelector('input');
-        const focus = input || editor.querySelector('button');
-        focus.focus();
-        if (input) input.select();
-      }
-    }
-    if (event.target.closest('[data-rain-override-reset]')) submit(root, null, 'reset');
+    if (!event.target.closest('[data-rain-reset-selected]') || !selected || !selected.isConnected) return;
+    submit(selected, null, 'reset');
   });
   document.addEventListener('input', event => {
     if (!event.target.matches('[data-rain-override-time]')) return;
     const root = event.target.closest('[data-rain-override-mission]');
     root.dataset.rainOverrideDirty = 'true';
+    // Every keystroke supersedes older responses, including blank/partial drafts.
+    root._rainSequence = (root._rainSequence || 0) + 1;
     const raw = event.target.value;
     if (validClock(raw)) submit(root, raw);
     else note(root, raw.length === 4 ? 'Invalid time.' : 'Enter four digits.', raw.length === 4);

@@ -12,20 +12,25 @@ class CompactRainTemplateTest(unittest.TestCase):
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
 
-    def test_boards_render_values_icons_and_accessible_names_without_source_labels(self):
+    def test_boards_render_inline_inputs_and_one_shared_reset_without_source_labels(self):
         for board in ('inbound', 'outbound'):
             response = self.fixture.client.get('/neorain/' + board)
             self.assertEqual(response.status_code, 200)
             html = response.get_data(as_text=True)
             self.assertNotIn('<small data-rain-override-source', html)
             self.assertNotIn('>Use Google</button>', html)
-            readouts = re.findall(r'<span data-rain-override-readout>(.*?)</span>', html)
-            self.assertTrue(readouts)
-            self.assertTrue(all(re.fullmatch(r'\d{2}:\d{2}|\u2014', value) for value in readouts))
-            self.assertIn('data-rain-override-editor hidden', html)
-            self.assertIn('aria-expanded="false"', html)
-            self.assertIn('aria-label="Reset ', html)
-            self.assertIn('20261015-compact-overrides-v2', html)
+            inputs = re.findall(r'<input[^>]*data-rain-override-time[^>]*>', html)
+            self.assertTrue(inputs)
+            for control in inputs:
+                self.assertIn('maxlength="4"', control)
+                self.assertIn('inputmode="numeric"', control)
+                self.assertIn('(HHMM)', control)
+                self.assertRegex(control, r'value="(?:[0-9]{4})?"')
+            self.assertNotIn('data-rain-override-editor', html)
+            self.assertNotIn('data-rain-override-open', html)
+            self.assertNotIn('data-rain-override-reset', html)
+            self.assertEqual(html.count('type="button" data-rain-reset-selected'), 1)
+            self.assertIn('20261015-inline-times-v3', html)
         self.assertIn('aria-label="Include for UPS948"', html)
         self.assertNotIn('>Include</label>', html)
         self.assertNotIn('>No Return</label>', html)
@@ -37,8 +42,7 @@ class CompactRainTemplateTest(unittest.TestCase):
         for board in ('inbound', 'outbound'):
             html = self.fixture.client.get('/neorain/' + board).get_data(as_text=True)
             # Match HTML attributes, excluding the CSS/JS selector definitions.
-            self.assertNotIn('type="button" data-rain-override-open', html)
-            self.assertNotIn('type="button" data-rain-override-reset', html)
+            self.assertNotRegex(html, r'<input[^>]*data-rain-override-time')
 
     def test_watcher_keeps_readouts_without_editing_controls(self):
         watcher = self.fixture.fixture._user('compact_watcher', 'watcher', rain_role='watcher')
@@ -48,5 +52,4 @@ class CompactRainTemplateTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             html = response.get_data(as_text=True)
             self.assertIn('<span data-rain-override-readout>', html)
-            self.assertNotIn('type="button" data-rain-override-open', html)
-            self.assertNotIn('type="button" data-rain-override-reset', html)
+            self.assertNotRegex(html, r'<input[^>]*data-rain-override-time')

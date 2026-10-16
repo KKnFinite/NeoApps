@@ -32,6 +32,7 @@
         <div data-neorain-summary-total><strong>TOTAL</strong><span>AIRCRAFT LATE <output data-neorain-late-summary-value="total.aircraft_late">{{ late_summary.total.aircraft_late }}</output></span><span>LATE MINUTES <output data-neorain-late-summary-value="total.late_minutes">{{ late_summary.total.late_minutes }}</output></span><span>AVERAGE <output data-neorain-late-summary-value="total.average">{{ late_summary.total.average }}</output></span></div>
     </section>
     </div>
+    {% include "neonodes/neorain/_override_reset_tools.html" %}
     <div class="neorain-board-content" data-neorain-outbound-content>
         {% include "neonodes/neorain/_outbound_content.html" %}
     </div>

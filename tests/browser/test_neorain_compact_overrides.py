@@ -46,88 +46,180 @@ class CompactRainBrowserTest(unittest.TestCase):
         cls.stack.close()
         cls.fixture.tearDownClass()
 
+    cases = (('inbound', 'arrival', 'block_in'), ('outbound', 'departure', 'ramp_load_complete'))
+    attrs = {'block_in': ('actual_block_in_datetime_utc', 'actual_block_in_source'),
+             'ramp_load_complete': ('ramp_load_completed_at_utc', 'ramp_load_completed_source')}
+
+    def upstream(self, kind, field, value):
+        # The same canonical import fence used by Google refresh, without external I/O.
+        from app.services.neorain_overrides import observe_import
+        with self.fixture.app.app_context():
+            mission = db.session.get(SortDateMission, self.ids[kind])
+            attr, source = self.attrs[field]
+            values = {attr: value, source: 'google_rain'}
+            observe_import(mission, field, values)
+            for key, item in values.items():
+                setattr(mission, key, item)
+            db.session.commit()
+
+    def clear(self, kind, field):
+        from app.models import User
+        from app.services.neorain_overrides import edit_override
+        with self.fixture.app.app_context():
+            mission = db.session.get(SortDateMission, self.ids[kind])
+            operation = db.session.get(SortDateOperation, self.operation_id)
+            edit_override(mission, operation, field, None, User.query.filter_by(username='drawer-admin').one(), reset=True)
+            db.session.commit()
+        self.upstream(kind, field, None)
+
+    def cell(self, page, field):
+        return page.locator(f'.rain-override[data-rain-override-field="{field}"]:visible').first
+
+    def input(self, page, field):
+        return self.cell(page, field).locator('[data-rain-override-time]')
+
+    def save(self, page, field, value, status=200):
+        with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as saved:
+            self.input(page, field).fill(value)
+        self.assertEqual(saved.value.status, status)
+        return saved.value.json()
+
+    def reset(self, page, field):
+        self.input(page, field).focus()
+        with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as response:
+            page.locator('[data-rain-reset-selected]').click()
+        self.assertEqual(response.value.status, 200)
+        body = response.value.request.post_data_json
+        self.assertEqual(body['action'], 'reset')
+        self.assertIsNone(body['value'])
+        expect(self.cell(page, field)).not_to_have_attribute('data-rain-override-dirty', 'true')
+        return response.value.json()
+
     def assert_compact(self, page, board):
         root = page.locator(f'[data-neorain-board-page="{board}"]')
-        self.assertNotRegex(root.inner_text(), r'UPSTREAM|GOOGLE|NEO_ONLY|Use Google|Reset to Google')
-        for value in root.locator('[data-rain-override-readout]:visible').all_text_contents():
-            self.assertRegex(value, r'^(?:\d{2}:\d{2}|\u2014)$')
-        self.assertEqual(root.locator('[data-rain-override-reset]:visible').count(), 0)
+        self.assertNotRegex(root.inner_text(), r'UPSTREAM|NEO_ONLY|Use Google')
+        self.assertEqual(root.locator('[data-rain-override-open], [data-rain-override-editor], [data-rain-override-reset]').count(), 0)
+        self.assertEqual(page.locator('[data-rain-reset-selected]').count(), 1)
         self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'))
-        geometry = root.locator('.rain-override:visible').evaluate_all('''els => els.map(el => {
-            const r=el.getBoundingClientRect();
-            return {width:r.width, scroll:el.scrollWidth, height:r.height,
-                nowrap:getComputedStyle(el.querySelector('[data-rain-override-readout]') || el).whiteSpace};
+        geometry = root.locator('[data-rain-override-time]:visible').evaluate_all('''els => els.map(el => {
+            const r=el.getBoundingClientRect(), parent=el.parentElement.getBoundingClientRect();
+            return {width:r.width, parent:parent.width, height:r.height, value:el.value};
         })''')
-        self.assertTrue(all(x['scroll'] <= x['width'] + 1 for x in geometry), geometry)
-        self.assertTrue(all(x['height'] <= 50 for x in geometry), geometry)
+        self.assertTrue(geometry)
+        self.assertTrue(all(x['width'] <= min(58, x['parent']) + 1 and x['height'] == 26 for x in geometry), geometry)
+        self.assertTrue(all(not x['value'] or (x['value'].isdigit() and len(x['value']) == 4) for x in geometry))
 
-    def test_desktop_mobile_autosave_reset_checkboxes_and_refresh(self):
+    def test_desktop_mobile_inline_autosave_reset_and_refresh(self):
         for engine in ('chromium', 'webkit'):
             browser = getattr(self.fixture.pw, engine).launch(headless=True)
             try:
                 for width, height in ((1920, 1080), (390, 844), (375, 667)):
                     with self.subTest(engine=engine, width=width):
                         context = browser.new_context(viewport={'width': width, 'height': height})
-                        page = context.new_page()
-                        errors = []
-                        page.on('pageerror', lambda error: errors.append(str(error)))
-                        self.fixture().login(page)
-                        for board, kind, field in (('inbound', 'arrival', 'block_in'),
-                                                   ('outbound', 'departure', 'ramp_load_complete')):
-                            self.fixture().ready(page, '/neorain/' + board)
-                            self.assert_compact(page, board)
-                            if engine == 'chromium':
-                                page.screenshot(path=str(self.fixture.evidence / f'rain-{board}-compact-{width}.png'))
-                            cell = page.locator(f'.rain-override[data-rain-override-field="{field}"]:visible').first
-                            opener = cell.locator('[data-rain-override-open]')
-                            page.evaluate('window.rainOriginalDocument = true')
-                            opener.click()
-                            expect(opener).to_have_attribute('aria-expanded', 'true')
-                            reset = cell.locator('[data-rain-override-reset]')
-                            expect(reset).to_be_visible()
-                            self.assertLessEqual(reset.bounding_box()['width'], 22)
-                            self.assertTrue(reset.get_attribute('aria-label').startswith('Reset '))
-                            cell.locator('input[type=text]').fill('2460')
-                            expect(cell.locator('[data-rain-override-message]')).to_have_text('Invalid time.')
-                            self.assertTrue(cell.locator('input[type=text]').evaluate('''el => {
-                                const r=el.getBoundingClientRect();
-                                return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2) === el;
-                            }'''))
-                            # Partial input remains a draft until all four digits are valid.
-                            cell.locator('input[type=text]').fill('12')
-                            page.wait_for_timeout(1200)
-                            expect(cell.locator('input[type=text]')).to_have_value('12')
-                            with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as saved:
-                                cell.locator('input[type=text]').fill('1234')
-                            self.assertEqual(saved.value.status, 200)
-                            expect(cell.locator('[data-rain-override-readout]')).to_have_text('12:34')
-                            opener.click()
-                            self.assert_compact(page, board)
-                            # The real existing revision poll reloads canonical controls.
-                            page.wait_for_function('!window.rainOriginalDocument', timeout=20000)
-                            self.assert_compact(page, board)
-                            cell = page.locator(f'.rain-override[data-rain-override-field="{field}"]:visible').first
-                            expect(cell.locator('[data-rain-override-readout]')).to_have_text('12:34')
-                            cell.locator('[data-rain-override-open]').click()
-                            with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as reset_response:
-                                cell.locator('[data-rain-override-reset]').click()
-                            self.assertEqual(reset_response.value.status, 200)
-                            expect(cell.locator('[data-rain-override-readout]')).to_have_text('\u2014')
-                            cell.locator('[data-rain-override-open]').click()
-                            self.assert_compact(page, board)
-                            if board == 'outbound':
-                                checkbox = page.locator('.rain-override[data-rain-override-field="included"]:visible').first
-                                with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as checked:
-                                    checkbox.locator('[data-rain-override-checkbox]').click()
-                                self.assertEqual(checked.value.status, 200)
-                                self.assertNotIn('Include', checkbox.inner_text())
-                                checkbox.locator('[data-rain-override-open]').click()
-                                with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as reset_check:
-                                    checkbox.locator('[data-rain-override-reset]').click()
-                                self.assertEqual(reset_check.value.status, 200)
-                                expect(checkbox.locator('[data-rain-override-checkbox]')).to_be_checked(checked=reset_check.value.json()['value'] is True)
-                                checkbox.locator('[data-rain-override-open]').click()
-                        self.assertEqual(errors, [])
-                        context.close()
+                        try:
+                            page = context.new_page()
+                            errors, posts = [], []
+                            page.on('pageerror', lambda error: errors.append(str(error)))
+                            page.on('request', lambda request: posts.append(request.post_data_json)
+                                if '/neorain/override' in request.url and request.method == 'POST' else None)
+                            self.fixture().login(page)
+                            for board, kind, field in self.cases:
+                                self.clear(kind, field)
+                                self.fixture().ready(page, '/neorain/' + board)
+                                self.assert_compact(page, board)
+                                expect(self.input(page, field)).to_have_value('')
+                                expect(page.locator('[data-rain-reset-selected]')).to_be_disabled()
+                                page.screenshot(path=str(self.fixture.evidence / f'rain-{board}-inline-{engine}-{width}.png'))
+                                before = len(posts)
+                                self.input(page, field).fill('2460')
+                                expect(self.cell(page, field).locator('[data-rain-override-message]')).to_have_text('Invalid time.')
+                                self.input(page, field).fill('12')
+                                self.input(page, field).fill('')
+                                page.wait_for_timeout(200)
+                                self.assertEqual(len(posts), before)
+                                page.evaluate('window.rainOriginalDocument = true')
+                                result = self.save(page, field, '1234')
+                                self.assertEqual(result['value'], '12:34')
+                                expect(self.input(page, field)).to_have_value('1234')
+                                page.wait_for_function('!window.rainOriginalDocument', timeout=20000)
+                                self.assert_compact(page, board)
+                                expect(self.input(page, field)).to_have_value('1234')
+                                self.reset(page, field)
+                                expect(self.input(page, field)).to_have_value('')
+                                if board == 'outbound':
+                                    checkbox = self.cell(page, 'included').locator('[data-rain-override-checkbox]')
+                                    with page.expect_response(lambda r: '/neorain/override' in r.url and r.request.method == 'POST') as checked:
+                                        checkbox.click()
+                                    self.assertEqual(checked.value.status, 200)
+                                    self.assertNotIn('Include', self.cell(page, 'included').inner_text())
+                            self.assertEqual(errors, [])
+                        finally:
+                            context.close()
             finally:
                 browser.close()
+
+    def test_google_refresh_populates_empty_protects_drafts_and_active_override(self):
+        browser = self.fixture.pw.chromium.launch(headless=True)
+        try:
+            for width in (1920, 390):
+                context = browser.new_context(viewport={'width': width, 'height': 900})
+                try:
+                    page = context.new_page()
+                    self.fixture().login(page)
+                    for board, kind, field in self.cases:
+                        with self.subTest(width=width, board=board):
+                            self.clear(kind, field)
+                            self.fixture().ready(page, '/neorain/' + board)
+                            expect(self.input(page, field)).to_have_value('')
+                            self.upstream(kind, field, datetime(2026, 10, 16, 7, 45))
+                            expect(self.input(page, field)).to_have_value('0245', timeout=20000)
+                            self.input(page, field).fill('12')
+                            self.upstream(kind, field, datetime(2026, 10, 16, 8, 10))
+                            expect(page.locator(f'[data-neorain-{board}-live]')).to_have_attribute('data-neorain-refresh-deferred', 'true', timeout=20000)
+                            expect(self.input(page, field)).to_have_value('12')
+                            self.save(page, field, '1234', status=409)
+                            expect(self.input(page, field)).to_have_value('1234')
+                            # Explicit reload recovers from the genuine stale-version conflict.
+                            page.reload()
+                            expect(self.input(page, field)).to_have_value('0310')
+                            self.save(page, field, '1234')
+                            expect(self.cell(page, field)).not_to_have_attribute('data-rain-override-dirty', 'true')
+                            self.upstream(kind, field, datetime(2026, 10, 16, 8, 55))
+                            page.reload()
+                            expect(self.input(page, field)).to_have_value('1234')
+                            self.input(page, field).fill('')
+                            result = self.reset(page, field)
+                            self.assertEqual(result['value'], '03:55')
+                            expect(self.input(page, field)).to_have_value('0355')
+                            self.assert_compact(page, board)
+                finally:
+                    context.close()
+        finally:
+            browser.close()
+
+    def test_inflight_response_preserves_new_partial_and_blank_drafts(self):
+        browser = self.fixture.pw.chromium.launch(headless=True)
+        context = browser.new_context(viewport={'width': 390, 'height': 844})
+        try:
+            page = context.new_page()
+            self.fixture().login(page)
+            for board, kind, field in self.cases:
+                self.clear(kind, field)
+                self.fixture().ready(page, '/neorain/' + board)
+                for draft in ('12', ''):
+                    pending = []
+                    page.route('**/neorain/override', lambda route: pending.append((route, route.fetch())))
+                    self.input(page, field).fill('1400')
+                    page.wait_for_timeout(300)
+                    self.assertEqual(len(pending), 1)
+                    self.input(page, field).fill(draft)
+                    route, response = pending[0]
+                    route.fulfill(response=response)
+                    expect(self.cell(page, field)).to_have_attribute('data-rain-override-version', response.json()['version'])
+                    expect(self.input(page, field)).to_have_value(draft)
+                    expect(self.cell(page, field)).to_have_attribute('data-rain-override-dirty', 'true')
+                    page.unroute('**/neorain/override')
+                    self.reset(page, field)
+        finally:
+            context.close()
+            browser.close()
