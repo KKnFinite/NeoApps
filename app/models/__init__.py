@@ -1,3 +1,4 @@
+from app.models.neorain_fuel_publication import NeoRainFuelPublication
 from app.models.neoscorpion_tail_note import NeoScorpionTailNote
 from app.models.neoscorpion_spear_plan import NeoScorpionSpearPlanSnapshot
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation, NeoScorpionSpearFleetObservation
