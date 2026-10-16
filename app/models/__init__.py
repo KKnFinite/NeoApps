@@ -1,3 +1,4 @@
+from app.models.neoscorpion_pending_uplift import NeoScorpionPendingUplift
 from app.models.auth_rate_limit_state import AuthRateLimitState
 from app.models.neoscorpion_dispatch_preference import NeoScorpionDispatchPreference
 from app.models.neorain_mission_override import NeoRainMissionOverride, NeoRainOverrideAudit
@@ -144,6 +145,7 @@ from app.models.user import User
 from app.models.user_token import UserToken
 
 __all__ = [
+    "NeoScorpionPendingUplift",
     "NeoScorpionVendorAccount", "NeoScorpionVendorNight", "NeoScorpionVendorRequest",
     "NeoScorpionVendorAudit", "NeoScorpionInventoryReading", "NeoScorpionTopOffEvent",
     "User",

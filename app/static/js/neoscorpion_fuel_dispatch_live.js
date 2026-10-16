@@ -223,13 +223,18 @@
             )).find(row => row.dataset.dispatchRowKey.startsWith(`${missionId}-`)) || null;
         };
 
-        const restoreDetailRows = (detailIds) => {
+        const restoreDetailRows = (detailIds, activeDetailIds = []) => {
             if (!Array.isArray(detailIds)) return;
             detailIds.forEach((detailId) => {
-                let detail = document.getElementById(detailId);
-                let toggle = scope.querySelector(
+                // Rollover freezes the former active ID into history. Keep an
+                // open active editor on the mission's new cycle, while an
+                // intentionally opened historical DETAILS stays historical.
+                const active = activeDetailIds.includes(detailId)
+                    ? activeRowForKey(detailId.replace("neoscorpion-dispatch-detail-", "")) : null;
+                let toggle = active?.querySelector("[data-neoscorpion-dispatch-details]") || scope.querySelector(
                     `[data-neoscorpion-dispatch-details][aria-controls="${detailId}"]`
                 );
+                let detail = document.getElementById(toggle?.getAttribute("aria-controls") || detailId);
                 if (!detail || !toggle) {
                     const row = activeRowForKey(detailId.replace("neoscorpion-dispatch-detail-", ""));
                     toggle = row?.querySelector("[data-neoscorpion-dispatch-details]");
@@ -272,6 +277,9 @@
                 tableScrollTop: wrap?.scrollTop || 0,
                 tableScrollLeft: wrap?.scrollLeft || 0,
                 openDetails,
+                openActiveDetails: Array.from(scope.querySelectorAll(
+                    ".neoscorpion-dispatch-primary-row [data-neoscorpion-dispatch-details][aria-expanded='true']"
+                )).map(toggle => toggle.getAttribute("aria-controls")).filter(Boolean),
             };
         };
 
@@ -281,7 +289,7 @@
             if (saved.completing && document.activeElement?.closest(".is-complete")) {
                 document.activeElement.blur();
             }
-            restoreDetailRows(saved.openDetails);
+            restoreDetailRows(saved.openDetails, saved.openActiveDetails);
             if (Number.isFinite(saved.y) || Number.isFinite(saved.x)) {
                 window.scrollTo({
                     top: Number.isFinite(saved.y) ? saved.y : window.scrollY,
@@ -515,7 +523,8 @@
 
     const protectedControls = () => Array.from(root.querySelectorAll(
         "select[name='assigned_fueler_user_id']:not([disabled]), "
-        + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden])"
+        + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden]), "
+        + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select"
     ));
 
     const resetProtectedBaselines = () => {
@@ -906,6 +915,12 @@
 
     const submitLifecycleAction = async (form, button) => {
         if (lifecycleSaving) return;
+        if (form.matches("[data-pending-uplift-form]") && button?.value === "retry"
+                && protectedControls().some(control => control.form === form && initialControlValues.get(control) !== controlValue(control))) {
+            setStatus(form.querySelector("[data-lifecycle-status]"), "Save pending uplift changes before retrying promotion.", "error");
+            return;
+        }
+        const pendingControls = [];
         const status = form.querySelector("[data-lifecycle-status]");
         if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
         lifecycleSaving = true;
@@ -913,13 +928,27 @@
         setStatus(status, "Saving...");
         syncDirtyState();
         try {
+            const body = new FormData(form);
+            if (button?.name) body.set(button.name, button.value);
+            if (form.matches("[data-pending-uplift-form]")) {
+                Array.from(form.elements).filter(control => !control.disabled).forEach(control => {
+                    pendingControls.push(control);
+                    control.disabled = true;
+                });
+            }
+
             const response = await fetch(form.getAttribute("action"), {
-                method: "POST", body: new FormData(form), cache: "no-store", credentials: "same-origin",
+                method: "POST", body, cache: "no-store", credentials: "same-origin",
                 headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Action failed.");
             lifecycleSaving = false;
+            if (form.matches("[data-pending-uplift-form]")) {
+                if (form.elements.expected_version && payload.pending_version) form.elements.expected_version.value = String(payload.pending_version);
+                protectedControls().filter(control => control.form === form)
+                    .forEach(control => initialControlValues.set(control, controlValue(control)));
+            }
             setStatus(status, payload.changed ? "Saved" : "No change");
             // The existing panel refresh preserves row/details/scroll and defers
             // while another field or the shared Fueler Data modal is in use.
@@ -928,6 +957,7 @@
         } catch (error) {
             setStatus(status, `Save Failed: ${error.message || "Unable to save."}`, "error");
         } finally {
+            pendingControls.forEach(control => { control.disabled = false; });
             lifecycleSaving = false;
             if (button) button.disabled = false;
             syncDirtyState();

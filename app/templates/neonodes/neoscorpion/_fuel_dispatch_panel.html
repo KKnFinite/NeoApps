@@ -223,12 +223,29 @@
                         <td class="neoscorpion-dispatch-action-cell neoscorpion-dispatch-size-medium"><div class="neoscorpion-dispatch-action-stack neoscorpion-dispatch-size-medium">{% if can_edit and row.confirm_tail_available %}<span class="neoscorpion-dispatch-size-small">CONFIRM IN DETAILS</span>{% endif %}{% if editable %}{% if row.fuel_on_board_ready %}<button form="{{ assignment_form_id }}" class="action-button neoscorpion-dispatch-size-medium" type="submit" formaction="{{ url_for('neoscorpion.fuel_on_board') }}" formmethod="post">FOB</button>{% endif %}{% if row.normal_completion_ready %}<button form="{{ assignment_form_id }}" class="action-button neoscorpion-dispatch-size-medium" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_complete') }}" formmethod="post">COMPLETE</button>{% endif %}<button form="{{ assignment_form_id }}" class="action-button neoscorpion-save-button neoscorpion-dispatch-assignment-action neoscorpion-dispatch-size-medium" type="submit" data-dispatch-assignment-submit>{{ "UPDATE" if row.assignment else "ASSIGN" }}</button><small class="neoscorpion-save-status neoscorpion-dispatch-save-status" data-assignment-save-status aria-live="polite"></small>{% else %}<small>{{ row.normal_completion_reason }}</small>{% endif %}</div></td>
                     <td class="neoscorpion-dispatch-size-small"><button class="neoscorpion-dispatch-details-toggle neoscorpion-dispatch-size-small" type="button" data-neoscorpion-dispatch-details aria-expanded="false" aria-controls="{{ detail_row_id }}">DETAILS <span aria-hidden="true">⌄</span></button></td>
                 </tr>
+                {% if row.pending_uplift %}{% include "neonodes/neoscorpion/_pending_uplift.html" %}{% endif %}
+                {% if can_edit and not row.administratively_complete and not row.pending_uplift %}
+                <tr class="neoscorpion-pending-create-mobile" data-dispatch-sort-group="{{ row.mission.id }}"><td colspan="16">
+                    <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_pending_uplift') }}" data-dispatch-lifecycle-form data-pending-uplift-form>
+                    {{ csrf_field() }}<input type="hidden" name="assignment_id" value="{{ row.assignment.id if row.assignment else '' }}"><input type="hidden" name="mission_id" value="{{ row.mission.id }}">
+                    <input type="hidden" name="expected_cycle" value="{{ row.cycle_number }}"><input type="hidden" name="expected_tail" value="{{ row.tail_number }}">
+                    <button class="action-button" type="submit" name="pending_action" value="create">ADD PENDING UPLIFT</button><small data-lifecycle-status role="status"></small>
+                    </form>
+                </td></tr>{% endif %}
+
                 <tr id="{{ detail_row_id }}" class="neoscorpion-dispatch-detail-row" data-dispatch-sort-group="{{ row.mission.id }}" data-neoscorpion-dispatch-detail-row hidden>
                     <td colspan="16"><div class="neoscorpion-dispatch-detail-grid">
                         <section><strong>FLIGHT DATA</strong><dl><div><dt>Aircraft Type</dt><dd>{{ row.aircraft_type if row.aircraft_type and row.aircraft_type != "UNKNOWN" else "-" }}</dd></div><div><dt>FOB</dt><dd>{{ row.fob_display or '-' }}</dd></div><div><dt>ON / OFF</dt><dd>{{ row.on_time }} / {{ row.off_time }}</dd></div><div><dt>Estimated Fuel</dt><dd>{{ row.estimated_fuel_display }}{% if row.estimated_fuel_source == 'fallback' %} · {{ row.estimated_fuel_source_label }}{% endif %}</dd></div><div><dt>Projected Truck</dt><dd class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</dd></div></dl></section>
                         {% include "neonodes/neoscorpion/_outstanding_work.html" %}
                         <section><strong>FUELER SUBMISSION</strong><p data-dispatch-fueler-submission>{% if row.fueler_submitted %}READY FOR DISPATCHER COMPLETE{% else %}{{ row.fueler_completion_reason or "Fueler COMPLETE ASSIGNMENT required." }}{% endif %}</p></section>
                         <section><strong>FUELER NOTES</strong><p data-fueler-notes style="white-space: pre-wrap; overflow-wrap: anywhere">{{ row.fueler_notes or '-' }}</p></section>
+                        {% if can_edit and not row.administratively_complete and not row.pending_uplift %}
+                        <section><form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_pending_uplift') }}" data-dispatch-lifecycle-form data-pending-uplift-form>
+                            {{ csrf_field() }}<input type="hidden" name="assignment_id" value="{{ row.assignment.id if row.assignment else '' }}"><input type="hidden" name="mission_id" value="{{ row.mission.id }}">
+                            <input type="hidden" name="expected_cycle" value="{{ row.cycle_number }}"><input type="hidden" name="expected_tail" value="{{ row.tail_number }}">
+                            <button class="action-button" type="submit" name="pending_action" value="create">ADD PENDING UPLIFT</button><small data-lifecycle-status role="status"></small>
+                        </form></section>
+                        {% endif %}
                         <section><strong>LOAD PLANNING</strong><div class="neoscorpion-dispatch-detail-stack">{% if row.load_planning_ready %}<span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span><button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>{% else %}<span>{{ row.load_planning_placeholder }}</span>{% endif %}<span data-dispatch-load-planner>Load Planner: {{ row.load_planner_name }}</span></div></section>
                         {% if can_edit and row.assignment %}
                         <section class="neoscorpion-dispatch-detail-actions">

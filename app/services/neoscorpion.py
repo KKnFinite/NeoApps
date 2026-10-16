@@ -3580,6 +3580,7 @@ def start_follow_up_fuel_cycle(
     now_utc=None,
     expected_cycle=None,
     expected_tail=None,
+    pending_uplift_id=None,
 ):
     operation = current_sort_operation(gateway)
     if not operation:
@@ -3605,6 +3606,10 @@ def start_follow_up_fuel_cycle(
         action_label=f"START {cycle_type.upper()}",
     )
     _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
+    from app.services.neoscorpion_pending_uplift import outstanding
+    queued=outstanding(assignment.id,lock=True)
+    if queued is not None and queued.id != pending_uplift_id:
+        raise ValueError("Resolve the saved pending uplift before starting another fuel cycle.")
     if assignment.fuel_on_board_at_utc is not None:
         raise ValueError("Fuel On Board assignments cannot start a physical follow-up cycle.")
     if assignment.completed_at_utc is None:
@@ -3976,6 +3981,10 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
     mission.fuel_completed_at_utc = now_utc
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    if source_work is None or not assignment._detached_segment:
+        from app.services.neoscorpion_pending_uplift import promote_after_completion
+        promote_after_completion(gateway,user,operation,parent_assignment,parent_mission,now_utc)
+        asset_state=db.session.get(NeoScorpionSortAssetState,asset_state.id)
     return DispatcherCompleteResult(
         changed=True,
         revision=int(asset_state.revision),

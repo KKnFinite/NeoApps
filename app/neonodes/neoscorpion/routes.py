@@ -459,6 +459,24 @@ def fuel_on_board():
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
+@bp.post("/fuel-dispatch/pending-uplift")
+@gateway_node_required("scorpion")
+def fuel_dispatch_pending_uplift():
+    access=permission_access(FUEL_DISPATCH_VIEW_PERMISSION,FUEL_DISPATCH_EDIT_PERMISSION)
+    if not access['can_view'] or not access['can_edit']:
+        return _json_no_store({'ok':False,'error':'Access denied.'},403)
+    from app.services.neoscorpion_pending_uplift import save_pending_uplift,PendingUpliftConflict
+    try:
+        result=save_pending_uplift(get_current_gateway(),current_user,request.form)
+        db.session.commit()
+    except (ValueError,IntegrityError) as exc:
+        db.session.rollback()
+        return _json_no_store({'ok':False,'error':str(exc) if isinstance(exc,ValueError) else 'Pending uplift changed; refresh and review.'},
+            409 if isinstance(exc,(PendingUpliftConflict,IntegrityError)) else 400)
+    return _json_no_store({'ok':True,'changed':result.changed,'revision':result.revision,
+        'pending_status':result.pending.status,'pending_version':result.pending.version})
+
+
 @bp.post("/fuel-dispatch/complete")
 @gateway_node_required("scorpion")
 def fuel_dispatch_complete():
@@ -1820,7 +1838,8 @@ def completed_fuel():
 def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
     # All projections, scheduling and SPEAR enrichment finish in their existing
     # order. Sort a new list only for these two Dispatch render paths.
-    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices)
+    from app.services.neoscorpion_pending_uplift import attach_pending
+    context = attach_pending(fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices))
     rows = [dict(row) for row in context["rows"]]
     # Browser reorders existing DOM groups using ranks derived from full UTC
     # timestamps, never formatted clock strings or operational planning order.
