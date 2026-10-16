@@ -11,7 +11,7 @@ test("intentional sort preserves offsets without restoring the obsolete mission 
     const saved = {rowKey: "1-1", y: 80, tableScrollTop: 120, tableScrollLeft: 30, openDetails: ["details-1"]};
     let click, restored, applied = 0, savedMode;
     const storage = new Map();
-    const context = {dispatchSortMode: "arrival",
+    const context = {dispatchSortMode: "arrival", pendingPreferences: new Set(),
         root: {dataset: {sortPreferenceKey: "gateway.1.user.2"}, addEventListener: (_name, callback) => {click = callback;}},
         dispatchScroll: {snapshot: () => saved, restoreSnapshot: value => {restored = value;}},
         saveSortPreferences: () => {savedMode = context.dispatchSortMode;},

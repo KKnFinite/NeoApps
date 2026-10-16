@@ -19,10 +19,10 @@ class DispatchPreferencesTest(unittest.TestCase):
             arrived_first='0',secondary_sort='arrival',expected_version='0',**changes))
 
     def test_defaults_persistence_other_sessions_users_gateways_and_no_operational_change(self):
-        self.assertEqual(dispatch_preferences(self.gateway,self.user),dict(arrived_first=True,secondary_sort='etd',version=0))
+        self.assertEqual(dispatch_preferences(self.gateway,self.user),dict(arrived_first=True,secondary_sort='etd',truck_cards_collapsed=False,spear_data_collapsed=False,version=0))
         response=self.post(user_id=999,gateway_id=999)
         self.assertEqual(response.status_code,200)
-        self.assertEqual(response.json['preferences'],dict(arrived_first=False,secondary_sort='arrival',version=1))
+        self.assertEqual(response.json['preferences'],dict(arrived_first=False,secondary_sort='arrival',truck_cards_collapsed=False,spear_data_collapsed=False,version=1))
         self.assertEqual(NeoScorpionSortAssetState.query.count(),0)
         user_id=self.user.id;gateway_id=self.gateway.id
         db.session.remove()
@@ -57,6 +57,42 @@ class DispatchPreferencesTest(unittest.TestCase):
         self.assertEqual(self.post().status_code,200)
         self.assertIsNotNone(self.fixture.operation.id)
 
+    def test_sections_are_independent_sparse_patches_preserve_sort_and_old_clients(self):
+        endpoint='/neoscorpion/fuel-dispatch/preferences'
+        response=self.client.post(endpoint,data=dict(truck_cards_collapsed='1',expected_version='0'))
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['preferences']['secondary_sort'],'etd')
+        self.assertTrue(response.json['preferences']['truck_cards_collapsed'])
+        self.assertFalse(response.json['preferences']['spear_data_collapsed'])
+        response=self.client.post(endpoint,data=dict(spear_data_collapsed='1',expected_version='1'))
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.json['preferences']['truck_cards_collapsed'])
+        # Old sorting-only clients cannot reopen sections.
+        self.assertEqual(self.client.post(endpoint,data=dict(arrived_first='0',secondary_sort='arrival',expected_version='2')).status_code,200)
+        self.assertEqual(self.client.post(endpoint,data=dict(truck_cards_collapsed='0',expected_version='2')).status_code,409)
+        prefs=dispatch_preferences(self.gateway,self.user)
+        self.assertTrue(prefs['truck_cards_collapsed']);self.assertTrue(prefs['spear_data_collapsed'])
+        self.assertEqual(prefs['secondary_sort'],'arrival')
+        self.assertEqual(NeoScorpionSortAssetState.query.count(),0)
+        for value in ('true','yes','-1',''):
+            self.assertEqual(self.client.post(endpoint,data=dict(truck_cards_collapsed=value,expected_version='3')).status_code,400)
+        self.assertEqual(self.client.post(endpoint,data=dict(expected_version='3')).status_code,400)
+
+    def test_additive_columns_default_expanded_preserve_existing_sort_profile(self):
+        from sqlalchemy import text
+        from app.services.schema_sync import sync_local_sqlite_schema
+        self.assertEqual(self.post().status_code,200)
+        before=(self.user.id,self.gateway.id)
+        db.session.execute(text('ALTER TABLE neoscorpion_dispatch_preferences DROP COLUMN truck_cards_collapsed'))
+        db.session.execute(text('ALTER TABLE neoscorpion_dispatch_preferences DROP COLUMN spear_data_collapsed'))
+        db.session.commit()
+        for _ in range(2):sync_local_sqlite_schema(self.fixture.app);db.session.commit()
+        db.session.expire_all()
+        record=Preference.query.one()
+        self.assertEqual((record.user_id,record.gateway_id),before)
+        self.assertEqual((record.secondary_sort,record.arrived_first,record.version),('arrival',False,1))
+        self.assertFalse(record.truck_cards_collapsed);self.assertFalse(record.spear_data_collapsed)
+
 
 from tests import test_neoscorpion_segments_postgres as postgres
 
@@ -87,3 +123,18 @@ class DispatchPreferencesPostgresTest(unittest.TestCase):
         self.assertEqual(Preference.query.one().version,1)
         from app.models import NeoScorpionFuelWorkState
         self.assertEqual(db.session.get(NeoScorpionFuelWorkState,self.ids[-1]).id,self.ids[-1])
+
+    def test_additive_section_columns_preserve_existing_profile_and_work(self):
+        from sqlalchemy import text
+        from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
+        save_dispatch_preferences(self.gateway,self.dispatcher,dict(secondary_sort='arrival',arrived_first='0',expected_version='0'))
+        db.session.commit()
+        for name in ('truck_cards_collapsed','spear_data_collapsed'):
+            db.session.execute(text('ALTER TABLE neoscorpion_dispatch_preferences DROP COLUMN '+name))
+        db.session.commit()
+        for _ in range(2):
+            with patch.dict(self.fixture.app.config,{'TESTING':False}):ensure_neoscorpion_production_schema(self.fixture.app)
+        db.session.expire_all()
+        prefs=dispatch_preferences(self.gateway,self.dispatcher)
+        self.assertEqual(prefs,dict(arrived_first=False,secondary_sort='arrival',version=1,truck_cards_collapsed=False,spear_data_collapsed=False))
+        self.assertIsNotNone(self.work.id)

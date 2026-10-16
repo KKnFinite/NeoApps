@@ -72,6 +72,10 @@ NEOSCORPION_MODEL_TABLES = (
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
+    "neoscorpion_dispatch_preferences": {
+        "truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "spear_data_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+    },
     'neoscorpion_fuel_trucks': {'availability_history': 'JSON'},
     'neoscorpion_truck_drivers': {'manual_name': "VARCHAR(120) NOT NULL DEFAULT ''"},
     "neoscorpion_sort_trucks": {

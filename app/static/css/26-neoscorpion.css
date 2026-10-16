@@ -1387,3 +1387,22 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     .neoscorpion-pending-create-mobile { display: table-row; }
     .neoscorpion-pending-create-mobile > td { padding: .25rem .5rem !important; text-align: left; }
 }
+
+/* Personal Dispatch presentation only; shared truck markup also serves Board View. */
+.neoscorpion-screen[data-fuel-dispatch-live] [data-dispatch-section][hidden] { display: none !important; }
+.neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-section-head {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin: 0; min-width: 0;
+}
+.neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-section-head h2 { margin: 0; }
+.neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-section-head > :first-child { margin-right: auto; }
+.neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-dispatch-section-head button {
+    flex: 0 0 auto; min-height: 24px; padding: 3px 7px; font-size: .6rem; line-height: 1.2;
+}
+.neoscorpion-screen[data-fuel-dispatch-live] [data-dispatch-preference-status] { font-size: .65rem; }
+.neoscorpion-screen[data-fuel-dispatch-live] [data-dispatch-preference-status].is-error { color: #ff7773; }
+.neoscorpion-dispatch-insights { align-items: start; }
+.neoscorpion-screen[data-fuel-dispatch-live] [data-dispatch-section="spear"] { margin-top: 7px; }
+@media (max-width: 760px) {
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-projection-label { display: none; }
+}

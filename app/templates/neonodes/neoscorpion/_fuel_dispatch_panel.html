@@ -13,7 +13,7 @@
 </div>
 {% endif %}
 {%- endmacro %}
-<section class="neoscorpion-panel" data-assignment-alert-threshold-minutes="{{ red_assignment_alert_threshold_minutes }}">
+<section class="neoscorpion-panel" data-dispatch-preferences data-sort-mode="{{ dispatch_preferences.secondary_sort }}" data-arrived-first="{{ '1' if dispatch_preferences.arrived_first else '0' }}" data-truck-cards-collapsed="{{ '1' if dispatch_preferences.truck_cards_collapsed else '0' }}" data-spear-data-collapsed="{{ '1' if dispatch_preferences.spear_data_collapsed else '0' }}" data-preference-version="{{ dispatch_preferences.version }}" data-assignment-alert-threshold-minutes="{{ red_assignment_alert_threshold_minutes }}">
     <div data-dispatch-board-header>
     <div class="neoscorpion-panel-head">
         <span>Current Sort Operation</span>
@@ -30,7 +30,12 @@
     {% if operation %}
     <div class="neoscorpion-dispatch-insights" aria-label="SPEAR and fueling performance">
     <section class="neoscorpion-dispatch-insights-spear" aria-label="SPEAR">
-    <h2>SPEAR</h2>
+    <header class="neoscorpion-dispatch-section-head">
+        <h2>SPEAR</h2>
+        <span data-dispatch-preference-status role="status" aria-live="polite"></span>
+        <button type="button" class="action-button" data-dispatch-collapse="spear" aria-controls="dispatch-spear-data" aria-expanded="{{ 'false' if dispatch_preferences.spear_data_collapsed else 'true' }}" aria-label="{{ 'Expand' if dispatch_preferences.spear_data_collapsed else 'Collapse' }} SPEAR data">{{ 'EXPAND' if dispatch_preferences.spear_data_collapsed else 'COLLAPSE' }}</button>
+    </header>
+    <div id="dispatch-spear-data" data-dispatch-section="spear"{% if dispatch_preferences.spear_data_collapsed %} hidden{% endif %}>
     {% if operation and spear_unavailable %}
     <div class="neoscorpion-spear-fleet-status is-at-risk" data-spear-fleet-status>
         SPEAR · UNAVAILABLE
@@ -60,6 +65,7 @@
         </div>
     </details>
     {% endif %}
+    </div>
     </section>
     {% set performance = fueling_performance|default({'fuelers': (), 'trucks': ()}) %}
     <section class="neoscorpion-dispatch-performance" aria-label="Fueling Statistics" data-fueling-performance>
@@ -90,11 +96,13 @@
     {% endif %}
     </div>{% if operation and truck_visuals %}
     <aside class="neoscorpion-truck-visual-panel" aria-label="Tonight's fuel truck capacity">
-        <header>
+        <header class="neoscorpion-dispatch-section-head">
             <strong>TRUCK FUEL STATUS</strong>
-            <span>Current-sort projections</span>
+            <span class="neoscorpion-truck-projection-label">Current-sort projections</span>
+            <span data-dispatch-preference-status role="status" aria-live="polite"></span>
+            <button type="button" class="action-button" data-dispatch-collapse="trucks" aria-controls="dispatch-truck-cards" aria-expanded="{{ 'false' if dispatch_preferences.truck_cards_collapsed else 'true' }}" aria-label="{{ 'Expand' if dispatch_preferences.truck_cards_collapsed else 'Collapse' }} truck fuel status">{{ 'EXPAND' if dispatch_preferences.truck_cards_collapsed else 'COLLAPSE' }}</button>
         </header>
-        <div class="neoscorpion-truck-visual-list">
+        <div class="neoscorpion-truck-visual-list" id="dispatch-truck-cards" data-dispatch-section="trucks"{% if dispatch_preferences.truck_cards_collapsed %} hidden{% endif %}>
             {% for truck in truck_visuals %}
             <article class="neoscorpion-truck-visual-card neoscorpion-truck-visual-card--{{ truck.status }}{% if truck.projected_short %} is-short{% endif %}">
                 <header>
@@ -178,7 +186,7 @@
     {% elif not rows %}
     <p class="neoscorpion-empty">No outbound departure missions are available for this sort.</p>
     {% else %}
-    <div class="neoscorpion-dispatch-sort" data-dispatch-preferences data-sort-mode="{{ dispatch_preferences.secondary_sort }}" data-arrived-first="{{ '1' if dispatch_preferences.arrived_first else '0' }}" data-preference-version="{{ dispatch_preferences.version }}">
+    <div class="neoscorpion-dispatch-sort">
         <div role="group" aria-label="Primary sort Arrived First">
             <span>PRIMARY SORT: ARRIVED FIRST</span>
             <button type="button" class="action-button" data-dispatch-arrived-first="1" aria-pressed="{{ 'true' if dispatch_preferences.arrived_first else 'false' }}">ON</button>

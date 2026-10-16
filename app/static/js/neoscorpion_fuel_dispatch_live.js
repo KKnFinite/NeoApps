@@ -12,6 +12,9 @@
     initializeDispatchApuEditors(root);
     let dispatchSortMode = root.dataset.sortMode === "arrival" ? "arrival" : "etd";
     let arrivedFirst = root.dataset.arrivedFirst !== "0";
+    let truckCardsCollapsed = root.dataset.truckCardsCollapsed === "1";
+    let spearDataCollapsed = root.dataset.spearDataCollapsed === "1";
+    const pendingPreferences = new Set();
     let preferenceVersion = Number(root.dataset.preferenceVersion || 0);
     let preferenceSaving = false;
     let preferenceQueued = false;
@@ -25,17 +28,30 @@
         }
     }, true);
     root.addEventListener("click", (event) => {
-        const button = event.target.closest("[data-dispatch-sort-mode], [data-dispatch-arrived-first]");
+        const button = event.target.closest("[data-dispatch-sort-mode], [data-dispatch-arrived-first], [data-dispatch-collapse]");
         if (!button) return;
         const saved = dispatchScroll.snapshot();
-        if (button.hasAttribute("data-dispatch-sort-mode")) dispatchSortMode = button.dataset.dispatchSortMode === "arrival" ? "arrival" : "etd";
-        else arrivedFirst = button.dataset.dispatchArrivedFirst === "1";
+        const section = button.dataset.dispatchCollapse;
+        if (section === "trucks") {
+            truckCardsCollapsed = !truckCardsCollapsed;
+            pendingPreferences.add("truck_cards_collapsed");
+        } else if (section === "spear") {
+            spearDataCollapsed = !spearDataCollapsed;
+            pendingPreferences.add("spear_data_collapsed");
+        } else if (button.hasAttribute("data-dispatch-sort-mode")) {
+            dispatchSortMode = button.dataset.dispatchSortMode === "arrival" ? "arrival" : "etd";
+            pendingPreferences.add("secondary_sort");
+        } else {
+            arrivedFirst = button.dataset.dispatchArrivedFirst === "1";
+            pendingPreferences.add("arrived_first");
+        }
         preferenceMessage = "SAVING…";
-        applyDispatchSort(root);
+        if (section) renderSortControls(root);
+        else applyDispatchSort(root);
         // An intentional sort must expose the new order at the same scroll
         // offset, not scroll back to the former first mission and conceal it.
         // Automatic live refresh still restores its mission anchor separately.
-        dispatchScroll.restoreSnapshot({...saved, rowKey: null});
+        dispatchScroll.restoreSnapshot(section ? saved : {...saved, rowKey: null});
         saveSortPreferences();
     });
     async function saveSortPreferences() {
@@ -43,15 +59,21 @@
         preferenceSaving = true;
         preferenceMessage = "SAVING…";
         renderSortControls(root);
+        const values = preferenceValues();
+        const sent = new Map(Array.from(pendingPreferences, key => [key, values[key]]));
         try {
-            const body = new URLSearchParams({secondary_sort: dispatchSortMode,
-                arrived_first: arrivedFirst ? "1" : "0", expected_version: String(preferenceVersion),
+            const body = new URLSearchParams({expected_version: String(preferenceVersion),
                 csrf_token: document.querySelector('meta[name="csrf-token"]')?.content || ""});
+            sent.forEach((value, key) => body.set(key, typeof value === "boolean" ? (value ? "1" : "0") : value));
             const response = await fetch(root.dataset.sortPreferencesUrl, {method: "POST", body,
                 credentials: "same-origin", headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}});
             const payload = await response.json().catch(() => ({}));
-            if (payload.preferences) preferenceVersion = payload.preferences.version;
-            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Unable to save sorting preferences.");
+            if (response.ok && payload.ok === true) {
+                const current = preferenceValues();
+                sent.forEach((value, key) => { if (current[key] === value) pendingPreferences.delete(key); });
+            }
+            if (payload.preferences) adoptPreferences(payload.preferences);
+            if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Unable to save Dispatch preferences.");
             preferenceMessage = "SAVED";
         } catch (error) {
             preferenceMessage = `NOT SAVED: ${error.message || "Connection failed. Select again to retry."}`;
@@ -59,8 +81,19 @@
         } finally {
             preferenceSaving = false;
             renderSortControls(root);
-            if (preferenceQueued) { preferenceQueued = false; saveSortPreferences(); }
+            if (preferenceQueued) { preferenceQueued = false; if (pendingPreferences.size) saveSortPreferences(); }
         }
+    }
+    function preferenceValues() {
+        return {secondary_sort: dispatchSortMode, arrived_first: arrivedFirst,
+            truck_cards_collapsed: truckCardsCollapsed, spear_data_collapsed: spearDataCollapsed};
+    }
+    function adoptPreferences(preferences) {
+        if (!pendingPreferences.has("secondary_sort")) dispatchSortMode = preferences.secondary_sort === "arrival" ? "arrival" : "etd";
+        if (!pendingPreferences.has("arrived_first")) arrivedFirst = preferences.arrived_first !== false;
+        if (!pendingPreferences.has("truck_cards_collapsed")) truckCardsCollapsed = preferences.truck_cards_collapsed === true;
+        if (!pendingPreferences.has("spear_data_collapsed")) spearDataCollapsed = preferences.spear_data_collapsed === true;
+        preferenceVersion = Number(preferences.version || 0);
     }
     const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
@@ -106,8 +139,21 @@
         scope.querySelectorAll("[data-dispatch-arrived-first]").forEach(button => {
             button.setAttribute("aria-pressed", String((button.dataset.dispatchArrivedFirst === "1") === arrivedFirst));
         });
-        const status = scope.querySelector("[data-dispatch-preference-status]");
-        if (status) { status.textContent = preferenceMessage; status.classList.toggle("is-error", preferenceMessage.startsWith("NOT SAVED")); }
+        scope.querySelectorAll("[data-dispatch-collapse]").forEach(button => {
+            const trucks = button.dataset.dispatchCollapse === "trucks";
+            const collapsed = trucks ? truckCardsCollapsed : spearDataCollapsed;
+            button.setAttribute("aria-expanded", String(!collapsed));
+            button.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${trucks ? "truck fuel status" : "SPEAR data"}`);
+            button.textContent = collapsed ? "EXPAND" : "COLLAPSE";
+            const body = scope.querySelector(`[data-dispatch-section="${button.dataset.dispatchCollapse}"]`);
+            if (body) body.hidden = collapsed;
+        });
+        scope.querySelectorAll("[data-dispatch-preference-status]").forEach(status => {
+            const error = preferenceMessage.startsWith("NOT SAVED");
+            status.textContent = error ? "NOT SAVED · select again" : preferenceMessage;
+            status.title = preferenceMessage;
+            status.classList.toggle("is-error", error);
+        });
     }
 
     function applyDispatchSort(scope) {
@@ -661,11 +707,13 @@
             // Restore the working position at replacement, not request start.
             const saved = dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
             currentPanel.replaceWith(nextPanel);
-            const preferences = nextPanel.querySelector("[data-dispatch-preferences]");
+            const preferences = nextPanel.matches("[data-dispatch-preferences]") ? nextPanel : nextPanel.querySelector("[data-dispatch-preferences]");
             if (preferences && Number(preferences.dataset.preferenceVersion || 0) >= preferenceVersion && !preferenceMessage.startsWith("NOT SAVED")) {
-                dispatchSortMode = preferences.dataset.sortMode === "arrival" ? "arrival" : "etd";
-                arrivedFirst = preferences.dataset.arrivedFirst !== "0";
-                preferenceVersion = Number(preferences.dataset.preferenceVersion || 0);
+                adoptPreferences({secondary_sort: preferences.dataset.sortMode,
+                    arrived_first: preferences.dataset.arrivedFirst !== "0",
+                    truck_cards_collapsed: preferences.dataset.truckCardsCollapsed === "1",
+                    spear_data_collapsed: preferences.dataset.spearDataCollapsed === "1",
+                    version: preferences.dataset.preferenceVersion});
             }
             applyDispatchSort(root);
             updateAssignmentAlerts(root);
