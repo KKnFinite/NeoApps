@@ -2160,7 +2160,7 @@ def fueler_edit_state(assignment, mission, work, tail, tanks):
         "apu_override_enabled": bool(work and work.apu_override_enabled),
         "apu_override_allowance": work.apu_override_allowance_lbs if work else None,
         "transfer_fuel_gallons": assignment.transfer_fuel_gallons,
-        "notes": (tail.notes or "") if tail else "",
+        "notes": (work.notes or "") if work else "",
         "physical_sequence": work.physical_sequence_number if work else None,
         "work_ref": getattr(assignment, "active_work_state_id", None),
     }
@@ -2572,7 +2572,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
     )
     target_apu_lbs = target_apu_allowance_lbs
     target_notes = ((form.get("notes") or "").strip() if "notes" in form
-                    else ((tail_fuel_state.notes or "") if tail_fuel_state else ""))
+                    else ((fuel_work_state.notes or "") if fuel_work_state else ""))
     target_transfer_gallons = (_int_or_none(form.get("transfer_fuel_gallons"))
                                if "transfer_fuel_gallons" in form else assignment.transfer_fuel_gallons)
 
@@ -2614,7 +2614,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
     )
 
     current_apu_lbs = tail_fuel_state.apu_lbs if tail_fuel_state else None
-    current_notes = tail_fuel_state.notes if tail_fuel_state else ""
+    current_notes = (fuel_work_state.notes or "") if fuel_work_state else ""
     current_fob_lbs = tail_fuel_state.fob_lbs if tail_fuel_state else None
     current_actual_lbs = tail_fuel_state.actual_fuel_lbs if tail_fuel_state else None
     current_center_lbs = tail_fuel_state.center_fuel_lbs if tail_fuel_state else None
@@ -2672,7 +2672,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state=fuel_work_state,
         )
 
-    if tank_changed or apu_changed or apu_source_changed or apu_override_changed or confirm_on or transfer_changed:
+    if tank_changed or apu_changed or apu_source_changed or apu_override_changed or confirm_on or transfer_changed or current_notes != target_notes:
         if fuel_work_state is None:
             fuel_work_state = new_work(assignment, tail_number, user, now_utc)
             fuel_work_state.physical_required_fuel_lbs = mission.planned_fuel_load
@@ -2733,8 +2733,11 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         tail_fuel_state.actual_fuel_lbs = target_actual_lbs
         tail_fuel_state.center_fuel_lbs = target_center_lbs
         tail_fuel_state.apu_lbs = target_apu_lbs
-        tail_fuel_state.notes = target_notes
+        if "notes" in form:
+            tail_fuel_state.notes = target_notes
 
+    if fuel_work_state is not None and "notes" in form:
+        fuel_work_state.notes = target_notes
     assignment.transfer_fuel_gallons = target_transfer_gallons
     if transfer_changed and fuel_work_state:
         from app.services.neoscorpion_inventory import on_transfer_entry
@@ -2744,7 +2747,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
     if fuel_work_state is not None:
         fuel_work_state.physical_transfer_gallons = target_transfer_gallons
     entry_changes={key:value for key,value in requested.items() if current.get(key)!=value
-        and (key.startswith(("remaining_","actual_","apu_")) or key=="transfer_fuel_gallons")}
+        and (key.startswith(("remaining_","actual_","apu_")) or key in ("transfer_fuel_gallons", "notes"))}
     if fuel_work_state is not None and entry_changes:
         _new_fuel_audit(operation,assignment,user,"segment_transfer","fuel_entry",
             json.dumps({key:current.get(key) for key in entry_changes},sort_keys=True),
@@ -2767,7 +2770,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         elif not actuals_complete:
             fuel_work_state.actuals_received_at_utc = None
         _capture_resource_data_milestones(assignment, fuel_work_state, tank_layout, tank_states_by_code, now_utc,
-                                          data_changed=bool(entry_changes))
+                                          data_changed=any(key != "notes" for key in entry_changes))
         _capture_physical_forecast(gateway, assignment, mission, fuel_work_state, now_utc)
         _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
@@ -6143,27 +6146,10 @@ def _fuel_rows(
             f"{mission.flight_number or '-'} {mission.destination or '-'} "
             f"{tail_number or '-'}"
         )
-        load_planning_complete = bool(
-            assignment
-            and (
-                assignment.fuel_on_board_at_utc
-                or assignment.completed_at_utc
-            )
-        )
-        if (
-            load_planning_complete
-            and neo_fuel_lbs is not None
-            and (
-                detailed_aircraft_type != "A300"
-                or center_actual_lbs is not None
-            )
-        ):
-            load_planning_output = (
-                f"{mission.flight_number or '-'} {mission.destination or '-'} "
-                f"{tail_number or '-'} NEO > {format_display_thousands(neo_fuel_lbs)}"
-            )
-            if detailed_aircraft_type == "A300":
-                load_planning_output += f" CF > {int(center_actual_lbs)}"
+        if neo_fuel_lbs is not None:
+            load_planning_output += f" NEO > {format_display_thousands(neo_fuel_lbs)}"
+        if detailed_aircraft_type == "A300" and center_actual_lbs is not None:
+            load_planning_output += f" CF > {int(center_actual_lbs)}"
         fuel_on_board_complete = bool(
             assignment and assignment.fuel_on_board_at_utc
         )
@@ -6635,6 +6621,7 @@ def _fuel_rows(
                     assignment.review_status if assignment else (mission.fuel_status or "pending")
                 ),
                 **fob,
+                "fueler_notes": (fuel_work_state.notes or "") if fuel_work_state else "",
                 "load_planning_output": load_planning_output,
                 "load_planning_ready": load_planning_output is not None,
                 "load_planning_placeholder": "-",

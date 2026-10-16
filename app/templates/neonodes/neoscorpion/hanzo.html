@@ -57,6 +57,7 @@
                         <div><dt>ACTUAL OFF</dt><dd data-hanzo-actual-off>{{ row.hanzo_actual_off_time }}</dd></div>
                     </dl>
                 </section>
+                {% if row.fueler_notes %}<section class="neoscorpion-hanzo-fueling" aria-label="Fueler notes"><h2>FUELER NOTES</h2><p data-fueler-notes style="white-space: pre-wrap; overflow-wrap: anywhere">{{ row.fueler_notes }}</p></section>{% endif %}
                 <dl class="neoscorpion-fuel-totals neoscorpion-hanzo-totals">
                     <div class="neoscorpion-fuel-total-primary"><dt>Planned Total</dt><dd>{{ row.planned_total_display }}</dd></div>
                     <div><dt>Effective APU Allowance</dt><dd>{{ row.apu_allowance_display }}</dd></div>

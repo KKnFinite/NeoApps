@@ -190,6 +190,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "notes": "TEXT",
         "visit_number": "INTEGER",
         "actuals_received_at_utc": "DATETIME",
         "preparation_received_at_utc": "DATETIME",
@@ -463,6 +464,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "notes": "TEXT",
         "visit_number": "INTEGER",
         "actuals_received_at_utc": "TIMESTAMP",
         "preparation_received_at_utc": "TIMESTAMP",

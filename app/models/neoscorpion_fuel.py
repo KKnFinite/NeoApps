@@ -261,6 +261,8 @@ class NeoScorpionFuelWorkState(db.Model):
         nullable=False,
     )
     tail_number = db.Column(db.String(32), nullable=False)
+    # NULL legacy notes have no proven mission/visit provenance; never backfill from tail.
+    notes = db.Column(db.Text, nullable=True)
     # NULL identifies pre-segment legacy containers, never a new operational visit.
     visit_number = db.Column(db.Integer, nullable=True)
     on_at_utc = db.Column(db.DateTime, nullable=True)

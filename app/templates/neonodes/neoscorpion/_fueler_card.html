@@ -262,7 +262,7 @@
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" placeholder="Gallons">
                     </label>
                     <label class="neoscorpion-fueler-notes">Notes
-                        <textarea name="notes" rows="3">{{ row.tail_fuel_state.notes if row.tail_fuel_state else '' }}</textarea>
+                        <textarea name="notes" rows="3">{{ row.fueler_notes }}</textarea>
                     </label>
                     <button class="action-button neoscorpion-save-button" type="submit">Save Fuel Entry</button>
                 </form>
@@ -279,7 +279,7 @@
                 {{ estimated_gallons(row) }}
                 <dl class="neoscorpion-fueler-readout">
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
-                    <div><dt>Notes</dt><dd>{{ row.tail_fuel_state.notes if row.tail_fuel_state and row.tail_fuel_state.notes else '-' }}</dd></div>
+                    <div><dt>Notes</dt><dd>{{ row.fueler_notes or '-' }}</dd></div>
                 </dl>
                 {% if can_edit and row.fueler_work_blocked %}
                 <p class="neoscorpion-calculation-warning">Fuel entry and TRUCK OFF are blocked until dispatcher review is complete.</p>

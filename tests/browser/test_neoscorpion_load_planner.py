@@ -112,7 +112,7 @@ class DispatchLoadPlannerBrowserTest(unittest.TestCase):
                     expect(detail.locator("[data-dispatch-load-planner] input, [data-dispatch-load-planner] select")).to_have_count(0)
                 copy = details[0].locator("[data-copy-value]")
                 original_copy = copy.get_attribute("data-copy-value")
-                self.assertEqual(original_copy, "UPS901 SDF N4LP0")
+                self.assertEqual(original_copy, "UPS901 SDF N4LP0 NEO > 25.0")
                 self.assertEqual(details[0].locator('.neoscorpion-load-planning-output').inner_text(), original_copy)
                 copy.click()
                 expect(copy).to_have_text("COPIED")
