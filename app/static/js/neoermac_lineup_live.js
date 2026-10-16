@@ -30,12 +30,15 @@
                 if (!slot) continue;
                 if (protectedSelect(select)) { complete = false; continue; }
                 const placeholder = select.options[0].textContent;
-                const values = ['', ...choices];
+                const labels = new Map(choices.map(choice => [choice.value, choice.label]));
+                const values = ['', ...labels.keys()];
                 // Preserve a persisted value even if its master was retired.
-                if (slot.destination && !choices.includes(slot.destination)) values.push(slot.destination);
+                if (slot.destination && !labels.has(slot.destination)) values.push(slot.destination);
                 const current = Array.from(select.options, option => option.value);
-                if (JSON.stringify(current) !== JSON.stringify(values)) {
-                    select.replaceChildren(...values.map(v => new Option(v || placeholder, v)));
+                const label = v => labels.get(v) || (v.startsWith('legacy:') ? 'SELECT FLIGHT — ' + v.slice(7) : v ? 'UNAVAILABLE FLIGHT #' + v : placeholder);
+                if (JSON.stringify(current) !== JSON.stringify(values)
+                    || Array.from(select.options, option => option.textContent).some((text, i) => text !== label(values[i] || ''))) {
+                    select.replaceChildren(...values.map(v => new Option(label(v), v)));
                 }
                 select.value = slot.destination;
                 select.dataset.lastSavedValue = slot.destination;
@@ -66,7 +69,7 @@
                     method: 'POST', body, credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'},
                 });
                 const payload = await response.json();
-                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Destination save failed.');
+                if (!response.ok || !payload.ok) throw new Error(payload.error || 'Flight save failed.');
                 // One in-flight request per slot. Other slots remain independent.
                 originalInput(select).value = payload.original;
                 select.dataset.lastSavedValue = payload.destination;

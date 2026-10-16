@@ -15,7 +15,7 @@ from flask import g
 from sqlalchemy import event
 
 from app.extensions import db
-from app.models import NeoErmacDoorPull, SortDateOperation, SortDateParkingAssignment
+from app.models import MasterFlightSchedule, NeoErmacBuildingLineup, NeoErmacDoorPull, SortDateOperation, SortDateParkingAssignment
 from app.services.neoermac_dashboard import neoermac_dashboard_context
 from tests import test_neoermac_routes as fixtures
 from tests.neoermac_pull_forms import pull_cards
@@ -35,6 +35,13 @@ class UpcomingActualTest(unittest.TestCase):
                              ("runout_10", "west_destination_2")):
             self._assign_lineup_destination(runout, slot, "SDF")
         self.mission = self._add_operation_departure("UPS501", "SDF")
+        master = MasterFlightSchedule(gateway_id=self.gateway.id, gateway_code=self.gateway.code,
+            sort_name='night', mission_type='departure', flight_number='UPS501', origin=self.gateway.code,
+            destination='SDF', active=True, active_days='monday', planned_time_local=time(2))
+        db.session.add(master); db.session.flush()
+        self.mission.master_flight_schedule_id = master.id
+        from app.services.neoermac_building_lineup import backfill_lineup_flight_identities
+        backfill_lineup_flight_identities()
         db.session.commit()
         self._login_approved_user(role="operator")
 
@@ -103,53 +110,17 @@ class UpcomingActualTest(unittest.TestCase):
         self.assertEqual(self.post().json["filled"], 2)
         self.assertEqual(NeoErmacDoorPull.query.filter_by(door="D32").one().actual_pure_pull_time_local, time(12,14))
 
-    def test_canonical_mission_with_repeated_destination_is_isolated(self):
+    def test_unassigned_same_destination_is_rejected_and_selected_flight_never_advances(self):
         other = self._add_operation_departure("UPS502", "SDF")
         db.session.commit()
-        self.assertEqual(self.post(mission_id=other.id).json["filled"], 3)
-        self.assertEqual({r.sort_date_mission_id for r in NeoErmacDoorPull.query.all()}, {other.id})
-        self.assertIsNone(self.mission.actual_pure_pull_time_local)
-        context = neoermac_dashboard_context(self.gateway, initialize_lineup=False)
-        self.assertIn(self.mission.id, [r["mission_id"] for r in context["west"] if r["pull_key"] == "pure"])
-
-    def test_repeated_destination_matches_door_view_and_advances_after_completion(self):
-        self.mission.assigned_tail_number = "N376UP"
-        self.mission.pure_pull_time_local = time(2, 1)
-        self.mission.mix_pull_time_local = time(2, 21)
-        db.session.add(SortDateParkingAssignment(
-            sort_date_operation_id=self.mission.sort_date_operation_id,
-            tail_number="N376UP", ramp_code="E", position_code="E02", lane_number=1,
-        ))
-        second = self._add_operation_departure(
-            "UPS502", "SDF", tail="N390UP", parking="E06",
-            planned_datetime_local=datetime(2026, 6, 11, 3),
-            planned_datetime_utc=datetime(2026, 6, 11, 8),
-            pure_pull_time_local=time(0, 2), mix_pull_time_local=time(0, 12),
-        )
-        db.session.commit()
-
-        for expected, tail, parking in ((self.mission, "N376UP", "E02"), (second, "N390UP", "E06")):
-            board = neoermac_dashboard_context(self.gateway, initialize_lineup=False)
-            for side, door in (("east", "D1"), ("west", "D32")):
-                with self.subTest(mission_id=expected.id, side=side):
-                    card = pull_cards(self.gateway, door)[0]
-                    self.assertEqual((card["mission_id"], card["tail"], card["parking"]),
-                                     (expected.id, tail, parking))
-                    self.assertEqual(len(board[side]), 2)
-                    self.assertEqual({row["pull_key"] for row in board[side]}, {"pure", "mix"})
-                    for row in board[side]:
-                        self.assertEqual((row["mission_id"], row["tail"], row["parking"]),
-                                         (card["mission_id"], card["tail"], card["parking"]))
-                        self.assertEqual(row["planned_time"], card["planned"][row["pull_key"]])
-            if expected.id == self.mission.id:
-                self.assertEqual(self.post(actual_pull="02:02").status_code, 200)
-                partial = neoermac_dashboard_context(self.gateway, initialize_lineup=False)
-                for side in ("east", "west"):
-                    self.assertEqual([(row["mission_id"], row["pull_key"]) for row in partial[side]],
-                                     [(self.mission.id, "mix")])
-                self.assertEqual(self.post(pull_key="mix", actual_pull="02:22").status_code, 200)
-                db.session.refresh(self.mission)
-                self.assertEqual(self.mission.departure_status, "last_uld_enroute")
+        self.assertEqual(self.post(mission_id=other.id).status_code, 409)
+        self.assertEqual(NeoErmacDoorPull.query.count(), 0)
+        self.assertEqual(self.post(actual_pull="02:02").status_code, 200)
+        self.assertEqual(self.post(pull_key="mix", actual_pull="02:22").status_code, 200)
+        self.mission.departure_status = 'departed'; db.session.commit()
+        self.assertEqual(pull_cards(self.gateway, 'D32')[0]['mission_id'], self.mission.id)
+        self.assertEqual(neoermac_dashboard_context(self.gateway, initialize_lineup=False)['both'], [])
+        self.assertIsNone(other.actual_pure_pull_time_local)
 
     def test_invalid_identity_time_and_type_never_write(self):
         other = self._add_operation_departure("UPS502", "BOS")

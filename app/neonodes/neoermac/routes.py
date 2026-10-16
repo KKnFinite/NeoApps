@@ -23,6 +23,7 @@ from app.services.access_control import (
 from app.services.neoermac_building_lineup import (
     LineupConflict,
     lineup_original,
+    slot_flight_value,
     building_lineup_state_payload,
     DESTINATION_FIELDS,
     get_building_lineup_rows,
@@ -866,6 +867,7 @@ def _building_lineup_response(gateway, access, rows=None, status_code=200):
         destination_fields=DESTINATION_FIELDS,
         field_name=lineup_field_name,
         lineup_original=lineup_original,
+        slot_flight_value=slot_flight_value,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         refresh_status=neoermac_live_refresh_status(
@@ -907,6 +909,7 @@ def _door_view_response(gateway, access, selected_door, status_code=200):
             active_door,
             destination["destination"],
             supervision["selected_doors"],
+            master_flight_schedule_id=destination["master_flight_schedule_id"],
             bundle=bundle,
         )
     )

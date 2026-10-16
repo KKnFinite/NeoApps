@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.models import NeoErmacDoorPull, SortDateMission
 from app.services.gateway_matrix import gateway_timezone
 from app.services.neoermac_building_lineup import (
-    get_building_lineup_doors_by_destination,
+    get_building_lineup_doors_by_master,
     normalize_destination,
 )
 from app.services.night_sorting import sort_datetime_for_local_time
@@ -39,6 +39,7 @@ def recompute_current_sort_door_pull_aggregates(
     destinations=None,
     *,
     doors_by_destination=None,
+    doors_by_master=None,
     missions_by_destination=None,
     pulls_by_destination_and_door=None,
     all_operation_missions=None,
@@ -53,8 +54,8 @@ def recompute_current_sort_door_pull_aggregates(
         for destination in (destinations or ())
         if normalize_destination(destination)
     }
-    if doors_by_destination is None:
-        doors_by_destination = get_building_lineup_doors_by_destination(gateway)
+    if doors_by_master is None:
+        doors_by_master = get_building_lineup_doors_by_master(gateway)
     # ``missions_by_destination`` is retained as a compatibility argument for
     # callers that preloaded the Door View bundle.  Work is deliberately
     # performed per mission, not per destination: two OAK departures may have
@@ -91,11 +92,14 @@ def recompute_current_sort_door_pull_aggregates(
         )
     results = {}
     for mission in missions:
+        assigned_doors = doors_by_master.get(mission.master_flight_schedule_id, ())
+        if not assigned_doors:
+            continue  # Preserve canonical historical pulls for unassigned flights.
         results[mission.id] = _recompute_mission(
             gateway,
             operation,
             mission,
-            doors_by_destination.get(normalize_destination(mission.destination), ()),
+            assigned_doors,
             pulls_by_mission_and_door,
         )
     return results

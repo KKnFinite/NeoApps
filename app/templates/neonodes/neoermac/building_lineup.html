@@ -15,11 +15,11 @@
     <select class="neoermac-destination-select" name="{{ input_name }}" data-lineup-destination-select data-lineup-field="{{ input_name }}" {% if not can_edit or not slot.field %}disabled{% endif %}>
         <option value="">{{ slot.placeholder }}</option>
         {% if slot.field %}
-        {% if selected_value and selected_value not in destination_choices %}
-        <option value="{{ selected_value }}" selected>{{ selected_value }}</option>
+        {% if selected_value and selected_value not in destination_choices|map(attribute="value")|list %}
+        <option value="{{ selected_value }}" selected>{{ 'SELECT FLIGHT — ' ~ selected_value[7:] if selected_value.startswith('legacy:') else 'UNAVAILABLE FLIGHT #' ~ selected_value }}</option>
         {% endif %}
         {% for destination in destination_choices %}
-        <option value="{{ destination }}" {% if selected_value == destination %}selected{% endif %}>{{ destination }}</option>
+        <option value="{{ destination.value }}" {% if selected_value == destination.value %}selected{% endif %}>{{ destination.label }}</option>
         {% endfor %}
         {% endif %}
     </select>
@@ -35,7 +35,7 @@
     </header>
     <div class="neoermac-belt-destination-row" data-belt-destination-position="{{ side.side }}">
         {% for slot in side.slots %}
-        {% set selected_value = row|attr(slot.field) if slot.field else "" %}
+        {% set selected_value = slot_flight_value(row, slot.field) if slot.field else "" %}
         {% call destination_select(row, slot, selected_value, destination_choices, can_edit) %}
             {{ pull_times_display(selected_value, pull_time_lookup.get(selected_value, {})) }}
         {% endcall %}
@@ -58,7 +58,7 @@
     <p class="neoermac-readonly-note">View Only</p>
     {% endif %}
 
-    <p class="neoermac-readonly-note" data-lineup-empty-choices {% if destination_choices %}hidden{% endif %}>NO MASTER DEPARTURE DESTINATIONS AVAILABLE.</p>
+    <p class="neoermac-readonly-note" data-lineup-empty-choices {% if destination_choices %}hidden{% endif %}>NO MASTER DEPARTURE FLIGHTS AVAILABLE.</p>
 
     <form class="neoermac-lineup-form" method="post" data-lineup-autosave-url="{{ url_for('neoermac.building_lineup_destination_autosave') }}">
         <div class="neoermac-runout-list">
@@ -101,7 +101,7 @@
     </form>
 </section>
 <script src="{{ url_for('static', filename='js/neoermac_live_integrity.js', v='ermac-integrity-1') }}"></script>
-<script src="{{ url_for('static', filename='js/neoermac_lineup_live.js', v='ermac-transport-1') }}"></script>
+<script src="{{ url_for('static', filename='js/neoermac_lineup_live.js', v='ermac-flight-identity-2') }}"></script>
 <script>
 NeoErmacLineupLive.create(document.querySelector('[data-neoermac-lineup-live]'), {
     pullTimes: {{ pull_time_lookup|tojson }}, choices: {{ destination_choices|tojson }},

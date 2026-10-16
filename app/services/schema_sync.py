@@ -132,6 +132,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "updated_at": "DATETIME",
     },
     "neoermac_building_lineups": {
+        "flight_assignments": "JSON",
         "east_destination_1_slot_2": "VARCHAR(8)",
         "east_destination_2_slot_2": "VARCHAR(8)",
         "west_destination_1_slot_2": "VARCHAR(8)",
@@ -417,6 +418,7 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "updated_at": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
     },
     "neoermac_building_lineups": {
+        "flight_assignments": "JSON",
         "east_destination_1_slot_2": "VARCHAR(8)",
         "east_destination_2_slot_2": "VARCHAR(8)",
         "west_destination_1_slot_2": "VARCHAR(8)",
@@ -677,6 +679,9 @@ def sync_local_sqlite_schema(app):
     from app.services.neoermac_door_preference_schema import backfill_neoermac_door_preferences
 
     backfill_neoermac_door_preferences(table_names)
+    if "neoermac_building_lineups" in table_names:
+        from app.services.neoermac_building_lineup import backfill_lineup_flight_identities
+        backfill_lineup_flight_identities()
     db.session.flush()
 
 
@@ -746,6 +751,9 @@ def sync_database_schema(app):
     from app.services.neoermac_door_preference_schema import backfill_neoermac_door_preferences
 
     backfill_neoermac_door_preferences(table_names)
+    if "neoermac_building_lineups" in table_names:
+        from app.services.neoermac_building_lineup import backfill_lineup_flight_identities
+        backfill_lineup_flight_identities()
     from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
     sync_staffing_assignment_schema()
     db.session.flush()

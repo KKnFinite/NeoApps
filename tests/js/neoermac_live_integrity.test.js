@@ -31,7 +31,7 @@ function lineup() {
     context.window = context;
     vm.runInNewContext(fs.readFileSync('app/static/js/neoermac_lineup_live.js', 'utf8'), context);
     const live = context.NeoErmacLineupLive.create(root, {refresh: {auto_refresh_enabled: true, live_screen_refresh_interval_ms: 10000}});
-    const state = {slots: {east: {destination: 'SDF', original: 'east-1'}, west: {destination: 'ONT', original: 'west-1'}}, destination_choices: ['SDF','ONT','PHX'], pull_times: {}};
+    const state = {slots: {east: {destination: 'SDF', original: 'east-1'}, west: {destination: 'ONT', original: 'west-1'}}, destination_choices: ['SDF','ONT','PHX'].map((value, i) => ({value, label: 'UPS' + (i + 1) + ' — ' + value})), pull_times: {}};
     return {pending, statuses, originals, selects, doc, live, state};
 }
 
@@ -221,4 +221,17 @@ test('Door overlapping saves cannot infer commit order from in-order network rep
     assert.deepEqual(h.paints.map(p=>p.paint),[false,false]);
     const single=h.save('pure');h.requests[2].resolve({ok:true,card:{original:'p2'}});await single;
     assert.equal(h.paints.at(-1).paint,true);
+});
+
+
+test('same destination choices retain separate canonical IDs and flight labels on refresh', () => {
+    const h = lineup();
+    h.live.reconcile({...h.state, slots: {east: {destination: '202', original: 'selected-202'}, west: {destination: '101', original: 'selected-101'}},
+        destination_choices: [{value: '101', label: 'UPS101 - LAX'}, {value: '202', label: 'UPS202 - LAX'}]});
+    assert.deepEqual(h.selects[0].options.map(o => o.value), ['', '101', '202']);
+    assert.equal(h.selects[0].options[2].textContent, 'UPS202 - LAX');
+    assert.equal(h.selects[0].value, '202');
+    const source = fs.readFileSync('app/static/js/neoermac_door_live.js', 'utf8');
+    assert.ok(source.includes('card => card.dataset.doorFlightId'));
+    assert.ok(source.includes('String(row.master_flight_schedule_id)'));
 });

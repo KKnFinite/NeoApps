@@ -22,6 +22,7 @@
                 <article
                     class="neoermac-door-destination-card neoermac-door-destination-frame{% if card.pulls_complete %} is-pulls-complete is-pulls-collapsed{% endif %}"
                     data-door-destination-card
+                    data-door-flight-id="{{ card.master_flight_schedule_id }}"
                     data-door-destination="{{ card.destination }}"
                     data-destination-index="{{ destination_index }}"
                     data-tail-presence="{{ card.tail_presence.state if card.tail_presence else '' }}"

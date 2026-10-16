@@ -17,7 +17,7 @@ NEOERMAC_BUILDING_LINEUP_ADDITIVE_COLUMNS = (
 
 
 def ensure_neoermac_building_lineup_columns(app):
-    """Add only the four nullable second-slot columns in PostgreSQL."""
+    """Add nullable slot capacity and canonical flight identity in PostgreSQL."""
     if app.config.get("TESTING") or not _is_postgresql(app):
         return False
 
@@ -42,6 +42,9 @@ def ensure_neoermac_building_lineup_columns(app):
                         f"{column_name} VARCHAR(8)"
                     )
                 )
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS flight_assignments JSON"))
+            from app.services.neoermac_building_lineup import backfill_lineup_flight_identities
+            backfill_lineup_flight_identities()
             db.session.commit()
         except Exception as error:
             db.session.rollback()

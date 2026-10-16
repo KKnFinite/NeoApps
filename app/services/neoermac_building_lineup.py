@@ -94,14 +94,14 @@ class LineupConflict(ValueError):
 
 
 def lineup_original(gateway, field, value):
-    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-lineup-slot-v1").dumps(
-        [gateway.id, field, normalize_destination(value)]
+    return URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-lineup-slot-v2").dumps(
+        [gateway.id, field, str(value or "")]
     )
 
 
 def _original_value(gateway, field, token):
     try:
-        original = URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-lineup-slot-v1").loads(token or "")
+        original = URLSafeSerializer(current_app.config["SECRET_KEY"], salt="ermac-lineup-slot-v2").loads(token or "")
     except BadSignature:
         raise LineupConflict("Lineup form is outdated. Refresh before saving.") from None
     if not isinstance(original, list) or len(original) != 3 or original[:2] != [gateway.id, field]:
@@ -123,8 +123,8 @@ def building_lineup_state_payload(gateway, *, operation=_UNRESOLVED):
     return {
         "slots": {
             lineup_field_name(row, field): {
-                "destination": normalize_destination(getattr(row, field)),
-                "original": lineup_original(gateway, lineup_field_name(row, field), getattr(row, field)),
+                "destination": slot_flight_value(row, field),
+                "original": lineup_original(gateway, lineup_field_name(row, field), slot_flight_value(row, field)),
             }
             for row in rows for field in DESTINATION_FIELDS
         },
@@ -192,7 +192,7 @@ def get_lineup_departures(gateway):
             MasterFlightSchedule.active.is_(True),
             or_(
                 MasterFlightSchedule.gateway_id == gateway.id,
-                MasterFlightSchedule.gateway_code == gateway.code,
+                (MasterFlightSchedule.gateway_id.is_(None) & (MasterFlightSchedule.gateway_code == gateway.code)),
             ),
         )
         .order_by(MasterFlightSchedule.destination.asc(), MasterFlightSchedule.flight_number.asc())
@@ -202,72 +202,104 @@ def get_lineup_departures(gateway):
 
 def get_departure_destination_choices(gateway, *, masters=None):
     rows = get_lineup_departures(gateway) if masters is None else masters
-    destinations = {
-        normalize_destination(row.destination)
-        for row in rows
-        if normalize_destination(row.destination)
-    }
-    return sorted(destinations)
+    return [{"value": str(row.id), "label": f"{row.flight_number} — {normalize_destination(row.destination)}"}
+            for row in rows if normalize_destination(row.destination)]
 
+
+def slot_flight_value(row, field):
+    value = (row.flight_assignments or {}).get(field)
+    if value:
+        return str(value)
+    destination = normalize_destination(getattr(row, field, None))
+    return f"legacy:{destination}" if destination else ""
+
+
+def backfill_lineup_flight_identities():
+    """Bootstrap only: resolve each legacy slot once, never replace an identity.
+
+    Explicit nulls freeze ambiguous/missing mappings until an operator selects a
+    flight. No historical pull or Sort mission is edited.
+    """
+    rows = [row for row in NeoErmacBuildingLineup.query.all() if row.flight_assignments is None]
+    if not rows:
+        return 0
+    gateways = {g.id: g for g in Gateway.query.all()}
+    masters = MasterFlightSchedule.query.filter_by(active=True, mission_type="departure").all()
+    corrected = 0
+    for row in rows:
+        gateway = gateways.get(row.gateway_id)
+        choices = {}
+        for master in masters:
+            if gateway and (master.gateway_id == gateway.id or
+                           (master.gateway_id is None and master.gateway_code == gateway.code)):
+                choices.setdefault(normalize_destination(master.destination), []).append(master.id)
+        identities = {}
+        for field in DESTINATION_FIELDS:
+            candidates = choices.get(normalize_destination(getattr(row, field)), ())
+            identities[field] = candidates[0] if len(candidates) == 1 else None
+            corrected += bool(identities[field])
+        row.flight_assignments = identities
+    db.session.flush()
+    return corrected
 
 def get_departure_destination_pull_times(gateway, *, masters=None, operation=_UNRESOLVED, missions=None):
-    pull_times = _current_sort_destination_pull_times(
-        gateway, operation=operation, missions=missions,
-    )
-    rows = get_lineup_departures(gateway) if masters is None else masters
-
-    for row in rows:
-        destination = normalize_destination(row.destination)
-        if not destination:
+    if operation is _UNRESOLVED:
+        operation = current_operational_sort_operation(gateway)
+    if missions is None:
+        missions = _lineup_operation_missions(operation)
+    by_master = {}
+    for mission in missions:
+        if mission.master_flight_schedule_id:
+            by_master.setdefault(mission.master_flight_schedule_id, []).append(mission)
+    result = {}
+    for master_id, candidates in by_master.items():
+        values = dict(DEFAULT_PULL_TIMES)
+        if len(candidates) == 1:
+            mission = candidates[0]
+            timing = mission_display_timing_data(mission, operation)
+            _fill_pull_time(values, "pure", timing.get("adjusted_pure_pull_time") or mission.pure_pull_time_local)
+            _fill_pull_time(values, "mix", timing.get("adjusted_mix_pull_time") or mission.mix_pull_time_local)
+        result[str(master_id)] = values
+    for master in (get_lineup_departures(gateway) if masters is None else masters):
+        if str(master.id) in result:
             continue
-
-        destination_times = pull_times.setdefault(
-            destination,
-            {"pure": "--", "mix": "--"},
-        )
-        _fill_pull_time(destination_times, "pure", row.pure_pull_time_local)
-        _fill_pull_time(destination_times, "mix", row.mix_pull_time_local)
-
-    return pull_times
-
+        values = dict(DEFAULT_PULL_TIMES)
+        _fill_pull_time(values, "pure", master.pure_pull_time_local)
+        _fill_pull_time(values, "mix", master.mix_pull_time_local)
+        result[str(master.id)] = values
+    return result
 
 def get_destination_pull_times(gateway, destination, **snapshot):
-    destination = normalize_destination(destination)
-    if not destination:
-        return dict(DEFAULT_PULL_TIMES)
-    return dict(get_departure_destination_pull_times(gateway, **snapshot).get(destination, DEFAULT_PULL_TIMES))
-
+    return dict(get_departure_destination_pull_times(gateway, **snapshot).get(str(destination or ""), DEFAULT_PULL_TIMES))
 
 def save_building_lineup(gateway, form_data):
     _lock_lineup(gateway)
     rows = get_building_lineup_rows(gateway, for_update=True)
-    destination_choices = set(get_departure_destination_choices(gateway))
-
+    masters = {str(master.id): master for master in get_lineup_departures(gateway)}
     for row in rows:
-        normalized_values = {}
         for field_name in DESTINATION_FIELDS:
             field = lineup_field_name(row, field_name)
-            current = normalize_destination(getattr(row, field_name))
-            normalized_values[field_name] = current
             if field not in form_data:
                 continue
-            value = normalize_destination(form_data.get(field))
+            value = str(form_data.get(field) or "").strip()
             original = _original_value(gateway, field, form_data.get(f"original_{field}"))
             if value == original:
-                continue  # Displayed but unchanged is not an intentional clear.
-            if current != original:
+                continue
+            if slot_flight_value(row, field_name) != original:
                 raise LineupConflict("This lineup slot changed since it was displayed. Refresh before saving.")
-            if value and value not in destination_choices:
-                raise ValueError(f"{value} is not an available master departure destination.")
-            normalized_values[field_name] = value
-        for field_name, value in normalized_values.items():
-            setattr(row, field_name, value or None)
-
+            _set_slot_flight(row, field_name, value, masters)
     db.session.flush()
     _recompute_current_sort_door_pull_aggregates(gateway, rows)
     db.session.flush()
     return rows
 
+
+def _set_slot_flight(row, field, value, masters):
+    if value and value not in masters:
+        raise ValueError("Select an available Master Schedule departure flight.")
+    master = masters.get(value)
+    row.flight_assignments = {**(row.flight_assignments or {}), field: master.id if master else None}
+    setattr(row, field, normalize_destination(master.destination) if master else None)
 
 def get_building_lineup_doors_by_destination(gateway, *, assignments=None):
     doors_by_destination = {}
@@ -333,8 +365,9 @@ def get_linked_building_lineup_doors(
     destination,
     *,
     assignments=None,
+    master_flight_schedule_id=None,
 ):
-    """Return doors facing the same physical belt and destination."""
+    """Return doors facing the same physical belt and selected flight."""
     door = str(door or "").strip().upper()
     destination = normalize_destination(destination)
     if not door or not destination:
@@ -347,6 +380,7 @@ def get_linked_building_lineup_doors(
         for assignment in assignments
         if assignment["supervising_door"] == door
         and assignment["destination"] == destination
+        and (master_flight_schedule_id is None or assignment["master_flight_schedule_id"] == master_flight_schedule_id)
     ]
     linked_doors = set()
     for source in source_assignments:
@@ -355,7 +389,7 @@ def get_linked_building_lineup_doors(
                 candidate["runout_key"] == source["runout_key"]
                 and candidate["belt_number"] == source["belt_number"]
                 and candidate["side"] != source["side"]
-                and candidate["destination"] == destination
+                and candidate["master_flight_schedule_id"] == source["master_flight_schedule_id"]
                 and candidate["supervising_door"] != door
             ):
                 linked_doors.add(candidate["supervising_door"])
@@ -369,38 +403,26 @@ def get_linked_building_lineup_doors(
 
 def save_building_lineup_destination(gateway, field_token, destination, *, expected_original=None):
     field_token = str(field_token or "").strip()
-    if not field_token:
-        raise ValueError("Building Lineup destination field is required.")
-
     _lock_lineup(gateway)
     rows = get_building_lineup_rows(gateway, for_update=True)
     masters = get_lineup_departures(gateway)
-    destination_choices = set(get_departure_destination_choices(gateway, masters=masters))
-    value = normalize_destination(destination)
-    if value and value not in destination_choices:
-        raise ValueError(f"{value} is not an available master departure destination.")
-
+    choices = {str(master.id): master for master in masters}
+    value = str(destination or "").strip()
     for row in rows:
         for field_name in DESTINATION_FIELDS:
             if lineup_field_name(row, field_name) == field_token:
                 original = _original_value(gateway, field_token, expected_original)
-                if normalize_destination(getattr(row, field_name)) != original:
+                if slot_flight_value(row, field_name) != original:
                     raise LineupConflict("This lineup slot changed since it was displayed. Refresh before saving.")
-                setattr(row, field_name, value or None)
+                _set_slot_flight(row, field_name, value, choices)
                 db.session.flush()
                 operation, missions = _recompute_current_sort_door_pull_aggregates(gateway, rows)
                 db.session.flush()
-                return {
-                    "field": field_token,
-                    "destination": value,
-                    "original": lineup_original(gateway, field_token, value),
-                    "pull_times": get_destination_pull_times(
-                        gateway, value, masters=masters, operation=operation, missions=missions,
-                    ),
-                }
-
-    raise ValueError("Unknown Building Lineup destination field.")
-
+                return {"field": field_token, "destination": value,
+                        "original": lineup_original(gateway, field_token, value),
+                        "pull_times": get_destination_pull_times(gateway, value, masters=masters,
+                                                                operation=operation, missions=missions)}
+    raise ValueError("Unknown Building Lineup flight field.")
 
 def lineup_field_name(row, field_name):
     return f"lineup_{row.runout_key}_{field_name}"
@@ -475,7 +497,8 @@ def building_lineup_slot_descriptors(row, include_blank=False):
     descriptors = []
     for belt_number, side, slot_number, field_name in BUILDING_LINEUP_SLOT_LAYOUT:
         destination = normalize_destination(getattr(row, field_name, None))
-        if not destination and not include_blank:
+        master_id = (row.flight_assignments or {}).get(field_name)
+        if (not destination or not master_id) and not include_blank:
             continue
         belt_name = row.belt_names[belt_number - 1]
         supervising_door = row.east_door if side == "east" else row.west_door
@@ -491,6 +514,7 @@ def building_lineup_slot_descriptors(row, include_blank=False):
                 "field_name": field_name,
                 "supervising_door": supervising_door,
                 "destination": destination,
+                "master_flight_schedule_id": master_id,
                 "display_label": (
                     f"{row.belt_group_label} BELT {belt_number} "
                     f"{side.upper()} SLOT {slot_number}"
@@ -527,38 +551,6 @@ def _lineup_operation_missions(operation):
     )
 
 
-def _current_sort_destination_pull_times(gateway, *, operation=_UNRESOLVED, missions=None):
-    if operation is _UNRESOLVED:
-        operation = current_operational_sort_operation(gateway)
-    if not operation:
-        return {}
-    if missions is None:
-        missions = _lineup_operation_missions(operation)
-    pull_times = {}
-    for mission in missions:
-        destination = normalize_destination(mission.destination)
-        if not destination:
-            continue
-
-        timing_data = mission_display_timing_data(mission, operation)
-        destination_times = pull_times.setdefault(
-            destination,
-            {"pure": "--", "mix": "--"},
-        )
-        _fill_pull_time(
-            destination_times,
-            "pure",
-            timing_data.get("adjusted_pure_pull_time") or mission.pure_pull_time_local,
-        )
-        _fill_pull_time(
-            destination_times,
-            "mix",
-            timing_data.get("adjusted_mix_pull_time") or mission.mix_pull_time_local,
-        )
-
-    return pull_times
-
-
 def _fill_pull_time(destination_times, key, value):
     if destination_times[key] == "--" and value:
         destination_times[key] = value.strftime("%H:%M")
@@ -575,7 +567,7 @@ def _recompute_current_sort_door_pull_aggregates(gateway, rows):
         assignments = get_building_lineup_assignments(gateway, rows=rows)
         recompute_current_sort_door_pull_aggregates(
             gateway, operation=operation, all_operation_missions=missions,
-            doors_by_destination=get_building_lineup_doors_by_destination(gateway, assignments=assignments),
+            doors_by_master=get_building_lineup_doors_by_master(gateway, assignments=assignments),
         )
     # These same ORM missions now contain the post-aggregation values.
     return operation, missions
@@ -586,3 +578,15 @@ def _door_number(door):
     if value.startswith("D"):
         value = value[1:]
     return int(value) if value.isdigit() else None
+
+
+def get_building_lineup_doors_by_master(gateway, *, assignments=None):
+    result = {}
+    if assignments is None:
+        assignments = get_building_lineup_assignments(gateway)
+    for slot in assignments:
+        master_id = slot.get("master_flight_schedule_id")
+        if master_id:
+            result.setdefault(master_id, set()).add(slot["supervising_door"])
+    return {key: tuple(door for door in OUTBOUND_DOOR_OPTIONS if door in doors)
+            for key, doors in result.items()}

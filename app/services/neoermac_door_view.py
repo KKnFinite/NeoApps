@@ -25,6 +25,7 @@ from app.services.neoermac_building_lineup import (
     get_building_lineup_assignments,
     get_building_lineup_destinations_for_door,
     get_building_lineup_doors_by_destination,
+    get_building_lineup_doors_by_master,
     get_linked_building_lineup_doors,
     get_outbound_door_options,
     load_building_lineup_rows,
@@ -107,7 +108,7 @@ def _pull_token(bundle, mission, destination, selected_door, field):
         "field": field["key"],
         "originals": {
             door: _pull_original(bundle, mission, destination, door, field)
-            for door in bundle.doors_by_destination.get(destination, ())
+            for door in bundle.doors_by_master.get(mission.master_flight_schedule_id, ())
         },
     })
 
@@ -119,7 +120,7 @@ def _validate_pull_edit(bundle, door, destination, field, operation_id, mission_
     except (BadSignature, TypeError, ValueError):
         raise DoorPullConflict("Pull form is outdated. Reload the door before saving.") from None
     mission = next((row for row in bundle.missions if row.id == mission_id), None)
-    active_mission = bundle.departure_missions_by_destination.get(destination)
+    active_mission = bundle.missions_by_master.get(mission.master_flight_schedule_id) if mission else None
     if (
         not bundle.operation or operation_id != bundle.operation.id
         or not mission or not active_mission or mission.id != active_mission.id
@@ -127,7 +128,8 @@ def _validate_pull_edit(bundle, door, destination, field, operation_id, mission_
         or bundle.operation.gateway_id not in (None, bundle.gateway.id)
         or bundle.operation.gateway_code != bundle.gateway.code
         or mission.gateway_code != bundle.gateway.code
-        or destination not in bundle.destinations_by_door.get(door, {})
+        or normalize_destination(mission.destination) != destination
+        or door not in bundle.doors_by_master.get(mission.master_flight_schedule_id, ())
         or any(snapshot.get(key) != value for key, value in {
             "operation_id": operation_id, "mission_id": mission_id,
             "door": door, "destination": destination, "field": field["key"],
@@ -170,6 +172,10 @@ class DoorViewOperationalStateBundle:
     missions: tuple
     door_pulls: list
     initialization_changed: bool = False
+    flights_by_door: dict = field(init=False)
+    doors_by_master: dict = field(init=False)
+    missions_by_master: dict = field(init=False)
+    masters_by_id: dict = field(init=False)
     destinations_by_door: dict = field(init=False)
     doors_by_destination: dict = field(init=False)
     departure_missions_by_destination: dict = field(init=False)
@@ -179,7 +185,6 @@ class DoorViewOperationalStateBundle:
     door_pulls_by_destination_and_door: dict = field(init=False)
     door_pulls_by_door_mission: dict = field(init=False)
     door_pulls_by_mission_and_door: dict = field(init=False)
-    _masters_by_destination: object = field(default=_BUNDLE_UNSET, init=False)
     _parking_by_tail: object = field(default=_BUNDLE_UNSET, init=False)
     _arrivals_by_tail: object = field(default=_BUNDLE_UNSET, init=False)
     _uld_requests: object = field(default=_BUNDLE_UNSET, init=False)
@@ -216,6 +221,22 @@ class DoorViewOperationalStateBundle:
                 self.departure_mission_candidates_by_destination.setdefault(
                     destination, []
                 ).append(mission)
+        self.doors_by_master = get_building_lineup_doors_by_master(self.gateway, assignments=self.lineup_assignments)
+        selected_ids = set(self.doors_by_master)
+        self.masters_by_id = {m.id: m for m in MasterFlightSchedule.query.filter(
+            MasterFlightSchedule.id.in_(selected_ids),
+            MasterFlightSchedule.mission_type == "departure",
+            or_(MasterFlightSchedule.gateway_id == self.gateway.id,
+                (MasterFlightSchedule.gateway_id.is_(None) & (MasterFlightSchedule.gateway_code == self.gateway.code))),
+        ).all()} if selected_ids else {}
+        self.flights_by_door = {door: {} for door in door_options}
+        for slot in self.lineup_assignments:
+            master_id = slot.get("master_flight_schedule_id")
+            if master_id not in self.masters_by_id:
+                continue  # Deleted/foreign identities never fall back to destination.
+            entry = self.flights_by_door[slot["supervising_door"]].setdefault(master_id, {
+                "destination": normalize_destination(self.masters_by_id[master_id].destination), "labels": []})
+            entry["labels"].append(slot["display_label"])
         self.refresh_active_departure_missions()
         self.arrival_missions = tuple(arrivals)
         self.door_pulls_by_door_destination = {}
@@ -296,19 +317,16 @@ class DoorViewOperationalStateBundle:
             self.door_pulls.append(record)
 
     def refresh_active_departure_missions(self):
+        by_master = {}
+        for mission in self.missions:
+            if mission.mission_type == "departure" and mission.master_flight_schedule_id in self.masters_by_id:
+                by_master.setdefault(mission.master_flight_schedule_id, []).append(mission)
+        self.missions_by_master = {key: rows[0] for key, rows in by_master.items() if len(rows) == 1}
+        # Compatibility lookup is intentionally unambiguous, never chronological.
         self.departure_missions_by_destination = {
-            destination: mission
-            for destination, candidates in self.departure_mission_candidates_by_destination.items()
-            if (mission := _active_departure_mission(candidates)) is not None
+            dest: candidates[0] for dest, candidates in self.departure_mission_candidates_by_destination.items()
+            if len(candidates) == 1 and candidates[0] in self.missions_by_master.values()
         }
-
-    @property
-    def masters_by_destination(self):
-        if self._masters_by_destination is _BUNDLE_UNSET:
-            self._masters_by_destination = _master_departures_by_destination(
-                self.gateway
-            )
-        return self._masters_by_destination
 
     @property
     def parking_by_tail(self):
@@ -509,8 +527,8 @@ def save_door_pulls(
         gateway,
         operation=operation,
         destinations=changed_destinations,
-        doors_by_destination=bundle.doors_by_destination,
-        missions_by_destination=bundle.departure_missions_by_destination,
+        doors_by_master=bundle.doors_by_master,
+        missions_by_destination={m.id: m for m in bundle.missions_by_master.values()},
         all_operation_missions=bundle.missions,
         door_pull_records=bundle.door_pulls,
     )
@@ -587,8 +605,8 @@ def save_single_door_pull(
         gateway,
         operation=operation,
         destinations=(destination,),
-        doors_by_destination=bundle.doors_by_destination,
-        missions_by_destination=bundle.departure_missions_by_destination,
+        doors_by_master=bundle.doors_by_master,
+        missions_by_destination={m.id: m for m in bundle.missions_by_master.values()},
         all_operation_missions=bundle.missions,
         door_pull_records=bundle.door_pulls,
     )
@@ -600,6 +618,7 @@ def save_single_door_pull(
         destination,
         operation,
         bundle=bundle,
+        mission_id=mission.id,
     )
 
 
@@ -625,6 +644,7 @@ def _apply_pull_value(
         supervised_doors,
         apply_to_both=apply_to_both,
         bundle=bundle,
+        master_flight_schedule_id=mission.master_flight_schedule_id if mission else None,
     )
     # Check every target before writing any. The reservation covers absent rows;
     # field originals omit the other pull field and row-wide updated_at.
@@ -655,6 +675,7 @@ def _pull_write_doors(
     *,
     apply_to_both=False,
     bundle=None,
+    master_flight_schedule_id=None,
 ):
     if not apply_to_both:
         return (selected_door,)
@@ -665,6 +686,7 @@ def _pull_write_doors(
         destination,
         supervised_doors,
         bundle=bundle,
+        master_flight_schedule_id=master_flight_schedule_id,
     )
 
 
@@ -675,6 +697,7 @@ def linked_supervised_pull_doors(
     supervised_doors=(),
     *,
     bundle=None,
+    master_flight_schedule_id=None,
 ):
     """Return valid opposite supervised doors for one displayed destination."""
     selected_door = normalize_door(selected_door)
@@ -691,6 +714,7 @@ def linked_supervised_pull_doors(
             gateway,
             selected_door,
             destination,
+            master_flight_schedule_id=master_flight_schedule_id,
             assignments=(
                 bundle.lineup_assignments if bundle is not None else None
             ),
@@ -829,7 +853,7 @@ def door_view_uld_state(
             destinations=destinations, selected_door=selected_door,
             can_edit=can_edit, pull_fields=PULL_FIELDS,
             linked_supervised_pull_doors=any(
-                linked_supervised_pull_doors(gateway, selected_door, card["destination"], supervised_doors, bundle=bundle)
+                linked_supervised_pull_doors(gateway, selected_door, card["destination"], supervised_doors, bundle=bundle, master_flight_schedule_id=card["master_flight_schedule_id"])
                 for card in destinations
             ),
         )
@@ -899,11 +923,6 @@ def door_tab_pull_alerts(
             operation=operation,
             initialize_lineup=initialize_lineup,
         )
-    destinations_by_door = {
-        door: set(bundle.destinations_by_door.get(door, {})) for door in doors
-    }
-    missions = bundle.departure_missions_by_destination
-    masters = bundle.masters_by_destination
     if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
         door_pulls = bundle.door_pulls_by_door_destination
 
@@ -912,9 +931,10 @@ def door_tab_pull_alerts(
             continue
         tab_state = ""
         tab_pulls = []
-        for destination in destinations_by_door[door]:
-            mission = missions.get(destination)
-            master = masters.get(destination)
+        for master_id, entry in bundle.flights_by_door.get(door, {}).items():
+            destination = entry["destination"]
+            mission = bundle.missions_by_master.get(master_id)
+            master = bundle.masters_by_id.get(master_id)
             timing_data = _mission_timing_data(mission, operation)
             planned_times = {
                 "pure": _planned_pull_time(timing_data, master, "pure"),
@@ -1118,6 +1138,7 @@ def _pull_card_payload(
     operation,
     *,
     bundle=None,
+    mission_id=None,
 ):
     for index, card in enumerate(
         _destination_cards_for_door(
@@ -1127,7 +1148,7 @@ def _pull_card_payload(
             bundle=bundle,
         )
     ):
-        if card["destination"] == destination:
+        if card["destination"] == destination and (mission_id is None or card["mission_id"] == mission_id):
             return _door_card_state_payload(card, order_index=index)
     raise ValueError(f"{destination} is not assigned to {selected_door}.")
 
@@ -1136,6 +1157,7 @@ def _door_card_state_payload(card, order_index):
     return {
         "operation_id": card["operation_id"],
         "mission_id": card["mission_id"],
+        "master_flight_schedule_id": card["master_flight_schedule_id"],
         "original": card["original"],
         "destination": card["destination"],
         "flight_number": card["flight_number"],
@@ -1187,18 +1209,16 @@ def _destination_cards_for_door(
             operation=operation,
             initialize_lineup=initialize_lineup,
         )
-    destination_slots = bundle.destinations_by_door.get(selected_door, {})
-    missions = bundle.departure_missions_by_destination
     parking_by_tail = bundle.parking_by_tail
     arrivals_by_tail = bundle.arrivals_by_tail
-    masters = bundle.masters_by_destination
     if door_pulls is _DOOR_PULL_LOOKUP_UNSET:
         door_pulls = bundle.door_pulls_by_door_destination
     cards = []
 
-    for destination, slot_labels in destination_slots.items():
-        mission = missions.get(destination)
-        master = masters.get(destination)
+    for master_id, entry in bundle.flights_by_door.get(selected_door, {}).items():
+        destination, slot_labels = entry["destination"], entry["labels"]
+        mission = bundle.missions_by_master.get(master_id)
+        master = bundle.masters_by_id.get(master_id)
         door_pull = _door_pull_for_mission(
             bundle, selected_door, destination, mission, legacy_lookup=door_pulls
         )
@@ -1232,6 +1252,7 @@ def _destination_cards_for_door(
             {
                 "operation_id": operation.id if operation else None,
                 "mission_id": mission.id if mission else None,
+                "master_flight_schedule_id": master_id,
                 "original": {
                     field["key"]: _pull_token(bundle, mission, destination, selected_door, field)
                     for field in PULL_FIELDS
@@ -1351,51 +1372,6 @@ def _current_operation(gateway):
     return operations[0] if operations else None
 
 
-_PULL_COMPLETE_DEPARTURE_STATUSES = {
-    "last_uld_enroute",
-    "ramp_load_complete",
-    "crew_load_complete",
-    "blocked_out",
-    "departed",
-    "cancelled",
-}
-
-
-def _active_departure_mission(candidates):
-    """Choose the next operational mission for one displayed destination.
-
-    Building-lineup slots intentionally remain destination based.  The pull
-    state beneath them cannot be: repeat destinations must advance in planned
-    chronology once the earlier mission's pull progression is complete.
-    """
-    for mission in candidates or ():
-        status = str(getattr(mission, "departure_status", "") or "").strip().lower()
-        if status not in _PULL_COMPLETE_DEPARTURE_STATUSES:
-            return mission
-    return (candidates or (None,))[0]
-
-
-def _master_departures_by_destination(gateway):
-    masters = (
-        MasterFlightSchedule.query.filter(
-            MasterFlightSchedule.mission_type == "departure",
-            MasterFlightSchedule.active.is_(True),
-            or_(
-                MasterFlightSchedule.gateway_id == gateway.id,
-                MasterFlightSchedule.gateway_code == gateway.code,
-            ),
-        )
-        .order_by(MasterFlightSchedule.planned_time_local.asc(), MasterFlightSchedule.id.asc())
-        .all()
-    )
-    result = {}
-    for master in masters:
-        destination = normalize_destination(master.destination)
-        if destination and destination not in result:
-            result[destination] = master
-    return result
-
-
 def _door_pull_record(
     gateway,
     selected_door,
@@ -1462,13 +1438,6 @@ def _door_pull_record(
     return record
 
 
-def _mission_for_destination(bundle, destination):
-    if bundle is None:
-        return None
-    return bundle.departure_missions_by_destination.get(
-        normalize_destination(destination)
-    )
-
 
 def _door_pull_for_mission(bundle, door, destination, mission, *, legacy_lookup=None):
     """Read a mission pull, allowing a destination legacy record only safely."""
@@ -1479,7 +1448,7 @@ def _door_pull_for_mission(bundle, door, destination, mission, *, legacy_lookup=
     candidates = bundle.departure_mission_candidates_by_destination.get(
         normalize_destination(destination), ()
     )
-    if len(candidates) != 1:
+    if mission is None or len(candidates) != 1:
         return None
     lookup = legacy_lookup if legacy_lookup is not None else bundle.door_pulls_by_door_destination
     return lookup.get((normalize_door(door), normalize_destination(destination)))

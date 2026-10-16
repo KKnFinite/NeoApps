@@ -431,16 +431,16 @@
     const renderDestinations = (destinations, html) => {
         const list = root.querySelector("[data-door-destination-list]");
         if (!list) return false;
-        const rows = new Map(destinations.map(row => [String(row.destination).toUpperCase(), row]));
+        const rows = new Map(destinations.map(row => [String(row.master_flight_schedule_id), row]));
         let complete = true;
         if (typeof html === 'string') {
             const template = document.createElement('template');
             template.innerHTML = html;
             const incoming = Array.from(template.content.querySelectorAll('[data-door-destination-card]'));
             complete = window.NeoErmacLiveIntegrity.reconcileMembership(
-                list, incoming, card => card.dataset.doorDestination,
+                list, incoming, card => card.dataset.doorFlightId,
                 cardHasProtectedInput,
-                (card) => applyDoorCardState(card, rows.get(card.dataset.doorDestination), {protectLocal: true}),
+                (card) => applyDoorCardState(card, rows.get(card.dataset.doorFlightId), {protectLocal: true}),
             );
             const form = root.querySelector('[data-door-pull-form]');
             form.hidden = list.children.length === 0;
@@ -464,7 +464,7 @@
             window.neoErmacBindPullControls?.();
         } else {
             for (const card of list.children) {
-                const row = rows.get(card.dataset.doorDestination);
+                const row = rows.get(card.dataset.doorFlightId);
                 if (row) applyDoorCardState(card, row, {protectLocal: true});
                 if (!row || cardHasProtectedInput(card)) complete = false;
             }

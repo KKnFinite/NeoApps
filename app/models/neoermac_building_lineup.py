@@ -25,6 +25,8 @@ class NeoErmacBuildingLineup(db.Model):
     east_destination_2_slot_2 = db.Column(db.String(8), nullable=True)
     west_destination_1_slot_2 = db.Column(db.String(8), nullable=True)
     west_destination_2_slot_2 = db.Column(db.String(8), nullable=True)
+    # Slot field -> canonical MasterFlightSchedule ID; null explicitly needs selection.
+    flight_assignments = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime,
