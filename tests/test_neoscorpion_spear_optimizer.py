@@ -144,6 +144,7 @@ class WholeSortTest(unittest.TestCase):
             physical_off_forecast={'likely':NOW-timedelta(minutes=1)})
         p=plan([active,row(200)])
         self.assertNotIn(200,jobs(p))
+        self.assertEqual(p.risks_by_mission_id[100],'TIMING UNKNOWN')
         active['physical_off_forecast']['likely']=NOW+timedelta(minutes=10)
         p=plan([active,row(200)])
         self.assertTrue(p.steps[0].requires_resource_release)

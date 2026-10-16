@@ -471,7 +471,9 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
     steps=[];risks={}
     for row in rows:
         if row.get('fueling_on_trusted') and not row.get('is_off') and not row.get('administratively_complete'):
-            risks[row['mission'].id]=legacy._risk(stamp((row.get('physical_off_forecast') or {}).get('likely')),legacy._departure_at(row))
+            prediction=stamp((row.get('physical_off_forecast') or {}).get('likely'))
+            departure=legacy._departure_at(row)
+            risks[row['mission'].id]=('LATE' if departure and departure<now else 'TIMING UNKNOWN') if not prediction or prediction<=now else legacy._risk(prediction,departure)
     for mid,c in best.jobs.items():
         row=row_by_id[mid];mission=row['mission'];timing=timings[mid]
         truck=trucks[c['truck_id']];fueler=fuelers[c['fueler_id']]
