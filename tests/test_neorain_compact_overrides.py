@@ -12,6 +12,20 @@ class CompactRainTemplateTest(unittest.TestCase):
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
 
+    def test_explicit_clear_suppresses_std_fallback_on_full_and_live_render(self):
+        for board, mission, field in (('inbound', self.fixture.arrival, 'sta'),
+                                      ('outbound', self.fixture.departure, 'etd')):
+            self.assertEqual(self.fixture.edit(mission, field, '0125').status_code, 200)
+            self.assertEqual(self.fixture.edit(mission, field, action='clear').status_code, 200)
+            html = self.fixture.client.get('/neorain/' + board).get_data(as_text=True)
+            inputs = re.findall(r'<input[^>]*aria-label="[^\"]+ \(HHMM\)"[^>]*data-rain-override-time[^>]*>', html)
+            targets = [control for control in inputs if ('STA for' if field == 'sta' else 'ETD for') in control]
+            self.assertTrue(targets, field)
+            self.assertTrue(all('value=""' in control for control in targets), targets)
+            self.assertEqual(self.fixture.edit(mission, field, action='reset').status_code, 200)
+            html = self.fixture.client.get('/neorain/' + board).get_data(as_text=True)
+            self.assertIn('value="01:00"' if field == 'sta' else 'value="07:00"', html)
+
     def test_boards_render_inline_inputs_and_one_shared_reset_without_source_labels(self):
         for board in ('inbound', 'outbound'):
             response = self.fixture.client.get('/neorain/' + board)
@@ -30,7 +44,7 @@ class CompactRainTemplateTest(unittest.TestCase):
             self.assertNotIn('data-rain-override-open', html)
             self.assertNotIn('data-rain-override-reset', html)
             self.assertEqual(html.count('type="button" data-rain-reset-selected'), 1)
-            self.assertIn('20261016-rain-ui-v5', html)
+            self.assertIn('20261016-clear-v1', html)
         self.assertIn('aria-label="Include for UPS948"', html)
         self.assertNotIn('>Include</label>', html)
         self.assertNotIn('>No Return</label>', html)

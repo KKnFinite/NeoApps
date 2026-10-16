@@ -55,13 +55,13 @@ def handle_override(default_field=None):
         db.session.rollback()
         return jsonify(ok=False, code='stale_version', error=conflict['message']), 409
     action = payload.get('action', 'edit')
-    if action not in ('edit', 'reset'):
-        return jsonify(ok=False, error='Choose edit or reset.'), 400
+    if action not in ('edit', 'reset', 'clear'):
+        return jsonify(ok=False, error='Choose edit, clear or reset.'), 400
     try:
         if mission.arrival_status == 'cancelled' or mission.departure_status == 'cancelled':
             raise ValueError('Cancelled missions must be restored through authorized mission management.')
         row, changed = edit_override(mission, operation, field, payload.get('value', payload.get('included')),
-            current_user, reset=action == 'reset', confirmed=payload.get('confirmed') is True)
+            current_user, reset=action == 'reset', clear=action == 'clear', confirmed=payload.get('confirmed') is True)
         row_id, generation = (row.id, row.generation) if row else (None, None)
         db.session.commit()
     except ValueError as exc:

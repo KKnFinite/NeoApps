@@ -120,6 +120,7 @@ def inject_neorain_navigation():
     from app.neonodes.neorain.mission_routes import tail_tools_context
     from app.neonodes.neorain.override_routes import can_edit_field
     from app.models import NeoRainMissionOverride
+    from app.services.neorain_overrides import override_is_cleared
     cache = {}
     def state(mission_id, field):
         if 'rows' not in cache:
@@ -127,7 +128,8 @@ def inject_neorain_navigation():
             cache['rows'] = {(row.sort_date_mission_id,row.field):row for row in
                 NeoRainMissionOverride.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
         row = cache['rows'].get((mission_id,field))
-        return {'label': 'NEO · '+row.sync_status if row and row.active else 'UPSTREAM', 'detail':row.sync_detail or '' if row else ''}
+        return {'label': 'NEO · '+row.sync_status if row and row.active else 'UPSTREAM',
+                'detail':row.sync_detail or '' if row else '', 'cleared':override_is_cleared(row)}
     return {"neorain_menu_items": _visible_neorain_menu_items, "rain_tail_tools": tail_tools_context,
             'can_edit_override_field':can_edit_field, 'rain_override_state':state}
 

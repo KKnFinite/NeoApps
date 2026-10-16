@@ -47,8 +47,13 @@ class CompactRainBrowserTest(unittest.TestCase):
         cls.fixture.tearDownClass()
 
     cases = (('inbound', 'arrival', 'block_in'), ('outbound', 'departure', 'ramp_load_complete'))
-    attrs = {'block_in': ('actual_block_in_datetime_utc', 'actual_block_in_source'),
-             'ramp_load_complete': ('ramp_load_completed_at_utc', 'ramp_load_completed_source')}
+    attrs = {'sta': ('planned_datetime_utc', 'planned_source'),
+             'etd': ('eta_datetime_utc', 'eta_source'),
+             'block_in': ('actual_block_in_datetime_utc', 'actual_block_in_source'),
+             'elmac': ('elmac_completed_at_utc', 'elmac_completed_source'),
+             'ramp_load_complete': ('ramp_load_completed_at_utc', 'ramp_load_completed_source'),
+             'crew_load_complete': ('crew_load_completed_at_utc', 'crew_load_completed_source'),
+             'official_block_out': ('actual_block_out_datetime_utc', 'actual_block_out_source')}
 
     def upstream(self, kind, field, value):
         # The same canonical import fence used by Google refresh, without external I/O.
@@ -57,6 +62,11 @@ class CompactRainBrowserTest(unittest.TestCase):
             mission = db.session.get(SortDateMission, self.ids[kind])
             attr, source = self.attrs[field]
             values = {attr: value, source: 'google_rain'}
+            if field == 'sta':
+                from datetime import timezone
+                from zoneinfo import ZoneInfo
+                values['planned_datetime_local'] = (value.replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo(mission.timezone)).replace(tzinfo=None) if value else None)
             observe_import(mission, field, values)
             for key, item in values.items():
                 setattr(mission, key, item)
@@ -108,6 +118,104 @@ class CompactRainBrowserTest(unittest.TestCase):
         self.assertTrue(geometry)
         self.assertTrue(all(x['width'] <= min(58, x['parent']) + 1 and x['height'] == 26 for x in geometry), geometry)
         self.assertTrue(all(not x['value'] or (len(x['value']) == 5 and x['value'][2] == ':' and x['value'].replace(':','').isdigit()) for x in geometry))
+
+    def reveal(self, page, field):
+        if not page.locator(f'.rain-override[data-rain-override-field="{field}"] [data-rain-override-time]:visible').count():
+            page.locator('[data-neorain-mobile-row-open]:visible').first.click()
+
+    def test_clearing_all_fields_on_blur_persists_across_import_navigation_and_live_refresh(self):
+        fields = {'inbound':('sta','block_in'),
+                  'outbound':('etd','elmac','ramp_load_complete','crew_load_complete','official_block_out')}
+        for engine, width in (('chromium',1920), ('webkit',390)):
+            browser = getattr(self.fixture.pw, engine).launch(headless=True)
+            context = browser.new_context(viewport={'width':width,'height':900},
+                has_touch=width < 900, is_mobile=width < 900)
+            try:
+                page = context.new_page(); self.fixture().login(page)
+                errors = []; page.on('pageerror', lambda error: errors.append(str(error)))
+                for board, kind, _ in self.cases:
+                    for field in fields[board]:
+                        with self.subTest(engine=engine, field=field):
+                            self.clear(kind, field)
+                            self.upstream(kind, field, datetime(2026,10,16,7,45))
+                            self.fixture().ready(page, '/neorain/' + board)
+                            self.reveal(page, field)
+                            expect(self.input(page,field)).to_have_value('02:45')
+                            page.evaluate('window.rainClearDocument = true')
+                            self.input(page,field).fill('')
+                            expect(self.cell(page,field)).to_have_attribute('data-rain-override-dirty','true')
+                            with page.expect_response(lambda r:'/neorain/override' in r.url and r.request.method=='POST') as cleared:
+                                self.input(page,field).press('Tab')
+                            self.assertEqual(cleared.value.request.post_data_json['action'],'clear')
+                            self.assertEqual(cleared.value.status,200)
+                            self.assertTrue(cleared.value.json()['cleared'])
+                            expect(self.cell(page,field)).not_to_have_attribute('data-rain-override-dirty','true')
+                            page.wait_for_function('!window.rainClearDocument',timeout=20000)
+                            self.reveal(page,field)
+                            expect(self.input(page,field)).to_have_value('')
+                            # Existing live polling receives a genuine new upstream fact,
+                            # but explicit Neo null authority keeps both views empty.
+                            revision_url=page.locator(f'[data-neorain-{board}-live]').get_attribute('data-revision-url')
+                            with page.expect_response(lambda r:revision_url in r.url) as poll:
+                                self.upstream(kind,field,datetime(2026,10,16,8,10))
+                            self.assertEqual(poll.value.status,200)
+                            # Shielding an import need not change visible board facts
+                            # or force a reload. Check the next ordinary poll and reload.
+                            page.reload()
+                            self.reveal(page,field)
+                            expect(self.input(page,field)).to_have_value('')
+                            posts=[]
+                            def capture(request):
+                                if '/neorain/override' in request.url and request.method=='POST':posts.append(request.post_data_json)
+                            page.on('request',capture)
+                            self.input(page,field).focus();self.input(page,field).press('Tab')
+                            page.wait_for_timeout(100)
+                            self.assertEqual(posts,[])  # Untouched blank is not another clear.
+                            page.remove_listener('request',capture)
+                            self.fixture().ready(page, '/neorain/' + ('outbound' if board=='inbound' else 'inbound'))
+                            self.fixture().ready(page,'/neorain/'+board)
+                            self.reveal(page,field)
+                            expect(self.input(page,field)).to_have_value('')
+                            self.assertEqual(self.reset(page,field)['value'],'03:10')
+                            expect(self.input(page,field)).to_have_value('03:10')
+                            self.save(page,field,'0125')
+                            expect(self.input(page,field)).to_have_value('01:25')
+                    self.assert_compact(page,board)
+                    page.screenshot(path=str(self.fixture.evidence / f'rain-clear-{board}-{engine}-{width}.png'),full_page=True)
+                self.assertEqual(errors,[])
+            finally:
+                context.close();browser.close()
+
+    def test_clear_and_newer_draft_survive_queued_save_responses(self):
+        browser = self.fixture.pw.chromium.launch(headless=True)
+        context = browser.new_context(viewport={'width':390,'height':844})
+        try:
+            page=context.new_page();self.fixture().login(page)
+            for board,kind,field in self.cases:
+                self.clear(kind,field);self.fixture().ready(page,'/neorain/'+board)
+                pending=[]
+                page.route('**/neorain/override',lambda route:pending.append((route,route.fetch())))
+                self.input(page,field).fill('1400')
+                page.wait_for_timeout(200);self.assertEqual(len(pending),1)
+                self.input(page,field).fill('');self.input(page,field).press('Tab')
+                first,response=pending[0];first.fulfill(response=response)
+                page.wait_for_timeout(200);self.assertEqual(len(pending),2)
+                clear,cleared=pending[1]
+                self.assertEqual(clear.request.post_data_json['action'],'clear')
+                self.assertEqual(clear.request.post_data_json['expected_version'],response.json()['version'])
+                self.assertTrue(cleared.json()['cleared'])
+                # A new unfinished entry wins over the in-flight clear reply.
+                self.input(page,field).fill('12')
+                clear.fulfill(response=cleared)
+                expect(self.cell(page,field)).to_have_attribute('data-rain-override-version',cleared.json()['version'])
+                expect(self.input(page,field)).to_have_value('12')
+                expect(self.cell(page,field)).to_have_attribute('data-rain-override-dirty','true')
+                page.unroute('**/neorain/override')
+                self.save(page,field,'0125')
+                expect(self.input(page,field)).to_have_value('01:25')
+                page.reload();expect(self.input(page,field)).to_have_value('01:25')
+        finally:
+            context.close();browser.close()
 
     def test_desktop_mobile_inline_autosave_reset_and_refresh(self):
         for engine in ('chromium', 'webkit'):

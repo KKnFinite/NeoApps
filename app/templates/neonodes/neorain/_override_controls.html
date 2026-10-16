@@ -1,5 +1,6 @@
 {% macro rain_time(row, field, label, value) -%}
 {% set state = rain_override_state(row.mission_id, field) %}
+{% set value = '' if state.cleared else value %}
 <div class="rain-override" role="group" aria-label="{{ label }} for {{ row.flight_number }}" data-rain-override-mission="{{ row.mission_id }}" data-rain-override-field="{{ field }}" data-rain-override-version="{{ row.version }}" data-rain-override-authority="{{ state.label }}" data-rain-override-detail="{{ state.detail }}">
   {% if can_edit_override_field(field) and row.status != 'CANCELLED' %}
   <input type="text" inputmode="numeric" maxlength="5" pattern="[0-9]{4}|[0-9]{2}:[0-9]{2}" autocomplete="off" spellcheck="false" aria-label="{{ label }} for {{ row.flight_number }} (HHMM)" title="HHMM" value="{{ value or '' }}" data-rain-override-time>

@@ -54,6 +54,103 @@ class RainOverrideTest(unittest.TestCase):
         self.assertEqual(response.status_code,409)
         self.assertEqual(NeoRainOverrideAudit.query.filter_by(action='EDIT').count(),1)
 
+    def test_explicit_clear_all_time_fields_survives_import_and_reset_restores_upstream(self):
+        from app.services.neorain_overrides import override_is_cleared
+        for field, (direction, attrs) in FIELDS.items():
+            if field in ('included', 'no_return'):
+                continue
+            with self.subTest(field=field):
+                mission = self.arrival if direction == 'arrival' else self.departure
+                self.assertEqual(self.edit(mission, field, '0125').status_code, 200)
+                old_row = NeoRainMissionOverride.query.filter_by(field=field).one()
+                old_generation = old_row.generation
+                with patch('app.services.neorain_google_overrides.certified_write') as writer, \
+                     patch('app.services.neorain_google_overrides.refresh_reset') as reset_reader:
+                    response = self.edit(mission, field, action='clear')
+                    self.assertEqual(response.status_code, 200, response.json)
+                    self.assertTrue(response.json['active'])
+                    self.assertTrue(response.json['cleared'])
+                    self.assertEqual(response.json['value'], '')
+                    self.assertEqual(response.json['sync_status'], 'NEO_ONLY')
+                    self.assertIsNone(getattr(mission, attrs[0]))
+                    self.assertTrue(override_is_cleared(old_row))
+                    # Neither an old pending write nor the cleared generation can send blanks.
+                    attempt_once(old_row.id, old_generation)
+                    attempt_once(old_row.id, old_row.generation)
+                    writer.assert_not_called()
+                    reset_reader.assert_not_called()
+                generation = old_row.generation
+                self.assertFalse(self.edit(mission, field, action='clear').json['changed'])
+                self.assertEqual(old_row.generation, generation)
+                self.assertEqual(NeoRainOverrideAudit.query.filter_by(override_id=old_row.id, action='CLEAR').count(), 1)
+                incoming = {attrs[0]: datetime(2026, 8, 31, 9), attrs[-1]: 'google_rain'}
+                if field == 'sta':
+                    incoming['planned_datetime_local'] = datetime(2026, 8, 31, 4)
+                self.assertTrue(observe_import(mission, field, incoming))
+                for attr, value in incoming.items():
+                    setattr(mission, attr, value)
+                db.session.commit()
+                db.session.expire_all()
+                self.assertIsNone(getattr(mission, attrs[0]))
+                self.assertEqual(getattr(mission, attrs[-1]), 'neorain')
+                self.assertTrue(override_is_cleared(old_row))
+                response = self.edit(mission, field, action='reset')
+                self.assertEqual(response.status_code, 200, response.json)
+                self.assertFalse(response.json['cleared'])
+                self.assertEqual(response.json['value'], '04:00')
+
+    def test_clear_is_distinct_from_blank_and_cannot_clear_checkboxes_or_invalid_values(self):
+        before = self.arrival.planned_datetime_utc
+        self.assertFalse(self.edit(self.arrival, 'sta', '').json['changed'])
+        self.assertEqual(self.arrival.planned_datetime_utc, before)
+        self.assertEqual(NeoRainMissionOverride.query.count(), 0)
+        for field, raw in (('included', None), ('no_return', None), ('etd', '1234'), ('etd', '12'), ('etd', False)):
+            self.assertEqual(self.edit(self.departure, field, raw, action='clear').status_code, 400)
+        response = self.edit(self.arrival, 'sta', action='clear')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.arrival.planned_datetime_utc)
+        self.assertIsNone(self.arrival.planned_datetime_local)
+
+    def test_clear_preserves_status_safeguards_permissions_scope_and_stale_protection(self):
+        for field in ('ramp_load_complete', 'crew_load_complete', 'official_block_out'):
+            self.assertEqual(self.edit(self.departure, field, '0235').status_code, 200)
+        self.assertEqual(self.departure.departure_status, 'blocked_out')
+        self.assertEqual(self.edit(self.departure, 'official_block_out', action='clear').status_code, 200)
+        self.assertEqual(self.departure.departure_status, 'crew_load_complete')
+        self.assertEqual(self.edit(self.departure, 'ramp_load_complete', action='clear').status_code, 200)
+        self.assertEqual(self.departure.departure_status, 'crew_load_complete')
+        self.assertEqual(self.edit(self.departure, 'official_block_out', '0235').status_code, 200)
+        self.assertEqual(self.edit(self.departure, 'ramp_load_complete', '0235').status_code, 200)
+        self.assertEqual(self.edit(self.departure, 'no_return', True).status_code, 200)
+        self.assertEqual(self.edit(self.departure, 'official_block_out', action='clear').status_code, 200)
+        self.assertEqual(self.departure.departure_status, 'departed')
+        stale = entity_version(self.arrival)
+        self.assertEqual(self.edit(self.arrival, 'sta', '0125').status_code, 200)
+        response = self.client.post('/neorain/override', json={'mission_id':self.arrival.id,
+            'field':'sta', 'action':'clear', 'expected_version':stale})
+        self.assertEqual(response.status_code, 409)
+        self.assertIsNotNone(self.arrival.planned_datetime_utc)
+        watcher = self.fixture._user('rain_clear_watcher', 'watcher', rain_role='watcher')
+        db.session.commit(); self.fixture._login(watcher)
+        self.assertEqual(self.edit(self.arrival, 'sta', action='clear').status_code, 403)
+        self.fixture._login(self.actor)
+        with patch('app.neonodes.neorain.routes.current_neorain_outbound_operation', return_value=None):
+            self.assertEqual(self.edit(self.arrival, 'sta', action='clear').status_code, 409)
+        self.arrival.arrival_status = 'cancelled'; db.session.commit()
+        self.assertEqual(self.edit(self.arrival, 'sta', action='clear').status_code, 400)
+
+    def test_actual_google_rain_poll_cannot_resurrect_cleared_milestone(self):
+        from app.services.google_rain_live_milestones import apply_google_rain_departure_milestones
+        self.assertEqual(self.edit(self.departure, 'ramp_load_complete', '0235').status_code, 200)
+        self.assertEqual(self.edit(self.departure, 'ramp_load_complete', action='clear').status_code, 200)
+        apply_google_rain_departure_milestones(self.operation, rows=[{'flight_number':self.departure.flight_number,
+            'destination':'SDF', 'tail':self.departure.assigned_tail_number,
+            'ramp_load_complete':'8/31 03:00', 'crew_load_complete':'8/31 03:10', 'removed':False}])
+        db.session.commit()
+        self.assertIsNone(self.departure.ramp_load_completed_at_utc)
+        self.assertEqual(self.departure.crew_load_completed_at_utc, datetime(2026, 8, 31, 8, 10))
+        self.assertEqual(self.edit(self.departure, 'ramp_load_complete', action='reset').json['value'], '03:00')
+
     def test_google_import_cannot_overwrite_active_and_reset_accepts_new_google(self):
         self.arrival.actual_block_in_datetime_utc=datetime(2026,8,31,7)
         self.arrival.actual_block_in_source='google_motherbrain'; db.session.commit()

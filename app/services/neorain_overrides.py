@@ -102,13 +102,23 @@ def observe_import(mission, field, values):
         return row.active
 
 
-def edit_override(mission, operation, field, raw, actor, *, reset=False, confirmed=False):
+def override_is_cleared(row):
+    """An active explicit null is different from upstream authority or no edit."""
+    if not row or not row.active or row.field in ('included', 'no_return'):
+        return False
+    attr = FIELDS[row.field][1][0]
+    return isinstance(row.value, dict) and attr in row.value and row.value[attr] is None
+
+
+def edit_override(mission, operation, field, raw, actor, *, reset=False, clear=False, confirmed=False):
     from app.neonodes.neorain.services import (_parse_operational_hhmm,
         _mutate_no_return, _advance_departure_status)
     if field not in FIELDS or mission.mission_type != FIELDS[field][0]:
         raise ValueError('Field does not belong to this mission direction.')
     if mission.sort_date_operation_id != operation.id:
         raise ValueError('Mission is outside the current sort.')
+    if clear and (reset or field in ('included', 'no_return') or raw not in (None, '')):
+        raise ValueError('Only an empty time can be explicitly cleared.')
     row = NeoRainMissionOverride.query.filter_by(sort_date_mission_id=mission.id, field=field)
     row = row.populate_existing().with_for_update().one_or_none()
     before = row.value if row and row.active else None
@@ -128,9 +138,13 @@ def edit_override(mission, operation, field, raw, actor, *, reset=False, confirm
                 action='RESET', actor_user_id=actor.id, before_value=before, after_value=None))
             db.session.flush()
         return row, True
-    if raw is None or (isinstance(raw, str) and not raw.strip()):
+    if clear and override_is_cleared(row):
+        return row, False
+    if not clear and (raw is None or (isinstance(raw, str) and not raw.strip())):
         return row, False  # Blank/untouched never becomes false or a write.
-    if field in ('included', 'no_return'):
+    if clear:
+        value = None
+    elif field in ('included', 'no_return'):
         if type(raw) is not bool:
             raise ValueError('Enter a typed true or false checkbox value.')
         value = raw
@@ -158,11 +172,16 @@ def edit_override(mission, operation, field, raw, actor, *, reset=False, confirm
             if field == 'sta':
                 from zoneinfo import ZoneInfo
                 from datetime import timezone
-                mission.planned_datetime_local = value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(mission.timezone)).replace(tzinfo=None)
+                mission.planned_datetime_local = (value.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(mission.timezone)).replace(tzinfo=None)
+                    if value is not None else None)
             target = {'ramp_load_complete':'ramp_load_complete',
                       'crew_load_complete':'crew_load_complete', 'official_block_out':'blocked_out'}.get(field)
             if target:
-                _advance_departure_status(mission, target)
+                if clear:
+                    from app.services.departure_progress import recompute_departure_status_after_external_clear
+                    recompute_departure_status_after_external_clear(mission, target)
+                else:
+                    _advance_departure_status(mission, target)
         if row is None:
             row = NeoRainMissionOverride(gateway_id=operation.gateway_id,
                 sort_date_operation_id=operation.id, sort_date_mission_id=mission.id,
@@ -171,18 +190,21 @@ def edit_override(mission, operation, field, raw, actor, *, reset=False, confirm
         row.active, row.value = True, snapshot(mission, field)
         row.generation = (row.generation or 0) + 1
         row.modified_by_user_id, row.modified_at = actor.id, datetime.utcnow()
-        row.sync_status, row.sync_detail, row.sync_attempted_at = 'PENDING', None, None
+        row.sync_status = 'NEO_ONLY' if clear else 'PENDING'
+        row.sync_detail = 'Explicitly cleared in Neo; no Google write.' if clear else None
+        row.sync_attempted_at = None
         mission.updated_at = datetime.utcnow()
         db.session.flush()
         db.session.add(NeoRainOverrideAudit(override_id=row.id, generation=row.generation,
-            action='EDIT', actor_user_id=actor.id, before_value=before, after_value=row.value))
+            action='CLEAR' if clear else 'EDIT', actor_user_id=actor.id, before_value=before, after_value=row.value))
         db.session.flush()
     return row, True
 
 
 def override_display(mission, field):
     row = NeoRainMissionOverride.query.filter_by(sort_date_mission_id=mission.id, field=field).one_or_none()
-    return {'active': bool(row and row.active), 'source': 'NEO' if row and row.active else 'UPSTREAM',
+    return {'active': bool(row and row.active), 'cleared': override_is_cleared(row),
+            'source': 'NEO' if row and row.active else 'UPSTREAM',
             'sync_status': row.sync_status if row else 'UNSET',
             'sync_detail': row.sync_detail if row else None}
 

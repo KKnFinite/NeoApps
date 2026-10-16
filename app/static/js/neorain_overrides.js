@@ -11,6 +11,7 @@
   const submit = (root, value, action = 'edit', confirmed = false) => {
     const id = root.dataset.rainOverrideMission, field = root.dataset.rainOverrideField;
     const sequence = root._rainSequence = (root._rainSequence || 0) + 1;
+    root._rainPendingClear = action === 'clear' ? sequence : null;
     root.dataset.rainOverrideDirty = 'true';
     note(root, 'SAVING');
     const work = async () => {
@@ -25,7 +26,7 @@
         if (!response.ok || !payload.ok) throw new Error(payload.error || 'Save failed. Reload before retrying.');
         // ETD's single box includes the existing planned fallback after reset.
         // Keep the API's canonical value/writeback contract unchanged.
-        const displayValue = field === 'etd' ? (payload.row?.etd || payload.value || '') : payload.value;
+        const displayValue = payload.cleared ? '' : (field === 'etd' ? (payload.row?.etd || payload.value || '') : payload.value);
         for (const other of roots(id)) {
           other.dataset.rainOverrideVersion = payload.version;
           if (other.dataset.rainOverrideField !== field) continue;
@@ -50,10 +51,12 @@
           const input = root.querySelector('[data-rain-override-time]');
           if (input) input.value = String(displayValue || '');
           delete root.dataset.rainOverrideDirty;
-          note(root, action === 'reset' ? 'Reset saved.' : 'Saved.');
+          root._rainPendingClear = null;
+          note(root, action === 'reset' ? 'Reset saved.' : (action === 'clear' ? 'Cleared.' : 'Saved.'));
         }
       } catch (error) {
         if (sequence !== root._rainSequence) return;
+        root._rainPendingClear = null;
         note(root, error.message, true);
         const checkbox = root.querySelector('[data-rain-override-checkbox]');
         if (checkbox) { checkbox.checked = checkbox.dataset.saved === 'true'; delete root.dataset.rainOverrideDirty; }
@@ -65,6 +68,7 @@
   };
   // One reset action for the selected field; no controls repeated in each row.
   let selected = null;
+  let resetting = null;
   const tools = document.querySelector('[data-rain-reset-tools]');
   const choose = root => {
     selected = root;
@@ -88,7 +92,37 @@
   });
   document.addEventListener('click', event => {
     if (!event.target.closest('[data-rain-reset-selected]') || !selected || !selected.isConnected) return;
+    resetting = null;
     submit(selected, null, 'reset');
+  });
+  document.addEventListener('pointerdown', event => {
+    // Clicking Reset is one reset action, not a clear followed by reset.
+    resetting = event.target.closest('[data-rain-reset-selected]') ? selected : null;
+  });
+  const clearOnBlur = input => {
+    const root = input.closest('[data-rain-override-mission]');
+    if (input.value !== '' || root.dataset.rainOverrideDirty !== 'true' ||
+        root._rainPendingClear === root._rainSequence) return;
+    submit(root, null, 'clear');
+  };
+  document.addEventListener('focusout', event => {
+    if (!event.target.matches('[data-rain-override-time]') || event.target.disabled || event.target.readOnly) return;
+    if (resetting === event.target.closest('[data-rain-override-mission]')) return;
+    clearOnBlur(event.target);
+  });
+  document.addEventListener('pointercancel', () => {
+    if (resetting?.isConnected) {
+      const input = resetting.querySelector('[data-rain-override-time]');
+      if (input) clearOnBlur(input);
+    }
+    resetting = null;
+  });
+  document.addEventListener('pointerup', event => {
+    if (!resetting || event.target.closest('[data-rain-reset-selected]')) return;
+    // A canceled Reset gesture still saves the intentional deletion on blur.
+    const input = resetting.querySelector('[data-rain-override-time]');
+    if (input && document.activeElement !== input) clearOnBlur(input);
+    resetting = null;
   });
   document.addEventListener('keydown', event => {
     // WebKit can restore the tap caret after focus. Select before its first
