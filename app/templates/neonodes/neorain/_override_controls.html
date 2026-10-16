@@ -2,7 +2,7 @@
 {% set state = rain_override_state(row.mission_id, field) %}
 <div class="rain-override" role="group" aria-label="{{ label }} for {{ row.flight_number }}" data-rain-override-mission="{{ row.mission_id }}" data-rain-override-field="{{ field }}" data-rain-override-version="{{ row.version }}" data-rain-override-authority="{{ state.label }}" data-rain-override-detail="{{ state.detail }}">
   {% if can_edit_override_field(field) and row.status != 'CANCELLED' %}
-  <input type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="off" spellcheck="false" aria-label="{{ label }} for {{ row.flight_number }} (HHMM)" title="HHMM" value="{{ (value or '')|replace(':','') }}" data-rain-override-time>
+  <input type="text" inputmode="numeric" maxlength="5" pattern="[0-9]{4}|[0-9]{2}:[0-9]{2}" autocomplete="off" spellcheck="false" aria-label="{{ label }} for {{ row.flight_number }} (HHMM)" title="HHMM" value="{{ value or '' }}" data-rain-override-time>
   {% else %}<span data-rain-override-readout>{{ value or '—' }}</span>{% endif %}
   <output data-rain-override-message role="status" aria-live="polite"></output>
 </div>

@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const queues = new Map();
+  const clockDigits = value => /^[0-9]{2}:[0-9]{2}$/.test(value) ? value.replace(':', '') : value;
   const validClock = value => /^[0-9]{4}$/.test(value) && +value.slice(0, 2) < 24 && +value.slice(2) < 60;
   const roots = id => [...document.querySelectorAll('[data-rain-override-mission]')].filter(el => el.dataset.rainOverrideMission === id);
   const note = (root, text, error = false) => {
@@ -33,7 +34,7 @@
           other.dataset.rainOverrideDetail = payload.sync_detail || '';
           if (other !== root && other.dataset.rainOverrideDirty !== 'true') {
             const input = other.querySelector('[data-rain-override-time]');
-            if (input) input.value = String(payload.value || '').replace(':', '');
+            if (input) input.value = String(payload.value || '');
           }
         }
         document.querySelectorAll('[data-neorain-mission-id]').forEach(row => {
@@ -44,7 +45,7 @@
         });
         if (sequence === root._rainSequence) {
           const input = root.querySelector('[data-rain-override-time]');
-          if (input) input.value = String(payload.value || '').replace(':', '');
+          if (input) input.value = String(payload.value || '');
           delete root.dataset.rainOverrideDirty;
           note(root, action === 'reset' ? 'Reset saved.' : 'Saved.');
         }
@@ -74,21 +75,36 @@
   document.addEventListener('focusin', event => {
     if (event.target.matches('[data-rain-override-time], [data-rain-override-checkbox]') && !event.target.disabled) {
       choose(event.target.closest('[data-rain-override-mission]'));
+      // Replace a saved clock with four numeric keystrokes, while partial drafts
+      // retain their selection/caret and can still be edited in place.
+      if (event.target.matches('[data-rain-override-time]') && event.target.value.includes(':') && validClock(clockDigits(event.target.value))) {
+        event.target.select();
+        event.target._rainReplaceClock = true;
+      }
     } else if (!event.target.closest('[data-rain-reset-tools]')) choose(null);
   });
   document.addEventListener('click', event => {
     if (!event.target.closest('[data-rain-reset-selected]') || !selected || !selected.isConnected) return;
     submit(selected, null, 'reset');
   });
+  document.addEventListener('keydown', event => {
+    // WebKit can restore the tap caret after focus. Select before its first
+    // numeric insertion/maxlength check, while navigation/deletion keeps caret editing.
+    if (!event.target.matches('[data-rain-override-time]') || !event.target._rainReplaceClock) return;
+    if (/^[0-9]$/.test(event.key)) event.target.select();
+    if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) delete event.target._rainReplaceClock;
+  });
   document.addEventListener('input', event => {
     if (!event.target.matches('[data-rain-override-time]')) return;
+    delete event.target._rainReplaceClock;
     const root = event.target.closest('[data-rain-override-mission]');
     root.dataset.rainOverrideDirty = 'true';
     // Every keystroke supersedes older responses, including blank/partial drafts.
     root._rainSequence = (root._rainSequence || 0) + 1;
     const raw = event.target.value;
-    if (validClock(raw)) submit(root, raw);
-    else note(root, raw.length === 4 ? 'Invalid time.' : 'Enter four digits.', raw.length === 4);
+    const digits = clockDigits(raw);
+    if (validClock(digits)) submit(root, digits);
+    else note(root, raw.length >= 4 ? 'Invalid time.' : 'Enter four digits.', raw.length >= 4);
   });
   document.addEventListener('change', event => {
     if (!event.target.matches('[data-rain-override-checkbox]')) return;

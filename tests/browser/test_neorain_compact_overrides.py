@@ -107,7 +107,7 @@ class CompactRainBrowserTest(unittest.TestCase):
         })''')
         self.assertTrue(geometry)
         self.assertTrue(all(x['width'] <= min(58, x['parent']) + 1 and x['height'] == 26 for x in geometry), geometry)
-        self.assertTrue(all(not x['value'] or (x['value'].isdigit() and len(x['value']) == 4) for x in geometry))
+        self.assertTrue(all(not x['value'] or (len(x['value']) == 5 and x['value'][2] == ':' and x['value'].replace(':','').isdigit()) for x in geometry))
 
     def test_desktop_mobile_inline_autosave_reset_and_refresh(self):
         for engine in ('chromium', 'webkit'):
@@ -140,10 +140,10 @@ class CompactRainBrowserTest(unittest.TestCase):
                                 page.evaluate('window.rainOriginalDocument = true')
                                 result = self.save(page, field, '1234')
                                 self.assertEqual(result['value'], '12:34')
-                                expect(self.input(page, field)).to_have_value('1234')
+                                expect(self.input(page, field)).to_have_value('12:34')
                                 page.wait_for_function('!window.rainOriginalDocument', timeout=20000)
                                 self.assert_compact(page, board)
-                                expect(self.input(page, field)).to_have_value('1234')
+                                expect(self.input(page, field)).to_have_value('12:34')
                                 self.reset(page, field)
                                 expect(self.input(page, field)).to_have_value('')
                                 if board == 'outbound':
@@ -172,7 +172,7 @@ class CompactRainBrowserTest(unittest.TestCase):
                             self.fixture().ready(page, '/neorain/' + board)
                             expect(self.input(page, field)).to_have_value('')
                             self.upstream(kind, field, datetime(2026, 10, 16, 7, 45))
-                            expect(self.input(page, field)).to_have_value('0245', timeout=20000)
+                            expect(self.input(page, field)).to_have_value('02:45', timeout=20000)
                             self.input(page, field).fill('12')
                             self.upstream(kind, field, datetime(2026, 10, 16, 8, 10))
                             expect(page.locator(f'[data-neorain-{board}-live]')).to_have_attribute('data-neorain-refresh-deferred', 'true', timeout=20000)
@@ -181,16 +181,16 @@ class CompactRainBrowserTest(unittest.TestCase):
                             expect(self.input(page, field)).to_have_value('1234')
                             # Explicit reload recovers from the genuine stale-version conflict.
                             page.reload()
-                            expect(self.input(page, field)).to_have_value('0310')
+                            expect(self.input(page, field)).to_have_value('03:10')
                             self.save(page, field, '1234')
                             expect(self.cell(page, field)).not_to_have_attribute('data-rain-override-dirty', 'true')
                             self.upstream(kind, field, datetime(2026, 10, 16, 8, 55))
                             page.reload()
-                            expect(self.input(page, field)).to_have_value('1234')
+                            expect(self.input(page, field)).to_have_value('12:34')
                             self.input(page, field).fill('')
                             result = self.reset(page, field)
                             self.assertEqual(result['value'], '03:55')
-                            expect(self.input(page, field)).to_have_value('0355')
+                            expect(self.input(page, field)).to_have_value('03:55')
                             self.assert_compact(page, board)
                 finally:
                     context.close()
@@ -223,3 +223,51 @@ class CompactRainBrowserTest(unittest.TestCase):
         finally:
             context.close()
             browser.close()
+
+    def test_hhmm_normalizes_all_fields_and_numeric_keyboard_can_replace_formatted_clock(self):
+        fields={'inbound':('sta','block_in'),
+                'outbound':('etd','elmac','ramp_load_complete','crew_load_complete','official_block_out')}
+        for engine,width in (('chromium',1920),('webkit',390)):
+            browser=getattr(self.fixture.pw,engine).launch(headless=True)
+            context=browser.new_context(viewport={'width':width,'height':900},has_touch=width<900,is_mobile=width<900)
+            try:
+                page=context.new_page();self.fixture().login(page)
+                for board,kind,target in self.cases:
+                    with self.subTest(engine=engine,board=board):
+                        self.fixture().ready(page,'/neorain/'+board)
+                        for field in fields[board]:
+                            locator=page.locator(f'.rain-override[data-rain-override-field="{field}"] [data-rain-override-time]:visible')
+                            if not locator.count():
+                                page.locator('[data-neorain-mobile-row-open]:visible').first.click()
+                            payload=self.save(page,field,'0125')
+                            self.assertEqual(payload['value'],'01:25')
+                            expect(self.input(page,field)).to_have_value('01:25')
+                            mirrors=page.locator(f'.rain-override[data-rain-override-field="{field}"] [data-rain-override-time]')
+                            self.assertTrue(all(v=='01:25' for v in mirrors.evaluate_all('els => els.map(el => el.value)')))
+                        for raw,formatted in (('0000','00:00'),('0125','01:25'),('1430','14:30'),('2359','23:59')):
+                            self.save(page,target,raw)
+                            expect(self.input(page,target)).to_have_value(formatted)
+                        # Exercise actual typing into a saved five-character value,
+                        # including touch focus and the numeric mobile input mode.
+                        clock=self.input(page,target)
+                        clock.press('Tab')
+                        if width<900:clock.tap()
+                        else:clock.click()
+                        expect(clock).to_have_attribute('inputmode','numeric')
+                        with page.expect_response(lambda r:'/neorain/override' in r.url and r.request.method=='POST') as response:
+                            clock.press_sequentially('0125',delay=30)
+                        self.assertEqual(response.value.request.post_data_json['value'],'0125')
+                        expect(clock).to_have_value('01:25')
+                        # Caret edits / pasted formatted values still send HHMM to
+                        # STA/ETD's existing strict operational parser.
+                        self.assertEqual(self.save(page,target,'14:30')['value'],'14:30')
+                        expect(clock).to_have_value('14:30')
+                        for invalid in ('2400','2360','12:99'):
+                            clock.fill(invalid)
+                            expect(self.cell(page,target).locator('[data-rain-override-message]')).to_have_text('Invalid time.')
+                            expect(clock).to_have_value(invalid)
+                        page.reload()
+                        expect(self.input(page,target)).to_have_value('14:30')
+                        self.assert_compact(page,board)
+            finally:
+                context.close();browser.close()
