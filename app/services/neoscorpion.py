@@ -2730,6 +2730,14 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         tail_fuel_state.center_fuel_lbs = target_center_lbs
         tail_fuel_state.apu_lbs = target_apu_lbs
         if "notes" in form:
+            if tail_fuel_state.notes and tail_fuel_state.notes != target_notes:
+                # Archive the compatibility field before replacing it. This is
+                # evidence of this preservation action, not historical note
+                # ownership: old mission/cycle/visit provenance is unverified.
+                _new_fuel_audit(operation,assignment,user,"segment_transfer","legacy_tail_notes",
+                    tail_fuel_state.notes,None,
+                    f"Preserved shared-tail note for {tail_number}; historical mission/cycle/visit provenance unverified.",
+                    now_utc=now_utc)
             tail_fuel_state.notes = target_notes
 
     if fuel_work_state is not None and "notes" in form:

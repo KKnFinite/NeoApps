@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime
 from app.extensions import db
-from app.models import NeoScorpionFuelAssignment, NeoScorpionFuelWorkState, NeoScorpionTailFuelState, SortDateMission
+from app.models import NeoScorpionFuelAuditEntry, NeoScorpionFuelAssignment, NeoScorpionFuelWorkState, NeoScorpionTailFuelState, SortDateMission
 from app.services import neoscorpion as service
 from app.services.neoscorpion_segments import new_work
 from tests import test_neoscorpion_fuel_data as fixtures
@@ -40,6 +40,8 @@ class NotesPlanningTest(unittest.TestCase):
         second=new_work(self.assignment,self.mission.assigned_tail_number,self.user,datetime.utcnow());db.session.commit()
         self.assertEqual(self.row()['fueler_notes'],'')
         self.save(notes='Second visit');self.assertEqual(first.notes,'First visit')
+        archived=NeoScorpionFuelAuditEntry.query.filter_by(field_name='legacy_tail_notes',old_value='Legacy unknown owner').one()
+        self.assertIsNone(archived.fuel_work_state_id);self.assertIn('provenance unverified',archived.reason)
         self.assignment.current_cycle_number=2;third=new_work(self.assignment,'N412UP',self.user,datetime.utcnow());db.session.commit()
         self.save(notes='Uplift note');self.assertEqual(second.notes,'Second visit');self.assertEqual(third.notes,'Uplift note')
         other=SortDateMission(sort_date_operation_id=self.operation.id,sort_date=self.operation.sort_date,gateway_code=self.gateway.code,sort_name='night',mission_type='departure',mission_source='manual',flight_number='UPS802',origin=self.gateway.code,destination='SDF',timezone='America/Chicago',assigned_tail_number='N412UP')
