@@ -58,8 +58,9 @@ class SubmissionTest(unittest.TestCase):
         self.assertFalse(service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id).changed)
     def test_required_correction_invalidates_notes_preserve_and_resubmit_is_safe(self):
         self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data())
-        with self.assertRaisesRegex(ValueError,'TRUCK OFF'):self.submit()
-        db.session.rollback();self.off();self.submit();old=self.baseline()
+        self.submit()
+        self.assertIsNotNone(self.work.off_at_utc)
+        old=self.baseline()
         self.save(self.start+timedelta(minutes=14),notes='Optional note')
         self.assertTrue(self.row()['fueler_submitted'])
         self.save(self.start+timedelta(minutes=15),actual_left='16')
@@ -75,6 +76,35 @@ class SubmissionTest(unittest.TestCase):
             service.autosave_dispatch_field(self.gateway,self.mission.id,'required_fuel',value,expected_value=old)
             db.session.commit()
         self.assertFalse(self.row()['fueler_submitted']);self.submit();self.assertTrue(self.row()['normal_completion_ready'])
+    def test_complete_assignment_marks_physical_off_and_submits_atomically(self):
+        self.prepare()
+        self.save(self.start+timedelta(minutes=10),**self.final_data())
+        self.assertIsNone(self.work.off_at_utc)
+        self.assertFalse(self.row()['fueler_completion_ready'])
+        self.submit()
+        self.assertIsNotNone(self.work.off_at_utc)
+        self.assertEqual(self.work.off_by_user_id,self.fueler.id)
+        self.assertTrue(self.row()['fueler_submitted'])
+        self.assertFalse(self.selection.inventory_verified)
+        self.assertIsNone(self.assignment.completed_at_utc)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
+        db.session.commit()
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+
+    def test_complete_assignment_cannot_invent_physical_on(self):
+        self.prepare()
+        self.save(self.start+timedelta(minutes=10),**self.final_data())
+        self.work.manual_on_at_utc=None
+        self.work.confirmed_on_at_utc=None
+        self.work.on_at_utc=None
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError,'TRUCK ON'):
+            self.submit()
+        db.session.rollback()
+        self.assertIsNone(self.work.off_at_utc)
+        self.assertIsNone(self.work.fueler_submitted_at_utc)
+
     def test_missing_apu_tf_hold_and_actor_block_submission(self):
         self.prepare();self.off();data=self.final_data();data.pop('apu_running');data.pop('transfer_fuel_gallons')
         self.save(self.start+timedelta(minutes=14),**data)

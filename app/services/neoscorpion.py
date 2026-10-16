@@ -2938,6 +2938,20 @@ def submit_fueler_assignment(gateway,user,assignment_id,*,expected,now_utc=None,
     _check_fueler_expected(expected,current,{k:v for k,v in current.items() if k != "notes"})
     if any(k not in expected or expected[k] != v for k,v in current.items() if k not in {"notes"}):
         raise FuelerDataConflict()
+    # A Fueler's explicit COMPLETE ASSIGNMENT click also confirms physical OFF
+    # *now* when a trusted ON exists. Never infer or backdate an absent ON.
+    # Both writes are in the same request transaction; failed submission
+    # rolls the OFF back, preserving the existing validation/audit rules.
+    if work is not None and work.off_at_utc is None:
+        off_result = mark_fueler_off(
+            gateway, user, assignment_id, now_utc=now_utc, expected=expected,
+            defer_completion=True, physical_work_id=physical_work_id,
+            physical_sequence=physical_sequence,
+        )
+        work = off_result.fuel_work_state
+        asset_state = NeoScorpionSortAssetState.query.filter_by(
+            sort_date_operation_id=operation.id,
+        ).first() or asset_state
     context=fueler_context(gateway,user,assignment_id=parent.id,
         physical_work_id=physical_work_id,physical_sequence=physical_sequence)
     row=next((r for r in context['rows'] if r['physical_work_id']==(work.id if work else None)),None)

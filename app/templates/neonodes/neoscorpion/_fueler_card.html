@@ -298,10 +298,11 @@
                 <details class="scorpion-optional-verification"><summary>OPTIONAL TRUCK FUEL CHECK · SKIP</summary><form method="post" action="{{ url_for('scorpion_vendor.fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ row.assignment.sort_date_operation_id }}"><input type="hidden" name="truck_id" value="{{ row.assigned_truck.id }}"><label>Actual current truck gallons<input name="gallons" inputmode="numeric" required></label><button class="action-button">SUBMIT READING</button><button class="action-button" type="button" data-fuel-verification-skip>SKIP</button></form></details>
                 {% endif %}
                 {% if can_edit and not dispatcher_panel|default(false) and not row.administratively_complete and not row.physical_finalized %}
+                {% set can_submit_and_mark_off = row.off_ready and row.actual_complete and row.planned_ready and row.apu_running is not none and row.apu_source_valid and row.apu_allowance_lbs is not none and row.transfer_fuel_gallons is not none %}
                 <form method="post" action="{{ fuel_submit_url }}" data-fueler-submit-form>
                     {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
-                    <button class="action-button neoscorpion-save-button" type="submit" {% if not row.fueler_completion_ready or row.fueler_submitted %}disabled{% endif %}>COMPLETE ASSIGNMENT</button>
-                    <small data-fueler-submission-status>{% if row.fueler_submitted %}READY FOR DISPATCHER COMPLETE{% else %}{{ row.fueler_completion_reason }}{% endif %}</small>
+                    <button class="action-button neoscorpion-save-button" type="submit" {% if (not row.fueler_completion_ready and not can_submit_and_mark_off) or row.fueler_submitted %}disabled{% endif %}>COMPLETE ASSIGNMENT</button>
+                    <small data-fueler-submission-status>{% if row.fueler_submitted %}READY FOR DISPATCHER COMPLETE{% elif can_submit_and_mark_off and not row.is_off %}ALSO CONFIRMS PHYSICAL TRUCK OFF NOW · DISPATCHER APPROVAL FOLLOWS{% else %}{{ row.fueler_completion_reason }}{% endif %}</small>
                 </form>
                 {% endif %}
             </article>
