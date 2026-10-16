@@ -5,7 +5,7 @@ calendars retains alternate resource/top-off sequences; later jobs may fill gaps
 only if all earlier reservations, travel and inventory constraints still hold.
 This is a bounded search, not a claim of an exhaustive global optimum.
 """
-from dataclasses import dataclass, field, replace, asdict
+from dataclasses import dataclass, field, replace, asdict, is_dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from math import ceil
@@ -32,7 +32,17 @@ def minutes(value):
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str,
+    def canonical(item):
+        if is_dataclass(item):return canonical(asdict(item))
+        if isinstance(item,dict):
+            # Live calibration is keyed by (metric, aircraft). JSON's default
+            # callback does not handle dictionary keys; preserve typed keys as
+            # sorted pairs rather than dropping them or guessing string aliases.
+            pairs=[[type(k).__name__,canonical(k),canonical(v)] for k,v in item.items()]
+            return {'map':sorted(pairs,key=lambda p:json.dumps(p[:2],sort_keys=True,default=str))}
+        if isinstance(item,(tuple,list)):return [canonical(v) for v in item]
+        return item
+    return hashlib.sha256(json.dumps(canonical(value), sort_keys=True, default=str,
         separators=(',', ':')).encode()).hexdigest()
 
 

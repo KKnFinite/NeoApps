@@ -65,6 +65,26 @@ class ReplanningTest(unittest.TestCase):
         self.context['nightly_trucks'][0]['selection'].inventory_epoch+=1
         self.assertNotEqual(before,live.inputs(self.context,{}))
 
+    def test_completed_work_calibration_tuple_keys_are_stable_and_replan(self):
+        from decimal import Decimal
+        from app.services.neoscorpion_spear_calibration import LiveCalibration
+        calibration=LiveCalibration(metric='pump_rate',scope_key='B757',configured=Decimal(100),
+            observed=Decimal(140),effective=Decimal(120),samples=3,excluded_samples=0,
+            first_observation_utc=None,most_recent_observation_utc=None,observations=(),excluded_observations=())
+        data={('pump_rate','B757'):calibration}
+        fingerprint=live.inputs(self.context,data)
+        self.assertEqual(fingerprint,live.inputs(self.context,dict(reversed(list(data.items())))))
+        plan=live.enrich(self.context,self.baseline,base._PlanningSettings(),data,now=base.NOW)
+        self.assertFalse(self.context['spear_whole_sort'].get('fallback',False))
+        self.assertEqual(plan.steps,self.baseline.steps)
+        self.assertNotEqual(fingerprint,live.inputs(self.context,{('pump_rate','B757'):replace(calibration,samples=4)}))
+
+    def test_fingerprint_failure_retains_existing_spear_not_unavailable(self):
+        with patch.object(live,'inputs',side_effect=ValueError('unexpected optional data')):
+            plan=self.enrich()
+        self.assertEqual(plan,self.baseline)
+        self.assertTrue(self.context['spear_whole_sort']['fallback'])
+
     def test_failure_keeps_manual_and_existing_spear_without_canonical_writes(self):
         self.context['spear_settings']=replace(self.context['spear_settings'],whole_sort_mode='active')
         old=self.fixture.assignment.assigned_truck_id

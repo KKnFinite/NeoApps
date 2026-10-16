@@ -166,7 +166,13 @@ def enrich(context,baseline,planning,calibrations,now=None):
     settings=context['spear_settings']
     if not settings.recommendations_enabled:return baseline
     now=now or datetime.utcnow()
-    fingerprint=inputs(context,calibrations)
+    try:
+        fingerprint=inputs(context,calibrations)
+    except Exception:
+        current_app.logger.warning('SPEAR whole-sort inputs unavailable; safe SPEAR retained',exc_info=True)
+        context['spear_whole_sort']={'mode':settings.whole_sort_mode,'fallback':True,
+            'reason':'Whole-sort inputs unavailable; existing safe SPEAR retained'}
+        return baseline
     key=(id(current_app._get_current_object()),context['operation'].id)
     # Periodic reconciliation piggybacks on the existing Dispatch refresh; no
     # new browser timer/API. Exact time is deliberately excluded from tokens.
