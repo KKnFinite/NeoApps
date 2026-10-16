@@ -95,7 +95,7 @@
                     <div><dt>TAIL</dt><dd>{{ row.tail or '-' }}</dd></div>
                     <div><dt>DESTINATION</dt><dd>{{ row.destination or '-' }}</dd></div>
                     <div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
-                    <div><dt>STD/ETD</dt><dd>{{ row.planned_time or '-' }}{{ rain_time(row, 'etd', 'ETD', row.etd) }}</dd></div>
+                    <div><dt>STD/ETD</dt><dd>{{ rain_time(row, 'etd', 'ETD', row.etd) }}</dd></div>
                     <div><dt>LOAD PLANNER</dt><dd>{{ row.load_planner or 'UNASSIGNED' }}</dd></div>
                     <div><dt>MEAL</dt><dd class="neorain-mobile-service-field">
                         {% if can_edit_service_fields %}

@@ -10,32 +10,40 @@
   <div data-rain-report-live>
   <section class="rain-report-panel" aria-label="Report output">
     <h2>Volume &amp; performance</h2>
-    <div class="rain-report-grid">
-      {% for key in ('planned_volume','actual_volume','smalls_percent','planned_fph','actual_fph') %}
+    {% set volume_keys = ('planned_volume','actual_volume','smalls_percent','planned_fph','actual_fph') %}
+    {% set available = namespace(volume=[], staffing=false) %}
+    {% for key in volume_keys %}{% if report.fields[key].value is not none %}{% set available.volume = available.volume + [key] %}{% endif %}{% endfor %}
+    {% if available.volume %}<div class="rain-report-grid">
+      {% for key in available.volume %}
       {% set item = report.fields[key] %}
       <div class="rain-report-metric"><span>{{ item.label }}</span><strong>{{ item.value if item.value is not none else '—' }}{% if key == 'smalls_percent' and item.value is not none %}%{% endif %}</strong>{% if item.value is not none %}<small>{{ item.source }}</small>{% endif %}</div>
       {% endfor %}
     </div>
+    {% if available.volume|length < volume_keys|length %}<p class="rain-report-unavailable"><small>Unavailable: {% for key in volume_keys if key not in available.volume %}{{ report.fields[key].label }}{{ ', ' if not loop.last else '' }}{% endfor %}.</small></p>{% endif %}
+    {% else %}<p class="rain-report-unavailable" data-report-volume-unavailable>Volume &amp; performance unavailable.</p>{% endif %}
   </section>
   <section class="rain-report-panel">
     <h2>Staffing</h2>
-    <table class="rain-report-matrix" aria-label="Separate Hub / Shift and Ramp staffing">
+    {% for prefix in ('hub','ramp') %}{% for suffix in ('planned_payroll','actual_payroll','planned_working','actual_working') %}{% if report.fields[prefix ~ '_' ~ suffix].value is not none %}{% set available.staffing = true %}{% endif %}{% endfor %}{% endfor %}
+    {% if available.staffing %}<table class="rain-report-matrix" aria-label="Separate Hub / Shift and Ramp staffing">
       <thead><tr><th>Population</th><th>Planned payroll</th><th>Actual payroll</th><th>Planned working</th><th>Actual working</th></tr></thead>
       <tbody>{% for prefix, label in (('hub','Hub / Shift'),('ramp','Ramp')) %}
       <tr><th scope="row">{{ label }}</th>{% for suffix in ('planned_payroll','actual_payroll','planned_working','actual_working') %}{% set item = report.fields[prefix ~ '_' ~ suffix] %}
         <td><strong>{{ item.value if item.value is not none else '—' }}</strong>{% if item.value is not none %}<small title="{{ item.label }} source">{{ item.source }}</small>{% endif %}</td>
       {% endfor %}</tr>{% endfor %}</tbody>
-    </table>
+    </table>{% else %}<p class="rain-report-unavailable" data-report-staffing-unavailable>Staffing unavailable.</p>{% endif %}
   </section>
   <section class="rain-report-panel">
     <h2>Aircraft lateness</h2>
     <p>Recorded actuals: inbound {{ report.recorded_inbound }}/{{ report.eligible_inbound }}, outbound {{ report.recorded_outbound }}/{{ report.eligible_outbound }}. Counts can remain provisional until all flights are recorded.</p>
+    {% if report.recorded_inbound or report.recorded_outbound %}
     <table class="rain-report-matrix" aria-label="Inbound and outbound aircraft lateness">
       <thead><tr><th>Aircraft</th><th>Late aircraft</th><th>Late minutes</th><th>Average</th></tr></thead><tbody>
       {% for side, summary in (('Inbound', report.inbound_late), ('Outbound', report.outbound_late)) %}
-      <tr><th scope="row">{{ side }}</th><td><strong>{{ summary.aircraft_late }}</strong></td><td><strong>{{ summary.late_minutes }}</strong></td><td><strong>{{ '%.1f'|format(summary.late_minutes / summary.aircraft_late) if summary.aircraft_late else '0.0' }}</strong></td></tr>
+      <tr><th scope="row">{{ side }}</th>{% if (report.recorded_inbound if side == 'Inbound' else report.recorded_outbound) %}<td><strong>{{ summary.aircraft_late }}</strong></td><td><strong>{{ summary.late_minutes }}</strong></td><td><strong>{{ '%.1f'|format(summary.late_minutes / summary.aircraft_late) if summary.aircraft_late else '0.0' }}</strong></td>{% else %}<td colspan="3" class="rain-report-unavailable">Actuals unavailable</td>{% endif %}</tr>
       {% endfor %}
     </tbody></table>
+    {% else %}<p class="rain-report-unavailable" data-report-lateness-unavailable>Lateness unavailable until actual Block-In/Block-Out times are recorded.</p>{% endif %}
   </section>
   {% for heading, rows, location_label, scheduled_label, actual_label in (('Inbound aircraft', report.inbound_rows, 'Origin', 'Scheduled arrival', 'Actual Block-In'), ('Outbound aircraft', report.outbound_rows, 'Destination', 'Scheduled departure', 'Actual Block-Out')) %}
   <section class="rain-report-panel">

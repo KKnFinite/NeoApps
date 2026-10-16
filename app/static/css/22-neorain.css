@@ -869,3 +869,36 @@
     .neorain-outbound-shell.neorain-mobile-summary-compact .neorain-outbound-late-summary span { font-size: .5rem; }
     .neorain-outbound-shell.neorain-mobile-summary-compact .neorain-outbound-late-summary output { font-size: .78rem; }
 }
+/* NeoRain body typography; decorative NeoFont is reserved for titles/branding. */
+body.blueprint-neorain .content :is(.neorain-outbound-shell, .rain-report),
+body.blueprint-neorain .content :is(.neorain-outbound-shell, .rain-report) :is(
+    p, pre, h2, h3, h4, dl, dt, dd, table, th, td, label, input, select, textarea,
+    button, output, summary, small
+) { font-family: NeoFontPlain, Arial, sans-serif; }
+body.blueprint-neorain .neorain-outbound-head h1 { font-family: NeoFont, Arial, sans-serif; }
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board tbody > tr[data-neorain-outbound-row] > td {
+    font-size: .76rem; line-height: 1.2;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board :is(th, td[data-label="Status"], td[data-label="Load Planner"]) {
+    overflow-wrap: normal; word-break: normal;
+}
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board th:nth-child(9) { white-space: nowrap; }
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board td[data-label="Load Planner"] :is(span, summary) {
+    display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: inherit;
+}
+
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+.neorain-outbound-table--flight-board td:is(
+    [data-label="Wave"], [data-label="Flight #"], [data-label="Tail"],
+    [data-label="Destination"], [data-label="Parking"]
+) { white-space: nowrap; overflow-wrap: normal; }
+@media (min-width: 1441px) and (max-width: 1599px) {
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board tbody > tr[data-neorain-outbound-row] > td { font-size: .72rem; }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound"]
+    .neorain-outbound-table--flight-board th { font-size: .58rem; padding-inline: 2px; }
+}

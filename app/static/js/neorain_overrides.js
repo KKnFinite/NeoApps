@@ -23,18 +23,21 @@
         });
         const payload = await response.json();
         if (!response.ok || !payload.ok) throw new Error(payload.error || 'Save failed. Reload before retrying.');
+        // ETD's single box includes the existing planned fallback after reset.
+        // Keep the API's canonical value/writeback contract unchanged.
+        const displayValue = field === 'etd' ? (payload.row?.etd || payload.value || '') : payload.value;
         for (const other of roots(id)) {
           other.dataset.rainOverrideVersion = payload.version;
           if (other.dataset.rainOverrideField !== field) continue;
           const readout = other.querySelector('[data-rain-override-readout]');
-          if (readout) readout.textContent = payload.value || '\u2014';
+          if (readout) readout.textContent = displayValue || '\u2014';
           const checkbox = other.querySelector('[data-rain-override-checkbox]');
           if (checkbox) { checkbox.checked = payload.value === true; checkbox.dataset.saved = String(checkbox.checked); }
           other.dataset.rainOverrideAuthority = payload.source;
           other.dataset.rainOverrideDetail = payload.sync_detail || '';
           if (other !== root && other.dataset.rainOverrideDirty !== 'true') {
             const input = other.querySelector('[data-rain-override-time]');
-            if (input) input.value = String(payload.value || '');
+            if (input) input.value = String(displayValue || '');
           }
         }
         document.querySelectorAll('[data-neorain-mission-id]').forEach(row => {
@@ -45,7 +48,7 @@
         });
         if (sequence === root._rainSequence) {
           const input = root.querySelector('[data-rain-override-time]');
-          if (input) input.value = String(payload.value || '');
+          if (input) input.value = String(displayValue || '');
           delete root.dataset.rainOverrideDirty;
           note(root, action === 'reset' ? 'Reset saved.' : 'Saved.');
         }

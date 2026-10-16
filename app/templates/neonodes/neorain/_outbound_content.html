@@ -71,26 +71,26 @@
     <table class="neorain-outbound-table neorain-outbound-table--flight-board">
         <caption class="visually-hidden">Current-sort outbound departures</caption>
         <colgroup>
-            <col data-neorain-outbound-column="wave" style="width: 2.5%">
-            <col data-neorain-outbound-column="flight" style="width: 6.3%">
+            <col data-neorain-outbound-column="wave" style="width: 3.0%">
+            <col data-neorain-outbound-column="flight" style="width: 6.0%">
             <col data-neorain-outbound-column="tail" style="width: 4.8%">
-            <col data-neorain-outbound-column="dest" style="width: 4.6%">
-            <col data-neorain-outbound-column="parking" style="width: 3.7%">
+            <col data-neorain-outbound-column="dest" style="width: 3.1%">
+            <col data-neorain-outbound-column="parking" style="width: 4.5%">
             <col data-neorain-outbound-column="std" style="width: 4.8%">
-            <col data-neorain-outbound-column="status" style="width: 5.2%">
-            <col data-neorain-outbound-column="planner" style="width: 5.7%">
-            <col data-neorain-outbound-column="meal" style="width: 2.4%">
+            <col data-neorain-outbound-column="status" style="width: 6.4%">
+            <col data-neorain-outbound-column="planner" style="width: 6.8%">
+            <col data-neorain-outbound-column="meal" style="width: 3.0%">
             <col data-neorain-outbound-column="jump" style="width: 2.9%">
             <col data-neorain-outbound-column="js-in" style="width: 4.8%">
-            <col data-neorain-outbound-column="neo-fuel" style="width: 5.2%">
+            <col data-neorain-outbound-column="neo-fuel" style="width: 4.7%">
             <col data-neorain-outbound-column="center-fuel" style="width: 4.4%">
             <col data-neorain-outbound-column="elmac" style="width: 4.6%">
             <col data-neorain-outbound-column="ramp-lc" style="width: 5.6%">
             <col data-neorain-outbound-column="crew-lc" style="width: 5.6%">
             <col data-neorain-outbound-column="block-out" style="width: 5.6%">
             <col data-neorain-outbound-column="variance" style="width: 3%">
-            <col data-neorain-outbound-column="include" style="width: 5.8%">
-            <col data-neorain-outbound-column="no-return" style="width: 5.5%">
+            <col data-neorain-outbound-column="include" style="width: 4.9%">
+            <col data-neorain-outbound-column="no-return" style="width: 4.5%">
             <col data-neorain-outbound-column="delay" style="width: 7%">
         </colgroup>
         <thead><tr>
@@ -106,9 +106,9 @@
                 <td data-label="Tail">{{ row.tail or '-' }}</td>
                 <td data-label="Destination">{{ row.destination or '-' }}</td>
                 <td data-label="Parking">{{ row.parking or '-' }}</td>
-                <td data-label="STD/ETD"><small aria-label="STD" title="STD">{{ row.planned_time or '—' }}</small>{{ rain_time(row, 'etd', 'ETD', row.etd) }}</td>
+                <td data-label="STD/ETD">{{ rain_time(row, 'etd', 'ETD', row.etd) }}</td>
                 <td data-label="Status" data-neorain-display="status">{{ row.status }}</td>
-                <td data-label="Load Planner">
+                <td data-label="Load Planner" title="{{ row.load_planner or 'UNASSIGNED' }}">
                     {% if row.load_planner and row.load_planner != 'UNASSIGNED' and (row.load_planner_contact.extension or row.load_planner_contact.radio_channel) %}
                     <details class="neorain-outbound-planner-contact">
                         <summary aria-label="Show Load Planner contact for {{ row.load_planner }}">{{ row.load_planner }}</summary>
