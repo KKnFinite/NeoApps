@@ -153,7 +153,10 @@ class LifecycleAuditTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
         self.login(self.dispatcher)
         response=self.client.get(f'/neoscorpion/fuel-dispatch/fueler-data/{self.assignment.id}',query_string=identity)
-        self.assertIn('data-source-verification-form',response.json['html'])
+        self.assertNotIn('data-source-verification-form',response.json['html'])
+        dispatch=self.client.get('/neoscorpion/fuel-dispatch').get_data(as_text=True)
+        self.assertIn(f'data-action-key="verify-{self.work.id}"',dispatch)
+        self.assertIn(f'name="expected_submission_version" value="{self.work.fueler_submission_version}"',dispatch)
         rejected=self.client.post('/neoscorpion/fuel-dispatch/complete',data=dict(assignment_id=self.assignment.id,
             expected_submission_version=self.work.fueler_submission_version-1,**identity))
         self.assertEqual(rejected.status_code,400)
@@ -232,12 +235,12 @@ class LifecycleAuditTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
     def test_changed_departure_target_cannot_accept_old_fueler_screen(self):
-        self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
+        self.prepare();self.save(self.start+timedelta(minutes=10),remaining_left='6',remaining_ctr='0',remaining_right='6',apu_running='no');self.off()
         old=self.baseline()
-        fuel.autosave_dispatch_field(self.gateway,self.mission.id,'required_fuel','26',expected_value='25');db.session.commit()
+        fuel.autosave_dispatch_field(self.gateway,self.mission.id,'required_fuel','26',expected_value='25',user=self.dispatcher);db.session.commit()
         with self.assertRaises(fuel.FuelerDataConflict):self.submit(old)
         db.session.rollback();self.assertIsNone(self.work.fueler_submitted_at_utc)
-        self.submit();self.assertTrue(self.row()['normal_completion_ready'])
+        self.save(self.start+timedelta(minutes=15),**self.final_data());self.submit();self.assertTrue(self.row()['normal_completion_ready'])
 
     def test_a_b_a_pending_original_actuals_independent_handoffs_and_postings(self):
         self._a_b_a()

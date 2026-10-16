@@ -289,6 +289,8 @@ class NeoScorpionFuelWorkState(db.Model):
     physical_truck_id = db.Column(db.Integer, db.ForeignKey("neoscorpion_fuel_trucks.id"), nullable=True, index=True)
     physical_fueler_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     physical_required_fuel_lbs = db.Column(db.Integer, nullable=True)
+    target_frozen = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    continuation_review_reason = db.Column(db.Text, nullable=True)
     physical_transfer_gallons = db.Column(db.Integer, nullable=True)
     physical_finalized_at_utc = db.Column(db.DateTime, nullable=True)
     physical_finalized_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)

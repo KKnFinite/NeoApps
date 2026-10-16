@@ -234,6 +234,7 @@ def _release_resources(rows, fuelers, trucks, now, settings, top_events, policie
                         future=future+minutes(finishing) if finishing is not None else INFINITY
                     resource.update(base=max(resource['base'],future),conditional=True,
                         ramp=segment_ramp)
+                    if is_truck:resource['physically_on']=True
                     if is_truck and not resource.get('active_demand_reserved'):
                         demand=legacy._decimal_or_none(row.get('planning_demand_gallons'))
                         if demand is None:
@@ -260,6 +261,12 @@ def _release_resources(rows, fuelers, trucks, now, settings, top_events, policie
             truck['ramp']='Remote'
         if truck['ramp'] is None:truck['base']=INFINITY
         sent=truck.get('sent')
+        if sent and event and event.occurred_at_utc>=sent:
+            sent=None;truck['sent']=None  # Historical SENT is not a current absence.
+        if sent and truck.get('physically_on'):
+            truck['return_missing']=True
+            truck['base']=INFINITY  # Review serviceability before future recommendations.
+            continue
         if truck['status'] in ('top_off','topping_off') or sent:
             recorded=next((e for e in top_events if e.kind=='sent' and e.fuel_truck_id==identifier and stamp(e.occurred_at_utc)==sent),None)
             predicted=(stamp(recorded.spear_predicted_return_at_utc) if recorded is not None else
@@ -337,7 +344,8 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
         forecast=dict(pending_id=pending.id,mission_id=row['mission'].id,identity=pending.pending_cycle_identity,
             version=pending.version,status=pending.status,proposed_truck=pending.proposed_truck_id,
             proposed_fueler=pending.proposed_fueler_user_id,demand_gallons=str(demand) if demand is not None and demand>0 else None,
-            reason='Dispatcher completion and promotion required; forecast demand only' if demand is not None and demand>0 and pending.status=='pending'
+            reason=('Fueler submission and handoff required; forecast demand only' if getattr(pending,'plan_kind','uplift') in ('continuation','increase')
+                else 'Dispatcher completion and promotion required; forecast demand only') if demand is not None and demand>0 and pending.status=='pending'
                 else 'REVIEW REQUIRED' if demand is not None else 'Final Actual / tail / cycle evidence incomplete',conditional=True)
         future.append(forecast)
         if demand is None or demand<=0 or pending.status!='pending':continue
@@ -544,7 +552,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
         truck_calendars={str(i):[asdict(b) for b in sorted(bs,key=lambda b:b.start)] for i,bs in best.trucks.items()},
         fueler_calendars={str(i):[asdict(b) for b in sorted(bs,key=lambda b:b.start)] for i,bs in best.fuelers.items()},
         policies=policies,future_demands=future,
-        top_off_status={str(i):dict(return_at=t.get('return_at'),overdue=t.get('overdue',False),verified_available=False)
+        top_off_status={str(i):dict(return_at=t.get('return_at'),overdue=t.get('overdue',False),return_missing=t.get('return_missing',False),verified_available=False)
             for i,t in trucks.items() if t.get('sent')})
     plan=legacy._plan(steps,risks,unavailable,waiting_for_data=waiting,readiness_by_mission_id=readiness,
         live_calibration_mode=settings.live_calibration_mode)

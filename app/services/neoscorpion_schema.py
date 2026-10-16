@@ -74,7 +74,13 @@ NEOSCORPION_MODEL_TABLES = (
 )
 
 NEOSCORPION_ADDITIVE_COLUMNS = {
+    "neoscorpion_pending_uplifts": {
+        "plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'",
+        "handoff_snapshot": "JSON",
+    },
     "neoscorpion_dispatch_preferences": {
+        "board_truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "statistics_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
         "truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
         "spear_data_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
     },
@@ -145,6 +151,8 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fuel_work_states": {
+        "target_frozen": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "continuation_review_reason": "TEXT",
         "fueler_submitted_at_utc": "TIMESTAMP",
         "fueler_submitted_by_user_id": "INTEGER",
         "fueler_submission_evidence": "VARCHAR(64)",

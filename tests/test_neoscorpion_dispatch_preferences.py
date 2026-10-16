@@ -19,10 +19,10 @@ class DispatchPreferencesTest(unittest.TestCase):
             arrived_first='0',secondary_sort='arrival',expected_version='0',**changes))
 
     def test_defaults_persistence_other_sessions_users_gateways_and_no_operational_change(self):
-        self.assertEqual(dispatch_preferences(self.gateway,self.user),dict(arrived_first=True,secondary_sort='etd',truck_cards_collapsed=False,spear_data_collapsed=False,version=0))
+        self.assertEqual(dispatch_preferences(self.gateway,self.user),dict(arrived_first=True,secondary_sort='etd',truck_cards_collapsed=False,board_truck_cards_collapsed=False,statistics_collapsed=False,spear_data_collapsed=False,version=0))
         response=self.post(user_id=999,gateway_id=999)
         self.assertEqual(response.status_code,200)
-        self.assertEqual(response.json['preferences'],dict(arrived_first=False,secondary_sort='arrival',truck_cards_collapsed=False,spear_data_collapsed=False,version=1))
+        self.assertEqual(response.json['preferences'],dict(arrived_first=False,secondary_sort='arrival',truck_cards_collapsed=False,board_truck_cards_collapsed=False,statistics_collapsed=False,spear_data_collapsed=False,version=1))
         self.assertEqual(NeoScorpionSortAssetState.query.count(),0)
         user_id=self.user.id;gateway_id=self.gateway.id
         db.session.remove()
@@ -93,6 +93,16 @@ class DispatchPreferencesTest(unittest.TestCase):
         self.assertEqual((record.secondary_sort,record.arrived_first,record.version),('arrival',False,1))
         self.assertFalse(record.truck_cards_collapsed);self.assertFalse(record.spear_data_collapsed)
 
+    def test_board_and_statistics_persist_without_overwriting_normal_view(self):
+        for version,patch in enumerate((dict(truck_cards_collapsed='1'),dict(board_truck_cards_collapsed='0'),dict(statistics_collapsed='1'))):
+            result=self.client.post('/neoscorpion/fuel-dispatch/preferences',data=dict(expected_version=version,**patch))
+            self.assertEqual(result.status_code,200)
+        uid=self.user.id;gid=self.gateway.id;db.session.remove()
+        from app.models import User
+        prefs=dispatch_preferences(db.session.get(Gateway,gid),db.session.get(User,uid))
+        self.assertTrue(prefs['truck_cards_collapsed']);self.assertFalse(prefs['board_truck_cards_collapsed'])
+        self.assertTrue(prefs['statistics_collapsed']);self.assertEqual(prefs['version'],3)
+
 
 from tests import test_neoscorpion_segments_postgres as postgres
 
@@ -129,12 +139,12 @@ class DispatchPreferencesPostgresTest(unittest.TestCase):
         from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
         save_dispatch_preferences(self.gateway,self.dispatcher,dict(secondary_sort='arrival',arrived_first='0',expected_version='0'))
         db.session.commit()
-        for name in ('truck_cards_collapsed','spear_data_collapsed'):
+        for name in ('truck_cards_collapsed','board_truck_cards_collapsed','statistics_collapsed','spear_data_collapsed'):
             db.session.execute(text('ALTER TABLE neoscorpion_dispatch_preferences DROP COLUMN '+name))
         db.session.commit()
         for _ in range(2):
             with patch.dict(self.fixture.app.config,{'TESTING':False}):ensure_neoscorpion_production_schema(self.fixture.app)
         db.session.expire_all()
         prefs=dispatch_preferences(self.gateway,self.dispatcher)
-        self.assertEqual(prefs,dict(arrived_first=False,secondary_sort='arrival',version=1,truck_cards_collapsed=False,spear_data_collapsed=False))
+        self.assertEqual(prefs,dict(arrived_first=False,secondary_sort='arrival',version=1,truck_cards_collapsed=False,board_truck_cards_collapsed=False,statistics_collapsed=False,spear_data_collapsed=False))
         self.assertIsNotNone(self.work.id)

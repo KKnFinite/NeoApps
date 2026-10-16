@@ -196,7 +196,9 @@
                 throw new Error("Submission not confirmed. Review this visit and try again; do not assume it was submitted.");
             }
             acceptSaveResponse(response, payload, (state, message) => {
-                if (response.ok && form.matches("[data-fueler-submit-form]")) message = "SUBMITTED · READY FOR DISPATCHER COMPLETE";
+                if (response.ok && form.matches("[data-fueler-submit-form]")) message = state.next_visit_activated
+                    ? "PREVIOUS TRUCK SUBMITTED · NEXT TRUCK ACTIVATED · FRESH ON REQUIRED"
+                    : "SUBMITTED · READY FOR DISPATCHER COMPLETE";
                 if (response.ok && physicalAction) message = `${form.matches(".neoscorpion-fueler-off-form") ? "TRUCK OFF" : "TRUCK ON"} recorded${unsaved.length ? " · Unsaved Fuel Entry kept" : ""}`;
                 if (dialog?.open && content.contains(card)) {
                     generation += 1; // Discard any older GET still in flight.

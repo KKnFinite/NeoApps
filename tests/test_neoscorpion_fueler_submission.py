@@ -71,12 +71,16 @@ class SubmissionTest(unittest.TestCase):
         self.assertFalse(self.submit().changed)
         service.reopen_fueler_off(self.gateway,self.dispatcher,self.assignment.id,'Verify OFF');db.session.commit()
         self.assertFalse(self.row()['fueler_submitted'])
-    def test_required_target_correction_and_revert_still_requires_resubmission(self):
+    def test_required_target_increase_and_revert_preserves_submitted_source_for_review(self):
         self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data());self.off();self.submit()
         for value,old in (('26','25'),('25','26')):
-            service.autosave_dispatch_field(self.gateway,self.mission.id,'required_fuel',value,expected_value=old)
+            service.autosave_dispatch_field(self.gateway,self.mission.id,'required_fuel',value,expected_value=old,user=self.dispatcher)
             db.session.commit()
-        self.assertFalse(self.row()['fueler_submitted']);self.submit();self.assertTrue(self.row()['normal_completion_ready'])
+        self.assertTrue(self.row()['fueler_submitted']);self.assertTrue(self.row()['normal_completion_ready'])
+        from app.models import NeoScorpionPendingUplift
+        plan=NeoScorpionPendingUplift.query.one()
+        self.assertEqual(plan.status,'review');self.assertEqual(plan.parent_work_state_id,self.work.id)
+        self.assertEqual(self.work.physical_required_fuel_lbs,25000)
     def test_complete_assignment_requires_separate_physical_off(self):
         self.prepare()
         self.save(self.start+timedelta(minutes=10),**self.final_data())

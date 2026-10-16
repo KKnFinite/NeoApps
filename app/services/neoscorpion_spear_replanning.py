@@ -212,7 +212,7 @@ def enrich(context,baseline,planning,calibrations,now=None):
             visual['spear_top_off_status']=''
             if status:
                 predicted=status.get('return_at')
-                visual['spear_top_off_status']=('TOP OFF TIMING UNKNOWN' if predicted is None else 'TOP OFF OVERDUE' if status['overdue'] else
+                visual['spear_top_off_status']=('TOP OFF RETURN VERIFICATION MISSING — REVIEW' if status.get('return_missing') else 'TOP OFF TIMING UNKNOWN' if predicted is None else 'TOP OFF OVERDUE' if status['overdue'] else
                     'EST RETURN '+format_local_hhmm(predicted,gateway_timezone(context['operation'].gateway)))
                 visual['spear_top_off_confidence']=candidate.optimizer['policies'].get(visual['truck_id'],{}).get('confidence','manual')
         if settings.whole_sort_mode=='active':

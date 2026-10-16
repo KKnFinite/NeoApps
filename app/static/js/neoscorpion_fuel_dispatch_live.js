@@ -13,6 +13,8 @@
     let dispatchSortMode = root.dataset.sortMode === "arrival" ? "arrival" : "etd";
     let arrivedFirst = root.dataset.arrivedFirst !== "0";
     let truckCardsCollapsed = root.dataset.truckCardsCollapsed === "1";
+    let boardTruckCardsCollapsed = root.dataset.boardTruckCardsCollapsed === "1";
+    let statisticsCollapsed = root.dataset.statisticsCollapsed === "1";
     let spearDataCollapsed = root.dataset.spearDataCollapsed === "1";
     const pendingPreferences = new Set();
     let preferenceVersion = Number(root.dataset.preferenceVersion || 0);
@@ -33,8 +35,16 @@
         const saved = dispatchScroll.snapshot();
         const section = button.dataset.dispatchCollapse;
         if (section === "trucks") {
-            truckCardsCollapsed = !truckCardsCollapsed;
-            pendingPreferences.add("truck_cards_collapsed");
+            if (document.body.classList.contains('operational-board-view')) {
+                boardTruckCardsCollapsed = !boardTruckCardsCollapsed;
+                pendingPreferences.add('board_truck_cards_collapsed');
+            } else {
+                truckCardsCollapsed = !truckCardsCollapsed;
+                pendingPreferences.add("truck_cards_collapsed");
+            }
+        } else if (section === 'statistics') {
+            statisticsCollapsed = !statisticsCollapsed;
+            pendingPreferences.add('statistics_collapsed');
         } else if (section === "spear") {
             spearDataCollapsed = !spearDataCollapsed;
             pendingPreferences.add("spear_data_collapsed");
@@ -86,12 +96,15 @@
     }
     function preferenceValues() {
         return {secondary_sort: dispatchSortMode, arrived_first: arrivedFirst,
+            board_truck_cards_collapsed: boardTruckCardsCollapsed, statistics_collapsed: statisticsCollapsed,
             truck_cards_collapsed: truckCardsCollapsed, spear_data_collapsed: spearDataCollapsed};
     }
     function adoptPreferences(preferences) {
         if (!pendingPreferences.has("secondary_sort")) dispatchSortMode = preferences.secondary_sort === "arrival" ? "arrival" : "etd";
         if (!pendingPreferences.has("arrived_first")) arrivedFirst = preferences.arrived_first !== false;
         if (!pendingPreferences.has("truck_cards_collapsed")) truckCardsCollapsed = preferences.truck_cards_collapsed === true;
+        if (!pendingPreferences.has('board_truck_cards_collapsed')) boardTruckCardsCollapsed = preferences.board_truck_cards_collapsed === true;
+        if (!pendingPreferences.has('statistics_collapsed')) statisticsCollapsed = preferences.statistics_collapsed === true;
         if (!pendingPreferences.has("spear_data_collapsed")) spearDataCollapsed = preferences.spear_data_collapsed === true;
         preferenceVersion = Number(preferences.version || 0);
     }
@@ -141,9 +154,10 @@
         });
         scope.querySelectorAll("[data-dispatch-collapse]").forEach(button => {
             const trucks = button.dataset.dispatchCollapse === "trucks";
-            const collapsed = trucks ? truckCardsCollapsed : spearDataCollapsed;
+            const collapsed = trucks ? (document.body.classList.contains('operational-board-view') ? boardTruckCardsCollapsed : truckCardsCollapsed)
+                : button.dataset.dispatchCollapse === 'statistics' ? statisticsCollapsed : spearDataCollapsed;
             button.setAttribute("aria-expanded", String(!collapsed));
-            button.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${trucks ? "truck fuel status" : "SPEAR data"}`);
+            button.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${trucks ? "truck fuel status" : button.dataset.dispatchCollapse === 'statistics' ? 'Fueling Statistics' : "SPEAR data"}`);
             button.textContent = collapsed ? "EXPAND" : "COLLAPSE";
             const body = scope.querySelector(`[data-dispatch-section="${button.dataset.dispatchCollapse}"]`);
             if (body) body.hidden = collapsed;
@@ -155,6 +169,8 @@
             status.classList.toggle("is-error", error);
         });
     }
+
+    new MutationObserver(() => renderSortControls(root)).observe(document.body, {attributes:true,attributeFilter:['class']});
 
     function applyDispatchSort(scope) {
         renderSortControls(scope);
@@ -222,17 +238,18 @@
 
     function initializeDispatchDetails(scope) {
         scope.addEventListener("click", (event) => {
-            const toggle = event.target.closest("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-completion-explain]");
+            const toggle = event.target.closest("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-completion-explain], [data-dispatch-action-open]");
             if (!toggle) return;
             event.preventDefault();
             const detail = document.getElementById(toggle.getAttribute("aria-controls"));
             if (!detail) return;
-            const expanded = toggle.getAttribute("aria-expanded") === "true";
-            scope.querySelectorAll("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details]").forEach(button => {
+            const expanded = toggle.matches('[data-dispatch-action-open]') ? false : toggle.getAttribute("aria-expanded") === "true";
+            scope.querySelectorAll("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-action-open]").forEach(button => {
                 if (button.getAttribute("aria-controls") === detail.id) button.setAttribute("aria-expanded", String(!expanded));
             });
             detail.hidden = expanded;
             detail.setAttribute("aria-hidden", String(expanded));
+            if (toggle.matches('[data-dispatch-action-open]')) detail.querySelector('[data-dispatch-action-center]')?.scrollIntoView({block:'nearest'});
         });
     }
 
@@ -588,6 +605,7 @@
     const protectedControls = () => Array.from(root.querySelectorAll(
         "select[name='assigned_fueler_user_id']:not([disabled]), "
         + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden]), "
+        + "[data-dispatch-action-center] input:not([type=hidden]), [data-dispatch-action-center] select, [data-dispatch-action-center] textarea, "
         + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select"
     ));
 
@@ -760,6 +778,47 @@
             };
             const currentDetails = detailFor(root, currentRow);
             const nextDetails = detailFor(nextPanel, nextRow);
+            const oldTimeline=currentDetails?.querySelector('[data-dispatch-work-timeline]');
+            const newTimeline=nextDetails?.querySelector('[data-dispatch-work-timeline]');
+            if (oldTimeline && newTimeline && !groupDirty([oldTimeline])) {
+                const timeline=newTimeline.cloneNode(true);
+                oldTimeline.replaceWith(timeline);
+                timeline.querySelectorAll('input,select,textarea').forEach(control=>initialControlValues.set(control,controlValue(control)));
+            }
+            // Independently addressed actions must appear even while another
+            // mission/plan is being edited or the Fueler Data dialog is open.
+            // Preserve dirty action inputs, not an entire stale Action Center.
+            const oldCenter=currentDetails?.querySelector('[data-dispatch-action-center]');
+            const newCenter=nextDetails?.querySelector('[data-dispatch-action-center]');
+            if (oldCenter && newCenter) {
+                const incoming=new Map(Array.from(newCenter.querySelectorAll('[data-action-key]'),item=>[item.dataset.actionKey,item]));
+                oldCenter.querySelectorAll('[data-action-key]').forEach(item=>{
+                    const fresh=incoming.get(item.dataset.actionKey);
+                    if (!groupDirty([item])) {
+                        if (fresh) item.replaceWith(fresh.cloneNode(true)); else item.remove();
+                    } else if (!fresh) {
+                        // Retain the draft but never leave a resolved/stale
+                        // action executable against changed evidence.
+                        item.querySelectorAll('button[type="submit"], button:not([type])').forEach(button=>button.disabled=true);
+                        const status=item.querySelector('[data-lifecycle-status]');
+                        if (status) status.textContent='ACTION CHANGED — review refreshed state before submitting.';
+                    }
+                    incoming.delete(item.dataset.actionKey);
+                });
+                incoming.forEach(item=>oldCenter.appendChild(item.cloneNode(true)));
+                oldCenter.querySelector('header').replaceWith(newCenter.querySelector('header').cloneNode(true));
+                oldCenter.querySelectorAll(':scope > small').forEach(item=>item.remove());
+                newCenter.querySelectorAll(':scope > small').forEach(item=>oldCenter.appendChild(item.cloneNode(true)));
+                oldCenter.querySelectorAll('input,select,textarea').forEach(control=>{
+                    if (!initialControlValues.has(control)) initialControlValues.set(control,controlValue(control));
+                });
+            }
+            const oldIndicator=currentStack.querySelector('[data-dispatch-action-open]');
+            const newIndicator=nextStack.querySelector('[data-dispatch-action-open]');
+            if (newIndicator) {
+                if (oldIndicator) oldIndicator.replaceWith(newIndicator.cloneNode(true));
+                else currentStack.appendChild(newIndicator.cloneNode(true));
+            } else oldIndicator?.remove();
             const currentHandoff = currentDetails?.querySelector("[data-dispatch-fueler-submission]");
             const nextHandoff = nextDetails?.querySelector("[data-dispatch-fueler-submission]");
             if (sameVisit && currentHandoff && nextHandoff) currentHandoff.textContent = nextHandoff.textContent;
@@ -870,6 +929,8 @@
                 adoptPreferences({secondary_sort: preferences.dataset.sortMode,
                     arrived_first: preferences.dataset.arrivedFirst !== "0",
                     truck_cards_collapsed: preferences.dataset.truckCardsCollapsed === "1",
+                    board_truck_cards_collapsed: preferences.dataset.boardTruckCardsCollapsed === "1",
+                    statistics_collapsed: preferences.dataset.statisticsCollapsed === "1",
                     spear_data_collapsed: preferences.dataset.spearDataCollapsed === "1",
                     version: preferences.dataset.preferenceVersion});
             }
@@ -990,7 +1051,14 @@
             }
             adoptFingerprint(payload);
             updateNeoFuel(missionId, payload.neo_fuel);
-            if (payload.changed) pendingFuelDataRefresh = true;
+            if (payload.changed) {
+                pendingFuelDataRefresh = true;
+                // Required-fuel edits can create a mandatory next-visit review.
+                // Adopting our revision must not hide that action merely
+                // because an unrelated mission still has unsaved controls.
+                await refreshCriticalCompletion(String(payload.operation_id ?? 'none'),
+                    Number(payload.revision || 0),String(payload.tail_revision || ''));
+            }
             setStatus(status, payload.changed ? "Saved" : "No change");
             return true;
         } catch (error) {
@@ -1165,6 +1233,15 @@
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true) throw new Error(payload.error || "Action failed.");
             lifecycleSaving = false;
+            // Accept only the values actually submitted in this action, not
+            // newer typing or drafts elsewhere. Resolved review forms can then
+            // disappear promptly rather than masquerading as unsaved work.
+            Array.from(form.elements).forEach(control=>{
+                if (!control.name || control.type==='hidden' || control.tagName==='BUTTON') return;
+                const submitted=(control.type==='checkbox' || control.type==='radio')
+                    ? (body.getAll(control.name).includes(control.value) ? '1':'0') : body.get(control.name);
+                if (submitted===controlValue(control)) initialControlValues.set(control,controlValue(control));
+            });
             if (form.matches("[data-pending-uplift-form]")) {
                 if (form.elements.expected_version && payload.pending_version) form.elements.expected_version.value = String(payload.pending_version);
                 protectedControls().filter(control => control.form === form)
@@ -1174,7 +1251,7 @@
             // The existing panel refresh preserves row/details/scroll and defers
             // while another field or the shared Fueler Data modal is in use.
             pendingFuelDataRefresh = true;
-            if (form.matches('[data-dispatch-verification-form]')) {
+            if (payload.operation_id != null) {
                 observeLiveState(String(payload.operation_id ?? 'none'),Number(payload.revision || 0),String(payload.tail_revision || ''));
                 await handleChangedFingerprint(String(payload.operation_id ?? 'none'),Number(payload.revision || 0),String(payload.tail_revision || ''));
             } else await reloadPage();

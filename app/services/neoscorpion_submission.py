@@ -11,7 +11,7 @@ def evidence(assignment, mission, work, tanks):
         work=work.id,visit=work.visit_number,sequence=work.physical_sequence_number,
         physical_cycle=work.physical_cycle_number,physical_truck=work.physical_truck_id,
         fueler=assignment.assigned_fueler_user_id,truck=assignment.assigned_truck_id,
-        cycle_type=assignment.current_cycle_type,required=mission.planned_fuel_load,
+        cycle_type=assignment.current_cycle_type,required=work.physical_required_fuel_lbs if work.target_frozen else mission.planned_fuel_load,
         on=stamp(work.manual_on_at_utc or work.confirmed_on_at_utc or work.on_at_utc),
         off=stamp(work.off_at_utc),ended=stamp(work.ended_early_at_utc),
         hold=assignment.operational_status,review=work.physical_transfer_review,
@@ -23,10 +23,21 @@ def evidence(assignment, mission, work, tanks):
     return hashlib.sha256(json.dumps(data,sort_keys=True,default=str).encode()).hexdigest()
 
 
-def invalidate(work):
+def invalidate(work, _seen=None):
     # Keep the last actor/time/evidence and append-only audit; the version
     # revokes it even when a correction later restores the original quantities.
     if work is not None and work.fueler_submitted_at_utc is not None:
+        _seen=set() if _seen is None else _seen
+        if work.id in _seen:raise ValueError('Conflicting continuation history requires review.')
+        _seen.add(work.id)
+        from app.models import NeoScorpionPendingUplift,NeoScorpionFuelWorkState
+        for plan in NeoScorpionPendingUplift.query.filter_by(parent_work_state_id=work.id,status='promoted').filter(
+                NeoScorpionPendingUplift.plan_kind.in_(('continuation','increase'))).all():
+            child=NeoScorpionFuelWorkState.query.filter_by(id=plan.promoted_work_state_id).with_for_update().one()
+            if child.physical_finalized_at_utc:
+                raise ValueError('A verified later visit depends on this measurement. Use authorized historical review; source and later readings remain unchanged.')
+            invalidate(child, _seen)
+            child.continuation_review_reason='SOURCE MEASUREMENT CHANGED — Dispatcher must verify the handoff; starting readings were NOT overwritten.'
         work.fueler_submission_version=int(work.fueler_submission_version or 0)+1
 
 
@@ -43,6 +54,8 @@ def state(assignment, mission, work, tanks, *, on_trusted):
         problem='This physical visit is already complete.'
     elif assignment.operational_status=='hold_review' or work.ended_early_at_utc or work.physical_transfer_review:
         problem='Resolve physical work review before COMPLETE ASSIGNMENT.'
+    elif work.continuation_review_reason:
+        problem=work.continuation_review_reason
     elif work.tail_number != mission.assigned_tail_number or (work.physical_cycle_number is not None and work.physical_cycle_number != int(assignment.current_cycle_number or 1)):
         problem='Physical visit identity changed; refresh.'
     elif not assignment.assigned_truck_id or not on_trusted:

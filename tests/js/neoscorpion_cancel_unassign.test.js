@@ -9,8 +9,8 @@ function actionHarness({confirmed=true, ok=true, changed=true}={}) {
     const messages=[], requests=[], refreshes=[];
     let finish;
     const context={
-        lifecycleSaving:false, pendingFuelDataRefresh:false,
-        window:{confirm:()=>confirmed}, FormData:class { constructor(form) { this.form=form; } },
+        lifecycleSaving:false, pendingFuelDataRefresh:false, initialControlValues:new WeakMap(),controlValue:c=>c.value,
+        window:{confirm:()=>confirmed}, FormData:class { constructor(form) { this.form=form; this.values=new Map(form.elements.map(c=>[c.name,c.value])); } get(name){return this.values.get(name);} },
         syncDirtyState:()=>{}, setStatus:(_element,message)=>messages.push(message),
         reloadPage:async()=>refreshes.push('partial'),
         fetch:async(url,options)=>{requests.push({url,options}); return new Promise(resolve=>{
@@ -22,7 +22,7 @@ function actionHarness({confirmed=true, ok=true, changed=true}={}) {
     vm.createContext(context);
     vm.runInContext(source.slice(start,end)+'\nglobalThis.submit = submitLifecycleAction;',context);
     const button={disabled:false};
-    const form={dataset:{confirm:'Confirm action?'},matches:()=>false,querySelector:()=>({}),getAttribute:()=>'/cancel-uplift'};
+    const form={elements:[],dataset:{confirm:'Confirm action?'},matches:()=>false,querySelector:()=>({}),getAttribute:()=>'/cancel-uplift'};
     return {context,button,form,messages,requests,refreshes,finish:()=>finish()};
 }
 
@@ -60,6 +60,15 @@ test('rejected stale or ambiguous action shows error without refresh, retry, or 
     assert.deepEqual(h.refreshes,[]);
     assert.match(h.messages.join(' '),/Save Failed: REVIEW REQUIRED/);
     assert.equal(h.context.lifecycleSaving,false);
+});
+test('accepted review marks only submitted values clean; typing after submission remains unsaved',async()=>{
+    const h=actionHarness();const reason={name:'reason',value:'Reviewed',tagName:'INPUT',type:'text'};
+    h.form.elements.push(reason);
+    let pending=h.context.submit(h.form,h.button);h.finish();await pending;
+    assert.equal(h.context.initialControlValues.get(reason),'Reviewed');
+    pending=h.context.submit(h.form,h.button);reason.value='New draft while saving';h.finish();await pending;
+    assert.equal(h.context.initialControlValues.get(reason),'Reviewed');
+    assert.notEqual(h.context.initialControlValues.get(reason),reason.value);
 });
 
 test('refresh continues to protect dirty fields, open modal, details, and both scroll axes',()=>{

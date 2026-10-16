@@ -1,0 +1,14 @@
+{% set p=row.pending_uplift %}
+{% if p %}<div class="scorpion-console-action" data-action-key="plan-{{ p.id }}">
+<strong>{{ 'REVIEW PENDING UPLIFT' if p.plan_kind=='uplift' else 'REVIEW PLANNED NEXT TRUCK' if row.plan_requires_review else 'NEXT TRUCK — PLANNED' }}</strong>
+<span>{{ p.review_reason or row.pending_uplift_warning or ('Waiting for parent Dispatcher COMPLETE; separate post-completion uplift.' if p.plan_kind=='uplift' else 'Waiting for current Fueler COMPLETE ASSIGNMENT.') }}</span>
+{% if row.pending_spear_forecast %}<small data-pending-spear>SPEAR · {{ row.pending_spear_forecast.reason }}{% if row.pending_spear_forecast.demand_gallons %} · ~{{ row.pending_spear_forecast.demand_gallons|float|round|int }} GAL forecast{% endif %}</small>{% endif %}
+{% if can_edit %}<form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_pending_uplift') }}" data-dispatch-lifecycle-form data-pending-uplift-form>
+{{ csrf_field() }}<input type="hidden" name="assignment_id" value="{{ p.fuel_assignment_id }}"><input type="hidden" name="pending_id" value="{{ p.id }}"><input type="hidden" name="expected_version" value="{{ p.version }}">
+{% if p.plan_kind!='uplift' %}<input type="hidden" name="plan_kind" value="continuation"><input type="hidden" name="expected_cycle" value="{{ row.cycle_number }}"><input type="hidden" name="expected_tail" value="{{ row.tail_number }}"><span>Fueler {{ p.proposed_fueler.display_name if p.proposed_fueler else 'UNKNOWN' }} · Target {{ row.pending_uplift_target_input }}</span>
+{% else %}<label>TOTAL Required, K lbs<input name="required_fuel" value="{{ row.pending_uplift_target_input }}" inputmode="decimal"></label><label>Fueler<select name="proposed_fueler_user_id"><option value=""></option>{% for fueler in nightly_assignment_fuelers %}<option value="{{ fueler.id }}"{% if fueler.id==p.proposed_fueler_user_id %} selected{% endif %}>{{ fueler.display_name }}</option>{% endfor %}</select></label>{% endif %}
+<label>Next truck<select name="proposed_truck_id"{% if p.plan_kind!='uplift' %} required{% endif %}><option value=""></option>{% for entry in nightly_trucks %}<option value="{{ entry.truck.id }}"{% if entry.truck.id==p.proposed_truck_id %} selected{% endif %}>{{ entry.truck.truck_number }} · {{ entry.selection.status|replace('_',' ') }}</option>{% endfor %}</select></label>
+<button class="action-button" name="pending_action" value="save">{{ 'SAVE TRUCK PLAN' if p.plan_kind!='uplift' else 'SAVE UPLIFT PLAN' }}</button>
+{% if p.plan_kind=='uplift' and row.normal_completion_complete and p.status=='review' %}<button class="action-button" name="pending_action" value="retry">RECHECK REVIEWED UPLIFT</button>{% endif %}
+<button class="action-button" name="pending_action" value="cancel" formnovalidate>CANCEL PLANNED {{ 'UPLIFT' if p.plan_kind=='uplift' else 'TRUCK' }}</button><small data-lifecycle-status role="status"></small>
+</form>{% endif %}</div>{% endif %}

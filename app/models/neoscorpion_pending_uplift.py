@@ -29,6 +29,9 @@ class NeoScorpionPendingUplift(db.Model):
     created_at_utc=db.Column(db.DateTime,nullable=False,default=datetime.utcnow)
     updated_at_utc=db.Column(db.DateTime,nullable=False,default=datetime.utcnow)
     status=db.Column(db.String(16),nullable=False,default='pending')
+    # Existing rows remain post-completion uplifts, never silently converted.
+    plan_kind=db.Column(db.String(16),nullable=False,default='uplift',server_default='uplift')
+    handoff_snapshot=db.Column(db.JSON,nullable=True)
     version=db.Column(db.Integer,nullable=False,default=1)
     review_reason=db.Column(db.Text,nullable=True)
     promoted_cycle_number=db.Column(db.Integer,nullable=True)

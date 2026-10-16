@@ -786,8 +786,8 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         **asset_context,
     }
     _clear_optional_dispatch_enrichment(context)
-    from app.services.neoscorpion_pending_uplift import attach_pending
-    return attach_pending(context)
+    from app.services.neoscorpion_pending_uplift import attach_pending,attach_console
+    return attach_console(attach_pending(context))
 
 
 def _empty_spear_calibration():
@@ -1660,6 +1660,7 @@ def autosave_dispatch_field(
     *,
     expected_value=None,
     now_utc=None,
+    user=None,
 ):
     if field_name not in {"required_fuel", "inbound_fuel"}:
         raise ValueError("Select a supported Fuel Dispatch autosave field.")
@@ -1722,10 +1723,8 @@ def autosave_dispatch_field(
         )
 
     if field_name == "required_fuel":
-        from app.services.neoscorpion_submission import invalidate
-        invalidate(_locked_current_fuel_work_state(assignment,mission) if assignment else None)
-        mission.planned_fuel_load = requested_lbs
-        mission.planned_fuel_updated_at = now_utc
+        from app.services.neoscorpion_pending_uplift import target_changed
+        target_changed(gateway,user or current_user,operation,assignment,mission,current_lbs,requested_lbs,now_utc)
         change_message = _fuel_change_message(
             "Required Fuel",
             current_lbs,
@@ -1900,8 +1899,8 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
                     planned_fuel_load,
                 )
             )
-            mission.planned_fuel_load = planned_fuel_load
-            mission.planned_fuel_updated_at = now_utc
+            from app.services.neoscorpion_pending_uplift import target_changed
+            target_changed(gateway,current_user,operation,assignment,mission,mission.planned_fuel_load,planned_fuel_load,now_utc)
             changed = True
 
         tail_number = _normalize_tail(mission.assigned_tail_number)
@@ -2161,7 +2160,7 @@ def fueler_edit_state(assignment, mission, work, tail, tanks):
         "mission_id": mission.id,
         "cycle": int(assignment.current_cycle_number or 1),
         "tail": _normalize_tail(mission.assigned_tail_number),
-        "required_fuel_lbs": mission.planned_fuel_load,
+        "required_fuel_lbs": work.physical_required_fuel_lbs if work and work.target_frozen else mission.planned_fuel_load,
         "assigned_fueler_user_id": assignment.assigned_fueler_user_id,
         "assigned_truck_id": assignment.assigned_truck_id,
         "apu_running": work.apu_running if work else None,
@@ -2246,7 +2245,7 @@ def _segment_views(assignment, mission, work):
         if hasattr(mission, "__table__") else vars(mission)))
     mission_view.assigned_tail_number = work.tail_number
     mission_view.planned_fuel_load = work.physical_required_fuel_lbs
-    if not view._detached_segment:
+    if not view._detached_segment and not work.target_frozen:
         mission_view.planned_fuel_load = mission.planned_fuel_load
     if facts.get("planned_departure_at"):
         mission_view.planned_datetime_utc = _segment_timestamp(facts["planned_departure_at"])
@@ -2302,7 +2301,8 @@ def _bind_physical_segment(assignment, mission, work, *, legacy=False):
     work.physical_cycle_type = _assignment_cycle_type(assignment)
     work.physical_truck_id = assignment.assigned_truck_id
     work.physical_fueler_user_id = assignment.assigned_fueler_user_id
-    work.physical_required_fuel_lbs = mission.planned_fuel_load
+    if not work.target_frozen:
+        work.physical_required_fuel_lbs = mission.planned_fuel_load
     work.physical_transfer_gallons = None if legacy else assignment.transfer_fuel_gallons
     work.physical_transfer_review = legacy
     work.physical_finalized_at_utc = None
@@ -2822,6 +2822,8 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
         if not initial_on_retry:
             raise FuelerDataConflict()
     _validate_fueler_work_access(assignment, mission, work)
+    if work and work.continuation_review_reason:
+        raise ValueError(work.continuation_review_reason)
     if work and work.off_at_utc is not None:
         raise ValueError("Fueler is already OFF for this cycle.")
     if assignment.assigned_truck_id is None:
@@ -2950,6 +2952,9 @@ def submit_fueler_assignment(gateway,user,assignment_id,*,expected,now_utc=None,
         fuel_work_state=work,now_utc=now)
     asset_state=record_nightly_operational_change(asset_state,operation.id)
     db.session.flush()
+    if work.id == parent.active_work_state_id:
+        from app.services.neoscorpion_pending_uplift import activate_after_submission
+        activate_after_submission(gateway,user,operation,parent,parent.sort_date_mission,now)
     return FuelerSaveResult(True,int(asset_state.revision),None,work)
 
 
@@ -2992,6 +2997,8 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
         raise ValueError("Fuel assignment does not have a tail number.")
 
     fuel_work_state = source_work or current_work(assignment, tail_number, lock=True)
+    if fuel_work_state and fuel_work_state.target_frozen and source_work is None:
+        _visit_assignment, mission = _segment_views(assignment,mission,fuel_work_state)
     if expected is not None:
         _check_fueler_expected(expected, {
             "operation_id": operation.id, "mission_id": mission.id,
@@ -3931,6 +3938,10 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
         raise FuelerDataConflict()
     if fuel_work_state is None or fuel_work_state.off_at_utc is None:
         raise ValueError("Fueler must MARK OFF before dispatcher COMPLETE.")
+    if fuel_work_state.target_frozen and source_work is None:
+        _visit_assignment, mission = _segment_views(assignment,mission,fuel_work_state)
+    if fuel_work_state.continuation_review_reason:
+        raise ValueError(fuel_work_state.continuation_review_reason)
     if fuel_work_state.physical_transfer_review:
         raise ValueError("REVIEW REQUIRED: verify this physical segment's T/F first.")
     if fuel_work_state.physical_sequence_number is not None and fuel_work_state.physical_cycle_type is None:
@@ -4044,6 +4055,8 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
         from app.services.neoscorpion_pending_uplift import promote_after_completion
         promote_after_completion(gateway,user,operation,parent_assignment,parent_mission,now_utc)
         asset_state=db.session.get(NeoScorpionSortAssetState,asset_state.id)
+    from app.services.neoscorpion_pending_uplift import reconcile_completion
+    reconcile_completion(operation,parent_assignment,parent_mission,user,now_utc)
     return DispatcherCompleteResult(
         changed=True,
         revision=int(asset_state.revision),
@@ -5346,7 +5359,7 @@ def _close_current_truck_segment(
         nightly_truck.inventory_pending_epoch = None
     else:
         nightly_truck.current_gallons = post_transfer_gallons
-        pending = db.session.query(NeoScorpionFuelWorkState.id).join(NeoScorpionFuelAssignment,
+        pending_works = db.session.query(NeoScorpionFuelWorkState).join(NeoScorpionFuelAssignment,
             NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id).join(
             SortDateMission, SortDateMission.id == NeoScorpionFuelAssignment.sort_date_mission_id).filter(
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
@@ -5356,9 +5369,17 @@ def _close_current_truck_segment(
             NeoScorpionFuelWorkState.id != fuel_work_state.id,
             NeoScorpionFuelWorkState.physical_finalized_at_utc.is_(None),
             NeoScorpionFuelWorkState.off_at_utc.is_not(None),
-            NeoScorpionFuelWorkState.off_inventory_epoch == nightly_truck.inventory_epoch,
-        ).first()
-        if not pending and nightly_truck.inventory_pending_epoch == nightly_truck.inventory_epoch:
+        ).all()
+        # A baseline correction advances the epoch without measuring away
+        # outstanding transfers. Only explicit reading coverage can retire
+        # an older OFF visit; epoch equality alone is not ownership evidence.
+        pending=any(not transfer_covered(operation,nightly_truck,work,
+            work.off_inventory_epoch is not None and work.off_inventory_epoch != nightly_truck.inventory_epoch)
+            for work in pending_works)
+        if pending:
+            nightly_truck.inventory_verified=False
+            nightly_truck.inventory_pending_epoch=nightly_truck.inventory_epoch
+        elif nightly_truck.inventory_pending_epoch == nightly_truck.inventory_epoch:
             nightly_truck.inventory_verified = True
             nightly_truck.inventory_pending_epoch = None
         if covered_by_new_reading:
@@ -6055,6 +6076,7 @@ def _fuel_rows(
 
     rows = []
     for mission, source_assignment, source_work in [*((item, None, None) for item in missions), *projection_sources]:
+        departure_required = mission.planned_fuel_load
         tail_number = _normalize_tail(mission.assigned_tail_number)
         tail_state = tail_states.get(tail_number)
         tail_fuel_state = tail_fuel_states.get(tail_number)
@@ -6078,6 +6100,11 @@ def _fuel_rows(
             current_fuel_work_state = source_work
         elif current_fuel_work_state is not None and current_fuel_work_state.visit_number is not None:
             assignment, _unused_mission = _segment_views(assignment, mission, current_fuel_work_state)
+            if current_fuel_work_state.target_frozen:
+                # Freeze the visit's fuel target, not the live departure clock
+                # used by Dispatch sorting and SPEAR priority.
+                _unused_mission.planned_datetime_utc=mission.planned_datetime_utc
+                mission = _unused_mission
         elif assignment is not None and confirmed_tail_number != tail_number:
             projected = SimpleNamespace(**{column.name: getattr(assignment, column.name) for column in assignment.__table__.columns})
             projected.assigned_truck = assignment.assigned_truck
@@ -6702,7 +6729,8 @@ def _fuel_rows(
                 ),
                 "parking_position": parking.get(tail_number, ("-", False))[0] if tail_number else "-",
                 "parking_valid": parking.get(tail_number, ("-", False))[1] if tail_number else False,
-                "required_fuel_display": format_dispatch_thousands(mission.planned_fuel_load),
+                "departure_required_fuel_lbs": departure_required,
+                "required_fuel_display": format_dispatch_thousands(departure_required),
                 "required_fuel_lbs": mission.planned_fuel_load,
                 "inbound_fuel_display": format_dispatch_thousands(
                     tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None
@@ -7059,7 +7087,22 @@ def _attach_fueling_start_state(rows, operation, assignments, work_states, parki
                 outstanding_segments=[],pending_segment_fuelers=[],physical_segment_resources=[],
                 truck_start_reason="",truck_travel_origin="",truck_travel_until="")
             continue
-        record = by_id[record_key]
+        record = by_id.get(record_key)
+        if record is None and row.get("is_source_segment"):
+            # Retained preparation or uncertain legacy work has no confirmed
+            # physical occupation. Keep its data accessible without inventing
+            # an ON record or borrowing the current visit's timing.
+            from app.services.neoscorpion_submission import state as submission_state
+            row.update(fueling_on_trusted=False,fueling_on_active=False,fueling_effective_on_utc=None,
+                manual_on_confirmed=False,on_time="-",outstanding_segments=[],pending_segment_fuelers=[],
+                physical_segment_resources=[],truck_start_reason="PRIOR VISIT TIMING UNKNOWN",
+                truck_travel_origin="",truck_travel_until="",off_ready=False,
+                off_reason="No confirmed physical ON exists for this prior visit.")
+            row.update(submission_state(assignment,row['mission'],work,list(work.tank_states),on_trusted=False))
+            row['normal_completion_ready']=False
+            row['normal_completion_reason']=row['fueler_completion_reason']
+            continue
+        if record is None:raise ValueError('Current physical visit timing identity is missing; refresh/review required.')
         state = dict(states[record_key])
         fob_check = bool(assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
                          and row.get("fob_likely"))

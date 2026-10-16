@@ -10,7 +10,10 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 }
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
+    "neoscorpion_pending_uplifts": {"plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'", "handoff_snapshot": "JSON"},
     "neoscorpion_dispatch_preferences": {
+        "board_truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "statistics_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
         "truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT 0",
         "spear_data_collapsed": "BOOLEAN NOT NULL DEFAULT 0",
     },
@@ -195,6 +198,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "target_frozen": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "continuation_review_reason": "TEXT",
         "fueler_submitted_at_utc": "DATETIME",
         "fueler_submitted_by_user_id": "INTEGER",
         "fueler_submission_evidence": "VARCHAR(64)",
@@ -320,7 +325,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
+    "neoscorpion_pending_uplifts": {"plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'", "handoff_snapshot": "JSON"},
     "neoscorpion_dispatch_preferences": {
+        "board_truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "statistics_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
         "truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
         "spear_data_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
     },
@@ -485,6 +493,8 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "requested_by_user_id": "INTEGER",
     },
     "neoscorpion_fuel_work_states": {
+        "target_frozen": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "continuation_review_reason": "TEXT",
         "fueler_submitted_at_utc": "TIMESTAMP",
         "fueler_submitted_by_user_id": "INTEGER",
         "fueler_submission_evidence": "VARCHAR(64)",

@@ -501,15 +501,18 @@ def fuel_dispatch_pending_uplift():
     access=permission_access(FUEL_DISPATCH_VIEW_PERMISSION,FUEL_DISPATCH_EDIT_PERMISSION)
     if not access['can_view'] or not access['can_edit']:
         return _json_no_store({'ok':False,'error':'Access denied.'},403)
-    from app.services.neoscorpion_pending_uplift import save_pending_uplift,PendingUpliftConflict
+    from app.services.neoscorpion_pending_uplift import save_pending_uplift,plan_continuation,review_handoff,PendingUpliftConflict
     try:
-        result=save_pending_uplift(get_current_gateway(),current_user,request.form)
+        action=plan_continuation if request.form.get('plan_kind')=='continuation' else save_pending_uplift
+        if request.form.get('pending_action') in {'review_source','resolve_handoff','cancel_unstarted_handoff'}:action=review_handoff
+        result=action(get_current_gateway(),current_user,request.form)
         db.session.commit()
     except (ValueError,IntegrityError) as exc:
         db.session.rollback()
         return _json_no_store({'ok':False,'error':str(exc) if isinstance(exc,ValueError) else 'Pending uplift changed; refresh and review.'},
             409 if isinstance(exc,(PendingUpliftConflict,IntegrityError)) else 400)
     return _json_no_store({'ok':True,'changed':result.changed,'revision':result.revision,
+        'operation_id':result.pending.sort_date_operation_id,'tail_revision':_dispatch_tail_revision(result.pending.sort_date_operation_id),
         'pending_status':result.pending.status,'pending_version':result.pending.version})
 
 
@@ -552,7 +555,8 @@ def fuel_dispatch_complete():
     if result.changed:
         db.session.commit()
         _capture_learning_after_commit(gateway, result.assignment.id)
-        flash("FUELING COMPLETE.", "success")
+        owner=getattr(result.assignment,'_parent_assignment',result.assignment)
+        flash("FUELING COMPLETE." if owner.completed_at_utc else "PHYSICAL VISIT VERIFIED · REMAINING WORK / VERIFICATION STILL OPEN.", "success")
         event = result.fueling_event
         current_app.logger.info("scorpion_dispatch_complete actor=%s operation=%s mission=%s assignment=%s event=%s work=%s tail=%s revision=%s",
             current_user.id, result.assignment.sort_date_operation_id,result.mission.id,result.assignment.id,
@@ -1045,9 +1049,22 @@ def _fuel_data_permissions(dispatcher):
 
 def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status=200, submission_receipt=None):
     _can_view, can_edit = _fuel_data_permissions(dispatcher)
+    physical_work_id=request.args.get("physical_work_id")
+    physical_sequence=request.args.get("physical_sequence")
+    if submission_receipt and error is None:
+        # Source-addressed submission must show the next visit only when an
+        # exact recorded handoff proves the relationship (not a tail lookup).
+        from app.models import NeoScorpionPendingUplift,NeoScorpionFuelAssignment
+        owner=db.session.get(NeoScorpionFuelAssignment,assignment_id)
+        promoted=NeoScorpionPendingUplift.query.filter_by(fuel_assignment_id=assignment_id,
+            parent_work_state_id=submission_receipt['work_id'],status='promoted',
+            promoted_work_state_id=owner.active_work_state_id if owner else None).first()
+        if (promoted and promoted.plan_kind in ('continuation','increase')
+                and (promoted.handoff_snapshot or {}).get('submission_version')==submission_receipt['version']):
+            physical_work_id=None;physical_sequence=None
     context = fueler_context(gateway, current_user, assignment_id=assignment_id,
-                             dispatcher=dispatcher, physical_work_id=request.args.get("physical_work_id"),
-                             physical_sequence=request.args.get("physical_sequence"))
+                             dispatcher=dispatcher, physical_work_id=physical_work_id,
+                             physical_sequence=physical_sequence)
     row = context["rows"][0] if context["rows"] else None
     return _json_no_store({
         "ok": error is None,
@@ -1056,6 +1073,7 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
         "operation_id": context["operation"].id if context["operation"] else None,
         "closed": row is None,
         "submission_receipt": submission_receipt,
+        "next_visit_activated": bool(submission_receipt and row and row['physical_work_id'] != submission_receipt['work_id']),
         "html": render_template("neonodes/neoscorpion/_fueler_card.html", row=row,
                                 can_edit=can_edit, dispatcher_panel=dispatcher) if row else "",
     }, status)

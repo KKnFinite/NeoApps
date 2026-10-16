@@ -40,6 +40,26 @@ def assignment(fueler=1,truck=10,**kw):
 
 
 class WholeSortTest(unittest.TestCase):
+    def test_actual_top_off_return_supersedes_historical_sent_forecast(self):
+        from app.services.neoscorpion_spear_optimizer import _release_resources
+        sent=NOW-timedelta(hours=2);returned=NOW-timedelta(hours=1)
+        resource=dict(base=NOW,ramp='A',capacity=10000,gallons=8200,status='available',sent=sent,
+            physically_on=True,location_at=NOW-timedelta(minutes=10))
+        event=NS(kind='returned',inventory_verified=True,fuel_truck_id=10,occurred_at_utc=returned)
+        _release_resources([],{}, {10:resource},NOW,SpearSettings(),[event],{10:{'minutes':55}},NS(id=1),fixture._PlanningSettings())
+        self.assertIsNone(resource['sent']);self.assertNotIn('return_at',resource)
+        self.assertNotIn('overdue',resource);self.assertEqual(resource['gallons'],8200)
+        self.assertEqual(resource['ramp'],'A');self.assertEqual(event.occurred_at_utc,returned)
+
+    def test_missing_current_return_while_fueling_is_review_not_overdue_or_refill(self):
+        from app.services.neoscorpion_spear_optimizer import _release_resources,INFINITY
+        resource=dict(base=NOW,ramp='A',capacity=10000,gallons=1200,status='available',
+            sent=NOW-timedelta(hours=2),physically_on=True)
+        old=NS(kind='returned',inventory_verified=True,fuel_truck_id=10,occurred_at_utc=NOW-timedelta(hours=3))
+        _release_resources([],{}, {10:resource},NOW,SpearSettings(),[old],{10:{'minutes':55}},NS(id=1),fixture._PlanningSettings())
+        self.assertTrue(resource['return_missing']);self.assertNotIn('overdue',resource)
+        self.assertEqual(resource['gallons'],1200);self.assertEqual(resource['base'],INFINITY)
+
     def test_strict_earliest_even_if_already_late(self):
         early=row(100,etd=-15,arrival=40)
         later=row(200,etd=20,demand=1500)
