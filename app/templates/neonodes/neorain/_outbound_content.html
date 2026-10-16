@@ -106,7 +106,7 @@
                 <td data-label="Tail">{{ row.tail or '-' }}</td>
                 <td data-label="Destination">{{ row.destination or '-' }}</td>
                 <td data-label="Parking">{{ row.parking or '-' }}</td>
-                <td data-label="STD/ETD"><small>STD {{ row.planned_time or '-' }}</small>{{ rain_time(row, 'etd', 'ETD', row.etd) }}</td>
+                <td data-label="STD/ETD"><small aria-label="STD" title="STD">{{ row.planned_time or '—' }}</small>{{ rain_time(row, 'etd', 'ETD', row.etd) }}</td>
                 <td data-label="Status" data-neorain-display="status">{{ row.status }}</td>
                 <td data-label="Load Planner">
                     {% if row.load_planner and row.load_planner != 'UNASSIGNED' and (row.load_planner_contact.extension or row.load_planner_contact.radio_channel) %}

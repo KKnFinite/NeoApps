@@ -26,16 +26,11 @@
           other.dataset.rainOverrideVersion = payload.version;
           if (other.dataset.rainOverrideField !== field) continue;
           const readout = other.querySelector('[data-rain-override-readout]');
-          if (readout) {
-            const label = {sta: 'STA', etd: 'ETD', block_in: 'BLOCK-IN', elmac: 'eLMAC',
-              ramp_load_complete: 'RAMP LC', crew_load_complete: 'CREW LC', official_block_out: 'BLOCK-OUT'}[field];
-            readout.textContent = label + ' ' + (payload.value || '-');
-          }
+          if (readout) readout.textContent = payload.value || '\u2014';
           const checkbox = other.querySelector('[data-rain-override-checkbox]');
           if (checkbox) { checkbox.checked = payload.value === true; checkbox.dataset.saved = String(checkbox.checked); }
-          const source = other.querySelector('[data-rain-override-source]');
-          source.textContent = payload.source + (payload.active ? ' · ' + payload.sync_status : '');
-          source.title = payload.sync_detail || '';
+          other.dataset.rainOverrideAuthority = payload.source;
+          other.dataset.rainOverrideDetail = payload.sync_detail || '';
           if (other !== root && other.dataset.rainOverrideDirty !== 'true') {
             const input = other.querySelector('[data-rain-override-time]');
             if (input) input.value = String(payload.value || '').replace(':', '');
@@ -51,7 +46,7 @@
           const input = root.querySelector('[data-rain-override-time]');
           if (input) input.value = String(payload.value || '').replace(':', '');
           delete root.dataset.rainOverrideDirty;
-          note(root, action === 'reset' ? 'UPSTREAM' : 'SAVED · ' + payload.sync_status);
+          note(root, action === 'reset' ? 'Reset saved.' : 'Saved.');
         }
       } catch (error) {
         note(root, error.message, true);
@@ -69,7 +64,13 @@
     if (event.target.closest('[data-rain-override-open]')) {
       const editor = root.querySelector('[data-rain-override-editor]');
       editor.hidden = !editor.hidden;
-      if (!editor.hidden) { const input = editor.querySelector('input'); input.focus(); input.select(); }
+      root.querySelector('[data-rain-override-open]').setAttribute('aria-expanded', String(!editor.hidden));
+      if (!editor.hidden) {
+        const input = editor.querySelector('input');
+        const focus = input || editor.querySelector('button');
+        focus.focus();
+        if (input) input.select();
+      }
     }
     if (event.target.closest('[data-rain-override-reset]')) submit(root, null, 'reset');
   });
