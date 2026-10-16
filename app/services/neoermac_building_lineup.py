@@ -270,6 +270,8 @@ def get_departure_destination_pull_times(gateway, *, masters=None, operation=_UN
     return result
 
 def get_destination_pull_times(gateway, destination, **snapshot):
+    if not destination:
+        return dict(DEFAULT_PULL_TIMES)
     return dict(get_departure_destination_pull_times(gateway, **snapshot).get(str(destination or ""), DEFAULT_PULL_TIMES))
 
 def save_building_lineup(gateway, form_data):
