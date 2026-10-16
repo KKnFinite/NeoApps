@@ -1,3 +1,4 @@
+from app.services.neoscorpion_tail_notes import tail_notes_revision
 from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
@@ -198,6 +199,25 @@ def fuel_dispatch():
     return _dispatch_response(gateway, access)
 
 
+@bp.post('/fuel-dispatch/tail-notes')
+@gateway_node_required('scorpion')
+def fuel_dispatch_tail_notes():
+    from app.services.neoscorpion_tail_notes import save_tail_note, TailNoteConflict
+    access = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)
+    if not access['can_view'] or not access['can_edit']:
+        return _json_no_store({'ok': False, 'error': 'Access denied.'}, 403)
+    try:
+        note = save_tail_note(get_current_gateway(), current_user, request.form)
+        db.session.commit()
+    except TailNoteConflict as exc:
+        db.session.rollback()
+        return _json_no_store({'ok': False, 'error': str(exc)}, 409)
+    except ValueError as exc:
+        db.session.rollback()
+        return _json_no_store({'ok': False, 'error': str(exc)}, 400)
+    return _json_no_store({'ok': True, 'note': note})
+
+
 @bp.post('/fuel-dispatch/preferences')
 @gateway_node_required('scorpion')
 def fuel_dispatch_preferences():
@@ -268,6 +288,7 @@ def fuel_dispatch_live_panel():
     )
     if not access["can_view"]:
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
+    notes_revision = tail_notes_revision(gateway)
     context = _dispatch_presentation_context(
         gateway,
         include_asset_choices=access["can_edit"],
@@ -285,6 +306,7 @@ def fuel_dispatch_live_panel():
                 context["spear_settings"].automation_enabled
                 and context["spear_automatic_available"]
             ),
+            "tail_notes_revision": notes_revision,
             "html": render_template(
                 "neonodes/neoscorpion/_fuel_dispatch_panel.html",
                 gateway=gateway,
@@ -1128,6 +1150,7 @@ def fuel_assignments_live_panel():
     if not access["can_view"]:
         return _json_no_store({"ok": False, "error": "Access denied."}, 403)
 
+    notes_revision = tail_notes_revision(gateway)
     context = fueler_context(gateway, current_user)
     operation = context["operation"]
     return _json_no_store(
@@ -1135,6 +1158,7 @@ def fuel_assignments_live_panel():
             "ok": True,
             "operation_id": operation.id if operation else None,
             "revision": int(context.get("fuel_assignments_revision") or 0),
+            "tail_notes_revision": notes_revision,
             "html": render_template(
                 "neonodes/neoscorpion/_fueler_panel.html",
                 can_edit=access["can_edit"],
@@ -1263,6 +1287,7 @@ def fuel_assignments_revision():
         {
             "ok": True,
             **fuel_assignments_live_revision(gateway),
+            "tail_notes_revision": tail_notes_revision(gateway),
         }
     )
     response.headers["Cache-Control"] = "no-store"
@@ -1309,6 +1334,7 @@ def fuel_dispatch_revision():
         return response, 403
 
     fingerprint = fuel_assignments_live_revision(gateway)
+    fingerprint["tail_notes_revision"] = tail_notes_revision(gateway)
     response = jsonify(
         fingerprint
     )

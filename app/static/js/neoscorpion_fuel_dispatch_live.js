@@ -222,13 +222,15 @@
 
     function initializeDispatchDetails(scope) {
         scope.addEventListener("click", (event) => {
-            const toggle = event.target.closest("[data-neoscorpion-dispatch-details]");
+            const toggle = event.target.closest("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details]");
             if (!toggle) return;
             event.preventDefault();
             const detail = document.getElementById(toggle.getAttribute("aria-controls"));
             if (!detail) return;
             const expanded = toggle.getAttribute("aria-expanded") === "true";
-            toggle.setAttribute("aria-expanded", String(!expanded));
+            scope.querySelectorAll("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details]").forEach(button => {
+                if (button.getAttribute("aria-controls") === detail.id) button.setAttribute("aria-expanded", String(!expanded));
+            });
             detail.hidden = expanded;
             detail.setAttribute("aria-hidden", String(expanded));
         });
@@ -290,6 +292,7 @@
                 detail.hidden = false;
                 detail.setAttribute("aria-hidden", "false");
                 toggle.setAttribute("aria-expanded", "true");
+                scope.querySelector(`[data-neoscorpion-mobile-details][aria-controls="${detail.id}"]`)?.setAttribute("aria-expanded", "true");
             });
         };
 
@@ -549,6 +552,7 @@
     let spearRenderedAt = Date.now();
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
+    let tailNotesRevision = 0;
     const initialControlValues = new WeakMap();
     let reloading = false;
     let lifecycleSaving = false;
@@ -588,7 +592,9 @@
     ));
 
     const hasUnsavedControls = () => (
-        lifecycleSaving ||
+        lifecycleSaving || document.activeElement?.matches?.("[data-tail-note-form] textarea") ||
+        Array.from(root.querySelectorAll("[data-tail-note-form]")).some(form =>
+            form.dataset.saving === "true" || form.elements.notes.value !== form.elements.notes.defaultValue) ||
         protectedControls().some(
             (control) => initialControlValues.get(control) !== controlValue(control)
         )
@@ -612,6 +618,7 @@
     };
 
     const adoptFingerprint = (payload) => {
+        if (payload.tail_notes_revision !== undefined) tailNotesRevision = Number(payload.tail_notes_revision);
         operationId = payload.operation_id === null
             ? "none"
             : String(payload.operation_id);
@@ -765,6 +772,9 @@
         if (nextOperationId !== operationId || nextRevision !== revision) {
             window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
             await handleChangedFingerprint();
+        } else if (Number(payload.tail_notes_revision || 0) !== tailNotesRevision) {
+            pendingFuelDataRefresh = true;
+            if (!hasUnsavedControls()) await reloadPage();
         } else if (pendingFuelDataRefresh && !hasUnsavedControls()) {
             await reloadPage();
         } else if (

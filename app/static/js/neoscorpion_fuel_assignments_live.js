@@ -13,6 +13,8 @@
     const acknowledgeUrl = root.dataset.acknowledgeUpdateUrl;
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
+    let tailNotesRevision = 0;
+    let pendingTailNotesRevision = 0;
     let pendingOperationId = operationId;
     let pendingRevision = revision;
     let refreshing = false;
@@ -174,6 +176,8 @@
     };
 
     const adoptFingerprint = (payload) => {
+        if (payload.tail_notes_revision !== undefined) tailNotesRevision = Number(payload.tail_notes_revision);
+        pendingTailNotesRevision = tailNotesRevision;
         operationId = payload.operation_id === null
             ? "none"
             : String(payload.operation_id);
@@ -238,7 +242,7 @@
     const reconcileWhenClean = () => {
         if (
             !hasUnsavedFuelEntry()
-            && (pendingOperationId !== operationId || pendingRevision !== revision)
+            && (pendingOperationId !== operationId || pendingRevision !== revision || pendingTailNotesRevision !== tailNotesRevision)
         ) {
             refreshForChange(pendingOperationId, pendingRevision).catch(() => {});
         }
@@ -259,7 +263,8 @@
             ? "none"
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
-        if (nextOperationId !== operationId || nextRevision !== revision) {
+        pendingTailNotesRevision = Number(payload.tail_notes_revision || 0);
+        if (nextOperationId !== operationId || nextRevision !== revision || pendingTailNotesRevision !== tailNotesRevision) {
             await refreshForChange(nextOperationId, nextRevision);
         }
     };

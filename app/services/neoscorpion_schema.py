@@ -11,6 +11,7 @@ from app.models import (
     NeoScorpionSpearFleetObservation,
     NeoScorpionPendingUplift,
     NeoScorpionDispatchPreference,
+    NeoScorpionTailNote,
     NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
     NeoScorpionVendorAudit, NeoScorpionInventoryReading, NeoScorpionTopOffEvent,
     NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
@@ -42,6 +43,7 @@ NEOSCORPION_SCHEMA_LOCK_TIMEOUT = "5s"
 
 NEOSCORPION_MODEL_TABLES = (
     NeoScorpionDispatchPreference,
+    NeoScorpionTailNote,
     NeoScorpionTailFuelState,
     NeoScorpionFuelTruck,
     NeoScorpionFuelerNickname,

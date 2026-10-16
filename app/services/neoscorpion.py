@@ -5978,6 +5978,9 @@ def _fuel_rows(
     now_utc = now_utc or datetime.utcnow()
     tail_states = _tail_states_by_tail(operation)
     tail_fuel_states = _tail_fuel_states_by_tail(operation)
+    from app.services.neoscorpion_tail_notes import tail_notes_by_tail
+    aircraft_notes = tail_notes_by_tail(operation.gateway_id,
+        (_normalize_tail(item.assigned_tail_number) for item in [*missions, *(source[0] for source in projection_sources)]))
     parking = _parking_by_tail(operation) if parking_by_tail is None else parking_by_tail
     assignments = (
         _assignments_by_mission(operation)
@@ -6720,6 +6723,7 @@ def _fuel_rows(
                 ),
                 **fob,
                 "fueler_notes": (fuel_work_state.notes or "") if fuel_work_state else "",
+                "tail_note": aircraft_notes.get(tail_number),
                 "load_planning_output": load_planning_output,
                 "load_planning_ready": load_planning_output is not None,
                 "load_planning_placeholder": "-",

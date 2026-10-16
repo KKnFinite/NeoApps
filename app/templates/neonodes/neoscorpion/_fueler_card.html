@@ -55,6 +55,7 @@
                         <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
                     </div>
                 </header>
+                {% with tail_notes_readonly=true %}{% include "neonodes/neoscorpion/_tail_notes.html" %}{% endwith %}
                 {% if row.fueler_work_blocked %}
                 <p class="neoscorpion-calculation-warning"><strong>REVIEW</strong> {{ row.hold_reason_display }}</p>
                 {% endif %}
