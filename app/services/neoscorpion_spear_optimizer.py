@@ -96,6 +96,10 @@ def _travel(origin, destination, settings, fueler=False):
 
 
 def _gaps(blocks, base, location, ramp, duration, earliest, settings, fueler=False):
+    # Unknown physical locations intentionally block this resource. Do not pass
+    # them to ramp conversion, guess Remote, or abort the entire fleet plan.
+    if base>=INFINITY or location not in legacy.SPEAR_RAMP_ORDER:
+        return
     previous_end, previous_ramp = base, location
     for block in sorted(blocks, key=lambda b:(b.start, b.key)):
         start = max(earliest, previous_end + _travel(previous_ramp, ramp, settings, fueler))

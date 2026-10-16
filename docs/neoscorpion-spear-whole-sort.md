@@ -96,7 +96,7 @@ never reconstructed.
 
 ## Focused validation and changed files
 
-Validation covers 25 pure scheduling/policy cases, 7 mapped integration cases,
+Validation covers 26 pure scheduling/policy cases, 7 mapped integration cases,
 9 PostgreSQL replanning/bootstrap/SENT cases and 4 existing PostgreSQL submission /
 exactly-once inventory cases. Phase 1's 17 decision-contract checks also pass with
 the additive fleet prediction evidence. Chromium desktop and WebKit mobile cover
@@ -126,3 +126,6 @@ Phase 2 changes:
   `spear_settings.html`.
 - Four focused test modules and this document. No NeoRain code or JS polling
   changes. No feature branch or manual Render deploy.
+
+The post-deploy location regression also verifies that an unknown historical ramp
+excludes only that resource, without guessing Remote or aborting the fleet plan.

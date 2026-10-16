@@ -204,6 +204,16 @@ class WholeSortTest(unittest.TestCase):
         a['spear_visits_truncated']=True
         with self.assertRaisesRegex(ValueError,'history bound'):plan([a])
 
+    def test_unknown_historical_location_excludes_only_affected_resources(self):
+        a=row(100)
+        a['spear_physical_visits']=[dict(id=9,on=str(NOW-timedelta(hours=1)),
+            off=str(NOW-timedelta(minutes=20)),fueler_release=str(NOW-timedelta(minutes=15)),
+            truck_id=10,fueler_id=1,parking=None,finalized=True)]
+        p=plan([a],trucks=[fixture._truck(10),fixture._truck(20)],
+            fuelers=[fixture._fueler(1),fixture._fueler(2)])
+        self.assertEqual((p.steps[0].truck_id,p.steps[0].fueler_id),(20,2))
+        self.assertFalse(plan([a]).steps)
+
     def test_bounded_performance_and_fail_closed(self):
         rows=[row(i,etd=60+i*4,demand=200) for i in range(40)]
         p=plan(rows,trucks=[fixture._truck(i,current=10000,capacity=12000) for i in (10,20,30)],
