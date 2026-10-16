@@ -23,6 +23,10 @@ class NeoScorpionTopOffEvent(db.Model):
     inventory_epoch = db.Column(db.Integer, nullable=False)
     actor_user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     driver_name = db.Column(db.String(160), nullable=False, default='UNKNOWN')
+    # Frozen at SENT, independent of later settings/calibration changes. Legacy
+    # NULLs retain unknown historical prediction provenance.
+    spear_predicted_return_at_utc = db.Column(db.DateTime)
+    spear_roundtrip_policy = db.Column(db.JSON)
 
 
 def _immutable(*_args):

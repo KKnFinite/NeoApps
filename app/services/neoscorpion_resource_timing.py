@@ -336,6 +336,10 @@ def attach_resource_evidence(rows,operation,settings,planning,now):
         and not row.get('administratively_complete') and not row.get('fueling_effective_on_utc')
         and not row.get('is_off')]
     for row in rows:
+        # Reuse the already-loaded authoritative visit evidence for whole-sort
+        # calendars. This adds no query or second physical-release formula.
+        row['spear_physical_visits']=visits
+        row['spear_visits_truncated']=truncated
         work=row.get('fuel_work_state');assignment=row.get('assignment')
         facts=getattr(work,'performance_context',None) or {}
         if not assignment:continue

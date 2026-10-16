@@ -231,6 +231,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "ended_early_by_user_id": "INTEGER",
         "ended_early_reason": "TEXT",
     },
+    "neoscorpion_top_off_events": {
+        "spear_predicted_return_at_utc": "TIMESTAMP",
+        "spear_roundtrip_policy": "JSON",
+    },
     "neoscorpion_settings": {
         'truck_fuel_discrepancy_threshold_gallons': 'INTEGER NOT NULL DEFAULT 1000',
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
@@ -253,6 +257,9 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
         "spear_incoming_early_staging_minutes": "INTEGER NOT NULL DEFAULT 15",
         "spear_recalculation_interval_minutes": "INTEGER NOT NULL DEFAULT 2",
         "spear_automation_stability_delay_seconds": "INTEGER NOT NULL DEFAULT 5",
+        "spear_whole_sort_mode": "VARCHAR(8) NOT NULL DEFAULT 'shadow' CHECK (spear_whole_sort_mode IN ('shadow','active'))",
+        "spear_top_off_roundtrip_minutes": "INTEGER NOT NULL DEFAULT 40 CHECK (spear_top_off_roundtrip_minutes > 0)",
+        "spear_use_learned_top_off": "BOOLEAN NOT NULL DEFAULT FALSE",
         "spear_priority_order_json": "TEXT",
     },
     "neosubzero_departure_deice_events": {
@@ -509,6 +516,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "ended_early_by_user_id": "INTEGER",
         "ended_early_reason": "TEXT",
     },
+    "neoscorpion_top_off_events": {
+        "spear_predicted_return_at_utc": "TIMESTAMP",
+        "spear_roundtrip_policy": "JSON",
+    },
     "neoscorpion_settings": {
         'truck_fuel_discrepancy_threshold_gallons': 'INTEGER NOT NULL DEFAULT 1000',
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
@@ -531,6 +542,9 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "spear_incoming_early_staging_minutes": "INTEGER NOT NULL DEFAULT 15",
         "spear_recalculation_interval_minutes": "INTEGER NOT NULL DEFAULT 2",
         "spear_automation_stability_delay_seconds": "INTEGER NOT NULL DEFAULT 5",
+        "spear_whole_sort_mode": "VARCHAR(8) NOT NULL DEFAULT 'shadow' CHECK (spear_whole_sort_mode IN ('shadow','active'))",
+        "spear_top_off_roundtrip_minutes": "INTEGER NOT NULL DEFAULT 40 CHECK (spear_top_off_roundtrip_minutes > 0)",
+        "spear_use_learned_top_off": "BOOLEAN NOT NULL DEFAULT FALSE",
         "spear_priority_order_json": "TEXT",
     },
     "neoscorpion_aircraft_fuel_settings": {

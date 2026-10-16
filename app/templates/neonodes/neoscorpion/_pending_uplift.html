@@ -4,6 +4,7 @@
     <strong>PENDING UPLIFT{% if pending.status=='review' %} — REVIEW REQUIRED{% endif %}</strong>
     <small>{{ row.mission.flight_number }} {{ row.destination }} {{ pending.tail_number }} · Parent cycle {{ pending.parent_cycle_number }}</small>
     {% if pending.review_reason %}<p class="neoscorpion-calculation-warning" data-pending-review>{{ pending.review_reason }}</p>{% endif %}
+    {% if row.pending_spear_forecast %}<small data-pending-spear>SPEAR · {{ row.pending_spear_forecast.reason }}{% if row.pending_spear_forecast.demand_gallons %} · ~{{ row.pending_spear_forecast.demand_gallons|float|round|int }} GAL forecast{% endif %}</small>{% endif %}
     {% if row.pending_uplift_warning %}<small>{{ row.pending_uplift_warning }}</small>{% endif %}
     {% if can_edit %}
     <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_pending_uplift') }}" data-dispatch-lifecycle-form data-pending-uplift-form>

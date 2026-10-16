@@ -16,6 +16,13 @@
         <section class="neoscorpion-panel">
             <div class="neoscorpion-panel-head"><span>Operational Controls</span><strong>{{ gateway.code }}</strong></div>
             <div class="neoscorpion-spear-setting-grid">
+                <input type="hidden" name="whole_sort_settings_present" value="1">
+                <label>Whole-sort Rollout<select name="whole_sort_mode" {% if not can_edit %}disabled{% endif %}>
+                    <option value="shadow" {% if spear_settings.whole_sort_mode == 'shadow' %}selected{% endif %}>SHADOW</option>
+                    <option value="active" {% if spear_settings.whole_sort_mode == 'active' %}selected{% endif %}>ACTIVE</option></select>
+                    <small>SHADOW compares schedules without changing recommendations. Activate only after validation, before operational assignments begin. Earlier authoritative departures always take priority.</small></label>
+                <label>Manual TOP OFF Roundtrip Minutes<input name="top_off_roundtrip_minutes" value="{{ spear_settings.top_off_roundtrip_minutes }}" type="number" min="1" max="1440" {% if not can_edit %}readonly{% endif %}><small>Complete roundtrip to Remote. Predicted return never releases a truck.</small></label>
+                <label><input type="checkbox" name="use_learned_top_off" value="1" {% if spear_settings.use_learned_top_off %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Use SPEAR Learned TOP OFF Time<small>Conservative 80th percentile; requires 10 verified roundtrips across multiple sorts. Otherwise uses the manual duration.</small></label>
                 <label><input type="checkbox" name="recommendations_enabled" value="1" {% if spear_settings.recommendations_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %}> Enable SPEAR Recommendations</label>
                 <label><input type="checkbox" name="automation_enabled" value="1" {% if spear_settings.automation_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %} data-spear-automation-toggle> SPEAR Automation</label>
                 <label>LIVE CALIBRATION MODE
@@ -30,7 +37,7 @@
                 <label>Truck Minutes Per Ramp Move<input name="truck_minutes_per_ramp_move" value="{{ spear_settings.truck_minutes_per_ramp_move }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}></label>
                 <label>Fueler Begins At<select name="fueler_begins_at" {% if not can_edit %}disabled{% endif %}>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<option value="{{ ramp }}" {% if spear_settings.fueler_begins_at == ramp %}selected{% endif %}>{{ ramp }}</option>{% endfor %}</select></label>
                 <label>Truck Begins At<select name="truck_begins_at" {% if not can_edit %}disabled{% endif %}>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<option value="{{ ramp }}" {% if spear_settings.truck_begins_at == ramp %}selected{% endif %}>{{ ramp }}</option>{% endfor %}</select></label>
-                <label>Truck After Top Off<select name="truck_after_top_off" {% if not can_edit %}disabled{% endif %}>{% for ramp in ['Remote','Alpha','Bravo','Charlie','Delta','Echo'] %}<option value="{{ ramp }}" {% if spear_settings.truck_after_top_off == ramp %}selected{% endif %}>{{ ramp }}</option>{% endfor %}</select></label>
+                <label>Truck After Top Off<select name="truck_after_top_off" aria-label="Truck returns to Remote"><option value="Remote">Remote</option></select></label>
                 <label>Incoming Aircraft Early Staging, minutes<input name="incoming_early_staging_minutes" value="{{ spear_settings.incoming_early_staging_minutes }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
                 <label>Recalculation Interval, minutes<input name="recalculation_interval_minutes" value="{{ spear_settings.recalculation_interval_minutes }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>
                 <label>Automation Stability Delay, seconds<input name="automation_stability_delay_seconds" value="{{ spear_settings.automation_stability_delay_seconds }}" inputmode="numeric" {% if not can_edit %}readonly{% endif %}></label>

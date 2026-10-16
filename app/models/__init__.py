@@ -1,3 +1,4 @@
+from app.models.neoscorpion_spear_plan import NeoScorpionSpearPlanSnapshot
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation, NeoScorpionSpearFleetObservation
 from app.models.neoscorpion_pending_uplift import NeoScorpionPendingUplift
 from app.models.auth_rate_limit_state import AuthRateLimitState

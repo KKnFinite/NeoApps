@@ -581,7 +581,10 @@ def mark_nightly_truck_topping_off(
         transfer_covered(locked_operation, nightly_truck, work,
             work.off_inventory_epoch is not None and work.off_inventory_epoch != nightly_truck.inventory_epoch)
         for work in pending_work)
-    db.session.add(NeoScorpionTopOffEvent(sort_date_operation_id=locked_operation.id,
+    from app.services.neoscorpion_spear_replanning import freeze_sent_forecast
+    predicted_return,roundtrip_policy=freeze_sent_forecast(locked_operation,truck.id,nightly_truck.top_off_sent_at_utc)
+    db.session.add(NeoScorpionTopOffEvent(spear_predicted_return_at_utc=predicted_return,spear_roundtrip_policy=roundtrip_policy,
+        sort_date_operation_id=locked_operation.id,
         fuel_truck_id=truck.id, kind='sent', occurred_at_utc=nightly_truck.top_off_sent_at_utc,
         gallons=nightly_truck.current_gallons, inventory_verified=departure_verified,
         inventory_epoch=nightly_truck.inventory_epoch, actor_user_id=changed_by_user.id if changed_by_user else None,

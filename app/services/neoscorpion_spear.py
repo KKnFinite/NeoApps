@@ -62,6 +62,9 @@ class SpearSettings:
     recalculation_interval_minutes: int = 2
     automation_stability_delay_seconds: int = 5
     priority_order: tuple[str, ...] = SPEAR_DEFAULT_PRIORITY_ORDER
+    whole_sort_mode: str = 'shadow'
+    top_off_roundtrip_minutes: int = 40
+    use_learned_top_off: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,8 @@ class SpearPlan:
     readiness_by_mission_id: dict[int, tuple[str, ...]] = field(default_factory=dict)
     timing_unknown_count: int = 0
     occupied_truck_next: dict[int, SpearTruckNext] = field(default_factory=dict)
+    algorithm_version: str = 'spear-v1'
+    optimizer: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -223,7 +228,7 @@ def effective_spear_settings(settings):
         ),
         fueler_begins_at=_ramp(settings.spear_fueler_begins_at),
         truck_begins_at=_ramp(settings.spear_truck_begins_at),
-        truck_after_top_off=_ramp(settings.spear_truck_after_top_off),
+        truck_after_top_off="Remote",
         incoming_early_staging_minutes=int(
             settings.spear_incoming_early_staging_minutes if settings.spear_incoming_early_staging_minutes is not None else 15
         ),
@@ -234,6 +239,9 @@ def effective_spear_settings(settings):
             settings.spear_automation_stability_delay_seconds or 5
         ),
         priority_order=_priority_order(settings.spear_priority_order_json),
+        whole_sort_mode='active' if getattr(settings, 'spear_whole_sort_mode', None) == 'active' else 'shadow',
+        top_off_roundtrip_minutes=int(getattr(settings, 'spear_top_off_roundtrip_minutes', None) or 40),
+        use_learned_top_off=bool(getattr(settings, 'spear_use_learned_top_off', False)),
     )
 
 
@@ -288,6 +296,18 @@ def save_spear_settings(gateway, user, form):
             list(_priority_order(form.get("priority_order")))
         ),
     }
+    if form.get('whole_sort_settings_present'):
+        mode = form.get('whole_sort_mode', 'shadow')
+        if mode not in ('shadow', 'active'):
+            raise ValueError('Whole-sort mode must be SHADOW or ACTIVE.')
+        if mode == 'active' and effective_spear_settings(settings).whole_sort_mode != 'active':
+            from app.services.neoscorpion_spear_optimizer import validate_activation
+            validate_activation(gateway, user)
+        values.update(spear_whole_sort_mode=mode,
+            spear_top_off_roundtrip_minutes=_whole_number(form.get('top_off_roundtrip_minutes'),
+                'Manual TOP OFF Roundtrip Minutes', 1, 1440),
+            spear_use_learned_top_off=_form_bool(form, 'use_learned_top_off'))
+    values['spear_truck_after_top_off'] = 'Remote'
     changed = False
     for field, value in values.items():
         if getattr(settings, field) != value:

@@ -109,7 +109,7 @@ def attach_references(context, gateway):
     for row in context['rows']:
         step = row.get('spear_step')
         evidence = dict(gateway_id=gateway.id, actor_id=actor, generated_at=_plain(now),
-            plan_token=plan.token if plan else None, algorithm_version=SPEAR_ALGORITHM_VERSION,
+            plan_token=plan.token if plan else None, algorithm_version=getattr(plan, "algorithm_version", SPEAR_ALGORITHM_VERSION),
             scope=scope(operation, row['mission'], row.get('assignment'), revision, operational=operational),
             recommendation=_plain(asdict(step)) if step else None,
             alternatives=_plain((step.explanation or {}).get('alternatives', [])[1:4]) if step else [],
@@ -250,9 +250,18 @@ def validate_record(record):
                 'reason': {'decision_id','actor_id','reason','note'},
                 'fleet': {'audit_id','sent_event_id','actor_id','before','original_spear','reference_state','executed_step'},
                 'fleet_outcome': {'decision_id','audit_id','sent_event_id','returned_event_id','minutes','gallons','qualified','exclusions'}}
-    if set(record['payload']) != required[record['record_type']]:
+    expected=required[record['record_type']]
+    optional={'predicted_return_at','roundtrip_policy'} if record['record_type'] in ('fleet','fleet_outcome') else set()
+    if set(record['payload']) not in (expected,expected|optional):
         raise ValueError('Invalid SPEAR observation payload.')
     payload = record['payload']
+    if 'predicted_return_at' in payload:
+        if payload['predicted_return_at'] is not None:
+            datetime.fromisoformat(payload['predicted_return_at'].rstrip('Z'))
+        policy=payload['roundtrip_policy']
+        if policy is not None and (not isinstance(policy,dict) or type(policy.get('minutes')) not in (int,float)
+                or policy['minutes']<=0):
+            raise ValueError('Invalid immutable TOP OFF forecast.')
     def identifier(value, optional=False):
         return (optional and value is None) or (type(value) is int and value > 0)
     if record['record_type'] == 'decision':
@@ -319,7 +328,8 @@ def observe_fleet(gateway, operation, audit, step, actor, before):
                 operation_id=operation.id,mission_id=step.mission_id,assignment_id=None,cycle_number=None,
                 captured_at=_plain(datetime.utcnow()),training_eligible=False,payload=_plain(dict(audit_id=audit.id,
                     sent_event_id=sent.id,actor_id=actor.id,before=before,original_spear=evidence,
-                    reference_state=state,executed_step=asdict(step))))
+                    reference_state=state,executed_step=asdict(step),
+                    predicted_return_at=sent.spear_predicted_return_at_utc,roundtrip_policy=sent.spear_roundtrip_policy)))
             validate_record(record)
             db.session.add(FleetObservation(id=identifier,kind='fleet',audit_id=audit.id,
                 sent_event_id=sent.id,gateway_id=gateway.id,payload=record))
@@ -349,7 +359,8 @@ def reconcile_fleet(gateway_id):
         identifier=uuid4().hex
         record={**decision.payload,'id':identifier,'record_type':'fleet_outcome','captured_at':_plain(end.occurred_at_utc),
             'payload':dict(decision_id=decision.id,audit_id=decision.audit_id,sent_event_id=start.id,
-                returned_event_id=end.id,minutes=minutes,gallons=end.gallons,qualified=not exclusions,exclusions=exclusions)}
+                returned_event_id=end.id,minutes=minutes,gallons=end.gallons,qualified=not exclusions,exclusions=exclusions,
+                predicted_return_at=_plain(start.spear_predicted_return_at_utc),roundtrip_policy=start.spear_roundtrip_policy)}
         validate_record(record)
         with db.session.begin_nested():
             db.session.add(FleetObservation(id=identifier,kind='fleet_outcome',audit_id=decision.audit_id,

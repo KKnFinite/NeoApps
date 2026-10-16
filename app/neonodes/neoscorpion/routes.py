@@ -1637,6 +1637,8 @@ def fuel_dispatch_spear_action():
         )
         if step is None:
             raise ValueError("SPEAR recommendation is no longer available.")
+        if step.action_type == 'assign' and step.requires_resource_release:
+            raise ValueError('Future SPEAR assignment requires verified resource release / TOP OFF RETURN. Review the current plan.')
         approved_top_off = False
         if step.action_type == 'top_off':
             from app.services.neoscorpion_spear import validate_top_off_approval
@@ -1855,8 +1857,7 @@ def completed_fuel():
 def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
     # All projections, scheduling and SPEAR enrichment finish in their existing
     # order. Sort a new list only for these two Dispatch render paths.
-    from app.services.neoscorpion_pending_uplift import attach_pending
-    context = attach_pending(fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices))
+    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices)
     rows = [dict(row) for row in context["rows"]]
     # Browser reorders existing DOM groups using ranks derived from full UTC
     # timestamps, never formatted clock strings or operational planning order.

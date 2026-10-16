@@ -44,6 +44,12 @@
         <span>{{ spear_plan.relevant_count - spear_plan.waiting_for_data_count }}/{{ spear_plan.relevant_count }} MISSIONS READY</span>
         {% if spear_plan.waiting_for_data_count %}<span>{{ spear_plan.waiting_for_data_count }} WAITING FOR DATA</span>{% endif %}
     </div>
+    {% if spear_whole_sort %}<details class="neoscorpion-spear-calibration" data-spear-whole-sort><summary>WHOLE-SORT · {{ spear_whole_sort.mode|upper }}{% if spear_whole_sort.fallback %} · SAFE FALLBACK{% endif %}</summary><div>
+        {% if spear_whole_sort.fallback %}<span>{{ spear_whole_sort.reason }}</span>{% else %}
+        <span>Strict earliest authoritative departure priority · {{ spear_whole_sort.evaluations }} evaluated schedules</span>
+        {% if spear_whole_sort.mode=='active' %}{% for change in spear_whole_sort.changes %}<span>{{ change }}</span>{% endfor %}{% else %}<span>SHADOW comparison only; current SPEAR recommendations remain authoritative.</span>{% endif %}
+        {% for truck_id, policy in spear_whole_sort.policies.items() %}<span>Truck {{ policy.truck_number or truck_id }} TOP OFF: {{ policy.minutes|round(1) }} MIN · {{ policy.source }} · {{ policy.sample_count }} samples / {{ policy.sort_count }} sorts · {{ policy.confidence }}</span>{% endfor %}
+        {% endif %}</div></details>{% endif %}
     <details class="neoscorpion-spear-calibration" data-spear-calibration>
         <summary>{{ spear_calibration.label }} · {{ spear_settings.live_calibration_mode|upper }}</summary>
         <div>
@@ -95,6 +101,7 @@
                     <strong>TRUCK {{ truck.truck_number }}</strong>
                     <span class="neoscorpion-truck-status neoscorpion-truck-activity"{% if truck.activity_travel_until %} data-truck-travel-until="{{ truck.activity_travel_until }}" data-truck-travel-origin="{{ truck.activity_travel_origin }}"{% endif %}><span data-fueler-off-estimate-text>{{ truck.activity_label }}</span></span>
                 </header>
+                {% if truck.spear_top_off_status %}<small class="neoscorpion-truck-top-off-sent" title="Forecast only; Dispatcher must record actual RETURN">{{ truck.spear_top_off_status }} · {{ truck.spear_top_off_confidence }}</small>{% endif %}
                 {% if truck.top_off_sent_time %}<small class="neoscorpion-truck-top-off-sent">TOP OFF SENT {{ truck.top_off_sent_time }}</small>{% endif %}
                 {% set driver = drivers_by_truck_id.get(truck.truck_id) %}
                 <small class="neoscorpion-truck-driver-name">DRIVER: {{ truck.driver_name|default('UNKNOWN') }}{% if can_edit %} · <a href="{{ url_for('scorpion_vendor.manage') }}">MANAGE</a>{% endif %}</small>

@@ -420,6 +420,8 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
                 now_utc=datetime.utcnow(),
                 calibrations=live_calibrations,
             )
+            from app.services.neoscorpion_spear_replanning import enrich
+            spear_plan = enrich(context, spear_plan, configured_planning_settings, live_calibrations)
             stage = "SPEAR presentation"
             _attach_spear_plan(context["rows"], context["truck_visuals"], spear_plan)
     except Exception:
@@ -779,7 +781,8 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
         **asset_context,
     }
     _clear_optional_dispatch_enrichment(context)
-    return context
+    from app.services.neoscorpion_pending_uplift import attach_pending
+    return attach_pending(context)
 
 
 def _empty_spear_calibration():
@@ -6504,6 +6507,9 @@ def _fuel_rows(
                     if remaining_complete
                     else "INCOMPLETE"
                 ),
+                "actual_total_lbs": actual_total_lbs if actual_complete else None,
+                "actual_complete": actual_complete,
+                "fuel_density": fuel_density_lbs_per_gallon,
                 "actual_total_display": (
                     format_display_thousands(actual_total_lbs)
                     if actual_complete
@@ -6830,6 +6836,7 @@ def _attach_spear_plan(rows, truck_visuals, plan):
                 visual["spear_next_status"] = "NEXT PENDING · MISSION DATA"
                 continue
             visual["spear_recommendation"] = step
+            visual["spear_advisory_only"] = step.action_type == "assign" and step.requires_resource_release
             mission_row = rows_by_mission_id.get(step.mission_id, {})
             visual["spear_parking_position"] = (
                 mission_row.get("parking_position") if mission_row.get("parking_valid") else None

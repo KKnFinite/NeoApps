@@ -797,6 +797,8 @@ class NeoScorpionSettings(db.Model):
     __tablename__ = "neoscorpion_settings"
     __table_args__ = (
         db.UniqueConstraint("gateway_id", name="uq_neoscorpion_settings_gateway"),
+        db.CheckConstraint("spear_whole_sort_mode IN ('shadow','active')", name='ck_scorpion_whole_sort_mode'),
+        db.CheckConstraint('spear_top_off_roundtrip_minutes > 0', name='ck_scorpion_topoff_roundtrip_positive'),
         db.CheckConstraint("neo_fuel_excess_alert_gallons >= 0", name="ck_neoscorpion_neo_fuel_excess_nonnegative"),
         db.CheckConstraint(
             "spear_live_calibration_mode IN ('observe', 'apply')",
@@ -865,6 +867,9 @@ class NeoScorpionSettings(db.Model):
     spear_automation_stability_delay_seconds = db.Column(
         db.Integer, nullable=False, default=5, server_default="5"
     )
+    spear_whole_sort_mode = db.Column(db.String(8), nullable=False, default='shadow', server_default='shadow')
+    spear_top_off_roundtrip_minutes = db.Column(db.Integer, nullable=False, default=40, server_default='40')
+    spear_use_learned_top_off = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     spear_priority_order_json = db.Column(db.Text, nullable=True)
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
