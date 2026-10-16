@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
 from sqlalchemy import func
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.extensions import db
 from app.services.operator_errors import safe_mutation_error
@@ -180,6 +180,15 @@ def apply_google_motherbrain_live_mission_batch(
                 )
                 db.session.flush()
         except (GoogleMotherBrainMissionError, ParkingPlanError, SQLAlchemyError) as error:
+            if isinstance(error, IntegrityError):
+                origin = getattr(error, "orig", None)
+                diagnostic = getattr(origin, "diag", None)
+                current_app.logger.error(
+                    "Google MotherBrain integrity block sheet=%s row=%s flight=%s constraint=%s sqlstate=%s",
+                    row["source_sheet"], row["sheet_row"], row["flight_number"],
+                    getattr(diagnostic, "constraint_name", None) or "unknown",
+                    getattr(origin, "sqlstate", None) or getattr(origin, "pgcode", None) or "unknown",
+                )
             result = _skipped_result(row, safe_mutation_error(error, "apply live mission") or "Live mission application failed.")
         else:
             # Publish only after the savepoint succeeds; rolled-back creations and
@@ -621,6 +630,11 @@ def _arrival_status_after_update(current_status, proposed_status):
 
 
 def _apply_effective_tail(mission, tail_number, applied_at):
+    # Every Google heartbeat used to rewrite this stamp even when the aircraft
+    # never changed, invalidating legitimate concurrent MotherBrain edits.
+    if (mission.assigned_tail_number == tail_number
+            and mission.tail_source == GOOGLE_MOTHERBRAIN_MISSION_SOURCE):
+        return
     mission.assigned_tail_number = tail_number
     mission.tail_source = GOOGLE_MOTHERBRAIN_MISSION_SOURCE
     mission.tail_updated_at = applied_at
@@ -714,6 +728,10 @@ def _normalize_live_row(supplied_row, mission_type, batch_index):
     raw_flight = row.get("flight_number", row.get("P", ""))
     raw_tail = row.get("effective_tail", row.get("tail_number", row.get("Q", "")))
     raw_tail_text = str(raw_tail or "").strip()
+    if mission_type == "departure" and raw_tail_text.upper() in {"CANX", "CNL", "CANCELLED"}:
+        raise GoogleMotherBrainMissionError(
+            "Cancellation marker is not an aircraft tail; existing outbound mission preserved."
+        )
     raw_airport = row.get(
         "origin" if mission_type == "arrival" else "destination",
         row.get("R", ""),

@@ -552,6 +552,7 @@
     let spearRenderedAt = Date.now();
     let operationId = root.dataset.operationId || "none";
     let revision = Number(root.dataset.revision || 0);
+    let tailRevision = root.dataset.tailRevision || "";
     let tailNotesRevision = 0;
     const initialControlValues = new WeakMap();
     let reloading = false;
@@ -623,6 +624,7 @@
             ? "none"
             : String(payload.operation_id);
         revision = Number(payload.revision || 0);
+        tailRevision = String(payload.tail_revision || "");
         root.dataset.operationId = operationId;
         root.dataset.revision = String(revision);
     };
@@ -673,6 +675,83 @@
     };
 
     let pendingFuelDataRefresh = false;
+    let criticalRefreshKey = "";
+    let criticalRefreshBusy = false;
+
+    const applyCriticalCompletion = (nextPanel) => {
+        const live = new Map(Array.from(root.querySelectorAll(
+            ".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]"
+        ), row => [row.dataset.dispatchMissionId, row]));
+        nextPanel.querySelectorAll(".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]").forEach(nextRow => {
+            const missionId = nextRow.dataset.dispatchMissionId;
+            const currentRow = live.get(missionId);
+            if (!currentRow) return;
+            const currentStack = currentRow.querySelector(".neoscorpion-dispatch-action-stack");
+            const nextStack = nextRow.querySelector(".neoscorpion-dispatch-action-stack");
+            if (!currentStack || !nextStack) return;
+            const completeSelector = 'button[formaction$="/fuel-dispatch/complete"]';
+            const previousComplete = currentStack.querySelector(completeSelector);
+            const nextComplete = nextStack.querySelector(completeSelector);
+            if (nextComplete && !previousComplete) {
+                currentStack.insertBefore(nextComplete.cloneNode(true), currentStack.firstChild);
+            } else if (!nextComplete && previousComplete) {
+                previousComplete.remove();
+            }
+            const currentDetails = root.querySelector(
+                '.neoscorpion-dispatch-detail-row[data-dispatch-sort-group="' + missionId + '"]'
+            );
+            const nextDetails = nextPanel.querySelector(
+                '.neoscorpion-dispatch-detail-row[data-dispatch-sort-group="' + missionId + '"]'
+            );
+            const currentHandoff = currentDetails?.querySelector("[data-dispatch-fueler-submission]");
+            const nextHandoff = nextDetails?.querySelector("[data-dispatch-fueler-submission]");
+            if (currentHandoff && nextHandoff) currentHandoff.textContent = nextHandoff.textContent;
+            const oldTail = currentRow.querySelector(".neoscorpion-dispatch-tail strong");
+            const newTail = nextRow.querySelector(".neoscorpion-dispatch-tail strong");
+            const previousWarning = currentStack.querySelector("[data-dispatch-tail-change-warning]");
+            if (oldTail && newTail && oldTail.textContent.trim() !== newTail.textContent.trim()) {
+                const warning = previousWarning || document.createElement("small");
+                warning.setAttribute("data-dispatch-tail-change-warning", "");
+                warning.className = "neoscorpion-calculation-warning";
+                warning.textContent = "TAIL CHANGED TO " + newTail.textContent.trim()
+                    + " · SAVE OR CANCEL EDITS TO REFRESH";
+                if (!previousWarning) currentStack.insertBefore(warning, currentStack.firstChild);
+            } else if (previousWarning) {
+                previousWarning.remove();
+            }
+        });
+    };
+
+    const refreshCriticalCompletion = async (nextOperationId, nextRevision, nextTailRevision) => {
+        const key = [nextOperationId, nextRevision, nextTailRevision].join(":");
+        if (criticalRefreshBusy || criticalRefreshKey === key || !panelUrl
+                || nextOperationId !== operationId) return false;
+        criticalRefreshBusy = true;
+        try {
+            const response = await fetch(panelUrl, {
+                cache: "no-store", credentials: "same-origin",
+                headers: {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || payload.ok !== true || !payload.html
+                    || String(payload.operation_id) !== nextOperationId) return false;
+            const holder = document.createElement("template");
+            holder.innerHTML = payload.html.trim();
+            const nextPanel = holder.content.firstElementChild;
+            if (!nextPanel?.matches(".neoscorpion-panel")) return false;
+            // Deliberately update *only* read-only handoff text and server-rendered
+            // COMPLETE actions. Full page replacement still waits for clean inputs.
+            applyCriticalCompletion(nextPanel);
+            criticalRefreshKey = key;
+            return true;
+        } catch (error) {
+            const status = root.querySelector("[data-spear-fleet-status]");
+            setStatus(status, "CRITICAL REFRESH: " + (error.message || "Retrying"), "error");
+            return false;
+        } finally {
+            criticalRefreshBusy = false;
+        }
+    };
 
     const reloadPage = async () => {
         // Protect personal saves from markup replacement without making them
@@ -750,9 +829,14 @@
         if (pendingFuelDataRefresh && !hasUnsavedControls()) reloadPage();
     });
 
-    const handleChangedFingerprint = () => {
-        if (!hasUnsavedControls()) return reloadPage();
-        return Promise.resolve(false);
+    const handleChangedFingerprint = async (nextOperationId, nextRevision, nextTailRevision) => {
+        if (!hasUnsavedControls()) {
+            if (await reloadPage()) return true;
+        }
+        // A dispatcher may have unsaved edits or an OPEN Fueler Data dialog.
+        // Those states must not hide a newly valid COMPLETE action for minutes.
+        pendingFuelDataRefresh = true;
+        return refreshCriticalCompletion(nextOperationId, nextRevision, nextTailRevision);
     };
 
     const poll = async () => {
@@ -769,9 +853,11 @@
             ? "none"
             : String(payload.operation_id);
         const nextRevision = Number(payload.revision || 0);
-        if (nextOperationId !== operationId || nextRevision !== revision) {
+        const nextTailRevision = String(payload.tail_revision || "");
+        if (nextOperationId !== operationId || nextRevision !== revision
+                || nextTailRevision !== tailRevision) {
             window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
-            await handleChangedFingerprint();
+            await handleChangedFingerprint(nextOperationId, nextRevision, nextTailRevision);
         } else if (Number(payload.tail_notes_revision || 0) !== tailNotesRevision) {
             pendingFuelDataRefresh = true;
             if (!hasUnsavedControls()) await reloadPage();

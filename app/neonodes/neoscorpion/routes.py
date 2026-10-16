@@ -9,7 +9,7 @@ from datetime import datetime
 
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import NeoScorpionSettings
+from app.models import NeoScorpionSettings, SortDateMission
 from app.neonodes.neoscorpion import bp
 from app.services.access_control import get_current_gateway
 from app.services.neoscorpion_drivers import DRIVER_VIEW, DRIVER_EDIT, change_driver, driver_context, driver_roster
@@ -104,6 +104,17 @@ from app.services.neoscorpion_spear_learning_capture import (
     capture_completed_learning_outcome,
     capture_current_sort_learning_outcomes,
 )
+
+
+def _dispatch_tail_revision(operation_id):
+    """Shared mission tail changes, independent of NeoScorpion's asset revision."""
+    if not operation_id:
+        return ""
+    latest = db.session.query(db.func.max(SortDateMission.tail_updated_at)).filter(
+        SortDateMission.sort_date_operation_id == operation_id,
+        SortDateMission.mission_type == "departure",
+    ).scalar()
+    return latest.isoformat(timespec="microseconds") if latest is not None else ""
 
 
 FUEL_DISPATCH_VIEW_PERMISSION = "neoscorpion.fuel_dispatch.view"
@@ -300,6 +311,7 @@ def fuel_dispatch_live_panel():
             "ok": True,
             "operation_id": operation.id if operation else None,
             "revision": int(context.get("nightly_asset_revision") or 0),
+            "tail_revision": _dispatch_tail_revision(operation.id if operation else None),
             "spear_plan_token": spear_plan.token if spear_plan else "",
             "spear_automatic_reference": context.get("spear_automatic_reference", ""),
             "spear_automation_enabled": bool(
@@ -1334,6 +1346,7 @@ def fuel_dispatch_revision():
         return response, 403
 
     fingerprint = fuel_assignments_live_revision(gateway)
+    fingerprint["tail_revision"] = _dispatch_tail_revision(fingerprint["operation_id"])
     fingerprint["tail_notes_revision"] = tail_notes_revision(gateway)
     response = jsonify(
         fingerprint

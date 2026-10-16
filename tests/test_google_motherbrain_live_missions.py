@@ -639,6 +639,26 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(SortDateMission.query.count(), 1)
         self.assertEqual(self._tail_state("N457UP").operational_status, "hot")
 
+    def test_repeated_unchanged_google_tail_does_not_churn_mission_version(self):
+        self._apply_departures(self._outbound(4, "755", "N457UP", destination="HOT"))
+        db.session.commit()
+        mission = SortDateMission.query.one()
+        first_tail_stamp = mission.tail_updated_at
+        first_version = mission.updated_at
+        self._apply_departures(self._outbound(4, "755", "N457UP", destination="HOT"))
+        db.session.commit()
+        db.session.refresh(mission)
+        self.assertEqual(mission.tail_updated_at, first_tail_stamp)
+        self.assertEqual(mission.updated_at, first_version)
+
+    def test_cancellation_marker_in_google_tail_never_creates_aircraft(self):
+        result = self._apply_departures(
+            self._outbound(4, "9329", "CANX", destination="HOT")
+        )
+        self.assertEqual(result["results"][0]["status"], "skipped")
+        self.assertIn("not an aircraft tail", result["results"][0]["reason"])
+        self.assertEqual(SortDateMission.query.count(), 0)
+
     def test_effective_tail_change_updates_same_mission_and_moves_hot(self):
         first = self._apply_departures(
             self._outbound(4, "755", "N457UP", destination="HOT")
