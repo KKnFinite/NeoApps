@@ -1,6 +1,7 @@
 """Canonical history, epoch-safe ledger and future TOP OFF capture only."""
 from datetime import datetime, timedelta
 from unittest import TestCase
+from tests.neoscorpion_handoff_fixture import submit_and_verify
 from app.extensions import db
 from app.models import (NeoScorpionTopOffEvent, NeoScorpionFuelingEvent, NeoScorpionSortTruck,
     NeoScorpionFuelTruck, NeoScorpionVendorRequest, NeoScorpionTruckDriverAudit, SortDateOperation)
@@ -31,7 +32,7 @@ class RolldownTest(TestCase):
         before=self.report()
         self.assertIn('TRUCK OFF / RELEASED',before['copy_text'])
         self.assertNotIn('DISPATCHER COMPLETE',before['copy_text'])
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         event=NeoScorpionFuelingEvent.query.one()
         report=self.report()
         transfer=next(e['columns'] for e in report['events'] if e['source']==f'fuel:{event.id}')
@@ -49,7 +50,7 @@ class RolldownTest(TestCase):
         self.prepare();self.selection.current_gallons=6000;db.session.commit()
         inventory.correct_baseline(self.gateway,self.operation,self.dispatcher,self.truck.id,5500,0);db.session.commit()
         self.save(self.start+timedelta(minutes=10),**{**self.final_data(),'transfer_fuel_gallons':'1200'});self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         other=NeoScorpionFuelTruck(gateway_id=self.gateway.id,truck_number='SECOND',capacity_gallons=10000)
         db.session.add(other);db.session.flush()
         db.session.add(NeoScorpionSortTruck(sort_date_operation_id=self.operation.id,fuel_truck_id=other.id,status='available',starting_gallons=2000,current_gallons=2000));db.session.commit()
@@ -66,7 +67,7 @@ class RolldownTest(TestCase):
         request=inventory.submit_verification(self.gateway,self.operation,user,self.truck.id,'9000');db.session.commit()
         self.assertEqual(request.status,'approved')
         self.save(self.start+timedelta(minutes=16),**self.final_data())
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         event=NeoScorpionFuelingEvent.query.one()
         db.session.add(NeoScorpionVendorRequest(sort_date_operation_id=self.operation.id,fuel_truck_id=self.truck.id,
             user_id=user.id,kind='fuel',status='pending',gallons=1234));db.session.commit()
@@ -118,7 +119,7 @@ class RolldownTest(TestCase):
 
     def test_historical_sort_and_later_driver_never_rewrite_event_identity(self):
         self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         db.session.add(NeoScorpionTruckDriverAudit(sort_date_operation_id=self.operation.id,fuel_truck_id=self.truck.id,
             driver_user_id=self.dispatcher.id,changed_by_user_id=self.dispatcher.id,reason='Later driver',created_at=datetime.utcnow()+timedelta(minutes=1)))
         other=SortDateOperation(gateway_id=self.gateway.id,gateway_code=self.gateway.code,generated_by_user_id=self.dispatcher.id,
@@ -173,7 +174,7 @@ class RolldownTest(TestCase):
 
     def test_verified_top_off_difference_known_and_rollback_does_not_capture_trip(self):
         self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         self.assignment.assigned_truck_id=None;db.session.commit()
         assets.mark_nightly_truck_topping_off(self.operation,self.truck,changed_by_user=self.dispatcher)
         db.session.rollback()

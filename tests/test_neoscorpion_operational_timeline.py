@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from sqlalchemy import event, inspect, text
 from app.extensions import db
+from tests.neoscorpion_handoff_fixture import submit_and_verify
 from app.models import (NeoScorpionFuelingEvent, NeoScorpionFuelWorkState,
                         NeoScorpionSortTruck, NeoScorpionSortFueler, NeoScorpionTruckInventoryAudit, SortDateOperation)
 from app.services import neoscorpion as service
@@ -416,6 +417,9 @@ class OperationalTimelineTest(unittest.TestCase):
         service.save_fueler_entry(self.gateway,self.dispatcher,dict(assignment_id=self.assignment.id,**identity,
             transfer_fuel_gallons="3000",segment_review_reason="Reviewed original truck transfer receipt"),dispatcher=True)
         db.session.commit()
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,**identity)
+        db.session.commit()
         self.assertEqual(NeoScorpionFuelingEvent.query.one().tail_number,"N491UP")
         self.assertIsNone(self.assignment.completed_at_utc)
 
@@ -427,7 +431,7 @@ class OperationalTimelineTest(unittest.TestCase):
 
     def _exercise_returning_tail(self,different_truck=False):
         self.prepare(); self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,
             now_utc=self.start+timedelta(minutes=12)); db.session.commit()
         original_id, original_sequence = self.work.id, self.work.physical_sequence_number
         original_on, original_off = self.work.manual_on_at_utc, self.work.off_at_utc
@@ -468,7 +472,7 @@ class OperationalTimelineTest(unittest.TestCase):
             **{**self.final_data(),"actual_left":"14","actual_right":"14","transfer_fuel_gallons":"2000"})
         self.off(at=self.start+timedelta(minutes=30))
         self.assertIsNone(self.assignment.completed_at_utc)
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,
             now_utc=self.start+timedelta(minutes=30)); db.session.commit()
         completion=self.assignment.completed_at_utc
         self.assertIsNotNone(completion)
@@ -480,6 +484,7 @@ class OperationalTimelineTest(unittest.TestCase):
             apu_running="no",actual_left="10",actual_ctr="0",actual_right="10"),
             now_utc=self.start+timedelta(minutes=31))
         db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,**b_identity);db.session.commit()
         original=db.session.get(NeoScorpionFuelWorkState,original_id)
         self.assertEqual(original.physical_sequence_number,original_sequence)
         self.assertEqual(original.physical_transfer_gallons,3000)
@@ -493,15 +498,21 @@ class OperationalTimelineTest(unittest.TestCase):
         _validate_learning_record(record)
         self.assertEqual({item["work_state_id"] for item in record["fuel_events"]},{original_id,b_work.id,new_a.id})
         if not different_truck:
-            self.assertTrue(record["training_eligible"],record["exclusion_reasons"])
+            # These v4 fixtures deliberately lack staging/accessibility proof.
+            # Physical history is valid, but cannot become qualified training.
+            self.assertFalse(record["training_eligible"])
+            self.assertIn("unverified_resource_availability",record["exclusion_reasons"])
         if different_truck:
             self.assertEqual(NeoScorpionSortTruck.query.filter_by(fuel_truck_id=current_truck.id).one().current_gallons,8000)
         self.assertTrue(self.selection.inventory_verified)
-        self.assertEqual(totals(load_jobs(self.gateway.id,operation_id=self.operation.id),"truck")["jobs"],3)
+        jobs=load_jobs(self.gateway.id,operation_id=self.operation.id)
+        self.assertEqual(len(jobs),3)
+        self.assertEqual(totals(jobs,"truck")["jobs"],0)
+        self.assertTrue(all(job['truck_reasons'] for job in jobs))
         self.assertEqual({j["event"].fuel_work_state_id for j in load_observation_jobs(self.gateway.id,operation_id=self.operation.id)},
                          {original_id,b_work.id,new_a.id})
         for work in (original,new_a,b_work):
-            service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,
                 physical_work_id=work.id,physical_sequence=work.physical_sequence_number)
         db.session.commit()
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),3)
@@ -537,6 +548,8 @@ class OperationalTimelineTest(unittest.TestCase):
         db.session.commit()
         self.assertIsNone(self.assignment.completed_at_utc)
         self.assertIsNone(new.off_at_utc)
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,
+            physical_work_id=old.id,physical_sequence=old.physical_sequence_number);db.session.commit()
         self.assertEqual(NeoScorpionFuelingEvent.query.one().fuel_work_state_id,old.id)
         self.assertEqual(old.physical_transfer_gallons,3000)
 

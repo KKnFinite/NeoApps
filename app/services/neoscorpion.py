@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from flask import current_app, has_request_context, request
 from flask_login import current_user
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, lazyload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.extensions import db
@@ -376,7 +376,7 @@ def _fuel_assignments_revision_for_operation(operation):
 
 
 def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nicknames=True,
-                          include_fueling_performance=True):
+                          include_fueling_performance=True, include_spear=True):
     """Build core Dispatch first, then add optional planning intelligence."""
     context = _manual_fuel_dispatch_context(
         gateway, include_asset_choices=include_asset_choices
@@ -392,6 +392,11 @@ def fuel_dispatch_context(gateway, *, include_asset_choices=False, display_nickn
                  *(row["user"] for row in context["nightly_fuelers"]),
                  *(row["assigned_fueler"] for row in context["rows"])]
         nicknames = fueler_nicknames(gateway, users)
+
+    if not include_spear:
+        _apply_operational_fueler_names(context, nicknames)
+        context["fueling_performance"] = {"fuelers": (), "trucks": ()}
+        return context
 
     configured_planning_settings = None
     stage = "assignment recommendations"
@@ -903,7 +908,7 @@ def hanzo_context(gateway):
 
 
 def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physical_work_id=None, physical_sequence=None,
-                   truck_id=None, include_completed=False):
+                   truck_id=None, include_completed=False, include_timing=True):
     operation = current_sort_operation(gateway)
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     refresh_setting = live_screen_refresh_value(
@@ -1003,7 +1008,8 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
                                timezone_name=gateway_timezone(gateway))
     try:
         with db.session.begin_nested():
-            _attach_fueling_timing(rows, operation, settings)
+            if include_timing:
+                _attach_fueling_timing(rows, operation, settings)
     except Exception:
         current_app.logger.exception("Fueling timing unavailable; retaining TIMING UNKNOWN.")
         for row in rows:
@@ -1808,7 +1814,7 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
     )
     _check_dispatch_segment_reference(assignment,form)
     from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
-    spear_before = scope(operation, mission, assignment, asset_state.revision)
+    spear_before = scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
     assignment_created = assignment is None
     current_fueler_id = assignment.assigned_fueler_user_id if assignment else None
     current_truck_id = assignment.assigned_truck_id if assignment else None
@@ -2155,6 +2161,7 @@ def fueler_edit_state(assignment, mission, work, tail, tanks):
         "mission_id": mission.id,
         "cycle": int(assignment.current_cycle_number or 1),
         "tail": _normalize_tail(mission.assigned_tail_number),
+        "required_fuel_lbs": mission.planned_fuel_load,
         "assigned_fueler_user_id": assignment.assigned_fueler_user_id,
         "assigned_truck_id": assignment.assigned_truck_id,
         "apu_running": work.apu_running if work else None,
@@ -2633,21 +2640,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         )
     )
     transfer_changed = assignment.transfer_fuel_gallons != target_transfer_gallons
-    confirm_on = False
-    if (submitted_nonnull_remaining and assignment.assigned_fueler_user_id is not None
-            and not (fuel_work_state and fuel_work_state.manual_on_at_utc)):
-        if assignment.assigned_truck_id is None and (fuel_work_state is None or fuel_work_state.on_at_utc is None):
-            allowance = target_apu_allowance_lbs
-            departure = mission.eta_datetime_utc or mission.planned_datetime_utc
-            if target_apu_running is None and departure is not None:
-                allowance = calculate_apu_allowance_lbs(departure, operation.window_minutes, now_utc,
-                                                       _effective_apu_rate(gateway.id, aircraft_type))
-            check = fob_assessment(required=mission.planned_fuel_load,
-                inbound=tail_fuel_state.inbound_fuel_lbs if tail_fuel_state else None,
-                remaining=target_fob_lbs, actual=target_actual_lbs, apu_allowance=allowance,
-                apu_confirmed=target_apu_running is not None, apu_source_valid=True,
-                transfer=target_transfer_gallons, cycle_type=_assignment_cycle_type(assignment))
-            confirm_on = check["fob_likely"]
     changed = (
         tank_changed
         or apu_changed
@@ -2655,7 +2647,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         or apu_override_changed
         or tail_changed
         or transfer_changed
-        or confirm_on
     )
     revision = int(asset_state.revision if asset_state else 0)
     if not changed:
@@ -2666,7 +2657,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state=fuel_work_state,
         )
 
-    if tank_changed or apu_changed or apu_source_changed or apu_override_changed or confirm_on or transfer_changed or current_notes != target_notes:
+    if tank_changed or apu_changed or apu_source_changed or apu_override_changed or transfer_changed or current_notes != target_notes:
         if fuel_work_state is None:
             fuel_work_state = new_work(assignment, tail_number, user, now_utc)
             fuel_work_state.physical_required_fuel_lbs = mission.planned_fuel_load
@@ -2697,15 +2688,6 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
             fuel_work_state.apu_source_tank_code = target_apu_source_tank_code
         _capture_resource_data_milestones(assignment, fuel_work_state, tank_layout, tank_states_by_code, now_utc,
                                           preparation_only=True)
-        if confirm_on:
-            # Only this valid save confirms arrival/start. GETs and clocks never
-            # create milestones. Preserve legacy ON even when it was premature.
-            if fuel_work_state.on_at_utc is None:
-                fuel_work_state.on_at_utc = now_utc
-            fuel_work_state.confirmed_on_at_utc = now_utc
-            if assignment.assigned_truck_id is not None:
-                fuel_work_state.truck_segment_started_at_utc = now_utc
-            _snapshot_physical_start(gateway, assignment, mission, fuel_work_state, now_utc, source="trusted automatic", actor=user)
 
     if tail_changed or tank_changed:
         if tail_fuel_state is None:
@@ -2777,7 +2759,7 @@ def save_fueler_entry(gateway, user, form, *, now_utc=None, dispatcher=False, re
         _capture_resource_data_milestones(assignment, fuel_work_state, tank_layout, tank_states_by_code, now_utc,
                                           data_changed=any(key != "notes" for key in entry_changes))
         _capture_physical_forecast(gateway, assignment, mission, fuel_work_state, now_utc)
-        _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
+        _record_defuel_service_requirement(operation,assignment,fuel_work_state,user,now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return FuelerSaveResult(
@@ -2863,7 +2845,7 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     gate = truck_start_gate(record, records, releases, settings, at=now_utc)
     # A deliberate physical arrival can override an estimate, not a confirmed
     # resource conflict or an unavailable truck.
-    if gate["reason"] in {"TRUCK STILL FUELING", "TRUCK UNAVAILABLE", "Needs Fueler", "Needs Truck"}:
+    if gate["reason"] in {"TRUCK STILL FUELING", "TRUCK UNAVAILABLE", "DEFUEL RECOVERY REVIEW", "Needs Fueler", "Needs Truck"}:
         raise ValueError(gate["reason"])
     if work is None:
         work = new_work(assignment, _normalize_tail(mission.assigned_tail_number), user, now_utc)
@@ -2935,25 +2917,22 @@ def submit_fueler_assignment(gateway,user,assignment_id,*,expected,now_utc=None,
     tanks=_locked_tank_states(work)
     current=fueler_edit_state(assignment,mission,work,None,tanks)
     if expected is None:raise FuelerDataConflict()
+    from app.services.neoscorpion_submission import evidence
+    # A lost response/double tap may carry the baseline immediately preceding
+    # the accepted receipt. Only that exact, unchanged visit is idempotent;
+    # material corrections increment the version and revoke its fingerprint.
+    if (work and work.fueler_submitted_at_utc
+            and work.fueler_submission_evidence == evidence(assignment,mission,work,tanks)
+            and all(expected.get(k) == v for k,v in current.items() if k not in {"notes","submission_version"})
+            and expected.get("submission_version") in {current["submission_version"],current["submission_version"]-1}):
+        return FuelerSaveResult(False,int(asset_state.revision if asset_state else 0),None,work)
     _check_fueler_expected(expected,current,{k:v for k,v in current.items() if k != "notes"})
     if any(k not in expected or expected[k] != v for k,v in current.items() if k not in {"notes"}):
         raise FuelerDataConflict()
-    # A Fueler's explicit COMPLETE ASSIGNMENT click also confirms physical OFF
-    # *now* when a trusted ON exists. Never infer or backdate an absent ON.
-    # Both writes are in the same request transaction; failed submission
-    # rolls the OFF back, preserving the existing validation/audit rules.
-    if work is not None and work.off_at_utc is None:
-        off_result = mark_fueler_off(
-            gateway, user, assignment_id, now_utc=now_utc, expected=expected,
-            defer_completion=True, physical_work_id=physical_work_id,
-            physical_sequence=physical_sequence,
-        )
-        work = off_result.fuel_work_state
-        asset_state = NeoScorpionSortAssetState.query.filter_by(
-            sort_date_operation_id=operation.id,
-        ).first() or asset_state
+    # Physical disconnection is an independent, explicit action. Submission
+    # must never manufacture it, even when all fuel data is already valid.
     context=fueler_context(gateway,user,assignment_id=parent.id,
-        physical_work_id=physical_work_id,physical_sequence=physical_sequence)
+        physical_work_id=physical_work_id,physical_sequence=physical_sequence,include_timing=False)
     row=next((r for r in context['rows'] if r['physical_work_id']==(work.id if work else None)),None)
     if not row or not row['fueler_completion_ready']:
         raise ValueError(row['fueler_completion_reason'] if row else "Physical work is not eligible for submission.")
@@ -3032,6 +3011,11 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
             fuel_work_state=fuel_work_state,
         )
     _validate_fueler_work_access(assignment, mission, fuel_work_state)
+
+    if assignment.assigned_truck_id is None:
+        if assignment.transfer_fuel_gallons not in (None, 0):
+            raise ValueError("Assign the truck used for positive T/F before OFF.")
+        raise ValueError("No physical truck is assigned. Use Dispatcher Fuel On Board verification; do not record TRUCK OFF.")
 
     tank_states = (
         NeoScorpionFuelTankState.query.filter_by(
@@ -3113,8 +3097,7 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
         selection.inventory_verified = False
         from app.services.neoscorpion_resource_timing import record_truck_availability
         record_truck_availability(selection,assignment.assigned_truck,user,'physical_off',now_utc)
-    if not defer_completion:
-        _try_finalize_retired_segment(gateway, user, assignment, mission, fuel_work_state, now_utc)
+        _record_defuel_service_requirement(operation,assignment,fuel_work_state,user,now_utc)
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
     return FuelerOffResult(
@@ -3122,6 +3105,39 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
         revision=int(asset_state.revision),
         fuel_work_state=fuel_work_state,
     )
+
+
+def _truck_sumped_after(work, selection):
+    from app.services.neoscorpion_resource_timing import stamp
+    return bool(work and work.off_at_utc and selection and any(
+        item.get("source") == "sumped" and item.get("actor_id") is not None
+        and stamp(item.get("at")) is not None and stamp(item["at"]) >= utc_naive(work.off_at_utc)
+        for item in (selection.availability_history or []) if isinstance(item,dict)))
+
+
+def _record_defuel_service_requirement(operation, assignment, work, actor, now):
+    """Serviceability follows proven received fuel, never administrative approval.
+
+    No inventory movement is posted here. A later authorized sump verification
+    remains effective when the older physical visit is finally approved.
+    """
+    if (not work or not work.off_at_utc or work.physical_finalized_at_utc
+            or _assignment_cycle_type(assignment) != "defuel"
+            or not work.physical_truck_id or not work.physical_transfer_gallons
+            or _cycle_direction_evidence(assignment,work,list(work.tank_states)) != "expected"):
+        return
+    selection=NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id,
+        fuel_truck_id=work.physical_truck_id).with_for_update().populate_existing().one()
+    if selection.status != "available" or _truck_sumped_after(work,selection):
+        return
+    selection.status="needs_sump"
+    from app.services.neoscorpion_resource_timing import record_truck_availability
+    record_truck_availability(selection,work.physical_truck,actor,"defuel_needs_sump",now)
+    _new_fuel_audit(operation,assignment,actor,"segment_transfer","defuel_serviceability",
+        "available","needs_sump","Physical DEFUEL OFF with verified decreasing tanks and positive T/F; inventory not yet posted.",
+        fuel_work_state=work,now_utc=now)
+    hold_active_assignments_for_truck(operation,work.physical_truck,actor,
+        "Assigned truck received DEFUEL fuel and requires sumping.",now_utc=now,exclude_assignment_id=assignment.id)
 
 
 def _capture_resource_data_milestones(assignment, work, layout, tanks, now, *, preparation_only=False, data_changed=False):
@@ -3322,13 +3338,19 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
         fuel_work_state,
         tank_states=tank_states,
     )
-    assumed_apu = calculate_apu_allowance_lbs(
-        mission.eta_datetime_utc or mission.planned_datetime_utc, operation.window_minutes,
-        now_utc, _effective_apu_rate(gateway.id, detailed_aircraft_type_for_tail(tail_number)),
-    )
+    if assignment.assigned_truck_id is not None:
+        raise ValueError("Clear the unused truck before Fuel On Board.")
+    if assignment.transfer_fuel_gallons not in (None, 0):
+        raise ValueError("T/F must be blank or 0 for Fuel On Board.")
+    if fuel_work_state and (fuel_work_state.manual_on_at_utc or fuel_work_state.confirmed_on_at_utc
+            or fuel_work_state.on_at_utc or fuel_work_state.off_at_utc or fuel_work_state.physical_transfer_review):
+        raise ValueError("REVIEW REQUIRED: physical truck evidence cannot be completed as no-truck FOB.")
+    confirmed_apu = (_effective_apu_allowance_lbs(fuel_work_state) if fuel_work_state
+        and fuel_work_state.apu_running is not None
+        and _apu_source_is_valid(fuel_work_state,tank_layout_for_tail(tail_number)) else None)
     inherited_fob_ready = bool(inherited_measurement and mission.planned_fuel_load is not None
-                              and assumed_apu is not None
-                              and inherited_measurement["total_lbs"] - assumed_apu >= mission.planned_fuel_load)
+                              and confirmed_apu is not None
+                              and inherited_measurement["total_lbs"] - confirmed_apu >= mission.planned_fuel_load)
     if _assignment_cycle_type(assignment) == "defuel":
         raise ValueError("DEFUEL requires physical completion, not Fuel On Board.")
 
@@ -3549,12 +3571,15 @@ def _cancel_follow_up_cycle(gateway, user, assignment_id, cycle_type, *, expecte
             _restore_fuel_rollback_values(saved_work, rollback["work"])
             for tank in saved_work_tanks:
                 _restore_fuel_rollback_values(tank, saved_tanks[tank.id])
-    if work is not None and work.id != getattr(saved_work,"id",None):
-        work.ended_early_at_utc = now_utc
-        work.ended_early_by_user_id = user.id
-        work.ended_early_reason = f"Cancelled {cycle_type} before physical transfer."
-        work.physical_finalized_at_utc = now_utc
-        work.physical_finalized_by_user_id = user.id
+    for cancelled_work in cycle_works:
+        if cancelled_work.id == getattr(saved_work,"id",None) or cancelled_work.physical_finalized_at_utc:
+            continue
+        # Cancel reservations, not physical facts; do not fabricate OFF.
+        cancelled_work.ended_early_at_utc = now_utc
+        cancelled_work.ended_early_by_user_id = user.id
+        cancelled_work.ended_early_reason = f"Cancelled {cycle_type} before physical transfer."
+        cancelled_work.physical_finalized_at_utc = now_utc
+        cancelled_work.physical_finalized_by_user_id = user.id
     if rollback["tail_state"] is not None:
         _restore_fuel_rollback_values(tail_state, rollback["tail_state"])
     elif tail_state is not None:
@@ -3626,7 +3651,7 @@ def start_follow_up_fuel_cycle(
         action_label=f"START {cycle_type.upper()}",
     )
     from app.services.neoscorpion_spear_decisions import prepare_scope, observe
-    spear_before = prepare_scope(operation, mission, assignment, asset_state.revision)
+    spear_before = prepare_scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
     _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
     from app.services.neoscorpion_pending_uplift import outstanding
     queued=outstanding(assignment.id,lock=True)
@@ -3887,6 +3912,12 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
         )
     if assignment.review_status == "complete" or mission.fuel_status == "complete":
         raise ValueError("REVIEW REQUIRED: completion audit is missing.")
+    if physical_work_id is None and has_request_context():
+        _validate_cycle_request(assignment, mission, request.form.get("expected_cycle"), request.form.get("expected_tail"))
+        current_segment = current_work(assignment, _normalize_tail(mission.assigned_tail_number), lock=True)
+        if "expected_submission_version" in request.form and str(request.form["expected_submission_version"]) != str(
+                current_segment.fueler_submission_version if current_segment else ""):
+            raise FuelerDataConflict()
     if assignment.operational_status == "hold_review":
         raise ValueError("REVIEW REQUIRED must be resolved before COMPLETE.")
 
@@ -3894,6 +3925,10 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
     if not tail_number:
         raise ValueError("Fuel assignment does not have a tail number.")
     fuel_work_state = source_work or current_work(assignment, tail_number, lock=True)
+    if (source_work is not None and has_request_context()
+            and "expected_submission_version" in request.form
+            and str(request.form["expected_submission_version"]) != str(source_work.fueler_submission_version)):
+        raise FuelerDataConflict()
     if fuel_work_state is None or fuel_work_state.off_at_utc is None:
         raise ValueError("Fueler must MARK OFF before dispatcher COMPLETE.")
     if fuel_work_state.physical_transfer_review:
@@ -4290,7 +4325,7 @@ def swap_assignment_fueler(
         action_label="FUELER SWAP",
     )
     from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
-    spear_before = scope(operation, mission, assignment, asset_state.revision)
+    spear_before = scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
     _validate_precompletion_assignment(assignment, mission, "FUELER SWAP")
     replacement_user_id = _int_or_none(replacement_user_id)
     if replacement_user_id is None:
@@ -4370,7 +4405,7 @@ def swap_assignment_truck(
         action_label="TRUCK SWAP",
     )
     from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
-    spear_before = scope(operation, mission, assignment, asset_state.revision)
+    spear_before = scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
     _validate_precompletion_assignment(assignment, mission, "TRUCK SWAP")
     replacement_truck_id = _int_or_none(replacement_truck_id)
     if replacement_truck_id is None:
@@ -4449,7 +4484,7 @@ def unassign_assignment_truck(gateway, user, assignment_id, *, expected_truck_id
     operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)
     assignment, mission = _locked_current_fuel_assignment(operation, assignment_id, action_label="UNASSIGN TRUCK")
     from app.services.neoscorpion_spear_decisions import prepare_scope as scope, observe
-    spear_before = scope(operation, mission, assignment, asset_state.revision)
+    spear_before = scope(operation, mission, assignment, int(asset_state.revision if asset_state else 0))
     if expected_cycle is None or expected_tail is None:
         raise ValueError("Refresh before unassigning the truck.")
     _validate_cycle_request(assignment, mission, expected_cycle, expected_tail)
@@ -4506,7 +4541,7 @@ def _retire_visit(gateway, operation, assignment, mission, work, tanks, user, no
         return
     if work.manual_on_at_utc or work.confirmed_on_at_utc:
         if work.off_at_utc is None:
-            mark_fueler_off(gateway, user, assignment.id, dispatcher=True, now_utc=now, defer_completion=True)
+            raise ValueError("Record physical TRUCK OFF for this visit before changing resources.")
         return  # Pending Actuals/APU/T/F remain on this exact retired segment.
     if assignment.transfer_fuel_gallons not in (None, 0):
         raise ValueError("REVIEW REQUIRED: transferred fuel without trusted physical ON.")
@@ -4603,6 +4638,14 @@ def confirm_assignment_tail(
     if replacement_work is None:
         replacement_work = new_work(assignment, current_tail, user, now_utc)
         replacement_work.physical_required_fuel_lbs = mission.planned_fuel_load
+        measurement = _latest_trusted_completed_tail_measurement(operation,current_tail)
+        if measurement:
+            for code, reading in measurement["actual_by_tank"].items():
+                replacement_work.tank_states.append(NeoScorpionFuelTankState(tank_code=code,remaining_lbs=reading))
+            _new_fuel_audit(operation,assignment,user,"confirm_tail",TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,
+                current_tail,str(measurement["event"].id),
+                "Verified same-tail completed Actual carried into Remaining only; fresh Actual/APU required.",
+                fuel_work_state=replacement_work,now_utc=now_utc)
         assignment.completed_at_utc = None
         assignment.completed_by_user_id = None
         assignment.fuel_on_board_at_utc = None
@@ -4996,7 +5039,9 @@ def _latest_trusted_completed_tail_measurement(operation, tail_number):
             NeoScorpionFuelingEvent.tail_number == tail_number,
             NeoScorpionFuelingEvent.ended_at_utc.isnot(None),
         )
-        .options(selectinload(NeoScorpionFuelingEvent.tank_snapshots))
+        # Follow-up creation already loaded these immutable snapshots under
+        # the operation lock. Reuse them; load once only for a different tail.
+        .options(lazyload(NeoScorpionFuelingEvent.tank_snapshots))
         .order_by(
             NeoScorpionFuelingEvent.ended_at_utc.desc(),
             NeoScorpionFuelingEvent.id.desc(),
@@ -5036,14 +5081,6 @@ def _validated_tail_swap_inherited_measurement(
         or fuel_work_state.manual_on_at_utc is not None
         or fuel_work_state.off_at_utc is not None
         or fuel_work_state.ended_early_at_utc is not None
-        or fuel_work_state.apu_running is not None
-        or fuel_work_state.apu_confirmed_at_utc is not None
-        or fuel_work_state.apu_allowance_lbs is not None
-        or fuel_work_state.automatic_apu_allowance_lbs is not None
-        or fuel_work_state.apu_override_enabled
-        or fuel_work_state.apu_override_allowance_lbs is not None
-        or fuel_work_state.applied_apu_rate_thousand_lbs_per_hour is not None
-        or fuel_work_state.apu_source_tank_code is not None
         or fuel_work_state.truck_segment_started_at_utc is not None
     ):
         return None
@@ -5053,6 +5090,7 @@ def _validated_tail_swap_inherited_measurement(
             sort_date_operation_id=operation.id,
             fuel_assignment_id=assignment.id,
             action="confirm_tail",
+            fuel_work_state_id=fuel_work_state.id,
             field_name=TAIL_SWAP_INHERITED_EVENT_AUDIT_FIELD,
             old_value=current_tail,
         )
@@ -5332,7 +5370,7 @@ def _close_current_truck_segment(
                 transfer_fuel_gallons=transfer_gallons, confirmed_gallons=nightly_truck.current_gallons,
                 reason="Physical OFF predates a newly verified reading; transfer already covered, no second deduction.",
                 actor_user_id=changed_by_user.id, created_at=datetime.utcnow()))
-    if cycle_type == "defuel":
+    if cycle_type == "defuel" and not _truck_sumped_after(fuel_work_state,nightly_truck):
         nightly_truck.status = "needs_sump"
         from app.services.neoscorpion_resource_timing import record_truck_availability
         record_truck_availability(nightly_truck,fuel_truck,changed_by_user,'defuel_needs_sump',ended_at_utc)
@@ -6306,9 +6344,9 @@ def _fuel_rows(
         fuel_on_board_ready = bool(
             assignment and fob["fob_verified"]
             and not administratively_complete and not effective_hold and not work_ended_early
-            and (inherited_fob_ready or (
-                assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
-            ))
+            and assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
+            and not (fuel_work_state and (fuel_work_state.manual_on_at_utc or fuel_work_state.confirmed_on_at_utc
+                or fuel_work_state.on_at_utc or fuel_work_state.off_at_utc or fuel_work_state.physical_transfer_review))
         )
         off_transfer_ready = bool(
             assignment
@@ -6327,7 +6365,7 @@ def _fuel_rows(
         physical_off_ready = bool(
             fuel_work_state
             and fuel_work_state.off_at_utc is None
-            and assignment and (assignment.assigned_truck_id is not None or fuel_on_board_ready)
+            and assignment and assignment.assigned_truck_id is not None
             and not effective_hold
             and not work_ended_early
         )
@@ -6951,6 +6989,9 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
         records.append(dict(id=assignment.id, assignment_id=assignment.id, truck_id=assignment.assigned_truck_id,
             fueler_id=assignment.assigned_fueler_user_id, on=on, confirmed_on=confirmed,
             manual_on=manual,
+            defuel_recovery_review=bool(work and work.physical_cycle_type == "defuel" and work.off_at_utc
+                and not work.ended_early_at_utc and not work.physical_finalized_at_utc
+                and not _truck_sumped_after(work,selection)),
             release=utc_naive((work.off_at_utc or work.ended_early_at_utc) if work else None)
                 or utc_naive(assignment.completed_at_utc or assignment.fuel_on_board_at_utc),
             assigned_at=utc_naive(assigned_at), remaining_complete=complete, remaining_at_on=at_on,
@@ -6974,6 +7015,8 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
             old_selection = selections.get(old_truck)
             records.append(dict(id=("tail_segment",old_work.id), assignment_id=assignment.id,
                 historical_segment=True, truck_id=old_truck,
+                defuel_recovery_review=bool(old_work.physical_cycle_type == "defuel" and old_work.off_at_utc
+                    and not old_work.ended_early_at_utc and not _truck_sumped_after(old_work,old_selection)),
                 fueler_id=facts.get("fueler_id") or old_work.manual_on_by_user_id,
                 on=None, confirmed_on=utc_naive(old_on), manual_on=utc_naive(old_work.manual_on_at_utc),
                 release=utc_naive(old_work.off_at_utc or old_work.ended_early_at_utc),
@@ -7020,8 +7063,6 @@ def _attach_fueling_start_state(rows, operation, assignments, work_states, parki
         state = dict(states[record_key])
         fob_check = bool(assignment.assigned_fueler_user_id is not None and assignment.assigned_truck_id is None
                          and row.get("fob_likely"))
-        if fob_check and work and work.on_at_utc:
-            state.update(on_trusted=True, on_active=True, effective_on=work.confirmed_on_at_utc or work.on_at_utc)
         confirmed_segment_on = (work.confirmed_on_at_utc if work and work.confirmed_on_at_utc
                                 and (work.truck_segment_started_at_utc is None
                                      or work.confirmed_on_at_utc >= work.truck_segment_started_at_utc)

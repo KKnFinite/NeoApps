@@ -20,6 +20,7 @@
     let refreshing = false;
     let audioContext = null;
     let controller = null;
+    let stateGeneration = 0;
 
     const storageKey = (suffix, scopedOperationId = operationId) => (
         `neoscorpion:fuel-assignments:${suffix}:${currentUserId}:${scopedOperationId}`
@@ -176,6 +177,9 @@
     };
 
     const adoptFingerprint = (payload) => {
+        const nextOperation = String(payload.operation_id ?? "none");
+        if (nextOperation === operationId && Number(payload.revision || 0) < revision) return false;
+        stateGeneration += 1;
         if (payload.tail_notes_revision !== undefined) tailNotesRevision = Number(payload.tail_notes_revision);
         pendingTailNotesRevision = tailNotesRevision;
         operationId = payload.operation_id === null
@@ -215,6 +219,7 @@
         }
 
         refreshing = true;
+        const requestGeneration = stateGeneration;
         try {
             const response = await fetch(panelUrl, {
                 cache: "no-store",
@@ -225,6 +230,10 @@
             if (!response.ok || payload.ok !== true) {
                 throw new Error(payload.error || "Fuel Assignments live panel is unavailable.");
             }
+            // A successful ON/OFF/save/submission may have committed while
+            // this GET was in flight. It must not be replaced by older markup.
+            if (requestGeneration !== stateGeneration || (String(payload.operation_id ?? "none") === operationId
+                    && Number(payload.revision || 0) < revision)) return false;
             if (hasUnsavedFuelEntry()) {
                 pendingOperationId = payload.operation_id === null
                     ? "none"

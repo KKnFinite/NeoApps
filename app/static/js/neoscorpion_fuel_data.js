@@ -55,9 +55,10 @@
         controls(scope).forEach(control => baselines.set(control, control.value));
     };
     const status = (scope, message) => {
-        const output = scope.querySelector("[data-fuel-data-status]");
-        if (output) output.textContent = message;
-        else if (scope === content) content.textContent = message;
+        const outputs = scope.querySelectorAll("[data-fuel-data-status], [data-fuel-action-feedback]");
+        outputs.forEach(output => { output.textContent = message; });
+        const output = outputs[0];
+        if (!output && scope === content) content.textContent = message;
     };
     const headers = () => ({
         "Accept": "application/json", "X-Requested-With": "XMLHttpRequest",
@@ -132,6 +133,7 @@
         const form = event.target;
         const card = form.closest("[data-fuel-data-card]");
         if (!card) return;
+        if (form.matches("[data-source-verification-form]")) return; // Explicit Dispatcher verification, not a Fueler data save.
         event.preventDefault();
         if (card.dataset.fuelDataBusy === "true") return;
         if (form.matches("[data-new-visit-form], [data-fueler-submit-form]") && hasDirty(card)) {
@@ -170,9 +172,7 @@
             if (control.value !== baselines.get(control)) body.set(control.name, control.value);
         });
         if (form.matches("[data-fuel-planning-form]")) {
-            // A deliberate SAVE can confirm physical start after travel even
-            // when Remaining was entered earlier. Server guards/version checks
-            // still decide eligibility; a refresh or timer never submits this.
+            // Save measurements only. Physical ON/OFF are separate actions.
             form.querySelectorAll('[data-fuel-reading="remaining"]').forEach(control => {
                 body.set(control.name, control.value);
             });
@@ -192,7 +192,11 @@
                 method: "POST", body, cache: "no-store", credentials: "same-origin", headers: headers(),
             });
             const payload = await response.json().catch(() => ({ok: false, error: "Unable to load Fueler Data. Reload and try again."}));
+            if (response.ok && form.matches("[data-fueler-submit-form]") && !payload.submission_receipt) {
+                throw new Error("Submission not confirmed. Review this visit and try again; do not assume it was submitted.");
+            }
             acceptSaveResponse(response, payload, (state, message) => {
+                if (response.ok && form.matches("[data-fueler-submit-form]")) message = "SUBMITTED · READY FOR DISPATCHER COMPLETE";
                 if (response.ok && physicalAction) message = `${form.matches(".neoscorpion-fueler-off-form") ? "TRUCK OFF" : "TRUCK ON"} recorded${unsaved.length ? " · Unsaved Fuel Entry kept" : ""}`;
                 if (dialog?.open && content.contains(card)) {
                     generation += 1; // Discard any older GET still in flight.

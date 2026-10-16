@@ -1,0 +1,17 @@
+{# Independent verification form: never submits unsaved assignment edits. #}
+<span data-dispatch-completion-slot data-completion-identity="{{ operation.id }}:{{ row.mission.id }}:{{ row.assignment.id if row.assignment else '' }}:{{ row.cycle_number }}:{{ row.tail_number }}:{{ row.assignment.active_work_state_id if row.assignment else '' }}:{{ row.assignment.assigned_fueler_user_id if row.assignment else '' }}:{{ row.assignment.assigned_truck_id if row.assignment else '' }}">
+{% if can_edit and row.normal_completion_ready %}
+<form id="scorpion-complete-{{ row.mission.id }}" method="post" action="{{ url_for('neoscorpion.fuel_dispatch_complete') }}" data-dispatch-lifecycle-form data-dispatch-verification-form>
+    {{ csrf_field() }}
+    <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
+    <input type="hidden" name="expected_work_ref" value="{{ row.assignment.active_work_state_id }}">
+    <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}">
+    <input type="hidden" name="expected_tail" value="{{ row.tail_number }}">
+    <input type="hidden" name="expected_submission_version" value="{{ row.fuel_work_state.fueler_submission_version }}">
+    <button class="action-button neoscorpion-dispatch-size-medium" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_complete') }}" formmethod="post">COMPLETE</button>
+    <small data-lifecycle-status role="status"></small>
+</form>
+{% elif not row.administratively_complete %}
+<button type="button" class="neoscorpion-completion-reason neoscorpion-dispatch-size-small" data-dispatch-completion-blocker data-dispatch-completion-explain aria-controls="neoscorpion-dispatch-detail-{{ row.row_key }}" aria-expanded="false" title="{{ row.normal_completion_reason }}" aria-label="Completion blocked: {{ row.normal_completion_reason }} Open DETAILS.">NOT READY</button>
+{% endif %}
+</span>

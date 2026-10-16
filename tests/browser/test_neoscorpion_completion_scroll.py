@@ -1,4 +1,4 @@
-"""Actual COMPLETE redirects and remote completion must not follow the row."""
+"""Actual COMPLETE verification and remote completion must not follow the row."""
 import unittest
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
@@ -61,6 +61,9 @@ class CompletionScrollBrowserTest(unittest.TestCase):
                             actual_ctr='0',actual_right='15',transfer_fuel_gallons='3000'),now_utc=at+timedelta(minutes=1))
                         service.mark_fueler_off(gateway,actor,aid,now_utc=at+timedelta(minutes=6))
                         db.session.commit()
+                        baseline=service.fueler_context(gateway,actor,assignment_id=aid)['rows'][0]['edit_baseline']
+                        service.submit_fueler_assignment(gateway,actor,aid,expected=baseline,now_utc=at+timedelta(minutes=6,seconds=30))
+                        db.session.commit()
                 browser=Fixture.pw.chromium.launch()
                 page=browser.new_page(viewport={'width':1440,'height':900})
                 page.add_init_script("window.__dispatchSaved=sessionStorage.getItem('neoapps.neoscorpion.fuel-dispatch.scroll.v3')")
@@ -86,7 +89,7 @@ class CompletionScrollBrowserTest(unittest.TestCase):
                         self.assertTrue(0 < box['y']+box['height']/2 < 900)
                         self.assertTrue(0 < box['x']+box['width']/2 < 1440)
                         self.assertEqual(page.evaluate('(p)=>document.elementFromPoint(p.x+p.width/2,p.y+p.height/2)?.textContent.trim()',box),'COMPLETE')
-                        with page.expect_navigation(wait_until='domcontentloaded'):
+                        with page.expect_response(lambda r:r.request.method=='POST' and r.url.endswith('/fuel-dispatch/complete')):
                             page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2)
                     else:
                         # Another authorized dispatcher completes: exercise live

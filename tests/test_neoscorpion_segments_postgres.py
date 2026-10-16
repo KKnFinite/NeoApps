@@ -108,6 +108,13 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
         db.session.commit()
         return dict(physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number)
 
+    def submit_current(self, **identity):
+        self.gateway=db.session.get(Gateway,self.ids[0]);self.fueler=db.session.get(User,self.ids[1])
+        self.dispatcher=db.session.get(User,self.ids[2]);self.assignment=db.session.get(service.NeoScorpionFuelAssignment,self.ids[3])
+        row=service.fueler_context(self.gateway,self.fueler,assignment_id=self.assignment.id,**identity)['rows'][0]
+        service.submit_fueler_assignment(self.gateway,self.fueler,self.assignment.id,expected=row['edit_baseline'],**identity)
+        db.session.commit()
+
     def test_duplicate_physical_off_preserves_first_timestamp(self):
         times = [self.start+timedelta(minutes=12), self.start+timedelta(minutes=13)]
         result = self.concurrent(lambda i,g,f,d: service.mark_fueler_off(g,f,self.ids[3],now_utc=times[i]).changed)
@@ -118,6 +125,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def test_duplicate_source_completion_posts_event_and_inventory_once(self):
         self.save(self.start+timedelta(minutes=1),**self.final_data())
         identity=self.swap_tail(); self.off(defer_completion=True,**identity)
+        self.submit_current(**identity)
         result=self.concurrent(lambda i,g,f,d: service.complete_fueled_assignment(g,d,self.ids[3],**identity).changed)
         self.assertEqual(sorted(result),[False,True])
         event=NeoScorpionFuelingEvent.query.one()
@@ -134,6 +142,9 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
         result=self.concurrent(lambda i,g,f,d: service.save_fueler_entry(g,f,dict(
             assignment_id=self.ids[3],**identity,**{**self.final_data(),"transfer_fuel_gallons":str(2000+i*500)},expected=expected)).changed)
         self.assertEqual(result.count("conflict"),1)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        self.submit_current(**identity)
+        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,**identity);db.session.commit()
         event=NeoScorpionFuelingEvent.query.one()
         self.assertIn(event.transfer_fuel_gallons,(2000,2500))
         self.assertEqual(NeoScorpionSortTruck.query.one().current_gallons,10000-event.transfer_fuel_gallons)
@@ -141,6 +152,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def test_failure_rolls_back_segment_event_inventory_and_completion(self):
         self.save(self.start+timedelta(minutes=1),**self.final_data())
         identity=self.swap_tail(); self.off(defer_completion=True,**identity)
+        self.submit_current(**identity)
         close=service._close_current_truck_segment
         def fail(*args,**kwargs):
             close(*args,**kwargs)
@@ -154,6 +166,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
 
     def test_additive_bootstrap_is_idempotent_without_historical_rewrite(self):
         self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
+        self.submit_current()
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         original=self.work.manual_on_at_utc
         original_event=NeoScorpionFuelingEvent.query.one()
@@ -203,6 +216,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def legacy_live_visit(self, cycle=2, proven_on=True):
         """Recreate a closed event owner reused by the old mutable slot schema."""
         self.save(self.start+timedelta(minutes=1),**self.final_data()); self.off()
+        self.submit_current()
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         original_id=self.work.id
         original_event_id=NeoScorpionFuelingEvent.query.one().id
@@ -249,6 +263,8 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
         self.assertEqual(live.manual_on_at_utc,self.start+timedelta(minutes=20))
         self.assertIsNone(live.off_at_utc)
         self.assertIsNone(live.physical_transfer_gallons)
+        self.assertIsNone(live.fueler_submitted_at_utc)
+        self.assertIsNone(live.fueler_submission_evidence)
         self.assertTrue(live.physical_transfer_review)
         self.assertEqual(live.tank_states,[])  # No stale Actuals promoted as current measurements.
         self.assertEqual(self.assignment.transfer_fuel_gallons,1200)  # Raw legacy projection retained for review.
@@ -280,6 +296,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
             dispatcher=True,now_utc=self.start+timedelta(minutes=31))
         db.session.commit()
         events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
+        self.submit_current()
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
         self.assertEqual([(e.fuel_work_state_id,e.transfer_fuel_gallons) for e in events],

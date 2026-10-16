@@ -37,6 +37,9 @@ from app.services.neoscorpion import (
     save_fueler_entry,
     save_dispatch_assignment,
     confirm_assignment_tail,
+    confirm_fueler_truck_on,
+    submit_fueler_assignment,
+    fueler_context,
     start_follow_up_fuel_cycle,
 )
 from app.services.neoscorpion_assets import mark_nightly_truck_sumped
@@ -160,7 +163,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self.assertIsNone(event.apu_source_tank_code)
         self.assertEqual(event.neo_fuel_lbs, 31_000)
         self.assertIsNone(event.center_fuel_lbs)
-        self.assertEqual(event.started_at_utc, work.on_at_utc)
+        self.assertEqual(event.started_at_utc, work.manual_on_at_utc)
         self.assertEqual(event.ended_at_utc, work.off_at_utc)
         snapshots = {row.tank_code: row for row in event.tank_snapshots}
         self.assertEqual(set(snapshots), {"left", "ctr", "right"})
@@ -228,14 +231,16 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             transfer=40,
         )
         db.session.commit()
+        self._on(assignment)
         mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.commit()
+        self._submit(assignment)
         completed = complete_fueled_assignment(
             self.gateway,
             self.dispatcher,
             assignment.id,
         )
-        self.assertEqual(completed.revision, revision + 3)
+        self.assertEqual(completed.revision, revision + 5)  # data, explicit ON, OFF, submission, verification
         db.session.commit()
 
         events = NeoScorpionFuelingEvent.query.order_by(
@@ -475,8 +480,10 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             transfer=40,
         )
         db.session.commit()
+        self._on(assignment)
         mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.commit()
+        self._submit(assignment)
         before_complete = self._revision(operation)
         completed = complete_fueled_assignment(
             self.gateway,
@@ -620,28 +627,29 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
                 transfer=20,
             )
             db.session.commit()
+            self._on(assignment)
             mark_fueler_off(self.gateway, self.fueler, assignment.id)
             db.session.commit()
             revision = self._revision(operation)
             event_count = NeoScorpionFuelingEvent.query.count()
             gallons = nightly.current_gallons
             with self.assertRaisesRegex(ValueError, "opposite fuel direction"):
-                complete_fueled_assignment(
-                    self.gateway,
-                    self.dispatcher,
-                    assignment.id,
-                )
+                self._submit(assignment)
             db.session.rollback()
             self.assertEqual(self._revision(operation), revision)
             self.assertEqual(NeoScorpionFuelingEvent.query.count(), event_count)
             self.assertEqual(nightly.current_gallons, gallons)
 
-        assignment.current_cycle_type = "defuel"
-        assignment.transfer_fuel_gallons = 30
-        tank_states = NeoScorpionFuelTankState.query.all()
-        for state in tank_states:
-            state.actual_lbs = 8_000 if state.tank_code == "left" else 10_000
+        _mission,assignment=self._assignment(operation,flight='UPS999',tail='N422UP')
+        truck,nightly=self._truck(operation,assignment,'CAPACITY',990,capacity=1000)
+        self._complete_cycle(operation,assignment,remaining=(10,10,10),actual=(11,10,10),transfer=10)
+        start_follow_up_fuel_cycle(self.gateway,self.dispatcher,assignment.id,'defuel','25',self.fueler.id,truck.id)
         db.session.commit()
+        self._save_cycle(assignment,remaining=(10,10,10),actual=(8,10,10),transfer=30)
+        db.session.commit();self._on(assignment)
+        mark_fueler_off(self.gateway,self.fueler,assignment.id)
+        db.session.commit()
+        self._submit(assignment)
         with self.assertRaisesRegex(ValueError, "capacity"):
             complete_fueled_assignment(
                 self.gateway,
@@ -687,8 +695,10 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         db.session.commit()
         self._save_a300(assignment, center_actual=4, transfer=20, remaining=6)
         db.session.commit()
+        self._on(assignment)
         mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.commit()
+        self._submit(assignment)
         complete_fueled_assignment(self.gateway, self.dispatcher, assignment.id)
         db.session.commit()
 
@@ -861,12 +871,19 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             transfer=transfer,
         )
         db.session.commit()
+        confirm_fueler_truck_on(self.gateway,self.fueler,assignment.id,
+            expected_cycle=assignment.current_cycle_number,expected_tail=assignment.sort_date_mission.assigned_tail_number,
+            expected_truck_id=assignment.assigned_truck_id,now_utc=datetime(2026,8,18,4,45))
+        db.session.commit()
         off = mark_fueler_off(
             self.gateway,
             self.fueler,
             assignment.id,
             now_utc=datetime(2026, 8, 18, 5, 0),
         )
+        db.session.commit()
+        baseline=fueler_context(self.gateway,self.fueler,assignment_id=assignment.id)['rows'][0]['edit_baseline']
+        submit_fueler_assignment(self.gateway,self.fueler,assignment.id,expected=baseline,now_utc=datetime(2026,8,18,5,5))
         db.session.commit()
         complete_fueled_assignment(
             self.gateway,
@@ -876,6 +893,17 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         )
         db.session.commit()
         return off.fuel_work_state
+
+    def _on(self, assignment):
+        confirm_fueler_truck_on(self.gateway,self.fueler,assignment.id,
+            expected_cycle=assignment.current_cycle_number,expected_tail=assignment.sort_date_mission.assigned_tail_number,
+            expected_truck_id=assignment.assigned_truck_id)
+        db.session.commit()
+
+    def _submit(self, assignment):
+        baseline=fueler_context(self.gateway,self.fueler,assignment_id=assignment.id)['rows'][0]['edit_baseline']
+        submit_fueler_assignment(self.gateway,self.fueler,assignment.id,expected=baseline)
+        db.session.commit()
 
     def _save_a300(self, assignment, *, center_actual, transfer, remaining=5):
         data = {
@@ -899,7 +927,14 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
             remaining=10,
         )
         db.session.commit()
+        confirm_fueler_truck_on(self.gateway,self.fueler,assignment.id,
+            expected_cycle=assignment.current_cycle_number,expected_tail=assignment.sort_date_mission.assigned_tail_number,
+            expected_truck_id=assignment.assigned_truck_id)
+        db.session.commit()
         mark_fueler_off(self.gateway, self.fueler, assignment.id)
+        db.session.commit()
+        baseline=fueler_context(self.gateway,self.fueler,assignment_id=assignment.id)['rows'][0]['edit_baseline']
+        submit_fueler_assignment(self.gateway,self.fueler,assignment.id,expected=baseline)
         db.session.commit()
         complete_fueled_assignment(self.gateway, self.dispatcher, assignment.id)
         db.session.commit()

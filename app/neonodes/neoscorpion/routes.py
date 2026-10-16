@@ -303,6 +303,7 @@ def fuel_dispatch_live_panel():
     context = _dispatch_presentation_context(
         gateway,
         include_asset_choices=access["can_edit"],
+        include_spear=request.args.get("completion_only") != "1",
     )
     operation = context["operation"]
     spear_plan = context["spear_plan"]
@@ -516,12 +517,15 @@ def fuel_dispatch_pending_uplift():
 @gateway_node_required("scorpion")
 def fuel_dispatch_complete():
     gateway = get_current_gateway()
+    json_response = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     access = permission_access(
         FUEL_DISPATCH_VIEW_PERMISSION,
         FUEL_DISPATCH_EDIT_PERMISSION,
     )
     if not access["can_edit"]:
         db.session.rollback()
+        if json_response:
+            return _json_no_store({"ok": False,"error":"Access denied."},403)
         flash("Access denied.", "error")
         return _dispatch_response(gateway, access, status_code=403)
 
@@ -530,6 +534,8 @@ def fuel_dispatch_complete():
             gateway,
             current_user,
             request.form.get("assignment_id"),
+            physical_work_id=request.form.get("physical_work_id"),
+            physical_sequence=request.form.get("physical_sequence"),
         )
     except (IntegrityError, ValueError) as exc:
         db.session.rollback()
@@ -538,6 +544,8 @@ def fuel_dispatch_complete():
             if isinstance(exc, ValueError)
             else "Fuel completion changed. Reload Fuel Dispatch and try again."
         )
+        if json_response:
+            return _json_no_store({"ok":False,"error":message},409 if isinstance(exc,FuelerDataConflict) else 400)
         flash(message, "error")
         return _dispatch_response(gateway, access, status_code=400)
 
@@ -545,8 +553,16 @@ def fuel_dispatch_complete():
         db.session.commit()
         _capture_learning_after_commit(gateway, result.assignment.id)
         flash("FUELING COMPLETE.", "success")
+        event = result.fueling_event
+        current_app.logger.info("scorpion_dispatch_complete actor=%s operation=%s mission=%s assignment=%s event=%s work=%s tail=%s revision=%s",
+            current_user.id, result.assignment.sort_date_operation_id,result.mission.id,result.assignment.id,
+            getattr(event,"id",None),getattr(event,"fuel_work_state_id",None),getattr(event,"tail_number",None),result.revision)
     else:
         flash("FUELING WAS ALREADY COMPLETE.", "info")
+    if json_response:
+        return _json_no_store({"ok":True,"changed":result.changed,
+            **fuel_assignments_live_revision(gateway),
+            "tail_revision":_dispatch_tail_revision(result.assignment.sort_date_operation_id)})
     return redirect(url_for("neoscorpion.fuel_dispatch"))
 
 
@@ -1027,7 +1043,7 @@ def _fuel_data_permissions(dispatcher):
     )
 
 
-def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status=200):
+def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status=200, submission_receipt=None):
     _can_view, can_edit = _fuel_data_permissions(dispatcher)
     context = fueler_context(gateway, current_user, assignment_id=assignment_id,
                              dispatcher=dispatcher, physical_work_id=request.args.get("physical_work_id"),
@@ -1039,6 +1055,7 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
         "revision": context["fuel_assignments_revision"],
         "operation_id": context["operation"].id if context["operation"] else None,
         "closed": row is None,
+        "submission_receipt": submission_receipt,
         "html": render_template("neonodes/neoscorpion/_fueler_card.html", row=row,
                                 can_edit=can_edit, dispatcher_panel=dispatcher) if row else "",
     }, status)
@@ -1086,7 +1103,7 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
                 expected_truck_id=form.get("expected_truck_id"),
                 expected_work_ref=form.get("expected_work_ref"), require_work_ref=True,
             )
-            result = SimpleNamespace(changed=changed, revision=revision)
+            result = SimpleNamespace(changed=changed, revision=revision, fuel_work_state=_work)
         elif off:
             result = mark_fueler_off(gateway, current_user, assignment_id,
                 dispatcher=dispatcher, expected=_fueler_expected(form, required=True),
@@ -1105,11 +1122,30 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
             db.session.rollback()
     except FuelerDataConflict as exc:
         db.session.rollback()
+        current_app.logger.warning("scorpion_action_rejected actor=%s assignment=%s work=%s sequence=%s reason=stale_evidence",
+            current_user.id,assignment_id,form.get("physical_work_id"),form.get("physical_sequence"))
         return _fuel_data_payload(gateway, assignment_id, dispatcher, error=str(exc), status=409)
     except ValueError as exc:
         db.session.rollback()
+        current_app.logger.warning("scorpion_action_rejected actor=%s assignment=%s work=%s sequence=%s reason=%s",
+            current_user.id,assignment_id,form.get("physical_work_id"),form.get("physical_sequence"),str(exc))
         return _json_no_store({"ok": False, "error": str(exc)}, 400)
-    return _fuel_data_payload(gateway, assignment_id, dispatcher)
+    receipt = None
+    if submit:
+        work = result.fuel_work_state
+        receipt = dict(work_id=work.id, cycle=work.physical_cycle_number,
+            sequence=work.physical_sequence_number, actor_id=work.fueler_submitted_by_user_id,
+            submitted_at=work.fueler_submitted_at_utc.isoformat(), version=work.fueler_submission_version)
+    logged_work = getattr(result, "fuel_work_state", None)
+    logged_assignment = logged_work.fuel_assignment if logged_work else None
+    current_app.logger.info("scorpion_action_committed action=%s actor=%s operation=%s mission=%s assignment=%s work=%s cycle=%s sequence=%s tail=%s truck=%s revision=%s changed=%s",
+        "submit" if submit else "on" if truck_on else "off" if off else "new_visit" if new_visit else "fuel_data",
+        current_user.id, getattr(logged_assignment,"sort_date_operation_id",None),
+        getattr(logged_assignment,"sort_date_mission_id",None), assignment_id,
+        getattr(logged_work,"id",None), getattr(logged_work,"physical_cycle_number",None),
+        getattr(logged_work,"physical_sequence_number",None), getattr(logged_work,"tail_number",None),
+        getattr(logged_work,"physical_truck_id",None), result.revision, result.changed)
+    return _fuel_data_payload(gateway, assignment_id, dispatcher, submission_receipt=receipt)
 
 
 @bp.route("/fueler/assignments/<int:assignment_id>", methods=["GET", "POST"])
@@ -1893,10 +1929,10 @@ def completed_fuel():
     return redirect(url_for("neoscorpion.history"))
 
 
-def _dispatch_presentation_context(gateway, *, include_asset_choices=False):
+def _dispatch_presentation_context(gateway, *, include_asset_choices=False, include_spear=True):
     # All projections, scheduling and SPEAR enrichment finish in their existing
     # order. Sort a new list only for these two Dispatch render paths.
-    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices)
+    context = fuel_dispatch_context(gateway, include_asset_choices=include_asset_choices, include_spear=include_spear)
     rows = [dict(row) for row in context["rows"]]
     # Browser reorders existing DOM groups using ranks derived from full UTC
     # timestamps, never formatted clock strings or operational planning order.

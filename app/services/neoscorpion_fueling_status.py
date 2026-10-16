@@ -63,8 +63,13 @@ def fueling_status(row, *, now=None, threshold=30):
         stage = "off"
     elif work and (getattr(work, "manual_on_at_utc", None) or work.on_at_utc) and row.get("fueling_on_active", row.get("fueling_on_trusted", True)):
         stage = "fueling"
-    elif fueler and not truck and not row.get("fob_likely"):
-        stage, detail = "ready", "Needs Truck"
+    elif fueler and truck:
+        # Assignment is not physical readiness. Missing operational evidence
+        # remains a warning/blocker, never a hidden third assignment gate.
+        stage = "assigned"
+    elif not (fueler and row.get("fob_likely")):
+        stage = "ready"
+        detail = "Needs Fueler" if truck else "Needs Truck" if fueler else "Needs Fueler / Truck"
     else:
         missing = []
         if str(row.get("arrival_status", "")).casefold() not in {"arrived", "on ground"}:
@@ -120,7 +125,7 @@ def fob_assessment(*, required, inbound, remaining, actual, apu_allowance,
                    apu_confirmed, apu_source_valid, inherited=None, transfer=None,
                    cycle_type="fuel"):
     """Estimates identify checks; only complete/trusted measurements verify FOB."""
-    verified = inherited if inherited is not None else actual if apu_confirmed and apu_source_valid else None
+    verified = (inherited if inherited is not None else actual) if apu_confirmed and apu_source_valid else None
     available = verified if verified is not None else remaining if remaining is not None else inbound
     projected = available - apu_allowance if available is not None and apu_allowance is not None else None
     eligible = cycle_type != "defuel" and transfer in (None, 0)

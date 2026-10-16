@@ -35,8 +35,10 @@ def state(assignment, mission, work, tanks, *, on_trusted):
     problem=''
     layout=fuel.tank_layout_for_tail(mission.assigned_tail_number)
     by_code={t.tank_code:t for t in tanks}
-    if not work or not assignment or not assignment.assigned_fueler_user_id:
-        problem='Assign a Fueler and save this physical visit first.'
+    if not assignment or not assignment.assigned_fueler_user_id:
+        problem='Assign a Fueler first.'
+    elif not work:
+        problem='Confirm physical TRUCK ON for this assignment.'
     elif assignment.completed_at_utc or work.physical_finalized_at_utc:
         problem='This physical visit is already complete.'
     elif assignment.operational_status=='hold_review' or work.ended_early_at_utc or work.physical_transfer_review:
@@ -47,10 +49,16 @@ def state(assignment, mission, work, tanks, *, on_trusted):
         problem='Valid physical TRUCK ON required.'
     elif not work.off_at_utc:
         problem='Record physical TRUCK OFF first.'
+    elif fuel.utc_naive(work.off_at_utc) <= fuel.utc_naive(work.manual_on_at_utc or work.confirmed_on_at_utc or work.on_at_utc):
+        problem='REVIEW REQUIRED: TRUCK OFF must be after physical TRUCK ON.'
     elif mission.planned_fuel_load is None:
         problem='Required Fuel is missing.'
-    elif not layout or not all(c in by_code and by_code[c].remaining_lbs is not None for c,_ in layout):
-        problem='Complete all Remaining readings.'
+    elif not layout:
+        problem='Aircraft tank configuration is unavailable; contact Dispatch.'
+    elif any(c not in by_code or by_code[c].remaining_lbs is None for c,_ in layout):
+        problem='Save Remaining: '+', '.join(label for c,label in layout if c not in by_code or by_code[c].remaining_lbs is None)+'.'
+    elif any(c not in by_code or by_code[c].actual_lbs is None for c,_ in layout):
+        problem='Save Actual: '+', '.join(label for c,label in layout if c not in by_code or by_code[c].actual_lbs is None)+'.'
     elif work.apu_running is None or fuel._effective_apu_allowance_lbs(work) is None or not fuel._apu_source_is_valid(work,layout):
         problem='Confirm APU status and valid source/allowance.'
     elif fuel._fuel_work_calculation(layout,by_code,work.apu_running,fuel._effective_apu_allowance_lbs(work))[-1] is None:

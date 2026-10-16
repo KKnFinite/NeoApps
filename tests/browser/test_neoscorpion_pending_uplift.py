@@ -75,7 +75,7 @@ class PendingBrowserTest(unittest.TestCase):
                         card.locator('[name="transfer_fuel_gallons"]').fill('3000');card.locator('[data-fuel-planning-form] button[type="submit"]').click()
                         expect(card.locator('[data-fuel-data-status]')).to_contain_text('Saved')
                         card.locator('.neoscorpion-fueler-off-form button').click();expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('TRUCK OFF')
-                        card.locator('[data-fueler-submit-form] button').click();expect(card.locator('[data-fueler-submission-status]')).to_have_text('READY FOR DISPATCHER COMPLETE')
+                        card.locator('[data-fueler-submit-form] button').click();expect(card.locator('[data-fueler-submission-status]')).to_contain_text('READY FOR DISPATCHER COMPLETE')
                         dispatch.bring_to_front();dispatch.set_viewport_size({'width':1440,'height':900})
                         row=dispatch.locator(f'[data-dispatch-mission-id="{mid}"]');button=row.locator('button[formaction$="/fuel-dispatch/complete"]')
                         expect(button).to_be_visible(timeout=20000)

@@ -22,7 +22,7 @@ function actionHarness({confirmed=true, ok=true, changed=true}={}) {
     vm.createContext(context);
     vm.runInContext(source.slice(start,end)+'\nglobalThis.submit = submitLifecycleAction;',context);
     const button={disabled:false};
-    const form={dataset:{confirm:'Confirm action?'},querySelector:()=>({}),getAttribute:()=>'/cancel-uplift'};
+    const form={dataset:{confirm:'Confirm action?'},matches:()=>false,querySelector:()=>({}),getAttribute:()=>'/cancel-uplift'};
     return {context,button,form,messages,requests,refreshes,finish:()=>finish()};
 }
 
@@ -82,7 +82,7 @@ test('cancel refresh restores details and scroll when the active cycle key chang
     const detail={hidden:false,setAttribute(){}};
     let key='7-2';
     const toggle={getAttribute:()=>`neoscorpion-dispatch-detail-${key}`,setAttribute(){}};
-    const row={dataset:{dispatchRowKey:key},getBoundingClientRect:()=>({top:110,bottom:150}),querySelector:()=>toggle};
+    const row={classList:{contains:()=>false},dataset:{dispatchRowKey:key},getBoundingClientRect:()=>({top:110,bottom:150}),querySelector:()=>toggle};
     const scope={
         querySelector(selector){
             if(selector==='.neoscorpion-table-wrap--sticky')return wrap;

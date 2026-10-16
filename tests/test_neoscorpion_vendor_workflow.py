@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from unittest import TestCase
 from unittest.mock import patch
+from tests.neoscorpion_handoff_fixture import submit_and_verify
 from app.extensions import db
 from app.models import (User, NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
     NeoScorpionTruckDriver, NeoScorpionSortTruck, NeoScorpionFuelTruck, NeoScorpionFuelingEvent,
@@ -109,11 +110,11 @@ class VendorWorkflowTest(TestCase):
         inventory.correct_baseline(self.gateway,self.operation,self.dispatcher,self.truck.id,'5500',0);db.session.commit()
         self.save(self.start+timedelta(minutes=5),**{**self.final_data(),'transfer_fuel_gallons':'1200'})
         self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,4300)
         self.assertEqual(self.selection.starting_gallons,10000)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,4300)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
 
@@ -157,15 +158,15 @@ class VendorWorkflowTest(TestCase):
         inventory.decide_verification(self.gateway,self.operation,self.dispatcher,reading.id,True,0);db.session.commit()
         self.assertEqual(reading.status,'approved')
         self.save(self.start+timedelta(minutes=16),**self.final_data())
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,6000)  # Previous transfer already in physical reading.
         service.save_fueler_entry(self.gateway,self.dispatcher,dict(assignment_id=next_assignment.id,
             **{**self.final_data(),'transfer_fuel_gallons':'1200'}),now_utc=self.start+timedelta(minutes=20))
         service.mark_fueler_off(self.gateway,self.dispatcher,next_assignment.id,now_utc=self.start+timedelta(minutes=25))
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,next_assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,next_assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,4800)
         self.assertEqual(sorted(e.transfer_fuel_gallons for e in NeoScorpionFuelingEvent.query.all()),[1200,3000])
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,next_assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,next_assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,4800)
 
     def test_pending_expires_on_next_off_before_any_actuals(self):
@@ -194,7 +195,7 @@ class VendorWorkflowTest(TestCase):
         self.save(self.start+timedelta(minutes=30),**self.final_data())
         self.assertEqual(reading.status,'pending')
         inventory.decide_verification(self.gateway,self.operation,self.dispatcher,reading.id,True,0);db.session.commit()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,6000)
 
     def test_physical_reading_then_baseline_never_rededucts_prior_transfer(self):
@@ -202,7 +203,7 @@ class VendorWorkflowTest(TestCase):
         reading=inventory.submit_verification(self.gateway,self.operation,user,self.truck.id,'9000');db.session.commit()
         inventory.correct_baseline(self.gateway,self.operation,self.dispatcher,self.truck.id,'8500',1);db.session.commit()
         self.save(self.start+timedelta(minutes=16),**self.final_data())
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         self.assertEqual(self.selection.current_gallons,8500)
 
     def test_limits_authorization_night_expiry_and_unverified_inventory(self):

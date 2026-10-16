@@ -28,8 +28,10 @@ class SubmissionPostgresTest(unittest.TestCase):
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
         expected=self.baseline();aid=self.assignment.id
         results=self.concurrent(lambda i,g,f,d:service.submit_fueler_assignment(g,f,aid,expected=expected).changed)
-        self.assertEqual(results.count(True),1);self.assertEqual(results.count('conflict'),1)
+        self.assertEqual(results.count(True),1);self.assertEqual(results.count(False),1)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+        from app.models import NeoScorpionFuelAuditEntry
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(field_name='fueler_submission').count(),1)
     def test_additive_repeat_bootstrap_does_not_fabricate_notes_or_submission(self):
         original=(self.work.id,self.work.manual_on_at_utc,self.work.tail_number)
         db.session.commit()

@@ -18,6 +18,9 @@ def truck_start_gate(record, records, releases, settings, *, at):
     # An ON from another mission is a commitment until its recorded release;
     # future resource selections without ON are not physical activity.
     for other in records:
+        if (other["id"] != record["id"] and other["truck_id"] == truck_id
+                and other.get("defuel_recovery_review") and other["release"] <= at):
+            return dict(result, reason="DEFUEL RECOVERY REVIEW")
         start = other.get("manual_on") or other["confirmed_on"] or other["on"]
         if (other["id"] == record["id"] or other["truck_id"] != truck_id
                 or start is None):

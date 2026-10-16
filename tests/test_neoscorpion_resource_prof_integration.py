@@ -4,6 +4,7 @@ import unittest
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
+from tests.neoscorpion_handoff_fixture import submit_and_verify
 from app.extensions import db
 from app.models import (NeoScorpionFuelAssignment,NeoScorpionFuelWorkState,NeoScorpionFuelingEvent,
     NeoScorpionSortFueler,SortDateMission,SortDateParkingAssignment)
@@ -43,7 +44,7 @@ class ResourceProfIntegrationTest(unittest.TestCase):
 
     def finish_first(self):
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=13));db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=13));db.session.commit()
 
     def test_early_preparation_while_truck_busy_freezes_v4_and_keeps_physical_workflow(self):
         self.prepare();mission,assignment,fueler=self.upcoming()
@@ -71,7 +72,7 @@ class ResourceProfIntegrationTest(unittest.TestCase):
             now_utc=self.start+timedelta(minutes=35));db.session.commit()
         self.assertEqual(fueler_work_end(prepared),self.start+timedelta(minutes=35))
         self.assertIsNone(assignment.completed_at_utc)
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,assignment.id,now_utc=self.start+timedelta(minutes=40));db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,assignment.id,now_utc=self.start+timedelta(minutes=40));db.session.commit()
         event=NeoScorpionFuelingEvent.query.filter_by(fuel_work_state_id=prepared.id).one()
         math=event_math(event)
         self.assertEqual(math['truck_actual_minutes'],18)
@@ -105,7 +106,7 @@ class ResourceProfIntegrationTest(unittest.TestCase):
         self.assertIsNone(self.assignment.completed_at_utc)
         self.save(self.start+timedelta(minutes=16),**self.final_data())
         self.assertEqual(self.work.performance_context['fueler_data_ready'],before)
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=20));db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=20));db.session.commit()
         self.assertEqual(fueler_work_end(self.work),self.start+timedelta(minutes=15))
 
     def test_v3_active_and_completed_snapshots_do_not_migrate(self):
@@ -151,7 +152,7 @@ class ResourceProfIntegrationTest(unittest.TestCase):
             expected_tail='N491UP',expected_truck_id=self.truck.id,now_utc=self.start+timedelta(minutes=20));db.session.commit()
         self.save(self.start+timedelta(minutes=22),**{**self.final_data(),'transfer_fuel_gallons':'2000','actual_left':'14','actual_right':'14'})
         self.off(at=self.start+timedelta(minutes=30))
-        service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=30));db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,now_utc=self.start+timedelta(minutes=30));db.session.commit()
         current=NeoScorpionFuelingEvent.query.filter_by(fuel_work_state_id=new.id).one()
         self.assertEqual(current.performance_snapshot['resource_timing']['truck_previous_work_id'],b.id)
         self.assertEqual(current.performance_snapshot['resource_timing']['fueler_previous_work_id'],b.id)
@@ -159,6 +160,7 @@ class ResourceProfIntegrationTest(unittest.TestCase):
         frozen=copy.deepcopy(current.performance_snapshot)
         service.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,**identity,
             apu_running='no',actual_left='10',actual_ctr='0',actual_right='10'),now_utc=self.start+timedelta(minutes=31));db.session.commit()
+        submit_and_verify(self.gateway,self.dispatcher,self.assignment.id,**identity);db.session.commit()
         events=NeoScorpionFuelingEvent.query.order_by(NeoScorpionFuelingEvent.id).all()
         self.assertEqual(len({e.fuel_work_state_id for e in events}),3)
         self.assertEqual([(e.tail_number,e.transfer_fuel_gallons) for e in events],[('N491UP',3000),('N491UP',2000),('N492UP',1000)])
