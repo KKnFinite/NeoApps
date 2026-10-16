@@ -134,8 +134,8 @@
         if (!card) return;
         event.preventDefault();
         if (card.dataset.fuelDataBusy === "true") return;
-        if (form.matches("[data-new-visit-form]") && hasDirty(card)) {
-            status(card, "Save existing fuel entry before starting another visit.");
+        if (form.matches("[data-new-visit-form], [data-fueler-submit-form]") && hasDirty(card)) {
+            status(card, form.matches("[data-fueler-submit-form]") ? "Save Fuel Entry before COMPLETE ASSIGNMENT." : "Save existing fuel entry before starting another visit.");
             return;
         }
         const physicalAction = form.matches(".neoscorpion-fueler-off-form, [data-truck-on-form]");
@@ -158,6 +158,10 @@
             }
             form.elements.apu_override_enabled.value = event.submitter?.matches("[data-apu-reset]") ? "0" : "1";
             if (form.elements.apu_override_enabled.value === "0") form.elements.apu_override_allowance.value = "";
+        }
+        if (form.matches("[data-fueler-submit-form]") && hasDirty(card.querySelector("[data-fuel-planning-form]"))) {
+            status(card, "Save Fuel Entry before COMPLETE ASSIGNMENT.");
+            return;
         }
         const body = new FormData();
         body.set("expected", card.dataset.editBaseline);

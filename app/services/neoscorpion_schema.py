@@ -124,6 +124,10 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "fueler_update_acknowledged_version": "INTEGER NOT NULL DEFAULT 0",
     },
     "neoscorpion_fuel_work_states": {
+        "fueler_submitted_at_utc": "TIMESTAMP",
+        "fueler_submitted_by_user_id": "INTEGER",
+        "fueler_submission_evidence": "VARCHAR(64)",
+        "fueler_submission_version": "INTEGER NOT NULL DEFAULT 0",
         "notes": "TEXT",
         "visit_number": "INTEGER",
         "actuals_received_at_utc": "TIMESTAMP",

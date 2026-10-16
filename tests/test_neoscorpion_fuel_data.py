@@ -219,6 +219,8 @@ class FuelerDataTest(unittest.TestCase):
         self.assertIn('Fueler note', conflict.json['html'])
         self.assertIsNone(self.baseline()['remaining_left'])
         different = self.save(self.dispatch, self.dispatch_url, stale, remaining_left='10')
+        self.assertEqual(different.status_code, 409)  # Notes allocated an exact visit; refresh its identity.
+        different = self.save(self.dispatch, self.dispatch_url, self.baseline(), remaining_left='10')
         self.assertEqual(different.status_code, 200)
         already = self.save(self.dispatch, self.dispatch_url, stale, notes='Fueler note')
         # Another writer allocated physical work since this empty-work form.

@@ -270,11 +270,9 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self.assertIsNone(assignment.assigned_truck_id)
         self.assertIsNone(assignment.transfer_fuel_gallons)
 
-        # Unassignment allocates separate preparing work. Preserve the prior
-        # measurements, then explicitly confirm this truckless FOB check's
-        # Actuals instead of treating another visit's Actuals as new evidence.
+        # No trusted ON: unassignment preserves the same legitimate preparation.
         current=db.session.get(NeoScorpionFuelWorkState,assignment.active_work_state_id)
-        self.assertTrue(all(t.actual_lbs is None for t in current.tank_states))
+        self.assertTrue(all(t.actual_lbs is not None for t in current.tank_states))
         save_fueler_entry(self.gateway,self.fueler,self._fueler_form(assignment,apu_running="no",
             remaining_left="10.0",actual_left="10.0",remaining_ctr="20.0",actual_ctr="20.0",
             remaining_right="30.0",actual_right="30.0"))
@@ -358,6 +356,11 @@ class NeoScorpionFuelOnBoardTest(unittest.TestCase):
         self._save_complete(assignment)
         db.session.commit()
         assignment.transfer_fuel_gallons = 1
+        db.session.commit()
+        with self.assertRaisesRegex(ValueError, "Assign the truck"):
+            mark_fueler_off(self.gateway, self.fueler, assignment.id)
+        db.session.rollback()
+        assignment.transfer_fuel_gallons = 0
         db.session.commit()
         mark_fueler_off(self.gateway, self.fueler, assignment.id)
         db.session.commit()

@@ -991,7 +991,7 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
     }, status)
 
 
-def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=False, new_visit=False):
+def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=False, new_visit=False, submit=False):
     gateway = get_current_gateway()
     can_view, can_edit = _fuel_data_permissions(dispatcher)
     if request.method == "GET":
@@ -1015,7 +1015,12 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
         form["physical_work_id"] = request.args.get("physical_work_id")
         form["physical_sequence"] = request.args.get("physical_sequence", "")
     try:
-        if new_visit:
+        if submit:
+            from app.services.neoscorpion import submit_fueler_assignment
+            result=submit_fueler_assignment(gateway,current_user,assignment_id,
+                expected=_fueler_expected(form,required=True),physical_work_id=form.get("physical_work_id"),
+                physical_sequence=form.get("physical_sequence"))
+        elif new_visit:
             result = begin_physical_visit(gateway,current_user,assignment_id,
                 expected=_fueler_expected(form,required=True),dispatcher=dispatcher)
         elif truck_on:
@@ -1058,6 +1063,12 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
 @gateway_node_required("scorpion")
 def fueler_assignment_data(assignment_id):
     return _fuel_data_request(assignment_id)
+
+
+@bp.post("/fueler/assignments/<int:assignment_id>/submit")
+@gateway_node_required("scorpion")
+def fueler_assignment_submit(assignment_id):
+    return _fuel_data_request(assignment_id, submit=True)
 
 
 @bp.post("/fueler/assignments/<int:assignment_id>/off")
