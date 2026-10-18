@@ -4,7 +4,7 @@
 <section class="neoscorpion-shell neoscorpion-screen neoscorpion-spear-settings" aria-label="SPEAR Vault">
  <header class="neoscorpion-screen-head"><h1>SPEAR Vault</h1><p>{{ spear_learning_vault.label }}{% if spear_learning_vault.bucket %} · Bucket: {{ spear_learning_vault.bucket }}{% endif %}</p></header>
  {% if learning_payload %}
- <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Operational Learning Record</span><strong>TRAINING ELIGIBLE: {{ "YES" if learning_payload.training_eligible else "NO" }}</strong></div><pre>{{ learning_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
+ <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Operational Learning Record</span><strong>TRAINING ELIGIBLE: {{ "YES" if learning_payload.training_eligible else "NO" }}</strong></div>{% if user_can('neoscorpion.history.view') %}<a class="action-button" href="{{ url_for('neoscorpion.spear_scorecard', operation_id=learning_payload.sort.operation_id, learning=request.args.get('learning')) }}">SCORECARD</a>{% endif %}<pre>{{ learning_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
  {% elif review_payload %}
  <section class="neoscorpion-panel"><div class="neoscorpion-panel-head"><span>Calibration Review</span><strong>TRAINING ELIGIBLE: NO</strong></div><pre>{{ review_payload|tojson(indent=2) }}</pre><a class="action-button" href="{{ url_for('neoscorpion.spear_vault') }}">BACK TO VAULT</a></section>
  {% else %}

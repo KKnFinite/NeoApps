@@ -1860,6 +1860,32 @@ def fuel_report():
     )
 
 
+@bp.get("/spear/scorecard")
+@gateway_node_required("scorpion")
+def spear_scorecard():
+    from app.models import SortDateOperation
+    from app.services.neoscorpion_spear_scorecard import report_context
+    gateway = get_current_gateway()
+    if not user_can(HISTORY_VIEW_PERMISSION):
+        return "Access denied.", 403
+    choices = SortDateOperation.query.filter_by(gateway_id=gateway.id).order_by(
+        SortDateOperation.sort_date.desc(), SortDateOperation.id.desc()).limit(200).all()
+    operation = current_sort_operation(gateway) or (choices[0] if choices else None)
+    try:
+        if request.args.get('operation_id'):
+            operation = SortDateOperation.query.filter_by(id=int(request.args['operation_id']), gateway_id=gateway.id).first()
+            if operation is None:
+                return "Sort not found for this gateway.", 404
+        truck = int(request.args['truck_id']) if request.args.get('truck_id') else None
+        fueler = int(request.args['fueler_id']) if request.args.get('fueler_id') else None
+        archive = read_learning_record(request.args['learning']) if request.args.get('learning') else None
+        context = report_context(gateway, operation, truck_id=truck, fueler_id=fueler, archive=archive)
+    except (ValueError, LearningVaultUnavailable):
+        return "Evidence unavailable or invalid for the selected gateway, sort or resource. Return to SPEAR and select again.", 400
+    return render_template('neonodes/neoscorpion/spear_scorecard.html', gateway=gateway,
+                           operation=operation, operations=choices, learning=request.args.get('learning', ''), **context)
+
+
 @bp.get("/reports/prof")
 @gateway_node_required("scorpion")
 def prof_report():
@@ -2277,6 +2303,8 @@ def _positive_form_id(value, label):
 @bp.after_request
 def _spear_learning_delivery(response):
     # Background only, bounded and rate limited; no external I/O in the request.
+    if request.endpoint == 'neoscorpion.spear_scorecard':
+        return response  # The scorecard never reconciles, trains or schedules delivery.
     if getattr(current_user, 'is_authenticated', False):
         try:
             from app.services.neoscorpion_spear_decisions import schedule_delivery

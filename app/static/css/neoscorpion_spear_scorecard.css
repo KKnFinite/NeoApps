@@ -1,0 +1,17 @@
+.spear-scorecard {font:inherit; font-size:.85rem; min-width:0;}
+.spear-scorecard > * {min-width:0;}
+.spear-scorecard h1 {font-size:1.25rem; margin:.2rem 0; min-width:0; overflow-wrap:normal;}
+.spear-scorecard > header {flex-wrap:wrap; gap:.35rem;}
+.spear-scorecard h2 {font-size:.95rem; margin:.25rem 0; color:#f4d676;}
+.spear-scorecard p {margin:.4rem 0; overflow-wrap:anywhere;}
+.spear-score-filters {display:flex; flex-wrap:wrap; align-items:end; gap:.5rem; margin:.7rem 0;}
+.spear-score-filters label {display:grid; gap:.2rem; min-width:0;}
+.spear-score-filters select {width:100%; max-width:100%; min-width:0; min-height:2rem;}
+.spear-score-strip,.spear-score-grid {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem;}
+.spear-scorecard dl {display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:.35rem .75rem; margin:.5rem 0;}
+.spear-scorecard dt {color:#c4c9ce; font-size:.78rem;}
+.spear-scorecard dd {margin:0; font-variant-numeric:tabular-nums;}
+.spear-scorecard details {border-top:1px solid #66572e; padding:.6rem 0; margin:.3rem 0; min-width:0;}
+.spear-scorecard summary {cursor:pointer; color:#f4d676; font-weight:600;}
+.spear-score-evidence {border-bottom:1px solid #393731; padding:.5rem 0; overflow-wrap:anywhere;}
+@media(max-width:700px) {.spear-score-strip,.spear-score-grid {grid-template-columns:1fr; gap:.5rem;} .spear-score-filters label {flex:1 1 140px;} .spear-scorecard {font-size:.8rem;}}

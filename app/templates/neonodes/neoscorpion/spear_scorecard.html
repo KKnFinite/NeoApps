@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% macro number(value) %}{{ '%.1f'|format(value) if value is not none else '—' }}{% endmacro %}
+{% macro accuracy(title, stats) %}
+<section class="spear-score-summary"><h2>{{ title }}</h2><dl>
+<div><dt>Verified / recorded</dt><dd>{{ stats.verified }} / {{ stats.total }}</dd></div>
+<div><dt>Mean absolute error</dt><dd>{{ number(stats.mae) }} min</dd></div>
+<div><dt>Actual − predicted</dt><dd>{{ number(stats.bias) }} min</dd></div>
+<div><dt>Within ±5 min</dt><dd>{{ stats.within5 if stats.within5 is not none else '—' }} / {{ stats.verified }}</dd></div>
+<div><dt>Unscored</dt><dd>{{ stats.unavailable }}</dd></div></dl></section>
+{% endmacro %}
+{% block title %}SPEAR Intelligence Scorecard | NeoScorpion{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoscorpion_spear_scorecard.css', v='20261018-scorecard-v1') }}">
+<section class="neoscorpion-shell neoscorpion-screen spear-scorecard" aria-label="SPEAR Intelligence Scorecard">
+<header class="neoscorpion-panel-head"><h1>SPEAR Intelligence Scorecard</h1><span>READ ONLY</span></header>
+{% include "neonodes/neoscorpion/_menu.html" %}
+<form method="get" class="spear-score-filters">
+<label>Sort / operation<select name="operation_id">{% for item in operations %}<option value="{{ item.id }}" {% if operation and operation.id == item.id %}selected{% endif %}>{{ item.sort_date }} · {{ item.sort_name }} · #{{ item.id }}</option>{% endfor %}</select></label>
+<label>Truck<select name="truck_id"><option value="">ALL TRUCKS</option>{% for id,name in trucks.items() %}<option value="{{ id }}" {% if truck_id == id %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+<label>Fueler<select name="fueler_id"><option value="">ALL FUELERS</option>{% for id,name in fuelers.items() %}<option value="{{ id }}" {% if fueler_id == id %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+{% if learning %}<input type="hidden" name="learning" value="{{ learning }}">{% endif %}
+<button class="action-button">View</button></form>
+<p>{{ gateway.code }} · {{ operation.sort_date if operation else 'No recorded sort' }}. Physical TRUCK OFF, never Dispatcher COMPLETE. Missing evidence is not a miss; no personnel rankings.</p>
+{% if truncated %}<p role="alert">PARTIAL: a source exceeds {{ 2000 }} records. Metrics cover loaded evidence only.</p>{% endif %}
+<div class="spear-score-strip">{{ accuracy('Fueling OFF accuracy', off_summary) }}{{ accuracy('TOP OFF roundtrips', top_summary) }}</div>
+{% if fueler_id %}<p>TOP OFF has no reliable Fueler attribution; omitted under the Fueler filter.</p>{% endif %}
+<details open><summary>AT RISK / LATE · verified prediction results</summary>
+<div class="spear-score-grid">{% for r in risks %}<section><h2>{{ r.label }}</h2><dl>
+<div><dt>Comparable visits</dt><dd>{{ r.n }}</dd></div><div><dt>Precision / recall</dt><dd>{{ number(r.precision) }}% / {{ number(r.recall) }}%</dd></div>
+<div><dt>True positive / false positive</dt><dd>{{ r.tp }} / {{ r.fp }}</dd></div><div><dt>False negative / true negative</dt><dd>{{ r.fn }} / {{ r.tn }}</dd></div></dl></section>{% endfor %}</div>
+<p>Exact categories against the departure captured with the recommendation: LATE = after departure; AT RISK = within its preceding 20 minutes; COVERED = at least 20 minutes early. Actual category uses physical OFF. Only matched, verified executed recommendations qualify. No counterfactual scoring of different choices.</p>
+</details>
+<details><summary>Trends &amp; calibration review</summary>
+{% if trend %}<p>Chronological verified halves: earlier {{ trend.earlier.verified }} visits MAE {{ number(trend.earlier.mae) }} min, bias {{ number(trend.earlier.bias) }} min; recent {{ trend.recent.verified }} visits MAE {{ number(trend.recent.mae) }} min, bias {{ number(trend.recent.bias) }} min.</p>{% else %}<p>Trend unavailable: at least six verified visits are needed for two groups of three. No trend is inferred from missing data.</p>{% endif %}
+<p>Positive error means forecasts were optimistic (actual OFF later); negative means conservative. Review repeated directional errors and TOP OFF variance before considering calibration. This page never changes calibration or operational decisions.</p>
+<p>Recorded choices: {% for label,count in comparisons.items() %}{{ label|replace('_',' ') }} {{ count }}{% if not loop.last %} · {% endif %}{% else %}No captured decisions{% endfor %}. Different choices are not errors and do not establish which choice was better.</p>
+</details>
+<details><summary>Fueling evidence · {{ off_summary.total }} physical visits</summary>
+{% for r in off %}<article class="spear-score-evidence" data-score-off="{{ r.event.id }}"><strong>{{ r.event.tail_number }} · work {{ r.event.fuel_work_state_id }} · cycle {{ r.event.cycle_number }} · event {{ r.event.id }}</strong>
+<p>Truck {{ trucks.get(r.event.fuel_truck_id, r.event.fuel_truck_id) }} · Fueler {{ fuelers.get(r.event.fueler_user_id, 'Historical identity unavailable') }}</p>
+<dl><div><dt>Prediction captured</dt><dd>{{ clock(r.observed) }}</dd></div><div><dt>Predicted OFF</dt><dd>{{ clock(r.predicted) }}</dd></div><div><dt>Physical OFF</dt><dd>{{ clock(r.actual) }}</dd></div><div><dt>Error</dt><dd>{{ number(r.error) }} min</dd></div></dl>
+<p>{{ 'VERIFIED' if r.error is not none else 'UNSCORED' }} · {{ r.source }} · {{ r.revisions }} saved forecast revisions{% if r.reasons %} · {{ r.reasons|join('; ') }}{% endif %}</p></article>{% else %}<p>No recorded physical outcomes for this selection.</p>{% endfor %}</details>
+<details><summary>TOP OFF evidence · {{ top_summary.total }} roundtrips</summary>
+{% for r in top %}<article class="spear-score-evidence"><strong>Truck {{ trucks.get(r.truck_id, r.truck_id) }} · {{ r.key }}</strong><p>{{ clock(r.at) }} → {{ clock(r.actual) }}</p><p>Predicted {{ number(r.predicted_minutes) }} min · actual {{ number(r.actual_minutes) }} min · error {{ number(r.error) }} min</p><p>{{ 'VERIFIED' if r.error is not none else 'UNSCORED' }}{% if r.reasons %} · {{ r.reasons|join('; ') }}{% endif %}</p></article>{% else %}<p>No attributable roundtrip evidence for this selection.</p>{% endfor %}
+{% if orphan_returns %}<p>{{ orphan_returns }} historical RETURN record(s) lack a loaded SENT boundary; no duration was invented.</p>{% endif %}</details>
+<details><summary>Dispatcher decisions vs SPEAR · {{ decisions|length }} captured actions</summary>
+{% for d in decisions %}<article class="spear-score-evidence"><strong>{{ d.tail or 'Unknown tail' }} · work {{ d.work_id or 'not yet bound' }} · {{ d.comparison|replace('_',' ')|upper }}</strong><p>{{ clock(d.at) }} · observation {{ d.id }}</p>
+<p>Selected truck {{ trucks.get(d.selected.truck_id, d.selected.truck_id or '—') }} / Fueler {{ fuelers.get(d.selected.fueler_id, d.selected.fueler_id or '—') }} · Recommended truck {{ trucks.get(d.recommended.truck_id, d.recommended.truck_id or '—') }} / Fueler {{ fuelers.get(d.recommended.fueler_id, d.recommended.fueler_id or '—') }}</p>
+<p>Predicted {{ d.predicted_risk or 'unknown' }} · observed {{ d.actual_risk or 'UNSCORED' }} · captured departure {{ clock(d.departure) }}</p>{% if d.reasons %}<p>{{ d.reasons|join('; ') }}</p>{% endif %}<p>Vault delivery: {{ 'Archived copy recorded' if d.vault_key else 'Not delivered / capture unavailable' }}</p></article>{% else %}<p>No decision capture for this selection. Capture disabled or absent is not poor performance.</p>{% endfor %}
+{% if invalid %}<p>{{ invalid }} malformed or mismatched observation(s) excluded.</p>{% endif %}</details>
+<details><summary>Evidence policy &amp; Vault</summary><p>One earliest valid saved prediction per physical visit, captured at/after verified ON and before OFF. Later revisions remain counted above but do not multiply the sample. Signed decision evidence uses its recorded deadline and fuel requirement, never current mission labels. Times include local dates and zones; arithmetic uses UTC.</p>
+<p>{{ archive_note }} Use a completed operational record’s “SCORECARD” link in the existing Vault to load one checksum-validated archive. Database event IDs win over archive duplicates. Archive-only unverified records stay unscored.</p><a href="{{ url_for('neoscorpion.spear_vault') }}">SPEAR Vault</a> · <a href="{{ url_for('neoscorpion.spear_settings') }}">SPEAR</a></details>
+</section>
+{% endblock %}

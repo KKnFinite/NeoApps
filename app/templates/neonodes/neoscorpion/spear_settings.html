@@ -11,6 +11,7 @@
         <p>Scorpion Planning Engine for Assignment &amp; Routing</p>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+    {% if user_can('neoscorpion.history.view') %}<p><a class="action-button" href="{{ url_for('neoscorpion.spear_scorecard') }}">INTELLIGENCE SCORECARD</a></p>{% endif %}
 
     <form class="neoscorpion-spear-settings-form" method="post" data-spear-settings-form>
         <section class="neoscorpion-panel">
