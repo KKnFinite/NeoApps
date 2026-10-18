@@ -238,6 +238,19 @@
 
     function initializeDispatchDetails(scope) {
         scope.addEventListener("click", (event) => {
+            const manageAssets = event.target.closest("[data-assets-open]");
+            if (manageAssets) {
+                event.preventDefault();
+                const workspace = scope.querySelector('[data-assets-workspace]');
+                if (!workspace) return;
+                workspace.open = true;
+                const truck = scope.querySelector(`[id="nightly-truck-${manageAssets.dataset.assetsOpen}"]`);
+                const target = truck || scope.querySelector('#nightly-trucks') || workspace;
+                target.scrollIntoView({block:'start'});
+                target.setAttribute('tabindex','-1');
+                target.focus({preventScroll:true});
+                return;
+            }
             const truckReview = event.target.closest("[data-dispatch-truck-review]");
             if (truckReview) {
                 const section = scope.querySelector('[data-dispatch-section="trucks"]');
@@ -353,6 +366,9 @@
                 tableScrollTop: wrap?.scrollTop || 0,
                 tableScrollLeft: wrap?.scrollLeft || 0,
                 openDetails,
+                assetWorkspaceOpen: scope.querySelector('[data-assets-workspace]')?.open,
+                assetWorkspaceScrollTop: scope.querySelector('[data-assets-workspace]')?.scrollTop || 0,
+                openAssetSections: Array.from(scope.querySelectorAll('[data-assets-disclosure][open]')).map(item => item.dataset.assetsDisclosure),
                 openConsoleSections: Array.from(scope.querySelectorAll('details[data-console-section][open]'))
                     .map(item => [item.closest('[data-neoscorpion-dispatch-detail-row]')?.id, item.dataset.consoleSection]),
                 openActiveDetails: Array.from(scope.querySelectorAll(
@@ -368,6 +384,13 @@
                 document.activeElement.blur();
             }
             restoreDetailRows(saved.openDetails, saved.openActiveDetails);
+            const assets = scope.querySelector('[data-assets-workspace]');
+            if (assets && typeof saved.assetWorkspaceOpen === 'boolean') assets.open = saved.assetWorkspaceOpen;
+            (saved.openAssetSections || []).forEach(key => {
+                Array.from(scope.querySelectorAll('[data-assets-disclosure]'))
+                    .filter(item => item.dataset.assetsDisclosure === key).forEach(item => item.open = true);
+            });
+            if (assets && Number.isFinite(saved.assetWorkspaceScrollTop)) assets.scrollTop = saved.assetWorkspaceScrollTop;
             (saved.openConsoleSections || []).forEach(([id, key]) => {
                 const row = scope.querySelector(`[id="${id}"]`);
                 Array.from(row?.querySelectorAll('details[data-console-section]') || [])
@@ -624,7 +647,8 @@
         + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden]), "
         + "[data-dispatch-action-center] input:not([type=hidden]), [data-dispatch-action-center] select, [data-dispatch-action-center] textarea, "
         + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select, "
-        + ".scorpion-desktop-console input:not([type=hidden]):not([disabled]), .scorpion-desktop-console select:not([disabled]), .scorpion-desktop-console textarea:not([disabled])"
+        + ".scorpion-desktop-console input:not([type=hidden]):not([disabled]), .scorpion-desktop-console select:not([disabled]), .scorpion-desktop-console textarea:not([disabled]), "
+        + "[data-assets-workspace] input:not([type=hidden]):not([disabled]), [data-assets-workspace] select:not([disabled]), [data-assets-workspace] textarea:not([disabled])"
     )).filter(control => !control.closest("[data-tail-note-form]"));
 
     const resetProtectedBaselines = () => {
@@ -642,7 +666,7 @@
     ));
 
     const hasUnsavedControls = () => (
-        lifecycleSaving || document.activeElement?.matches?.(".scorpion-desktop-console input:not([type=hidden]), .scorpion-desktop-console select, .scorpion-desktop-console textarea") ||
+        lifecycleSaving || document.activeElement?.matches?.(".scorpion-desktop-console input:not([type=hidden]), .scorpion-desktop-console select, .scorpion-desktop-console textarea, [data-assets-workspace] input:not([type=hidden]), [data-assets-workspace] select, [data-assets-workspace] textarea") ||
         Array.from(root.querySelectorAll("[data-tail-note-form]")).some(form =>
             form.dataset.saving === "true" || form.elements.notes.value !== form.elements.notes.defaultValue) ||
         protectedControls().some(
@@ -903,6 +927,42 @@
             applyDispatchSort(root);
             if (scrollState) dispatchScroll.restoreSnapshot(scrollState);
         }
+        const oldAssets=root.querySelector('[data-assets-workspace]'), newAssets=nextPanel.querySelector('[data-assets-workspace]');
+        if (oldAssets && newAssets && oldAssets.dataset.assetsOperationId === newAssets.dataset.assetsOperationId) {
+            const incoming=new Map(Array.from(newAssets.querySelectorAll('[data-assets-unit]'),item=>[item.dataset.assetsUnit,item]));
+            oldAssets.querySelectorAll('[data-assets-unit]').forEach(item=>{
+                const fresh=incoming.get(item.dataset.assetsUnit);
+                const editing=item.contains(document.activeElement) && document.activeElement?.matches('input,select,textarea');
+                if (!groupDirty([item]) && !editing && !lifecycleSaving) {
+                    if (!fresh) item.remove();
+                    else {
+                        const copy=fresh.cloneNode(true);
+                        item.querySelectorAll('[data-assets-disclosure][open]').forEach(open=>{
+                            Array.from(copy.querySelectorAll('[data-assets-disclosure]')).filter(n=>n.dataset.assetsDisclosure===open.dataset.assetsDisclosure).forEach(n=>n.open=true);
+                        });
+                        if(item.outerHTML!==copy.outerHTML)item.replaceWith(copy);
+                    }
+                } else if (fresh) {
+                    ['[data-assets-truck-facts]','[data-assets-driver-name]'].forEach(selector=>{
+                        const old=item.querySelector(selector),next=fresh.querySelector(selector);
+                        if(old&&next)old.replaceWith(next.cloneNode(true));
+                    });
+                } else {
+                    item.querySelectorAll('button[type="submit"],button:not([type])').forEach(button=>button.disabled=true);
+                    const status=item.querySelector('[data-lifecycle-status]');
+                    if(status)status.textContent='STATE CHANGED — refresh this request before submitting.';
+                }
+                incoming.delete(item.dataset.assetsUnit);
+            });
+            incoming.forEach(item=>{
+                const slot=item.dataset.assetsUnit.startsWith('account-')?'[data-assets-account-list]':item.dataset.assetsUnit.startsWith('truck-')?'[data-assets-truck-list]':null;
+                if(slot)oldAssets.querySelector(slot)?.appendChild(item.cloneNode(true));
+            });
+            if(oldAssets.querySelector('[data-assets-unit^="truck-"]'))oldAssets.querySelector('[data-assets-empty]')?.remove();
+            protectedControls().filter(control=>oldAssets.contains(control)).forEach(control=>{
+                if(!initialControlValues.has(control))initialControlValues.set(control,controlValue(control));
+            });
+        }
         // Truck physical status must not be frozen by a mission/inventory draft.
         // Preserve every editable control and optional planning enrichment.
         nextPanel.querySelectorAll('[data-dispatch-truck-id]').forEach(nextCard => {
@@ -917,6 +977,10 @@
                 if (oldNotes && newNotes) oldNotes.replaceWith(newNotes.cloneNode(true));
             }
             currentCard.dataset.truckOperationalStatus=nextCard.dataset.truckOperationalStatus;
+            ['.neoscorpion-truck-visual-values','.neoscorpion-truck-gauges','.neoscorpion-truck-driver-name'].forEach(selector=>{
+                const oldValue=currentCard.querySelector(selector),nextValue=nextCard.querySelector(selector);
+                if(oldValue && nextValue && oldValue.outerHTML!==nextValue.outerHTML && !oldValue.contains(document.activeElement))oldValue.replaceWith(nextValue.cloneNode(true));
+            });
         });
         updateAssignmentAlerts(root);
     };
@@ -1288,7 +1352,14 @@
             return;
         }
         const pendingControls = [];
-        const status = form.querySelector("[data-lifecycle-status]");
+        let status = form.querySelector("[data-lifecycle-status]");
+        const assetsWorkspace=form.closest('[data-assets-workspace]');
+        if(assetsWorkspace && !status) {
+            status=document.createElement('small');
+            status.setAttribute('data-lifecycle-status','');
+            status.setAttribute('role','status');
+            form.appendChild(status);
+        }
         if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
         lifecycleSaving = true;
         if (button) button.disabled = true;
@@ -1296,6 +1367,10 @@
         syncDirtyState();
         try {
             const body = new FormData(form);
+            if(assetsWorkspace) {
+                body.set('dispatch_assets_workspace','1');
+                body.set('operation_id',assetsWorkspace.dataset.assetsOperationId || '');
+            }
             if (button?.name) body.set(button.name, button.value);
             if (form.matches("[data-pending-uplift-form]")) {
                 Array.from(form.elements).filter(control => !control.disabled).forEach(control => {
@@ -1422,7 +1497,8 @@
         }
     });
     root.addEventListener("submit", (event) => {
-        const lifecycleForm = event.target.closest("[data-dispatch-lifecycle-form]");
+        const lifecycleForm = event.target.closest("[data-dispatch-lifecycle-form]")
+            || (event.target.closest("[data-assets-workspace]") && event.target.closest("form"));
         if (lifecycleForm) {
             event.preventDefault();
             submitLifecycleAction(lifecycleForm, event.submitter || lifecycleForm.querySelector("button[type='submit']"));

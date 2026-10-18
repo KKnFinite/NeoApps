@@ -19,7 +19,9 @@
         <span>Current Sort Operation</span>
         <strong>{% if operation %}{{ operation.gateway_code }} {{ operation.sort_name|upper }} {{ operation.sort_date.strftime('%m/%d/%y') if operation.sort_date else '' }}{% else %}No current sort{% endif %}</strong>
     </div>
+    </div>
     {% include "neonodes/neoscorpion/_nightly_assets.html" %}
+    <div data-dispatch-board-header>
     {% if operation %}
     <div class="neoscorpion-dispatch-insights" aria-label="SPEAR and fueling performance">
     <section class="neoscorpion-dispatch-insights-spear" aria-label="SPEAR">
@@ -108,7 +110,7 @@
                 <div data-truck-status-notes{% if not truck.spear_top_off_status and not truck.top_off_sent_time %} hidden{% endif %}>{% if truck.spear_top_off_status %}<small class="neoscorpion-truck-top-off-sent" title="Forecast only; Dispatcher must record actual RETURN">{{ truck.spear_top_off_status }} · {{ truck.spear_top_off_confidence }}</small>{% endif %}
                 {% if truck.top_off_sent_time %}<small class="neoscorpion-truck-top-off-sent">TOP OFF SENT {{ truck.top_off_sent_time }}</small>{% endif %}</div>
                 {% set driver = drivers_by_truck_id.get(truck.truck_id) %}
-                <small class="neoscorpion-truck-driver-name">DRIVER: {{ truck.driver_name|default('UNKNOWN') }}{% if can_edit %} · <a href="{{ url_for('scorpion_vendor.manage') }}">MANAGE</a>{% endif %}</small>
+                <small class="neoscorpion-truck-driver-name">DRIVER: {{ truck.driver_name|default('UNKNOWN') }}{% if can_edit %} · <a href="#nightly-truck-{{ truck.truck_id }}" data-assets-open="{{ truck.truck_id }}">MANAGE</a>{% endif %}</small>
                 {% include 'neonodes/neoscorpion/_truck_inventory_controls.html' %}
                 <div class="neoscorpion-truck-visual-values">
                     <span>Current {{ truck.current_display }}{% if truck.current_percent is not none %} / {{ truck.current_percent }}%{% endif %}</span>

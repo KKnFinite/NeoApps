@@ -10,8 +10,8 @@ function fixture() {
     const row = {dataset:{dispatchRowKey:'8-1'}, complete:false,
         classList:{contains: () => row.complete}, getBoundingClientRect: () => ({top:110,bottom:208})};
     const scope = {style:{overflowAnchor:''},
-        querySelector: s => s.includes('table-wrap') ? wrap : row,
-        querySelectorAll: s => s.includes('aria-expanded') || s.includes('data-console-section') ? [] : [row]};
+        querySelector: s => s.includes('table-wrap') ? wrap : s.includes('data-assets-workspace') ? null : row,
+        querySelectorAll: s => s.includes('aria-expanded') || s.includes('data-console-section') || s.includes('data-assets-disclosure') ? [] : [row]};
     const window = {location:{pathname:'/neoscorpion/fuel-dispatch'},scrollX:0,scrollY:300,
         scrollTo({top,left}) {this.scrollY=top;this.scrollX=left;}, requestAnimationFrame: f => f(),
         sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)}};
@@ -52,5 +52,17 @@ test('inner console sections retain independent expansion after panel replacemen
     const scroll=f.create(f.scope), saved=scroll.snapshot();
     section.open=false;scroll.restoreSnapshot(saved);
     assert.equal(section.open,true);
+    assert.equal(f.wrap.scrollLeft,87);
+});
+
+test("Tonight's assets retains workspace, driver disclosure and internal scroll during replacement",()=>{
+    const f=fixture(), assets={open:true,scrollTop:240}, driver={open:true,dataset:{assetsDisclosure:'driver-8'}};
+    const find=f.scope.querySelector, all=f.scope.querySelectorAll;
+    f.scope.querySelector=s=>s==='[data-assets-workspace]'?assets:find(s);
+    f.scope.querySelectorAll=s=>s.includes('data-assets-disclosure')?[driver]:all(s);
+    const scroll=f.create(f.scope), saved=scroll.snapshot();
+    assets.open=false;assets.scrollTop=0;driver.open=false;
+    scroll.restoreSnapshot(saved);
+    assert.equal(assets.open,true);assert.equal(assets.scrollTop,240);assert.equal(driver.open,true);
     assert.equal(f.wrap.scrollLeft,87);
 });

@@ -1,0 +1,19 @@
+{% if can_manage_assets and asset_driver_admin %}{% set admin=asset_driver_admin %}
+{% if driver_admin_region|default('all') != 'accounts' %}
+<div class="scorpion-asset-claims" data-assets-unit="claims">
+{% if admin.pending %}<strong>PENDING TRUCK CLAIMS · {{ admin.pending|length }}</strong>{% endif %}
+{% for pending in admin.pending %}<div class="scorpion-asset-claim"><strong>TRUCK {{ pending.truck.truck_number }} · {{ pending.user.display_name }}</strong><span>{{ (pending.gallons|string ~ ' initial gal') if pending.gallons is not none else 'Existing inventory unchanged' }}</span>
+<form method="post" action="{{ url_for('scorpion_vendor.manage') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="request_id" value="{{ pending.id }}"><input type="hidden" name="version" value="{{ pending.version }}"><label class="scorpion-assets-check"><input type="checkbox" name="override" value="1">Replace conflicting driver</label><button class="action-button" name="action" value="claim_approve">APPROVE CLAIM</button><button class="action-button" name="action" value="claim_deny">DENY</button><small data-lifecycle-status role="status"></small></form></div>{% endfor %}
+</div>
+{% endif %}
+{% if driver_admin_region|default('all') != 'claims' %}
+<details class="scorpion-asset-accounts" data-assets-disclosure="accounts"><summary>Driver accounts & nightly participation · {{ admin.profiles|length }} accounts</summary>
+<form method="post" action="{{ url_for('scorpion_vendor.manage') }}" data-assets-unit="invitation">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id if operation else '' }}"><input type="hidden" name="action" value="invite"><label>Driver name<input name="name" maxlength="120" required></label><label>Email<input type="email" name="email" required></label><button class="action-button">SEND INVITATION</button><small data-lifecycle-status role="status"></small></form>
+<div data-assets-account-list>{% for profile in admin.profiles %}{% set night=admin.nights.get(profile.user_id) %}
+<div class="scorpion-asset-account" data-assets-unit="account-{{ profile.user_id }}"><span><strong>{{ profile.user.display_name }}</strong><small>{{ 'ENABLED' if profile.enabled else 'DISABLED' }} · {{ night.status|upper if night else 'NOT APPROVED' }} · {{ 'EMAIL VERIFIED' if profile.user.email_verified_at else 'REGISTRATION PENDING' }}</small></span>
+<form method="post" action="{{ url_for('scorpion_vendor.manage') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ operation.id if operation else '' }}"><input type="hidden" name="user_id" value="{{ profile.user_id }}"><input type="hidden" name="version" value="{{ night.version if night else 0 }}">
+{% for action,label in [('approved','APPROVE TONIGHT'),('denied','DENY'),('revoked','REVOKE'),('disable','DISABLE ACCOUNT'),('enable','ENABLE ACCOUNT')] %}<button class="action-button" name="action" value="{{ action }}" {% if not operation and action in ['approved','denied','revoked'] %}disabled{% endif %}>{{ label }}</button>{% endfor %}{% if not profile.user.email_verified_at %}<button class="action-button" name="action" value="resend">RESEND INVITATION</button>{% endif %}<small data-lifecycle-status role="status"></small></form></div>{% endfor %}</div>
+</details>
+<details data-assets-disclosure="audit"><summary>Driver audit history</summary><div class="scorpion-assets-audit" data-assets-unit="audit">{% for entry in admin.audits %}<p>{{ entry.created_at|local_datetime(timezone) }} · {{ entry.action }} · actor {{ entry.actor_user_id }} · truck {{ entry.fuel_truck_id or '—' }} · {{ entry.facts }}</p>{% else %}<p>No driver audit history.</p>{% endfor %}</div></details>
+{% endif %}
+{% endif %}

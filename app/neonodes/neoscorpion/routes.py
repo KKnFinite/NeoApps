@@ -821,7 +821,8 @@ def manage_nightly_assets():
     # Do not depend on optional fetch headers here: a missing or altered header
     # previously made a successful card request fall through to a 302 redirect,
     # which the client then reported as a generic save failure.
-    json_response = compact_truck_card
+    workspace_request = request.form.get("dispatch_assets_workspace") == "1"
+    json_response = compact_truck_card or workspace_request
     access = permission_access(
         FUEL_DISPATCH_VIEW_PERMISSION,
         FUEL_DISPATCH_EDIT_PERMISSION,
@@ -844,12 +845,16 @@ def manage_nightly_assets():
         operation = current_sort_operation(gateway)
         if operation is None:
             raise ValueError("No current sort operation is available.")
+        if workspace_request and str(operation.id) != request.form.get("operation_id"):
+            raise ValueError("The active sort changed. Refresh tonight's assets before continuing.")
         result = _apply_nightly_asset_action(gateway, operation, request.form)
         if result.changed:
             db.session.commit()
-            flash("TONIGHT'S ASSETS UPDATED.", "success")
+            if not workspace_request:
+                flash("TONIGHT'S ASSETS UPDATED.", "success")
         else:
-            flash("NO NIGHTLY ASSET CHANGES.", "info")
+            if not workspace_request:
+                flash("NO NIGHTLY ASSET CHANGES.", "info")
     except (IntegrityError, ValueError) as exc:
         db.session.rollback()
         message = (
@@ -861,7 +866,8 @@ def manage_nightly_assets():
                 else "Nightly assets changed. Reload and try again."
             )
         )
-        flash(message, "error")
+        if not workspace_request:
+            flash(message, "error")
         if json_response:
             return _json_no_store({"ok": False, "error": message}, 400)
     except Exception:
@@ -887,6 +893,7 @@ def manage_nightly_assets():
                 "ok": True,
                 "changed": result.changed,
                 "revision": result.revision,
+                **({"operation_id": operation.id} if workspace_request else {}),
             }
         )
 
@@ -1979,6 +1986,10 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
     # Presentation-only pointers to existing truck controls: never duplicate
     # inventory/approval mutations inside a mission's DETAILS.
     dispatch_editable = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)['can_edit']
+    driver_admin = None
+    if dispatch_editable and include_asset_choices:
+        from app.neonodes.neoscorpion.vendor_routes import driver_management_context
+        driver_admin = driver_management_context(gateway, operation)
     for row in rows:
         truck = row.get('assigned_truck')
         visual = next((v for v in context.get('truck_visuals', []) if truck and v['truck_id'] == truck.id), None)
@@ -1992,7 +2003,7 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
         row['console_truck_review'] = ' · '.join(reasons)
         row['action_count'] += int(bool(row.get('call_dispatch_alert') and dispatch_editable))
         row['action_count'] += int(bool(reasons))
-    return {**context, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
+    return {**context, 'asset_driver_admin':driver_admin, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
         "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
 
 

@@ -1440,7 +1440,6 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-required::after { height: calc(var(--dispatch-font-small) * 1.15); }
 @media (max-width: 900px) {
     .neoscorpion-screen[data-fuel-dispatch-live] .scorpion-desktop-console,
-    .neoscorpion-screen[data-fuel-dispatch-live] #manage-tonights-assets,
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card a,
     .neoscorpion-screen[data-fuel-dispatch-live] form,
     .neoscorpion-screen[data-fuel-dispatch-live] button[form],
@@ -1449,6 +1448,74 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     .neoscorpion-screen[data-fuel-dispatch-live] textarea { display: none !important; }
     .scorpion-mobile-readonly { display: grid; gap: 5px; text-align: left; font: 11px/1.3 NeoFontPlain, sans-serif; overflow-wrap: anywhere; }
     .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-history-row { display: none; }
+}
+
+/* Tonight's assets: one compact workspace, not a second administration page. */
+[data-assets-workspace] { font: 12px/1.35 NeoFontPlain, sans-serif; scroll-margin-top: 100px; }
+[data-assets-workspace] .neoscorpion-assets-summary { min-height: 34px; padding: 5px 9px; gap: 7px; font-size: 12px; }
+[data-assets-workspace] .neoscorpion-assets-summary::before { width: 20px; height: 20px; flex-basis: 20px; }
+[data-assets-workspace] .neoscorpion-assets-grid { grid-template-columns: minmax(180px, .65fr) minmax(0, 2fr); }
+[data-assets-workspace] .neoscorpion-assets-section { gap: 6px; padding: 8px 10px; margin: 0; }
+[data-assets-workspace] .neoscorpion-assets-section > header { align-items: center; gap: 8px; }
+[data-assets-workspace] h2, [data-assets-workspace] h3, [data-assets-workspace] strong { font-family: NeoFontPlain, sans-serif; font-size: 12px; line-height: 1.35; letter-spacing: normal; margin: 0; }
+[data-assets-workspace] form { display: flex; flex-wrap: wrap; align-items: end; gap: 4px 7px; min-width: 0; margin: 0; padding: 0; }
+[data-assets-workspace] label { display: flex; flex-direction: column; gap: 2px; flex: 0 1 180px; min-width: 0; font: 11px/1.3 NeoFontPlain, sans-serif; color: #bfc5cc; text-transform: none; }
+[data-assets-workspace] input:not([type=hidden]), [data-assets-workspace] select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 27px; max-width: 100%; height: auto; padding: 3px 6px; border: 1px solid #4a4d51; border-radius: 4px; background: #080d15; color: #e9edf1; font: 12px/1.3 NeoFontPlain, sans-serif; }
+[data-assets-workspace] input[type=checkbox] { width: auto; min-height: 16px; margin: 0; }
+[data-assets-workspace] .scorpion-assets-check { flex-direction: row; align-items: center; align-self: center; flex-basis: 200px; }
+[data-assets-workspace] .action-button { width: auto; min-height: 27px; margin: 0; padding: 3px 7px; font: 11px/1.3 NeoFontPlain, sans-serif; white-space: normal; }
+[data-assets-workspace] .neoscorpion-assets-row { min-height: 0; padding: 5px 0; gap: 4px 10px; }
+[data-assets-workspace] .neoscorpion-assets-row > span { flex: 1 1 170px; }
+[data-assets-workspace] .neoscorpion-assets-nickname-form { flex: 1 1 220px; }
+[data-assets-workspace] .neoscorpion-assets-rows, [data-assets-workspace] .neoscorpion-assets-trucks { gap: 0; }
+[data-assets-workspace] .neoscorpion-assets-truck { display: grid; grid-template-columns: minmax(0,1fr); gap: 5px; padding: 9px 0; min-width: 0; scroll-margin-top: 105px; border-radius: 0; background: transparent; }
+[data-assets-workspace] .neoscorpion-assets-truck > header { flex-wrap: wrap; justify-content: start; align-items: center; gap: 5px 12px; }
+[data-assets-workspace] small { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+[data-assets-workspace] .scorpion-assets-truck-facts, [data-assets-workspace] .scorpion-assets-truck-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; }
+[data-assets-workspace] .scorpion-assets-truck-controls form { flex: 0 1 auto; }
+[data-assets-workspace] .scorpion-inventory-inline { display: flex; }
+[data-assets-workspace] .scorpion-inventory-pending { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 0; border: 0; background: transparent; }
+[data-assets-workspace] .scorpion-asset-driver-controls { display: flex; flex-wrap: wrap; align-items: start; gap: 4px 18px; }
+[data-assets-workspace] .scorpion-asset-driver-controls > form { flex: 0 1 auto; }
+[data-assets-workspace] .scorpion-inventory-inline { flex: 0 1 270px; flex-wrap: nowrap; }
+[data-assets-workspace] .scorpion-asset-driver-controls > form { flex: 0 1 350px; flex-wrap: nowrap; }
+[data-assets-workspace] .scorpion-asset-driver-controls > details { flex: 1 1 220px; }
+[data-assets-workspace] .scorpion-asset-driver-controls > form label { flex: 1 1 160px; }
+[data-assets-workspace] .scorpion-asset-driver-controls > form .action-button { flex: 0 0 auto; }
+[data-assets-workspace] details:not(.neoscorpion-assets-workspace) { margin: 0; padding: 0; border: 0; background: transparent; min-width: 0; }
+[data-assets-workspace] summary:not(.neoscorpion-assets-summary) { padding: 4px 0; font: 12px/1.3 NeoFontPlain, sans-serif; cursor: pointer; color: #e4ce8c; }
+[data-assets-workspace] .scorpion-asset-claim, [data-assets-workspace] .scorpion-asset-account { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 5px 0; border-bottom: 1px solid #34373d; }
+[data-assets-workspace] .scorpion-asset-account > span { flex: 1 1 190px; }
+[data-assets-workspace] .scorpion-asset-account > span small { display: block; }
+[data-assets-workspace] .scorpion-asset-account > form { flex: 2 1 430px; }
+[data-assets-workspace] .scorpion-assets-audit { max-height: 220px; overflow: auto; overflow-wrap: anywhere; }
+[data-assets-workspace] .scorpion-assets-audit p { margin: 4px 0; font-size: 11px; }
+[data-assets-workspace] [data-lifecycle-status][data-state=error] { color: #ff8983; }
+[data-assets-workspace] [data-assets-status]:empty { display: none; }
+.scorpion-assets-mobile-note { display: none; }
+body.operational-board-view [data-assets-workspace] { flex: 0 1 auto; min-height: 35px; }
+body.operational-board-view [data-assets-workspace][open] { max-height: 50vh; overflow: auto; }
+body.operational-board-view [data-assets-workspace] > .neoscorpion-assets-summary { position: sticky; top: 0; z-index: 2; background: #0d0c06; }
+@media (min-width: 1200px) {
+    [data-assets-workspace] .neoscorpion-assets-truck { grid-template-columns: minmax(170px,.8fr) minmax(0,2fr); gap: 3px 16px; }
+    [data-assets-workspace] .neoscorpion-assets-truck > header { grid-column: 1; grid-row: 1; }
+    [data-assets-workspace] .scorpion-assets-truck-facts { grid-column: 1; grid-row: 2; gap: 2px 8px; }
+    [data-assets-workspace] .neoscorpion-assets-truck > .scorpion-assets-truck-controls { grid-column: 2; grid-row: 1 / span 2; }
+    [data-assets-workspace] .scorpion-asset-driver { grid-column: 1; grid-row: 3; align-self: center; }
+    [data-assets-workspace] .scorpion-asset-driver-controls { grid-column: 2; grid-row: 3; }
+    [data-assets-workspace] .neoscorpion-assets-truck > details { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+    [data-assets-workspace] .neoscorpion-assets-grid { grid-template-columns: minmax(0,1fr); }
+    [data-assets-workspace] .neoscorpion-assets-section + .neoscorpion-assets-section { border-left: 0; border-top: 1px solid #34373d; }
+}
+@media (max-width: 900px) {
+    .neoscorpion-screen[data-fuel-dispatch-live] [data-assets-workspace] { display: block; }
+    [data-assets-workspace] .neoscorpion-assets-summary { font-size: 10px; }
+    [data-assets-workspace] .neoscorpion-assets-section { padding: 6px 8px; }
+    [data-assets-workspace] .scorpion-assets-mobile-note { display: block; margin: 3px 8px; color: #bfc5cc; font-size: 10px; }
+    [data-assets-workspace] .scorpion-asset-accounts, [data-assets-workspace] [data-assets-disclosure],
+    [data-assets-workspace] .scorpion-asset-driver-controls { display: none !important; }
 }
 
 /* Personal Dispatch presentation only; shared truck markup also serves Board View. */

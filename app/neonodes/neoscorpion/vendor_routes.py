@@ -50,7 +50,15 @@ def operational(account):
 
 @bp.errorhandler(PermissionError)
 def denied(error):
+    if request.form.get('dispatch_assets_workspace') == '1':
+        return jsonify(ok=False,error=str(error)),403
     return str(error), 403
+
+
+def workspace_result(gateway):
+    """Read the existing revision after commit; never create a parallel state."""
+    from app.services.neoscorpion import fuel_assignments_live_revision
+    return jsonify(ok=True,changed=True,**fuel_assignments_live_revision(gateway))
 
 
 @bp.route('/invitation/<token>', methods=['GET','POST'])
@@ -155,7 +163,13 @@ def manage_inventory():
                 request.form.get('action')=='approve',request.form.get('version'))
         db.session.commit()
     except (ValueError,TypeError,IntegrityError) as exc:
-        db.session.rollback();flash(str(exc) if isinstance(exc,ValueError) else 'Inventory changed. Refresh.','error')
+        db.session.rollback()
+        message=str(exc) if isinstance(exc,ValueError) else 'Inventory changed. Refresh.'
+        if request.form.get('dispatch_assets_workspace')=='1':
+            return jsonify(ok=False,error=message),400
+        flash(message,'error')
+    if request.form.get('dispatch_assets_workspace')=='1':
+        return workspace_result(gateway)
     return redirect(url_for('neoscorpion.fuel_dispatch'))
 
 
@@ -224,18 +238,32 @@ def manage():
                 vendors.audit(gateway,current_user,'manual_driver',operation=operation,truck_id=truck.id,name=name)
                 record_nightly_operational_change(state,operation.id)
             else:raise ValueError('Unsupported driver action.')
+            if operation and action in {'invite','resend'}:
+                operation,state=lock_nightly_asset_scope_for_mutation(operation)
+                record_nightly_operational_change(state,operation.id)
             db.session.commit()
         except (ValueError,TypeError,IntegrityError) as exc:
-            db.session.rollback();flash(str(exc) if isinstance(exc,ValueError) else 'Driver state changed. Refresh.','error')
+            db.session.rollback()
+            message=str(exc) if isinstance(exc,ValueError) else 'Driver state changed. Refresh.'
+            if request.form.get('dispatch_assets_workspace')=='1':
+                return jsonify(ok=False,error=message),400
+            flash(message,'error')
+        if request.form.get('dispatch_assets_workspace')=='1':
+            return workspace_result(gateway)
         return redirect(url_for('scorpion_vendor.manage'))
+    return render_template('neonodes/neoscorpion/vendor_manage.html',gateway=gateway,operation=operation,
+        **driver_management_context(gateway,operation))
+
+
+def driver_management_context(gateway,operation):
+    """Existing gateway-scoped administration data, shared by Dispatch and fallback."""
     profiles=NeoScorpionVendorAccount.query.filter_by(gateway_id=gateway.id).all()
     nights={r.user_id:r for r in NeoScorpionVendorNight.query.filter_by(sort_date_operation_id=operation.id).all()} if operation else {}
     connections=NeoScorpionTruckDriver.query.filter_by(sort_date_operation_id=operation.id).all() if operation else []
     from app.services.neoscorpion_drivers import driver_roster
     employee_choices=driver_roster(gateway,operation,include_choices=True)['eligible_drivers']
     approved_vendors=[p.user for p in profiles if p.enabled and p.user.is_active and p.user.email_verified_at and nights.get(p.user_id) and nights[p.user_id].status=='approved']
-    return render_template('neonodes/neoscorpion/vendor_manage.html',gateway=gateway,operation=operation,profiles=profiles,nights=nights,
-        driver_choices=employee_choices+approved_vendors,
+    return dict(profiles=profiles,nights=nights,driver_choices=employee_choices+approved_vendors,
         connections={r.fuel_truck_id:r for r in connections}, trucks_by_driver={r.driver_user_id:r.fuel_truck_id for r in connections if r.driver_user_id},
         pending=NeoScorpionVendorRequest.query.filter_by(sort_date_operation_id=operation.id,kind='claim',status='pending').all() if operation else [],
         driver_trucks=NeoScorpionFuelTruck.query.join(NeoScorpionSortTruck,NeoScorpionSortTruck.fuel_truck_id==NeoScorpionFuelTruck.id).filter(NeoScorpionSortTruck.sort_date_operation_id==operation.id).all() if operation else [],
