@@ -11,7 +11,7 @@ function fixture() {
         classList:{contains: () => row.complete}, getBoundingClientRect: () => ({top:110,bottom:208})};
     const scope = {style:{overflowAnchor:''},
         querySelector: s => s.includes('table-wrap') ? wrap : row,
-        querySelectorAll: s => s.includes('aria-expanded') ? [] : [row]};
+        querySelectorAll: s => s.includes('aria-expanded') || s.includes('data-console-section') ? [] : [row]};
     const window = {location:{pathname:'/neoscorpion/fuel-dispatch'},scrollX:0,scrollY:300,
         scrollTo({top,left}) {this.scrollY=top;this.scrollX=left;}, requestAnimationFrame: f => f(),
         sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)}};
@@ -41,5 +41,16 @@ test('ordinary refresh still follows the active mission anchor', () => {
     f.row.getBoundingClientRect=()=>({top:160,bottom:258});
     scroll.restoreSnapshot(saved);
     assert.equal(f.wrap.scrollTop,550); // retained 50px active-anchor correction
+    assert.equal(f.wrap.scrollLeft,87);
+});
+
+test('inner console sections retain independent expansion after panel replacement', () => {
+    const f=fixture(), section={dataset:{consoleSection:'history'},open:true,closest:()=>({id:'detail-8'})};
+    const base=f.scope.querySelectorAll, find=f.scope.querySelector;
+    f.scope.querySelectorAll=s=>s.includes('data-console-section')?[section]:base(s);
+    f.scope.querySelector=s=>s==='[id="detail-8"]'?{querySelectorAll:()=>[section]}:find(s);
+    const scroll=f.create(f.scope), saved=scroll.snapshot();
+    section.open=false;scroll.restoreSnapshot(saved);
+    assert.equal(section.open,true);
     assert.equal(f.wrap.scrollLeft,87);
 });

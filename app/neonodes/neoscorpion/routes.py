@@ -1976,6 +1976,22 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
             visual['inventory_epoch']=selection.inventory_epoch if selection else None
             visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
             visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
+    # Presentation-only pointers to existing truck controls: never duplicate
+    # inventory/approval mutations inside a mission's DETAILS.
+    dispatch_editable = permission_access(FUEL_DISPATCH_VIEW_PERMISSION, FUEL_DISPATCH_EDIT_PERMISSION)['can_edit']
+    for row in rows:
+        truck = row.get('assigned_truck')
+        visual = next((v for v in context.get('truck_visuals', []) if truck and v['truck_id'] == truck.id), None)
+        reasons = []
+        if truck and not row.get('administratively_complete') and pending.get(truck.id):
+            reasons.append('Fuel verification awaiting Dispatcher approval')
+        if visual and not row.get('administratively_complete') and visual.get('status') in ('needs_sump', 'unavailable_oos'):
+            reasons.append('Serviceability: ' + visual['status'].replace('_', ' ').upper())
+        if visual and not row.get('administratively_complete') and visual.get('inventory_verified') is False and visual.get('status') == 'available':
+            reasons.append('Truck fuel inventory requires verification')
+        row['console_truck_review'] = ' · '.join(reasons)
+        row['action_count'] += int(bool(row.get('call_dispatch_alert') and dispatch_editable))
+        row['action_count'] += int(bool(reasons))
     return {**context, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
         "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
 

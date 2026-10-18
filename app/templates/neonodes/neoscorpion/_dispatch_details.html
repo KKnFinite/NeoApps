@@ -1,0 +1,25 @@
+<div class="neoscorpion-dispatch-detail-grid scorpion-desktop-console">
+{% include "neonodes/neoscorpion/_dispatch_action_center.html" %}
+{% include "neonodes/neoscorpion/_dispatch_work_timeline.html" %}
+<section data-details-region="fuel"><strong>FUEL & FLIGHT DATA</strong>
+<dl class="scorpion-facts" data-dispatch-console-facts>
+<div><dt>Aircraft</dt><dd>{{ row.tail_number }} · {{ row.aircraft_type if row.aircraft_type and row.aircraft_type != 'UNKNOWN' else '-' }}</dd></div>
+<div><dt>Flight / destination</dt><dd>{{ row.mission.flight_number }} · {{ row.destination }}</dd></div>
+<div><dt>Parking / ETD</dt><dd>{{ row.parking_position or '-' }} · {{ row.departure_time or '-' }}</dd></div>
+<div><dt>Required / Inbound</dt><dd>{{ row.required_fuel_display }} / {{ row.inbound_fuel_display or '-' }}</dd></div>
+<div><dt>Actual / NEO Fuel</dt><dd>{{ row.actual_total_display }} / {{ row.neo_fuel_display }}</dd></div>
+<div><dt>APU / T/F</dt><dd>{{ row.apu_allowance_display }} / {{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
+<div><dt>Verified FOB</dt><dd>{{ row.fob_display or '-' }}</dd></div>
+<div><dt>Physical ON / OFF</dt><dd>{{ row.on_time }} / {{ row.off_time }}</dd></div>
+<div><dt>Estimated demand</dt><dd>{{ row.estimated_fuel_display }}{% if row.estimated_fuel_source == 'fallback' %} · {{ row.estimated_fuel_source_label }}{% endif %}</dd></div>
+<div><dt>Projected truck</dt><dd class="{% if row.projected_truck_short %}neoscorpion-calculation-warning{% endif %}">{{ row.projected_truck_display }}</dd></div>
+</dl>
+<div class="scorpion-load-planning" data-dispatch-console-planning>{% if row.load_planning_ready %}<span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span><button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>{% else %}<span>{{ row.load_planning_placeholder }}</span>{% endif %}<small data-dispatch-load-planner>Load Planner: {{ row.load_planner_name }}</small></div>
+<div data-fuel-status-details>{% for warning in row.fuel_status_warnings if warning != row.dispatch_status_detail and warning not in row.status_review_reasons %}<p>{{ warning }}</p>{% endfor %}</div>
+</section>
+<section data-details-region="notes"><strong>NOTES</strong><div class="scorpion-console-notes">
+{% with tail_notes_rows=2 %}{% include "neonodes/neoscorpion/_tail_notes.html" %}{% endwith %}
+<div data-dispatch-visit-notes><strong>FUELER / VISIT NOTES</strong>{% for visit in row.console_visits if visit.notes and not visit.physical_finalized_at_utc and not visit.ended_early_at_utc %}<div data-visit-note="{{ visit.id }}"><small>{{ visit.tail_number }} · Truck {{ visit.physical_truck.truck_number if visit.physical_truck else '-' }} · Cycle {{ visit.physical_cycle_number }} / Visit {{ visit.visit_number }}</small><p class="scorpion-visit-note">{{ visit.notes }}</p></div>{% else %}<p>No current visit notes. Earlier notes are in History.</p>{% endfor %}</div>
+</div></section>
+{% include "neonodes/neoscorpion/_dispatch_secondary.html" %}
+</div>

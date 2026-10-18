@@ -98,10 +98,18 @@ class VisitLifecycleBrowserTest(unittest.TestCase):
                         expect(b.locator('[data-fueler-submission-status]')).to_contain_text('SUBMITTED')
                         F().ready(d,'/neoscorpion/fuel-dispatch')
                         if row.locator('[data-neoscorpion-dispatch-details]').get_attribute('aria-expanded')!='true':row.locator('[data-neoscorpion-dispatch-details]').click()
-                        prior=d.locator(f'#neoscorpion-dispatch-detail-{mid}-1 [data-prior-work-id="{b_id}"]')
-                        if not prior.evaluate('el=>el.open'):prior.locator(':scope > summary').click()
-                        prior.locator('[data-fuel-data-open]').click()
-                        with d.expect_navigation():d.locator('[data-source-verification-form] button').click()
+                        # Original-tail verification is directly actionable in
+                        # the console, not buried in the retired prior-work drawer.
+                        prior=d.locator(f'#neoscorpion-dispatch-detail-{mid}-1 [data-action-key="verify-{b_id}"]')
+                        expect(prior).to_be_visible()
+                        expect(prior.locator('[name="physical_work_id"]')).to_have_value(str(b_id))
+                        with F.app.app_context():
+                            source=db.session.get(NeoScorpionFuelWorkState,b_id)
+                            sequence,receipt=source.physical_sequence_number,source.fueler_submission_version
+                        expect(prior.locator('[name="physical_sequence"]')).to_have_value(str(sequence))
+                        expect(prior.locator('[name="expected_submission_version"]')).to_have_value(str(receipt))
+                        prior.locator('[data-dispatch-verification-form] button').click()
+                        expect(prior).to_have_count(0,timeout=12000)
                         with F.app.app_context():
                             events=NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).order_by(NeoScorpionFuelingEvent.id).all()
                             self.assertEqual([(e.fuel_work_state_id,e.tail_number,e.transfer_fuel_gallons) for e in events],[(first_id,tail_a,3000),(last_id,tail_a,2000),(b_id,tail_b,1000)])

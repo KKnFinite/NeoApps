@@ -6,7 +6,7 @@
         {{ csrf_field() }}
         <input type="hidden" name="tail_number" value="{{ row.tail_number }}">
         <input type="hidden" name="expected_version" value="{{ note.version if note else 0 }}">
-        <textarea name="notes" rows="3" maxlength="10000" aria-label="Tail Notes for {{ row.tail_number }}">{{ '\n' }}{{ note.notes if note else '' }}</textarea>
+        <textarea name="notes" rows="{{ tail_notes_rows|default(3) }}" maxlength="10000" aria-label="Tail Notes for {{ row.tail_number }}">{{ '\n' }}{{ note.notes if note else '' }}</textarea>
         <div class="neoscorpion-tail-note-controls"><button type="submit" class="action-button">SAVE</button><button type="button" class="action-button" data-tail-note-clear>CLEAR</button><small data-tail-note-status role="status" aria-live="polite"></small></div>
     </form>
     {% else %}<p data-tail-note-text>{{ note.notes if note and note.notes else '-' }}</p>{% endif %}

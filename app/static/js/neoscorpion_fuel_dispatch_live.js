@@ -238,6 +238,16 @@
 
     function initializeDispatchDetails(scope) {
         scope.addEventListener("click", (event) => {
+            const truckReview = event.target.closest("[data-dispatch-truck-review]");
+            if (truckReview) {
+                const section = scope.querySelector('[data-dispatch-section="trucks"]');
+                if (section?.hidden) scope.querySelector('[data-dispatch-collapse="trucks"]')?.click();
+                const card = Array.from(scope.querySelectorAll('[data-dispatch-truck-id]'))
+                    .find(item => item.dataset.dispatchTruckId === truckReview.dataset.dispatchTruckReview);
+                card?.scrollIntoView({block: 'nearest'});
+                card?.querySelector('input:not([type=hidden]), button, a')?.focus({preventScroll:true});
+                return;
+            }
             const toggle = event.target.closest("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-completion-explain], [data-dispatch-action-open]");
             if (!toggle) return;
             event.preventDefault();
@@ -343,6 +353,8 @@
                 tableScrollTop: wrap?.scrollTop || 0,
                 tableScrollLeft: wrap?.scrollLeft || 0,
                 openDetails,
+                openConsoleSections: Array.from(scope.querySelectorAll('details[data-console-section][open]'))
+                    .map(item => [item.closest('[data-neoscorpion-dispatch-detail-row]')?.id, item.dataset.consoleSection]),
                 openActiveDetails: Array.from(scope.querySelectorAll(
                     ".neoscorpion-dispatch-primary-row [data-neoscorpion-dispatch-details][aria-expanded='true']"
                 )).map(toggle => toggle.getAttribute("aria-controls")).filter(Boolean),
@@ -356,6 +368,11 @@
                 document.activeElement.blur();
             }
             restoreDetailRows(saved.openDetails, saved.openActiveDetails);
+            (saved.openConsoleSections || []).forEach(([id, key]) => {
+                const row = scope.querySelector(`[id="${id}"]`);
+                Array.from(row?.querySelectorAll('details[data-console-section]') || [])
+                    .filter(item => item.dataset.consoleSection === key).forEach(item => item.open = true);
+            });
             if (Number.isFinite(saved.y) || Number.isFinite(saved.x)) {
                 window.scrollTo({
                     top: Number.isFinite(saved.y) ? saved.y : window.scrollY,
@@ -606,8 +623,9 @@
         "select[name='assigned_fueler_user_id']:not([disabled]), "
         + "select[name='assigned_truck_id']:not([disabled]), [data-cycle-start] input:not([type=hidden]), "
         + "[data-dispatch-action-center] input:not([type=hidden]), [data-dispatch-action-center] select, [data-dispatch-action-center] textarea, "
-        + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select"
-    ));
+        + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select, "
+        + ".scorpion-desktop-console input:not([type=hidden]):not([disabled]), .scorpion-desktop-console select:not([disabled]), .scorpion-desktop-console textarea:not([disabled])"
+    )).filter(control => !control.closest("[data-tail-note-form]"));
 
     const resetProtectedBaselines = () => {
         protectedControls().forEach((control) => {
@@ -624,7 +642,7 @@
     ));
 
     const hasUnsavedControls = () => (
-        lifecycleSaving || document.activeElement?.matches?.("[data-tail-note-form] textarea") ||
+        lifecycleSaving || document.activeElement?.matches?.(".scorpion-desktop-console input:not([type=hidden]), .scorpion-desktop-console select, .scorpion-desktop-console textarea") ||
         Array.from(root.querySelectorAll("[data-tail-note-form]")).some(form =>
             form.dataset.saving === "true" || form.elements.notes.value !== form.elements.notes.defaultValue) ||
         protectedControls().some(
@@ -794,10 +812,32 @@
             if (sameVisit && oldMobileDetails && newMobileDetails) oldMobileDetails.replaceWith(newMobileDetails.cloneNode(true));
             const oldTimeline=currentDetails?.querySelector('[data-dispatch-work-timeline]');
             const newTimeline=nextDetails?.querySelector('[data-dispatch-work-timeline]');
-            if (oldTimeline && newTimeline && !groupDirty([oldTimeline])) {
+            if (oldTimeline && newTimeline && !groupDirty([oldTimeline]) && !oldTimeline.contains(document.activeElement)) {
                 const timeline=newTimeline.cloneNode(true);
                 oldTimeline.replaceWith(timeline);
                 timeline.querySelectorAll('input,select,textarea').forEach(control=>initialControlValues.set(control,controlValue(control)));
+            }
+            if (sameVisit && currentDetails && nextDetails) {
+                const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]'),
+                    item => [item.dataset.consoleSection, item]));
+                currentDetails.querySelectorAll('details[data-console-section]').forEach(item => {
+                    const fresh = incoming.get(item.dataset.consoleSection);
+                    if (!groupDirty([item]) && !item.contains(document.activeElement)) {
+                        if (!fresh) item.remove();
+                        else {
+                            const copy = fresh.cloneNode(true);
+                            copy.open = item.open;
+                            if (item.outerHTML !== copy.outerHTML) item.replaceWith(copy);
+                        }
+                    } else if (!fresh) {
+                        item.querySelectorAll('button[type="submit"], button:not([type])').forEach(button => button.disabled = true);
+                    }
+                    incoming.delete(item.dataset.consoleSection);
+                });
+                incoming.forEach(item => currentDetails.querySelector('[data-details-region="secondary"]')?.appendChild(item.cloneNode(true)));
+                protectedControls().filter(control => currentDetails.contains(control)).forEach(control => {
+                    if (!initialControlValues.has(control)) initialControlValues.set(control,controlValue(control));
+                });
             }
             // Independently addressed actions must appear even while another
             // mission/plan is being edited or the Fueler Data dialog is open.
@@ -808,8 +848,8 @@
                 const incoming=new Map(Array.from(newCenter.querySelectorAll('[data-action-key]'),item=>[item.dataset.actionKey,item]));
                 oldCenter.querySelectorAll('[data-action-key]').forEach(item=>{
                     const fresh=incoming.get(item.dataset.actionKey);
-                    if (!groupDirty([item])) {
-                        if (fresh) item.replaceWith(fresh.cloneNode(true)); else item.remove();
+                    if (!groupDirty([item]) && !(fresh && item.contains(document.activeElement))) {
+                        if (fresh && item.outerHTML !== fresh.outerHTML) item.replaceWith(fresh.cloneNode(true)); else if (!fresh) item.remove();
                     } else if (!fresh) {
                         // Retain the draft but never leave a resolved/stale
                         // action executable against changed evidence.
@@ -836,6 +876,10 @@
             const currentHandoff = currentDetails?.querySelector("[data-dispatch-fueler-submission]");
             const nextHandoff = nextDetails?.querySelector("[data-dispatch-fueler-submission]");
             if (sameVisit && currentHandoff && nextHandoff) currentHandoff.textContent = nextHandoff.textContent;
+            if (sameVisit) ['[data-dispatch-console-facts]', '[data-dispatch-console-planning]', '[data-dispatch-visit-notes]'].forEach(selector => {
+                const oldValue = currentDetails?.querySelector(selector), newValue = nextDetails?.querySelector(selector);
+                if (oldValue && newValue && oldValue.outerHTML !== newValue.outerHTML && !oldValue.contains(document.activeElement)) oldValue.replaceWith(newValue.cloneNode(true));
+            });
             const oldTail = currentRow.querySelector(".neoscorpion-dispatch-tail strong");
             const newTail = nextRow.querySelector(".neoscorpion-dispatch-tail strong");
             const previousWarning = currentStack.querySelector("[data-dispatch-tail-change-warning]");
