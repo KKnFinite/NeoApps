@@ -1192,6 +1192,7 @@ def settings_context(gateway):
             "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
             "red_assignment_alert_threshold_minutes": 30,
             "ready_assignment_pulse_enabled": True,
+            "mission_row_height_percent": 100,
             "neo_fuel_excess_alert_gallons": 500,
             "planning_inbound_fuel_fallback_lbs": (
                 DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
@@ -5600,6 +5601,12 @@ def deactivate_truck(gateway, form, user=None):
 
 
 def save_settings(gateway, form):
+    row_height = None
+    if "mission_row_height_percent" in form:
+        value = str(form.get("mission_row_height_percent", "")).strip()
+        if not re.fullmatch(r"[0-9]{2,3}", value) or not 75 <= int(value) <= 150:
+            raise ValueError("Mission Row Height must be a whole percentage from 75 to 150.")
+        row_height = int(value)
     if "ready_assignment_pulse_enabled" in form and form.get("ready_assignment_pulse_enabled") not in {"0", "1"}:
         raise ValueError("READY Assignment Pulse must be ON or OFF.")
     if 'truck_fuel_discrepancy_threshold_gallons' in form:
@@ -5610,6 +5617,9 @@ def save_settings(gateway, form):
     old_density = settings.fuel_density_lbs_per_gallon
     old_excess_threshold = settings.neo_fuel_excess_alert_gallons
     old_ready_pulse = settings.ready_assignment_pulse_enabled
+    old_row_height = settings.mission_row_height_percent
+    if row_height is not None:
+        settings.mission_row_height_percent = row_height
     if "ready_assignment_pulse_enabled" in form:
         settings.ready_assignment_pulse_enabled = form.get("ready_assignment_pulse_enabled") == "1"
     if "neo_fuel_excess_alert_gallons" in form:
@@ -5649,7 +5659,8 @@ def save_settings(gateway, form):
         settings.updated_by_user_id = current_user.id
     if (threshold_changed or old_density != settings.fuel_density_lbs_per_gallon
             or old_excess_threshold != settings.neo_fuel_excess_alert_gallons
-            or old_ready_pulse != settings.ready_assignment_pulse_enabled):
+            or old_ready_pulse != settings.ready_assignment_pulse_enabled
+            or old_row_height != settings.mission_row_height_percent):
         operation = current_sort_operation(gateway)
         if operation is not None:
             operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)

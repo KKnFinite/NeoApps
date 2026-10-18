@@ -73,7 +73,7 @@ test('same-stage status notes and READY pulse refresh without touching drafts',(
 });
 
 test('shared READY pulse switch updates during critical refresh without replacing drafts',()=>{
-    const preferences={dataset:{readyAssignmentPulse:'1'}};
+    const preferences={dataset:{readyAssignmentPulse:'1',missionRowHeightPercent:'100'}};
     const nextPreferences={dataset:{readyAssignmentPulse:'0'}};
     const draft={value:'unsaved'};
     const context={root:{querySelectorAll:()=>[],querySelector:s=>s==='[data-dispatch-preferences]'?preferences:null},updateAssignmentAlerts(){}};
@@ -85,6 +85,23 @@ test('shared READY pulse switch updates during critical refresh without replacin
     // The real live fragment IS the preferences section, not its parent.
     panel.matches=()=>true;panel.dataset={readyAssignmentPulse:'0'};
     context.patch(panel);assert.equal(preferences.dataset.readyAssignmentPulse,'0');
+});
+
+test('shared row height applies to the fragment root and restores working scroll without touching drafts',()=>{
+    const styles={};let snapshots=0,restores=0;
+    const preferences={dataset:{readyAssignmentPulse:'0',missionRowHeightPercent:'100'},
+        style:{setProperty:(key,value)=>styles[key]=value}};
+    const panel={dataset:{readyAssignmentPulse:'0',missionRowHeightPercent:'130'},matches:()=>true,querySelectorAll:()=>[],querySelector:()=>null};
+    const draft={value:'unsaved'};
+    const context={root:{querySelectorAll:()=>[],querySelector:s=>s==='[data-dispatch-preferences]'?preferences:null},
+        dispatchScroll:{snapshot(){snapshots++;return {};},prepareRefresh:s=>s,restoreSnapshot(){restores++;}},updateAssignmentAlerts(){}};
+    vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
+    context.patch(panel);
+    assert.equal(styles['--dispatch-row-height-scale'],'1.3');assert.equal(preferences.dataset.readyAssignmentPulse,'0');
+    assert.equal(preferences.dataset.missionRowHeightPercent,'130');assert.equal(draft.value,'unsaved');assert.equal(restores,1);
+    context.patch(panel);assert.equal(restores,1);
+    panel.dataset.missionRowHeightPercent='100';context.patch(panel);
+    assert.equal(styles['--dispatch-row-height-scale'],'1');assert.equal(restores,2);assert.equal(snapshots,3);
 });
 
 test('a changed visit never leaves the old READY accent on a protected row',()=>{

@@ -754,6 +754,9 @@
     let criticalRefreshBusy = false;
 
     const applyCriticalCompletion = (nextPanel) => {
+        const scrollState = typeof dispatchScroll === 'undefined' ? null
+            : dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
+        let rowHeightChanged = false;
         // Shared presentation settings must update even when another row's
         // unsaved inputs defer full replacement. Never replace those inputs.
         const currentPreferences = root.querySelector('[data-dispatch-preferences]');
@@ -761,9 +764,14 @@
             ? nextPanel : nextPanel.querySelector('[data-dispatch-preferences]');
         if (currentPreferences && nextPreferences) {
             currentPreferences.dataset.readyAssignmentPulse = nextPreferences.dataset.readyAssignmentPulse;
+            const percent = Number(nextPreferences.dataset.missionRowHeightPercent || 100);
+            const height = Number.isInteger(percent) && percent >= 75 && percent <= 150 ? percent : 100;
+            rowHeightChanged = currentPreferences.dataset.missionRowHeightPercent !== String(height);
+            if (rowHeightChanged) {
+                currentPreferences.dataset.missionRowHeightPercent = String(height);
+                currentPreferences.style.setProperty('--dispatch-row-height-scale', String(height / 100));
+            }
         }
-        const scrollState = typeof dispatchScroll === 'undefined' ? null
-            : dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
         let regrouped = false;
         const groupDirty = nodes => nodes.some(node => Array.from(node.querySelectorAll('input,select,textarea')).some(control => {
             if (control.type === 'hidden' || control.disabled || control.readOnly) return false;
@@ -998,6 +1006,7 @@
             });
         });
         updateAssignmentAlerts(root);
+        if (rowHeightChanged && !regrouped && scrollState) dispatchScroll.restoreSnapshot(scrollState);
     };
 
     const refreshCriticalCompletion = async (nextOperationId, nextRevision, nextTailRevision) => {

@@ -40,6 +40,16 @@
                     <option value="0" {% if not settings.ready_assignment_pulse_enabled|default(true) %}selected{% endif %}>OFF</option>
                 </select>
             </label>
+            <label>Mission Row Height
+                <select name="mission_row_height_percent" {% if not can_edit %}disabled{% endif %}>
+                    {% set row_height = settings.mission_row_height_percent|default(100) %}
+                    {% if row_height not in [75, 85, 100, 115, 130, 150] %}<option value="{{ row_height }}" selected>{{ row_height }}%</option>{% endif %}
+                    {% for percent in [75, 85, 100, 115, 130, 150] %}
+                    <option value="{{ percent }}" {% if row_height == percent %}selected{% endif %}>{{ 'Restore Default · ' if percent == 100 else '' }}{{ percent }}% · {{ (98 * percent / 100)|round|int }}px desktop / {{ (73 * percent / 100)|round|int }}px mobile</option>
+                    {% endfor %}
+                </select>
+                <small>Shared across Dispatchers. Rows expand when content needs more space.</small>
+            </label>
             <label>Neo Fuel Excess Alert (gallons)
                 <input type="number" name="neo_fuel_excess_alert_gallons" value="{{ settings.neo_fuel_excess_alert_gallons }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
             </label>

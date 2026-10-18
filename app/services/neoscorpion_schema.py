@@ -103,6 +103,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
         "ready_assignment_pulse_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "mission_row_height_percent": "INTEGER NOT NULL DEFAULT 100",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "advance_setup_window_minutes": "INTEGER",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",

@@ -820,6 +820,9 @@ class NeoScorpionSettings(db.Model):
     ready_assignment_pulse_enabled = db.Column(
         db.Boolean, nullable=False, default=True, server_default=db.true()
     )
+    mission_row_height_percent = db.Column(
+        db.Integer, nullable=False, default=100, server_default="100"
+    )
     fob_difference_threshold_lbs = db.Column(db.Integer, nullable=True)
     tf_vs_estimated_threshold_lbs = db.Column(db.Integer, nullable=True)
     assignment_setup_minutes = db.Column(db.Numeric(8, 2), nullable=True)
