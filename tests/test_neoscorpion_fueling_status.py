@@ -20,12 +20,12 @@ from tests import test_neoscorpion_fuel_interruptions as interruption_fixture
 
 
 class FuelingStatusClassificationTest(unittest.TestCase):
-    def test_pending_secondary_is_empty_but_missing_reasons_remain_internal(self):
+    def test_pending_secondary_is_concise_and_exact_reasons_remain_available(self):
         row=self.row(); row.update(arrival_status='Scheduled',inbound_fuel_lbs=None,required_fuel_lbs=None,parking_valid=False)
         status=fueling_status(row)
         self.assertEqual(status['dispatch_status_label'],'PENDING')
-        self.assertEqual(status['dispatch_status_detail'],'Needs Arrival, Inbound, Required, Parking')
-        self.assertEqual(status['fuel_status_secondary'],'')
+        self.assertEqual(status['mission_data_missing'],('Required Fuel Load','Inbound Fuel / verified measurement','Parking'))
+        self.assertEqual(status['fuel_status_secondary'],'MISSION DATA MISSING')
 
     def test_one_secondary_prioritizes_timing_and_discrepancy_over_routine_details(self):
         row=self.row(); row.update(tail_mismatch=True,direction_mismatch=True,fob_likely=True)
@@ -34,7 +34,7 @@ class FuelingStatusClassificationTest(unittest.TestCase):
         self.assertEqual(len(status['fuel_status_warnings']),3)
         row['fuel_work_state'].on_at_utc=datetime(2026,10,9,2)
         status=fueling_status(row)
-        self.assertEqual(status['fuel_status_secondary'],'TIMING UNKNOWN')
+        self.assertEqual(status['fuel_status_secondary'],'Fuel direction discrepancy')
 
     def test_macro_call_dispatch_uses_only_secondary_line_and_preserves_fueler_secrecy(self):
         from app import create_app
@@ -59,9 +59,10 @@ class FuelingStatusClassificationTest(unittest.TestCase):
             self.assertIn('FOB LIKELY',fueler)
 
     def row(self):
-        return dict(mission=SimpleNamespace(eta_datetime_utc=None, planned_datetime_utc=datetime(2026, 10, 9, 8)),
+        return dict(mission=SimpleNamespace(assigned_tail_number='N491UP',flight_number='UPS901',destination='MSP',
+            eta_datetime_utc=None, planned_datetime_utc=datetime(2026, 10, 9, 8)),
             assignment=SimpleNamespace(assigned_fueler_user_id=None, assigned_truck_id=None, review_status="pending"),
-            fuel_work_state=SimpleNamespace(on_at_utc=None, off_at_utc=None), arrival_status="On Ground",
+            fuel_work_state=SimpleNamespace(on_at_utc=None, off_at_utc=None), fueling_on_trusted=True, arrival_status="On Ground",
             inbound_fuel_lbs=12000, required_fuel_lbs=25000, parking_valid=True)
 
     def test_all_primary_transitions_and_partial_assignments(self):
@@ -93,7 +94,7 @@ class FuelingStatusClassificationTest(unittest.TestCase):
         row["fob_likely"] = True
         self.assertIn("FOB LIKELY", fueling_status(row)["fuel_status_warnings"])
         row["assignment"].assigned_fueler_user_id = 1
-        self.assertEqual(fueling_status(row)["dispatch_status_key"], "assigned")
+        self.assertEqual(fueling_status(row)["dispatch_status_key"], "ready")
         self.assertIn("FOB CHECK", fueling_status(row)["fuel_status_warnings"])
         row["fuel_work_state"].on_at_utc = datetime(2026, 10, 9, 2)
         self.assertEqual(fueling_status(row)["dispatch_status_key"], "fueling")
@@ -107,7 +108,7 @@ class FuelingStatusClassificationTest(unittest.TestCase):
         row["assignment"].review_status = "review"
         row["fuel_work_state"].on_at_utc = datetime(2026, 10, 9, 2)
         result = fueling_status(row)
-        self.assertEqual(result["dispatch_status_key"], "fueling")
+        self.assertEqual(result["dispatch_status_key"], "review")
         self.assertNotIn("Needs", result["dispatch_status_detail"])
         self.assertIn("TAIL SWAP · advisory", result["fuel_status_warnings"])
         self.assertIn("Fuel direction discrepancy", result["fuel_status_warnings"])
@@ -120,14 +121,14 @@ class FuelingStatusClassificationTest(unittest.TestCase):
         self.assertEqual(fueling_status(row)["dispatch_status_key"], "complete")
 
     def test_basic_missing_fields_arrival_formats_and_measured_inbound(self):
-        for key, value, label in (("arrival_status", "Scheduled", "Arrival"), ("inbound_fuel_lbs", None, "Inbound"),
-                ("required_fuel_lbs", None, "Required"), ("parking_valid", False, "Parking")):
+        for key, value, label in (("inbound_fuel_lbs", None, "Inbound Fuel / verified measurement"),
+                ("required_fuel_lbs", None, "Required Fuel Load"), ("parking_valid", False, "Parking")):
             with self.subTest(key=key):
                 row = self.row(); row[key] = value
                 status = fueling_status(row)
                 self.assertEqual(status["dispatch_status_key"], "pending")
-                self.assertIn(label, status["dispatch_status_detail"])
-        for arrived in ("On Ground", "Arrived"):
+                self.assertIn(label, status["mission_data_missing"])
+        for arrived in ("Scheduled", "On Ground", "Arrived"):
             row = self.row(); row.update(arrival_status=arrived, inbound_fuel_lbs=None, measured_inbound_fuel_lbs=0)
             self.assertEqual(fueling_status(row)["dispatch_status_key"], "ready")
 
@@ -162,7 +163,7 @@ class FuelingStatusClassificationTest(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.assertFalse(fob_assessment(**dict(args, **changes))["fob_likely"])
         self.assertTrue(fob_assessment(**dict(args, actual=25500, apu_confirmed=True))["fob_verified"])
-        self.assertTrue(fob_assessment(**dict(args, inherited=25500))["fob_verified"])
+        self.assertTrue(fob_assessment(**dict(args, inherited=25500, apu_confirmed=True))["fob_verified"])
         self.assertFalse(fob_assessment(**dict(args, inherited=25499))["fob_verified"])
         self.assertFalse(fob_assessment(**dict(args, actual=30000, apu_confirmed=False))["fob_verified"])
         self.assertFalse(fob_assessment(**dict(args, apu_allowance=None))["fob_likely"])

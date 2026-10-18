@@ -11,7 +11,5 @@
     <button class="action-button neoscorpion-dispatch-size-medium" type="submit" formaction="{{ url_for('neoscorpion.fuel_dispatch_complete') }}" formmethod="post">COMPLETE</button>
     <small data-lifecycle-status role="status"></small>
 </form>
-{% elif not row.administratively_complete %}
-<button type="button" class="neoscorpion-completion-reason neoscorpion-dispatch-size-small" data-dispatch-completion-blocker data-dispatch-completion-explain aria-controls="neoscorpion-dispatch-detail-{{ row.row_key }}" aria-expanded="false" title="{{ row.normal_completion_reason }}" aria-label="Completion blocked: {{ row.normal_completion_reason }} Open DETAILS.">NOT READY</button>
 {% endif %}
 </span>

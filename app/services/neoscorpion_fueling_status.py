@@ -14,13 +14,64 @@ def status_secondary(stage, detail, warnings):
     """Pick one compact line; full reasons/warnings remain in canonical data."""
     if stage == "review" and detail:
         return detail
-    for critical in ("TIMING UNKNOWN", "Fuel direction discrepancy", "Dispatcher review requested",
-                     "FOB CHECK", "FOB LIKELY"):
+    for critical in ("Fuel direction discrepancy", "Dispatcher review requested"):
         if critical in warnings:
             return critical
-    if detail and stage != "pending":
+    if detail == "MISSION DATA MISSING":
+        return detail
+    for critical in ("TIMING UNKNOWN", "FOB CHECK", "FOB LIKELY"):
+        if critical in warnings:
+            return critical
+    if detail:
         return detail
     return next(iter(warnings), "")
+
+
+def mission_missing_fields(row):
+    """Data readiness only. Arrival and resource availability are separate facts.
+
+    Only complete measured/inherited evidence may replace Inbound. Zero is a
+    valid fuel reading, not a missing value. This never gates assignment writes.
+    """
+    mission = row["mission"]
+    missing = []
+    for label, value in (("Tail", row.get("tail_number", getattr(mission, "assigned_tail_number", None))),
+                         ("Flight", getattr(mission, "flight_number", None)),
+                         ("Destination", getattr(mission, "destination", None))):
+        if not str(value or "").strip() or str(value).strip() in {"-", "—"}:
+            missing.append(label)
+    if not (mission.eta_datetime_utc or mission.planned_datetime_utc):
+        missing.append("Departure time")
+    if row.get("required_fuel_lbs") is None:
+        missing.append("Required Fuel Load")
+    if all(row.get(key) is None for key in
+           ("inbound_fuel_lbs", "measured_inbound_fuel_lbs", "tail_swap_inherited_fuel_lbs")):
+        missing.append("Inbound Fuel / verified measurement")
+    if row.get("parking_required", True) and not row.get("parking_valid"):
+        missing.append("Parking")
+    return tuple(missing)
+
+
+def review_reasons(row):
+    """Current operational evidence, never arrival, forecasts or advisory swaps."""
+    work = row.get("fuel_work_state")
+    reasons = []
+    if row.get("effective_hold"):
+        reasons.append(row.get("hold_reason_display") or "Dispatcher hold requires review")
+    if getattr(row.get("assignment"), "review_status", None) == "review" and not row.get("effective_hold"):
+        reasons.append("Dispatcher review requested")
+    if row.get("work_ended_early"):
+        reasons.append("Fuel work ended early; Dispatcher review required")
+    if row.get("physical_transfer_review") or getattr(work, "physical_transfer_review", False):
+        reasons.append("Verify this physical visit's T/F ownership")
+    if getattr(work, "continuation_review_reason", None):
+        reasons.append(work.continuation_review_reason)
+    if row.get("direction_mismatch"):
+        reasons.append("Fuel direction discrepancy")
+    if (work and not work.off_at_utc and row.get("fueling_on_trusted") is False
+            and (getattr(work, "manual_on_at_utc", None) or getattr(work, "confirmed_on_at_utc", None) or work.on_at_utc)):
+        reasons.append("Physical ON evidence requires verification")
+    return tuple(dict.fromkeys(reasons))
 
 
 def utc_naive(value):
@@ -48,53 +99,41 @@ def fueling_status(row, *, now=None, threshold=30):
     work = row.get("fuel_work_state")
     fueler = bool(assignment and assignment.assigned_fueler_user_id is not None)
     truck = bool(assignment and assignment.assigned_truck_id is not None)
+    missing = mission_missing_fields(row)
+    reviews = review_reasons(row)
     detail = ""
     warnings = []
     if row.get("fuel_on_board_complete"):
         stage = "fob"
     elif row.get("administratively_complete"):
         stage = "complete"
-    elif row.get("effective_hold") or row.get("work_ended_early"):
+    elif reviews:
         stage = "review"
-        detail = row.get("hold_reason_display") or "Dispatcher review required"
+        detail = reviews[0]
     elif row.get("fuel_on_board_ready"):
         stage = "fob-ready"
     elif work and work.off_at_utc:
         stage = "off"
-    elif work and (getattr(work, "manual_on_at_utc", None) or work.on_at_utc) and row.get("fueling_on_active", row.get("fueling_on_trusted", True)):
+    elif work and (getattr(work, "manual_on_at_utc", None) or getattr(work, "confirmed_on_at_utc", None) or work.on_at_utc) and row.get("fueling_on_trusted", row.get("fueling_on_active", False)):
         stage = "fueling"
     elif fueler and truck:
         # Assignment is not physical readiness. Missing operational evidence
         # remains a warning/blocker, never a hidden third assignment gate.
         stage = "assigned"
-    elif not (fueler and row.get("fob_likely")):
-        stage = "ready"
-        detail = "Needs Fueler" if truck else "Needs Truck" if fueler else "Needs Fueler / Truck"
-    else:
-        missing = []
-        if str(row.get("arrival_status", "")).casefold() not in {"arrived", "on ground"}:
-            missing.append("Arrival")
-        if row.get("inbound_fuel_lbs") is None and row.get("measured_inbound_fuel_lbs") is None:
-            missing.append("Inbound")
-        if row.get("required_fuel_lbs") is None:
-            missing.append("Required")
-        if not row.get("parking_valid"):
-            missing.append("Parking")
         if missing:
-            stage, detail = "pending", "Needs " + ", ".join(missing)
-        elif fueler and (truck or row.get("fob_likely")):
-            stage = "assigned"
-        else:
-            stage = "ready"
-            detail = "Needs Fueler" if not fueler else "Needs Truck"
-            if not fueler and not truck and not row.get("fob_likely"):
-                detail = "Needs Fueler / Truck"
+            detail = "MISSION DATA MISSING"
+    elif missing:
+        stage, detail = "pending", "MISSION DATA MISSING"
+    else:
+        stage = "ready"
+        detail = "FOB CHECK" if fueler and row.get("fob_likely") else (
+            "Needs Fueler" if truck else "Needs Truck" if fueler else "Needs Fueler / Truck")
     movement = row.get("truck_start_reason")
     if stage in {"pending", "assigned", "ready"} and truck and movement == "TRUCK STILL FUELING":
         warnings.append("WAITING FOR TRUCK · TRUCK STILL FUELING")
     if stage in {"assigned", "ready"} and truck and movement:
         detail = "WAITING FOR TRUCK · TRUCK STILL FUELING" if movement == "TRUCK STILL FUELING" else movement
-    fob_check = bool(row.get("fob_likely") and fueler and not truck and stage in {"assigned", "fueling"})
+    fob_check = bool(row.get("fob_likely") and fueler and not truck)
     if row.get("fob_likely") and stage not in {"fob-ready", "fob", "complete"}:
         warnings.append("FOB CHECK" if fob_check else "FOB LIKELY")
     if row.get("tail_mismatch"):
@@ -107,7 +146,14 @@ def fueling_status(row, *, now=None, threshold=30):
     predicted_finish = row.get("fueling_predicted_finish_utc")
     if stage == "fueling" and (predicted_finish is None or departure is None):
         warnings.append("TIMING UNKNOWN")
+    if stage in {"complete", "fob"}:
+        detail = ""
+        # Drop stale advisory decoration, not genuine discrepancies on retained
+        # historical evidence. Completed does not mean warnings may be erased.
+        warnings = [warning for warning in warnings if warning != "TAIL SWAP · advisory"]
     return {
+        "mission_data_missing": missing,
+        "status_review_reasons": reviews if stage not in {"complete", "fob"} else (),
         "dispatch_status_key": stage,
         "dispatch_status_label": stage.upper().replace("-", " "),
         "dispatch_status_detail": detail,

@@ -162,7 +162,7 @@
                 </div>
                 {% endif %}
                 {% if row.physical_finalized and not row.administratively_complete %}<p class="neoscorpion-helper">This visit is finalized. A new physical visit requires its own record.</p>
-                {% elif row.is_off and not row.administratively_complete %}<p class="neoscorpion-helper">Truck released. Save outstanding final readings/APU/T/F to complete this mission.</p>{% endif %}
+                {% elif row.is_off and not row.administratively_complete %}<p class="neoscorpion-helper">Truck released. {% if row.fueler_submitted %}Submitted; awaiting Dispatcher verification.{% else %}Save final readings/APU/T/F, then submit COMPLETE ASSIGNMENT for Dispatcher verification.{% endif %}</p>{% endif %}
                 {% if row.is_off and not row.is_source_segment and can_edit and not dispatcher_panel|default(false) and not row.fueler_work_blocked %}
                 <form method="post" action="{{ url_for('neoscorpion.fueler_new_visit',assignment_id=row.assignment.id) }}" data-new-visit-form>{{ csrf_field() }}
                     <button class="action-button" type="submit">NEW TRUCK VISIT</button>
@@ -289,11 +289,6 @@
                 {% if can_edit and row.fueler_work_blocked %}
                 <p class="neoscorpion-calculation-warning">Fuel entry and TRUCK OFF are blocked until dispatcher review is complete.</p>
                 {% endif %}
-                {% endif %}
-                {% if can_edit and row.assignment %}
-                    {% if not row.off_ready and not row.is_off and not row.fueler_work_blocked %}
-                    <p class="neoscorpion-calculation-warning">{{ row.off_reason }}</p>
-                    {% endif %}
                 {% endif %}
                 {% if can_edit and row.truck_verification_available %}
                 <details class="scorpion-optional-verification"><summary>OPTIONAL TRUCK FUEL CHECK · SKIP</summary><form method="post" action="{{ url_for('scorpion_vendor.fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ row.assignment.sort_date_operation_id }}"><input type="hidden" name="truck_id" value="{{ row.assigned_truck.id }}"><label>Actual current truck gallons<input name="gallons" inputmode="numeric" required></label><button class="action-button">SUBMIT READING</button><button class="action-button" type="button" data-fuel-verification-skip>SKIP</button></form></details>

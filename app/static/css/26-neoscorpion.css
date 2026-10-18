@@ -1283,6 +1283,13 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         grid-column: 1 / -1;
         margin: 0;
     }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > :is([data-truck-status-notes], .neoscorpion-truck-driver-name, .neoscorpion-calculation-warning) {
+        grid-column: 1 / -1;
+        min-width: 0;
+        margin: 0;
+        white-space: normal;
+        overflow-wrap: break-word;
+    }
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > header > strong {
         min-width: 0;
         overflow: hidden;

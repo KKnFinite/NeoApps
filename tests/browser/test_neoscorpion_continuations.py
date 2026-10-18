@@ -1,11 +1,12 @@
 """Real desktop Dispatch and mobile Fueler handoff before source verification."""
 from datetime import date,datetime,timedelta
 import re
+import time
 import unittest
 from unittest.mock import patch
 from playwright.sync_api import expect
 from app.extensions import db
-from app.models import (User,PortalAppAccess,SortDateOperation,SortDateMission,NeoScorpionFuelAssignment,
+from app.models import (User,PortalAppAccess,SortDateOperation,SortDateMission,SortDateParkingAssignment,NeoScorpionFuelAssignment,
     NeoScorpionFuelTruck,NeoScorpionSortTruck,NeoScorpionSortFueler,NeoScorpionFuelWorkState,NeoScorpionFuelingEvent)
 from app.services.access_control import ensure_default_gateway_and_nodes,backfill_default_gateway_node_roles
 from app.services.password_policy import set_user_password
@@ -39,6 +40,8 @@ class ContinuationBrowserTest(unittest.TestCase):
                         assigned_tail_number=f'N49{i+1}UP',planned_datetime_utc=datetime.utcnow()+timedelta(hours=2,minutes=i),
                         timezone='America/Chicago',planned_fuel_load=40000)
                     db.session.add(m);db.session.flush()
+                    db.session.add(SortDateParkingAssignment(sort_date_operation_id=oid,tail_number=m.assigned_tail_number,
+                        ramp_code='C',position_code=f'{7+i:02}',lane_number=1))
                     a=NeoScorpionFuelAssignment(sort_date_operation_id=oid,sort_date_mission_id=m.id,
                         assigned_fueler_user_id=u.id,assigned_truck_id=trucks[0],confirmed_tail_number=m.assigned_tail_number)
                     db.session.add(a);db.session.flush();cases.append((a.id,m.id,trucks[1]))
@@ -61,7 +64,13 @@ class ContinuationBrowserTest(unittest.TestCase):
                         form.get_by_role('button',name='PLAN SECOND TRUCK',exact=True).click()
                         expect(detail).to_contain_text('NEXT TRUCK — PLANNED')
                         expect(row.locator('[name="inbound_fuel"]')).to_be_visible(timeout=12000)
-                        inbound,required,geometry=row.evaluate("r=>[r.querySelector('[name=\"inbound_fuel\"]'),r.querySelector('[name=\"required_fuel\"]'),r].map(n=>{const b=n.getBoundingClientRect();return {y:b.y,width:b.width,height:b.height};})")
+                        # The live panel can detach a resolved element between
+                        # locator resolution and evaluation. Re-resolve a zero
+                        # rectangle; retain the actual 98px/alignment assertions.
+                        for attempt in range(20):
+                            inbound,required,geometry=row.evaluate("r=>[r.querySelector('[name=\"inbound_fuel\"]'),r.querySelector('[name=\"required_fuel\"]'),r].map(n=>{const b=n.getBoundingClientRect();return {y:b.y,width:b.width,height:b.height};})")
+                            if geometry['height'] and inbound['width'] and required['width']:break
+                            time.sleep(.1)
                         self.assertAlmostEqual(inbound['y'],required['y'],delta=1)
                         self.assertAlmostEqual(inbound['width'],required['width'],delta=1)
                         self.assertAlmostEqual(geometry['height'],98,delta=1)

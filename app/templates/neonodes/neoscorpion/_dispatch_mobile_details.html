@@ -1,11 +1,14 @@
 <div class="scorpion-mobile-readonly" aria-label="Read-only mission details">
 <strong>{{ row.mission.flight_number }} · {{ row.tail_number }} · {{ row.aircraft_type }}</strong>
-<span>{{ row.dispatch_status_label }} · {{ row.dispatch_status_detail }}</span>
+<span>{{ row.dispatch_status_label }}{% if row.dispatch_status_detail %} · {{ row.dispatch_status_detail }}{% endif %}</span>
+{% if row.mission_data_action %}<span>Missing: {{ row.mission_data_missing|join(', ') }}</span>{% endif %}
+{% for reason in row.status_review_reasons %}<span>{{ reason }}</span>{% endfor %}
+{% if row.completion_progress %}<span>{{ row.completion_progress }}</span>{% endif %}
 <span>Fueler {{ row.assigned_fueler.display_name if row.assigned_fueler else '-' }} · Truck {{ row.assigned_truck.truck_number if row.assigned_truck else '-' }}</span>
 <span>Required {{ row.required_fuel_display }} · NEO {{ row.neo_fuel_display }} · T/F {{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</span>
 <span>TRUCK ON {{ row.on_time }} · TRUCK OFF {{ row.off_time }}</span>
-{% for visit in row.console_visits %}<span>Visit {{ visit.visit_number }} · {{ visit.tail_number }} · Truck {{ visit.physical_truck.truck_number if visit.physical_truck else '-' }} · {{ 'VERIFIED' if visit.physical_finalized_at_utc else 'REVIEW REQUIRED' if visit.continuation_review_reason else 'FUELER SUBMITTED' if visit.fueler_submitted_at_utc else 'TRUCK OFF' if visit.off_at_utc else 'TRUCK ON' if visit.manual_on_at_utc else 'PREPARING' }}</span>{% endfor %}
+{% for visit in row.console_visits %}<span>Visit {{ visit.visit_number }} · {{ visit.tail_number }} · Truck {{ visit.physical_truck.truck_number if visit.physical_truck else '-' }} · {{ 'CANCELLED / ENDED EARLY' if visit.ended_early_at_utc else 'VERIFIED' if visit.physical_finalized_at_utc else 'REVIEW REQUIRED' if visit.continuation_review_reason else 'FUELER SUBMITTED' if visit.console_submission_valid else 'CORRECT / RESUBMIT' if visit.fueler_submitted_at_utc else 'TRUCK OFF' if visit.off_at_utc else 'TRUCK ON' if visit.console_on_trusted else 'PHYSICAL ON REVIEW' if visit.manual_on_at_utc or visit.confirmed_on_at_utc or visit.on_at_utc else 'PREPARING' }}</span>{% endfor %}
 {% if row.pending_uplift %}<span>NEXT TRUCK {{ row.pending_uplift.proposed_truck.truck_number if row.pending_uplift.proposed_truck else '-' }} · {{ row.pending_uplift.review_reason or 'PLANNED' }}</span>{% endif %}
-{% for warning in row.fuel_status_warnings %}<span>{{ warning }}</span>{% endfor %}
+{% for warning in row.fuel_status_warnings if warning != row.dispatch_status_detail and warning not in row.status_review_reasons %}<span>{{ warning }}</span>{% endfor %}
 <span>Tail Notes: {{ row.tail_note.notes if row.tail_note and row.tail_note.notes else '-' }}</span><span>Fueler Notes: {{ row.fueler_notes or '-' }}</span>
 </div>

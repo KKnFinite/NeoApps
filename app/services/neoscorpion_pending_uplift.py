@@ -259,10 +259,24 @@ def attach_console(context):
             or s['fuel_work_state'].physical_transfer_review or s['fuel_work_state'].manual_on_at_utc
             or s['fuel_work_state'].confirmed_on_at_utc or s['fuel_work_state'].on_at_utc or s['fuel_work_state'].off_at_utc)
         row['action_count']+=len(row['console_dependencies'])+bool(row.get('plan_requires_review'))+bool(row.get('fueler_work_blocked'))
+        # Read-only status explanations must not enable verification or mutate
+        # the workflow. Ordinary Fueler data entry is not a Dispatcher review.
+        row['mission_data_action'] = bool(row.get('mission_data_missing') and not row.get('administratively_complete'))
+        row['status_review_action'] = bool(row.get('status_review_reasons') and not row.get('fueler_work_blocked')
+            and not (row.get('fuel_work_state') and row['fuel_work_state'].continuation_review_reason))
+        row['action_count'] += int(row['mission_data_action']) + int(row['status_review_action'])
+        row['completion_progress'] = ''
+        if not row.get('administratively_complete') and row.get('is_off'):
+            row['completion_progress'] = ('Fueler submitted — ready for Dispatcher COMPLETE.' if row['normal_completion_ready'] else
+                row.get('normal_completion_reason') or row.get('fueler_completion_reason') or 'Fueler COMPLETE ASSIGNMENT required.')
         row['console_visits']=[w for w in fuel.all_work(index) if a and w.fuel_assignment_id==a.id]
         valid={s['physical_work_id']:s['fueler_submitted'] for s in row['console_sources']}
+        trusted_on={s['physical_work_id']:s.get('fueling_on_trusted',False) for s in row['console_sources']}
         if row.get('physical_work_id'):valid[row['physical_work_id']]=row.get('fueler_submitted',False)
-        for visit in row['console_visits']:visit.console_submission_valid=valid.get(visit.id,False)
+        if row.get('physical_work_id'):trusted_on[row['physical_work_id']]=row.get('fueling_on_trusted',False)
+        for visit in row['console_visits']:
+            visit.console_submission_valid=valid.get(visit.id,False)
+            visit.console_on_trusted=trusted_on.get(visit.id,False)
     return context
 
 class PendingUpliftConflict(ValueError):

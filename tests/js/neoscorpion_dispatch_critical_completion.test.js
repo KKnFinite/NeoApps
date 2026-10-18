@@ -26,10 +26,10 @@ test("critical completion appears under a dirty Dispatch without replacing edita
         return {textContent:"N168UP"};
     }});
     const actual = makeRow(original), next = makeRow(incoming);
-    const context = {root: {querySelectorAll: () => [actual],querySelector: () => null},
+    const context = {updateAssignmentAlerts(){}, root: {querySelectorAll: s => s.includes('data-dispatch-mission-id') ? [actual] : [],querySelector: () => null},
         document: {createElement: () => ({setAttribute(){}})}};
     vm.runInNewContext(expression + "\nthis.runPatch = applyCriticalCompletion;", context);
-    context.runPatch({querySelectorAll:()=>[next],querySelector:()=>null});
+    context.runPatch({querySelectorAll:s=>s.includes('data-dispatch-mission-id')?[next]:[],querySelector:()=>null});
     assert.equal(original.read().copied,true);
     assert.equal(actual.dataset.dispatchMissionId,"45");
 });
@@ -44,4 +44,44 @@ test('older, cross-sort and out-of-order panel responses are rejected',()=>{
     assert.equal(context.observe('1',9,'tail-a'),false);
     const newer=context.generation();assert.equal(context.accept({operation_id:1,revision:11},newer),true);
     context.observe('2',0,'tail-new-sort');assert.equal(context.accept({operation_id:1,revision:99},newer),false);
+});
+
+test('same-stage status notes and READY pulse refresh without touching drafts',()=>{
+    let replaced, alerts=0;
+    const oldStatus={dataset:{fuelStatus:'assigned'},outerHTML:'ASSIGNED WAITING FOR TRUCK',replaceWith:n=>replaced=n};
+    const newStatus={dataset:{fuelStatus:'assigned'},outerHTML:'ASSIGNED MISSION DATA MISSING',cloneNode(){return this;}};
+    const classes=new Set(['is-ready-to-assign','is-assignment-alert-red']);
+    const slot={dataset:{completionIdentity:'1:2:3:1:TAIL:4:5:6'},replaceWith(){},cloneNode(){return this;}};
+    const stack={querySelector:s=>s==='[data-dispatch-completion-slot]'?slot:null};
+    const draft={value:'unsaved 42'};
+    const makeRow=status=>({dataset:{dispatchMissionId:'2'},classList:{contains:()=>false,
+        toggle(name,on){if(on)classes.add(name);else classes.delete(name);}},querySelector(s){
+            if(s==='.neoscorpion-dispatch-action-stack')return stack;
+            if(s==='[data-fuel-status]')return status;
+            return null;
+        }});
+    const actual=makeRow(oldStatus),next=makeRow(newStatus);next.dataset.etdUtc='2026-10-18T07:00:00Z';
+    const context={root:{querySelectorAll:s=>s.includes('data-dispatch-mission-id')?[actual]:[],querySelector:()=>null},updateAssignmentAlerts(){alerts++;}};
+    vm.runInNewContext(expression+'\nthis.runPatch=applyCriticalCompletion;',context);
+    context.runPatch({querySelectorAll:s=>s.includes('data-dispatch-mission-id')?[next]:[],querySelector:()=>null});
+    assert.equal(replaced,newStatus);
+    assert.equal(classes.has('is-ready-to-assign'),false);
+    assert.equal(classes.has('is-assignment-alert-red'),false);
+    assert.equal(actual.dataset.etdUtc,next.dataset.etdUtc);
+    assert.equal(draft.value,'unsaved 42');
+    assert.equal(alerts,1);
+});
+
+test('an adopted autosave revision still reconciles a missed critical GET while dirty',async()=>{
+    const start=source.indexOf('    const poll = async () => {');
+    const end=source.indexOf('    const autosaveField = async',start);
+    let reconciled=0;
+    const context={revisionUrl:'/revision',operationId:'1',revision:8,tailRevision:'tail',tailNotesRevision:0,
+        pendingFuelDataRefresh:true,criticalRefreshKey:'1:7:tail',window:{},root:{dataset:{}},
+        fetch:async()=>({ok:true,json:async()=>({operation_id:1,revision:8,tail_revision:'tail'})}),
+        observeLiveState:()=>true,hasUnsavedControls:()=>true,
+        handleChangedFingerprint:async()=>{reconciled++;},reloadPage:async()=>{throw Error('must preserve draft');}};
+    vm.runInNewContext(source.slice(start,end)+'\nthis.runPoll=poll;',context);
+    await context.runPoll();assert.equal(reconciled,1);
+    context.criticalRefreshKey='1:8:tail';await context.runPoll();assert.equal(reconciled,1);
 });

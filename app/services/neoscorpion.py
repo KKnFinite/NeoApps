@@ -7279,7 +7279,8 @@ def _attach_dispatch_truck_activity(
     }
     by_truck = {}
     for record in records:
-        if (record.get("assignment_id",record["id"]) in eligible_ids or record.get("historical_segment")) and record["release"] is None and record["truck_id"] is not None:
+        if (record.get("assignment_id",record["id"]) in eligible_ids or record.get("historical_segment")
+                or record.get("manual_on") or record.get("confirmed_on")) and record["release"] is None and record["truck_id"] is not None:
             by_truck.setdefault(record["truck_id"], []).append(record)
     released_by_truck = {}
     for record in (*records, *releases):
@@ -7293,17 +7294,24 @@ def _attach_dispatch_truck_activity(
         current = by_truck.get(truck_id, ())
         visual.update(activity_label="STATUS UNKNOWN", activity_travel_until="",
                       activity_travel_origin="")
-        physically_active = [record for record in current if record.get("manual_on") is not None or record["on"] is not None]
+        physically_active = [record for record in current if record.get("manual_on") is not None
+                             or record["confirmed_on"] is not None or record["on"] is not None]
         if physically_active:
             if len(physically_active) != 1:
                 continue
             record = physically_active[0]
             state = fueling_start_state(record, records, releases, travel_settings, now=now)
-            if state["on_trusted"] and selection and selection.status == "available":
+            if state["on_trusted"]:
                 visual["activity_label"] = (
                     f"FUELING · {record['parking']}" if record["parking"] != "-"
                     else "FUELING · LOCATION UNKNOWN"
                 )
+                if not selection or selection.status != "available":
+                    # Physical occupation and serviceability are independent.
+                    # Do not erase the service restriction or invent a RETURN.
+                    issue = {"topping_off": "RETURN", "needs_sump": "NEEDS SUMP",
+                             "unavailable_oos": "OOS"}.get(selection.status if selection else None, "ASSET")
+                    visual["activity_label"] += f" · {issue} REVIEW"
             continue
         if len(current) > 1:
             continue

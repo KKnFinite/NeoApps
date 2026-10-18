@@ -766,7 +766,13 @@
             if (sameVisit) {
                 const oldStatus = currentRow.querySelector('[data-fuel-status]');
                 const newStatus = nextRow.querySelector('[data-fuel-status]');
-                if (oldStatus?.dataset?.fuelStatus !== newStatus?.dataset?.fuelStatus) oldStatus?.replaceWith(newStatus.cloneNode(true));
+                // Same-stage messages, forecast metadata and urgency can change
+                // while a different field/dialog prevents full-panel refresh.
+                if (oldStatus && newStatus && oldStatus.outerHTML !== newStatus.outerHTML) oldStatus.replaceWith(newStatus.cloneNode(true));
+                currentRow.classList?.toggle('is-ready-to-assign', nextRow.classList?.contains('is-ready-to-assign') || false);
+                currentRow.classList?.toggle('is-assignment-alert-red', nextRow.classList?.contains('is-assignment-alert-red') || false);
+                if (nextRow.dataset.etdUtc) currentRow.dataset.etdUtc = nextRow.dataset.etdUtc;
+                else delete currentRow.dataset.etdUtc;
                 ['[data-dispatch-neo-fuel]', '[data-dispatch-actual]', '.neoscorpion-dispatch-center-fuel'].forEach(selector => {
                     const oldValue = currentRow.querySelector(selector), newValue = nextRow.querySelector(selector);
                     if (oldValue && newValue) { oldValue.textContent = newValue.textContent; oldValue.className = newValue.className; }
@@ -778,6 +784,14 @@
             };
             const currentDetails = detailFor(root, currentRow);
             const nextDetails = detailFor(nextPanel, nextRow);
+            const oldStatusDetails=currentDetails?.querySelector('[data-fuel-status-details]');
+            const newStatusDetails=nextDetails?.querySelector('[data-fuel-status-details]');
+            if (sameVisit && oldStatusDetails && newStatusDetails && !groupDirty([oldStatusDetails])) {
+                oldStatusDetails.replaceWith(newStatusDetails.cloneNode(true));
+            }
+            const oldMobileDetails=currentDetails?.querySelector('.scorpion-mobile-readonly');
+            const newMobileDetails=nextDetails?.querySelector('.scorpion-mobile-readonly');
+            if (sameVisit && oldMobileDetails && newMobileDetails) oldMobileDetails.replaceWith(newMobileDetails.cloneNode(true));
             const oldTimeline=currentDetails?.querySelector('[data-dispatch-work-timeline]');
             const newTimeline=nextDetails?.querySelector('[data-dispatch-work-timeline]');
             if (oldTimeline && newTimeline && !groupDirty([oldTimeline])) {
@@ -845,6 +859,22 @@
             applyDispatchSort(root);
             if (scrollState) dispatchScroll.restoreSnapshot(scrollState);
         }
+        // Truck physical status must not be frozen by a mission/inventory draft.
+        // Preserve every editable control and optional planning enrichment.
+        nextPanel.querySelectorAll('[data-dispatch-truck-id]').forEach(nextCard => {
+            const currentCard=Array.from(root.querySelectorAll('[data-dispatch-truck-id]')).find(card => card.dataset.dispatchTruckId===nextCard.dataset.dispatchTruckId);
+            if (!currentCard) return;
+            const oldBadge=currentCard.querySelector('.neoscorpion-truck-activity');
+            const newBadge=nextCard.querySelector('.neoscorpion-truck-activity');
+            if (oldBadge && newBadge) oldBadge.replaceWith(newBadge.cloneNode(true));
+            if (currentCard.dataset.truckOperationalStatus!==nextCard.dataset.truckOperationalStatus || newBadge?.textContent.trim().startsWith('FUELING')) {
+                const oldNotes=currentCard.querySelector('[data-truck-status-notes]');
+                const newNotes=nextCard.querySelector('[data-truck-status-notes]');
+                if (oldNotes && newNotes) oldNotes.replaceWith(newNotes.cloneNode(true));
+            }
+            currentCard.dataset.truckOperationalStatus=nextCard.dataset.truckOperationalStatus;
+        });
+        updateAssignmentAlerts(root);
     };
 
     const refreshCriticalCompletion = async (nextOperationId, nextRevision, nextTailRevision) => {
@@ -992,7 +1022,11 @@
         const nextTailRevision = String(payload.tail_revision || "");
         if (!observeLiveState(nextOperationId, nextRevision, nextTailRevision)) return;
         if (nextOperationId !== operationId || nextRevision !== revision
-                || nextTailRevision !== tailRevision) {
+                || nextTailRevision !== tailRevision
+                || (pendingFuelDataRefresh && criticalRefreshKey !== [nextOperationId,nextRevision,nextTailRevision].join(':'))) {
+            // Concurrent autosaves can adopt a revision while its critical GET
+            // is busy/discarded. A dirty form must not suppress the next read
+            // merely because that revision is already known locally.
             window.NeoScorpionFuelData?.revisionChanged(nextRevision, nextOperationId);
             await handleChangedFingerprint(nextOperationId, nextRevision, nextTailRevision);
         } else if (Number(payload.tail_notes_revision || 0) !== tailNotesRevision) {
