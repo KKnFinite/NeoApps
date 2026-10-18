@@ -6,6 +6,17 @@
         return;
     }
 
+    function initializeDispatchRowHeight(scope) {
+        const panel = scope.matches?.('[data-mission-row-height-percent]')
+            ? scope : scope.querySelector('[data-mission-row-height-percent]');
+        const value = Number(panel?.dataset.missionRowHeightPercent || 100);
+        if (panel && Number.isInteger(value) && value >= 75 && value <= 150) {
+            // CSSOM updates are allowed by CSP; HTML style attributes are not.
+            panel.style.setProperty('--dispatch-row-height-scale', String(value / 100));
+        }
+    }
+
+    initializeDispatchRowHeight(root);
     initializeSpearSplash(root);
     initializeDispatchDetails(root);
     initializeDispatchSelects(root);
@@ -1085,6 +1096,7 @@
             // A dispatcher may scroll while the panel request is in flight.
             // Restore the working position at replacement, not request start.
             const saved = dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
+            initializeDispatchRowHeight(nextPanel);
             currentPanel.replaceWith(nextPanel);
             const preferences = nextPanel.matches("[data-dispatch-preferences]") ? nextPanel : nextPanel.querySelector("[data-dispatch-preferences]");
             if (preferences && Number(preferences.dataset.preferenceVersion || 0) >= preferenceVersion && !preferenceMessage.startsWith("NOT SAVED")) {

@@ -18,6 +18,7 @@ class RowHeightBrowserTest(unittest.TestCase):
     def exercise(self,engine):
         F=fixtures.MobileDrawerBrowserTest;F.setUpClass();browser=None
         F.app.config['LIVE_SCREEN_REFRESH_INTERVAL_MS']=1000
+        F.app.config['SECURITY_HEADERS_CSP_ALLOW_NON_PRODUCTION']=True
         try:
             with F.app.app_context():
                 g=ensure_default_gateway_and_nodes();admin=User.query.filter_by(username='drawer-admin').one()
@@ -84,6 +85,9 @@ class RowHeightBrowserTest(unittest.TestCase):
                     for p in (page,other):
                         expect(p.locator('[data-dispatch-preferences]')).to_have_attribute('data-mission-row-height-percent',value,timeout=12000)
                         expect(p.locator('[data-dispatch-preferences]')).to_have_attribute('data-ready-assignment-pulse','1')
+                    if value=='150':
+                        other.reload()
+                        expect(other.locator('[data-dispatch-preferences]')).to_have_attribute('data-mission-row-height-percent','150')
                     expect(draft).to_have_value('Preserve the Dispatcher draft during shared sizing changes')
                     expect(draft).to_be_focused()
                     self.assertAlmostEqual(detail.bounding_box()['height'],detail_height,delta=1)

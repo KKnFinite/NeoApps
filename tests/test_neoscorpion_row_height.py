@@ -37,7 +37,7 @@ class RowHeightTest(unittest.TestCase):
             response=self.client.get(path)
             html=response.get_json()['html'] if response.is_json else response.get_data(as_text=True)
             self.assertIn('data-mission-row-height-percent="100"',html)
-            self.assertIn('--dispatch-row-height-scale: 1.0;',html)
+            self.assertNotIn('style="--dispatch-row-height-scale:',html)
         page=self.client.get('/neoscorpion/settings').get_data(as_text=True)
         self.assertIn('Restore Default',page);self.assertIn('98px desktop / 73px mobile',page)
         self.assertEqual(self.settings.updated_by_user_id,admin.id);self.assertNotEqual(admin.id,other.id)

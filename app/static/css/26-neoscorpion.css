@@ -48,6 +48,14 @@
 .neoscorpion-dispatch-board-control { display:flex; justify-content:flex-end; margin:0 0 7px; }
 .neoscorpion-dispatch-board-toggle { min-height:28px; border:1px solid rgba(var(--node-scorpion-primary-rgb),.48); border-radius:6px; background:#100b0d; color:#ffe6a3; padding:5px 9px; font:850 .6rem/1 var(--font-sans); letter-spacing:.07em; cursor:pointer; }
 .neoscorpion-dispatch-board-toggle:hover,.neoscorpion-dispatch-board-toggle:focus-visible { border-color:var(--node-scorpion-primary); outline:0; box-shadow:0 0 0 2px rgba(var(--node-scorpion-primary-rgb),.16); }
+/* External CSS, not inline styles: initial rendering also works under the
+   production style-src-attr 'none' policy, including before scripts run. */
+[data-mission-row-height-percent="75"] { --dispatch-row-height-scale: .75; }
+[data-mission-row-height-percent="85"] { --dispatch-row-height-scale: .85; }
+[data-mission-row-height-percent="100"] { --dispatch-row-height-scale: 1; }
+[data-mission-row-height-percent="115"] { --dispatch-row-height-scale: 1.15; }
+[data-mission-row-height-percent="130"] { --dispatch-row-height-scale: 1.3; }
+[data-mission-row-height-percent="150"] { --dispatch-row-height-scale: 1.5; }
 .neoscorpion-dispatch-table--compact {
     min-width: 1120px;
     table-layout: fixed;
