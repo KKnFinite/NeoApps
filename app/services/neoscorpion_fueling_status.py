@@ -52,6 +52,16 @@ def mission_missing_fields(row):
     return tuple(missing)
 
 
+def mission_data_summary(missing):
+    """One actionable note; the complete list stays in DETAILS and the title."""
+    if not missing:
+        return ""
+    labels = {"Required Fuel Load": "FUEL LOAD", "Inbound Fuel / verified measurement": "INBOUND",
+              "Departure time": "ETD"}
+    first = labels.get(missing[0], missing[0].upper())
+    return f"NEEDS {first}" + (f" +{len(missing)-1}" if len(missing) > 1 else "")
+
+
 def review_reasons(row):
     """Current operational evidence, never arrival, forecasts or advisory swaps."""
     work = row.get("fuel_work_state")
@@ -129,10 +139,15 @@ def fueling_status(row, *, now=None, threshold=30):
         detail = "FOB CHECK" if fueler and row.get("fob_likely") else (
             "Needs Fueler" if truck else "Needs Truck" if fueler else "Needs Fueler / Truck")
     movement = row.get("truck_start_reason")
-    if stage in {"pending", "assigned", "ready"} and truck and movement == "TRUCK STILL FUELING":
-        warnings.append("WAITING FOR TRUCK · TRUCK STILL FUELING")
-    if stage in {"assigned", "ready"} and truck and movement:
-        detail = "WAITING FOR TRUCK · TRUCK STILL FUELING" if movement == "TRUCK STILL FUELING" else movement
+    if stage in {"pending", "assigned", "ready"} and truck and movement:
+        movement_note = "WAITING FOR TRUCK · TRUCK STILL FUELING" if movement == "TRUCK STILL FUELING" else movement
+        # Availability does not make missing mission data disappear. Retain
+        # movement separately for DETAILS/Fueler truck information, then show it
+        # on the primary status only when no essential data is missing.
+        if missing or movement == "TRUCK STILL FUELING":
+            warnings.append(movement_note)
+        if stage in {"assigned", "ready"} and not missing:
+            detail = movement_note
     fob_check = bool(row.get("fob_likely") and fueler and not truck)
     if row.get("fob_likely") and stage not in {"fob-ready", "fob", "complete"}:
         warnings.append("FOB CHECK" if fob_check else "FOB LIKELY")
@@ -153,6 +168,7 @@ def fueling_status(row, *, now=None, threshold=30):
         warnings = [warning for warning in warnings if warning != "TAIL SWAP · advisory"]
     return {
         "mission_data_missing": missing,
+        "mission_data_summary": mission_data_summary(missing),
         "status_review_reasons": reviews if stage not in {"complete", "fob"} else (),
         "dispatch_status_key": stage,
         "dispatch_status_label": stage.upper().replace("-", " "),

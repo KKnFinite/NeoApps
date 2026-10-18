@@ -63,6 +63,17 @@ class StatusBrowserTest(unittest.TestCase):
                         expect(status(pending)).to_have_attribute('data-fuel-status','pending')
                         expect(status(ready)).to_have_attribute('data-fuel-status','ready')
                         expect(ready).to_have_class(__import__('re').compile('is-ready-to-assign'))
+                        # Removing/restoring required data must reverse readiness
+                        # and its pulse without arrival or resource prerequisites.
+                        ready.locator('[name="required_fuel"]').fill('')
+                        ready.locator('[name="required_fuel"]').press('Tab')
+                        expect(status(ready)).to_have_attribute('data-fuel-status','pending',timeout=12000)
+                        expect(status(ready).locator('[data-fuel-status-secondary]')).to_have_text('NEEDS FUEL LOAD')
+                        self.assertFalse(ready.evaluate("r=>r.classList.contains('is-ready-to-assign')"))
+                        ready.locator('[name="required_fuel"]').fill('25')
+                        ready.locator('[name="required_fuel"]').press('Tab')
+                        expect(status(ready)).to_have_attribute('data-fuel-status','ready',timeout=12000)
+                        expect(ready).to_have_class(__import__('re').compile('is-ready-to-assign'))
                         expect(page.locator('[data-dispatch-completion-blocker]')).to_have_count(0)
                         expect(pending.locator('[data-dispatch-verification-form]')).to_have_count(0)
                         # Actual Dispatcher assignment is allowed before mission data exists.
@@ -82,6 +93,20 @@ class StatusBrowserTest(unittest.TestCase):
                         ready.locator('select[name="assigned_fueler_user_id"]').select_option(str(uid))
                         pending.locator('[name="inbound_fuel"]').fill('12');pending.locator('[name="inbound_fuel"]').press('Tab')
                         expect(pending.locator('[name="inbound_fuel"]')).to_have_attribute('data-saved-value','12.0',timeout=12000)
+                        expect(status(pending).locator('[data-fuel-status-secondary]')).to_have_text('NEEDS FUEL LOAD',timeout=12000)
+                        expect(details.locator('[data-action-key="mission-data"]')).to_contain_text('Required Fuel Load')
+                        # Board and read-only mobile use the same warning even
+                        # while the assigned truck is physically busy elsewhere.
+                        page.locator('[data-operational-board-toggle]:visible').click()
+                        expect(status(pending).locator('[data-fuel-status-secondary]')).to_have_text('NEEDS FUEL LOAD')
+                        page.screenshot(path=str(F.evidence/f'status-{engine.name}-missing-board.png'),full_page=False)
+                        page.locator('[data-operational-board-toggle]:visible').click()
+                        page.set_viewport_size({'width':375,'height':568})
+                        expect(status(pending).locator('[data-fuel-status-secondary]')).to_have_text('NEEDS FUEL LOAD')
+                        expect(details.locator('.scorpion-mobile-readonly')).to_contain_text('ASSIGNED · NEEDS FUEL LOAD')
+                        pending.scroll_into_view_if_needed()
+                        page.screenshot(path=str(F.evidence/f'status-{engine.name}-missing-mobile.png'),full_page=False)
+                        page.set_viewport_size({'width':1440,'height':900})
                         pending.locator('[name="required_fuel"]').fill('25');pending.locator('[name="required_fuel"]').press('Tab')
                         try:
                             expect(pending.locator('[name="required_fuel"]')).to_have_attribute('data-saved-value','25.0',timeout=12000)

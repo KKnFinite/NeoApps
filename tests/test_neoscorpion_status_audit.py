@@ -53,10 +53,35 @@ class StatusRulesTest(unittest.TestCase):
         r['truck_start_reason']='TRUCK STILL FUELING'
         s=fueling_status(r)
         self.assertEqual(s['dispatch_status_key'],'assigned')
-        self.assertEqual(s['fuel_status_secondary'],'WAITING FOR TRUCK · TRUCK STILL FUELING')
+        self.assertEqual(s['fuel_status_secondary'],'MISSION DATA MISSING')
+        self.assertEqual(s['mission_data_summary'],'NEEDS FUEL LOAD +2')
+        self.assertIn('WAITING FOR TRUCK · TRUCK STILL FUELING',s['fuel_status_warnings'])
         self.assertEqual(len(s['mission_data_missing']),3)
         r.update(inbound_fuel_lbs=0,required_fuel_lbs=25000,parking_valid=True)
         self.assertEqual(fueling_status(r)['dispatch_status_detail'],'WAITING FOR TRUCK · TRUCK STILL FUELING')
+
+    def test_movement_and_fob_advice_never_hide_missing_data(self):
+        for movement in ('TRUCK STILL FUELING','TRUCK UNAVAILABLE','ARRIVAL UNCONFIRMED','COMING FROM C07'):
+            r=self.row();r['assignment'].assigned_truck_id=2;r['assignment'].assigned_fueler_user_id=1
+            r.update(required_fuel_lbs=None,truck_start_reason=movement,
+                     truck_travel_until='2026-10-18T06:00:00Z',fob_likely=True)
+            s=fueling_status(r)
+            self.assertEqual(s['dispatch_status_key'],'assigned')
+            self.assertEqual(s['fuel_status_secondary'],'MISSION DATA MISSING')
+            self.assertEqual(s['mission_data_summary'],'NEEDS FUEL LOAD')
+            self.assertFalse(fuel._ready_to_assign(r))
+
+    def test_missing_summary_full_list_and_reversible_readiness(self):
+        r=self.row();r.update(required_fuel_lbs=None,inbound_fuel_lbs=None)
+        s=fueling_status(r)
+        self.assertEqual(s['mission_data_missing'],('Required Fuel Load','Inbound Fuel / verified measurement'))
+        self.assertEqual(s['mission_data_summary'],'NEEDS FUEL LOAD +1')
+        r['required_fuel_lbs']=25000
+        self.assertEqual(fueling_status(r)['mission_data_summary'],'NEEDS INBOUND')
+        r['inbound_fuel_lbs']=0
+        self.assertEqual(fueling_status(r)['dispatch_status_key'],'ready')
+        r['inbound_fuel_lbs']=None
+        self.assertEqual(fueling_status(r)['dispatch_status_key'],'pending')
 
     def test_physical_milestones_precede_missing_data_but_not_real_review(self):
         r=self.row();r.update(inbound_fuel_lbs=None,parking_valid=False)
@@ -97,7 +122,8 @@ class StatusRulesTest(unittest.TestCase):
         r['required_fuel_lbs']=None
         self.assertFalse(fuel._ready_to_assign(r))
         r['assignment'].assigned_fueler_user_id=1;r['assignment'].assigned_truck_id=2
-        self.assertEqual(fueling_status(r)['fuel_status_color'],'orange')
+        self.assertEqual(fueling_status(r,now=datetime(2026,10,18,6))['fuel_status_color'],'orange')
+        self.assertEqual(fueling_status(r,now=datetime(2026,10,18,6,45))['fuel_status_color'],'red')
         self.assertFalse(fuel._ready_to_assign(r))
 
     def test_truck_physical_status_and_serviceability_are_independent(self):
@@ -155,6 +181,14 @@ class StatusIntegrationTest(unittest.TestCase):
         self.assertIn('data-action-key="mission-data"',html)
         self.assertIn('Required Fuel Load',html);self.assertIn('Inbound Fuel / verified measurement',html)
         self.assertNotIn('id="scorpion-complete-',html)
+        fr=next(item for item in fuel.fueler_context(self.gateway,self.fueler)['rows']
+                if item['mission'].id==self.mission.id)
+        for key in ('dispatch_status_key','mission_data_missing','mission_data_summary'):
+            self.assertEqual(fr[key],r[key])
+        self.login(self.fueler)
+        fueler_html=self.client.get('/neoscorpion/fueler').get_data(as_text=True)
+        self.assertIn('NEEDS FUEL LOAD +1',fueler_html)
+        self.assertNotIn('>NOT READY<',fueler_html)
 
     def test_off_submission_and_verification_remain_independent_with_one_event(self):
         self.prepare();self.assertEqual(self.row()['dispatch_status_key'],'fueling')
@@ -183,3 +217,19 @@ class StatusIntegrationTest(unittest.TestCase):
         self.assertFalse(r['normal_completion_ready']);self.assertEqual(self.work.manual_on_at_utc,on)
         self.assertNotEqual(self.assignment.operational_status,'hold_review')
         self.assertTrue(r['off_ready'])  # Review presentation never holds the truck hostage.
+
+    def test_shared_status_template_preserves_missing_data_during_travel(self):
+        from flask import current_app, render_template_string
+        r=self.row()
+        r['assignment'].assigned_fueler_user_id=self.fueler.id
+        r['assignment'].assigned_truck_id=123
+        r.update(required_fuel_lbs=None,truck_start_reason='COMING FROM C07',
+                 truck_travel_until='2026-10-18T09:00:00Z',truck_travel_origin='C07')
+        r.update(fueling_status(r))
+        for dispatcher in (True,False):
+            with current_app.test_request_context():
+                html=render_template_string('{% from "neonodes/neoscorpion/_fuel_status.html" import fuel_status with context %}{{ fuel_status(row,dispatcher=dispatcher) }}',row=r,dispatcher=dispatcher)
+            self.assertIn('NEEDS FUEL LOAD',html)
+            self.assertIn('title="Missing: Required Fuel Load',html)
+            self.assertNotIn('data-truck-travel-until',html)
+            self.assertNotIn('SEE DETAILS',html)

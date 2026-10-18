@@ -1,6 +1,6 @@
 <div class="scorpion-mobile-readonly" aria-label="Read-only mission details">
 <strong>{{ row.mission.flight_number }} · {{ row.tail_number }} · {{ row.aircraft_type }}</strong>
-<span>{{ row.dispatch_status_label }}{% if row.dispatch_status_detail %} · {{ row.dispatch_status_detail }}{% endif %}</span>
+<span>{{ row.dispatch_status_label }}{% if row.dispatch_status_detail %} · {{ row.mission_data_summary if row.dispatch_status_detail == 'MISSION DATA MISSING' else row.dispatch_status_detail }}{% endif %}</span>
 {% if row.mission_data_action %}<span>Missing: {{ row.mission_data_missing|join(', ') }}</span>{% endif %}
 {% for reason in row.status_review_reasons %}<span>{{ reason }}</span>{% endfor %}
 {% if row.completion_progress %}<span>{{ row.completion_progress }}</span>{% endif %}

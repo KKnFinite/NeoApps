@@ -346,7 +346,10 @@ class LifecycleAuditTest(unittest.TestCase):
         work=db.session.get(NeoScorpionFuelWorkState,assignment.active_work_state_id)
         row=next(r for r in fuel.fuel_dispatch_context(self.gateway)['rows'] if r['mission'].id==mission.id)
         self.assertEqual(row['dispatch_status_key'],'assigned')
-        self.assertIn('WAITING FOR TRUCK',row['fuel_status_secondary'])
+        self.assertEqual(row['fuel_status_secondary'],'MISSION DATA MISSING')
+        self.assertEqual(row['mission_data_missing'],('Parking',))
+        self.assertEqual(row['mission_data_summary'],'NEEDS PARKING')
+        self.assertIn('WAITING FOR TRUCK · TRUCK STILL FUELING',row['fuel_status_warnings'])
         self.assertIsNone(work.manual_on_at_utc);self.assertIsNone(work.on_at_utc)
         with self.assertRaisesRegex(ValueError,'TRUCK STILL FUELING'):
             fuel.confirm_fueler_truck_on(self.gateway,self.fueler,assignment.id,
