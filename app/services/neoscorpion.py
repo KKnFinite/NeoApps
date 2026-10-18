@@ -1191,6 +1191,7 @@ def settings_context(gateway):
         settings = {
             "fuel_density_lbs_per_gallon": DEFAULT_FUEL_DENSITY_LBS_PER_GALLON,
             "red_assignment_alert_threshold_minutes": 30,
+            "ready_assignment_pulse_enabled": True,
             "neo_fuel_excess_alert_gallons": 500,
             "planning_inbound_fuel_fallback_lbs": (
                 DEFAULT_PLANNING_INBOUND_FALLBACK_LBS
@@ -5599,6 +5600,8 @@ def deactivate_truck(gateway, form, user=None):
 
 
 def save_settings(gateway, form):
+    if "ready_assignment_pulse_enabled" in form and form.get("ready_assignment_pulse_enabled") not in {"0", "1"}:
+        raise ValueError("READY Assignment Pulse must be ON or OFF.")
     if 'truck_fuel_discrepancy_threshold_gallons' in form:
         threshold_text = str(form.get('truck_fuel_discrepancy_threshold_gallons',''))
         if not re.fullmatch(r'\d{1,9}', threshold_text):
@@ -5606,6 +5609,9 @@ def save_settings(gateway, form):
     settings = ensure_neoscorpion_settings(gateway)
     old_density = settings.fuel_density_lbs_per_gallon
     old_excess_threshold = settings.neo_fuel_excess_alert_gallons
+    old_ready_pulse = settings.ready_assignment_pulse_enabled
+    if "ready_assignment_pulse_enabled" in form:
+        settings.ready_assignment_pulse_enabled = form.get("ready_assignment_pulse_enabled") == "1"
     if "neo_fuel_excess_alert_gallons" in form:
         submitted_excess = str(form.get("neo_fuel_excess_alert_gallons", "")).strip()
         if not re.fullmatch(r"[0-9]+", submitted_excess):
@@ -5642,7 +5648,8 @@ def save_settings(gateway, form):
     if current_user and getattr(current_user, "is_authenticated", False):
         settings.updated_by_user_id = current_user.id
     if (threshold_changed or old_density != settings.fuel_density_lbs_per_gallon
-            or old_excess_threshold != settings.neo_fuel_excess_alert_gallons):
+            or old_excess_threshold != settings.neo_fuel_excess_alert_gallons
+            or old_ready_pulse != settings.ready_assignment_pulse_enabled):
         operation = current_sort_operation(gateway)
         if operation is not None:
             operation, asset_state = lock_nightly_asset_scope_for_mutation(operation)

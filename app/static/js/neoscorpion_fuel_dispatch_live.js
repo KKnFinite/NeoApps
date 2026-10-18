@@ -754,6 +754,14 @@
     let criticalRefreshBusy = false;
 
     const applyCriticalCompletion = (nextPanel) => {
+        // Shared presentation settings must update even when another row's
+        // unsaved inputs defer full replacement. Never replace those inputs.
+        const currentPreferences = root.querySelector('[data-dispatch-preferences]');
+        const nextPreferences = nextPanel.matches?.('[data-dispatch-preferences]')
+            ? nextPanel : nextPanel.querySelector('[data-dispatch-preferences]');
+        if (currentPreferences && nextPreferences) {
+            currentPreferences.dataset.readyAssignmentPulse = nextPreferences.dataset.readyAssignmentPulse;
+        }
         const scrollState = typeof dispatchScroll === 'undefined' ? null
             : dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
         let regrouped = false;
@@ -803,6 +811,13 @@
                 oldSlot.querySelector('button')?.remove();
                 oldSlot.textContent = 'VISIT CHANGED';
                 oldSlot.title = 'SAVE OR CANCEL THIS MISSION’S EDITS TO REFRESH THE CHANGED VISIT';
+            }
+            if (!sameVisit) {
+                // A protected draft may still show the old visit until it is
+                // reconciled. Never keep its READY attention animation running
+                // after the authoritative resource/visit identity changed.
+                currentRow.classList?.toggle('is-ready-to-assign', false);
+                currentRow.classList?.toggle('is-assignment-alert-red', false);
             }
             if (dirty) currentStack.querySelector('button[formaction$="/fuel-dispatch/complete"]')?.setAttribute('disabled','');
             if (sameVisit) {

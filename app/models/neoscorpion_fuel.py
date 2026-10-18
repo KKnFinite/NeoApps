@@ -817,6 +817,9 @@ class NeoScorpionSettings(db.Model):
     red_assignment_alert_threshold_minutes = db.Column(
         db.Integer, nullable=False, default=30, server_default="30"
     )
+    ready_assignment_pulse_enabled = db.Column(
+        db.Boolean, nullable=False, default=True, server_default=db.true()
+    )
     fob_difference_threshold_lbs = db.Column(db.Integer, nullable=True)
     tf_vs_estimated_threshold_lbs = db.Column(db.Integer, nullable=True)
     assignment_setup_minutes = db.Column(db.Numeric(8, 2), nullable=True)

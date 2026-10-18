@@ -155,32 +155,36 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) {
     background: rgba(8, 8, 3, .18);
 }
-.neoscorpion-dispatch-primary-row.is-ready-to-assign {
-    --assignment-alert-color: #f0d17a;
-    --assignment-alert-glow: rgba(240, 209, 122, .5);
+.neoscorpion-dispatch-table--compact td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking) {
+    position: relative;
 }
-.neoscorpion-dispatch-primary-row.is-ready-to-assign.is-assignment-alert-red {
-    --assignment-alert-color: #ff7773;
-    --assignment-alert-glow: rgba(255, 85, 78, .55);
+/* A separate accent makes READY visible without animating/recoloring arrival
+   text, status urgency, controls, or the geometry of either Dispatch view. */
+[data-ready-assignment-pulse="1"] .neoscorpion-dispatch-table--compact
+.neoscorpion-dispatch-primary-row.is-ready-to-assign:not(.is-complete)
+> td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking)::after {
+    content: "";
+    position: absolute;
+    left: 18%;
+    right: 18%;
+    bottom: 7px;
+    height: 2px;
+    border-radius: 2px;
+    background: #f0d17a;
+    pointer-events: none;
+    animation: neoscorpion-assignment-accent-pulse 2.3s ease-in-out infinite;
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > strong,
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > small,
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > strong,
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > small {
-    animation: neoscorpion-assignment-text-pulse 2.3s ease-in-out infinite;
-}
-@keyframes neoscorpion-assignment-text-pulse {
-    0%, 100% { color: var(--assignment-alert-color); text-shadow: none; }
-    50% { color: var(--assignment-alert-color); text-shadow: 0 0 7px var(--assignment-alert-glow); }
+@keyframes neoscorpion-assignment-accent-pulse {
+    0%, 100% { opacity: .15; transform: scaleX(.65); box-shadow: none; }
+    50% { opacity: 1; transform: scaleX(1); box-shadow: 0 0 6px rgba(240, 209, 122, .5); }
 }
 @media (prefers-reduced-motion: reduce) {
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > strong,
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-flight > small,
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > strong,
-    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign > td.neoscorpion-dispatch-etd-parking > small {
+    [data-ready-assignment-pulse="1"] .neoscorpion-dispatch-table--compact
+    .neoscorpion-dispatch-primary-row.is-ready-to-assign:not(.is-complete)
+    > td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking)::after {
         animation: none;
-        color: var(--assignment-alert-color);
-        text-shadow: none;
+        opacity: .4;
+        box-shadow: none;
     }
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) > td {
@@ -195,17 +199,14 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) small:not(.neoscorpion-dispatch-secondary):not(.neoscorpion-spear-risk):not(.neoscorpion-dispatch-arrival-text) {
     color: #d9d5c4;
 }
-/* Only mission information text inherits arrival emphasis. SPEAR and completed
-   history keep their own colors; assignment-alert animations still take priority. */
+/* Arrival colors are independent of READY accents and departure urgency. SPEAR,
+   critical assignment alerts and completed history keep their own styling. */
 .neoscorpion-dispatch-primary-row:not(.is-complete) { --arrival-text:#d5d8de; --arrival-weight:400; }
 .neoscorpion-dispatch-primary-row.is-arrived:not(.is-complete) { --arrival-text:#8fffa8; --arrival-weight:700; }
 .neoscorpion-dispatch-primary-row.is-on-ground:not(.is-complete) { --arrival-text:#fff0b0; --arrival-weight:700; }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row:not(.is-complete) > td > .neoscorpion-dispatch-arrival-text {
     color:var(--arrival-text);
     font-weight:var(--arrival-weight);
-}
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row.is-ready-to-assign:not(.is-complete) > td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking) > .neoscorpion-dispatch-arrival-text {
-    color:var(--assignment-alert-color);
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > td {
     border-bottom: 0;

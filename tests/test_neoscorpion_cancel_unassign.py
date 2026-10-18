@@ -228,9 +228,9 @@ class CancelUnassignTest(unittest.TestCase):
         self.assertIn('>FOB 30.0</small>', after)
         self.assertNotIn('neoscorpion-dispatch-size-small is-empty', after)
         css = (Path(__file__).resolve().parents[1] / 'app/static/css/26-neoscorpion.css').read_text(encoding='utf-8')
-        self.assertIn('neoscorpion-assignment-text-pulse 2.3s', css)
-        self.assertIn('td.neoscorpion-dispatch-flight > strong', css)
-        self.assertIn('td.neoscorpion-dispatch-etd-parking > small', css)
+        self.assertIn('neoscorpion-assignment-accent-pulse 2.3s', css)
+        self.assertIn('td:is(.neoscorpion-dispatch-flight, .neoscorpion-dispatch-etd-parking)::after', css)
+        self.assertNotIn('color: var(--assignment-alert-color)', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
         self.assertNotIn('inset 0 0 0 1px', css)
 

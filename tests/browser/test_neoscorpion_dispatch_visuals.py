@@ -310,6 +310,8 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                                     row.querySelector('.neoscorpion-dispatch-etd-parking strong'),
                                     row.querySelector('.neoscorpion-dispatch-etd-parking small')].map(
                                     node => getComputedStyle(node).animationName),
+                                accentAnimations: [...row.querySelectorAll('.neoscorpion-dispatch-flight,.neoscorpion-dispatch-etd-parking')].map(
+                                    node => getComputedStyle(node,'::after').animationName),
                                 rowWidth: row.getBoundingClientRect().width,
                                 cellsWidth: cells.reduce((sum, cell) => sum + cell.getBoundingClientRect().width, 0)};
                         })""")
@@ -326,8 +328,8 @@ class NeoScorpionDispatchVisualsBrowserTest(unittest.TestCase):
                             self.assertTrue(item["aligned"] and item["reserved"], item)
                             self.assertAlmostEqual(item["rowWidth"], item["cellsWidth"], delta=2)
                             self.assertEqual(item["cellAnimations"], ["none"] * 3)
-                            self.assertEqual(item["textAnimations"],
-                                ["neoscorpion-assignment-text-pulse"] * 4)
+                            self.assertEqual(item["textAnimations"], ["none"] * 4)
+                            self.assertEqual(item["accentAnimations"], ["neoscorpion-assignment-accent-pulse"] * 2)
                         if width == 1440:
                             self.assertEqual(rows.first.get_attribute('data-etd-utc'),
                                 '2026-10-08T04:30:00Z')

@@ -102,6 +102,7 @@ NEOSCORPION_ADDITIVE_COLUMNS = {
         "neo_fuel_excess_alert_gallons": "INTEGER NOT NULL DEFAULT 500",
         "planning_inbound_fuel_fallback_lbs": "INTEGER",
         "red_assignment_alert_threshold_minutes": "INTEGER NOT NULL DEFAULT 30",
+        "ready_assignment_pulse_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
         "assignment_setup_minutes": "NUMERIC(8, 2)",
         "advance_setup_window_minutes": "INTEGER",
         "assignment_finishing_minutes": "NUMERIC(8, 2)",

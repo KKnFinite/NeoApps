@@ -109,10 +109,10 @@ class DispatchProfileBrowserTest(unittest.TestCase):
                 self.assertEqual(order(),[ids[1],ids[0],ids[2],ids[4],ids[3]])
                 self.assertEqual(row(3).evaluate('el=>getComputedStyle(el).backgroundColor'),'rgb(9, 10, 12)')
                 self.assertEqual(row(3).evaluate('el=>getComputedStyle(el).getPropertyValue("--arrival-text").trim()'),'')
-                # Arrival paint must not suppress critical red alerts, including reduced motion.
+                # READY/ETD urgency must not recolor arrival text, including reduced motion.
                 page.emulate_media(reduced_motion='reduce')
                 row(0).evaluate("el=>el.classList.add('is-ready-to-assign','is-assignment-alert-red')")
-                self.assertEqual(row(0).locator('.neoscorpion-dispatch-flight > strong').evaluate('el=>getComputedStyle(el).color'),'rgb(255, 119, 115)')
+                self.assertEqual(row(0).locator('.neoscorpion-dispatch-flight > strong').evaluate('el=>getComputedStyle(el).color'),'rgb(143, 255, 168)')
                 for width,height in ((1440,900),(1920,1080),(390,844),(375,568)):
                     page.set_viewport_size({'width':width,'height':height})
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))

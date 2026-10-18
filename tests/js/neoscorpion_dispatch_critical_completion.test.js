@@ -72,6 +72,35 @@ test('same-stage status notes and READY pulse refresh without touching drafts',(
     assert.equal(alerts,1);
 });
 
+test('shared READY pulse switch updates during critical refresh without replacing drafts',()=>{
+    const preferences={dataset:{readyAssignmentPulse:'1'}};
+    const nextPreferences={dataset:{readyAssignmentPulse:'0'}};
+    const draft={value:'unsaved'};
+    const context={root:{querySelectorAll:()=>[],querySelector:s=>s==='[data-dispatch-preferences]'?preferences:null},updateAssignmentAlerts(){}};
+    vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
+    const panel={querySelectorAll:()=>[],querySelector:s=>s==='[data-dispatch-preferences]'?nextPreferences:null};
+    context.patch(panel);assert.equal(preferences.dataset.readyAssignmentPulse,'0');
+    nextPreferences.dataset.readyAssignmentPulse='1';context.patch(panel);
+    assert.equal(preferences.dataset.readyAssignmentPulse,'1');assert.equal(draft.value,'unsaved');
+    // The real live fragment IS the preferences section, not its parent.
+    panel.matches=()=>true;panel.dataset={readyAssignmentPulse:'0'};
+    context.patch(panel);assert.equal(preferences.dataset.readyAssignmentPulse,'0');
+});
+
+test('a changed visit never leaves the old READY accent on a protected row',()=>{
+    const classes=new Set(['is-ready-to-assign','is-assignment-alert-red']);
+    const oldSlot={dataset:{completionIdentity:'1:2:3:1:TAIL:4:5:6'},querySelector:()=>null};
+    const newSlot={dataset:{completionIdentity:'1:2:3:1:TAIL:4:5:7'}};
+    const makeRow=slot=>({dataset:{dispatchMissionId:'2'},classList:{toggle:(n,on)=>on?classes.add(n):classes.delete(n)},
+        querySelector:s=>s==='.neoscorpion-dispatch-action-stack'?{querySelector:s=>s==='[data-dispatch-completion-slot]'?slot:null}:null});
+    const row=makeRow(oldSlot),next=makeRow(newSlot);
+    const context={root:{querySelectorAll:()=>[row],querySelector:()=>null},updateAssignmentAlerts(){}};
+    vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
+    context.patch({querySelectorAll:()=>[next],querySelector:()=>null});
+    assert.equal(classes.has('is-ready-to-assign'),false);
+    assert.equal(oldSlot.textContent,'VISIT CHANGED');
+});
+
 test('an adopted autosave revision still reconciles a missed critical GET while dirty',async()=>{
     const start=source.indexOf('    const poll = async () => {');
     const end=source.indexOf('    const autosaveField = async',start);

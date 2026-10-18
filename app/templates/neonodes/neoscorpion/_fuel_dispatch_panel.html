@@ -13,7 +13,7 @@
 </div>
 {% endif %}
 {%- endmacro %}
-<section class="neoscorpion-panel" data-dispatch-preferences data-board-truck-cards-collapsed="{{ '1' if dispatch_preferences.board_truck_cards_collapsed else '0' }}" data-statistics-collapsed="{{ '1' if dispatch_preferences.statistics_collapsed else '0' }}" data-sort-mode="{{ dispatch_preferences.secondary_sort }}" data-arrived-first="{{ '1' if dispatch_preferences.arrived_first else '0' }}" data-truck-cards-collapsed="{{ '1' if dispatch_preferences.truck_cards_collapsed else '0' }}" data-spear-data-collapsed="{{ '1' if dispatch_preferences.spear_data_collapsed else '0' }}" data-preference-version="{{ dispatch_preferences.version }}" data-assignment-alert-threshold-minutes="{{ red_assignment_alert_threshold_minutes }}">
+<section class="neoscorpion-panel" data-dispatch-preferences data-ready-assignment-pulse="{{ '1' if settings.ready_assignment_pulse_enabled|default(true) else '0' }}" data-board-truck-cards-collapsed="{{ '1' if dispatch_preferences.board_truck_cards_collapsed else '0' }}" data-statistics-collapsed="{{ '1' if dispatch_preferences.statistics_collapsed else '0' }}" data-sort-mode="{{ dispatch_preferences.secondary_sort }}" data-arrived-first="{{ '1' if dispatch_preferences.arrived_first else '0' }}" data-truck-cards-collapsed="{{ '1' if dispatch_preferences.truck_cards_collapsed else '0' }}" data-spear-data-collapsed="{{ '1' if dispatch_preferences.spear_data_collapsed else '0' }}" data-preference-version="{{ dispatch_preferences.version }}" data-assignment-alert-threshold-minutes="{{ red_assignment_alert_threshold_minutes }}">
     <div data-dispatch-board-header>
     <div class="neoscorpion-panel-head">
         <span>Current Sort Operation</span>
