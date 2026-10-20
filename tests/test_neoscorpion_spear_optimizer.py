@@ -191,7 +191,10 @@ class WholeSortTest(unittest.TestCase):
         for status in ('unavailable_oos','needs_sump'):
             self.assertFalse(plan([row(100)],trucks=[fixture._truck(status=status)]).steps)
         truck=fixture._truck();truck['selection'].inventory_verified=False
-        self.assertFalse(plan([row(100)],trucks=[truck]).steps)
+        unknown=plan([row(100)],trucks=[truck])
+        self.assertFalse(unknown.steps)
+        self.assertIn('gallons unverified', unknown.unavailable_by_mission_id[100])
+        self.assertEqual(truck['selection'].status, 'available')
 
     def test_missing_inputs_and_midnight(self):
         a=row(100,demand=None)

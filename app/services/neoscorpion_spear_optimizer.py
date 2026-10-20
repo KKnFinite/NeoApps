@@ -457,7 +457,9 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
                         new.changes+=int(old is not None and old != [tid,fid])
                         generated.append(new)
         if not generated:
-            unavailable[mid]='NO FEASIBLE RESOURCE — occupancy / reserve / capacity / commitment'
+            unavailable[mid]=('NO FEASIBLE RESOURCE — truck gallons unverified'
+                if not trucks and legacy._unverified_available_trucks(nightly_trucks)
+                else 'NO FEASIBLE RESOURCE — occupancy / reserve / capacity / commitment')
             # Infeasibility is not permission to consume a committed resource.
             for pool,identifier in ((trucks,assigned_t),(fuelers,assigned_f)):
                 if identifier in pool:pool[identifier]['base']=INFINITY

@@ -2024,8 +2024,8 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
             reasons.append('Fuel verification awaiting Dispatcher approval')
         if visual and not row.get('administratively_complete') and visual.get('status') in ('needs_sump', 'unavailable_oos'):
             reasons.append('Serviceability: ' + visual['status'].replace('_', ' ').upper())
-        if visual and not row.get('administratively_complete') and visual.get('inventory_verified') is False and visual.get('status') == 'available':
-            reasons.append('Truck fuel inventory requires verification')
+        if visual and not row.get('administratively_complete') and visual.get('inventory_reconciliation_required') and visual.get('status') == 'available':
+            reasons.append('Truck inventory discrepancy / unknown baseline')
         row['console_truck_review'] = ' · '.join(reasons)
         row['action_count'] += int(bool(row.get('call_dispatch_alert') and dispatch_editable))
         row['action_count'] += int(bool(reasons))

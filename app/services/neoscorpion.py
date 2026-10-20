@@ -6087,7 +6087,9 @@ def _fuel_rows(
     if fuel_trucks is None:
         fuel_trucks = _fuel_trucks(operation.gateway or _gateway_stub(operation))
     trucks = {truck.id: truck for truck in fuel_trucks}
-    fuel_work_states = fuel_work_states_by_assignment_tail or {}
+    # An empty current-tail WorkIndex can still retain an open physical visit.
+    fuel_work_states = (fuel_work_states_by_assignment_tail
+                        if fuel_work_states_by_assignment_tail is not None else {})
     event_cycle_keys = fueling_event_cycle_keys or set()
     effective_apu_rates = apu_rates_by_aircraft_type or {}
     effective_lateral_limits = lateral_imbalance_limits_by_aircraft_type or {}
@@ -6125,6 +6127,7 @@ def _fuel_rows(
                 mission = _unused_mission
         elif assignment is not None and confirmed_tail_number != tail_number:
             projected = SimpleNamespace(**{column.name: getattr(assignment, column.name) for column in assignment.__table__.columns})
+            projected._parent_assignment = assignment
             projected.assigned_truck = assignment.assigned_truck
             projected.assigned_fueler = assignment.assigned_fueler
             projected.sort_date_mission = mission
@@ -7032,14 +7035,17 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
             assigned_at = max(assigned_at, work.truck_segment_started_at_utc) if assigned_at else work.truck_segment_started_at_utc
         selection = selections.get(assignment.assigned_truck_id)
         truck = assignment.assigned_truck
-        records.append(dict(id=assignment.id, assignment_id=assignment.id, truck_id=assignment.assigned_truck_id,
+        records.append(dict(id=assignment.id, assignment_id=assignment.id,
+            work_id=work.id if work else None, truck_id=assignment.assigned_truck_id,
             fueler_id=assignment.assigned_fueler_user_id, on=on, confirmed_on=confirmed,
             manual_on=manual,
             defuel_recovery_review=bool(work and work.physical_cycle_type == "defuel" and work.off_at_utc
                 and not work.ended_early_at_utc and not work.physical_finalized_at_utc
                 and not _truck_sumped_after(work,selection)),
             release=utc_naive((work.off_at_utc or work.ended_early_at_utc) if work else None)
-                or utc_naive(assignment.completed_at_utc or assignment.fuel_on_board_at_utc),
+                # Administrative completion cannot release this visit's open ON.
+                or (utc_naive(assignment.completed_at_utc or assignment.fuel_on_board_at_utc)
+                    if not (manual or confirmed or on) else None),
             assigned_at=utc_naive(assigned_at), remaining_complete=complete, remaining_at_on=at_on,
             premature_readings=premature_readings,
             parking=parking.get(tail, ("-", False))[0],
@@ -7060,6 +7066,7 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
                 continue
             old_selection = selections.get(old_truck)
             records.append(dict(id=("tail_segment",old_work.id), assignment_id=assignment.id,
+                work_id=old_work.id,
                 historical_segment=True, truck_id=old_truck,
                 defuel_recovery_review=bool(old_work.physical_cycle_type == "defuel" and old_work.off_at_utc
                     and not old_work.ended_early_at_utc and not _truck_sumped_after(old_work,old_selection)),
@@ -7069,11 +7076,11 @@ def _fuel_start_records(operation, assignments, work_states, parking, selections
                 assigned_at=None, remaining_complete=False, remaining_at_on=False, premature_readings=False,
                 parking=parking.get(old_tail,("-",False))[0],
                 truck_available=bool(old_selection and old_selection.status == "available")))
-    releases = [dict(id=event.fuel_assignment_id, truck_id=event.fuel_truck_id,
+    releases = [dict(id=event.fuel_assignment_id, work_id=event.fuel_work_state_id, truck_id=event.fuel_truck_id,
                     release=utc_naive(event.ended_at_utc), parking=parking.get(_normalize_tail(event.tail_number), ("-", False))[0])
                 for event in db.session.query(NeoScorpionFuelingEvent.fuel_assignment_id,
                     NeoScorpionFuelingEvent.fuel_truck_id, NeoScorpionFuelingEvent.ended_at_utc,
-                    NeoScorpionFuelingEvent.tail_number).filter(
+                    NeoScorpionFuelingEvent.tail_number, NeoScorpionFuelingEvent.fuel_work_state_id).filter(
                     NeoScorpionFuelingEvent.sort_date_operation_id == operation.id,
                     NeoScorpionFuelingEvent.ended_at_utc.isnot(None)).all()]
     return records, releases
@@ -7250,6 +7257,9 @@ def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
                 "current_display": (_gallons_display(current_gallons) if selection.inventory_verified
                                     else "UNVERIFIED · LAST " + _gallons_display(selection.current_gallons)),
                 "inventory_verified": selection.inventory_verified,
+                # Normal OFF awaits canonical T/F posting, not a new reading.
+                "inventory_reconciliation_required": bool(not selection.inventory_verified
+                    and selection.inventory_pending_epoch != selection.inventory_epoch),
                 "current_percent": _capacity_percent(current_gallons, truck.capacity_gallons),
                 "current_gauge_percent": _gauge_percent(
                     _capacity_percent(current_gallons, truck.capacity_gallons)

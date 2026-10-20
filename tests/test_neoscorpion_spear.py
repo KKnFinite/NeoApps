@@ -114,6 +114,8 @@ class NeoScorpionSpearPlanningTest(unittest.TestCase):
         plan = _plan([_row(100)], trucks=(truck,))
         self.assertFalse(plan.steps)
         self.assertIn("NO ELIGIBLE TRUCK", plan.unavailable_by_mission_id[100])
+        self.assertIn("gallons unverified", plan.unavailable_by_mission_id[100])
+        self.assertEqual(truck["selection"].status, "available")
 
     def commitment(self, *, fueler=1, truck=10, **values):
         return SimpleNamespace(id=7, assigned_fueler_user_id=fueler, assigned_truck_id=truck,

@@ -250,12 +250,12 @@ class FuelingStartBrowserTest(unittest.TestCase):
                     expect(future.locator('[data-fuel-status]')).to_have_attribute('data-fuel-status','assigned')
                 clock[0]+=timedelta(minutes=3)
                 page.clock.set_system_time(clock[0].replace(tzinfo=timezone.utc)); page.clock.run_for(1000)
-                expect(line).to_have_text('ARRIVAL UNCONFIRMED')
+                expect(line).to_have_text('TRUCK WAIT')
                 with fixture.app.app_context():
                     self.assertIsNone(db.session.get(NeoScorpionFuelWorkState,works[1]).on_at_utc)
                 fixture().ready(page,"/neoscorpion/fueler")
                 card=page.locator('[data-fuel-data-card]').first
-                expect(card.locator('[data-assigned-truck-status]')).to_have_text('ARRIVAL UNCONFIRMED')
+                expect(card.locator('[data-assigned-truck-status]')).to_have_text('TRUCK WAIT')
                 card.locator('[data-truck-on-form] button').click()
                 expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('CONFIRMED',timeout=15000)
                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth+1'))

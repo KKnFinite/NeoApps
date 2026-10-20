@@ -61,7 +61,7 @@ class StatusRulesTest(unittest.TestCase):
         self.assertEqual(fueling_status(r)['dispatch_status_detail'],'WAITING FOR TRUCK · TRUCK STILL FUELING')
 
     def test_movement_and_fob_advice_never_hide_missing_data(self):
-        for movement in ('TRUCK STILL FUELING','TRUCK UNAVAILABLE','ARRIVAL UNCONFIRMED','COMING FROM C07'):
+        for movement in ('TRUCK STILL FUELING','TRUCK UNAVAILABLE','TRUCK ON PENDING','COMING FROM C07'):
             r=self.row();r['assignment'].assigned_truck_id=2;r['assignment'].assigned_fueler_user_id=1
             r.update(required_fuel_lbs=None,truck_start_reason=movement,
                      truck_travel_until='2026-10-18T06:00:00Z',fob_likely=True)

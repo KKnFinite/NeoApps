@@ -35,7 +35,7 @@ test("Dispatch uses compact OFF notes while full forecast detail remains availab
 test("travel countdown never confirms physical arrival or creates ON", () => {
     assert.equal(travelText(now+120000, "ALPHA", now), "COMING FROM ALPHA · ~2 MIN");
     assert.equal(travelText(now+120000, "ALPHA", now+60001), "COMING FROM ALPHA · ~1 MIN");
-    assert.equal(travelText(now, "ALPHA", now), "ARRIVAL UNCONFIRMED");
-    assert.equal(travelText(now, "ALPHA", now+60000), "ARRIVAL UNCONFIRMED");
+    assert.equal(travelText(now, "ALPHA", now), "TRUCK WAIT");
+    assert.equal(travelText(now, "ALPHA", now+60000), "TRUCK WAIT");
     assert.equal(travelText(NaN, "", now), "TRUCK LOCATION UNKNOWN");
 });

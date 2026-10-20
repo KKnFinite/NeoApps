@@ -34,7 +34,7 @@ class StatusNotesBrowserTest(unittest.TestCase):
             def context(gateway,**kwargs):
                 result=original(gateway,**kwargs)
                 for i,row in enumerate(result['rows']):
-                    stage,secondary=[('complete',''),('fueling',''),('fueling',''),('assigned','ARRIVAL UNCONFIRMED'),
+                    stage,secondary=[('complete',''),('fueling',''),('fueling',''),('assigned','TRUCK ON PENDING'),
                         ('assigned','WAITING FOR TRUCK · TRUCK STILL FUELING'),('ready','Needs Fueler'),('review','Dispatcher review requested'),
                         ('ready','Needs Truck'),('review','Dispatcher review requested')][i]
                     row.update(dispatch_status_key=stage,dispatch_status_label=stage.upper(),fuel_status_secondary=secondary,

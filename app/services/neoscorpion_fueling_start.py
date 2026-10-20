@@ -6,6 +6,12 @@ from app.services.neoscorpion_fueling_status import utc_naive
 from app.services.neoscorpion_spear import _parking_ramp, _travel_minutes
 
 
+def _same_visit(left, right):
+    if left.get("work_id") is not None and right.get("work_id") is not None:
+        return left["work_id"] == right["work_id"]
+    return left["id"] == right["id"]
+
+
 def truck_start_gate(record, records, releases, settings, *, at):
     truck_id = record["truck_id"]
     result = dict(can_start=False, reason="Needs Truck", origin="", arrival=None)
@@ -18,11 +24,11 @@ def truck_start_gate(record, records, releases, settings, *, at):
     # An ON from another mission is a commitment until its recorded release;
     # future resource selections without ON are not physical activity.
     for other in records:
-        if (other["id"] != record["id"] and other["truck_id"] == truck_id
+        if (not _same_visit(other, record) and other["truck_id"] == truck_id
                 and other.get("defuel_recovery_review") and other["release"] <= at):
             return dict(result, reason="DEFUEL RECOVERY REVIEW")
         start = other.get("manual_on") or other["confirmed_on"] or other["on"]
-        if (other["id"] == record["id"] or other["truck_id"] != truck_id
+        if (_same_visit(other, record) or other["truck_id"] != truck_id
                 or start is None):
             continue
         assigned_at = other["assigned_at"]
@@ -30,10 +36,10 @@ def truck_start_gate(record, records, releases, settings, *, at):
             continue  # Legacy ON predates this truck's actual assignment.
         if start <= at and (other["release"] is None or other["release"] > at):
             return dict(result, reason="TRUCK STILL FUELING")
-    past = [other for other in records if other["id"] != record["id"]
+    past = [other for other in records if not _same_visit(other, record)
             and other["truck_id"] == truck_id and other["release"] is not None
             and other["release"] <= at and (other["on"] or other["confirmed_on"] or other.get("manual_on"))]
-    past.extend(event for event in releases if event["id"] != record["id"]
+    past.extend(event for event in releases if not _same_visit(event, record)
                 and event["truck_id"] == truck_id and event["release"] <= at)
     if past:
         previous = max(past, key=lambda item: item["release"])
@@ -49,7 +55,7 @@ def truck_start_gate(record, records, releases, settings, *, at):
         if arrival > at:
             return dict(result, reason=f"COMING FROM {origin.upper()} · ~{ceil((arrival-at).total_seconds()/60)} MIN",
                         origin=origin.upper(), arrival=arrival)
-        return dict(result, can_start=True, reason="ARRIVAL UNCONFIRMED", origin=origin.upper(), arrival=arrival)
+        return dict(result, can_start=True, reason="TRUCK ON PENDING", origin=origin.upper(), arrival=arrival)
     return dict(result, can_start=True, reason="")
 
 

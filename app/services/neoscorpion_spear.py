@@ -567,7 +567,8 @@ def build_spear_plan(
                 "NO AVAILABLE FUELER — active assignment" if not fueler_ids and fuelers else
                 "NO ELIGIBLE FUELER" if not fueler_ids else
                 "NO AVAILABLE TRUCK — active assignment" if not truck_ids and usable_trucks else
-                "NO ELIGIBLE TRUCK" if not truck_ids else
+                ("NO ELIGIBLE TRUCK — gallons unverified" if _unverified_available_trucks(truck_rows.values())
+                 else "NO ELIGIBLE TRUCK") if not truck_ids else
                 "NO FEASIBLE RESOURCE — truck fuel / capacity constraints"
             )
             continue
@@ -1114,6 +1115,16 @@ def _candidate_explanation_reason(candidate, selected):
     return "Lower deterministic priority after workload and travel"
 
 
+def _unverified_available_trucks(truck_rows):
+    """Inventory uncertainty is not a physical serviceability restriction."""
+    return any(item.get("truck") and item.get("selection")
+        and item["truck"].is_active and not item["truck"].is_out_of_service
+        and item["selection"].status == "available"
+        and (item["selection"].current_gallons is None
+             or not getattr(item["selection"], "inventory_verified", True))
+        for item in truck_rows)
+
+
 def _truck_constraint_notes(truck_rows):
     notes = []
     for item in truck_rows.values():
@@ -1127,7 +1138,7 @@ def _truck_constraint_notes(truck_rows):
         elif getattr(selection, "current_gallons", None) is None:
             notes.append(f"Truck {number}: current gallons missing hard constraint")
         elif not getattr(selection, "inventory_verified", True):
-            notes.append(f"Truck {number}: inventory unverified hard constraint")
+            notes.append(f"Truck {number}: gallons unverified; physically available")
     return tuple(notes[:3])
 
 
@@ -1326,10 +1337,18 @@ def _current_resource_owners(rows):
             for fueler_id,truck_id in row.get("physical_segment_resources", ()):
                 if fueler_id is not None: fuelers.setdefault(fueler_id,set()).add(row["mission"].id)
                 if truck_id is not None: trucks.setdefault(truck_id,set()).add(row["mission"].id)
+        work = row.get("fuel_work_state")
+        # A completion flag cannot free a truck with a trusted open physical ON.
+        if (assignment is not None and work is not None and row.get("fueling_on_trusted")
+                and not getattr(work, "off_at_utc", None) and not getattr(work, "ended_early_at_utc", None)):
+            truck_id = getattr(work, "physical_truck_id", None) or assignment.assigned_truck_id
+            fueler_id = getattr(work, "physical_fueler_user_id", None) or assignment.assigned_fueler_user_id
+            if truck_id is not None: trucks.setdefault(truck_id, set()).add(row["mission"].id)
+            if fueler_id is not None and fueler_work_end(work) is None:
+                fuelers.setdefault(fueler_id, set()).add(row["mission"].id)
         if (assignment is None or row.get("administratively_complete") or getattr(assignment,"completed_at_utc",None)
                 or getattr(assignment,"fuel_on_board_at_utc",None)):
             continue
-        work = row.get("fuel_work_state")
         released = _assignment_finished(assignment, work)
         for owners, identifier in (
             (fuelers, getattr(assignment, "assigned_fueler_user_id", None)),

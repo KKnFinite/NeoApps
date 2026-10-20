@@ -176,7 +176,7 @@ class FuelingStartHotfixTest(unittest.TestCase):
         self.save(now=self.now+timedelta(minutes=1), **self.readings())
         self.assertIsNone(work.on_at_utc)
         row = self.row(self.now+timedelta(minutes=3))
-        self.assertEqual(row["truck_start_reason"], "ARRIVAL UNCONFIRMED")
+        self.assertEqual(row["truck_start_reason"], "TRUCK ON PENDING")
         self.assertEqual(row["dispatch_status_key"], "assigned")
         self.assertIsNone(work.on_at_utc)
         result = self.save(now=self.now+timedelta(minutes=3), **self.readings())

@@ -18,10 +18,11 @@
     {% elif dispatcher and row.dispatch_status_key == 'fueling' and row.fueler_off_estimate_display is defined and row.fuel_status_secondary not in critical_secondary %}
     <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-estimate neoscorpion-dispatch-size-small" data-fuel-status-secondary data-fueler-off-estimate="{{ row.fueler_off_estimate_utc }}" data-fueler-off-clock="{{ row.fueler_off_estimate_clock }}" data-prof-difference="{{ row.fueler_off_prof_difference if row.fueler_off_prof_difference is not none else '' }}" data-off-source="{{ row.fueler_off_estimate_source }}" title="{{ row.fueler_off_estimate_display }}"><span data-fueler-off-estimate-text>{{ row.fueler_off_status_note }}</span></small>
     {% elif dispatcher and row.truck_travel_until and row.dispatch_status_key in ['assigned', 'ready'] and not row.mission_data_missing and row.fuel_status_secondary not in critical_secondary %}
-    <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-estimate neoscorpion-dispatch-size-small" data-fuel-status-secondary data-truck-travel-until="{{ row.truck_travel_until }}" data-truck-travel-origin="{{ row.truck_travel_origin }}" title="{{ row.truck_start_reason }}"><span data-fueler-off-estimate-text>{{ row.truck_start_reason }}</span></small>
+    <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-estimate neoscorpion-dispatch-size-small" data-fuel-status-secondary data-truck-travel-until="{{ row.truck_travel_until }}" data-truck-travel-origin="{{ row.truck_travel_origin }}" title="{{ row.truck_start_reason }}"><span data-fueler-off-estimate-text>{{ 'TRUCK WAIT' if row.truck_start_reason == 'TRUCK ON PENDING' else row.truck_start_reason }}</span></small>
     {% elif row.fuel_status_secondary %}
     {% if row.fuel_status_secondary == 'MISSION DATA MISSING' %}
     {% set secondary = row.mission_data_summary %}
+    {% elif row.fuel_status_secondary == 'TRUCK ON PENDING' %}{% set secondary = 'TRUCK WAIT' %}
     {% elif dispatcher %}
     {% set secondary = {
         'Needs Fueler': 'Needs Fueler', 'Needs Truck': 'Needs Truck',
@@ -36,7 +37,7 @@
         'TAIL SWAP · advisory': 'TAIL SWAP',
         'TRUCK STILL FUELING': 'TRUCK STILL FUELING', 'TRUCK UNAVAILABLE': 'TRUCK UNAVAILABLE',
         'WAITING FOR TRUCK · TRUCK STILL FUELING': 'WAITING FOR TRUCK',
-        'TRUCK LOCATION UNKNOWN': 'TRUCK LOCATION UNKNOWN', 'ARRIVAL UNCONFIRMED': 'ARRIVAL UNCONFIRMED'
+        'TRUCK LOCATION UNKNOWN': 'TRUCK LOCATION UNKNOWN'
     }.get(row.fuel_status_secondary, 'SEE DETAILS') %}
     {% else %}{% set secondary = row.fuel_status_secondary %}{% endif %}
     <small class="neoscorpion-fuel-status-warning{% if dispatcher %} neoscorpion-dispatch-size-small{% endif %}" data-fuel-status-secondary title="{% if row.fuel_status_secondary == 'MISSION DATA MISSING' %}Missing: {{ row.mission_data_missing|join(', ') }}{% else %}{{ row.fuel_status_secondary }}{% endif %}">{{ secondary }}</small>

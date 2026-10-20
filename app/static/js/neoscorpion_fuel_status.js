@@ -19,7 +19,7 @@
     };
     const travelText = (arrival, origin, now) => {
         if (!Number.isFinite(arrival) || !origin) return "TRUCK LOCATION UNKNOWN";
-        if (arrival <= now) return "ARRIVAL UNCONFIRMED";
+        if (arrival <= now) return "TRUCK WAIT";
         return `COMING FROM ${origin} · ~${Math.ceil((arrival - now) / 60000)} MIN`;
     };
     const update = () => {
@@ -44,7 +44,8 @@
             const text = travelText(Date.parse(element.dataset.truckTravelUntil), element.dataset.truckTravelOrigin, now);
             const label = element.querySelector("[data-fueler-off-estimate-text]") || element;
             if (label.textContent !== text) label.textContent = text;
-            if (element.title !== text) element.title = text;
+            const title = text === "TRUCK WAIT" ? "Truck ON pending; estimated travel has elapsed." : text;
+            if (element.title !== title) element.title = title;
         });
     };
     if (typeof module !== "undefined" && module.exports) module.exports = {colorFor, estimateText, estimateDetails, travelText};
