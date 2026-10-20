@@ -90,7 +90,7 @@ from app.services.neorain_fuel_authority import (
     rain_fuel_data_source,
 )
 from app.services.neorain_reports import (
-    REPORT_FIELDS, briefing_text, report_context, save_report_entry,
+    REPORT_FIELDS, report_context, save_report_entry,
 )
 
 
@@ -212,19 +212,76 @@ def rainrock_entry():
 @bp.route("/daily-briefing")
 @gateway_node_required("rain")
 def daily_briefing():
+    from app.services.neorain_daily_briefing import INPUT_GROUPS, briefing_context, format_briefing
     if not user_can("neorain.daily_briefing.view"):
         abort(403)
     gateway = get_current_gateway()
     operation, current = _selected_report_operation(gateway)
     is_current = bool(current and operation and current.id == operation.id)
-    report = report_context(operation, current=is_current) if operation else None
+    report = briefing_context(operation, current=is_current) if operation else None
     session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.daily_briefing"
     return render_template(
         "neonodes/neorain/daily_briefing.html", gateway=gateway, operation=operation,
         operations=_report_choices(gateway), report=report,
-        is_current=is_current,
-        briefing=briefing_text(report) if report else "No selected sort.",
+        is_current=is_current, input_groups=INPUT_GROUPS,
+        input_versions={key: field['version'] for key, field in report['fields'].items()} if report else {},
+        can_edit=user_can('neorain.rainrock.edit'),
+        briefing=format_briefing(report) if report else "No selected sort.",
     )
+
+
+@bp.route('/daily-briefing/state')
+@gateway_node_required('rain')
+def daily_briefing_state():
+    from app.services.neorain_daily_briefing import briefing_context, briefing_payload
+    if not user_can('neorain.daily_briefing.view'):
+        abort(403)
+    operation, current = _selected_report_operation(get_current_gateway())
+    if operation is None:
+        abort(404)
+    response = jsonify(ok=True, **briefing_payload(briefing_context(operation,
+        current=bool(current and current.id == operation.id))))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@bp.route('/daily-briefing/inputs', methods=['POST'])
+@gateway_node_required('rain')
+def daily_briefing_inputs():
+    import json
+    from app.services.neorain_daily_briefing import (
+        INPUTS, BriefingConflict, briefing_context, briefing_payload, save_inputs,
+    )
+    if not user_can('neorain.daily_briefing.view') or not user_can('neorain.rainrock.edit'):
+        abort(403)
+    operation, current = _selected_report_operation(get_current_gateway())
+    if operation is None:
+        abort(404)
+    is_current = bool(current and current.id == operation.id)
+    try:
+        if request.is_json:
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict) or set(payload) != {'values', 'versions'}:
+                raise ValueError('Provide briefing values and their saved versions.')
+            values, versions = payload['values'], payload['versions']
+        else:
+            values = {key: request.form[key] for key in INPUTS if key in request.form}
+            all_versions = json.loads(request.form.get('expected_versions', '{}'))
+            versions = {key: all_versions[key] for key in values}
+        save_inputs(operation, values, versions, current_user.id, current=is_current)
+        db.session.commit()
+    except (ValueError, KeyError, TypeError, IntegrityError) as exc:
+        db.session.rollback()
+        conflict = isinstance(exc, (BriefingConflict, IntegrityError))
+        message = str(exc) if isinstance(exc, ValueError) else 'Briefing inputs changed or were invalid. Reload before retrying.'
+        if request.is_json:
+            return jsonify(ok=False, error=message), 409 if conflict else 400
+        flash(message, 'error')
+    else:
+        if request.is_json:
+            return jsonify(ok=True, **briefing_payload(briefing_context(operation, current=is_current)))
+        flash('Briefing inputs saved.', 'success')
+    return redirect(url_for('neorain.daily_briefing', operation_id=operation.id))
 
 
 @bp.route("/inbound")

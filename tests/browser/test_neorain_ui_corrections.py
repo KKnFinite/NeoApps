@@ -63,7 +63,7 @@ class RainUICorrectionsBrowserTest(unittest.TestCase):
                         page.evaluate("navigator.clipboard.writeText=async text=>{window.copiedBriefing=text;}")
                         page.locator('#copy-briefing').click();expect(page.locator('#copy-briefing-status')).to_have_text('Copied.')
                         self.assertEqual(page.evaluate('window.copiedBriefing'),text)
-                        self.assertIn('LATE INBOUND AIRCRAFT',text)
+                        self.assertIn('RFD-LAX UPS7831 N7831UP +11 RS',text)
                         line=page.locator('#briefing-text').evaluate('el=>parseFloat(getComputedStyle(el).lineHeight)')
                         self.assertLessEqual(line,22)
                     if board=='rainrock':
