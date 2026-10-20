@@ -272,18 +272,17 @@
                 card?.querySelector('input:not([type=hidden]), button, a')?.focus({preventScroll:true});
                 return;
             }
-            const toggle = event.target.closest("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-completion-explain], [data-dispatch-action-open]");
+            const toggle = event.target.closest("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-completion-explain]");
             if (!toggle) return;
             event.preventDefault();
             const detail = document.getElementById(toggle.getAttribute("aria-controls"));
             if (!detail) return;
-            const expanded = toggle.matches('[data-dispatch-action-open]') ? false : toggle.getAttribute("aria-expanded") === "true";
-            scope.querySelectorAll("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details], [data-dispatch-action-open]").forEach(button => {
+            const expanded = toggle.getAttribute("aria-expanded") === "true";
+            scope.querySelectorAll("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details]").forEach(button => {
                 if (button.getAttribute("aria-controls") === detail.id) button.setAttribute("aria-expanded", String(!expanded));
             });
             detail.hidden = expanded;
             detail.setAttribute("aria-hidden", String(expanded));
-            if (toggle.matches('[data-dispatch-action-open]')) detail.querySelector('[data-dispatch-action-center]')?.scrollIntoView({block:'nearest'});
         });
     }
 
@@ -876,9 +875,9 @@
                 timeline.querySelectorAll('input,select,textarea').forEach(control=>initialControlValues.set(control,controlValue(control)));
             }
             if (sameVisit && currentDetails && nextDetails) {
-                const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]'),
+                const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).map(
                     item => [item.dataset.consoleSection, item]));
-                currentDetails.querySelectorAll('details[data-console-section]').forEach(item => {
+                Array.from(currentDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).forEach(item => {
                     const fresh = incoming.get(item.dataset.consoleSection);
                     if (!groupDirty([item]) && !item.contains(document.activeElement)) {
                         if (!fresh) item.remove();
@@ -889,6 +888,13 @@
                         }
                     } else if (!fresh) {
                         item.querySelectorAll('button[type="submit"], button:not([type])').forEach(button => button.disabled = true);
+                    } else if (fresh.dataset.operationUnavailable !== undefined) {
+                        // Keep the draft, focus and disclosure state, while
+                        // current prerequisites still govern execution.
+                        item.querySelectorAll('button[type="submit"], button:not([type])').forEach(button => {
+                            button.disabled = fresh.dataset.operationUnavailable === 'true';
+                        });
+                        item.querySelector('summary')?.replaceWith(fresh.querySelector('summary').cloneNode(true));
                     }
                     incoming.delete(item.dataset.consoleSection);
                 });
@@ -903,6 +909,7 @@
             const oldCenter=currentDetails?.querySelector('[data-dispatch-action-center]');
             const newCenter=nextDetails?.querySelector('[data-dispatch-action-center]');
             if (oldCenter && newCenter) {
+                oldCenter.hidden = newCenter.hidden && !groupDirty([oldCenter]);
                 const incoming=new Map(Array.from(newCenter.querySelectorAll('[data-action-key]'),item=>[item.dataset.actionKey,item]));
                 oldCenter.querySelectorAll('[data-action-key]').forEach(item=>{
                     const fresh=incoming.get(item.dataset.actionKey);
@@ -925,12 +932,11 @@
                     if (!initialControlValues.has(control)) initialControlValues.set(control,controlValue(control));
                 });
             }
-            const oldIndicator=currentStack.querySelector('[data-dispatch-action-open]');
-            const newIndicator=nextStack.querySelector('[data-dispatch-action-open]');
-            if (newIndicator) {
-                if (oldIndicator) oldIndicator.replaceWith(newIndicator.cloneNode(true));
-                else currentStack.appendChild(newIndicator.cloneNode(true));
-            } else oldIndicator?.remove();
+            ['[data-dispatch-action-count]', '[data-mobile-dispatch-action-count]'].forEach(selector => {
+                const oldIndicator=currentRow.querySelector(selector);
+                const newIndicator=nextRow.querySelector(selector);
+                if (oldIndicator && newIndicator) oldIndicator.replaceWith(newIndicator.cloneNode(true));
+            });
             const currentHandoff = currentDetails?.querySelector("[data-dispatch-fueler-submission]");
             const nextHandoff = nextDetails?.querySelector("[data-dispatch-fueler-submission]");
             if (sameVisit && currentHandoff && nextHandoff) currentHandoff.textContent = nextHandoff.textContent;

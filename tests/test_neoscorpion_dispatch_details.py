@@ -28,6 +28,15 @@ class Controls(HTMLParser):
         if tag=='form':self.depth-=1
 
 
+class Operations(HTMLParser):
+    def __init__(self, html):
+        super().__init__(); self.states={};self.feed(html)
+    def handle_starttag(self,tag,attrs):
+        attrs=dict(attrs)
+        if tag=='details' and 'data-operation-unavailable' in attrs:
+            self.states[attrs['data-console-section']]=attrs['data-operation-unavailable']=='false'
+
+
 class DetailsTest(unittest.TestCase):
     setUp=base.ContinuationTest.setUp
     prepare=base.ContinuationTest.prepare
@@ -122,3 +131,58 @@ class DetailsTest(unittest.TestCase):
         center=html.split('data-dispatch-action-center',1)[1].split('data-dispatch-work-timeline',1)[0]
         self.assertNotIn('name="inventory_epoch"',center)
         self.assertEqual(self.selection.status,'needs_sump')
+
+    def test_untouched_missing_data_is_not_an_extra_action_and_details_are_minimal(self):
+        self.tail.inbound_fuel_lbs=None;self.mission.planned_fuel_load=None
+        db.session.delete(self.assignment);db.session.commit()
+        html=self.html();states=Operations(html).states
+        self.assertEqual(states,{'second-truck':False,'start-uplift':False,'start-defuel':False})
+        self.assertNotIn('data-dispatch-action-open',html)
+        self.assertNotIn('FUEL & FLIGHT DATA',html)
+        self.assertNotIn('No current visit notes',html)
+        self.assertNotIn('No finalized physical visits',html)
+        self.assertIn('aria-label="Dispatcher actions" hidden',html)
+        self.assertIn('data-dispatch-action-count hidden',html)
+
+    def test_second_truck_is_discoverable_before_and_during_fueling_and_not_duplicated(self):
+        self.assertTrue(Operations(self.html()).states['second-truck'])
+        self.prepare();html=self.html();states=Operations(html).states
+        self.assertEqual(states,{'second-truck':True,'start-uplift':False,'start-defuel':False})
+        self.plan();html=self.html()
+        self.assertFalse(Operations(html).states['second-truck'])
+        self.assertEqual(html.count('data-pending-uplift-form'),1)
+        self.assertIn('SAVE TRUCK PLAN',html)
+
+    def complete_physical(self):
+        self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data());self.off();self.submit()
+        fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+
+    def test_completed_physical_fueling_exposes_both_follow_ups_before_history(self):
+        self.complete_physical();html=self.html()
+        self.assertEqual(Operations(html).states,{'second-truck':False,'start-uplift':True,'start-defuel':True})
+        self.assertLess(html.index('data-console-section="start-uplift"'),html.index('data-console-section="history"'))
+        self.assertIn('data-console-section="history"',html)
+        self.assertNotIn('<details open',html)
+
+    def test_active_uplift_and_defuel_keep_operations_and_existing_cancel_workflow(self):
+        self.complete_physical()
+        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'defuel','20',
+            self.fueler.id,self.truck.id,expected_cycle=1,expected_tail=self.mission.assigned_tail_number);db.session.commit()
+        html=self.html()
+        self.assertEqual(Operations(html).states,{'second-truck':False,'start-uplift':False,'start-defuel':False})
+        self.assertIn('CANCEL DEFUEL',html)
+
+    def test_active_uplift_allows_second_truck_but_not_an_overlapping_follow_up(self):
+        self.complete_physical()
+        fuel.start_follow_up_fuel_cycle(self.gateway,self.dispatcher,self.assignment.id,'uplift','40',
+            None,None,expected_cycle=1,expected_tail=self.mission.assigned_tail_number);db.session.commit()
+        html=self.html()
+        self.assertEqual(Operations(html).states,{'second-truck':True,'start-uplift':False,'start-defuel':False})
+        self.assertIn('CANCEL UPLIFT',html)
+
+    def test_fob_never_exposes_a_physical_follow_up(self):
+        from datetime import datetime
+        self.assignment.fuel_on_board_at_utc=datetime.utcnow();db.session.commit()
+        html=self.html()
+        self.assertEqual(Operations(html).states,{'second-truck':False,'start-uplift':False,'start-defuel':False})
+        self.assertIn('FOB does not establish a physical fueling event.',html)

@@ -2029,6 +2029,37 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
         row['console_truck_review'] = ' · '.join(reasons)
         row['action_count'] += int(bool(row.get('call_dispatch_alert') and dispatch_editable))
         row['action_count'] += int(bool(reasons))
+        # Presentation only: missing row data is not an additional mandatory
+        # action. Existing canonical eligibility and mutation guards still rule.
+        row['details_action_count'] = max(0, row['action_count'] - int(row['mission_data_action']))
+        row['details_action_count'] += int(bool(row.get('confirm_tail_available')))
+        row['details_action_count'] += int(bool(row.get('normal_completion_ready')))
+        if not row.get('assignment'):
+            second_reason = 'Assign the mission first.'
+        elif row.get('administratively_complete'):
+            second_reason = 'Use UPLIFT after completed physical fueling.'
+        elif row.get('pending_uplift'):
+            second_reason = 'A saved truck / uplift plan already exists.'
+        elif row.get('cycle_type') == 'defuel':
+            second_reason = 'Complete or review DEFUEL first.'
+        elif not row['mission'].planned_fuel_load:
+            second_reason = 'Enter Required Fuel first.'
+        else:
+            second_reason = ''
+        row['second_truck_reason'] = second_reason
+        if row.get('fuel_on_board_complete'):
+            follow_reason = 'FOB does not establish a physical fueling event.'
+        elif row.get('pending_uplift'):
+            follow_reason = 'Resolve the saved truck / uplift plan first.'
+        elif not row.get('normal_completion_complete'):
+            follow_reason = 'Dispatcher COMPLETE required.'
+        elif not row.get('has_prior_fueling_events'):
+            follow_reason = 'A completed physical fueling event is required.'
+        elif not row.get('follow_up_available') or row['assignment'].review_status != 'complete' or row['mission'].fuel_status != 'complete':
+            follow_reason = 'Review the completed cycle and confirmed aircraft.'
+        else:
+            follow_reason = ''
+        row['follow_up_reason'] = follow_reason
     return {**context, 'asset_driver_admin':driver_admin, 'dispatch_preferences':preferences, 'vendor_pending_by_truck':pending,
         "rows": sorted(rows, key=lambda row: _dispatch_presentation_key(row, preferences['secondary_sort'], preferences['arrived_first'])), **roster}
 

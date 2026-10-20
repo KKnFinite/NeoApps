@@ -1,6 +1,6 @@
 {% set note = row.tail_note %}
 <div class="neoscorpion-tail-notes" data-tail-notes data-tail="{{ row.tail_number }}">
-    <strong>TAIL NOTES</strong>
+    {% if not tail_notes_compact|default(false) %}<strong>TAIL NOTES</strong>{% endif %}
     {% if can_edit|default(false) and not tail_notes_readonly|default(false) and row.tail_number and row.tail_number != '-' %}
     <form action="{{ url_for('neoscorpion.fuel_dispatch_tail_notes') }}" method="post" data-tail-note-form>
         {{ csrf_field() }}
@@ -10,5 +10,5 @@
         <div class="neoscorpion-tail-note-controls"><button type="submit" class="action-button">SAVE</button><button type="button" class="action-button" data-tail-note-clear>CLEAR</button><small data-tail-note-status role="status" aria-live="polite"></small></div>
     </form>
     {% else %}<p data-tail-note-text>{{ note.notes if note and note.notes else '-' }}</p>{% endif %}
-    <small data-tail-note-editor>{% if note %}{{ note.editor }} · <time datetime="{{ note.updated_at }}">{{ note.updated_at }}</time>{% else %}No saved Tail Notes{% endif %}</small>
+    <small data-tail-note-editor{% if tail_notes_compact|default(false) and not note %} hidden{% endif %}>{% if note %}{{ note.editor }} · <time datetime="{{ note.updated_at }}">{{ note.updated_at }}</time>{% else %}No saved Tail Notes{% endif %}</small>
 </div>

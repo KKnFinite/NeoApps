@@ -34,7 +34,10 @@
                 field.defaultValue = payload.note.notes;
                 other.elements.expected_version.value = String(payload.note.version);
                 const label = other.closest('[data-tail-notes]').querySelector('[data-tail-note-editor]');
+                label.hidden = false;
                 label.textContent = `${payload.note.editor} · ${payload.note.updated_at}`;
+                const preview = other.closest('details[data-console-section="tail-notes"]')?.querySelector('[data-tail-note-preview]');
+                if (preview) { preview.textContent = payload.note.notes; preview.hidden = !payload.note.notes; }
             });
             status.textContent = input.value === input.defaultValue ? 'SAVED' : 'SAVED · new draft unsaved';
             status.classList.remove('is-error');
