@@ -26,7 +26,7 @@
                         <div><div class="neoscorpion-dispatch-detail-stack">{% if editable and row.assignment_recommendation_display %}<span class="neoscorpion-dispatch-recommendation">SPEAR {{ row.assignment_recommendation_display }}{% if row.assignment_recommendation_time_display %} {{ row.assignment_recommendation_time_display }}{% endif %}</span>{% elif row.assignment_recommendation_reason_display %}<span class="neoscorpion-dispatch-recommendation">{{ row.assignment_recommendation_reason_display }}</span>{% endif %}</div></div>
 
 {% for source in row.console_sources if can_edit and source.continuation_plan %}{% set handoff=source.continuation_plan %}
-<details data-console-section="source-{{ source.physical_work_id }}"><summary>Review / correct source handoff · Visit {{ source.fuel_work_state.visit_number }}</summary>
+<details data-console-section="source-{{ source.physical_work_id }}"><summary>SOURCE HANDOFF · VISIT {{ source.fuel_work_state.visit_number }}</summary>
 <form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_pending_uplift') }}" data-dispatch-lifecycle-form>
 {{ csrf_field() }}<input type="hidden" name="assignment_id" value="{{ row.assignment.id }}"><input type="hidden" name="pending_id" value="{{ handoff.id }}"><input type="hidden" name="expected_version" value="{{ handoff.version }}"><label>Source correction / review reason<input name="reason" required></label><button class="action-button" name="pending_action" value="review_source">REVIEW SOURCE HANDOFF</button><small data-lifecycle-status role="status"></small></form></details>
 {% endfor %}
