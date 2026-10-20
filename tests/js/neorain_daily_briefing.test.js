@@ -7,6 +7,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function page() {
   const requests=[], handlers={}, timers=[];
   const inputs=['briefing_safety','actual_volume'].map(name => ({name,value:'',disabled:false,
+    tagName:name==='briefing_safety'?'TEXTAREA':'INPUT',style:{},scrollHeight:30,
     dataset:{savedValue:'',version:'0'}}));
   const preview={textContent:'Initial\n\nReport'}, status={textContent:''}, copyStatus={textContent:''};
   const button={disabled:false}, hidden={value:''}, copy={addEventListener:(_,fn)=>{handlers.copy=fn;}};
@@ -59,4 +60,16 @@ test('failed save retains drafts, confirmed report and original versions',async(
   assert.equal(p.inputs[0].value,'Draft');assert.equal(p.inputs[0].dataset.version,'0');
   assert.equal(p.preview.textContent,'Initial\n\nReport');assert.match(p.status.textContent,/changed/);
   assert.equal(p.button.disabled,false);
+});
+
+test('notes expand for typing and refreshed values without changing save or draft state',async()=>{
+  const p=page(),note=p.inputs[0];assert.equal(note.style.height,'32px');
+  note.value='Longer\nunfinished\nnote';note.scrollHeight=66;
+  p.handlers.input({target:note});assert.equal(note.style.height,'68px');
+  assert.equal(p.status.textContent,'Unsaved changes.');assert.equal(p.requests.length,0);
+  const poll=p.timers[0].fn();await tick();await p.reply(0);await poll;
+  assert.equal(note.value,'Longer\nunfinished\nnote');assert.equal(note.style.height,'68px');
+  note.value='';note.scrollHeight=30;
+  const next=p.timers[0].fn();await tick();await p.reply(1);await next;
+  assert.equal(note.value,'saved');assert.equal(note.style.height,'32px');
 });

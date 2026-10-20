@@ -3,18 +3,39 @@
 {% block content %}
 {% include "neonodes/neorain/_report_style.html" %}
 <style>
-.rain-daily-briefing .briefing-input-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.rain-daily-briefing fieldset{min-width:0;margin:0;padding:6px;border:1px solid rgba(var(--node-rgb),.25)}
-.rain-daily-briefing legend{padding:0 4px;font:.8rem NeoFontPlain,Arial,sans-serif;font-weight:700;color:var(--node-highlight)}
-.rain-daily-briefing .briefing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.rain-daily-briefing .briefing-note{grid-column:1/-1}
-.rain-daily-briefing textarea,.rain-daily-briefing input{width:100%;min-width:0;font-size:.8rem;line-height:1.3}
-.rain-daily-briefing textarea{resize:vertical;min-height:52px}
-.rain-daily-briefing [role=status]{font-size:.8rem;margin-left:6px}
-.rain-daily-briefing .briefing-save-row{margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-@media(max-width:700px){.rain-daily-briefing .briefing-input-groups{grid-template-columns:1fr}}
-@media(min-width:1200px){.rain-daily-briefing .briefing-input-groups{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.rain-daily-briefing .briefing-input-panel{padding:8px;border:1px solid rgba(var(--node-rgb),.25);background:#0b1018;font-family:NeoFontPlain,Arial,sans-serif}
+.rain-daily-briefing .briefing-input-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rain-daily-briefing .briefing-input-header h2{margin:0}
+.rain-daily-briefing .briefing-input-header button{margin-left:auto;min-height:28px;padding:3px 8px;font-size:.75rem;line-height:1.2}
+.rain-daily-briefing .briefing-input-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;margin-top:6px;align-items:start}
+.rain-daily-briefing .briefing-volume-row{grid-template-columns:repeat(6,minmax(0,1fr))}
+.rain-daily-briefing .briefing-count-row{max-width:360px}
+.rain-daily-briefing .briefing-input-row label{min-width:0;font-size:.75rem;line-height:1.25}
+.rain-daily-briefing .briefing-input-row input,.rain-daily-briefing .briefing-input-row textarea{display:block;width:100%;min-width:0;min-height:32px;margin-top:3px;padding:6px 8px;font:400 .8rem/18px NeoFontPlain,Arial,sans-serif}
+.rain-daily-briefing .briefing-input-row input{height:32px}
+.rain-daily-briefing .briefing-input-row textarea{height:32px;max-height:144px;resize:vertical}
+.rain-daily-briefing .briefing-notes-row textarea{min-height:50px}
+.rain-daily-briefing [data-briefing-status]{display:block;font-size:.75rem;line-height:1.3}
+.rain-daily-briefing [data-briefing-status]:empty{display:none}
+@media(max-width:1100px){.rain-daily-briefing .briefing-volume-row{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.rain-daily-briefing .briefing-volume-row{grid-template-columns:repeat(2,minmax(0,1fr))}.rain-daily-briefing .briefing-count-row{max-width:none}}
+@media(max-width:480px){.rain-daily-briefing .briefing-text-row,.rain-daily-briefing .briefing-notes-row{grid-template-columns:1fr}}
 </style>
+{% macro briefing_field(key, label, rows=1) %}
+  {% set field = report.fields[key] %}
+  <label for="briefing-{{ key }}">{{ label }}
+  {% if field.kind == 'note' %}
+    <textarea id="briefing-{{ key }}" name="{{ key }}" rows="{{ rows }}" maxlength="2000"
+  {% else %}
+    <input id="briefing-{{ key }}" name="{{ key }}" type="text" inputmode="numeric" maxlength="16"
+      value="{{ field.manual_value if field.editable else field.value }}"
+  {% endif %}
+      data-briefing-field="{{ key }}" data-version="{{ field.version }}"
+      data-saved-value="{{ field.manual_value if field.editable else field.value }}"
+      {% if not can_edit or not field.editable %}disabled{% endif %}
+      {% if field.kind == 'note' %}>{{ field.manual_value }}</textarea>{% else %}>{% endif %}
+  </label>
+{% endmacro %}
 <main class="rain-report rain-daily-briefing" data-daily-briefing
   {% if report %}data-state-url="{{ url_for('neorain.daily_briefing_state', operation_id=operation.id) }}"
   data-refresh-ms="{{ config.get('NEORAIN_BRIEFING_REFRESH_MS',60000) }}"{% endif %}>
@@ -22,36 +43,34 @@
   {% include "neonodes/neorain/_report_sort_picker.html" %}
   {% if report %}
   <p>{{ operation.gateway_code }} · {{ operation.sort_name }} · {{ operation.sort_date }}{% if not is_current %} · Historical sort{% endif %}</p>
-  <section class="rain-report-panel" aria-label="Sort-specific briefing inputs">
-    <h2>Briefing inputs</h2>
-    <p>Saved for this sort in NeoRain, independently of Google Rain. Staffing remains manual until NeoStaffing is operational. Leave unknown information blank.</p>
+  <section class="rain-report-panel briefing-input-panel" aria-label="Sort-specific briefing inputs">
     <form method="post" action="{{ url_for('neorain.daily_briefing_inputs', operation_id=operation.id) }}" data-briefing-inputs>
       {{ csrf_field() }}
       <input type="hidden" name="expected_versions" value='{{ input_versions|tojson }}' data-briefing-versions>
-      <div class="briefing-input-groups">
-      {% for group, fields in input_groups %}
-        <fieldset><legend>{{ group }}</legend>
-        {% if group == 'Volume Plan / Actual' %}<p>Saved Rainrock volumes are used when available. Enter a fallback or correction here.</p>{% endif %}
-        <div class="briefing-fields">
-        {% for key,label,kind in fields %}{% set field = report.fields[key] %}
-          <label{% if kind == 'note' %} class="briefing-note"{% endif %} for="briefing-{{ key }}">{{ label }}
-          {% if kind == 'note' %}
-            <textarea id="briefing-{{ key }}" name="{{ key }}" rows="2" maxlength="2000"
-          {% else %}
-            <input id="briefing-{{ key }}" name="{{ key }}" type="text" inputmode="numeric" maxlength="16"
-              value="{{ field.manual_value if field.editable else field.value }}"
-          {% endif %}
-              data-briefing-field="{{ key }}" data-version="{{ field.version }}"
-              data-saved-value="{{ field.manual_value if field.editable else field.value }}"
-              {% if not can_edit or not field.editable %}disabled{% endif %}
-              {% if kind == 'note' %}>{{ field.manual_value }}</textarea>{% else %}>{% endif %}
-          {% if not field.editable %}<small>From {{ field.source }}</small>{% endif %}
-          </label>
-        {% endfor %}</div></fieldset>
-      {% endfor %}
+      <div class="briefing-input-header"><h2>Briefing inputs</h2>
+        {% if can_edit %}<button type="submit" data-briefing-save>SAVE INPUTS</button>{% endif %}
       </div>
-      {% if can_edit %}<div class="briefing-save-row"><button type="submit" data-briefing-save>SAVE INPUTS</button>
-        <span role="status" aria-live="polite" data-briefing-status></span></div>{% endif %}
+      <span role="status" aria-live="polite" data-briefing-status></span>
+      <div class="briefing-input-row briefing-text-row">
+        {{ briefing_field('briefing_safety', 'Safety') }}
+        {{ briefing_field('briefing_incident', 'Incident') }}
+      </div>
+      <div class="briefing-input-row briefing-volume-row">
+        {{ briefing_field('planned_volume', 'Volume Plan') }}
+        {{ briefing_field('actual_volume', 'Volume Actual') }}
+        {{ briefing_field('briefing_ramp_staffing_actual', 'Ramp Actual') }}
+        {{ briefing_field('briefing_ramp_staffing_planned', 'Ramp Planned') }}
+        {{ briefing_field('briefing_hub_staffing_actual', 'Hub Actual') }}
+        {{ briefing_field('briefing_hub_staffing_planned', 'Hub Planned') }}
+      </div>
+      <div class="briefing-input-row briefing-count-row">
+        {{ briefing_field('briefing_inbound_missorts', 'Inbound Missorts') }}
+        {{ briefing_field('briefing_libs', 'LIBs') }}
+      </div>
+      <div class="briefing-input-row briefing-notes-row">
+        {{ briefing_field('briefing_service', 'Service Failures', 2) }}
+        {{ briefing_field('briefing_operational_notes', 'Operational Notes', 2) }}
+      </div>
     </form>
   </section>
   {% endif %}
@@ -60,5 +79,5 @@
     <pre class="rain-report-briefing" id="briefing-text">{{ briefing }}</pre>
   </section>
 </main>
-<script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='20261019-briefing-v1') }}"></script>
+<script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='20261019-briefing-v2') }}"></script>
 {% endblock %}

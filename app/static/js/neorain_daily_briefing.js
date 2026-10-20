@@ -11,6 +11,12 @@
   const form = root.querySelector('[data-briefing-inputs]');
   if (!form) return;
   const inputs = [...form.querySelectorAll('[data-briefing-field]')];
+  const fitNote = input => {
+    if (input.tagName !== 'TEXTAREA') return;
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight + 2}px`;
+  };
+  inputs.forEach(fitNote);
   const status = form.querySelector('[data-briefing-status]');
   const button = form.querySelector('[data-briefing-save]');
   const dirty = input => input.value !== input.dataset.savedValue;
@@ -32,11 +38,13 @@
       input.dataset.savedValue = value ?? '';
       input.dataset.version = field.version;
       if (unchanged) input.value = value ?? '';
+      fitNote(input);
       input.disabled = !button || !field.editable;
     }
     syncVersions();
   };
-  form.addEventListener('input', () => {
+  form.addEventListener('input', event => {
+    fitNote(event.target);
     if (status && !saving) status.textContent = inputs.some(dirty) ? 'Unsaved changes.' : '';
   });
   form.addEventListener('submit', async event => {
