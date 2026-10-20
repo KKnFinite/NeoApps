@@ -113,47 +113,74 @@
 .neoscorpion-dispatch-status-detail {
     font-size: .68rem !important;
 }
-.neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed > strong {
+.neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed > strong {
     color: #ffd21a;
     font-size: .68rem;
     font-weight: 850;
 }
 .neoscorpion-dispatch-tail .neoscorpion-spear-risk { display:block; width:max-content; max-width:100%; margin:2px auto 0; padding:0; white-space:nowrap; overflow-wrap:normal; }
 .neoscorpion-dispatch-fuel-input { display: block; width: min(100%, 58px) !important; margin: 0 auto; text-align: center; }
-/* Center both fuel groups while retaining aligned inputs and the reserved FOB slot. */
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-inbound,
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-required { vertical-align: middle; }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-required::after {
-    content: "";
+/* One numeric rail, independent of optional FOB/CF/APU and autosave feedback.
+   Keep td in native table layout; only its contents use grid. The common
+   28/18/12px slots replace the mismatched Fuel Load pseudo-element spacer.
+   Anchor to the configured minimum height so a wrapping warning or expanded
+   editor can grow the row without shifting one column's primary value. */
+@media (min-width: 901px) {
+    .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-number-cell {
+        vertical-align: top;
+        padding-top: max(7px, calc((var(--dispatch-row-height) - 58px) / 2));
+    }
+}
+.neoscorpion-dispatch-number-stack {
+    display: grid;
+    grid-template-rows: 28px minmax(18px, auto) minmax(12px, auto);
+    align-content: start;
+    min-width: 0;
+}
+.neoscorpion-dispatch-number-stack > * { min-width: 0; max-width: 100%; }
+.neoscorpion-dispatch-transfer-estimate .neoscorpion-dispatch-number-stack > small { white-space: normal; overflow-wrap: normal; }
+.neoscorpion-dispatch-number-stack > .neoscorpion-dispatch-number {
+    grid-row: 1;
     display: block;
-    height: calc(var(--dispatch-font-small) * 1.15);
-    margin-top: 2px;
+    box-sizing: border-box;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    line-height: 28px;
+    white-space: nowrap;
 }
-.neoscorpion-dispatch-inbound > .neoscorpion-save-status:empty { display: none; }
-.neoscorpion-dispatch-inbound > strong { display: block; line-height: 1.15; }
-.neoscorpion-dispatch-inbound > .neoscorpion-dispatch-secondary { margin-top: 2px; }
-.neoscorpion-dispatch-inbound > .neoscorpion-dispatch-secondary.is-empty { visibility: hidden; }
-
-/* Keep every primary-row cell in the browser's table layout. Turning a td into
-   grid breaks shared row geometry and makes mission separators step between
-   columns when cell content heights differ. */
-.neoscorpion-dispatch-actual-apu { display: table-cell; }
-.neoscorpion-dispatch-actual-apu > strong { display: block; font-size: .68rem; }
-.neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    margin-top: 4px;
+.neoscorpion-dispatch-number-stack > input.neoscorpion-dispatch-number {
+    padding: 3px 0;
+    line-height: 20px;
 }
-.neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed > .neoscorpion-apu-editor {
+.neoscorpion-dispatch-number-stack > :is(.neoscorpion-dispatch-secondary, .neoscorpion-dispatch-center-fuel, .neoscorpion-apu-collapsed) {
+    grid-row: 2;
+    margin: 0;
+    line-height: 14px;
+}
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-number-stack > [data-autosave-status] {
+    grid-row: 3;
+    min-height: 12px;
+    margin: 0;
+    line-height: 12px;
+    font-size: 8px !important;
+    overflow-wrap: anywhere;
+}
+.neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed {
+    display: contents;
+}
+.neoscorpion-apu-collapsed > [data-dispatch-apu-effective] {
+    grid-row: 2;
+    line-height: 14px;
+}
+.neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed > .neoscorpion-apu-editor {
+    grid-row: 3;
     margin: 0;
 }
-.neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed > .neoscorpion-apu-editor > summary {
+.neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed > .neoscorpion-apu-editor > summary {
     display: block;
     margin: 0;
-    line-height: 1.1;
+    line-height: 12px;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row {
     /* Native table height reserves consistent space without clipping exceptions. */
@@ -242,8 +269,8 @@
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-status-detail {
     font-size: .75rem !important;
 }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-actual-apu > strong,
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-actual-apu > .neoscorpion-apu-collapsed > strong {
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-actual-apu [data-dispatch-actual],
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-dispatch-actual-apu .neoscorpion-apu-collapsed > strong {
     font-size: .75rem;
 }
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row .neoscorpion-spear-risk {
@@ -1479,9 +1506,6 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
     .scorpion-console-workspace:has([data-dispatch-work-timeline]:not([hidden])):has([data-dispatch-visit-notes]:not([hidden])) { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: 'visits facts support'; }
 }
 .neoscorpion-dispatch-action-stack .scorpion-action-indicator { min-width: 0; width: 100%; max-width: 100%; min-height: 23px; padding: 2px !important; white-space: normal; overflow-wrap: normal; font: 9px/1.05 NeoFontPlain, sans-serif !important; }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-inbound > [data-autosave-status],
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-required > [data-autosave-status] { display: block; height: 11px; margin: 1px 0 0; line-height: 11px; font-size: 8px !important; }
-.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row > .neoscorpion-dispatch-required::after { height: calc(var(--dispatch-font-small) * 1.15); }
 @media (max-width: 900px) {
     .neoscorpion-screen[data-fuel-dispatch-live] .scorpion-desktop-console,
     .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card a,

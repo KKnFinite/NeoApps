@@ -1292,7 +1292,8 @@
         );
         const enabled = form.elements.namedItem("apu_override_enabled");
         const allowance = form.elements.namedItem("apu_override_allowance");
-        const editor = form.querySelector("[data-dispatch-apu-editor]");
+        const editor = button?.closest("[data-dispatch-apu-editor]")
+            || form.querySelector("[data-dispatch-apu-editor]");
         if (effective) {
             if (effectiveLbs === null || effectiveLbs === undefined) {
                 effective.textContent = "APU: -";
@@ -1571,7 +1572,8 @@
         const cancel = event.target.closest("[data-dispatch-apu-cancel]");
         if (!cancel) return;
         const editor = cancel.closest("[data-dispatch-apu-editor]");
-        const form = cancel.closest("[data-dispatch-assignment-form]")
+        const form = editor?.querySelector("[data-dispatch-apu-override-value]")?.form
+            || cancel.closest("[data-dispatch-assignment-form]")
             || cancel.closest("[data-neoscorpion-dispatch-detail-row]")
                 ?.querySelector("[data-dispatch-apu-override-value]")?.form;
         if (!editor || !form) return;
