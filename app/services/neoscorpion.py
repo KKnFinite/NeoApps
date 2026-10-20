@@ -722,8 +722,13 @@ def _manual_fuel_dispatch_context(gateway, *, include_asset_choices=False):
     excess_threshold = getattr(settings, "neo_fuel_excess_alert_gallons", 500)
     for row in rows:
         row["dispatcher_checked"] = row["mission"].id in checked_missions
+        # Compare the displayed departure Fuel Load, not an earlier visit's
+        # immutable target retained for handoff/physical-work calculations.
+        comparison_required = row["departure_required_fuel_lbs"]
         row["neo_fuel_excess_alert"] = neo_fuel_excess_alert(
-            row["neo_fuel_lbs"], row["required_fuel_lbs"], fuel_density, excess_threshold)
+            row["neo_fuel_lbs"], comparison_required, fuel_density, excess_threshold)
+        row["neo_fuel_shortfall_alert"] = neo_fuel_shortfall_alert(
+            row["neo_fuel_lbs"], comparison_required)
     rows.sort(
         key=lambda row: (
             0
@@ -1153,6 +1158,18 @@ def truck_manager_context(gateway):
     }
 
 
+def neo_fuel_shortfall_alert(neo_lbs, required_lbs):
+    """Presentation only: any shortfall in unrounded, available fuel pounds."""
+    if neo_lbs is None or required_lbs is None:
+        return False
+    try:
+        neo, required = Decimal(str(neo_lbs)), Decimal(str(required_lbs))
+        return bool(neo.is_finite() and required.is_finite()
+                    and neo >= 0 and required >= 0 and neo < required)
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+
+
 def neo_fuel_excess_alert(neo_lbs, required_lbs, density, threshold_gallons=500):
     """Compare unrounded pounds at the gateway density, without changing fuel."""
     if any(value is None for value in (neo_lbs, required_lbs, density)):
@@ -1181,6 +1198,7 @@ def dispatch_neo_fuel_presentation(gateway, mission, assignment, work=None):
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     density = settings.fuel_density_lbs_per_gallon if settings else DEFAULT_FUEL_DENSITY_LBS_PER_GALLON
     return {"available": neo_lbs is not None, "display": format_display_thousands(neo_lbs),
+            "shortfall": neo_fuel_shortfall_alert(neo_lbs, mission.planned_fuel_load),
             "excess": neo_fuel_excess_alert(neo_lbs, mission.planned_fuel_load, density,
                                            getattr(settings, "neo_fuel_excess_alert_gallons", 500))}
 

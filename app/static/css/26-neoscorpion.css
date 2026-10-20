@@ -1100,6 +1100,10 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row strong.is-neo-fuel-excess {
     color: #ff626b !important; font-weight: 900 !important;
 }
+.neoscorpion-dispatch-table--compact .neoscorpion-dispatch-primary-row
+:is([data-dispatch-neo-fuel], [data-dispatch-required-fuel]).is-neo-fuel-shortfall {
+    color: #ff626b !important; font-weight: 900 !important;
+}
 .neoscorpion-fuel-status {
     container: fuel-status / inline-size;
     display: flex;
