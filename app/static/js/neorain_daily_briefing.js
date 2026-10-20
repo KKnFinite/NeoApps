@@ -3,26 +3,32 @@
   const root = document.querySelector('[data-daily-briefing]');
   if (!root) return;
   const preview = root.querySelector('#briefing-text');
+  let flushPending = async () => true;
   root.querySelector('#copy-briefing').addEventListener('click', async () => {
     const status = root.querySelector('#copy-briefing-status');
-    try { await navigator.clipboard.writeText(preview.textContent); status.textContent = 'Copied.'; }
+    try {
+      if (!await flushPending()) { status.textContent = 'Inputs are not saved. Resolve the save error before copying.'; return; }
+      await navigator.clipboard.writeText(preview.textContent); status.textContent = 'Copied.';
+    }
     catch (_) { status.textContent = 'Copy failed. Select the text to copy manually.'; }
   });
   const form = root.querySelector('[data-briefing-inputs]');
   if (!form) return;
   const inputs = [...form.querySelectorAll('[data-briefing-field]')];
   const fitNote = input => {
-    if (input.tagName !== 'TEXTAREA') return;
+    if (input.tagName !== 'TEXTAREA' || !input.hasAttribute('data-auto-grow')) return;
     input.style.height = 'auto';
     input.style.height = `${input.scrollHeight + 2}px`;
   };
   inputs.forEach(fitNote);
   const status = form.querySelector('[data-briefing-status]');
-  const button = form.querySelector('[data-briefing-save]');
+  const canEdit = form.dataset.canEdit === 'true';
   const dirty = input => input.value !== input.dataset.savedValue;
   const versions = () => Object.fromEntries(inputs.map(input => [input.name, +input.dataset.version]));
   const syncVersions = () => { form.querySelector('[data-briefing-versions]').value = JSON.stringify(versions()); };
   let saving = false, polling = false, generation = 0;
+  const pending = new Set(), timers = new Map(), errors = new Map();
+  let activeSave = null;
   const apply = (payload, sent = null) => {
     preview.textContent = payload.briefing;
     root.querySelector('#copy-briefing-status').textContent = '';
@@ -39,32 +45,72 @@
       input.dataset.version = field.version;
       if (unchanged) input.value = value ?? '';
       fitNote(input);
-      input.disabled = !button || !field.editable;
+      input.disabled = !canEdit || !field.editable;
     }
     syncVersions();
   };
+  const showStatus = () => {
+    status.textContent = errors.size ? [...errors.values()][0] :
+      saving ? 'Saving…' : inputs.some(dirty) ? 'Unsaved changes.' : 'Saved.';
+  };
+  const drain = () => {
+    if (activeSave) return activeSave;
+    activeSave = (async () => {
+      saving = true; generation++;
+      while (pending.size) {
+        const changed = [...pending].filter(input => !input.disabled && dirty(input));
+        pending.clear();
+        if (!changed.length) continue;
+        const sent = Object.fromEntries(changed.map(input => [input.name, input.value]));
+        const expected = Object.fromEntries(changed.map(input => [input.name, +input.dataset.version]));
+        showStatus();
+        try {
+          const response = await fetch(form.action, {method:'POST', credentials:'same-origin', keepalive:true,
+            headers:{'Content-Type':'application/json'}, body:JSON.stringify({values:sent, versions:expected})});
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.ok) throw new Error(payload.error || 'Unable to save briefing inputs.');
+          apply(payload, sent);
+          changed.forEach(input => {
+            errors.delete(input);
+            // An edit may have returned to the old saved value while this
+            // request was in flight. Compare against the newly acknowledged
+            // value so that intentional revert is saved too.
+            if (dirty(input) && !timers.has(input)) pending.add(input);
+          });
+        } catch (error) {
+          // Keep the original version and draft on failure. Do not repeatedly
+          // retry a conflict or let a failed field block unrelated edits.
+          changed.forEach(input => { errors.set(input, error.message || 'Unable to save. Your edits are still here.'); pending.delete(input); });
+        }
+      }
+      saving = false; generation++; activeSave = null; showStatus();
+    })();
+    return activeSave;
+  };
+  const cancelTimer = input => { clearTimeout(timers.get(input)); timers.delete(input); };
+  const enqueue = input => {
+    cancelTimer(input);
+    if (!canEdit || input.disabled || !dirty(input)) return activeSave;
+    pending.add(input);
+    return drain();
+  };
   form.addEventListener('input', event => {
-    fitNote(event.target);
-    if (status && !saving) status.textContent = inputs.some(dirty) ? 'Unsaved changes.' : '';
+    const input = event.target;
+    if (!inputs.includes(input) || input.disabled || !canEdit) return;
+    fitNote(input); errors.delete(input); cancelTimer(input);
+    if (dirty(input)) timers.set(input, setTimeout(() => enqueue(input), 650));
+    showStatus();
   });
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (saving || !button) return;
-    const changed = inputs.filter(input => !input.disabled && dirty(input));
-    if (!changed.length) { status.textContent = 'No changes to save.'; return; }
-    const sent = Object.fromEntries(changed.map(input => [input.name, input.value]));
-    const expected = Object.fromEntries(changed.map(input => [input.name, +input.dataset.version]));
-    saving = true; generation++; button.disabled = true; status.textContent = 'Saving…';
-    try {
-      const response = await fetch(form.action, {method:'POST', credentials:'same-origin',
-        headers:{'Content-Type':'application/json'}, body:JSON.stringify({values:sent, versions:expected})});
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Unable to save briefing inputs.');
-      apply(payload, sent);
-      status.textContent = inputs.some(dirty) ? 'Saved. New edits remain unsaved.' : 'Saved.';
-    } catch (error) { status.textContent = error.message || 'Unable to save. Your edits are still here.'; }
-    finally { saving = false; generation++; button.disabled = false; }
-  });
+  form.addEventListener('focusout', event => { if (inputs.includes(event.target)) return enqueue(event.target); });
+  flushPending = async () => {
+    for (const input of inputs) {
+      cancelTimer(input);
+      if (canEdit && !input.disabled && dirty(input) && !errors.has(input)) pending.add(input);
+    }
+    if (pending.size || activeSave) await drain();
+    return !inputs.some(input => !input.disabled && dirty(input));
+  };
+  form.addEventListener('submit', event => { event.preventDefault(); return flushPending(); });
   const refresh = async () => {
     if (document.hidden || saving || polling) return;
     const before = generation; polling = true;

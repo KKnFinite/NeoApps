@@ -42,6 +42,11 @@ class DailyBriefingTest(TestCase):
         self.assertIn('Safety: UNAVAILABLE\nIncident:',text)
         self.assertNotIn('\r',text)
         self.assertNotIn('ANC INFO',text);self.assertNotIn("ULD's",text)
+        html=self.client.get('/neorain/daily-briefing').get_data(as_text=True)
+        self.assertNotIn('SAVE INPUTS',html)
+        self.assertIn('briefing-short-fields',html)
+        self.assertEqual(html.count(' data-auto-grow'),2)
+        self.assertIn('data-can-edit="true"',html)
 
     def test_saved_inputs_zero_multiline_actor_and_google_independence(self):
         db.session.add(NeoRainReportEntry(gateway_id=self.f.gateway.id,sort_date_operation_id=self.operation.id,
