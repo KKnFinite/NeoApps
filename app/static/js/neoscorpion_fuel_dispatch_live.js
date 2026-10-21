@@ -883,6 +883,15 @@
                 oldTimeline.replaceWith(timeline);
                 timeline.querySelectorAll('input,select,textarea').forEach(control=>initialControlValues.set(control,controlValue(control)));
             }
+            // Read-only receipts refresh independently of dirty assignment/notes
+            // controls, including when a resource swap allocated a new visit.
+            const oldSent=currentDetails?.querySelector('[data-dispatch-assignment-times]');
+            const newSent=nextDetails?.querySelector('[data-dispatch-assignment-times]');
+            if (oldSent && newSent && oldSent.outerHTML !== newSent.outerHTML) {
+                const copy=newSent.cloneNode(true);
+                if (copy.querySelector('details') && oldSent.querySelector('details')?.open) copy.querySelector('details').open=true;
+                oldSent.replaceWith(copy);
+            }
             if (sameVisit && currentDetails && nextDetails) {
                 const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).map(
                     item => [item.dataset.consoleSection, item]));

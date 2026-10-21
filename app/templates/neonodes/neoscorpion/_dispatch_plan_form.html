@@ -1,6 +1,7 @@
 {% set p=row.pending_uplift %}
 {% if p %}<div class="scorpion-console-action" data-action-key="plan-{{ p.id }}">
 <strong>{{ 'REVIEW PENDING UPLIFT' if p.plan_kind=='uplift' else 'REVIEW PLANNED NEXT TRUCK' if row.plan_requires_review else 'NEXT TRUCK — PLANNED' }}</strong>
+<small class="scorpion-assignment-receipt" data-planned-assignment-times="{{ p.id }}">{% with receipts=row.planned_assignment_receipt %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}</small>
 <span>{{ p.review_reason or row.pending_uplift_warning or ('Waiting for parent Dispatcher COMPLETE; separate post-completion uplift.' if p.plan_kind=='uplift' else 'Waiting for current Fueler COMPLETE ASSIGNMENT.') }}</span>
 {% if row.pending_spear_forecast %}<small data-pending-spear>SPEAR · {{ row.pending_spear_forecast.reason }}{% if row.pending_spear_forecast.demand_gallons %} · ~{{ row.pending_spear_forecast.demand_gallons|float|round|int }} GAL forecast{% endif %}</small>{% endif %}
 {% if can_edit %}<form method="post" action="{{ url_for('neoscorpion.fuel_dispatch_pending_uplift') }}" data-dispatch-lifecycle-form data-pending-uplift-form>

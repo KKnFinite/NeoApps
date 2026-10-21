@@ -1982,6 +1982,7 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
         )
         changed = True
         assignment_changed = True
+    assignment_audits = []
     for field_name, value in (
         ("assigned_fueler_user_id", requested_fueler_id),
         ("assigned_truck_id", requested_truck_id),
@@ -1994,8 +1995,8 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
                 assignment.fueler_assigned_at_utc = now_utc if value is not None else None
                 assignment.resource_assignment_by_user_id = getattr(current_user, "id", None)
                 if getattr(current_user, "id", None):
-                    _new_fuel_audit(operation, assignment, current_user, "swap_fueler", field_name,
-                        old_value, value, "Dispatcher recorded the Fueler assignment.", now_utc=now_utc)
+                    assignment_audits.append(_new_fuel_audit(operation, assignment, current_user, "swap_fueler", field_name,
+                        old_value, value, "Dispatcher recorded the Fueler assignment.", now_utc=now_utc))
             elif field_name == "assigned_truck_id":
                 assignment.truck_assigned_at_utc = now_utc if value is not None else None
                 assignment.resource_assignment_by_user_id = getattr(current_user, "id", None)
@@ -2003,14 +2004,16 @@ def _save_dispatch_assignment(gateway, form, *, include_legacy_fields):
             assignment_changed = True
             if field_name == "assigned_truck_id":
                 if getattr(current_user, "id", None):
-                    _new_fuel_audit(operation, assignment, current_user, "swap_truck", field_name,
-                        old_value, value, "Dispatcher recorded the truck assignment.", now_utc=now_utc)
+                    assignment_audits.append(_new_fuel_audit(operation, assignment, current_user, "swap_truck", field_name,
+                        old_value, value, "Dispatcher recorded the truck assignment.", now_utc=now_utc))
                 change_messages.append(
                     f"Truck: {_resource_change_label(old_value)} -> "
                     f"{_resource_change_label(value)}"
                 )
 
     fuel_work_state = _locked_current_fuel_work_state(assignment, mission)
+    for audit in assignment_audits:
+        audit.fuel_work_state = fuel_work_state
     if resource_change_requested and fuel_work_state and not _fuel_work_has_begun(fuel_work_state, assignment):
         fuel_work_state.physical_truck_id = requested_truck_id
         fuel_work_state.physical_fueler_user_id = requested_fueler_id
@@ -3814,6 +3817,16 @@ def start_follow_up_fuel_cycle(
     # Actuals, T/F and identity must belong to a new row.
     fuel_work_state = new_work(assignment, tail_number, user, now_utc)
     fuel_work_state.physical_required_fuel_lbs = required_fuel_lbs
+    # A new explicitly assigned cycle has its own immutable assignment receipt,
+    # even if the same resources were used by the previous completed cycle.
+    for field_name, value in (
+        ('assigned_fueler_user_id', fueler_user_id),
+        ('assigned_truck_id', fuel_truck_id),
+    ):
+        if value is not None:
+            _new_fuel_audit(operation, assignment, user, 'segment_transfer', field_name, None, value,
+                'Dispatcher assigned resources to a new ' + cycle_type + ' cycle.',
+                fuel_work_state=fuel_work_state, now_utc=now_utc)
     tank_states = []
 
     mission.planned_fuel_load = required_fuel_lbs

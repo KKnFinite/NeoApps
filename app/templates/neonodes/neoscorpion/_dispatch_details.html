@@ -8,6 +8,7 @@
 </div>
 <div class="scorpion-console-facts-column">
 <section data-details-region="fuel">
+<div class="scorpion-assignment-receipt" data-dispatch-assignment-times data-assignment-work="{{ row.physical_work_id or '' }}">{% with receipts=row.assignment_receipt %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}{% if row.assignment_changes %}<details><summary>Earlier assignments</summary>{% with receipts=row.assignment_changes %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}</details>{% endif %}</div>
 <div class="scorpion-load-planning" data-dispatch-console-planning>{% if row.load_planning_ready %}<span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span><button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>{% endif %}<small data-dispatch-load-planner>Load Planner: {{ row.load_planner_name }}</small></div>
 {% if not other_live_visits and (row.on_time != '-' or row.off_time != '-') %}<small>TRUCK ON {{ row.on_time }} · OFF {{ row.off_time }}</small>{% endif %}
 <div data-fuel-status-details>{% for warning in row.fuel_status_warnings if warning != row.dispatch_status_detail and warning not in row.status_review_reasons %}<p>{{ warning }}</p>{% endfor %}</div>

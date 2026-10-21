@@ -1478,6 +1478,8 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .scorpion-desktop-console .scorpion-action-center { grid-column: 1 / -1; }
 .scorpion-console-workspace { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: 'visits facts' 'visits support'; gap: 4px 14px; align-items: start; }
 .scorpion-console-workspace > div { min-width: 0; }
+.scorpion-assignment-receipt { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font: inherit; }
+.scorpion-assignment-receipt time { white-space: nowrap; }
 .scorpion-console-work-column { grid-area: visits; }
 .scorpion-console-facts-column { grid-area: facts; }
 .scorpion-console-support-column { grid-area: support; }

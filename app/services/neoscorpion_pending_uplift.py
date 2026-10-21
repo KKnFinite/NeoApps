@@ -277,7 +277,8 @@ def attach_console(context):
         for visit in row['console_visits']:
             visit.console_submission_valid=valid.get(visit.id,False)
             visit.console_on_trusted=trusted_on.get(visit.id,False)
-    return context
+    from app.services.neoscorpion_assignment_times import attach_assignment_times
+    return attach_assignment_times(context)
 
 class PendingUpliftConflict(ValueError):
     pass
