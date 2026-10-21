@@ -96,6 +96,126 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
         self.assertEqual(db.session.get(SortDateMission, mission_id).flight_number, "UPS0955")
         self.assertEqual(SortDateMission.query.count(), 1)
 
+    def test_existing_hot_flight_wins_over_stale_google_row_link(self):
+        original=self._apply_departures(self._outbound(4,'950','N950UP',destination='SDF'))['results'][0]
+        hot=self._mission('departure','UPS9329',tail='N329UP',destination='HOT')
+        hot.fuel_status='complete';hot_id=hot.id
+        from app.services.parking_plan import set_tail_hot
+        set_tail_hot(self.operation,'N329UP',True)
+        db.session.commit()
+        for _ in range(3):
+            result=self._apply_departures(self._outbound(4,'5X09329','N329UP',destination='HOT'))
+            db.session.commit()
+            self.assertEqual(result['applied_count'],1,result)
+            self.assertEqual(result['results'][0]['mission_id'],hot_id)
+            self.assertFalse(result['results'][0]['created'])
+        self.assertEqual(SortDateMission.query.count(),2)
+        self.assertEqual(db.session.get(SortDateMission,original['mission_id']).flight_number,'UPS0950')
+        self.assertEqual((hot.flight_number,hot.assigned_tail_number,hot.destination,hot.fuel_status),('UPS9329','N329UP','HOT','complete'))
+        self.assertEqual(self._tail_state('N329UP').operational_status,'hot')
+        self.assertEqual(SortDateGoogleMissionLink.query.filter_by(source_row=4).one().sort_date_mission_id,hot_id)
+
+    def test_production_hot_inbound_and_outbound_echo_preserve_both_canonical_identities(self):
+        self._apply_arrivals(self._inbound(4,'9329','N460UP',origin='HOT',status='HOT',planned='-',operational='-'))
+        db.session.commit()
+        arrival=SortDateMission.query.filter_by(mission_type='arrival').one()
+        hot=SortDateMission.query.filter_by(mission_type='departure').one()
+        db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id,tail_number='N460UP',
+            ramp_code='D',position_code='D02',lane_number=1,note='Original parking evidence'))
+        db.session.commit()
+        def snapshot():
+            return [(m.id,m.flight_number,m.assigned_tail_number,m.mission_source,m.origin,m.destination,m.fuel_status,m.departure_status,m.updated_at)
+                for m in SortDateMission.query.order_by(SortDateMission.id)]
+        before=snapshot();parking=SortDateParkingAssignment.query.one();parking_stamp=parking.updated_at
+        for row,missing in ((4,'-'),(4,''),(19,None),(19,'-')):
+            result=self._apply_departures(self._outbound(row,'5X09329','N460UP',destination='HOT',parking='D02',planned=missing,operational=missing))
+            db.session.commit()
+            self.assertEqual(result['applied_count'],1,result)
+            self.assertEqual(result['results'][0]['mission_id'],hot.id)
+            self.assertFalse(result['results'][0]['created'])
+            self.assertIsNotNone(result['results'][0]['correlation_id'])
+            self.assertEqual(snapshot(),before)
+        self.assertEqual(arrival.flight_number,'UPS9329');self.assertEqual(hot.flight_number,'HOT-N460UP')
+        self.assertEqual(self._tail_state('N460UP').operational_status,'hot')
+        self.assertEqual((parking.position_code,parking.note,parking.updated_at),('D02','Original parking evidence',parking_stamp))
+        self.assertEqual(SortDateGoogleMissionLink.query.filter_by(source_sheet='Outbound',source_row=19).one().sort_date_mission_id,hot.id)
+
+    def test_hot_echo_rejects_unproven_identity_without_duplicate_or_rename(self):
+        self._apply_arrivals(self._inbound(4,'9329','N460UP',origin='HOT',status='HOT'))
+        db.session.commit();before=[(m.id,m.flight_number,m.assigned_tail_number) for m in SortDateMission.query.order_by(SortDateMission.id)]
+        for row in (self._outbound(4,'9329','N461UP',destination='HOT'),
+                    self._outbound(4,'9329','N460UP',destination='SDF'),
+                    self._outbound(4,'9329','N460UP',destination='HOT',planned='01:10'),
+                    self._outbound(4,'9329','N460UP',destination='HOT',planned='00:00')):
+            result=self._apply_departures(row);db.session.commit()
+            self.assertEqual(result['skipped_count'],1,result)
+            self.assertIn('another current-sort mission direction',result['results'][0]['reason'])
+            self.assertEqual([(m.id,m.flight_number,m.assigned_tail_number) for m in SortDateMission.query.order_by(SortDateMission.id)],before)
+        self.assertEqual(SortDateGoogleMissionLink.query.filter_by(source_sheet='Outbound').count(),0)
+
+    def test_hot_echo_preserves_physical_work_transfer_snapshots_and_inventory(self):
+        from app.models import (NeoScorpionFuelAssignment,NeoScorpionFuelWorkState,NeoScorpionFuelTruck,
+            NeoScorpionFuelingEvent,NeoScorpionFuelingEventTankSnapshot)
+        self._apply_arrivals(self._inbound(4,'9329','N460UP',origin='HOT',status='HOT'))
+        hot=SortDateMission.query.filter_by(mission_type='departure').one()
+        truck=NeoScorpionFuelTruck(gateway_id=self.gateway.id,truck_number='HOT-HISTORY',remaining_fuel_gallons=6800)
+        db.session.add(truck);db.session.flush()
+        assignment=NeoScorpionFuelAssignment(sort_date_operation_id=self.operation.id,sort_date_mission_id=hot.id,
+            assigned_truck_id=truck.id,confirmed_tail_number='N460UP')
+        db.session.add(assignment);db.session.flush()
+        work=NeoScorpionFuelWorkState(fuel_assignment_id=assignment.id,tail_number='N460UP',visit_number=1,
+            physical_truck_id=truck.id,on_at_utc=datetime(2026,8,8,5),off_at_utc=datetime(2026,8,8,6),
+            fueler_submitted_at_utc=datetime(2026,8,8,6,1),fueler_submission_evidence='verified-history',notes='Original physical visit')
+        db.session.add(work);db.session.flush();assignment.active_work_state_id=work.id
+        event=NeoScorpionFuelingEvent(sort_date_operation_id=self.operation.id,fuel_assignment_id=assignment.id,
+            fuel_work_state_id=work.id,fuel_truck_id=truck.id,tail_number='N460UP',sequence_number=1,
+            transfer_fuel_gallons=1200,started_at_utc=work.on_at_utc,ended_at_utc=work.off_at_utc)
+        db.session.add(event);db.session.flush()
+        tank=NeoScorpionFuelingEventTankSnapshot(fueling_event_id=event.id,tank_code='left',remaining_lbs=8000,actual_lbs=12000)
+        db.session.add(tank);db.session.commit()
+        records=(assignment,work,event,tank,truck)
+        before=[{c.name:getattr(record,c.name) for c in record.__table__.columns} for record in records]
+        for _ in range(3):
+            result=self._apply_departures(self._outbound(4,'9329','N460UP',destination='HOT'))
+            db.session.commit();self.assertEqual(result['applied_count'],1,result)
+        for record,expected in zip(records,before):
+            db.session.refresh(record)
+            self.assertEqual({c.name:getattr(record,c.name) for c in record.__table__.columns},expected)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+
+    def test_hot_echo_can_later_become_real_departure_without_changing_mission_id(self):
+        self._apply_arrivals(self._inbound(4,'9329','N460UP',origin='HOT',status='HOT'))
+        db.session.commit()
+        alias=self._apply_departures(self._outbound(4,'9329','N460UP',destination='HOT'))['results'][0]
+        db.session.commit()
+        result=self._apply_departures(self._outbound(4,'7831','N460UP',destination='LAX',planned='01:10'))
+        db.session.commit();self.assertEqual(result['applied_count'],1,result)
+        self.assertEqual(result['results'][0]['mission_id'],alias['mission_id'])
+        self.assertEqual(SortDateMission.query.filter_by(mission_type='arrival').one().flight_number,'UPS9329')
+        self.assertEqual(SortDateMission.query.filter_by(mission_type='departure').one().flight_number,'UPS7831')
+        self.assertEqual(SortDateMission.query.count(),2)
+
+    def test_reordered_hot_and_regular_rows_preserve_both_mission_ids(self):
+        first=self._apply_departures(self._outbound(4,'950','N950UP'),self._outbound(5,'9329','N329UP',destination='HOT'))
+        db.session.commit();ids={r['flight_number']:r['mission_id'] for r in first['results']}
+        for _ in range(2):
+            result=self._apply_departures(self._outbound(4,'9329','N329UP',destination='HOT'),self._outbound(5,'950','N950UP'))
+            db.session.commit()
+            self.assertEqual(result['applied_count'],2,result)
+            self.assertEqual({r['flight_number']:r['mission_id'] for r in result['results']},ids)
+        self.assertEqual(SortDateMission.query.count(),2)
+
+    def test_hot_placeholder_tail_digits_are_not_a_flight_identity(self):
+        placeholder=self._mission('departure','HOT-N9329UP',tail='N9329UP',destination='HOT')
+        placeholder.planned_datetime_local=placeholder.planned_datetime_utc=None
+        target=self._mission('departure','UPS9329',tail='N329UP',destination='HOT')
+        db.session.commit()
+        result=self._apply_departures(self._outbound(4,'9329','N329UP',destination='HOT'))
+        db.session.commit()
+        self.assertEqual(result['applied_count'],1,result)
+        self.assertEqual(result['results'][0]['mission_id'],target.id)
+        self.assertEqual(placeholder.flight_number,'HOT-N9329UP')
+
     def test_duplicate_google_flight_rows_first_row_wins(self):
         result = self._apply_arrivals(
             self._inbound(4, "947", "N457UP", origin="SDF"),
@@ -201,7 +321,7 @@ class GoogleMotherBrainLiveMissionTest(unittest.TestCase):
 
     def test_correlation_is_operation_and_direction_scoped(self):
         arrival = self._apply_arrivals(self._inbound(4, "947", "N457UP"))
-        departure = self._apply_departures(self._outbound(4, "947", "N458UP"))
+        departure = self._apply_departures(self._outbound(4, "755", "N458UP"))
         other_operation = self._operation(date(2026, 8, 8), "night")
         other = apply_google_motherbrain_live_mission_batch(
             other_operation,

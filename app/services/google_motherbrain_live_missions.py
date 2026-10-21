@@ -22,7 +22,8 @@ from app.models import (
     SortDateParkingAssignment,
     SortDateTailState,
 )
-from app.services.alp_import import alp_flight_key, normalize_alp_flight_number
+from app.services.alp_import import normalize_alp_flight_number
+from app.services.mission_identity import flight_identity
 from app.services.flight_rules import derive_aircraft_type_from_tail_number
 from app.services.gateway_matrix import gateway_timezone
 from app.services.google_motherbrain_parking import apply_google_motherbrain_parking
@@ -140,13 +141,17 @@ def apply_google_motherbrain_live_mission_batch(
             sort_date_operation_id=operation.id, mission_type=mission_type,
         ).all()
     } if ordered_rows else {}
-    missions = {
-        mission.id: mission
-        for mission in SortDateMission.query.filter_by(
-            sort_date_operation_id=operation.id, mission_type=mission_type,
-        ).all()
-    } if ordered_rows else {}
-    flight_keys = {mission.id: alp_flight_key(mission.flight_number) for mission in missions.values()}
+    operation_missions = SortDateMission.query.filter_by(
+        sort_date_operation_id=operation.id,
+    ).all() if ordered_rows else []
+    missions = {mission.id:mission for mission in operation_missions if mission.mission_type == mission_type}
+    opposite_flights = {}
+    for mission in operation_missions:
+        if mission.mission_type != mission_type:
+            opposite_flights.setdefault(flight_identity(mission.flight_number),[]).append(mission)
+    # Use the same identity as the cross-direction database invariant. An ALP
+    # digit extraction would incorrectly identify HOT-N9329UP as flight UPS9329.
+    flight_keys = {mission.id: flight_identity(mission.flight_number) for mission in missions.values()}
     flights = {}
     for mission_id, key in flight_keys.items():
         if key:
@@ -159,7 +164,7 @@ def apply_google_motherbrain_live_mission_batch(
             row = _raw_row_context(supplied_row, mission_type, batch_index)
             results.append(_skipped_result(row, str(error)))
             continue
-        flight_key = alp_flight_key(row["flight_number"])
+        flight_key = flight_identity(row["flight_number"])
         if flight_key and flight_key in seen_flight_keys:
             results.append(
                 _skipped_result(row, "Duplicate Google flight row; first row wins.")
@@ -176,7 +181,7 @@ def apply_google_motherbrain_live_mission_batch(
                     row,
                     user=user,
                     applied_at=applied_at,
-                    links=links, missions=missions, flights=flights,
+                    links=links, missions=missions, flights=flights, opposite_flights=opposite_flights,
                 )
                 db.session.flush()
         except (GoogleMotherBrainMissionError, ParkingPlanError, SQLAlchemyError) as error:
@@ -198,11 +203,23 @@ def apply_google_motherbrain_live_mission_batch(
                 old_key = flight_keys.get(mission.id)
                 if old_key:
                     flights[old_key].pop(mission.id, None)
-                key = alp_flight_key(mission.flight_number)
+                key = flight_identity(mission.flight_number)
                 missions[mission.id] = mission
                 flight_keys[mission.id] = key
                 if key:
                     flights.setdefault(key, {})[mission.id] = mission
+                if result.get("rebound_from_mission_id") is not None:
+                    current_app.logger.info(
+                        "Google MotherBrain row identity rebound operation_id=%s sheet=%s row=%s flight=%s old_mission_id=%s mission_id=%s tail=%s destination=%s",
+                        operation.id,row["source_sheet"],row["sheet_row"],mission.flight_number,
+                        result["rebound_from_mission_id"],mission.id,mission.assigned_tail_number,mission.destination,
+                    )
+                if result.get("hot_alias_resolved"):
+                    current_app.logger.info(
+                        "Google MotherBrain HOT row resolved operation_id=%s sheet=%s row=%s google_flight=%s mission_id=%s canonical_flight=%s tail=%s",
+                        operation.id,row["source_sheet"],row["sheet_row"],row["flight_number"],
+                        mission.id,mission.flight_number,mission.assigned_tail_number,
+                    )
         results.append(result)
 
     applied_count = sum(result["status"] in {"applied", "preserved"} for result in results)
@@ -214,7 +231,7 @@ def apply_google_motherbrain_live_mission_batch(
     }
 
 
-def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, missions, flights):
+def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, missions, flights, opposite_flights):
     if not row["sheet_row"]:
         raise GoogleMotherBrainMissionError("Google sheet row must be a positive integer.")
     if not row["effective_tail"]:
@@ -223,14 +240,52 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
         raise GoogleMotherBrainMissionError("Effective tail is required.")
 
     link = links.get((row["source_sheet"], row["sheet_row"]))
-    mission = _linked_mission(link, missions)
-    if mission is None and row["flight_number"]:
-        matches = list(flights.get(alp_flight_key(row["flight_number"]), {}).values())
-        if len(matches) > 1:
+    linked = _linked_mission(link, missions)
+    mission = linked
+    matches = []
+    if row["flight_number"]:
+        matches = list(flights.get(flight_identity(row["flight_number"]), {}).values())
+        # Sheet rows move. A row correlation is not permission to rename a
+        # different existing mission into a flight that already belongs to one.
+        # Retain a matching link for explicitly correlated legacy duplicates.
+        if linked is not None and linked in matches:
+            mission = linked
+        elif len(matches) > 1:
             raise GoogleMotherBrainMissionError(
                 "Multiple current-sort missions share this flight number."
             )
-        mission = matches[0] if matches else None
+        elif matches:
+            mission = matches[0]
+
+    opposite = opposite_flights.get(flight_identity(row["flight_number"]),[])
+    if not matches and opposite:
+        # MotherBrain echoes a stationary HOT aircraft on both sheets using its
+        # inbound flight number. It is NOT a second real flight. Correlate the
+        # outbound echo to the already-created same-tail HOT departure without
+        # renaming it, changing direction, or touching operational evidence.
+        hot_matches = [candidate for candidate in missions.values()
+            if is_hot_placeholder_mission(candidate)
+            and _normalize_tail(candidate.assigned_tail_number) == row["effective_tail"]]
+        if (mission_type == "departure" and row["destination_mode"] == "hot"
+            and _missing_live_time(row["planned_time"])
+            and _missing_live_time(row["operational_time"])
+            and len(opposite) == 1 and opposite[0].mission_type == "arrival"
+            and str(opposite[0].origin or "").strip().upper() == "HOT"
+            and opposite[0].planned_datetime_utc is None
+            and _normalize_tail(opposite[0].assigned_tail_number) == row["effective_tail"]
+            and len(hot_matches) == 1):
+            mission = hot_matches[0]
+            resolved = link is None or link.sort_date_mission_id != mission.id or link.last_flight_number != row["flight_number"]
+            link = link or _new_link(operation,mission_type,row)
+            link.sort_date_mission = mission
+            _update_link_snapshot(link,row,applied_at)
+            _apply_pending_tail_swap(link,row)
+            db.session.flush()
+            return dict(status="preserved",reason="Stationary HOT aircraft correlated; canonical mission identities preserved.",
+                mission_id=mission.id,correlation_id=link.id,created=False,sheet=row["source_sheet"],
+                sheet_row=row["sheet_row"],flight_number=mission.flight_number,warnings=[],parking=None,
+                pending_tail_number=link.pending_tail_number,hot_alias_resolved=resolved),link,mission
+        raise GoogleMotherBrainMissionError("Flight identity already belongs to another current-sort mission direction; existing missions preserved.")
 
     if (
         mission is None
@@ -335,6 +390,7 @@ def _apply_live_row(operation, mission_type, row, *, user, applied_at, links, mi
         "warnings": warnings,
         "parking": parking_result,
         "pending_tail_number": link.pending_tail_number,
+        "rebound_from_mission_id": linked.id if linked is not None and linked.id != mission.id else None,
     }, link, mission
 
 
@@ -800,11 +856,15 @@ def _raw_row_context(supplied_row, mission_type, batch_index):
     }
 
 
-def _parse_optional_live_datetime(value, operation, field_name):
-    if value is None or (
+def _missing_live_time(value):
+    return value is None or (
         isinstance(value, str)
         and value.strip() in {"", "-"}
-    ):
+    )
+
+
+def _parse_optional_live_datetime(value, operation, field_name):
+    if _missing_live_time(value):
         return None, None
     timezone_name = gateway_timezone(operation.gateway)
     if isinstance(value, datetime):
