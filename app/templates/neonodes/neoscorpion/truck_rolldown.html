@@ -4,18 +4,32 @@
 <dl class="rolldown-totals">
     <div><dt>Starting gallons</dt><dd>{{ value(s.starting) }}</dd></div>
     <div><dt>Current / ending gallons</dt><dd>{{ value(s.ending) }} · {{ 'VERIFIED' if s.verified else 'UNVERIFIED' }}</dd></div>
+    <div><dt>Recorded uplift / defuel · gal</dt><dd>{{ value(s.uplift) }} / {{ value(s.defuel) }}{% if s.transfer_unknown %} · PARTIAL{% endif %}</dd></div>
+    <div><dt>TOP OFF trips / known gallons added</dt><dd>{{ s.top_off_visits }} / {{ value(s.top_off_added) }}{% if s.top_off_unknown %} · PARTIAL / missing departure reading{% endif %}</dd></div>
+</dl>
+<details class="rolldown-summary-details"><summary>SUMMARY DETAILS</summary><dl class="rolldown-totals">
     <div><dt>Physical visits started</dt><dd>{{ s.visits }}</dd></div>
     <div><dt>Recorded physical duration</dt><dd>{{ value(s.physical_minutes) }} min{% if s.duration_unknown %} · PARTIAL / unknown intervals{% endif %}</dd></div>
-    <div><dt>Uplift / defuel gallons posted</dt><dd>{{ value(s.uplift) }} / {{ value(s.defuel) }}{% if s.transfer_unknown %} · PARTIAL{% endif %}</dd></div>
-    <div><dt>Recorded TOP OFF trips sent</dt><dd>{{ s.top_off_visits }}</dd></div>
-    <div><dt>Known TOP OFF gallons added</dt><dd>{{ value(s.top_off_added) }}{% if s.top_off_unknown %} · PARTIAL / missing departure reading{% endif %}</dd></div>
     <div><dt>Verified baseline adjustments (signed)</dt><dd>{{ value(s.adjustments) }}{% if s.adjustment_unknown %} · PARTIAL / unknown previous balance{% endif %}</dd></div>
     <div><dt>Time out of service</dt><dd>Unavailable · historical boundaries not recorded</dd></div>
-</dl>
+</dl></details>
 {% endmacro %}
+{% macro event_brief(c) -%}
+{% if 'UNVERIFIED' in c.Notes %}<strong class="rolldown-unverified">UNVERIFIED</strong> · {% endif %}
+{% if c.Event == 'MISSION ASSIGNED / PREASSIGNED' %}Preassignment · physical ON is separate
+{% elif c.Event == 'DRIVER CHANGE' %}{{ c.Notes }}
+{% elif c.Event == 'MANUAL DRIVER' %}{{ c.Driver }}
+{% elif c.Event in ['TRUCK OFF / RELEASED','END EARLY / RELEASED'] %}Physical release{% if c['Duration min'] != 'Unavailable' %} · {{ c['Duration min'] }} min{% endif %}
+{% elif c.Event == 'TRUCK ON' %}Physical connection
+{% elif c.Event in ['DISPATCHER COMPLETE','SEGMENT FINALIZED (DISPATCH)'] %}Dispatcher verification · physical OFF is separate
+{% elif c['Change gal'] != 'Unavailable' or c['Balance gal'] != 'Unavailable' %}
+{% if c['Change gal'] != 'Unavailable' %}{{ c['Change gal'] }} gal{% endif %}{% if c['Balance gal'] != 'Unavailable' %} · Balance {{ c['Balance gal'] }} gal{% endif %}{% if c['Duration min'] != 'Unavailable' %} · {{ c['Duration min'] }} min{% endif %}
+{% elif c['T/F gal'] != 'Unavailable' %}T/F {{ c['T/F gal'] }} gal
+{% else %}{{ c.Notes|truncate(100) if c.Notes else 'Recorded evidence; details below' }}{% endif %}
+{%- endmacro %}
 {% block title %}Truck Rolldown | NeoScorpion{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neoscorpion_rolldown.css', v=config.STATIC_ASSET_VERSION) }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoscorpion_rolldown.css', v=config.STATIC_ASSET_VERSION, rolldown='20261021-timeline-v1') }}">
 <section class="neoscorpion-shell neoscorpion-screen neoscorpion-rolldown">
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">{% include "neonodes/neoscorpion/_brand_title.html" %}<h1>Truck Rolldown</h1></header>
     {% include "neonodes/neoscorpion/_menu.html" %}
@@ -28,15 +42,26 @@
             <button class="action-button" type="button" data-prof-copy>COPY REPORT</button><small data-prof-copy-status role="status"></small>
         </form>
         <p class="neoscorpion-helper">{{ gateway.code }} · {{ operation.sort_date if operation else 'No sort' }} · {{ operation.sort_name if operation else '' }}. Local dates and times; chronological UTC ordering.</p>
-        <p class="neoscorpion-helper">Read-only evidence, not a simulated balance. Missing historical balances, parking snapshots, driver identities and OOS boundaries remain unavailable. Flight/destination refer to the linked mission. Pending, denied and expired requests are not fuel movements. TOP OFF history is complete only from capture rollout; older trips may have only a confirmed return reading.</p>
+        <p class="neoscorpion-helper rolldown-evidence-warning">Read-only evidence, not a simulated balance. Missing historical balances, parking snapshots, driver identities and OOS boundaries remain unavailable. Flight/destination refer to the linked mission. Pending, denied and expired requests are not fuel movements. TOP OFF history is complete only from capture rollout; older trips may have only a confirmed return reading.</p>
         {% if truncated %}<p role="alert">PARTIAL REPORT: a source exceeds 10,000 records. Totals and export cover loaded evidence only.</p>{% endif %}
         {% if not truck_id and summaries %}<section class="rolldown-summary"><h2>ALL TRUCKS · Fleet totals</h2>{{ totals(fleet) }}</section>{% endif %}
-        {% for s in summaries %}<section class="rolldown-summary" data-truck-summary="{{ s.truck }}"><h2>TRUCK {{ s.truck }} · {{ s.status|replace('_',' ')|upper }}</h2><p>Latest recorded driver: {{ s.driver }}</p>{{ totals(s) }}</section>{% endfor %}
+        {% for s in summaries %}<section class="rolldown-summary" data-truck-summary="{{ s.truck }}"><header><h2>TRUCK {{ s.truck }}</h2><span>{{ s.status|replace('_',' ')|upper }}</span><span>Latest recorded driver: {{ s.driver }}</span></header>{{ totals(s) }}</section>{% endfor %}
         <h2>Chronological activity / inventory ledger</h2>
-        {% for event in events %}<article class="rolldown-event" data-rolldown-source="{{ event.source }}">
-            <header><strong>{{ event.columns.Event }} · TRUCK {{ event.columns.Truck }}</strong><time>{{ event.columns.Time }}</time></header>
-            <dl>{% for key,value in event.columns.items() %}{% if key not in ['Event','Truck','Time'] %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endif %}{% endfor %}</dl>
-        </article>{% else %}<p>No truck history for this selection.</p>{% endfor %}
+        <div class="rolldown-timeline" data-rolldown-timeline>
+        <div class="rolldown-timeline-head" aria-hidden="true"><span>TIME</span><span>EVENT</span><span>FLIGHT / TAIL / LOCATION</span><span>RELEVANT DETAIL</span><span></span></div>
+        {% for event in events %}{% set c=event.columns %}
+        {% if loop.changed(c.Time[:10]) %}<h3 class="rolldown-date">{{ c.Time[:10] if c.Time != 'Unavailable' else 'Timestamp unavailable' }}{% if c.Time != 'Unavailable' %} · {{ c.Time.split(' ')|last }}{% endif %}</h3>{% endif %}
+        <details class="rolldown-event" data-rolldown-source="{{ event.source }}" data-rolldown-truck="{{ c.Truck }}">
+            <summary>
+                <time{% if c.UTC != 'Unavailable' %} datetime="{{ c.UTC }}"{% endif %}>{{ c.Time[11:16] if c.Time != 'Unavailable' else '—' }}</time>
+                <strong class="rolldown-event-name">{{ 'MISSION ASSIGNED' if c.Event == 'MISSION ASSIGNED / PREASSIGNED' else 'TRUCK OFF' if c.Event == 'TRUCK OFF / RELEASED' else c.Event }}{% if not truck_id %}<small>TRUCK {{ c.Truck }}</small>{% endif %}</strong>
+                <span class="rolldown-event-mission">{% if c.Flight %}{{ c.Flight }}{% endif %}{% if c.Tail %} · {{ c.Tail }}{% endif %}{% if c.Parking != 'Unavailable' %} · {{ c.Parking }}{% elif c.Destination %} · Dest {{ c.Destination }}{% endif %}</span>
+                <span class="rolldown-event-brief">{{ event_brief(c) }}</span>
+                <span class="rolldown-event-toggle">EVENT DETAILS <span aria-hidden="true">⌄</span></span>
+            </summary>
+            <dl>{% for key,entry in c.items() %}{% if entry is not none and entry != '' and entry != 'Unavailable' %}<div data-evidence-field="{{ key }}"><dt>{{ key }}</dt><dd>{{ entry }}</dd></div>{% endif %}{% endfor %}</dl>
+        </details>{% else %}<p>No truck history for this selection.</p>{% endfor %}
+        </div>
         <textarea data-prof-copy-text hidden>{{ copy_text }}</textarea>
     </section>
 </section>
