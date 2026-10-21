@@ -138,9 +138,12 @@
                 {% elif truck.spear_next_status %}
                 <div class="neoscorpion-truck-spear"><strong>SPEAR NEXT</strong><small>{{ truck.spear_next_status }}</small></div>
                 {% endif %}
+                <div data-truck-card-actions>
                 {% if can_manage_assets and truck.status == "available" %}
                 <form method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>
                     <input type="hidden" name="action" value="mark_topping_off">
+                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                    <input type="hidden" name="top_off_action_state" value="{{ truck.top_off_action_state }}">
                     <input type="hidden" name="dispatch_truck_card" value="1">
                     <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
                     <button class="action-button neoscorpion-truck-card-action" type="submit">TOP OFF</button>
@@ -149,6 +152,8 @@
                 {% elif can_manage_assets and truck.status == "topping_off" %}
                 <form class="neoscorpion-truck-return-form" method="post" action="{{ url_for('neoscorpion.manage_nightly_assets') }}" data-dispatch-truck-card-form>
                     <input type="hidden" name="action" value="complete_top_off">
+                    <input type="hidden" name="operation_id" value="{{ operation.id }}">
+                    <input type="hidden" name="top_off_action_state" value="{{ truck.top_off_action_state }}">
                     <input type="hidden" name="dispatch_truck_card" value="1">
                     <input type="hidden" name="fuel_truck_id" value="{{ truck.truck_id }}">
                     <input name="current_gallons" inputmode="numeric" min="0" {% if truck.capacity_gallons is not none %}max="{{ truck.capacity_gallons }}"{% endif %} placeholder="Gallons" aria-label="Returned current gallons for truck {{ truck.truck_number }}" required>
@@ -175,6 +180,7 @@
                     <span class="neoscorpion-truck-card-save-status" data-dispatch-truck-card-status aria-live="polite"></span>
                 </form>
                 {% endif %}
+                </div>
             </article>
             {% endfor %}
         </div>

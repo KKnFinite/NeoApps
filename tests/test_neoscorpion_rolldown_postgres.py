@@ -45,6 +45,35 @@ class RolldownPostgresTest(unittest.TestCase):
         self.assertEqual(NeoScorpionSortTruck.query.one().current_gallons,15000)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
 
+    def test_concurrent_card_tokens_reject_replays_across_trips(self):
+        self.release();operation_id,truck_id=self.operation.id,self.truck.id
+        token=assets.top_off_action_state(NeoScorpionSortTruck.query.one())
+        def change(action,expected,gallons=15000):
+            def execute(index,gateway,fueler,dispatcher):
+                operation=db.session.get(SortDateOperation,operation_id)
+                try:
+                    if action=='sent':
+                        assets.mark_nightly_truck_topping_off(operation,truck_id,changed_by_user=dispatcher,expected_state=expected)
+                    else:
+                        assets.complete_nightly_truck_top_off(operation,truck_id,gallons,changed_by_user=dispatcher,expected_state=expected)
+                    return 'saved'
+                except ValueError as exc:
+                    db.session.rollback();self.assertIn('trip changed',str(exc));return 'stale'
+            return execute
+        self.assertEqual(sorted(self.concurrent(change('sent',token))),['saved','stale'])
+        return_token=assets.top_off_action_state(NeoScorpionSortTruck.query.one())
+        self.assertEqual(sorted(self.concurrent(change('return',return_token))),['saved','stale'])
+        selection=NeoScorpionSortTruck.query.one();epoch=selection.inventory_epoch
+        new_token=assets.top_off_action_state(selection)
+        self.assertEqual(self.concurrent(change('sent',token)),['stale','stale'])
+        self.assertEqual(sorted(self.concurrent(change('sent',new_token))),['saved','stale'])
+        self.assertEqual(self.concurrent(change('return',return_token,100)),['stale','stale'])
+        selection=NeoScorpionSortTruck.query.one()
+        self.assertEqual(selection.status,'topping_off');self.assertEqual(selection.current_gallons,15000)
+        self.assertEqual(selection.inventory_epoch,epoch)
+        self.assertEqual(NeoScorpionTopOffEvent.query.count(),3)
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+
     def test_additive_bootstrap_repeat_preserves_physical_events_and_immutable_trip(self):
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()

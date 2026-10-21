@@ -845,8 +845,10 @@ def manage_nightly_assets():
         operation = current_sort_operation(gateway)
         if operation is None:
             raise ValueError("No current sort operation is available.")
-        if workspace_request and str(operation.id) != request.form.get("operation_id"):
+        if (workspace_request or action in {"mark_topping_off", "complete_top_off"}) and str(operation.id) != request.form.get("operation_id"):
             raise ValueError("The active sort changed. Refresh tonight's assets before continuing.")
+        if action in {"mark_topping_off", "complete_top_off"} and not request.form.get("top_off_action_state"):
+            raise ValueError("Refresh the truck controls before submitting TOP OFF / RETURN.")
         result = _apply_nightly_asset_action(gateway, operation, request.form)
         if result.changed:
             db.session.commit()
@@ -2008,6 +2010,8 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
             sort_date_operation_id=operation.id).group_by(NeoScorpionFuelingEvent.fuel_truck_id).all())
         for visual in context.get('truck_visuals',[]):
             selection=selections.get(visual['truck_id'])
+            from app.services.neoscorpion_assets import top_off_action_state
+            visual['top_off_action_state'] = top_off_action_state(selection) if selection else ''
             visual['inventory_epoch']=selection.inventory_epoch if selection else None
             visual['inventory_posting_id']=postings.get(visual['truck_id'],0)
             visual['driver_name']=driver_name(gateway,operation,visual['truck_id'],roster['drivers_by_truck_id'])
@@ -2301,6 +2305,7 @@ def _apply_nightly_asset_action(gateway, operation, form):
             operation,
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             changed_by_user=current_user,
+            expected_state=form.get("top_off_action_state"),
         )
     if action == "complete_top_off":
         return complete_nightly_truck_top_off(
@@ -2308,6 +2313,7 @@ def _apply_nightly_asset_action(gateway, operation, form):
             _positive_form_id(form.get("fuel_truck_id"), "fuel truck"),
             form.get("current_gallons"),
             changed_by_user=current_user,
+            expected_state=form.get("top_off_action_state"),
         )
     if action == "mark_sumped":
         return mark_nightly_truck_sumped(

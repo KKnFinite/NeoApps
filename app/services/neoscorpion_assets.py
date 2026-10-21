@@ -522,16 +522,32 @@ def remove_nightly_truck(operation, fuel_truck):
     return _changed(state)
 
 
+def top_off_action_state(selection):
+    """Optimistic trip identity; compare only after taking the operation lock."""
+    return '|'.join(str(value) for value in (
+        selection.id, selection.status, selection.inventory_epoch,
+        selection.top_off_sent_at_utc.isoformat() if selection.top_off_sent_at_utc else '',
+    ))
+
+
+def _check_top_off_action_state(selection, expected_state):
+    if expected_state is not None and expected_state != top_off_action_state(selection):
+        raise ValueError("Truck / TOP OFF trip changed. Check the refreshed truck status before submitting again.")
+
+
 def mark_nightly_truck_topping_off(
     operation,
     fuel_truck,
     *,
     changed_by_user=None,
     now_utc=None,
+    expected_state=None,
 ):
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
     nightly_truck = _selected_truck(locked_operation.id, truck.id)
+    db.session.refresh(nightly_truck)
+    _check_top_off_action_state(nightly_truck, expected_state)
     if nightly_truck.status == "needs_sump":
         raise ValueError("MARK SUMPED before changing this truck's status.")
     if (
@@ -656,13 +672,15 @@ def verify_nightly_truck_inventory(operation, fuel_truck, current_gallons, *,
     return _changed(state)
 
 
-def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons, *, changed_by_user=None, now_utc=None):
+def complete_nightly_truck_top_off(operation, fuel_truck, current_gallons, *, changed_by_user=None, now_utc=None, expected_state=None):
     if current_gallons is None or str(current_gallons).strip() == "":
         raise ValueError("Enter current gallons to complete the top off.")
     current_gallons = _validate_gallons(current_gallons, "Current gallons")
     locked_operation, state = _lock_operation_and_state(operation)
     truck = _truck_for_operation(locked_operation, fuel_truck)
     nightly_truck = _selected_truck(locked_operation.id, truck.id)
+    db.session.refresh(nightly_truck)
+    _check_top_off_action_state(nightly_truck, expected_state)
     if nightly_truck.status != "topping_off":
         raise ValueError("The selected truck is not currently topping off.")
 

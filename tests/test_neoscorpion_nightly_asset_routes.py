@@ -329,7 +329,8 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
 
         self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
-            data={"action": "mark_topping_off", "fuel_truck_id": str(truck.id)},
+            data={"action": "mark_topping_off", "fuel_truck_id": str(truck.id),
+                  **self._top_off_fields(operation, truck)},
         )
         db.session.refresh(selected)
         self.assertEqual(selected.status, "topping_off")
@@ -338,6 +339,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
             "/neoscorpion/fuel-dispatch/assets",
             data={
                 "action": "complete_top_off",
+                **self._top_off_fields(operation, truck),
                 "fuel_truck_id": str(truck.id),
                 "current_gallons": "",
             },
@@ -351,6 +353,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
             "/neoscorpion/fuel-dispatch/assets",
             data={
                 "action": "complete_top_off",
+                **self._top_off_fields(operation, truck),
                 "fuel_truck_id": str(truck.id),
                 "current_gallons": "7000",
             },
@@ -424,6 +427,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         card_data = {
             "dispatch_truck_card": "1",
             "fuel_truck_id": str(truck.id),
+            **self._top_off_fields(operation, truck),
         }
         headers = {
             "Accept": "application/json",
@@ -446,11 +450,9 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
             data={**card_data, "action": "mark_topping_off"},
             headers=headers,
         )
-        self.assertEqual(duplicate_top_off.status_code, 200)
-        self.assertEqual(
-            duplicate_top_off.json,
-            {"ok": True, "changed": False, "revision": 2},
-        )
+        self.assertEqual(duplicate_top_off.status_code, 400)
+        self.assertIn("trip changed", duplicate_top_off.json['error'])
+        card_data.update(self._top_off_fields(operation, truck))
 
         missing_gallons = self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
@@ -484,7 +486,8 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(duplicate_return.status_code, 400)
-        self.assertIn("not currently topping off", duplicate_return.json["error"])
+        self.assertIn("trip changed", duplicate_return.json["error"])
+        card_data.update(self._top_off_fields(operation, truck))
 
         completed_mission = SortDateMission(
             sort_date=operation.sort_date,
@@ -577,6 +580,7 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
                     "action": "mark_topping_off",
                     "dispatch_truck_card": "1",
                     "fuel_truck_id": str(blocked_truck.id),
+                    **self._top_off_fields(operation, blocked_truck),
                 },
                 headers=headers,
             )
@@ -600,6 +604,8 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
             "action": "mark_topping_off",
             "dispatch_truck_card": "1",
             "fuel_truck_id": "41",
+            "operation_id": str(operation.id),
+            "top_off_action_state": "mocked-service-state",
         }
 
         with patch(
@@ -665,6 +671,12 @@ class NeoScorpionNightlyAssetRoutesTest(unittest.TestCase):
         self.assertIn('form.getAttribute("action")', truck_card_block)
         self.assertIn("fetch(actionUrl,", truck_card_block)
         self.assertNotIn("fetch(form.action,", truck_card_block)
+
+    def _top_off_fields(self, operation, truck):
+        from app.services.neoscorpion_assets import top_off_action_state
+        selection=NeoScorpionSortTruck.query.filter_by(sort_date_operation_id=operation.id,
+            fuel_truck_id=truck.id).populate_existing().one()
+        return {'operation_id': str(operation.id), 'top_off_action_state': top_off_action_state(selection)}
 
     def _add_operation(self, sort_date):
         operation = SortDateOperation(

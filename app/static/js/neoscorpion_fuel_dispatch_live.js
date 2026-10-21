@@ -658,7 +658,8 @@
         + "[data-dispatch-action-center] input:not([type=hidden]), [data-dispatch-action-center] select, [data-dispatch-action-center] textarea, "
         + "[data-pending-uplift-form] input:not([type=hidden]), [data-pending-uplift-form] select, "
         + ".scorpion-desktop-console input:not([type=hidden]):not([disabled]), .scorpion-desktop-console select:not([disabled]), .scorpion-desktop-console textarea:not([disabled]), "
-        + "[data-assets-workspace] input:not([type=hidden]):not([disabled]), [data-assets-workspace] select:not([disabled]), [data-assets-workspace] textarea:not([disabled])"
+        + "[data-assets-workspace] input:not([type=hidden]):not([disabled]), [data-assets-workspace] select:not([disabled]), [data-assets-workspace] textarea:not([disabled]), "
+        + "[data-truck-card-actions] input:not([type=hidden])"
     )).filter(control => !control.closest("[data-tail-note-form]"));
 
     const resetProtectedBaselines = () => {
@@ -676,7 +677,7 @@
     ));
 
     const hasUnsavedControls = () => (
-        lifecycleSaving || document.activeElement?.matches?.(".scorpion-desktop-console input:not([type=hidden]), .scorpion-desktop-console select, .scorpion-desktop-console textarea, [data-assets-workspace] input:not([type=hidden]), [data-assets-workspace] select, [data-assets-workspace] textarea") ||
+        lifecycleSaving || !!root.querySelector('[data-truck-card-busy="true"]') || document.activeElement?.matches?.(".scorpion-desktop-console input:not([type=hidden]), .scorpion-desktop-console select, .scorpion-desktop-console textarea, [data-assets-workspace] input:not([type=hidden]), [data-assets-workspace] select, [data-assets-workspace] textarea") ||
         Array.from(root.querySelectorAll("[data-tail-note-form]")).some(form =>
             form.dataset.saving === "true" || form.elements.notes.value !== form.elements.notes.defaultValue) ||
         protectedControls().some(
@@ -794,6 +795,17 @@
             if (control.type === 'checkbox') return control.checked !== (control.dataset.savedChecked === '1');
             return control.tagName !== 'SELECT' && control.value !== control.defaultValue;
         }));
+        const reconcileTruckActions = (actions, nextActions) => {
+            const editing=actions?.contains(document.activeElement)
+                && !document.activeElement?.closest('form')?.dataset.truckCardSettled;
+            if (actions && nextActions && !editing && !groupDirty([actions])
+                    && !actions.querySelector('[data-truck-card-busy="true"]')) {
+                actions.replaceWith(nextActions.cloneNode(true));
+                protectedControls().forEach(control=>{
+                    if(!initialControlValues.has(control))initialControlValues.set(control,controlValue(control));
+                });
+            }
+        };
         const live = new Map(Array.from(root.querySelectorAll(
             ".neoscorpion-dispatch-primary-row[data-dispatch-mission-id]"
         ), row => [row.dataset.dispatchMissionId, row]));
@@ -1026,7 +1038,7 @@
             oldAssets.querySelectorAll('[data-assets-unit]').forEach(item=>{
                 const fresh=incoming.get(item.dataset.assetsUnit);
                 const editing=item.contains(document.activeElement) && document.activeElement?.matches('input,select,textarea');
-                if (!groupDirty([item]) && !editing && !lifecycleSaving) {
+                if (!groupDirty([item]) && !editing && !lifecycleSaving && !item.querySelector('[data-truck-card-busy="true"]')) {
                     if (!fresh) item.remove();
                     else {
                         const copy=fresh.cloneNode(true);
@@ -1040,6 +1052,7 @@
                         const old=item.querySelector(selector),next=fresh.querySelector(selector);
                         if(old&&next)old.replaceWith(next.cloneNode(true));
                     });
+                    reconcileTruckActions(item.querySelector('[data-assets-top-off-actions]'),fresh.querySelector('[data-assets-top-off-actions]'));
                 } else {
                     item.querySelectorAll('button[type="submit"],button:not([type])').forEach(button=>button.disabled=true);
                     const status=item.querySelector('[data-lifecycle-status]');
@@ -1070,6 +1083,7 @@
                 if (oldNotes && newNotes) oldNotes.replaceWith(newNotes.cloneNode(true));
             }
             currentCard.dataset.truckOperationalStatus=nextCard.dataset.truckOperationalStatus;
+            reconcileTruckActions(currentCard.querySelector('[data-truck-card-actions]'),nextCard.querySelector('[data-truck-card-actions]'));
             ['.neoscorpion-truck-visual-values','.neoscorpion-truck-gauges','.neoscorpion-truck-driver-name'].forEach(selector=>{
                 const oldValue=currentCard.querySelector(selector),nextValue=nextCard.querySelector(selector);
                 if(oldValue && nextValue && oldValue.outerHTML!==nextValue.outerHTML && !oldValue.contains(document.activeElement))oldValue.replaceWith(nextValue.cloneNode(true));
@@ -1515,13 +1529,17 @@
     };
 
     const submitTruckCardAction = async (form, button) => {
-        if (form.dataset.truckCardBusy === "true") {
+        if (form.dataset.truckCardBusy === "true" || form.dataset.truckCardSettled) {
             return;
         }
-        const status = form.querySelector("[data-dispatch-truck-card-status]");
+        const status = form.querySelector("[data-dispatch-truck-card-status], [data-lifecycle-status]");
         form.dataset.truckCardBusy = "true";
         if (button) button.disabled = true;
         setStatus(status, "Saving...");
+        const submitted = new FormData(form);
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 30000);
+        let acknowledged = false;
         try {
             // The hidden operational field is named "action". HTML form named
             // properties can therefore shadow HTMLFormElement.action and turn
@@ -1529,7 +1547,8 @@
             const actionUrl = form.getAttribute("action");
             const response = await fetch(actionUrl, {
                 method: "POST",
-                body: new FormData(form),
+                body: submitted,
+                signal: controller.signal,
                 cache: "no-store",
                 credentials: "same-origin",
                 headers: {
@@ -1538,15 +1557,42 @@
                 },
             });
             const payload = await response.json().catch(() => ({}));
+            acknowledged = payload.ok === true || payload.ok === false;
             if (!response.ok || payload.ok !== true) {
                 throw new Error(payload.error || "Truck update failed.");
             }
-            adoptFingerprint(payload);
-            await reloadPage();
+            // A committed mutation is successful even when a draft/dialog defers
+            // full-panel replacement. Never leave Saving tied to that refresh.
+            form.dataset.truckCardSettled = "saved";
+            const action = submitted.get('action');
+            setStatus(status, action === 'mark_topping_off' ? 'TOP OFF saved · TOPPING OFF'
+                : action === 'complete_top_off' ? 'RETURN saved · AVAILABLE' : 'Saved', 'saved');
         } catch (error) {
+            if (!acknowledged) form.dataset.truckCardSettled = "uncertain";
+            setStatus(status, acknowledged ? `Save Failed: ${error.message || "Unable to update this truck."}`
+                : 'RESULT UNKNOWN — check live truck status before retrying. No automatic retry.', "error");
+        } finally {
+            window.clearTimeout(timeout);
             form.dataset.truckCardBusy = "false";
-            if (button) button.disabled = false;
-            setStatus(status, `Save Failed: ${error.message || "Unable to update this truck."}`, "error");
+            if (button) button.disabled = !!form.dataset.truckCardSettled;
+            // Submitted readings are no longer an unsent draft, even when the
+            // acknowledgement was lost. Preserve typing that happened later;
+            // let a read-only refresh resolve the actual truck state. This does
+            // not label an uncertain transaction successful or resend it.
+            if (form.dataset.truckCardSettled) Array.from(form.elements).forEach(control=>{
+                if(submitted.get(control.name) === controlValue(control))
+                    initialControlValues.set(control,controlValue(control));
+            });
+            syncDirtyState();
+            pendingFuelDataRefresh = true;
+            criticalRefreshKey = "";
+            stateGeneration += 1;
+            // The acknowledgement need not include the operation/tail
+            // fingerprint. Obtain it with a read, never a mutation retry.
+            void poll().catch(() => {
+                if(form.isConnected) setStatus(status, (form.dataset.truckCardSettled === 'saved' ? 'Saved' : 'Check truck status')
+                    + ' — live status unavailable; refresh before another action.', 'error');
+            });
         }
     };
 
@@ -1593,6 +1639,12 @@
         }
     });
     root.addEventListener("submit", (event) => {
+        const topOffForm=event.target.closest('[data-top-off-form]');
+        if(topOffForm) {
+            event.preventDefault();
+            submitTruckCardAction(topOffForm,event.submitter || topOffForm.querySelector('button'));
+            return;
+        }
         const lifecycleForm = event.target.closest("[data-dispatch-lifecycle-form]")
             || (event.target.closest("[data-assets-workspace]") && event.target.closest("form"));
         if (lifecycleForm) {

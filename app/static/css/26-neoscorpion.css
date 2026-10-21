@@ -1382,12 +1382,13 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
         min-width: 0;
         height: 4px;
     }
-    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > form[data-dispatch-truck-card-form] {
+    .neoscorpion-screen[data-fuel-dispatch-live] [data-truck-card-actions] { display: contents; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card [data-truck-card-actions] > form[data-dispatch-truck-card-form] {
         grid-area: action;
         align-self: center;
         margin: 0;
     }
-    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card > form.neoscorpion-truck-return-form {
+    .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-truck-visual-card [data-truck-card-actions] > form.neoscorpion-truck-return-form {
         grid-area: auto;
         grid-column: 1 / -1;
         margin-top: 2px;
