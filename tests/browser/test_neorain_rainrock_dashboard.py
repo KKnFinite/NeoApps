@@ -14,7 +14,7 @@ from app.extensions import db
 from app.models import SortDateMission, NeoRainDelayInfo
 from tests import test_neorain_rainrock_dashboard as unit
 
-EVIDENCE=Path('instance/browser-evidence/rainrock-dashboard')
+EVIDENCE=Path('instance/browser-evidence/rainrock-flight-tables')
 
 
 class RainrockDashboardBrowserTest(TestCase):
@@ -37,6 +37,10 @@ class RainrockDashboardBrowserTest(TestCase):
                         m.planned_datetime_utc+timedelta(minutes=(-2 if i%2 else 12)))
                 db.session.add(m);db.session.flush()
                 if i%2==0:db.session.add(NeoRainDelayInfo(sort_date_mission_id=m.id,minutes=i,code='WX',notes='Weather / full remark '+str(i)))
+        long_note='Long aircraft-specific note with every saved detail retained. '*12+'END OF COMPLETE NOTE'
+        db.session.add_all([
+            NeoRainDelayInfo(sort_date_mission_id=case.arrival.id,minutes=10,code='RS',notes=long_note),
+            NeoRainDelayInfo(sort_date_mission_id=case.arrival.id,minutes=5,code='GL',notes='Second saved remark\nOriginal newline retained')])
         db.session.commit();operation_id=op.id
         server=make_server('127.0.0.1',0,app,threaded=True);worker=Thread(target=server.serve_forever,daemon=True);worker.start()
         origin=f'http://127.0.0.1:{server.server_port}';url=origin+'/neorain/rainrock?operation_id='+str(operation_id)
@@ -52,9 +56,22 @@ class RainrockDashboardBrowserTest(TestCase):
             self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
             for table in page.locator('.rainrock-flight-table').all():
                 cells=table.locator('[data-rainrock-flight]').first.locator('td').evaluate_all('els=>els.map(e=>({top:e.getBoundingClientRect().top,display:getComputedStyle(e).display}))')
-                self.assertEqual(len(cells),6);self.assertLess(max(c['top'] for c in cells)-min(c['top'] for c in cells),1)
+                self.assertEqual(len(cells),7);self.assertLess(max(c['top'] for c in cells)-min(c['top'] for c in cells),1)
                 self.assertTrue(all(c['display']=='table-cell' for c in cells))
+                self.assertEqual(table.locator('thead th').all_text_contents(),['Flight','Tail','Origin' if 'INBOUND' in table.locator('..').get_attribute('aria-label') else 'Destination','Scheduled','Actual','+/-','Delay Details'])
+                self.assertEqual(table.locator('tbody tr:not([data-rainrock-flight])').count(),0)
+                geometry=table.evaluate('t=>{const hs=[...t.querySelectorAll("th")];return [...t.querySelectorAll("tbody tr")].map(r=>[...r.cells].map((c,i)=>({left:c.getBoundingClientRect().left,headerLeft:hs[i].getBoundingClientRect().left,width:c.getBoundingClientRect().width,headerWidth:hs[i].getBoundingClientRect().width,clipped:c.scrollWidth>c.clientWidth+1,nowrap:getComputedStyle(c).whiteSpace})));}')
+                for row in geometry:
+                    for i,c in enumerate(row):
+                        self.assertLess(abs(c['left']-c['headerLeft']),1);self.assertLess(abs(c['width']-c['headerWidth']),1)
+                        self.assertFalse(c['clipped'])
+                        if i<6:self.assertEqual(c['nowrap'],'nowrap')
+                    self.assertGreater(row[6]['width'],max(c['width'] for c in row[:6]))
                 if width<700:self.assertTrue(table.locator('..').evaluate('e=>e.scrollWidth>e.clientWidth'))
+            first=page.locator(f'[data-rainrock-flight="{case.arrival.id}"]')
+            expect(first.locator('td').last).to_have_text('10 RS, 5 GL - '+long_note+'; Second saved remark\nOriginal newline retained')
+            self.assertGreater(first.bounding_box()['height'],page.locator('.rainrock-flight-table tbody tr').nth(1).bounding_box()['height']*2)
+            expect(page.locator('.rainrock-delay-row')).to_have_count(0)
             self.assertEqual(page.locator('[data-rainrock-field]').count(),10)
             self.assertEqual(page.locator('[data-rainrock-report] input,[data-rainrock-report] button').count(),0)
             self.assertEqual(page.locator('[data-rainrock-flight]').count(),14)
@@ -102,6 +119,12 @@ class RainrockDashboardBrowserTest(TestCase):
                     expect(page.locator('[data-rainrock-save-status]')).to_have_text('Auto-saves')
                     for width,height in ((1920,1080),(1440,900),(390,844),(375,568)):
                         page.set_viewport_size({'width':width,'height':height});assert_layout(page,width);screenshot(page,str(width))
+                        if width<700:
+                            for region in page.locator('.rainrock-table-scroll').all():
+                                region.evaluate('e=>e.scrollLeft=e.scrollWidth')
+                                self.assertTrue(region.evaluate('e=>{const c=e.querySelector("tbody tr td:last-child").getBoundingClientRect(),r=e.getBoundingClientRect();return c.right<=r.right+1&&c.left>=r.left-1;}'))
+                            screenshot(page,str(width)+'-delays')
+                            page.locator('.rainrock-table-scroll').evaluate_all('es=>es.forEach(e=>e.scrollLeft=0)')
                     with page.expect_download(timeout=20000) as d:page.locator('[data-rainrock-download]').click()
                     mobile_path=EVIDENCE/f'{engine}-mobile-export.png';d.value.save_as(mobile_path)
                     with Image.open(mobile_path) as img:
@@ -142,6 +165,7 @@ class RainrockDashboardBrowserTest(TestCase):
                                 notes=('FINAL REPORT MARKER' if i==99 else 'Full operational detail')+' — '+('Long retained remark. '*10)))
                         db.session.commit()
                     page.goto(url);expect(page.locator('[data-rainrock-flight]')).to_have_count(114)
+                    page.evaluate('''()=>{const render=window.html2canvas;window.html2canvas=(node,opts)=>{const rows=[...node.querySelectorAll("[data-rainrock-flight]")];window.exportEvidence={rows:rows.length,lastText:rows.at(-1).cells[6].textContent,delaysClipped:rows.some(r=>r.cells[6].scrollWidth>r.cells[6].clientWidth+1),right:Math.max(...rows.map(r=>r.cells[6].getBoundingClientRect().right-node.getBoundingClientRect().left)),width:node.getBoundingClientRect().width};return render(node,opts);};}''')
                     with page.expect_download(timeout=45000) as d:page.locator('[data-rainrock-download]').click()
                     long_path=EVIDENCE/f'{engine}-long-report.png';d.value.save_as(long_path)
                     with Image.open(long_path) as img:
@@ -149,6 +173,9 @@ class RainrockDashboardBrowserTest(TestCase):
                         self.assertGreater(img.crop((0,img.height-150,img.width,img.height)).convert('L').getextrema()[1],150)
                         metrics.append(dict(longImage=dict(width=img.width,height=img.height)))
                     expect(page.locator('.rainrock-delay').filter(has_text='FINAL REPORT MARKER')).to_have_count(1)
+                    export=page.evaluate('window.exportEvidence');self.assertEqual(export['rows'],114)
+                    self.assertIn('FINAL REPORT MARKER',export['lastText']);self.assertFalse(export['delaysClipped'])
+                    self.assertLessEqual(export['right'],export['width']);metrics.append(dict(exportGeometry=export))
                     self.assertEqual(errors,[])
                     (EVIDENCE/f'{engine}-measurements.json').write_text(json.dumps(metrics,indent=2))
                     other.close();context.close()

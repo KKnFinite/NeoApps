@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Rainrock | NeoRain{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neorain_rainrock.css',v='20261021-rainrock-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neorain_rainrock.css',v='20261021-rainrock-tables-v2') }}">
 <main class="rainrock" data-rainrock data-operation="{{ operation.id if operation else '' }}" data-state-url="{{ url_for('neorain.rainrock_state',operation_id=operation.id) if operation else '' }}" data-refresh-ms="{{ config.get('RAINROCK_REFRESH_INTERVAL_MS',60000) if is_current else 0 }}">
   <header class="rainrock-head"><h1>◈ RAINROCK</h1>{% include 'neonodes/neorain/_report_sort_picker.html' %}<span class="rainrock-save-state" data-rainrock-save-status role="status">{{ 'Auto-saves' if can_edit else 'Read-only' }}</span></header>
   {% if report %}

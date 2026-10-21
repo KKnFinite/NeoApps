@@ -88,8 +88,25 @@ class RainrockDashboardTest(TestCase):
         self.assertLess(html.index('Late inbound'),html.index('SECOND DELAY'))
         self.assertEqual(html.count('data-rainrock-flight='),2)
         self.assertEqual(html.count('data-rainrock-delays='),2)
+        self.assertNotIn('rainrock-delay-row',html)
         self.assertIn('IN PROGRESS',html)
         self.assertNotIn('<input',html);self.assertNotIn('<button',html)
+
+    def test_seven_column_same_row_delays_keep_codes_notes_order_and_mission_identity(self):
+        import re
+        db.session.add_all([
+            NeoRainDelayInfo(sort_date_mission_id=self.departure.id,minutes=5,code='GL',notes='Gate note\nFull second line'),
+            NeoRainDelayInfo(sort_date_mission_id=self.departure.id,minutes=0,code='WX',notes='')])
+        db.session.commit();html=self.state()['html']
+        for mission,delay in ((self.arrival,'—'),(self.departure,'11 RS, 5 GL, 0 WX - Late inbound; Gate note\nFull second line')):
+            row=re.search(r'<tr data-rainrock-flight="'+str(mission.id)+r'">(.*?)</tr>',html,re.S).group(1)
+            self.assertEqual(row.count('<td'),7)
+            self.assertIn('class="rainrock-delay"',row)
+            self.assertIn('>'+delay+'</td>',row)
+            if mission.id==self.arrival.id:self.assertNotIn('Gate note',row)
+        self.assertEqual(html.count('<th>Delay Details</th>'),2)
+        self.assertEqual(html.count('<th>Scheduled</th>'),2)
+        self.assertNotIn('rainrock-delay-row',html)
 
     def test_scheduled_actual_and_midnight_use_canonical_values_not_eta(self):
         self.arrival.planned_datetime_utc=datetime(2026,8,31,4,55)

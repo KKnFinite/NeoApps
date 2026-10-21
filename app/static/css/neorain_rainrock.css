@@ -49,21 +49,24 @@ body.blueprint-neorain.operational-shell-page:has([data-rainrock]) .content { ma
 .rainrock-matrix th:first-child { text-align:left; }
 .rainrock-matrix tbody th { font-size:12px; color:#e8eaf5; }
 .rainrock-provisional { display:block; margin-top:5px; color:#b6bdd3; font-size:10px; }
-.rainrock-flights { margin-top:9px; }
-.rainrock-flights h3 { margin:0 0 3px; }
+.rainrock-flights { margin-top:9px; border:1px solid #403063; border-radius:5px; overflow:hidden; }
+.rainrock-flights h3 { margin:0; padding:6px 10px; border-bottom:1px solid #403063; }
 .rainrock-table-scroll { width:100%; overflow-x:auto; }
-.rainrock-flight-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; }
-.rainrock-flight-table th,.rainrock-flight-table td { padding:3px 12px; text-align:left; border-bottom:1px solid #171f30; font-variant-numeric:tabular-nums; }
+.rainrock-flight-table { width:100%; min-width:900px; border-collapse:collapse; table-layout:fixed; font-size:12px; }
+.rainrock-flight-table th,.rainrock-flight-table td { padding:3px 10px; text-align:left; vertical-align:top; border-bottom:1px solid #171f30; font-variant-numeric:tabular-nums; }
 .rainrock-flight-table th { background:#121b31; color:#b8c5df; font-size:11px; font-weight:400; }
-.rainrock-flight-table tr:nth-child(even):not(.rainrock-delay-row) { background:#0b111f; }
-.rainrock-flight-table td:not([colspan]) { white-space:nowrap; }
-.rainrock-flight-col { width:22%; }
-.rainrock-variance-col { width:10%; }
+.rainrock-flight-table tr:nth-child(even) { background:#0b111f; }
+.rainrock-flight-table :is(td,th):nth-child(-n+6):not([colspan]) { white-space:nowrap; }
+.rainrock-flight-col { width:100px; }
+.rainrock-tail-col { width:104px; }
+.rainrock-route-col { width:108px; }
+.rainrock-scheduled-col { width:94px; }
+.rainrock-actual-col { width:78px; }
+.rainrock-variance-col { width:56px; }
 .rainrock-variance.is-late { color:#ffc950; font-weight:700; }
 .rainrock-variance.is-severe { color:#ff657e; font-weight:700; }
 .rainrock-variance.is-on-time { color:#6edba5; }
-.rainrock-delay-row td { background:#0d1424; padding:3px 12px 4px 8%; }
-.rainrock-delay { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; color:#b4c0da; }
+.rainrock-delay { white-space:pre-wrap; overflow-wrap:anywhere; color:#b4c0da; }
 .rainrock-report-notes { border-top:1px solid #302a4d; padding-top:7px; margin-top:9px; }
 .rainrock-report-notes p { margin:3px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .rainrock-source { display:block; margin-top:5px; color:#949db6; font-size:10px; }
@@ -76,7 +79,7 @@ body.blueprint-neorain.operational-shell-page:has([data-rainrock]) .content { ma
  .rainrock-copy-tools { position:static; justify-content:flex-end; margin-bottom:4px; flex-wrap:wrap; } .rainrock-copy-tools [role=status] { position:static; width:100%; }
  .rainrock-report { padding:9px; } .rainrock-report-title { padding-right:0; } .rainrock-report-title h2 { font-size:14px; }
  .rainrock-summaries { grid-template-columns:1fr; gap:6px; } .rainrock-summary:first-child { grid-column:auto; } .rainrock-summary { padding:7px; } .rainrock-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
- .rainrock-flight-table { min-width:540px; } .rainrock-flight-table td,.rainrock-flight-table th { padding:3px 7px; } .rainrock-delay-row td { padding-left:14px; }
+ .rainrock-flight-table { min-width:840px; } .rainrock-flight-table td,.rainrock-flight-table th { padding:3px 7px; }
 }
 /* Export is desktop-width even when the source was opened on a phone. */
 .rainrock-export { width:1200px !important; max-width:none !important; min-width:1200px !important; border-radius:0; padding:12px 14px; }
@@ -86,7 +89,6 @@ body.blueprint-neorain.operational-shell-page:has([data-rainrock]) .content { ma
 .rainrock-export .rainrock-metrics { grid-template-columns:repeat(5,minmax(0,1fr)); }
 .rainrock-export .rainrock-table-scroll { overflow:visible; }
 .rainrock-export .rainrock-flight-table { min-width:0; }
-.rainrock-export .rainrock-flight-table th,.rainrock-export .rainrock-flight-table td { padding:3px 12px; }
-.rainrock-export .rainrock-delay-row td { padding:3px 12px 4px 8%; }
+.rainrock-export .rainrock-flight-table th,.rainrock-export .rainrock-flight-table td { padding:3px 10px; }
 .rainrock-export .rainrock-report-title { padding-right:0; }
 .rainrock-export .rainrock-report-title h2 { font-size:17px; line-height:1.3; }

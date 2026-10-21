@@ -22,6 +22,7 @@ class RainrockPostgresTest(TestCase):
     test_default_snapshot=dashboard.RainrockDashboardTest.test_default_snapshot_only_new_sorts_and_per_sort_override_is_immutable_from_setting
     test_atomic_stale=dashboard.RainrockDashboardTest.test_invalid_and_stale_saves_are_atomic_zero_and_percent_are_real
     test_history_scope=dashboard.RainrockDashboardTest.test_historical_scope_gateway_and_permissions
+    test_same_row_delays=dashboard.RainrockDashboardTest.test_seven_column_same_row_delays_keep_codes_notes_order_and_mission_identity
 
     def test_rainrock_and_briefing_simultaneous_first_insert_share_one_identity(self):
         with self.client.session_transaction() as session:cookie=dict(session)
