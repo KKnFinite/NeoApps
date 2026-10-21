@@ -661,6 +661,8 @@ def sync_local_sqlite_schema(app):
             existing_columns.add(column_name)
 
     _sync_staffing_people_employee_status_sqlite(table_names)
+    from app.services.neoscorpion_continuation_schema import migrate_continuation_queue
+    migrate_continuation_queue(db.session.connection())
     from app.services.neoscorpion_segment_schema import migrate_physical_segment_identity
     if migrate_physical_segment_identity(db.session.connection()):
         # Subsequent compatibility inspectors use the engine. With SQLite's
@@ -762,6 +764,8 @@ def sync_database_schema(app):
     _create_google_live_poll_state_table()
     _sync_sort_date_tail_state_status_constraints_postgres(table_names)
     _sync_neoscorpion_fuel_audit_actions_postgres(table_names)
+    from app.services.neoscorpion_continuation_schema import migrate_continuation_queue
+    migrate_continuation_queue(db.session.connection())
     from app.services.neoscorpion_segment_schema import migrate_physical_segment_identity
     migrate_physical_segment_identity(db.session.connection())
     _sync_neoscorpion_sort_truck_status_postgres(table_names)

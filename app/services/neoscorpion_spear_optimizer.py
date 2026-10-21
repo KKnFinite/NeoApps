@@ -332,13 +332,12 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
     future=[]
     # Grounded pending uplift participates in the same protected calendars, but
     # can never become an executable assignment before canonical promotion.
-    for row in rows:
-        pending=row.get('pending_uplift')
-        if not pending:continue
+    for row,pending,position in ((row,pending,position) for row in rows for position,pending in enumerate(
+            row.get('pending_truck_plans') or ([row['pending_uplift']] if row.get('pending_uplift') else []))):
         assignment=row.get('assignment')
         actual=row.get('actual_total_lbs')
         same_tail=str(getattr(row['mission'],'assigned_tail_number','') or '').strip().upper()==str(pending.tail_number).strip().upper()
-        grounded=bool(actual is not None and row.get('actual_complete') and row.get('fuel_density')
+        grounded=bool(position==0 and actual is not None and row.get('actual_complete') and row.get('fuel_density')
             and same_tail and assignment and assignment.current_cycle_number==pending.parent_cycle_number)
         demand=(Decimal(pending.required_fuel_lbs)-Decimal(actual))/Decimal(str(row['fuel_density'])) if grounded else None
         forecast=dict(pending_id=pending.id,mission_id=row['mission'].id,identity=pending.pending_cycle_identity,
@@ -347,6 +346,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
             reason=('Fueler submission and handoff required; forecast demand only' if getattr(pending,'plan_kind','uplift') in ('continuation','increase')
                 else 'Dispatcher completion and promotion required; forecast demand only') if demand is not None and demand>0 and pending.status=='pending'
                 else 'REVIEW REQUIRED' if demand is not None else 'Final Actual / tail / cycle evidence incomplete',conditional=True)
+        if position>0:forecast['reason']='Queued after preceding truck; verified handoff demand not yet available'
         future.append(forecast)
         if demand is None or demand<=0 or pending.status!='pending':continue
         child=dict(row)

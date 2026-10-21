@@ -261,6 +261,19 @@ class WholeSortTest(unittest.TestCase):
         pending.status='review';self.assertNotIn('projected_start',plan([a]).optimizer['future_demands'][0])
         pending.tail_number='N999UP';self.assertIsNone(plan([a]).optimizer['future_demands'][0]['demand_gallons'])
 
+    def test_all_queued_trucks_are_visible_without_reusing_the_same_future_demand(self):
+        a=row(100,assignment=assignment())
+        a.update(actual_total_lbs=24000,actual_complete=True,fuel_density=Decimal(6))
+        queue=[NS(id=i,tail_number='N123UP',parent_cycle_number=1,required_fuel_lbs=27000,
+            pending_cycle_identity=f'continuation-{i}',version=1,status='pending',plan_kind='continuation',
+            proposed_truck_id=10,proposed_fueler_user_id=1) for i in range(7,11)]
+        a.update(pending_uplift=queue[0],pending_truck_plans=queue)
+        forecast=plan([a]).optimizer['future_demands']
+        self.assertEqual([p['pending_id'] for p in forecast],[7,8,9,10])
+        self.assertEqual(forecast[0]['demand_gallons'],'500')
+        self.assertTrue(all(p['demand_gallons'] is None and 'projected_start' not in p for p in forecast[1:]))
+        self.assertTrue(all('preceding truck' in p['reason'] for p in forecast[1:]))
+
 
 class TopOffLearningTest(unittest.TestCase):
     def pair(self,i,duration=40,truck=10,op=None):

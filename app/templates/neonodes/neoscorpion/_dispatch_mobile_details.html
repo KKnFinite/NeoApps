@@ -3,7 +3,7 @@
 {% for reason in row.status_review_reasons %}<span>{{ reason }}</span>{% endfor %}
 {% if row.completion_progress %}<span>{{ row.completion_progress }}</span>{% endif %}
 <strong>FUELING OPERATIONS · READ-ONLY</strong>
-<span>PLAN SECOND TRUCK — {{ row.second_truck_reason or 'Available on desktop Dispatch' }}</span>
+<span>PLAN ANOTHER TRUCK — {{ row.second_truck_reason or 'Available on desktop Dispatch' }}</span>
 <span>START UPLIFT / START DEFUEL — {{ row.follow_up_reason or 'Available on desktop Dispatch' }}</span>
 <div class="scorpion-assignment-receipt" data-mobile-assignment-times>{% with receipts=row.assignment_receipt %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}</div>
 {% if row.required_fuel_display or row.inbound_fuel_display or row.neo_fuel_available %}<span>Required {{ row.required_fuel_display or '-' }} · Inbound {{ row.inbound_fuel_display or '-' }} · Actual {{ row.actual_fuel_display if row.actual_fuel_display and row.actual_fuel_display != 'INCOMPLETE' else '-' }} · NEO {{ row.neo_fuel_display if row.neo_fuel_available else '-' }}</span>{% endif %}

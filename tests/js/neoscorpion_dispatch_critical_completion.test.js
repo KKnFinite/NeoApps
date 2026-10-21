@@ -6,6 +6,25 @@ const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../../app/static/js/neoscorpion_fuel_dispatch_live.js"), "utf8");
 const expression = source.slice(source.indexOf("    const applyCriticalCompletion = (nextPanel) => {"),
     source.indexOf("    const refreshCriticalCompletion = async", source.indexOf("    const applyCriticalCompletion = (nextPanel) => {")));
+
+test('independent visit completion lines refresh while a mission draft stays protected',()=>{
+    let replacement;
+    const oldLines={replaceWith:n=>replacement=n};
+    const newLines={receipt:'Visit 2 COMPLETE 02:46; Visit 1 awaiting verification',cloneNode(){return this;}};
+    const slot={dataset:{completionIdentity:'1:2:3:1:TAIL:4:5:6'},replaceWith(){},cloneNode(){return this;}};
+    const stack={querySelector:s=>s==='[data-dispatch-completion-slot]'?slot:null};
+    const draft={type:'text',tagName:'INPUT',value:'unsaved correction',defaultValue:'saved',matches:()=>false};
+    const makeRow=()=>({dataset:{dispatchMissionId:'2',dispatchSortGroup:'2'},
+        classList:{contains:()=>false,toggle(){}},
+        querySelector:s=>s==='.neoscorpion-dispatch-action-stack'?stack:null,querySelectorAll:()=>[draft],
+        closest:()=>({children:[actual]})});
+    const actual=makeRow(),next=makeRow();
+    const context={root:{querySelectorAll:()=>[actual],querySelector:s=>s==='[data-truck-lines-mission="2"]'?oldLines:null},
+        initialControlValues:new WeakMap(),updateAssignmentAlerts(){}};
+    vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
+    context.patch({querySelectorAll:()=>[next],querySelector:s=>s==='[data-truck-lines-mission="2"]'?newLines:null});
+    assert.equal(replacement,newLines);assert.equal(draft.value,'unsaved correction');
+});
 test("critical completion appears under a dirty Dispatch without replacing editable controls", () => {
     const makeStack = (initial) => {
         let button = initial;

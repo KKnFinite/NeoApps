@@ -31,6 +31,9 @@ def inputs(context,calibrations):
             objects.append({c.name:getattr(obj,c.name) for c in obj.__table__.columns
                 if c.name not in ('notes','updated_at','created_at','comment','remarks','load_planner_person_id')}
                 if obj is not None and hasattr(obj,'__table__') else None)
+        objects.append([dict(id=p.id,version=p.version,status=p.status,truck=p.proposed_truck_id,
+            fueler=p.proposed_fueler_user_id,target=p.required_fuel_lbs,parent=p.parent_work_state_id)
+            for p in row.get('pending_truck_plans',[])])
         rows.append([row['mission'].id,objects,*[row.get(k) for k in (
             'parking_position','arrival_status','required_fuel_lbs','inbound_fuel_lbs',
             'planning_demand_gallons','actual_total_lbs','actual_complete','cycle_type',

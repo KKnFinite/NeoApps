@@ -4005,7 +4005,11 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
     if fuel_work_state.ended_early_at_utc is not None:
         raise ValueError("Ended Early fuel work cannot use normal COMPLETE.")
     if fuel_work_state.physical_finalized_at_utc is not None:
-        raise ValueError("REVIEW REQUIRED: this visit is already finalized; it cannot complete a new mission visit.")
+        # This exact visit was verified, even if another visit keeps the parent
+        # mission unfinished. Never post its transfer again or reset its time.
+        return DispatcherCompleteResult(changed=False,revision=int(asset_state.revision),
+            movement_status="moved" if fuel_work_state.physical_transfer_gallons else "not_moved",
+            assignment=assignment,mission=mission,fueling_event=None)
 
     tank_states = (
         NeoScorpionFuelTankState.query.filter_by(

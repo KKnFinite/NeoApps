@@ -197,6 +197,9 @@ def attach_assignment_times(context):
                 item['kind'] == live['kind'] and item['resource_id'] == live['resource_id']
                 and item['at'] == live['at'] for live in row['assignment_receipt'])]
         p = row.get('pending_uplift')
+        for plan in row.get('pending_truck_plans',[]):
+            plan.console_assignment_receipt=[receipt(kind,getattr(plan,'proposed_fueler_user_id' if kind=='fueler' else 'proposed_truck_id'),
+                *(plan_times[plan.id].get(kind,(None,None,None))[1:]),source='Dispatcher plan') for kind,_ in FIELDS]
         if p:
             row['planned_assignment_receipt'] = [receipt(kind, getattr(p, 'proposed_fueler_user_id' if kind == 'fueler' else 'proposed_truck_id'),
                 *(plan_times[p.id].get(kind, (None, None, None))[1:]), source='Dispatcher plan') for kind, _ in FIELDS]

@@ -299,6 +299,8 @@ def ensure_neoscorpion_production_schema(app):
             for model in NEOSCORPION_MODEL_TABLES:
                 model.__table__.create(bind=connection, checkfirst=True)
             _ensure_additive_columns(connection)
+            from app.services.neoscorpion_continuation_schema import migrate_continuation_queue
+            migrate_continuation_queue(connection)
             from app.services.neoscorpion_segment_schema import migrate_physical_segment_identity
             migrate_physical_segment_identity(connection)
             _ensure_check_constraints(connection)

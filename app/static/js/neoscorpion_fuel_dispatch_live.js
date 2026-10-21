@@ -868,6 +868,14 @@
             };
             const currentDetails = detailFor(root, currentRow);
             const nextDetails = detailFor(nextPanel, nextRow);
+            // Read-only visit/plan lines carry no drafts. Keep their independent
+            // receipts visible even while another form defers a full refresh.
+            const lineSelector = `[data-truck-lines-mission="${missionId}"]`;
+            const oldLines = root.querySelector(lineSelector), newLines = nextPanel.querySelector(lineSelector);
+            if (newLines) {
+                if (oldLines) oldLines.replaceWith(newLines.cloneNode(true));
+                else currentRow.after(newLines.cloneNode(true));
+            } else oldLines?.remove();
             // Completion-only responses intentionally omit expensive SPEAR
             // enrichment. Omission is not evidence that forecasts disappeared.
             const hasSpear = nextDetails?.querySelector('[data-console-region="spear"]')?.dataset.spearAvailable !== 'false';

@@ -52,6 +52,18 @@ class DetailsTest(unittest.TestCase):
     handoff=base.ContinuationTest.handoff
     finish_child=base.ContinuationTest.finish_child
 
+    def assert_controls_preserved(self,before,current):
+        self.assertFalse(before.controls-current.controls,'An original operational control was removed')
+        # The newly repeatable planner stays available with an outstanding
+        # plan. Its one creation form and queue-tail token are intentional.
+        allowed={('form','/neoscorpion/fuel-dispatch/pending-uplift'),
+            ('select','proposed_truck_id',None),*(('input',name,None) for name in (
+                'expected_last_plan_ref','expected_work_ref','plan_kind','pending_action',
+                'assignment_id','expected_cycle','expected_tail'))}
+        extra=current.controls-before.controls
+        self.assertTrue(set(extra)<=allowed,extra)
+        self.assertTrue(all(count==1 for count in extra.values()),extra)
+
     def html(self):
         self.login(self.dispatcher)
         result=self.client.get('/neoscorpion/fuel-dispatch')
@@ -74,7 +86,7 @@ class DetailsTest(unittest.TestCase):
             app.jinja_env.loader=loader;app.jinja_env.cache.clear()
         old,new=Controls(original),Controls(current)
         self.assertFalse(new.nested)
-        self.assertEqual(old.controls,new.controls)
+        self.assert_controls_preserved(old,new)
         self.assertEqual(current.count('data-details-region="fuel"'),1)
         self.assertEqual(current.count('data-details-region="notes"'),1)
         self.assertIn('Source correction / review reason',current)
@@ -149,8 +161,9 @@ class DetailsTest(unittest.TestCase):
         self.prepare();html=self.html();states=Operations(html).states
         self.assertEqual(states,{'second-truck':True,'start-uplift':False,'start-defuel':False})
         self.plan();html=self.html()
-        self.assertFalse(Operations(html).states['second-truck'])
-        self.assertEqual(html.count('data-pending-uplift-form'),1)
+        self.assertTrue(Operations(html).states['second-truck'])
+        self.assertEqual(html.count('data-pending-uplift-form'),2)
+        self.assertIn('name="expected_last_plan_ref"',html)
         self.assertIn('SAVE TRUCK PLAN',html)
 
     def complete_physical(self):
@@ -224,7 +237,7 @@ class DetailsTest(unittest.TestCase):
             finally:
                 app.jinja_env.loader=loader;app.jinja_env.cache.clear()
             self.assertFalse(current.nested)
-            self.assertEqual(before.controls,current.controls)
+            self.assert_controls_preserved(before,current)
         compare();self.prepare();compare();self.plan();compare()
         self.save(self.start+timedelta(minutes=5),**self.final_data());self.off();compare();self.submit();compare()
         fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,

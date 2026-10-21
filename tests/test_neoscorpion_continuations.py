@@ -186,7 +186,7 @@ class ContinuationTest(unittest.TestCase):
         response=self.client.get('/neoscorpion/fuel-dispatch');self.assertEqual(response.status_code,200)
         html=response.get_data(as_text=True)
         self.assertIn('data-dispatch-action-center',html);self.assertIn(f'data-action-key="verify-{self.work.id}"',html)
-        self.assertIn('expected_submission_version',html);self.assertIn('PLAN SECOND TRUCK',html)
+        self.assertIn('expected_submission_version',html);self.assertIn('PLAN ANOTHER TRUCK',html)
         self.assertNotIn('ADD PENDING UPLIFT',html);self.assertNotIn('data-source-verification-form',html)
         self.assertIn('scorpion-mobile-readonly',html)
 

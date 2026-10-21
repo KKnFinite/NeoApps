@@ -13,6 +13,8 @@
     <div class="neoscorpion-call-dispatch neoscorpion-dispatch-size-small" data-fuel-status-secondary title="LOCAL FUEL DISPATCH must contact AIRLINE DISPATCH" role="status">
         <strong>CALL DISPATCH</strong>
     </div>
+    {% elif dispatcher and row.unverified_visit_count and row.fuel_work_state and row.fuel_work_state.physical_finalized_at_utc %}
+    <small class="neoscorpion-fuel-status-warning neoscorpion-dispatch-size-small" data-fuel-status-secondary>VERIFY {{ row.unverified_visit_count }} EARLIER VISIT{{ 'S' if row.unverified_visit_count > 1 else '' }}</small>
     {% elif (row.dispatch_status_key == 'complete' or (dispatcher and row.dispatch_status_key == 'off')) and row.fuel_status_secondary not in critical_secondary and row.off_time is defined and row.off_time and row.off_time != '-' %}
     <small class="neoscorpion-fuel-status-warning neoscorpion-fuel-status-off{% if dispatcher %} neoscorpion-dispatch-size-small{% endif %}" data-fuel-status-secondary title="Physical TRUCK OFF at {{ row.off_time }}">{% if dispatcher %}<span>TRUCK OFF</span><span>{{ row.off_time }}</span>{% else %}TRUCK OFF {{ row.off_time }}{% endif %}</small>
     {% elif dispatcher and row.dispatch_status_key == 'fueling' and row.fueler_off_estimate_display is defined and row.fuel_status_secondary not in critical_secondary %}

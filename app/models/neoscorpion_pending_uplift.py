@@ -10,8 +10,11 @@ class NeoScorpionPendingUplift(db.Model):
         db.CheckConstraint("status IN ('pending','review','promoted','cancelled')",name='ck_scorpion_pending_uplift_status'),
         db.CheckConstraint('required_fuel_lbs > 0',name='ck_scorpion_pending_uplift_target'),
         db.CheckConstraint('version >= 1 AND parent_cycle_number >= 1',name='ck_scorpion_pending_uplift_versions'),
-        db.Index('uq_scorpion_pending_uplift_outstanding','mission_id','parent_cycle_number',unique=True,
-            postgresql_where=text("status IN ('pending','review')"),sqlite_where=text("status IN ('pending','review')")),
+        # Continuations are an ordered queue (id order), not a single slot.
+        # Legacy post-completion uplift keeps its original one-plan contract.
+        db.Index('uq_scorpion_pending_legacy_uplift','mission_id','parent_cycle_number',unique=True,
+            postgresql_where=text("status IN ('pending','review') AND plan_kind = 'uplift'"),
+            sqlite_where=text("status IN ('pending','review') AND plan_kind = 'uplift'")),
     )
     id=db.Column(db.Integer,primary_key=True)
     sort_date_operation_id=db.Column(db.Integer,db.ForeignKey('sort_date_operations.id'),nullable=False,index=True)

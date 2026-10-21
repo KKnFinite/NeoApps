@@ -1711,3 +1711,14 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > .neos
 .neoscorpion-fueling-board .neoscorpion-board-card > .neoscorpion-helper {
     margin: 5px 0 0; font-size: 12px; line-height: 1.3; overflow-wrap: anywhere;
 }
+/* Independent visit receipts and future truck queue stay with their mission. */
+.scorpion-truck-lines-row > td { padding: 3px 8px !important; }
+.scorpion-truck-lines { display: grid; gap: 3px; }
+.scorpion-truck-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; border-left: 2px solid var(--neo-cyan, #40c9de); background: rgba(30,50,65,.32); font: 11px NeoFontPlain, sans-serif; }
+.scorpion-truck-line-readings { overflow-wrap: anywhere; }
+.scorpion-truck-line .action-button { padding: 3px 8px; min-height: 24px; }
+@media (max-width: 760px) {
+    .scorpion-truck-lines-row > td { display: table-cell !important; }
+    .scorpion-truck-line { font-size: 10px; gap: 3px 8px; }
+    .scorpion-truck-line .action-button { display: none; }
+}

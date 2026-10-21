@@ -2041,8 +2041,8 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
             second_reason = 'Assign the mission first.'
         elif row.get('administratively_complete'):
             second_reason = 'Use UPLIFT after completed physical fueling.'
-        elif row.get('pending_uplift'):
-            second_reason = 'A saved truck / uplift plan already exists.'
+        elif row.get('pending_uplift') and row['pending_uplift'].plan_kind=='uplift':
+            second_reason = 'Review the saved post-completion uplift first.'
         elif row.get('cycle_type') == 'defuel':
             second_reason = 'Complete or review DEFUEL first.'
         elif not row['mission'].planned_fuel_load:

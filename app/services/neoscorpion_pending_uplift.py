@@ -17,19 +17,29 @@ def plan_continuation(gateway,user,form,*,now_utc=None):
     op=fuel.current_sort_operation(gateway)
     if op is None:raise ValueError('No current sort operation.')
     op,asset=fuel.lock_nightly_asset_scope_for_mutation(op)
-    a,m=fuel._locked_current_fuel_assignment(op,form.get('assignment_id'),action_label='PLAN SECOND TRUCK')
+    a,m=fuel._locked_current_fuel_assignment(op,form.get('assignment_id'),action_label='PLAN ANOTHER TRUCK')
     if form.get('expected_cycle') is None or form.get('expected_tail') is None:
         raise PendingUpliftConflict('Refresh the current aircraft and cycle before planning a truck.')
     fuel._validate_cycle_request(a,m,form.get('expected_cycle'),form.get('expected_tail'))
     if a.completed_at_utc or a.fuel_on_board_at_utc:raise ValueError('Use START UPLIFT for an already completed aircraft.')
     if a.current_cycle_type=='defuel':raise ValueError('Complete/review DEFUEL independently; do not plan an uplift continuation.')
     now=now_utc or datetime.utcnow()
-    p=outstanding(a.id,lock=True)
     action=form.get('pending_action','create')
-    if p and p.plan_kind not in CONTINUATIONS:raise ValueError('Review the existing legacy pending uplift separately.')
+    queue=outstanding_plans(a.id,lock=True)
+    if any(p.plan_kind not in CONTINUATIONS for p in queue):raise ValueError('Review the existing legacy pending uplift separately.')
+    p=next((p for p in queue if str(p.id)==str(form.get('pending_id'))),None)
+    if action=='create' and not form.get('pending_id'):
+        if any(p.tail_number!=m.assigned_tail_number or p.parent_cycle_number!=a.current_cycle_number for p in queue):
+            raise PendingUpliftConflict('Review/cancel the earlier aircraft or cycle plans before adding another truck.')
+        # Compare the displayed queue tail under the operation lock. A repeated
+        # or concurrent stale click cannot manufacture another planned visit.
+        if str(form.get('expected_last_plan_ref') or '')!=str(queue[-1].id if queue else ''):
+            raise PendingUpliftConflict('Planned truck queue changed; refresh before adding another truck.')
+    elif p is None:
+        raise PendingUpliftConflict('Planned truck changed; refresh before editing it.')
     if p and (str(form.get('pending_id'))!=str(p.id) or str(form.get('expected_version'))!=str(p.version)):
         raise PendingUpliftConflict('Planned truck changed; refresh before editing it.')
-    if p and action!='cancel' and (p.tail_number!=m.assigned_tail_number or p.parent_work_state_id!=a.active_work_state_id):
+    if p and action!='cancel' and (p.tail_number!=m.assigned_tail_number or p.parent_cycle_number!=a.current_cycle_number):
         raise ValueError('Physical aircraft/visit changed. Cancel the old plan and explicitly plan the replacement; no readings will be transferred.')
     if p is None:
         if action!='create':raise PendingUpliftConflict('Planned truck changed; refresh.')
@@ -58,7 +68,7 @@ def plan_continuation(gateway,user,form,*,now_utc=None):
     else:raise ValueError('Select a valid planned-truck action.')
     p.version+=1;p.updated_at_utc=now;p.updated_by_user_id=user.id
     _audit(op,a,p,user,'Dispatcher '+action+' planned truck continuation.',now)
-    if p.status in OUTSTANDING:activate_after_submission(gateway,user,op,a,m,now)
+    activate_after_submission(gateway,user,op,a,m,now)
     reconcile_completion(op,a,m,user,now)
     asset=fuel.record_nightly_operational_change(asset,op.id);db.session.flush()
     return SimpleNamespace(changed=True,revision=int(asset.revision),pending=p)
@@ -69,7 +79,8 @@ def target_changed(gateway,user,op,a,m,old,target,now):
     from app.services import neoscorpion as fuel
     from app.services.neoscorpion_submission import invalidate
     work=fuel.current_work(a,fuel._normalize_tail(m.assigned_tail_number),lock=True) if a else None
-    p=outstanding(a.id,lock=True) if a else None
+    queue=outstanding_plans(a.id,lock=True) if a else []
+    p=queue[0] if queue else None
     measured=bool(work and any(t.actual_lbs is not None for t in work.tank_states))
     if (p or (measured and target is not None and old is not None and target>old)) and not getattr(user,'id',None):
         raise ValueError('An authenticated Dispatcher is required to plan changed measured work.')
@@ -95,7 +106,9 @@ def target_changed(gateway,user,op,a,m,old,target,now):
             work.continuation_review_reason='NEXT TRUCK NOT REQUIRED — DISPATCHER REVIEW: reduced departure target is met by the submitted source.'
             handoff.version+=1;handoff.updated_at_utc=now;handoff.updated_by_user_id=user.id
             _audit(op,a,handoff,user,'Reduced target requires explicit next-truck review; no visit was cancelled.',now)
-    if p and p.plan_kind in CONTINUATIONS:
+    if p and p not in queue:queue.append(p)
+    for p in queue:
+        if p.plan_kind not in CONTINUATIONS:continue
         if target is None or target<=0:raise ValueError('An outstanding truck plan requires a positive departure target.')
         p.required_fuel_lbs=target;p.version+=1;p.updated_at_utc=now;p.updated_by_user_id=user.id
         _audit(op,a,p,user,'Reconciled changed requirement with the existing planned visit.',now)
@@ -103,8 +116,8 @@ def target_changed(gateway,user,op,a,m,old,target,now):
             net=fuel._fuel_work_calculation(fuel.tank_layout_for_tail(work.tail_number),
                 {t.tank_code:t for t in work.tank_states},work.apu_running,fuel._effective_apu_allowance_lbs(work))[4]
             if net is not None and net>=target:
-                p.status='review';p.review_reason='SECOND TRUCK NOT REQUIRED — DISPATCHER REVIEW'
-        activate_after_submission(gateway,user,op,a,m,now)
+                p.status='review';p.review_reason='PLANNED TRUCK NOT REQUIRED — DISPATCHER REVIEW'
+    if queue:activate_after_submission(gateway,user,op,a,m,now)
 
 
 def activate_after_submission(gateway,user,op,a,m,now):
@@ -124,7 +137,7 @@ def activate_after_submission(gateway,user,op,a,m,now):
     if work.fueler_submission_evidence!=evidence(view,mission,work,tanks):return
     neo=fuel._fuel_work_calculation(fuel.tank_layout_for_tail(work.tail_number),{t.tank_code:t for t in tanks},
         work.apu_running,fuel._effective_apu_allowance_lbs(work))[4]
-    if reason is None and (neo is None or neo>=p.required_fuel_lbs):reason='SECOND TRUCK NOT REQUIRED — DISPATCHER REVIEW'
+    if reason is None and (neo is None or neo>=p.required_fuel_lbs):reason='PLANNED TRUCK NOT REQUIRED — DISPATCHER REVIEW'
     if reason is None and not p.proposed_truck_id:reason='SELECT NEXT TRUCK — DISPATCHER REVIEW'
     if reason:
         p.status='review';p.review_reason=reason;p.version+=1
@@ -151,6 +164,12 @@ def activate_after_submission(gateway,user,op,a,m,now):
     p.handoff_snapshot=snapshot;p.status='promoted';p.promoted_work_state_id=fresh.id
     p.promoted_cycle_number=a.current_cycle_number;p.review_reason=None;p.version+=1;p.updated_at_utc=now;p.updated_by_user_id=user.id
     _audit(op,a,p,user,'Activated next physical visit from Fueler submission; prior Dispatcher verification remains outstanding.',now)
+    # Only the immediate successor is activated. Every later plan now waits on
+    # this fresh visit's own validated receipt, never the original receipt.
+    for later in outstanding_plans(a.id,lock=True):
+        if later.plan_kind in CONTINUATIONS and later.tail_number==work.tail_number and later.parent_cycle_number==a.current_cycle_number:
+            later.parent_work_state_id=fresh.id;later.version+=1;later.updated_at_utc=now
+            _audit(op,a,later,user,'Queued truck now awaits the preceding physical visit submission.',now)
     truck=db.session.get(NeoScorpionFuelTruck,p.proposed_truck_id)
     fuel._record_assigned_fueler_update(a,(f'NEXT TRUCK {truck.truck_number} ACTIVATED · fresh ON/OFF/APU/Actual/T/F required.',),now_utc=now)
     db.session.flush()
@@ -165,8 +184,9 @@ def reconcile_completion(op,a,m,user,now):
     pending=any(p.status in OUTSTANDING for p in plans)
     unresolved=any(not w.physical_finalized_at_utc and (w.manual_on_at_utc or w.fueler_submitted_at_utc or w.continuation_review_reason) for w in works)
     complete=bool(current and current.physical_finalized_at_utc and not pending and not unresolved)
-    a.completed_at_utc=now if complete else None;a.completed_by_user_id=user.id if complete else None
-    a.review_status='complete' if complete else 'pending';m.fuel_status='complete' if complete else 'assigned';m.fuel_completed_at_utc=now if complete else None
+    completed_at=(a.completed_at_utc or now) if complete else None
+    a.completed_at_utc=completed_at;a.completed_by_user_id=(a.completed_by_user_id or user.id) if complete else None
+    a.review_status='complete' if complete else 'pending';m.fuel_status='complete' if complete else 'assigned';m.fuel_completed_at_utc=completed_at
 
 
 def review_handoff(gateway,user,form,*,now_utc=None):
@@ -258,7 +278,7 @@ def attach_console(context):
         row['action_count']=sum(1 for s in row['console_sources'] if s['normal_completion_ready']
             or s['fuel_work_state'].physical_transfer_review or s['fuel_work_state'].manual_on_at_utc
             or s['fuel_work_state'].confirmed_on_at_utc or s['fuel_work_state'].on_at_utc or s['fuel_work_state'].off_at_utc)
-        row['action_count']+=len(row['console_dependencies'])+bool(row.get('plan_requires_review'))+bool(row.get('fueler_work_blocked'))
+        row['action_count']+=len(row['console_dependencies'])+sum(p.console_review for p in row.get('pending_truck_plans',[]))+bool(row.get('fueler_work_blocked'))
         # Read-only status explanations must not enable verification or mutate
         # the workflow. Ordinary Fueler data entry is not a Dispatcher review.
         row['mission_data_action'] = bool(row.get('mission_data_missing') and not row.get('administratively_complete'))
@@ -270,6 +290,12 @@ def attach_console(context):
             row['completion_progress'] = ('Fueler submitted — ready for Dispatcher COMPLETE.' if row['normal_completion_ready'] else
                 row.get('normal_completion_reason') or row.get('fueler_completion_reason') or 'Fueler COMPLETE ASSIGNMENT required.')
         row['console_visits']=[w for w in fuel.all_work(index) if a and w.fuel_assignment_id==a.id]
+        row['console_visits'].sort(key=lambda w:(w.physical_cycle_number or 0,w.physical_sequence_number or 0,w.id))
+        row['unverified_visit_count']=sum(1 for w in row['console_visits']
+            if w.id!=row.get('physical_work_id') and not w.physical_finalized_at_utc and not w.ended_early_at_utc
+            and (w.manual_on_at_utc or w.off_at_utc or w.fueler_submitted_at_utc))
+        if row.get('fuel_work_state') and row['fuel_work_state'].physical_finalized_at_utc and row['unverified_visit_count']:
+            row['fuel_status_secondary']=f"VERIFY {row['unverified_visit_count']} EARLIER VISIT(S)"
         valid={s['physical_work_id']:s['fueler_submitted'] for s in row['console_sources']}
         trusted_on={s['physical_work_id']:s.get('fueling_on_trusted',False) for s in row['console_sources']}
         if row.get('physical_work_id'):valid[row['physical_work_id']]=row.get('fueler_submitted',False)
@@ -285,9 +311,13 @@ class PendingUpliftConflict(ValueError):
 
 
 def outstanding(assignment_id, *, lock=False):
+    return next(iter(outstanding_plans(assignment_id,lock=lock)),None)
+
+
+def outstanding_plans(assignment_id, *, lock=False):
     query=NeoScorpionPendingUplift.query.filter_by(fuel_assignment_id=assignment_id).filter(NeoScorpionPendingUplift.status.in_(OUTSTANDING))
     if lock:query=query.with_for_update().populate_existing()
-    return query.first()
+    return query.order_by(NeoScorpionPendingUplift.id).all()
 
 
 def _audit(op,a,p,user,action,now,old=None):
@@ -476,12 +506,19 @@ def attach_pending(context):
     if operation is None:return context
     pending=NeoScorpionPendingUplift.query.filter_by(sort_date_operation_id=operation.id).filter(
         NeoScorpionPendingUplift.status.in_(OUTSTANDING)).options(joinedload(NeoScorpionPendingUplift.proposed_truck),
-        joinedload(NeoScorpionPendingUplift.proposed_fueler)).all()
-    by_mission={p.mission_id:p for p in pending}
+        joinedload(NeoScorpionPendingUplift.proposed_fueler)).order_by(NeoScorpionPendingUplift.id).all()
+    by_mission={}
+    for p in pending:by_mission.setdefault(p.mission_id,[]).append(p)
     selections={r['selection'].fuel_truck_id:r['selection'] for r in context.get('nightly_trucks',[])}
     fuelers,trucks=fuel._current_resource_owners(context['rows'])
     for row in context['rows']:
-        p=by_mission.get(row['mission'].id);row['pending_uplift']=p;row['pending_uplift_warning']=''
+        queue=by_mission.get(row['mission'].id,[])
+        row['pending_truck_plans']=queue
+        row['last_plan_ref']=queue[-1].id if queue else ''
+        p=queue[0] if queue else None;row['pending_uplift']=p;row['pending_uplift_warning']=''
+        for planned in queue:
+            planned.console_target=format(Decimal(planned.required_fuel_lbs)/Decimal(1000),'.3f').rstrip('0').rstrip('.')
+            planned.console_review=bool(planned.status=='review' or planned.proposed_truck_id is None or planned.tail_number!=row['tail_number'])
         if p:
             row['pending_uplift_target_input']=format(Decimal(p.required_fuel_lbs)/Decimal(1000),'.3f').rstrip('0').rstrip('.')
             messages=[]
@@ -493,6 +530,6 @@ def attach_pending(context):
             if p.proposed_truck_id and selection and selection.status!='available':messages.append('Truck '+selection.status.replace('_',' '))
             if p.proposed_truck and (not p.proposed_truck.is_active or p.proposed_truck.is_out_of_service):messages.append('Truck inactive or OOS')
             row['pending_uplift_warning']='; '.join(messages)
-            row['plan_requires_review']=bool(p.status=='review' or p.proposed_truck_id is None or p.tail_number!=row['tail_number'])
+            row['plan_requires_review']=any(planned.console_review for planned in queue)
         else:row['plan_requires_review']=False
     return context
