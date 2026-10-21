@@ -128,3 +128,22 @@ class ResumeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'New fuel evidence'):
             reconcile_duplicate_visit(self.gateway,self.dispatcher,self.assignment.id,self.work.id,new.id,reason='Approved')
         db.session.rollback();self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(field_name='duplicate_visit_reconciliation').count(),0)
+
+    def test_already_posted_duplicate_evidence_cannot_deduct_again(self):
+        new,off=self.duplicate_fixture()
+        fuel.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,
+            apu_running='no',actual_left='15',actual_ctr='0',actual_right='15',transfer_fuel_gallons='2645'));db.session.commit()
+        fuel.mark_fueler_off(self.gateway,self.fueler,self.assignment.id,now_utc=off+timedelta(minutes=1));db.session.commit();self.submit()
+        fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        fuel.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,
+            physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number,
+            actual_left='15',actual_ctr='0',actual_right='15',transfer_fuel_gallons='2645'));db.session.commit()
+        row=fuel.fueler_context(self.gateway,self.fueler,assignment_id=self.assignment.id,
+            physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number)['rows'][0]
+        fuel.submit_fueler_assignment(self.gateway,self.fueler,self.assignment.id,expected=row['edit_baseline'],
+            physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number);db.session.commit()
+        with self.assertRaisesRegex(ValueError,'already posted'):
+            fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+                physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number)
+        db.session.rollback();self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)
+        self.assertEqual(self.selection.current_gallons,7355)

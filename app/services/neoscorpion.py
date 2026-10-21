@@ -4010,6 +4010,8 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
         .all()
     )
     tank_states_by_code = {state.tank_code: state for state in tank_states}
+    from app.services.neoscorpion_resume import guard_duplicate_transfer
+    guard_duplicate_transfer(fuel_work_state,tank_states)
     tank_layout = tank_layout_for_tail(tail_number)
     if not _apu_source_is_valid(fuel_work_state, tank_layout):
         raise ValueError("Select a valid APU source tank before COMPLETE.")

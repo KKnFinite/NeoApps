@@ -3,6 +3,33 @@ from app.extensions import db
 from app.models import NeoScorpionFuelAuditEntry, NeoScorpionFuelingEvent, NeoScorpionSortTruck, NeoScorpionSettings
 
 
+def guard_duplicate_transfer(work,tanks):
+    """Fail closed on the proven legacy accidental-new-visit pattern.
+
+    This never merges work or reverses inventory. A deliberately separate job
+    remains independent; identical evidence needs review, not another posting.
+    Called only on Dispatcher verification, not on background polls.
+    """
+    from app.models import NeoScorpionFuelWorkState
+    current={(t.tank_code,t.remaining_lbs,t.actual_lbs) for t in tanks}
+    for event in NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=work.fuel_assignment_id).filter(
+            NeoScorpionFuelingEvent.fuel_work_state_id!=work.id).all():
+        other=db.session.get(NeoScorpionFuelWorkState,event.fuel_work_state_id)
+        if not other or any(getattr(work,key)!=getattr(other,key) for key in
+                ('tail_number','physical_cycle_number','physical_cycle_type','physical_truck_id','physical_fueler_user_id','physical_transfer_gallons','apu_running','apu_allowance_lbs','apu_source_tank_code')):
+            continue
+        if not work.physical_transfer_gallons or event.transfer_fuel_gallons!=work.physical_transfer_gallons:
+            continue
+        older,newer=sorted((work,other),key=lambda w:(w.created_at,w.id))
+        if (not older.off_at_utc or not 0 <= (newer.created_at-older.off_at_utc).total_seconds() <= 60
+                or (older.fueler_submitted_at_utc and older.fueler_submitted_at_utc<=newer.created_at)):
+            continue
+        link=NeoScorpionFuelAuditEntry.query.filter_by(fuel_assignment_id=work.fuel_assignment_id,
+            field_name='physical_visit',old_value=str(older.id),new_value=str(newer.id)).first()
+        if link and current=={(t.tank_code,t.remaining_lbs,t.actual_lbs) for t in other.tank_states}:
+            raise ValueError(f'REVIEW REQUIRED: this accidental-OFF visit duplicates fuel evidence already posted on visit {other.id} (event {event.id}). No additional gallons posted; reconcile the duplicate records with Dispatch.')
+
+
 def resume_same_visit(gateway,user,operation,asset,assignment,mission,work,expected_off,now,*,administrative=False):
     # The caller holds the operation, assignment and current-work locks and has
     # checked the authenticated Fueler, cycle, tail, truck and work reference.
