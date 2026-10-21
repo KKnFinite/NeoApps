@@ -2033,7 +2033,8 @@ def _dispatch_presentation_context(gateway, *, include_asset_choices=False, incl
         # action. Existing canonical eligibility and mutation guards still rule.
         row['details_action_count'] = max(0, row['action_count'] - int(row['mission_data_action']))
         row['details_action_count'] += int(bool(row.get('confirm_tail_available')))
-        row['details_action_count'] += int(bool(row.get('normal_completion_ready')))
+        # Current-visit verification is already directly on the mission row.
+        # DETAILS counts only actions actually offered inside its workspace.
         if not row.get('assignment'):
             second_reason = 'Assign the mission first.'
         elif row.get('administratively_complete'):

@@ -1,3 +1,9 @@
-{% set active_visits = row.console_visits|rejectattr('physical_finalized_at_utc')|rejectattr('ended_early_at_utc')|list %}
-<section class="scorpion-work-timeline" data-dispatch-work-timeline{% if not other_live_visits %} hidden{% endif %}><strong>PHYSICAL VISITS</strong>
-{% for visit in active_visits %}{% if visit.manual_on_at_utc or visit.confirmed_on_at_utc or visit.on_at_utc or visit.off_at_utc or visit.fueler_submitted_at_utc or visit.continuation_review_reason or visit.notes %}{% include "neonodes/neoscorpion/_dispatch_visit.html" %}{% endif %}{% endfor %}</section>
+<div class="scorpion-work-timeline" data-dispatch-work-timeline>
+{% for visit in row.console_visits if visit.id == row.physical_work_id %}
+{% include "neonodes/neoscorpion/_dispatch_visit.html" %}
+{% else %}
+{% with visit=none %}{% include "neonodes/neoscorpion/_dispatch_milestones.html" %}{% endwith %}
+{% endfor %}
+{% set earlier_visits = row.console_visits|rejectattr('id','equalto',row.physical_work_id)|rejectattr('physical_finalized_at_utc')|rejectattr('ended_early_at_utc')|list %}
+{% if earlier_visits %}<details data-console-section="physical-visits"><summary>PHYSICAL VISITS · {{ earlier_visits|length }} earlier</summary>{% for visit in earlier_visits %}{% include "neonodes/neoscorpion/_dispatch_visit.html" %}{% endfor %}</details>{% endif %}
+</div>

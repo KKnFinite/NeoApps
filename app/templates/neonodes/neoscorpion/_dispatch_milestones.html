@@ -1,0 +1,11 @@
+{% set current = not visit or visit.id == row.physical_work_id %}
+{% set receipts = row.assignment_receipt if current else visit.console_assignment_receipt %}
+{% set changes = row.assignment_changes if current else visit.console_assignment_changes %}
+{% set on = (visit.manual_on_at_utc or visit.confirmed_on_at_utc or visit.on_at_utc) if visit else none %}
+{% set off = visit.off_at_utc if visit else none %}
+{# Written by Dispatcher verification, never by physical OFF or Fueler submission. #}
+{% set complete = (row.assignment.fuel_on_board_at_utc if current and row.assignment and row.assignment.fuel_on_board_at_utc else visit.completion_ready_at_utc) if visit else ((row.assignment.completed_at_utc or row.assignment.fuel_on_board_at_utc) if row.assignment else none) %}
+<div class="scorpion-milestones"{% if current %} data-dispatch-assignment-times data-assignment-work="{{ row.physical_work_id or '' }}"{% endif %}>
+<div data-milestone="assigned"><small>ASSIGNED</small><div class="scorpion-assignment-receipt"{% if visit %} data-visit-assignment-times="{{ visit.id }}"{% endif %}>{% for sent in receipts if sent.resource_id is not none %}<span data-assignment-resource="{{ sent.kind }}:{{ sent.resource_id }}"><abbr title="{{ 'Fueler' if sent.kind == 'fueler' else 'Truck' }} {{ sent.name }}">{{ 'F' if sent.kind == 'fueler' else 'T' }}</abbr> <time{% if sent.utc %} datetime="{{ sent.utc }}" title="{{ sent.source }} · {{ sent.utc }}"{% else %} title="Assignment time unavailable; no reliable historical evidence"{% endif %}>{{ sent.display if sent.utc else '—' }}</time></span>{% else %}—{% endfor %}</div>{% if changes %}<details><summary>Resource changes</summary>{% with receipts=changes %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}</details>{% endif %}</div>
+{% for key,label,value in [('on','TRUCK ON',on),('off','TRUCK OFF',off),('complete','MISSION COMPLETE',complete)] %}<div data-milestone="{{ key }}"><small>{{ label }}</small><time{% if value %} datetime="{{ value.isoformat() }}Z"{% endif %}>{{ value|local_time(timezone) if value else '—' }}</time></div>{% endfor %}
+</div>

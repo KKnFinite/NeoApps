@@ -89,14 +89,14 @@ class DetailsTest(unittest.TestCase):
         for work,note in ((self.work,'Truck A verified note'),(child,'Truck B preparation note')):
             self.assertIn('data-visit-note="'+str(work.id)+'"',html);self.assertIn(note,html)
         self.assertIn('T/F 3000 gal',html)
-        self.assertIn('T/F - gal',html)
+        self.assertIn('data-milestone="off"',html)
         fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
             physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number);db.session.commit()
         html=self.html()
         history=html.split('data-console-section="history"',1)[1]
         self.assertIn('data-console-visit="'+str(self.work.id)+'"',history)
         self.assertIn('VERIFIED',history)
-        timeline=html.split('data-dispatch-work-timeline',1)[1].split('data-details-region="fuel"',1)[0]
+        timeline=html.split('data-dispatch-work-timeline',1)[1].split('data-details-region="notes"',1)[0]
         self.assertNotIn('data-console-visit="'+str(self.work.id)+'"',timeline)
 
     def test_view_only_console_contains_no_optional_source_mutation(self):
@@ -160,8 +160,10 @@ class DetailsTest(unittest.TestCase):
     def test_completed_physical_fueling_exposes_both_follow_ups_before_history(self):
         self.complete_physical();html=self.html()
         self.assertEqual(Operations(html).states,{'second-truck':False,'start-uplift':True,'start-defuel':True})
-        self.assertLess(html.index('data-console-section="start-uplift"'),html.index('data-console-section="history"'))
-        self.assertIn('data-console-section="history"',html)
+        self.assertLess(html.index('data-console-section="start-uplift"'),html.index('data-console-region="times"'))
+        # A single current visit is already displayed once in the timeline;
+        # do not add an empty/duplicate historical disclosure for it.
+        self.assertNotIn('data-console-section="history"',html)
         self.assertNotIn('<details open',html)
 
     def test_active_uplift_and_defuel_keep_operations_and_existing_cancel_workflow(self):
@@ -186,3 +188,44 @@ class DetailsTest(unittest.TestCase):
         html=self.html()
         self.assertEqual(Operations(html).states,{'second-truck':False,'start-uplift':False,'start-defuel':False})
         self.assertIn('FOB does not establish a physical fueling event.',html)
+
+    def test_four_regions_copy_exact_text_and_one_current_timeline(self):
+        self.prepare();self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
+        row=self.row();html=self.html()
+        console=html.split('class="neoscorpion-dispatch-detail-grid scorpion-desktop-console"',1)[1]
+        console=console.split('</td>',1)[0]
+        self.assertEqual(console.count('data-console-region='),4)
+        self.assertEqual(console.count('data-copy-value='),1)
+        from markupsafe import escape
+        self.assertIn('data-copy-value="'+str(escape(row['load_planning_output']))+'"',console)
+        for milestone in ('assigned','on','off','complete'):
+            self.assertEqual(console.count('data-milestone="'+milestone+'"'),1)
+        self.assertNotIn('OFF TIME',console)
+        self.assertNotIn('name="assigned_truck_id"',console)
+        self.assertNotIn('name="assigned_fueler_user_id"',console)
+        # Physical OFF is never presented as administrative completion.
+        self.assertIn('data-milestone="complete"><small>MISSION COMPLETE</small><time>—</time>',console)
+        self.submit()
+        self.assertIn('data-milestone="complete"><small>MISSION COMPLETE</small><time>—</time>',self.html())
+        fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
+        self.assertIn('data-milestone="complete"><small>MISSION COMPLETE</small><time datetime=',self.html())
+
+    def test_current_production_control_inventory_is_preserved_in_each_state(self):
+        names=('_dispatch_details.html','_dispatch_operations.html','_dispatch_secondary.html',
+               '_dispatch_action_center.html','_dispatch_work_timeline.html','_dispatch_visit.html')
+        templates={'neonodes/neoscorpion/'+name:subprocess.check_output(['git','show',
+            'e40d7f413d184bdd584ddee9adfff8f3d6340c3b:app/templates/neonodes/neoscorpion/'+name]).decode() for name in names}
+        app=self.client.application;loader=app.jinja_env.loader
+        def compare():
+            current=Controls(self.html())
+            try:
+                app.jinja_env.loader=ChoiceLoader([DictLoader(templates),loader]);app.jinja_env.cache.clear()
+                before=Controls(self.html())
+            finally:
+                app.jinja_env.loader=loader;app.jinja_env.cache.clear()
+            self.assertFalse(current.nested)
+            self.assertEqual(before.controls,current.controls)
+        compare();self.prepare();compare();self.plan();compare()
+        self.save(self.start+timedelta(minutes=5),**self.final_data());self.off();compare();self.submit();compare()
+        fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id,
+            physical_work_id=self.work.id,physical_sequence=self.work.physical_sequence_number);db.session.commit();compare()

@@ -1,0 +1,5 @@
+{% set prior_visits = row.console_visits|rejectattr('id','equalto',row.physical_work_id)|list %}
+{% if row.history or prior_visits|selectattr("physical_finalized_at_utc")|list or prior_visits|selectattr("ended_early_at_utc")|list %}<details data-console-section="history"><summary>Verified visits & completed cycles</summary>
+{% for visit in row.console_visits if visit.id != row.physical_work_id and (visit.physical_finalized_at_utc or visit.ended_early_at_utc) %}{% include "neonodes/neoscorpion/_dispatch_visit.html" %}{% endfor %}
+{% for history in row.history %}{% set frozen=history.snapshot %}<div class="scorpion-history-summary"><strong>{{ history.label }} · Cycle {{ history.cycle_number }}</strong><span>{{ frozen.tail_number }} · {{ frozen.truck }} · Actual {{ frozen.actual_total_display }} · NEO {{ frozen.neo_fuel_display }} · ON {{ frozen.on_time }} / OFF {{ frozen.off_time }}</span></div>{% endfor %}
+</details>{% endif %}

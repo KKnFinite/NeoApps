@@ -1,28 +1,28 @@
-{% set other_live_visits = row.console_visits|rejectattr('physical_finalized_at_utc')|rejectattr('ended_early_at_utc')|rejectattr('id','equalto',row.physical_work_id)|list %}
 <div class="neoscorpion-dispatch-detail-grid scorpion-desktop-console">
+<section class="scorpion-console-region" data-console-region="operations">
 {% include "neonodes/neoscorpion/_dispatch_operations.html" %}
 {% include "neonodes/neoscorpion/_dispatch_action_center.html" %}
-<div class="scorpion-console-workspace">
-<div class="scorpion-console-work-column">
-{% include "neonodes/neoscorpion/_dispatch_work_timeline.html" %}
-</div>
-<div class="scorpion-console-facts-column">
-<section data-details-region="fuel">
-<div class="scorpion-assignment-receipt" data-dispatch-assignment-times data-assignment-work="{{ row.physical_work_id or '' }}">{% with receipts=row.assignment_receipt %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}{% if row.assignment_changes %}<details><summary>Earlier assignments</summary>{% with receipts=row.assignment_changes %}{% include "neonodes/neoscorpion/_assignment_receipt.html" %}{% endwith %}</details>{% endif %}</div>
-<div class="scorpion-load-planning" data-dispatch-console-planning>{% if row.load_planning_ready %}<span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span><button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>{% endif %}<small data-dispatch-load-planner>Load Planner: {{ row.load_planner_name }}</small></div>
-{% if not other_live_visits and (row.on_time != '-' or row.off_time != '-') %}<small>TRUCK ON {{ row.on_time }} · OFF {{ row.off_time }}</small>{% endif %}
+{% include "neonodes/neoscorpion/_dispatch_secondary.html" %}
 <div data-fuel-status-details>{% for warning in row.fuel_status_warnings if warning != row.dispatch_status_detail and warning not in row.status_review_reasons %}<p>{{ warning }}</p>{% endfor %}</div>
 </section>
-<section data-details-region="notes" class="scorpion-console-notes">
+<section class="scorpion-console-region" data-console-region="planning" data-details-region="fuel"{% if not row.load_planning_ready and (not row.load_planner_name or row.load_planner_name == 'UNASSIGNED') %} hidden{% endif %}>
+<h3>LOAD PLANNING</h3>
+<div class="scorpion-load-planning" data-dispatch-console-planning>{% if row.load_planning_ready %}<span class="neoscorpion-load-planning-output">{{ row.load_planning_output }}</span><button class="action-button neoscorpion-copy-fuel-button" type="button" data-copy-value="{{ row.load_planning_output }}">COPY</button>{% endif %}{% if row.load_planner_name and row.load_planner_name != 'UNASSIGNED' %}<small data-dispatch-load-planner>Load Planner: {{ row.load_planner_name }}</small>{% endif %}</div>
+</section>
+<section class="scorpion-console-region" data-console-region="times">
+<h3>MISSION DETAILS &amp; TIMES</h3>
+{% include "neonodes/neoscorpion/_dispatch_work_timeline.html" %}
+<div data-details-region="notes" class="scorpion-console-notes">
 <details data-console-section="tail-notes"><summary>TAIL NOTES<span class="scorpion-tail-note-preview" data-tail-note-preview{% if not row.tail_note or not row.tail_note.notes %} hidden{% endif %}>{{ row.tail_note.notes if row.tail_note else '' }}</span></summary>
 {% with tail_notes_rows=2, tail_notes_compact=true %}{% include "neonodes/neoscorpion/_tail_notes.html" %}{% endwith %}
 </details>
-</section>
 </div>
-<div class="scorpion-console-support-column">
 {% set current_notes = row.console_visits|selectattr('notes')|rejectattr('physical_finalized_at_utc')|rejectattr('ended_early_at_utc')|list %}
 <div data-dispatch-visit-notes{% if not current_notes and not row.fueler_notes %} hidden{% endif %}>{% if current_notes or row.fueler_notes %}<strong>FUELER / VISIT NOTES</strong>{% for visit in current_notes %}<div data-visit-note="{{ visit.id }}"><small>Truck {{ visit.physical_truck.truck_number if visit.physical_truck else '-' }} · Cycle {{ visit.physical_cycle_number }} / Visit {{ visit.visit_number }}</small><p class="scorpion-visit-note">{{ visit.notes }}</p></div>{% else %}<p class="scorpion-visit-note">{{ row.fueler_notes }}</p>{% endfor %}{% endif %}</div>
-</div>
-</div>
-{% include "neonodes/neoscorpion/_dispatch_secondary.html" %}
+{% include "neonodes/neoscorpion/_dispatch_history.html" %}
+</section>
+<section class="scorpion-console-region" data-console-region="spear" data-spear-available="{{ 'true' if spear_plan else 'false' }}"{% if not (row.assignment_recommendation_display or row.assignment_recommendation_reason_display or row.spear_last_decision_id or row.tail_mismatch or row.spear_risk or row.spear_readiness_reasons or row.spear_step or row.spear_problem or row.spear_ready) %} hidden{% endif %}>
+<h3>SPEAR DATA</h3>
+{% include "neonodes/neoscorpion/_dispatch_spear.html" %}
+</section>
 </div>

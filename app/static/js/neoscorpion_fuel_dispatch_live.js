@@ -868,6 +868,9 @@
             };
             const currentDetails = detailFor(root, currentRow);
             const nextDetails = detailFor(nextPanel, nextRow);
+            // Completion-only responses intentionally omit expensive SPEAR
+            // enrichment. Omission is not evidence that forecasts disappeared.
+            const hasSpear = nextDetails?.querySelector('[data-console-region="spear"]')?.dataset.spearAvailable !== 'false';
             const oldStatusDetails=currentDetails?.querySelector('[data-fuel-status-details]');
             const newStatusDetails=nextDetails?.querySelector('[data-fuel-status-details]');
             if (sameVisit && oldStatusDetails && newStatusDetails && !groupDirty([oldStatusDetails])) {
@@ -880,6 +883,12 @@
             const newTimeline=nextDetails?.querySelector('[data-dispatch-work-timeline]');
             if (oldTimeline && newTimeline && !groupDirty([oldTimeline]) && !oldTimeline.contains(document.activeElement)) {
                 const timeline=newTimeline.cloneNode(true);
+                // Assignment-change disclosures live inside the read-only
+                // timeline. Keep them open during critical status patches.
+                const disclosureKey=item=>item.dataset.consoleSection ||
+                    `${item.closest('[data-console-visit]')?.dataset.consoleVisit || 'current'}:${item.querySelector('summary')?.textContent}`;
+                const openDisclosures=new Set(Array.from(oldTimeline.querySelectorAll('details[open]'),disclosureKey));
+                timeline.querySelectorAll('details').forEach(item=>item.open=openDisclosures.has(disclosureKey(item)));
                 oldTimeline.replaceWith(timeline);
                 timeline.querySelectorAll('input,select,textarea').forEach(control=>initialControlValues.set(control,controlValue(control)));
             }
@@ -893,9 +902,21 @@
                 oldSent.replaceWith(copy);
             }
             if (sameVisit && currentDetails && nextDetails) {
-                const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).map(
+                // Empty read-only columns disappear, but can become applicable
+                // on the next poll without replacing editable sibling regions.
+                ['planning','spear'].forEach(region => {
+                    if (region === 'spear' && !hasSpear) return;
+                    const oldRegion=currentDetails.querySelector(`[data-console-region="${region}"]`);
+                    const newRegion=nextDetails.querySelector(`[data-console-region="${region}"]`);
+                    if (oldRegion && newRegion) oldRegion.hidden=newRegion.hidden && !groupDirty([oldRegion]);
+                });
+                const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]') && (hasSpear || !item.closest('[data-console-region="spear"]'))).map(
                     item => [item.dataset.consoleSection, item]));
                 Array.from(currentDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).forEach(item => {
+                    if (!hasSpear && item.closest('[data-console-region="spear"]')) {
+                        incoming.delete(item.dataset.consoleSection);
+                        return;
+                    }
                     const fresh = incoming.get(item.dataset.consoleSection);
                     if (!groupDirty([item]) && !item.contains(document.activeElement)) {
                         if (!fresh) item.remove();
@@ -916,7 +937,12 @@
                     }
                     incoming.delete(item.dataset.consoleSection);
                 });
-                incoming.forEach(item => currentDetails.querySelector('[data-details-region="secondary"]')?.appendChild(item.cloneNode(true)));
+                incoming.forEach(item => {
+                    const region=item.closest('[data-console-region]')?.dataset.consoleRegion;
+                    const destination=region ? currentDetails.querySelector(`[data-console-region="${region}"]`) :
+                        currentDetails.querySelector('[data-details-region="secondary"]');
+                    destination?.appendChild(item.cloneNode(true));
+                });
                 protectedControls().filter(control => currentDetails.contains(control)).forEach(control => {
                     if (!initialControlValues.has(control)) initialControlValues.set(control,controlValue(control));
                 });
@@ -958,7 +984,8 @@
             const currentHandoff = currentDetails?.querySelector("[data-dispatch-fueler-submission]");
             const nextHandoff = nextDetails?.querySelector("[data-dispatch-fueler-submission]");
             if (sameVisit && currentHandoff && nextHandoff) currentHandoff.textContent = nextHandoff.textContent;
-            if (sameVisit) ['[data-dispatch-console-facts]', '[data-dispatch-console-planning]', '[data-dispatch-visit-notes]'].forEach(selector => {
+            if (sameVisit) ['[data-dispatch-console-facts]', '[data-dispatch-console-planning]', '[data-dispatch-visit-notes]', '[data-dispatch-spear-summary]'].forEach(selector => {
+                if (selector === '[data-dispatch-spear-summary]' && !hasSpear) return;
                 const oldValue = currentDetails?.querySelector(selector), newValue = nextDetails?.querySelector(selector);
                 if (oldValue && newValue && oldValue.outerHTML !== newValue.outerHTML && !oldValue.contains(document.activeElement)) oldValue.replaceWith(newValue.cloneNode(true));
             });
