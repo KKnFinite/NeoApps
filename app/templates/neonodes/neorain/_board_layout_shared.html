@@ -519,6 +519,60 @@ body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound
     margin-inline: auto;
     text-align: center;
 }
+/* Identical aircraft-row geometry on both live boards; reports are untouched. */
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-arrival-clocks {
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px 6px; white-space:nowrap;
+}
+body.blueprint-neorain .neorain-arrival-clocks > label,
+body.blueprint-neorain .neorain-arrival-clocks > .neorain-eta {
+    display:flex; flex-shrink:0; align-items:center; gap:3px; margin:0; min-width:0; font:inherit;
+}
+body.blueprint-neorain .neorain-arrival-clocks :is(label > span, small) {font-size:9px; color:#b7a9d8;}
+body.blueprint-neorain .neorain-arrival-clocks .rain-override {width:54px; flex:0 0 54px;}
+body.blueprint-neorain [data-neorain-scorpion-fuel] {font:inherit; font-variant-numeric:tabular-nums;}
+@media (min-width:901px) {
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board {display:block;}
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-mobile-board {display:none;}
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board tbody > tr:not(.neorain-delay-panel-row) {height:42px;}
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board tbody > tr:not(.neorain-delay-panel-row) > td {
+        font:12px/1.2 NeoFontPlain,Arial,sans-serif; padding:5px 3px; vertical-align:middle;
+        overflow-wrap:normal; word-break:normal;
+    }
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board td[data-label="Connecting Outbound"] {
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+}
+@media (max-width:900px) {
+    body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-mobile-board {
+        display:block; width:100%; max-width:100%; min-width:0; overflow-x:auto; overscroll-behavior-x:contain;
+    }
+    body.blueprint-neorain .neorain-mobile-board[data-neorain-mobile-board="inbound"] {
+        --neorain-inbound-columns:90px 80px 65px 72px 65px 80px 45px;
+    }
+    body.blueprint-neorain .neorain-mobile-board[data-neorain-mobile-board="outbound"] {
+        --neorain-outbound-columns:90px 80px 60px 72px 90px 65px 80px 45px;
+    }
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission-list {display:block; width:max-content; min-width:100%;}
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission {border:0; border-bottom:1px solid rgba(var(--node-rgb),.25);}
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-column-head,
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission-grid {
+        gap:0; border:0; align-items:center; font:12px/1.2 NeoFontPlain,Arial,sans-serif;
+    }
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission-grid > * {
+        box-sizing:border-box; display:grid; align-items:center; min-width:0; min-height:34px;
+        padding:3px 5px; font:inherit; white-space:nowrap; text-align:center;
+    }
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission-grid > :first-child {text-align:left;}
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission-grid [data-neorain-mobile-row-open] {
+        min-height:28px; padding:0; font:inherit;
+    }
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-column-head > span {padding:5px; font-size:10px; white-space:nowrap;}
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-mission-open strong {font:inherit; font-weight:700;}
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-inline-detail {
+        position:sticky; left:0; box-sizing:border-box; width:calc(100vw - 32px); max-width:100%; padding:8px;
+    }
+    body.blueprint-neorain .neorain-mobile-board .neorain-mobile-inline-detail .rain-override {justify-content:flex-start;}
+}
 </style>
 <script>
 (() => {

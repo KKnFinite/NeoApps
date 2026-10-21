@@ -23,6 +23,8 @@ from app.models import (
     NeoRainOutboundServiceState,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
+    NeoScorpionFuelWorkState,
+    NeoScorpionFuelTankState,
     MotherBrainGoogleIntegrationSetting,
 )
 from app.models import NeoRainOperationalSetting, NeoRainCrewAdminAssignment, NeoRainDelayInfo
@@ -37,6 +39,7 @@ from app.services.neorain_fuel_authority import (
     fuel_review_pending_by_mission,
     google_rain_fuel_by_mission,
     rain_fuel_data_source,
+    scorpion_board_fuel_by_mission,
 )
 from app.services.neorain_load_planner_contacts import (
     neorain_load_planner_contact_values,
@@ -510,6 +513,11 @@ def neorain_outbound_revision(gateway, *, operation=_OPERATION_UNSET):
         _revision_aggregate("google_fuel", NeoRainGoogleFuelValue, NeoRainGoogleFuelValue.updated_at, NeoRainGoogleFuelValue.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("google_fuel", NeoRainGoogleFuelValue, NeoRainGoogleFuelValue.updated_at, NeoRainGoogleFuelValue.id.is_(None)),
         _revision_aggregate("scorpion_assignments", NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.updated_at, NeoScorpionFuelAssignment.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("scorpion_assignments", NeoScorpionFuelAssignment, NeoScorpionFuelAssignment.updated_at, NeoScorpionFuelAssignment.id.is_(None)),
         _revision_aggregate("scorpion_events", NeoScorpionFuelingEvent, NeoScorpionFuelingEvent.updated_at, NeoScorpionFuelingEvent.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("scorpion_events", NeoScorpionFuelingEvent, NeoScorpionFuelingEvent.updated_at, NeoScorpionFuelingEvent.id.is_(None)),
+        _revision_aggregate("scorpion_work", NeoScorpionFuelWorkState, NeoScorpionFuelWorkState.updated_at,
+            NeoScorpionFuelWorkState.fuel_assignment_id.in_(select(NeoScorpionFuelAssignment.id).where(NeoScorpionFuelAssignment.sort_date_operation_id == operation_id))),
+        _revision_aggregate("scorpion_tanks", NeoScorpionFuelTankState, NeoScorpionFuelTankState.updated_at,
+            NeoScorpionFuelTankState.fuel_work_state_id.in_(select(NeoScorpionFuelWorkState.id).join(NeoScorpionFuelAssignment,
+                NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id).where(NeoScorpionFuelAssignment.sort_date_operation_id == operation_id))),
         _revision_aggregate("fuel_review", NeoRainFuelReviewAcknowledgement, NeoRainFuelReviewAcknowledgement.reviewed_at, NeoRainFuelReviewAcknowledgement.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("fuel_review", NeoRainFuelReviewAcknowledgement, NeoRainFuelReviewAcknowledgement.reviewed_at, NeoRainFuelReviewAcknowledgement.id.is_(None)),
         _revision_aggregate("outbound_service", NeoRainOutboundServiceState, NeoRainOutboundServiceState.updated_at, NeoRainOutboundServiceState.sort_date_operation_id == operation_id) if operation_id else _revision_aggregate("outbound_service", NeoRainOutboundServiceState, NeoRainOutboundServiceState.updated_at, NeoRainOutboundServiceState.id.is_(None)),
     )
@@ -578,6 +586,9 @@ def _outbound_rows(operation, *, missions=None, fuel_source=None, fuel_by_missio
         )
         for mission in missions
     ]
+    board_fuel = scorpion_board_fuel_by_mission(operation, missions)
+    for row in rows:
+        row.update(board_fuel.get(row['mission_id'], {}))
     return sorted(rows, key=_row_sort_key)
 
 
@@ -1032,6 +1043,7 @@ def neorain_outbound_row(mission, operation):
             sort_date_operation_id=operation.id, sort_date_mission_id=mission.id,
         ).first(),
     )
+    row.update(scorpion_board_fuel_by_mission(operation, [mission]).get(mission.id, {}))
     row.pop("sort_time", None)
     row["departure_status"] = _normalized_status(mission.departure_status)
     return row

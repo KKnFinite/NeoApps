@@ -56,7 +56,7 @@ def set_rain_fuel_data_source(gateway, sort_name, source):
     return setting
 
 
-def completed_scorpion_fuel_by_mission(operation):
+def completed_scorpion_fuel_by_mission(operation, *, include_identity=False):
     """Return final fuel snapshots keyed only by canonical mission id.
 
     A Scorpion event is publishable only when its exact assignment is complete;
@@ -108,8 +108,51 @@ def completed_scorpion_fuel_by_mission(operation):
             "center_fuel": _fuel_value(event.center_fuel_lbs),
             "revision": revision,
             "is_correction": change_number > 0,
+            **({"tail": event.tail_number, "cycle": event.cycle_number} if include_identity else {}),
         }
     return values
+
+
+def scorpion_board_fuel_by_mission(operation, missions):
+    """Read-only board display; canonical Scorpion states, never tail-only joins.
+
+    Keep Rain's source-selected Center, review/publication and reporting data
+    independent. Only an administratively completed current aircraft/cycle may
+    display a final Neo quantity; an in-progress uplift cannot reuse old fuel.
+    """
+    if operation is None or not missions:
+        return {}
+    missions = tuple(m for m in missions if m.sort_date_operation_id == operation.id and m.mission_type == 'departure')
+    if not missions:
+        return {}
+    from app.models import NeoScorpionSettings
+    from app.services import neoscorpion as scorpion
+    assignments = scorpion._assignments_by_mission(operation)
+    works = scorpion._fuel_work_states_by_assignment_tail(assignments.values())
+    settings = NeoScorpionSettings.query.filter_by(gateway_id=operation.gateway_id).first()
+    rates, limits = scorpion._effective_aircraft_fuel_configuration(operation.gateway_id)
+    rows = scorpion._fuel_rows(operation, missions, assignments_by_mission=assignments,
+        fuel_work_states_by_assignment_tail=works, status_settings=settings,
+        apu_rates_by_aircraft_type=rates, lateral_imbalance_limits_by_aircraft_type=limits)
+    finals = completed_scorpion_fuel_by_mission(operation, include_identity=True)
+    result = {}
+    for row in rows:
+        mission = row['mission']; assignment = assignments.get(mission.id)
+        final = finals.get(mission.id, {})
+        verified = bool(row['administratively_complete'] and assignment and final.get('neo_fuel')
+            and scorpion._normalize_tail(final.get('tail')) == scorpion._normalize_tail(mission.assigned_tail_number)
+            and int(final.get('cycle') or 1) == int(assignment.current_cycle_number or 1))
+        quantity = scorpion.format_display_thousands(str(final['neo_fuel']).replace(',', '')) if verified else None
+        # No-truck FOB has no physical transfer event. Use only Scorpion's
+        # completed, verified measured/inherited assessment, never its estimate.
+        if row['fuel_on_board_complete'] and row['fob_verified'] and row['fob_projected_neo_lbs'] is not None:
+            verified = True
+            quantity = scorpion.format_display_thousands(row['fob_projected_neo_lbs'])
+        result[mission.id] = dict(
+            scorpion_fuel_display=quantity if verified else row['dispatch_status_label'],
+            scorpion_fuel_status=row['dispatch_status_key'], scorpion_fuel_final=verified,
+            scorpion_fuel_detail=row.get('mission_data_summary') or row.get('dispatch_status_detail') or '')
+    return result
 
 
 def google_rain_fuel_by_mission(operation):

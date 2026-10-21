@@ -64,26 +64,26 @@
 {%- endmacro %}
 
 <section class="neorain-mobile-board" data-neorain-mobile-board="inbound" aria-label="Compact inbound list">
-    <div class="neorain-mobile-mission-list">
+    <div class="neorain-mobile-mission-list" role="table" aria-label="Inbound flights">
         <div class="neorain-mobile-column-head" role="row" aria-label="Inbound columns">
             <span role="columnheader">FLIGHT</span>
+            <span role="columnheader">TAIL</span>
             <span role="columnheader">ORIGIN</span>
+            <span role="columnheader">PARKING</span>
+            <span role="columnheader">ETA</span>
             <span role="columnheader">BLOCK-IN</span>
-            <span role="columnheader">STATUS</span>
             <span role="columnheader">+/-</span>
-            <span role="columnheader">INCLUDE</span>
         </div>
         {% for row in rows %}
         {% set row_state = 'neorain-inbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-inbound-row--blocked-in' if row.block_in else '') %}
         {% set late_class = 'neorain-row--late' if (row.arrival_variance|int) >= 1 else '' %}
         <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-inbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
-            <div class="neorain-mobile-mission-grid">
-                <div><button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>{{ rain_time(row, 'sta', 'STA', row.sta) }}</div>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.origin or '-' }}</span></button>
-                {{ block_in_control(row) }}
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="status">{{ row.status }}</span></button>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span></button>
-                {{ inclusion_control(row) }}
+            <div class="neorain-mobile-mission-grid" role="row">
+                <div role="cell"><button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-label="{{ row.flight_number }} DETAILS" aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button></div>
+                <span role="cell">{{ row.tail or '-' }}</span><span role="cell">{{ row.origin or '-' }}</span>
+                <span role="cell">{{ row.parking or '-' }}</span><span role="cell">{{ row.eta or '—' }}</span>
+                <div role="cell">{{ block_in_control(row) }}</div>
+                <span role="cell" data-neorain-display="arrival_variance">{{ row.arrival_variance }}</span>
             </div>
             <div id="mobile-flight-detail-{{ row.mission_id }}" class="neorain-mobile-inline-detail" data-neorain-mobile-inline-detail hidden>
                 <header class="neorain-mobile-inline-detail-head"><strong>{{ row.flight_number or '-' }} DETAILS</strong><span data-neorain-display="status">{{ row.status }}</span></header>
@@ -92,10 +92,11 @@
                     <div><dt>TAIL</dt><dd>{{ row.tail or '-' }}</dd></div>
                     <div><dt>ORIGIN</dt><dd>{{ row.origin or '-' }}</dd></div>
                     <div><dt>PARKING</dt><dd>{{ row.parking or '-' }}</dd></div>
-                    <div><dt>ETA/STA</dt><dd>{{ row.eta_sta or '-' }}</dd></div>
-                    <div><dt>BLOCK-IN</dt><dd data-neorain-display="block_in">{{ row.block_in or row.eta_sta or '-' }}</dd></div>
+                    <div><dt>STA</dt><dd>{{ rain_time(row, 'sta', 'STA', row.sta) }}</dd></div>
+                    <div><dt>ETA</dt><dd>{{ row.eta or '—' }}</dd></div>
+                    <div><dt>BLOCK-IN</dt><dd data-neorain-display="block_in">{{ row.block_in or '-' }}</dd></div>
                     <div><dt>+/-</dt><dd data-neorain-display="arrival_variance">{{ row.arrival_variance }}</dd></div>
-                    <div><dt>INCLUSION</dt><dd data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</dd></div>
+                    <div><dt>INCLUSION</dt><dd>{{ inclusion_control(row) }}</dd></div>
                     <div><dt>CONNECTING OUTBOUND</dt><dd>{{ row.connecting_outbound or '-' }}</dd></div>
                     <div><dt>GROUND TIME</dt><dd class="{% if row.ground_time_warning %}neorain-ground-time-warning{% endif %}">{{ row.ground_time or '-' }}</dd></div>
                 </dl>

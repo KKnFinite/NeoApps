@@ -484,7 +484,7 @@ class NeoRainOutboundTest(unittest.TestCase):
             b'data-neorain-field="ramp_load_complete"',
             google_primary.data,
         )
-        self.assertIn(b">INCLUDED<", google_primary.data)
+        self.assertIn(b'aria-label="Include for UPS610"', google_primary.data)
         self.assertIn(b'data-late-inclusion-url="/neorain/outbound/late-inclusion"', google_primary.data)
         self.assertNotIn(b'data-neorain-no-return-action', google_primary.data)
 
@@ -504,7 +504,8 @@ class NeoRainOutboundTest(unittest.TestCase):
             b'data-neorain-field="ramp_load_complete"',
             neo_viewer.data,
         )
-        self.assertIn(b'data-neorain-display="late_metrics_included"', neo_viewer.data)
+        self.assertRegex(neo_viewer.get_data(as_text=True),
+            r'<input[^>]*aria-label="Include for UPS610"[^>]*disabled')
         self.assertNotIn(b'data-neorain-late-inclusion-toggle', neo_viewer.data)
         self.assertNotIn(b'data-neorain-no-return-action', neo_viewer.data)
 

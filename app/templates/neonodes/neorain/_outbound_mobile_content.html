@@ -65,28 +65,29 @@
 {%- endmacro %}
 
 <section class="neorain-mobile-board" data-neorain-mobile-board="outbound" aria-label="Compact outbound list">
-    <div class="neorain-mobile-mission-list">
+    <div class="neorain-mobile-mission-list" role="table" aria-label="Outbound flights">
         <div class="neorain-mobile-column-head neorain-mobile-column-head--outbound" role="row" aria-label="Outbound columns">
             <span role="columnheader">FLIGHT</span>
+            <span role="columnheader">TAIL</span>
             <span role="columnheader">DEST</span>
-            <span role="columnheader">RAMP LC</span>
-            <span role="columnheader">CREW LC</span>
+            <span role="columnheader">PARKING</span>
+            <span role="columnheader">NEO FUEL</span>
+            <span role="columnheader">CENTER</span>
             <span role="columnheader">BLOCK-OUT</span>
             <span role="columnheader">+/-</span>
-            <span role="columnheader">INCLUDE</span>
         </div>
         {% for row in rows %}
         {% set row_state = 'neorain-outbound-row--cancelled' if row.status == 'CANCELLED' else ('neorain-outbound-row--no-return' if row.no_return else ('neorain-outbound-row--blocked-out' if row.status == 'BLOCKED OUT' else '')) %}
         {% set late_class = 'neorain-row--late' if (row.departure_variance|int) >= 1 else '' %}
         <article id="mobile-flight-{{ row.mission_id }}" class="neorain-mobile-mission {{ row_state }} {{ late_class }}" data-neorain-outbound-row data-neorain-mission-id="{{ row.mission_id }}" data-mission-version="{{ row.version }}" data-neorain-no-return="{{ 'true' if row.no_return else 'false' }}" data-neorain-service-version="{{ row.service_version }}" data-neorain-cancelled="{{ 'true' if row.status == 'CANCELLED' else 'false' }}">
-            <div class="neorain-mobile-mission-grid neorain-mobile-mission-grid--outbound">
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button>
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span>{{ row.destination or '-' }}</span></button>
-                {{ milestone_control(row, 'ramp_load_complete', 'Ramp Load Complete') }}
-                {{ milestone_control(row, 'crew_load_complete', 'Crew Load Complete') }}
-                {{ milestone_control(row, 'official_block_out', 'Official Block-Out') }}
-                <button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><span data-neorain-display="departure_variance">{{ row.departure_variance }}</span></button>
-                {{ inclusion_control(row) }}
+            <div class="neorain-mobile-mission-grid neorain-mobile-mission-grid--outbound" role="row">
+                <div role="cell"><button type="button" class="neorain-mobile-mission-open" data-neorain-mobile-row-open aria-label="{{ row.flight_number }} DETAILS" aria-expanded="false" aria-controls="mobile-flight-detail-{{ row.mission_id }}"><strong>{{ row.flight_number or '-' }}</strong></button></div>
+                <span role="cell">{{ row.tail or '-' }}</span><span role="cell">{{ row.destination or '-' }}</span>
+                <span role="cell">{{ row.parking or '-' }}</span>
+                <div role="cell">{% include "neonodes/neorain/_scorpion_fuel.html" %}</div>
+                <span role="cell">{{ row.center_fuel_display or '-' }}</span>
+                <div role="cell">{{ milestone_control(row, 'official_block_out', 'Official Block-Out') }}</div>
+                <span role="cell" data-neorain-display="departure_variance">{{ row.departure_variance }}</span>
             </div>
             <div id="mobile-flight-detail-{{ row.mission_id }}" class="neorain-mobile-inline-detail" data-neorain-mobile-inline-detail hidden>
                 <header class="neorain-mobile-inline-detail-head"><strong>{{ row.flight_number or '-' }} DETAILS</strong><span data-neorain-display="status">{{ row.status }}</span></header>
@@ -115,14 +116,14 @@
                         <output class="neorain-service-message" data-neorain-service-message aria-live="polite" hidden></output>
                         {% else %}<span data-neorain-service-display="js_in">{{ row.js_in or '—' }}</span>{% endif %}
                     </dd></div>
-                    <div><dt>NEO FUEL</dt><dd>{{ row.neo_fuel_display or '-' }}</dd></div>
+                    <div><dt>NEO FUEL</dt><dd>{% include "neonodes/neorain/_scorpion_fuel.html" %}</dd></div>
                     <div><dt>CENTER FUEL</dt><dd>{{ row.center_fuel_display or '-' }}{% if row.fuel_review_pending %}<strong class="neorain-fuel-review-warning">FUEL DATA UPDATED — PLEASE REVIEW</strong>{% if can_edit %}<form method="post" action="{{ url_for('neorain.outbound_fuel_reviewed') }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="fuel_revision" value="{{ row.fuel_revision }}"><button type="submit" class="neorain-fuel-reviewed">REVIEWED</button></form>{% endif %}{% endif %}</dd></div>
                 <div><dt>eLMAC</dt><dd>{{ rain_time(row, 'elmac', 'eLMAC', row.elmac) }}</dd></div>
-                    <div><dt>RAMP LC</dt><dd data-neorain-display="ramp_load_complete">{{ row.ramp_load_complete or '-' }}</dd></div>
-                    <div><dt>CREW LC</dt><dd data-neorain-display="crew_load_complete">{{ row.crew_load_complete or '-' }}</dd></div>
+                    <div><dt>RAMP LC</dt><dd>{{ milestone_control(row, 'ramp_load_complete', 'Ramp Load Complete') }}</dd></div>
+                    <div><dt>CREW LC</dt><dd>{{ milestone_control(row, 'crew_load_complete', 'Crew Load Complete') }}</dd></div>
                     <div><dt>BLOCK-OUT</dt><dd data-neorain-display="official_block_out">{{ row.official_block_out or '-' }}</dd></div>
                     <div><dt>+/-</dt><dd data-neorain-display="departure_variance">{{ row.departure_variance }}</dd></div>
-                    <div><dt>INCLUSION</dt><dd data-neorain-display="late_metrics_included">{{ 'INCLUDED' if row.late_metrics_included else 'EXCLUDED' }}</dd></div>
+                    <div><dt>INCLUSION</dt><dd>{{ inclusion_control(row) }}</dd></div>
                 <div><dt>No Return</dt><dd>{{ rain_checkbox(row, 'no_return', 'No Return', row.no_return) }}</dd></div>
                 </dl>
                 {{ delay_info_mobile(row) }}
