@@ -74,3 +74,39 @@ claimed; the focused gates above are the release evidence.
 Protected NeoRain prototype files and artwork are excluded from this release.
 No PROF/SPEAR, Dispatch layout, fueling calculations or physical milestone code
 is changed. Only the existing TOP OFF actions gain operational persistence.
+
+## 2026-10-21 — distinguish sent assignments from planning changes
+
+Starting main: `327cb218fdfbc87c7a41c0fa27d73e7265f0255f`.
+Read-only production evidence confirms the shared `swap_truck` action also
+records initial assignments (`old_value = NULL`): audit 953 is an initial
+assignment, while 971 changes truck 4 to 7 after physical work on truck 4.
+The old report blindly rendered both as SWAP TRUCK and could also attribute an
+audit to a third truck currently attached to the linked mutable work record.
+
+The report now resolves evidence strictly at the change timestamp, within the
+assignment and recorded cycle. A noninitial change needs a preceding committed
+Dispatcher ASSIGN/UPDATE receipt for the old truck, or real preceding physical
+ON evidence. Later ON, dropdown selections, fuel autosaves, pending-plan edits
+and today's resource labels cannot establish an earlier sent assignment. An
+intervening resource change breaks the receipt chain; A→B→A does not borrow an
+old A receipt. Physical work still in progress remains evidence independently
+of intervening planning edits. Conflicting simultaneous physical identities
+are not resolved by guessing.
+
+Initial committed assignments retain MISSION ASSIGNED entries, not SWAP labels.
+Proven reassignments appear for their actual old/new trucks only. A proven
+removal is UNASSIGN TRUCK. Initial/planning/unknown swap-shaped raw audits stay
+available in a collapsed audit-evidence section, outside the operational
+timeline and exports. Timeline, COPY and CSV share one filtered event collection.
+No operational or historical records are changed; no schema migration.
+
+Validation: 20 report tests, 12 assignment-receipt tests, 5 focused disposable
+PostgreSQL filtering/TOP OFF concurrency tests, 2 JavaScript COPY checks, and
+authenticated Chromium/WebKit report workflows at 1920/1440/390/375px. Browser
+checks include individual/all trucks, raw evidence access, chronological source
+identity, COPY and CSV agreement, historical/partial data and mobile overflow.
+Compilation and diff checks also pass. The older PostgreSQL bootstrap-history
+test has a baseline failure before report generation: it invokes Dispatcher
+COMPLETE without mandatory Fueler submission. It is not part of the passing
+five-test PostgreSQL gate and was not changed to weaken production validation.

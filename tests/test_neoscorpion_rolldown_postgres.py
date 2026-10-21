@@ -10,6 +10,7 @@ from app.services import neoscorpion_assets as assets, neoscorpion as service
 from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
 from app.services.neoscorpion_rolldown import report_context
 from tests import test_neoscorpion_segments_postgres as segments
+from tests import test_neoscorpion_rolldown as reports
 
 
 @unittest.skipUnless(segments.URI,'Requires disposable local PostgreSQL')
@@ -21,6 +22,12 @@ class RolldownPostgresTest(unittest.TestCase):
     save=segments.PhysicalSegmentPostgresTest.save
     off=segments.PhysicalSegmentPostgresTest.off
     final_data=segments.PhysicalSegmentPostgresTest.final_data
+    truck_audit=reports.RolldownTest.truck_audit
+    report=reports.RolldownTest.report
+
+    test_unsent_selection_and_repeated_a_b_a_changes_do_not_borrow_old_receipt = reports.RolldownTest.test_unsent_selection_and_repeated_a_b_a_changes_do_not_borrow_old_receipt
+    test_sent_swap_belongs_to_both_trucks_not_a_later_physical_truck = reports.RolldownTest.test_sent_swap_belongs_to_both_trucks_not_a_later_physical_truck
+    test_physical_swap_survives_missing_assignment_receipts_but_not_future_on = reports.RolldownTest.test_physical_swap_survives_missing_assignment_receipts_but_not_future_on
 
     def release(self):
         self.off();self.assignment.assigned_truck_id=None;db.session.commit()

@@ -62,6 +62,14 @@
             <dl>{% for key,entry in c.items() %}{% if entry is not none and entry != '' and entry != 'Unavailable' %}<div data-evidence-field="{{ key }}"><dt>{{ key }}</dt><dd>{{ entry }}</dd></div>{% endif %}{% endfor %}</dl>
         </details>{% else %}<p>No truck history for this selection.</p>{% endfor %}
         </div>
+        {% if assignment_audits %}<details class="rolldown-summary-details" data-assignment-audit-evidence>
+            <summary>Assignment audit evidence · initial / planning / unverified changes (not operational activity)</summary>
+            <p class="neoscorpion-helper">Original records retained. These changes do not establish a swap of a previously sent assignment. Not included in the operational timeline, COPY REPORT or CSV.</p>
+            {% for event in assignment_audits %}<details data-assignment-audit-source="{{ event.source }}" class="rolldown-summary-details">
+                <summary>{{ event.columns.Time }} · TRUCK {{ event.columns.Truck }} · {{ event.source }}</summary>
+                <dl class="rolldown-totals">{% for key,entry in event.columns.items() %}{% if entry is not none and entry != '' and entry != 'Unavailable' %}<div><dt>{{ key }}</dt><dd>{{ entry }}</dd></div>{% endif %}{% endfor %}</dl>
+            </details>{% endfor %}
+        </details>{% endif %}
         <textarea data-prof-copy-text hidden>{{ copy_text }}</textarea>
     </section>
 </section>

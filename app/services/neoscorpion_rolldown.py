@@ -21,6 +21,70 @@ LIMIT = 10000
 UNKNOWN = 'Unavailable'
 
 
+def _truck_id(value):
+    return int(value) if str(value or '').isdigit() and int(value) > 0 else None
+
+
+def _sent_truck_receipt(audit):
+    return bool(audit.field_name == 'assigned_truck_id' and audit.changed_by_user_id and (
+        (audit.action == 'swap_truck' and audit.reason in {
+            'Dispatcher recorded the truck assignment.', 'Dispatcher changed the assigned fuel truck.'})
+        or (audit.action == 'segment_transfer' and audit.reason.startswith(
+            ('Dispatcher assigned resources to a new ', 'Activated Dispatcher-planned truck from validated source submission.')))))
+
+
+def _truck_change_evidence(audits, works, posted):
+    """Read-only proof at the instant of a change, never today's assignment.
+
+    ASSIGN/UPDATE receipts are emitted only by the committed Dispatcher action;
+    dropdown selection, fuel autosave and pending-plan saves are not receipts.
+    A later ON cannot retroactively turn an earlier planning edit into a swap.
+    """
+    previous = {}
+    physical = defaultdict(list)
+    work_by_id = {w.id:w for w in works}
+    for work in works:
+        facts = work.performance_context or {}
+        at = work.manual_on_at_utc or ((work.confirmed_on_at_utc or work.on_at_utc)
+            if facts.get('on_source') in {'manual','trusted automatic'} else None)
+        if at and work.physical_truck_id:
+            physical[work.fuel_assignment_id].append((at,work.physical_truck_id,work.physical_cycle_number,
+                work.off_at_utc or work.ended_early_at_utc))
+    for event in posted:
+        work = work_by_id.get(event.fuel_work_state_id)
+        proven = ((event.performance_snapshot or {}).get('on_source') in {'manual','trusted automatic'}
+            or (work and work.manual_on_at_utc == event.started_at_utc and work.physical_truck_id == event.fuel_truck_id))
+        if event.started_at_utc and proven:
+            physical[event.fuel_assignment_id].append((event.started_at_utc,event.fuel_truck_id,event.cycle_number,event.ended_at_utc))
+
+    result = {}
+    for row in sorted(audits,key=lambda a:(a.created_at,a.id)):
+        if row.field_name != 'assigned_truck_id' and row.action not in {'swap_truck','unassign_truck'}:
+            continue
+        old,new = _truck_id(row.old_value),_truck_id(row.new_value)
+        prior = previous.get(row.fuel_assignment_id)
+        work = work_by_id.get(row.fuel_work_state_id)
+        cycle = work.physical_cycle_number if work else None
+        boundary = prior.created_at if prior else datetime.min
+        candidates = [p for p in physical[row.fuel_assignment_id]
+                      if p[0] <= row.created_at and (not cycle or p[2] == cycle)
+                      and (boundary <= p[0] or p[3] is None or p[3] >= row.created_at)]
+        last_at = max((p[0] for p in candidates),default=None)
+        physical_proof = bool(old and {p[1] for p in candidates if p[0] == last_at} == {old})
+        prior_work = work_by_id.get(prior.fuel_work_state_id) if prior else None
+        receipt_proof = bool(prior and _sent_truck_receipt(prior) and _truck_id(prior.new_value) == old
+            and prior.created_at < row.created_at and (not work or not prior_work
+                or work.physical_cycle_number == prior_work.physical_cycle_number))
+        if row.action == 'swap_truck':
+            result[row.id] = (('Physical ON before change' if physical_proof else
+                'Prior committed Dispatcher assignment' if _sent_truck_receipt(row) and receipt_proof else None)
+                if old and old != new else None)
+        # Even an unknown/unverified edit breaks a previous resource episode.
+        # Never borrow a historical A receipt for a later unsent A→B change.
+        previous[row.fuel_assignment_id] = row
+    return result
+
+
 def quantity(value):
     return f'{value:,}' if value is not None else UNKNOWN
 
@@ -55,6 +119,8 @@ def report_context(gateway, operation, *, truck_id=None):
     ids |= {w.physical_truck_id for w in works if w.physical_truck_id}
     ids |= {v.fuel_truck_id for v in vendor if v.fuel_truck_id}
     ids |= {a.assigned_truck_id for a in assignments.values() if a.assigned_truck_id}
+    ids |= {_truck_id(value) for a in fuel_audits if a.field_name == 'assigned_truck_id'
+            for value in (a.old_value,a.new_value) if _truck_id(value)}
     trucks = {t.id:t.truck_number for t in Truck.query.filter(Truck.gateway_id == gateway.id, Truck.id.in_(ids)).order_by(Truck.truck_number,Truck.id).all()}
     if truck_id is not None and truck_id not in trucks:
         raise ValueError('Truck not found in this sort.')
@@ -89,13 +155,14 @@ def report_context(gateway, operation, *, truck_id=None):
         return history[-1][3] if history else 'UNKNOWN / historical identity unavailable'
 
     events = []
+    assignment_audits = []
 
     def add(identifier, at, label, source, *, actor=None, work=None, event=None, facts=None,
-            change=None, before=None, after=None, note='', duration=None, driver=None):
+            change=None, before=None, after=None, note='', duration=None, driver=None, audit_only=False, assignment_id=None):
         if identifier not in trucks or (truck_id is not None and truck_id != identifier):
             return
         facts = facts or {}
-        assignment = assignments.get(event.fuel_assignment_id if event else work.fuel_assignment_id if work else None)
+        assignment = assignments.get(event.fuel_assignment_id if event else work.fuel_assignment_id if work else assignment_id)
         mission = assignment.sort_date_mission if assignment else None
         tail = event.tail_number if event else work.tail_number if work else ''
         columns = {
@@ -105,7 +172,7 @@ def report_context(gateway, operation, *, truck_id=None):
             'Mission':mission.id if mission else '', 'Flight':mission.flight_number if mission else '',
             'Destination':mission.destination if mission else '', 'Tail':tail,
             'Cycle':event.cycle_number if event else work.physical_cycle_number if work else '',
-            'Work ID':event.fuel_work_state_id if event else work.id if work else '',
+            'Work ID':event.fuel_work_state_id if event else work.id if work else facts.get('audit_work_id',''),
             'Parking':facts.get('parking') or UNKNOWN,
             'Fueler':names.get(event.fueler_user_id if event else work.physical_fueler_user_id if work else None,'UNKNOWN'),
             'Driver':driver or driver_at(identifier, at), 'Actor':names.get(actor,'UNKNOWN'),
@@ -116,7 +183,8 @@ def report_context(gateway, operation, *, truck_id=None):
             'Change gal':f'{change:+,}' if change is not None else UNKNOWN,
             'Before gal':quantity(before), 'Balance gal':quantity(after), 'Notes':note,
         }
-        events.append(dict(at=utc(at), source=source, truck_id=identifier, columns=columns))
+        (assignment_audits if audit_only else events).append(
+            dict(at=utc(at), source=source, truck_id=identifier, columns=columns))
 
     summary = {}
     for identifier, number in trucks.items():
@@ -209,6 +277,7 @@ def report_context(gateway, operation, *, truck_id=None):
     for assignment in assignments.values():
         key=(assignment.assigned_truck_id,assignment.id,assignment.truck_assigned_at_utc)
         if assignment.truck_assigned_at_utc and key not in assigned_keys:
+            assigned_keys.add(key)
             work=work_by_id.get(assignment.active_work_state_id)
             add(assignment.assigned_truck_id,assignment.truck_assigned_at_utc,'MISSION ASSIGNED / PREASSIGNED',
                 f'assignment:{assignment.id}',actor=assignment.resource_assignment_by_user_id,work=work,
@@ -259,20 +328,40 @@ def report_context(gateway, operation, *, truck_id=None):
             before=sent.gallons if sent and sent.inventory_verified else None,
             after=row.gallons if row.inventory_verified else None,duration=duration,
             note=f'Inventory epoch {row.inventory_epoch}.'+(' Sent record unavailable; historical trip boundaries unknown.' if row.kind == 'returned' and not sent else ''))
+    change_evidence = _truck_change_evidence(fuel_audits, works, posted)
     for row in fuel_audits:
         if row.action not in {'swap_truck','unassign_truck','auto_hold','resume_hold','reopen_off'} and row.field_name != 'duplicate_visit_reconciliation':
             continue
         work=work_by_id.get(row.fuel_work_state_id)
+        # Initial committed assignments are assignments, not truck swaps. Keep
+        # their history even if today's resource/receipt has since changed.
+        initial_truck = _truck_id(row.new_value)
+        if (row.action == 'swap_truck' and not _truck_id(row.old_value) and initial_truck
+                and _sent_truck_receipt(row) and row.field_name == 'assigned_truck_id'):
+            key=(initial_truck,row.fuel_assignment_id,row.created_at)
+            if key not in assigned_keys:
+                assigned_keys.add(key)
+                add(initial_truck,row.created_at,'MISSION ASSIGNED / PREASSIGNED',f'audit:{row.id}:assigned',
+                    actor=row.changed_by_user_id,assignment_id=row.fuel_assignment_id,
+                    note='Committed Dispatcher assignment; not proof of physical arrival.')
         identifiers=set()
-        if work and work.physical_truck_id:
+        if work and work.physical_truck_id and row.action not in {'swap_truck','unassign_truck'}:
             identifiers.add(work.physical_truck_id)
         if row.action in {'swap_truck','unassign_truck'}:
             for value in (row.old_value,row.new_value):
                 if str(value or '').isdigit():identifiers.add(int(value))
         for identifier in identifiers:
-            add(identifier,row.created_at,row.action.replace('_',' ').upper(),f'audit:{row.id}',
-                actor=row.changed_by_user_id,work=work,note=(f'{row.new_value}. {row.reason}' if row.field_name=='duplicate_visit_reconciliation'
-                    else f'{row.old_value or "—"} → {row.new_value or "—"}. {row.reason}'))
+            proof = change_evidence.get(row.id)
+            audit_only = row.action == 'swap_truck' and not proof
+            label = ('UNASSIGN TRUCK' if row.action == 'swap_truck' and not _truck_id(row.new_value)
+                     else row.action.replace('_',' ').upper())
+            add(identifier,row.created_at,'ASSIGNMENT AUDIT (NOT OPERATIONAL)' if audit_only else label,f'audit:{row.id}',
+                actor=row.changed_by_user_id,work=None if row.action in {'swap_truck','unassign_truck'} else work,
+                assignment_id=row.fuel_assignment_id,audit_only=audit_only,facts={'audit_work_id':row.fuel_work_state_id},
+                note=(f'{row.new_value}. {row.reason}' if row.field_name=='duplicate_visit_reconciliation'
+                    else f'{row.old_value or "—"} → {row.new_value or "—"}. {row.reason}')
+                    + (' Prior sent assignment / physical change not established; initial or planning evidence only.' if audit_only
+                       else f' Evidence: {proof}.' if proof else ''))
     events.sort(key=lambda e:(e['at'] or datetime.min,e['source']))
     summaries=list(summary.values())
     fleet={key:sum(s[key] for s in summaries) if all(s[key] is not None for s in summaries) else None
@@ -295,5 +384,6 @@ def report_context(gateway, operation, *, truck_id=None):
             summary_rows.append({**dict.fromkeys(events[0]['columns'],''), 'Truck':s['truck'],'Event':'SUMMARY',
                                  'Balance gal':quantity(s['ending']),'Notes':details})
     copy_text+='\n'+'\n\n'.join('\n'.join(f'{key}: {value}' for key,value in e['columns'].items()) for e in events)
-    return dict(trucks=trucks,summaries=summaries,fleet=fleet,events=events,copy_text=copy_text,truncated=truncated,
+    assignment_audits.sort(key=lambda e:(e['at'] or datetime.min,e['source'],e['truck_id']))
+    return dict(trucks=trucks,summaries=summaries,fleet=fleet,events=events,assignment_audits=assignment_audits,copy_text=copy_text,truncated=truncated,
                 export_rows=summary_rows+[e['columns'] for e in events])

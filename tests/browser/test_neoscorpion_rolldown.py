@@ -112,6 +112,15 @@ class RolldownBrowserTest(unittest.TestCase):
                 db.session.add(NeoScorpionFuelAuditEntry(sort_date_operation_id=operation_id,fuel_assignment_id=assignment.id,
                     fuel_work_state_id=works[0].id,action='swap_truck',field_name='assigned_truck_id',old_value=str(truck_id),
                     new_value=str(second_id),changed_by_user_id=actor.id,reason='Recorded truck swap',created_at=at+timedelta(hours=4)))
+                # Initial/unsent changes must remain inspectable but must not
+                # leak into either truck's operational timeline or exports.
+                initial=NeoScorpionFuelAuditEntry(sort_date_operation_id=operation_id,fuel_assignment_id=assignment.id,
+                    action='swap_truck',field_name='assigned_truck_id',old_value=None,new_value=str(second_id),
+                    changed_by_user_id=actor.id,reason='Dispatcher recorded the truck assignment.',created_at=at-timedelta(minutes=10))
+                unsent=NeoScorpionFuelAuditEntry(sort_date_operation_id=operation_id,fuel_assignment_id=assignment.id,
+                    action='swap_truck',field_name='assigned_truck_id',old_value=str(second_id),new_value=str(truck_id),
+                    changed_by_user_id=actor.id,reason='Unsent planning selection',created_at=at-timedelta(minutes=9))
+                db.session.add_all([initial,unsent]);db.session.flush();filtered_ids=(initial.id,unsent.id)
                 db.session.add(NeoScorpionTruckInventoryAudit(sort_date_operation_id=operation_id,fuel_truck_id=truck_id,
                     action='verified',prior_recorded_gallons=8000,confirmed_gallons=7800,actor_user_id=actor.id,
                     reason='Verified correction. '+('Full audit note retained. '*30),created_at=at+timedelta(minutes=1)))
@@ -134,6 +143,13 @@ class RolldownBrowserTest(unittest.TestCase):
                 individual_sources=[event['source'] for event in individual['events']]
             page.goto(F.origin+f'/neoscorpion/reports/truck-rolldown?operation_id={operation_id}')
             expect(page.locator('[data-truck-summary]')).to_have_count(2)
+            for identifier in filtered_ids:
+                self.assertEqual(page.locator(f'.rolldown-event[data-rolldown-source="audit:{identifier}"]').count(),0)
+                self.assertGreater(page.locator(f'[data-assignment-audit-source="audit:{identifier}"]').count(),0)
+                self.assertNotIn(f'Source ID: audit:{identifier}\n',page.locator('[data-prof-copy-text]').input_value())
+            page.locator('[data-assignment-audit-evidence] > summary').click()
+            page.locator(f'[data-assignment-audit-source="audit:{filtered_ids[1]}"]').first.locator('summary').click()
+            expect(page.locator('[data-assignment-audit-evidence]')).to_contain_text('Unsent planning selection')
             self.assertEqual(page.locator('.rolldown-event').count(),len(evidence))
             self.assertEqual(page.locator('.rolldown-event').evaluate_all("els=>els.map(e=>e.dataset.rolldownSource)"),[source for source,_ in evidence])
             for index,(source,columns) in enumerate(evidence):

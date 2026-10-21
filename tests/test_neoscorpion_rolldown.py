@@ -4,7 +4,8 @@ from unittest import TestCase
 from tests.neoscorpion_handoff_fixture import submit_and_verify
 from app.extensions import db
 from app.models import (NeoScorpionTopOffEvent, NeoScorpionFuelingEvent, NeoScorpionSortTruck,
-    NeoScorpionFuelTruck, NeoScorpionVendorRequest, NeoScorpionTruckDriverAudit, SortDateOperation)
+    NeoScorpionFuelTruck, NeoScorpionVendorRequest, NeoScorpionTruckDriverAudit, SortDateOperation,
+    NeoScorpionFuelAuditEntry)
 from app.services import neoscorpion as service, neoscorpion_assets as assets, neoscorpion_inventory as inventory
 from app.services.neoscorpion_rolldown import report_context
 from tests import test_neoscorpion_vendor_workflow as vendors_fixture
@@ -25,6 +26,106 @@ class RolldownTest(TestCase):
 
     def report(self, **kwargs):
         return report_context(self.gateway,self.operation,**kwargs)
+
+    def truck_audit(self, old, new, at, reason='Dispatcher recorded the truck assignment.', work=None):
+        row=NeoScorpionFuelAuditEntry(sort_date_operation_id=self.operation.id,
+            fuel_assignment_id=self.assignment.id,fuel_work_state_id=work.id if work else None,
+            action='swap_truck',field_name='assigned_truck_id',old_value=str(old) if old else None,
+            new_value=str(new) if new else None,created_at=at,changed_by_user_id=self.dispatcher.id,reason=reason)
+        db.session.add(row);db.session.commit()
+        return row
+
+    def test_initial_and_unproven_changes_are_audit_only_not_operational_swaps(self):
+        self.prepare()
+        initial=self.truck_audit(None,self.truck.id,self.start-timedelta(minutes=5))
+        unknown=self.truck_audit(999,self.truck.id,self.start-timedelta(minutes=4),reason='Legacy planning edit')
+        report=self.report()
+        for row in (initial,unknown):
+            self.assertNotIn(f'audit:{row.id}',[e['source'] for e in report['events']])
+            self.assertIn(f'audit:{row.id}',[e['source'] for e in report['assignment_audits']])
+        self.assertNotIn('SWAP TRUCK',report['copy_text'])
+        self.assertFalse(any(r['Event']=='SWAP TRUCK' for r in report['export_rows']))
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='swap_truck').count(),2)
+
+    def test_sent_swap_belongs_to_both_trucks_not_a_later_physical_truck(self):
+        self.prepare()
+        other= self.fixture._nightly_truck('B');third=self.fixture._nightly_truck('C');db.session.commit()
+        at=self.start-timedelta(minutes=5)
+        self.truck_audit(None,other.id,at)
+        swap=self.truck_audit(other.id,third.id,at+timedelta(minutes=1),work=self.work)
+        report=self.report()
+        swaps=[e for e in report['events'] if e['source']==f'audit:{swap.id}']
+        self.assertEqual({e['truck_id'] for e in swaps},{other.id,third.id})
+        for truck in (other,third):
+            one=self.report(truck_id=truck.id)
+            self.assertEqual(sum(e['source']==f'audit:{swap.id}' for e in one['events']),1)
+            self.assertIn('SWAP TRUCK',one['copy_text'])
+            self.assertEqual(sum(r['Event']=='SWAP TRUCK' for r in one['export_rows']),1)
+
+    def test_physical_swap_survives_missing_assignment_receipts_but_not_future_on(self):
+        self.prepare()
+        other=self.fixture._nightly_truck('B');db.session.commit()
+        unknown=self.truck_audit(self.truck.id,other.id,self.start-timedelta(minutes=1),reason='Legacy change')
+        actual=self.truck_audit(self.truck.id,other.id,self.start+timedelta(minutes=1),reason='Physical truck swap')
+        sources=[e['source'] for e in self.report()['events']]
+        self.assertNotIn(f'audit:{unknown.id}',sources)
+        self.assertEqual(sources.count(f'audit:{actual.id}'),2)
+
+    def test_unsent_selection_and_repeated_a_b_a_changes_do_not_borrow_old_receipt(self):
+        self.prepare()
+        other=self.fixture._nightly_truck('B');db.session.commit()
+        at=self.start-timedelta(minutes=10)
+        initial=self.truck_audit(None,self.truck.id,at)
+        sent=self.truck_audit(self.truck.id,other.id,at+timedelta(minutes=1))
+        planning=self.truck_audit(other.id,self.truck.id,at+timedelta(minutes=2),reason='Unsent planning selection')
+        unknown=self.truck_audit(self.truck.id,other.id,at+timedelta(minutes=3),reason='Unsent planning selection')
+        sources=[e['source'] for e in self.report()['events']]
+        self.assertIn(f'audit:{sent.id}',sources)
+        self.assertNotIn(f'audit:{unknown.id}',sources)
+        self.assertEqual(NeoScorpionFuelAuditEntry.query.filter_by(action='swap_truck').count(),4)
+
+    def test_repeated_sent_a_b_a_swaps_and_initial_assignment_are_preserved_once(self):
+        self.prepare()
+        other=self.fixture._nightly_truck('B');db.session.commit()
+        at=self.assignment.truck_assigned_at_utc
+        self.truck_audit(None,self.truck.id,at)
+        first=self.truck_audit(self.truck.id,other.id,at+timedelta(seconds=1))
+        second=self.truck_audit(other.id,self.truck.id,at+timedelta(seconds=2))
+        report=self.report()
+        for change in (first,second):
+            self.assertEqual(sum(e['source']==f'audit:{change.id}' for e in report['events']),2)
+        self.assertEqual(sum(e['columns']['Event']=='MISSION ASSIGNED / PREASSIGNED'
+            and e['truck_id']==self.truck.id and e['at']==at for e in report['events']),1)
+        self.login(self.dispatcher)
+        html=self.client.get(f'/neoscorpion/reports/truck-rolldown?operation_id={self.operation.id}').get_data(as_text=True)
+        self.assertIn('data-assignment-audit-evidence',html)
+
+    def test_other_cycle_or_assignment_does_not_prove_old_truck_was_sent(self):
+        self.prepare()
+        other=self.fixture._nightly_truck('B');db.session.commit()
+        at=self.start-timedelta(minutes=10)
+        self.truck_audit(None,self.truck.id,at,work=self.work)
+        from app.models import NeoScorpionFuelWorkState
+        child=NeoScorpionFuelWorkState(fuel_assignment_id=self.assignment.id,tail_number=self.work.tail_number,
+            visit_number=2,physical_cycle_number=2,physical_truck_id=other.id)
+        db.session.add(child);db.session.commit()
+        change=self.truck_audit(self.truck.id,other.id,at+timedelta(minutes=1),work=child)
+        self.assertNotIn(f'audit:{change.id}',[e['source'] for e in self.report()['events']])
+
+    def test_actual_on_remains_proof_despite_intervening_unverified_planning_audit(self):
+        self.prepare()
+        other=self.fixture._nightly_truck('B');db.session.commit()
+        self.truck_audit(None,other.id,self.start+timedelta(seconds=1),reason='Unsent planning edit')
+        changed=self.truck_audit(self.truck.id,other.id,self.start+timedelta(seconds=2),reason='Physical change')
+        self.assertEqual(sum(e['source']==f'audit:{changed.id}' for e in self.report()['events']),2)
+
+    def test_legacy_automatic_on_without_provenance_is_not_dispatch_proof(self):
+        self.prepare()
+        other=self.fixture._nightly_truck('B')
+        self.work.manual_on_at_utc=None;self.work.confirmed_on_at_utc=None
+        self.work.on_at_utc=self.start;self.work.performance_context={};db.session.commit()
+        changed=self.truck_audit(self.truck.id,other.id,self.start+timedelta(seconds=2),reason='Legacy planning change')
+        self.assertNotIn(f'audit:{changed.id}',[e['source'] for e in self.report()['events']])
 
     def test_posted_transfer_and_physical_release_are_distinct_from_complete(self):
         self.prepare()
