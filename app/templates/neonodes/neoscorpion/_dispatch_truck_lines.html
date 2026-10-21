@@ -1,17 +1,19 @@
+{# The current visit already has its main mission row. Align other visits and
+   future trucks with the established uplift row's sixteen table columns. #}
 {% if row.console_visits|length > 1 or row.pending_truck_plans %}
-<tr class="scorpion-truck-lines-row" data-dispatch-sort-group="{{ row.mission.id }}" data-truck-lines-mission="{{ row.mission.id }}"><td colspan="16">
-<div class="scorpion-truck-lines" aria-label="{{ row.mission.flight_number }} truck visits and plans">
-{% for visit in row.console_visits %}
-<div class="scorpion-truck-line" data-truck-line-work="{{ visit.id }}">
-<strong>VISIT {{ visit.visit_number }} · TRUCK {{ visit.physical_truck.truck_number if visit.physical_truck else '—' }}</strong>
-<span>{{ visit.physical_fueler.display_name if visit.physical_fueler else 'UNKNOWN FUELER' }} · {{ visit.tail_number }}</span>
-<strong data-visit-state>{% if visit.ended_early_at_utc %}ENDED EARLY{% elif visit.physical_finalized_at_utc %}COMPLETE {{ visit.physical_finalized_at_utc|local_time(timezone) }}{% elif visit.continuation_review_reason %}REVIEW{% elif visit.console_submission_valid %}AWAITING DISPATCHER VERIFICATION{% elif visit.fueler_submitted_at_utc %}CORRECT / RESUBMIT{% elif visit.off_at_utc %}OFF · FUELER SUBMISSION REQUIRED{% elif visit.console_on_trusted %}FUELING{% else %}ASSIGNED{% endif %}</strong>
-<span>ON {{ (visit.manual_on_at_utc or visit.confirmed_on_at_utc or visit.on_at_utc)|local_time(timezone) if (visit.manual_on_at_utc or visit.confirmed_on_at_utc or visit.on_at_utc) else '—' }} · OFF {{ visit.off_at_utc|local_time(timezone) if visit.off_at_utc else '—' }} · T/F {{ visit.physical_transfer_gallons if visit.physical_transfer_gallons is not none else '—' }}</span>
-<span class="scorpion-truck-line-readings" title="Remaining / Actual in pounds">{% for tank in visit.tank_states %}{{ tank.tank_code|upper }} R {{ tank.remaining_lbs if tank.remaining_lbs is not none else '—' }} / A {{ tank.actual_lbs if tank.actual_lbs is not none else '—' }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
-{% if visit.fueler_submitted_at_utc %}<span>SUBMITTED {{ visit.fueler_submitted_at_utc|local_time(timezone) }}</span>{% endif %}
-{% if not visit.physical_finalized_at_utc and not visit.ended_early_at_utc %}<button type="button" class="action-button" data-neoscorpion-dispatch-details aria-controls="{{ detail_row_id }}" aria-expanded="false">{{ 'VERIFY / DETAILS' if visit.console_submission_valid else 'DETAILS' }}</button>{% endif %}
-</div>
+{% set truck_rows_collapsed = row.administratively_complete and not row.unverified_visit_count and not row.pending_truck_plans and not row.details_action_count %}
+{# When the latest truck was verified first, the overall mission is still
+   outstanding: retain that truck's own COMPLETE line as well. #}
+{% for visit in row.console_visits if visit.id != row.physical_work_id or (visit.physical_finalized_at_utc and not row.administratively_complete) %}
+{% if visit.physical_cycle_number == row.cycle_number or (not visit.physical_finalized_at_utc and not visit.ended_early_at_utc) %}
+{% set planned = none %}
+{% set source = row.console_sources|selectattr('physical_work_id','equalto',visit.id)|first|default(none) %}
+{% include "neonodes/neoscorpion/_dispatch_truck_row.html" %}
+{% endif %}
 {% endfor %}
-{% for p in row.pending_truck_plans %}<div class="scorpion-truck-line" data-truck-line-plan="{{ p.id }}"><strong>PLANNED {{ loop.index }} · TRUCK {{ p.proposed_truck.truck_number if p.proposed_truck else 'SELECT TRUCK' }}</strong><span>{{ p.proposed_fueler.display_name if p.proposed_fueler else 'UNKNOWN FUELER' }} · {{ p.tail_number }}</span><strong>{{ p.review_reason or 'PLANNED · WAITING FOR PRECEDING FUELER COMPLETION' }}</strong><span>ON — · OFF — · T/F — · Readings await verified handoff</span><button type="button" class="action-button" data-neoscorpion-dispatch-details aria-controls="{{ detail_row_id }}" aria-expanded="false">{{ 'REVIEW' if p.console_review else 'MANAGE PLAN' }}</button></div>{% endfor %}
-</div></td></tr>
+{% for planned in row.pending_truck_plans %}
+{% set visit = none %}{% set source = none %}
+{% set planned_number = row.console_visits|length + loop.index %}
+{% include "neonodes/neoscorpion/_dispatch_truck_row.html" %}
+{% endfor %}
 {% endif %}

@@ -64,7 +64,7 @@ class TruckQueueTest(ContinuationTest):
         self.assertIn('VERIFY 1 EARLIER VISIT',html)
         self.assertIn(f'data-truck-line-work="{child.id}"',html)
         self.assertIn(f'data-action-key="verify-{self.work.id}"',html)
-        self.assertIn('data-visit-state>COMPLETE ',html)
+        self.assertIn('data-visit-state>COMPLETE</strong>',html)
         self.assertFalse(fuel.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id).changed)
         db.session.commit();self.assertEqual(child.physical_finalized_at_utc,stamp)
         self.assertEqual(NeoScorpionFuelingEvent.query.count(),1)

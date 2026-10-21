@@ -1,0 +1,10 @@
+<details class="scorpion-visit-evidence" data-visit-evidence="{{ visit.id }}"><summary>Fuel readings &amp; submission evidence</summary>
+{% if visit.tank_states %}<div role="table" aria-label="Visit {{ visit.visit_number or visit.id }} recorded tank readings"><div role="row"><strong role="columnheader">Tank</strong><strong role="columnheader">Remaining · lbs</strong><strong role="columnheader">Actual · lbs</strong></div>{% for tank in visit.tank_states %}<div role="row"><strong role="rowheader">{{ tank.tank_code|replace('_','-')|upper }}</strong><span role="cell">{{ '{:,}'.format(tank.remaining_lbs) if tank.remaining_lbs is not none else '—' }}</span><span role="cell">{{ '{:,}'.format(tank.actual_lbs) if tank.actual_lbs is not none else '—' }}</span></div>{% endfor %}</div>{% endif %}
+<dl><div><dt>Work / cycle / visit</dt><dd>{{ visit.id }} / {{ visit.physical_cycle_number or '—' }} / {{ visit.visit_number or '—' }}</dd></div>
+<div><dt>T/F · gal</dt><dd>{{ visit.physical_transfer_gallons if visit.physical_transfer_gallons is not none else '—' }}</dd></div>
+<div><dt>APU confirmed / source</dt><dd>{{ 'YES' if visit.apu_running is sameas true else 'NO' if visit.apu_running is sameas false else 'NOT CONFIRMED' }} / {{ visit.apu_source_tank_code|upper if visit.apu_source_tank_code else '—' }}</dd></div>
+{% if visit.apu_allowance_lbs is not none %}<div><dt>Recorded APU · lbs</dt><dd>{{ visit.apu_allowance_lbs }}</dd></div>{% endif %}
+{% if visit.fueler_submitted_at_utc %}<div><dt>Fueler submitted</dt><dd><time datetime="{{ visit.fueler_submitted_at_utc.isoformat() }}Z">{{ visit.fueler_submitted_at_utc|local_time(timezone) }}</time> · account {{ visit.fueler_submitted_by_user_id or '—' }} · version {{ visit.fueler_submission_version }}</dd></div>{% endif %}</dl>
+{% if visit.continuation_review_reason %}<p>{{ visit.continuation_review_reason }}</p>{% endif %}
+{% if visit.notes and not visit.physical_finalized_at_utc and not visit.ended_early_at_utc %}<p>VISIT NOTES · {{ visit.notes }}</p>{% endif %}
+</details>

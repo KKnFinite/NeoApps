@@ -4,5 +4,6 @@
 {% include "neonodes/neoscorpion/_dispatch_milestones.html" %}
 {% if visit.id != row.physical_work_id and visit.physical_transfer_gallons is not none %}<small>T/F {{ visit.physical_transfer_gallons }} gal</small>{% endif %}
 {% if can_edit and visit.id != row.physical_work_id and not visit.physical_finalized_at_utc and not visit.ended_early_at_utc %}<button class="action-button" type="button" data-fuel-data-open="{{ url_for('neoscorpion.dispatch_fueler_data',assignment_id=row.assignment.id,physical_work_id=visit.id,physical_sequence=visit.physical_sequence_number) }}">VISIT DATA</button>{% endif %}
+{% include "neonodes/neoscorpion/_dispatch_visit_evidence.html" %}
 </div>
 {% if (visit.physical_finalized_at_utc or visit.ended_early_at_utc) and visit.notes %}<p class="scorpion-visit-note" data-visit-note="{{ visit.id }}">Visit {{ visit.visit_number }} · {{ visit.tail_number }} · {{ visit.notes }}</p>{% endif %}

@@ -277,12 +277,26 @@
             event.preventDefault();
             const detail = document.getElementById(toggle.getAttribute("aria-controls"));
             if (!detail) return;
-            const expanded = toggle.getAttribute("aria-expanded") === "true";
+            const targeted = toggle.dataset.dispatchVisitTarget || toggle.dataset.dispatchActionTarget;
+            const expanded = !targeted && toggle.getAttribute("aria-expanded") === "true";
             scope.querySelectorAll("[data-neoscorpion-dispatch-details], [data-neoscorpion-mobile-details]").forEach(button => {
                 if (button.getAttribute("aria-controls") === detail.id) button.setAttribute("aria-expanded", String(!expanded));
             });
             detail.hidden = expanded;
             detail.setAttribute("aria-hidden", String(expanded));
+            if (targeted) {
+                const workspace = detail.querySelector(window.innerWidth <= 900 ? '.scorpion-mobile-readonly' : '.scorpion-desktop-console');
+                const target = workspace?.querySelector(toggle.dataset.dispatchVisitTarget
+                    ? `[data-console-visit="${toggle.dataset.dispatchVisitTarget}"]`
+                    : `[data-action-key="${toggle.dataset.dispatchActionTarget}"]`);
+                if (target) {
+                    for (let parent = target.parentElement; parent && parent !== detail; parent = parent.parentElement) {
+                        if (parent.tagName === 'DETAILS') parent.open = true;
+                    }
+                    if (toggle.dataset.dispatchVisitTarget) target.querySelector('[data-visit-evidence]')?.setAttribute('open','');
+                    target.scrollIntoView({block:'nearest'});
+                }
+            }
         });
     }
 
@@ -883,11 +897,13 @@
             // Read-only visit/plan lines carry no drafts. Keep their independent
             // receipts visible even while another form defers a full refresh.
             const lineSelector = `[data-truck-lines-mission="${missionId}"]`;
-            const oldLines = root.querySelector(lineSelector), newLines = nextPanel.querySelector(lineSelector);
-            if (newLines) {
-                if (oldLines) oldLines.replaceWith(newLines.cloneNode(true));
-                else currentRow.after(newLines.cloneNode(true));
-            } else oldLines?.remove();
+            const oldLines = Array.from(root.querySelectorAll(lineSelector));
+            const newLines = Array.from(nextPanel.querySelectorAll(lineSelector), node => node.cloneNode(true));
+            newLines.forEach(node => node.querySelectorAll('[aria-controls]').forEach(button => {
+                button.setAttribute('aria-expanded',String(Boolean(currentDetails && !currentDetails.hidden)));
+            }));
+            oldLines.forEach(node => node.remove());
+            if (newLines.length) currentRow.after(...newLines);
             // Completion-only responses intentionally omit expensive SPEAR
             // enrichment. Omission is not evidence that forecasts disappeared.
             const hasSpear = nextDetails?.querySelector('[data-console-region="spear"]')?.dataset.spearAvailable !== 'false';

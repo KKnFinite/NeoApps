@@ -1713,8 +1713,6 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > .neos
     margin: 5px 0 0; font-size: 12px; line-height: 1.3; overflow-wrap: anywhere;
 }
 /* Independent visit receipts and future truck queue stay with their mission. */
-.scorpion-truck-lines-row > td { padding: 3px 8px !important; }
-.scorpion-truck-lines { display: grid; gap: 3px; }
 /* Approved Fueler workspace: one physical visit, in operational reading order.
    Dispatch's shared Fueler Data dialog retains its existing presentation. */
 .neoscorpion-fueler-card[data-dispatcher-panel="false"] {
@@ -1764,11 +1762,26 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > .neos
 .scorpion-fueler-finish :is(form,button), .neoscorpion-fueler-card[data-dispatcher-panel="false"] [data-fueler-submit-form] button { width: 100%; }
 .neoscorpion-fueler-card[data-dispatcher-panel="false"] [data-fueler-submit-form] { display: grid; gap: 5px; }
 .neoscorpion-fueler-card[data-dispatcher-panel="false"] [data-fueler-submit-form] small { font-size: 12px; overflow-wrap: anywhere; }
-.scorpion-truck-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; border-left: 2px solid var(--neo-cyan, #40c9de); background: rgba(30,50,65,.32); font: 11px NeoFontPlain, sans-serif; }
-.scorpion-truck-line-readings { overflow-wrap: anywhere; }
-.scorpion-truck-line .action-button { padding: 3px 8px; min-height: 24px; }
-@media (max-width: 760px) {
-    .scorpion-truck-lines-row > td { display: table-cell !important; }
-    .scorpion-truck-line { font-size: 10px; gap: 3px 8px; }
-    .scorpion-truck-line .action-button { display: none; }
+/* Continuation trucks share the uplift mission-row geometry, never a colspan
+   history card. Only the current visit uses the editable primary mission row. */
+.neoscorpion-dispatch-table--compact .scorpion-truck-mission-row > td { padding: 4px 5px; font: 11px/1.25 NeoFontPlain,sans-serif; background: rgba(30,50,65,.24); }
+.scorpion-truck-mission-row > td > small:not(.neoscorpion-dispatch-mobile-only) { display: block; margin-top: 2px; font-size: 10px; }
+.neoscorpion-screen[data-fuel-dispatch-live] .scorpion-truck-mission-row small.neoscorpion-dispatch-mobile-only { display: none; }
+.scorpion-truck-mission-row .neoscorpion-fuel-status-chip { padding: 3px 4px; font-size: 10px; white-space: normal; overflow: visible; }
+.scorpion-truck-mission-row :is(.action-button,.neoscorpion-dispatch-details-toggle) { min-height: 24px; max-width: 100%; min-width: 0; box-sizing: border-box; padding: 3px; letter-spacing: 0; font: 10px/1.2 NeoFontPlain,sans-serif; }
+.neoscorpion-dispatch-table--compact .scorpion-truck-mission-row.is-complete > td { color: #929aa3; background: #161b21; }
+.scorpion-truck-mission-row[hidden] { display: none !important; }
+.scorpion-visit-evidence { margin-top: 5px; min-width: 0; font: 11px/1.3 NeoFontPlain,sans-serif; }
+.scorpion-visit-evidence [role=row] { display: grid; grid-template-columns: minmax(45px,.6fr) repeat(2,minmax(0,1fr)); gap: 6px; padding: 2px 0; }
+.scorpion-visit-evidence :is(p,dd) { overflow-wrap: anywhere; }
+.scorpion-visit-evidence dl { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 5px 0; }
+.scorpion-visit-evidence :is(dt,dd) { margin: 0; }
+@media (max-width: 900px) {
+    .neoscorpion-dispatch-table--compact .scorpion-truck-mission-row:not([hidden]) { display: table-row !important; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .scorpion-truck-mission-row > td:is(:nth-child(1),:nth-child(3),:nth-child(6),:nth-child(7),:nth-child(8),:nth-child(9),:nth-child(10),:nth-child(11),:nth-child(12),:nth-child(15),:nth-child(16)) { display: none !important; }
+    .neoscorpion-dispatch-table--compact .scorpion-truck-mission-row > td { padding: 4px 2px; font-size: 10px; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .scorpion-truck-mission-row small.neoscorpion-dispatch-mobile-only { display: block; font-size: 9px; }
+    .neoscorpion-screen[data-fuel-dispatch-live] .scorpion-truck-mission-row .neoscorpion-dispatch-desktop-label { display: none; }
+    .scorpion-truck-mission-row .neoscorpion-dispatch-flight > small,
+    .scorpion-truck-mission-row .neoscorpion-dispatch-etd-parking > small { display: none; }
 }

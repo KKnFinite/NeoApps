@@ -8,22 +8,25 @@ const expression = source.slice(source.indexOf("    const applyCriticalCompletio
     source.indexOf("    const refreshCriticalCompletion = async", source.indexOf("    const applyCriticalCompletion = (nextPanel) => {")));
 
 test('independent visit completion lines refresh while a mission draft stays protected',()=>{
-    let replacement;
-    const oldLines={replaceWith:n=>replacement=n};
-    const newLines={receipt:'Visit 2 COMPLETE 02:46; Visit 1 awaiting verification',cloneNode(){return this;}};
+    let replacement,removed=0;
+    const oldLines=[{remove:()=>removed++},{remove:()=>removed++}];
+    const newLines=[1,2,3,4].map(id=>({id,receipt:'Independent visit or plan',querySelectorAll:()=>[],cloneNode(){return this;}}));
     const slot={dataset:{completionIdentity:'1:2:3:1:TAIL:4:5:6'},replaceWith(){},cloneNode(){return this;}};
     const stack={querySelector:s=>s==='[data-dispatch-completion-slot]'?slot:null};
     const draft={type:'text',tagName:'INPUT',value:'unsaved correction',defaultValue:'saved',matches:()=>false};
     const makeRow=()=>({dataset:{dispatchMissionId:'2',dispatchSortGroup:'2'},
         classList:{contains:()=>false,toggle(){}},
         querySelector:s=>s==='.neoscorpion-dispatch-action-stack'?stack:null,querySelectorAll:()=>[draft],
-        closest:()=>({children:[actual]})});
+        closest:()=>({children:[actual]}),after:(...nodes)=>replacement=nodes});
     const actual=makeRow(),next=makeRow();
-    const context={root:{querySelectorAll:()=>[actual],querySelector:s=>s==='[data-truck-lines-mission="2"]'?oldLines:null},
+    const context={root:{querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?oldLines:[actual],querySelector:()=>null},
         initialControlValues:new WeakMap(),updateAssignmentAlerts(){}};
     vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
-    context.patch({querySelectorAll:()=>[next],querySelector:s=>s==='[data-truck-lines-mission="2"]'?newLines:null});
-    assert.equal(replacement,newLines);assert.equal(draft.value,'unsaved correction');
+    context.patch({querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?newLines:[next],querySelector:()=>null});
+    assert.equal(removed,2);assert.deepEqual(replacement.map(n=>n.id),[1,2,3,4]);assert.equal(draft.value,'unsaved correction');
+    // Empty / completed groups remove every old row, not just the first one.
+    context.patch({querySelectorAll:s=>s==='[data-truck-lines-mission="2"]'?[]:[next],querySelector:()=>null});
+    assert.equal(removed,4);
 });
 test("critical completion appears under a dirty Dispatch without replacing editable controls", () => {
     const makeStack = (initial) => {
@@ -130,9 +133,9 @@ test('a changed visit never leaves the old READY accent on a protected row',()=>
     const makeRow=slot=>({dataset:{dispatchMissionId:'2'},classList:{toggle:(n,on)=>on?classes.add(n):classes.delete(n)},
         querySelector:s=>s==='.neoscorpion-dispatch-action-stack'?{querySelector:s=>s==='[data-dispatch-completion-slot]'?slot:null}:null});
     const row=makeRow(oldSlot),next=makeRow(newSlot);
-    const context={root:{querySelectorAll:()=>[row],querySelector:()=>null},updateAssignmentAlerts(){}};
+    const context={root:{querySelectorAll:s=>s.includes('data-dispatch-mission-id')?[row]:[],querySelector:()=>null},updateAssignmentAlerts(){}};
     vm.runInNewContext(expression+'\nthis.patch=applyCriticalCompletion;',context);
-    context.patch({querySelectorAll:()=>[next],querySelector:()=>null});
+    context.patch({querySelectorAll:s=>s.includes('data-dispatch-mission-id')?[next]:[],querySelector:()=>null});
     assert.equal(classes.has('is-ready-to-assign'),false);
     assert.equal(oldSlot.textContent,'VISIT CHANGED');
 });

@@ -1,0 +1,32 @@
+{% set line_key = 'visit-' ~ visit.id if visit else 'plan-' ~ planned.id %}
+{% set line_tail = visit.tail_number if visit else planned.tail_number %}
+{% set line_truck = visit.physical_truck if visit else planned.proposed_truck %}
+{% set line_fueler = visit.physical_fueler if visit else planned.proposed_fueler %}
+{% set line_complete = visit and visit.physical_finalized_at_utc %}
+{% set line_review = (visit and (visit.continuation_review_reason or visit.physical_transfer_review)) or (source and source.dispatch_status_key == 'review') or (planned and planned.console_review) %}
+{% set can_verify = source and source.normal_completion_ready %}
+{% set action_target = ('verify-' if can_verify else 'physical-') ~ visit.id if visit else 'plan-' ~ planned.id %}
+{% set status_label = 'COMPLETE' if line_complete else 'ENDED EARLY' if visit and visit.ended_early_at_utc else 'REVIEW' if line_review else 'PLANNED' if planned else 'SUBMITTED' if visit.console_submission_valid else 'OFF' if visit.off_at_utc else 'FUELING' if visit.console_on_trusted else 'ASSIGNED' %}
+{% set status_color = 'gray' if line_complete else 'red' if line_review else 'teal' if status_label in ['OFF','SUBMITTED'] else 'green' if status_label == 'FUELING' else 'yellow' %}
+<tr class="neoscorpion-dispatch-history-row scorpion-truck-mission-row{% if line_complete %} is-complete{% endif %}"
+    data-dispatch-sort-group="{{ row.mission.id }}" data-dispatch-row-key="{{ row.mission.id }}-{{ line_key }}"
+    data-truck-lines-mission="{{ row.mission.id }}" {% if visit %}data-truck-line-work="{{ visit.id }}"{% else %}data-truck-line-plan="{{ planned.id }}"{% endif %}{% if truck_rows_collapsed %} hidden{% endif %}>
+    <td class="neoscorpion-dispatch-check-cell"></td>
+    <td class="neoscorpion-dispatch-tail"><strong>{{ line_tail }}</strong><small class="neoscorpion-dispatch-desktop-label">{% if visit %}{{ (visit.physical_cycle_type or 'VISIT')|upper }} {{ visit.visit_number or '—' }}{% else %}PLANNED {{ planned_number }}{% endif %}</small><small class="neoscorpion-dispatch-mobile-only">TRUCK {{ line_truck.truck_number if line_truck else '—' }}</small>
+        <button type="button" class="neoscorpion-dispatch-mobile-only neoscorpion-mobile-details" data-neoscorpion-mobile-details aria-controls="{{ detail_row_id }}" aria-expanded="false" {% if visit %}data-dispatch-visit-target="{{ visit.id }}"{% else %}data-dispatch-action-target="{{ action_target }}"{% endif %}>DETAILS</button>
+    </td>
+    <td>{{ source.arrival_eta if source else '—' }}</td>
+    <td class="neoscorpion-dispatch-flight">{{ row.destination }}<small class="neoscorpion-dispatch-secondary">{{ row.mission.flight_number }}</small></td>
+    <td class="neoscorpion-dispatch-etd-parking">{{ row.departure_time or '—' }}{% if source and source.parking_position %}<small class="neoscorpion-dispatch-secondary">{{ source.parking_position }}</small>{% endif %}</td>
+    <td>{{ source.inbound_fuel_display if source else '—' }}</td>
+    <td>{{ '%.1f'|format(visit.physical_required_fuel_lbs / 1000) if visit and visit.physical_required_fuel_lbs is not none else planned.console_target if planned else '—' }}</td>
+    <td>{{ source.neo_fuel_display if source and source.neo_fuel_available else '—' }}</td>
+    <td class="neoscorpion-dispatch-actual-apu">{% if source %}{{ source.actual_fuel_display if source.actual_fuel_display != 'INCOMPLETE' else '—' }}<small class="neoscorpion-dispatch-secondary">APU {{ source.apu_allowance_display }}</small>{% else %}—{% endif %}</td>
+    <td>{{ line_fueler.display_name if line_fueler else 'UNKNOWN' }}</td>
+    <td>{% if can_edit and visit and not visit.physical_finalized_at_utc and not visit.ended_early_at_utc %}<button type="button" class="action-button" data-fuel-data-open="{{ url_for('neoscorpion.dispatch_fueler_data',assignment_id=row.assignment.id,physical_work_id=visit.id,physical_sequence=visit.physical_sequence_number) }}">VISIT DATA</button>{% else %}—{% endif %}</td>
+    <td>{{ line_truck.truck_number if line_truck else 'UNASSIGNED' }}</td>
+    <td><span class="neoscorpion-dispatch-desktop-transfer">{{ visit.physical_transfer_gallons if visit and visit.physical_transfer_gallons is not none else '—' }}</span><span class="neoscorpion-dispatch-mobile-estimate">{{ '{:,}'.format(source.estimated_fuel_gallons) if source and source.estimated_fuel_gallons is not none else '—' }}</span></td>
+    <td class="neoscorpion-dispatch-status-cell"><div class="neoscorpion-fuel-status" data-fuel-status-color="{{ status_color }}"><strong class="neoscorpion-fuel-status-chip" data-visit-state>{{ status_label }}</strong></div></td>
+    <td>{% if can_edit and not line_complete and (can_verify or planned or source) %}<button type="button" class="action-button" data-neoscorpion-dispatch-details data-dispatch-action-target="{{ action_target }}" aria-controls="{{ detail_row_id }}" aria-expanded="false">{{ 'VERIFY' if can_verify else 'REVIEW' if line_review or visit else 'MANAGE PLAN' }}</button>{% endif %}</td>
+    <td><button type="button" class="neoscorpion-dispatch-details-toggle" data-neoscorpion-dispatch-details aria-controls="{{ detail_row_id }}" aria-expanded="false" {% if visit %}data-dispatch-visit-target="{{ visit.id }}"{% else %}data-dispatch-action-target="{{ action_target }}"{% endif %}>DETAILS</button></td>
+</tr>

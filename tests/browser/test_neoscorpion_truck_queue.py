@@ -2,6 +2,9 @@
 from datetime import date,datetime,timedelta
 from pathlib import Path
 import re
+import os
+import json
+import subprocess
 import unittest
 from unittest.mock import patch
 from playwright.sync_api import expect
@@ -18,7 +21,16 @@ class TruckQueueBrowserTest(unittest.TestCase):
     def test_chromium_webkit_five_advance_trucks_live_handoffs_board_and_mobile(self):
         F=fixtures.MobileDrawerBrowserTest;F.setUpClass()
         F.app.config['LIVE_SCREEN_REFRESH_INTERVAL_MS']=1000
-        evidence=Path('instance/browser-evidence/truck-queue');evidence.mkdir(parents=True,exist_ok=True)
+        evidence=Path('instance/browser-evidence/truck-rows');evidence.mkdir(parents=True,exist_ok=True)
+        baseline=os.environ.get('NEO_TRUCK_ROWS_CAPTURE_BASELINE')=='1'
+        measurements=[]
+        if baseline:
+            from jinja2 import ChoiceLoader,DictLoader
+            before='29b69e59811f698fcb534db89aac19c1ecf993d6'
+            names=['_dispatch_truck_lines.html','_dispatch_visit.html','_dispatch_mobile_details.html']
+            original={f'neonodes/neoscorpion/{name}':subprocess.check_output(['git','show',f'{before}:app/templates/neonodes/neoscorpion/{name}']).decode('utf-8') for name in names}
+            F.app.jinja_env.loader=ChoiceLoader([DictLoader(original),F.app.jinja_env.loader])
+            original_css=subprocess.check_output(['git','show',before+':app/static/css/26-neoscorpion.css'])
         try:
             with F.app.app_context():
                 g=ensure_default_gateway_and_nodes();d=User.query.filter_by(username='drawer-admin').one()
@@ -48,6 +60,7 @@ class TruckQueueBrowserTest(unittest.TestCase):
                     try:
                         desktop=browser.new_context(viewport={'width':1440,'height':900},service_workers='block')
                         mobile=browser.new_context(viewport={'width':390,'height':844},service_workers='block')
+                        if baseline:desktop.route('**/static/css/26-neoscorpion.css*',lambda r:r.fulfill(body=original_css,content_type='text/css'))
                         dispatch=desktop.new_page();page=mobile.new_page()
                         for p in (dispatch,page):p.on('pageerror',lambda error:errors.append(str(error)))
                         F().login(dispatch);F().login(page,'queue-fueler')
@@ -61,8 +74,39 @@ class TruckQueueBrowserTest(unittest.TestCase):
                             if not operation.evaluate('n=>n.open'):operation.locator('summary').click()
                             form=operation.locator('form');form.locator('[name=proposed_truck_id]').select_option(str(truck))
                             form.get_by_role('button',name='PLAN ANOTHER TRUCK',exact=True).click()
-                            expect(dispatch.locator(f'[data-truck-lines-mission="{mid}"] [data-truck-line-plan]')).to_have_count(position,timeout=12000)
-                        dispatch.screenshot(path=str(evidence/f'{engine.name}-four-plans.png'),full_page=True)
+                            plans=dispatch.locator(f'[data-truck-lines-mission="{mid}"] [data-truck-line-plan]' if baseline else f'tr[data-truck-lines-mission="{mid}"][data-truck-line-plan]')
+                            expect(plans).to_have_count(position,timeout=12000)
+                        measurements.append({'engine':engine.name,'view':'four-plans','height':sum(dispatch.locator(f'[data-truck-lines-mission="{mid}"]').evaluate_all('ns=>ns.map(n=>n.getBoundingClientRect().height)'))})
+                        dispatch.screenshot(path=str(evidence/f'{"before" if baseline else "after"}-{engine.name}-four-plans.png'),full_page=True)
+                        if not baseline:
+                            self.assertEqual(dispatch.locator('.scorpion-truck-lines,.scorpion-truck-line-readings').count(),0)
+                            for line in dispatch.locator(f'tr[data-truck-lines-mission="{mid}"]').all():
+                                self.assertEqual(line.locator(':scope > td').count(),16)
+                                self.assertEqual(line.locator('form,[data-visit-evidence]').count(),0)
+                                expect(line.locator('small.neoscorpion-dispatch-mobile-only')).to_be_hidden()
+                                geometry=line.evaluate("""n=>({cells:Array.from(n.cells,c=>[c.getBoundingClientRect().x,c.getBoundingClientRect().width]),
+                                    headers:Array.from(n.closest('table').tHead.rows[0].cells,c=>[c.getBoundingClientRect().x,c.getBoundingClientRect().width])})""")
+                                for actual,header in zip(geometry['cells'],geometry['headers']):
+                                    self.assertAlmostEqual(actual[0],header[0],delta=1)
+                                    self.assertAlmostEqual(actual[1],header[1],delta=1)
+                            # Normal and Board use identical table columns.
+                            row.locator('[data-neoscorpion-dispatch-details]').click()
+                            dispatch.locator('[data-operational-board-toggle]:visible').click()
+                            expect(plans).to_have_count(4)
+                            dispatch.screenshot(path=str(evidence/f'after-{engine.name}-board-active.png'),full_page=True)
+                            for width in (390,375):
+                                dispatch.set_viewport_size({'width':width,'height':844})
+                                expect(plans.first).to_be_visible()
+                                self.assertFalse(dispatch.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                                self.assertEqual(plans.first.locator(':scope > td:visible').count(),5)
+                                self.assertEqual(dispatch.locator('[data-fuel-dispatch-live] button[type=submit]:visible').count(),0)
+                                dispatch.screenshot(path=str(evidence/f'after-{engine.name}-active-{width}.png'),full_page=True)
+                            plans.first.locator('[data-neoscorpion-mobile-details]').click()
+                            expect(detail.locator('.scorpion-mobile-readonly')).to_be_visible()
+                            self.assertEqual(detail.locator('.scorpion-mobile-readonly form').count(),0)
+                            dispatch.set_viewport_size({'width':1440,'height':900})
+                            expect(dispatch.locator('body')).to_have_class(re.compile('operational-board-view'))
+                            dispatch.get_by_role('button',name='Exit Board View',exact=True).click()
                         visits=[]
                         for index in range(5):
                             card=page.locator('[data-fuel-data-card]').filter(has=page.locator(f'input[name=assignment_id][value="{aid}"]')).first
@@ -76,8 +120,27 @@ class TruckQueueBrowserTest(unittest.TestCase):
                             # Verify the preceding truck while this one is ON.
                             if index:
                                 action=detail.locator(f'[data-action-key="verify-{visits[-2]}"]')
+                                draft=None
+                                if not baseline:
+                                    earlier=dispatch.locator(f'tr[data-truck-line-work="{visits[-2]}"]')
+                                    expect(earlier.locator('[data-visit-state]')).to_have_text('SUBMITTED',timeout=12000)
+                                    if index==1:
+                                        tail_section=detail.locator('details[data-console-section="tail-notes"]')
+                                        if not tail_section.evaluate('n=>n.open'):tail_section.locator('summary').click()
+                                        draft=tail_section.locator('textarea');saved_note=draft.input_value()
+                                        draft.fill('Unsent Tail Notes survive visit verification')
+                                    if detail.is_visible():row.locator('[data-neoscorpion-dispatch-details]').click()
+                                    earlier.get_by_role('button',name='VERIFY',exact=True).click()
                                 expect(action).to_be_visible(timeout=12000);action.locator('button').click()
                                 expect(dispatch.locator(f'[data-truck-line-work="{visits[-2]}"] [data-visit-state]')).to_contain_text('COMPLETE',timeout=12000)
+                                if not baseline and index==1:
+                                    expect(draft).to_have_value('Unsent Tail Notes survive visit verification')
+                                    earlier.locator('td:last-child button').click()
+                                    recorded=detail.locator(f'.scorpion-desktop-console [data-console-visit="{visits[-2]}"]')
+                                    expect(recorded.locator('[data-visit-evidence]')).to_have_attribute('open','')
+                                    expect(recorded.locator('[role=table]')).to_contain_text('15,000')
+                                    dispatch.screenshot(path=str(evidence/f'after-{engine.name}-earlier-complete-next-on.png'),full_page=True)
+                                    draft.fill(saved_note)
                             card.locator('[name=apu_running]').select_option('no')
                             for code in ('left','ctr','right'):
                                 if not index:card.locator(f'[name=remaining_{code}]').fill('0' if code=='ctr' else '6')
@@ -91,20 +154,47 @@ class TruckQueueBrowserTest(unittest.TestCase):
                         row.get_by_role('button',name='COMPLETE',exact=True).click()
                         expect(row).to_have_class(re.compile('is-complete'),timeout=12000)
                         lines=dispatch.locator(f'[data-truck-lines-mission="{mid}"]')
-                        expect(lines.locator('[data-truck-line-work]')).to_have_count(5)
+                        expect(lines.locator('[data-truck-line-work]') if baseline else lines).to_have_count(5 if baseline else 4)
                         self.assertEqual(lines.locator('[data-visit-state]').all_text_contents(),[text for text in lines.locator('[data-visit-state]').all_text_contents() if text.startswith('COMPLETE')])
                         dispatch.locator('[data-operational-board-toggle]:visible').click()
-                        expect(lines).to_be_visible()
-                        dispatch.screenshot(path=str(evidence/f'{engine.name}-board-five-complete.png'),full_page=True)
+                        if baseline:expect(lines).to_be_visible()
+                        else:
+                            expect(lines.first).to_be_hidden()
+                            self.assertEqual(lines.filter(has=dispatch.locator('[data-visit-state]')).locator('td:visible').count(),0)
+                        measurements.append({'engine':engine.name,'view':'five-complete','height':sum(lines.evaluate_all('ns=>ns.map(n=>n.getBoundingClientRect().height)'))})
+                        dispatch.screenshot(path=str(evidence/f'{"before" if baseline else "after"}-{engine.name}-board-five-complete.png'),full_page=True)
                         for width in (1920,1440,390,375):
                             dispatch.set_viewport_size({'width':width,'height':844})
                             self.assertFalse(dispatch.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
+                            if not baseline:expect(lines.first).to_be_hidden()
                             if width<901:self.assertEqual(dispatch.locator('[data-fuel-dispatch-live] button[type=submit]:visible').count(),0)
-                        dispatch.screenshot(path=str(evidence/f'{engine.name}-mobile.png'),full_page=True)
+                        if not baseline:
+                            if not detail.is_visible():row.locator('[data-neoscorpion-mobile-details]').click()
+                            history=detail.locator('.scorpion-mobile-readonly [data-console-section="mobile-visits"]')
+                            if not history.evaluate('n=>n.open'):history.locator('summary').first.click()
+                            self.assertEqual(history.locator('[data-visit-evidence]').count(),5)
+                            expect(history.locator('[data-console-visit]').first).to_contain_text('VERIFIED')
+                        dispatch.screenshot(path=str(evidence/f'{"before" if baseline else "after"}-{engine.name}-mobile.png'),full_page=True)
                         with F.app.app_context():
                             self.assertEqual(NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=aid).count(),5)
                             self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).count(),5)
                             self.assertIsNotNone(db.session.get(NeoScorpionFuelAssignment,aid).completed_at_utc)
+                        if not baseline:
+                            # Compare against a genuine existing START UPLIFT
+                            # history row, created through the canonical service.
+                            from app.services import neoscorpion as fuel
+                            with F.app.app_context():
+                                actor=User.query.filter_by(username='drawer-admin').one()
+                                fuel.start_follow_up_fuel_cycle(ensure_default_gateway_and_nodes(),actor,aid,'uplift','70',uid,trucks[0])
+                                db.session.commit()
+                            dispatch.set_viewport_size({'width':1440,'height':900})
+                            expect(row).to_have_attribute('data-dispatch-row-key',f'{mid}-2',timeout=12000)
+                            reference=dispatch.locator(f'tr[data-cycle-history][data-dispatch-sort-group="{mid}"]')
+                            expect(reference).to_have_count(1)
+                            self.assertEqual(reference.locator(':scope > td').count(),16)
+                            expect(dispatch.locator(f'[data-truck-lines-mission="{mid}"]')).to_have_count(0)
+                            dispatch.screenshot(path=str(evidence/f'after-{engine.name}-uplift-reference.png'),full_page=True)
                         self.assertEqual(errors,[])
                     finally:browser.close()
+            (evidence/f'{"before" if baseline else "after"}-measurements.json').write_text(json.dumps(measurements,indent=2))
         finally:F.tearDownClass()
