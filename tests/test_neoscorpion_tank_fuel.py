@@ -435,7 +435,9 @@ class NeoScorpionTankFuelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"B757", response.data)
-        self.assertIn(b"Remaining Total", response.data)
+        self.assertIn(b"TOTAL", response.data)
+        self.assertIn(b"data-fuel-autosave", response.data)
+        self.assertNotIn(b">Save Fuel Entry</button>", response.data)
         self.assertIn(b'name="remaining_left"', response.data)
         self.assertIn(b'name="actual_right"', response.data)
         self.assertEqual(NeoScorpionFuelWorkState.query.count(), 0)

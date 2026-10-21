@@ -1715,6 +1715,55 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > .neos
 /* Independent visit receipts and future truck queue stay with their mission. */
 .scorpion-truck-lines-row > td { padding: 3px 8px !important; }
 .scorpion-truck-lines { display: grid; gap: 3px; }
+/* Approved Fueler workspace: one physical visit, in operational reading order.
+   Dispatch's shared Fueler Data dialog retains its existing presentation. */
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] {
+    display: flex; flex-direction: column; gap: 9px; min-width: 0;
+    padding: 12px; font: 13px/1.3 NeoFontPlain, sans-serif;
+    background: #03121b; border: 1px solid #244456; border-radius: 7px;
+}
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] :is(p,dl,h2) { margin: 0; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-save-status:empty { display: none; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] > .scorpion-fueler-mission {
+    display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 12px;
+    padding-bottom: 9px; border-bottom: 1px solid #244456;
+}
+.scorpion-fueler-flight { display: grid; gap: 1px; }
+.neoscorpion-fueler-card > .scorpion-fueler-mission .scorpion-fueler-flight strong { font-size: 24px; letter-spacing: 0; }
+.neoscorpion-fueler-card > .scorpion-fueler-mission .scorpion-fueler-flight span { font-size: 14px; color: #e9f2f6; }
+.scorpion-fueler-etd { text-align: right; display: grid; align-content: start; }
+.scorpion-fueler-mission > small { grid-column: 1 / -1; overflow-wrap: anywhere; font-size: 11px; }
+.scorpion-fueler-identity { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px 9px; }
+.scorpion-fueler-identity div { min-width: 0; }
+.scorpion-fueler-identity :is(dt,dd), .scorpion-fueler-calculated :is(dt,dd) { margin: 0; }
+.scorpion-fueler-identity dt, .scorpion-fueler-etd small, .scorpion-fueler-calculated dt { font-size: 10px; color: #88a6b9; text-transform: uppercase; }
+.scorpion-fueler-identity dd { overflow-wrap: anywhere; color: #eef4f9; font-size: 13px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-truck-on-row { display: block; margin: 0; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-truck-on-row button { width: 100%; background: #287c32; border-color: #70c875; color: #fff; min-height: 40px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-fueler-form { display: grid; grid-template-columns: minmax(0,1fr); gap: 9px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .scorpion-fueler-section-title { font: 700 13px/1.3 NeoFontPlain,sans-serif; color: #f4d13e; }
+.scorpion-fueler-section-title small { font-size: 10px; color: #88a6b9; float: right; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-fuel-tank-grid { --fuel-tank-columns: minmax(46px,.7fr) repeat(3,minmax(0,1fr)); --fuel-tank-gap: 6px; padding: 0; border: 0; margin: 0; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-fuel-tank-row { min-height: 34px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-fuel-tank-row > :first-child { grid-column: auto; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-fuel-tank-head { font-size: 10px; color: #f4d13e; text-transform: uppercase; min-height: 24px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] :is(input,select,textarea) { min-width: 0; width: 100%; box-sizing: border-box; font: 14px NeoFontPlain,sans-serif; padding: 5px 7px; border: 1px solid #36515f; border-radius: 4px; background: #0b202b; color: #eef4f9; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] input { min-height: 31px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] label { font: 12px/1.3 NeoFontPlain,sans-serif; }
+.scorpion-fueler-apu { padding: 9px 0; border-block: 1px solid #244456; }
+.scorpion-fueler-apu [hidden] { display: none !important; }
+.scorpion-fueler-apu .neoscorpion-apu-controls { display: grid; grid-template-columns: minmax(0,1fr); gap: 7px; margin-top: 7px; }
+.scorpion-fueler-apu .neoscorpion-apu-controls > label { display: grid; grid-template-columns: 100px minmax(0,1fr); align-items: center; gap: 6px; }
+.scorpion-fueler-apu [data-apu-override-wrap] { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px; }
+.scorpion-fueler-apu .neoscorpion-apu-manual { grid-column: 1 / -1; }
+.scorpion-fueler-apu [data-apu-choice-output] { grid-column: 1 / -1; font-size: 11px; }
+.scorpion-fueler-calculated { display: flex; flex-wrap: wrap; gap: 6px 24px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .action-button { font: 700 12px NeoFontPlain,sans-serif; min-height: 33px; padding: 6px 10px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-fueler-notes textarea { min-height: 60px; resize: vertical; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] .neoscorpion-tail-notes { font-size: 12px; }
+.scorpion-fueler-finish :is(form,button), .neoscorpion-fueler-card[data-dispatcher-panel="false"] [data-fueler-submit-form] button { width: 100%; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] [data-fueler-submit-form] { display: grid; gap: 5px; }
+.neoscorpion-fueler-card[data-dispatcher-panel="false"] [data-fueler-submit-form] small { font-size: 12px; overflow-wrap: anywhere; }
 .scorpion-truck-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; border-left: 2px solid var(--neo-cyan, #40c9de); background: rgba(30,50,65,.32); font: 11px NeoFontPlain, sans-serif; }
 .scorpion-truck-line-readings { overflow-wrap: anywhere; }
 .scorpion-truck-line .action-button { padding: 3px 8px; min-height: 24px; }

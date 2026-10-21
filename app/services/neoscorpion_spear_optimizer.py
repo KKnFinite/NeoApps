@@ -236,7 +236,7 @@ def _release_resources(rows, fuelers, trucks, now, settings, top_events, policie
                         ramp=segment_ramp)
                     if is_truck:resource['physically_on']=True
                     if is_truck and not resource.get('active_demand_reserved'):
-                        demand=legacy._decimal_or_none(row.get('planning_demand_gallons'))
+                        demand=legacy._decimal_or_none(row.get('inventory_demand_gallons',row.get('planning_demand_gallons')))
                         if demand is None:
                             resource['base']=INFINITY
                         else:
@@ -291,6 +291,7 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
         for f in sorted(nightly_fuelers,key=legacy._fueler_sort_key)}
     trucks={}
     policies={}
+    inventory_bases=next((r['inventory_projection_bases'] for r in rows if 'inventory_projection_bases' in r),{})
     for item in nightly_trucks:
         t,s=item.get('truck'),item.get('selection')
         if not t or not s or not t.is_active or t.is_out_of_service or not t.capacity_gallons:
@@ -298,13 +299,15 @@ def optimize(rows, *, operation, planning_settings, spear_settings, nightly_fuel
         if s.status not in ('available','top_off','topping_off'):
             continue
         sent=stamp(getattr(s,'top_off_sent_at_utc',None))
-        if s.status == 'available' and (s.current_gallons is None or not getattr(s,'inventory_verified',True)):
+        if s.status == 'available' and (inventory_bases.get(t.id,s.current_gallons) is None or not (
+                getattr(s,'inventory_verified',True) or getattr(s,'inventory_pending_epoch',None) is not None
+                and s.inventory_pending_epoch==s.inventory_epoch)):
             continue
         if s.status != 'available' and not sent:
             continue
         policies[t.id]=dict(top_off_policy(top_off_pairs,t.id,settings),truck_number=str(t.truck_number))
         trucks[t.id]=dict(truck=t,base=now,ramp=settings.truck_begins_at,
-            gallons=int(s.current_gallons or 0),capacity=int(t.capacity_gallons),status=s.status,
+            gallons=int(inventory_bases.get(t.id,s.current_gallons) or 0),capacity=int(t.capacity_gallons),status=s.status,
             sent=sent,conditional=False)
     _release_resources(rows,fuelers,trucks,now,settings,top_events,policies,operation,planning)
     occupied_f,occupied_t=legacy._current_resource_owners(rows)

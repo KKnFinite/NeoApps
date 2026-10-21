@@ -8,7 +8,7 @@ from flask import g
 from flask.testing import FlaskClient
 
 from app.extensions import db
-from app.models import NeoScorpionFuelTruck, NeoScorpionFuelWorkState, NeoScorpionSettings
+from app.models import NeoScorpionFuelTruck, NeoScorpionFuelWorkState, NeoScorpionSettings, NeoScorpionTruckDriver
 from app.services.neoscorpion import fuel_dispatch_context, fueler_context
 from app.services.neoscorpion_dispatch_planning import estimate_fuel_demand_gallons
 from tests import test_neoscorpion_fueler_off as fixtures
@@ -98,6 +98,8 @@ class FuelerDataTest(unittest.TestCase):
         db.session.add(truck)
         db.session.flush()
         self.assignment.assigned_truck_id = truck.id
+        db.session.add(NeoScorpionTruckDriver(sort_date_operation_id=self.operation.id,
+            fuel_truck_id=truck.id,manual_name='Vendor Driver',changed_by_user_id=self.dispatcher.id))
         db.session.commit()
 
         fueler_page = self.fueler.get('/neoscorpion/fueler').get_data(as_text=True)
@@ -142,8 +144,12 @@ class FuelerDataTest(unittest.TestCase):
                 ):
                     estimate = f'ESTIMATED GALLONS: {row["estimated_fuel_display"].upper()}'
                     self.assertEqual(page.count(estimate), 1)
-                    self.assertLess(page.index('>TOTAL</strong>'), page.index(estimate))
-                    self.assertLess(page.index(estimate), page.index('<label>T/F'))  # OFF remains editable until complete.
+                    if 'data-dispatcher-panel="true"' in page:
+                        self.assertLess(page.index('>TOTAL</strong>'), page.index(estimate))
+                        self.assertLess(page.index(estimate), page.index('<label>T/F'))
+                    else:
+                        self.assertLess(page.index(estimate),page.index('>TOTAL</strong>'))
+                        self.assertIn('data-estimated-gallons',page)
                     self.assertNotIn('name="estimated_fuel', page)
 
     def test_missing_estimated_gallons_does_not_block_fuel_entry(self):
@@ -161,7 +167,10 @@ class FuelerDataTest(unittest.TestCase):
                 ):
                     self.assertIn('ESTIMATED GALLONS: -', page)
                     self.assertIn('name="transfer_fuel_gallons"', page)
-                    self.assertIn('Save Fuel Entry', page)
+                    if 'data-dispatcher-panel="true"' in page:self.assertIn('Save Fuel Entry', page)
+                    else:
+                        self.assertIn('data-fuel-autosave',page)
+                        self.assertNotIn('>Save Fuel Entry<',page)
                 response = self.save(self.fueler, self.fueler_url,
                                      self.baseline(self.fueler, self.fueler_url), notes=missing)
                 self.assertEqual(response.status_code, 200, response.data)

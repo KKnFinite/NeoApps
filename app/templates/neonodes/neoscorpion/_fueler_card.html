@@ -37,6 +37,28 @@
                     <small data-acknowledge-status aria-live="polite"></small>
                 </div>
                 {% endif %}
+                {% if not dispatcher_panel|default(false) %}
+                <header class="scorpion-fueler-mission">
+                    <div class="scorpion-fueler-flight"><strong>{{ row.mission.flight_number }}</strong><span>{{ row.destination }}</span></div>
+                    <div class="scorpion-fueler-etd"><small>ETD</small><strong>{{ row.departure_time or '—' }}</strong></div>
+                    <dl class="scorpion-fueler-identity">
+                        <div><dt>Fueler</dt><dd>{{ row.fueler_display_name }}</dd></div>
+                        <div><dt>Tail</dt><dd>{{ row.tail_number }}</dd></div>
+                        <div><dt>Parking</dt><dd>{{ row.parking_position or '—' }}</dd></div>
+                        <div><dt>Truck</dt><dd aria-label="TRUCK {{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}">{{ row.assigned_truck.truck_number if row.assigned_truck else 'UNASSIGNED' }}</dd></div>
+                        <div><dt>ON</dt><dd>{{ row.on_time }}</dd></div>
+                        <div><dt>Cycle</dt><dd>{{ row.cycle_type|upper }} {{ row.assignment.current_cycle_number }}</dd></div>
+                        <div><dt>Aircraft</dt><dd>{{ row.detailed_aircraft_type }}</dd></div>
+                        <div><dt>Required Fuel</dt><dd>{{ row.required_display }}</dd></div>
+                        <div><dt>Est. Gal</dt><dd data-estimated-gallons aria-label="ESTIMATED GALLONS: {{ row.estimated_fuel_display|upper }}">{{ row.estimated_fuel_display }}</dd></div>
+                    </dl>
+                    {% if row.assigned_truck %}<small class="neoscorpion-fueler-truck-vendor">DRIVER · {{ row.truck_driver_name|default('UNKNOWN') }}</small>{% endif %}
+                    {% if row.assigned_truck_current_status %}<small data-assigned-truck-status{% if row.truck_travel_until %} data-truck-travel-until="{{ row.truck_travel_until }}" data-truck-travel-origin="{{ row.truck_travel_origin }}"{% endif %}>{{ row.assigned_truck_current_status }}</small>{% endif %}
+                    {% if row.assigned_truck_top_off_sent_time %}<small data-assigned-truck-top-off-sent>TOP OFF SENT {{ row.assigned_truck_top_off_sent_time }}</small>{% endif %}
+                    {% if not row.is_off %}<small>100 PROF OFF · {{ row.fueler_off_goal|default('UNKNOWN') }}</small>{% endif %}
+                    {% if row.fuel_work_state and row.fuel_work_state.target_frozen and not row.is_source_segment and row.departure_required_fuel_lbs != row.required_fuel_lbs %}<small>Departure target {{ row.required_fuel_display }}K · separate next-truck plan</small>{% endif %}
+                </header>
+                {% else %}
                 <header class="neoscorpion-fueler-mission-head">
                     <div>
                         <span>{{ row.destination }}</span>
@@ -55,6 +77,7 @@
                         <small>{{ row.detailed_aircraft_type }} | ON {{ row.on_time }}</small>
                     </div>
                 </header>
+                {% endif %}
                 {% with tail_notes_readonly=true %}{% include "neonodes/neoscorpion/_tail_notes.html" %}{% endwith %}
                 {% if row.fueler_work_blocked %}
                 <p class="neoscorpion-calculation-warning"><strong>REVIEW</strong> {{ row.hold_reason_display }}</p>
@@ -65,7 +88,8 @@
                 {% if row.fuel_configuration_message %}
                 <p class="neoscorpion-calculation-warning">{{ row.fuel_configuration_message }}</p>
                 {% endif %}
-                <dl class="neoscorpion-fuel-totals">
+                {% if not dispatcher_panel|default(false) and not row.fueler_work_blocked and (row.mission_data_missing or row.dispatch_status_key == 'review' or row.fuel_status_secondary in ['Fuel direction discrepancy','FOB CHECK','FOB LIKELY']) %}<p class="neoscorpion-calculation-warning" data-fueler-operational-warning>{{ row.mission_data_summary if row.mission_data_missing else row.fuel_status_secondary }}</p>{% endif %}
+                {% if dispatcher_panel|default(false) %}<dl class="neoscorpion-fuel-totals">
                     <div>
                         <dt>{{ 'This Visit Fuel Load' if row.fuel_work_state and row.fuel_work_state.target_frozen else 'Fuel Load' }}</dt>
                         <dd>{{ row.required_display }}</dd>
@@ -135,11 +159,11 @@
                         <dt>OFF</dt>
                         <dd>{{ row.off_time }}</dd>
                     </div>
-                </dl>
+                </dl>{% endif %}
                 {% if row.assignment %}
                 <div class="neoscorpion-truck-on-row">
-                    {% if row.manual_on_confirmed %}
-                    <strong>ON {{ row.on_time }} · CONFIRMED</strong>
+                    {% if row.manual_on_confirmed and not row.is_off %}
+                    <strong>TRUCK ON · CONFIRMED{% if dispatcher_panel|default(false) %} {{ row.on_time }}{% endif %}</strong>
                     {% elif row.assigned_truck and not row.is_source_segment and not dispatcher_panel|default(false) and can_edit and not row.is_off and not row.fueler_work_blocked %}
                     <form method="post" action="{{ url_for('neoscorpion.fueler_assignment_on', assignment_id=row.assignment.id) }}" data-truck-on-form>
                         {{ csrf_field() }}
@@ -150,7 +174,7 @@
                         <button class="action-button" type="submit">TRUCK ON</button>
                     </form>
                     {% endif %}
-                    {% if row.is_off %}<strong>TRUCK OFF {{ row.off_time }} · CONFIRMED</strong>
+                    {% if dispatcher_panel|default(false) %}{% if row.is_off %}<strong>TRUCK OFF {{ row.off_time }} · CONFIRMED</strong>
                     {% elif can_edit %}
                     <form method="post" action="{{ fuel_off_url }}" class="neoscorpion-fueler-off-form">
                         {{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'>
@@ -158,7 +182,7 @@
                         <button class="action-button" type="submit" {% if not row.off_ready %}disabled aria-disabled="true" title="{{ row.off_reason }}"{% endif %}>TRUCK OFF</button>
                         {% if not row.off_ready %}<small>{{ row.off_reason }}</small>{% endif %}
                     </form>
-                    {% endif %}
+                    {% endif %}{% endif %}
                 </div>
                 {% endif %}
                 {% if row.physical_finalized and not row.administratively_complete %}<p class="neoscorpion-helper">This visit is finalized. A new physical visit requires its own record.</p>
@@ -186,6 +210,7 @@
                     method="post"
                     class="neoscorpion-fueler-form"
                     data-fuel-planning-form
+                    {% if not dispatcher_panel|default(false) %}data-fuel-autosave{% endif %}
                     data-aircraft-type="{{ row.detailed_aircraft_type }}"
                     data-required-lbs="{{ row.mission.planned_fuel_load if row.mission.planned_fuel_load is not none else '' }}"
                     data-initial-apu-running="{% if row.apu_running is sameas true %}yes{% elif row.apu_running is sameas false %}no{% else %}not_confirmed{% endif %}"
@@ -200,7 +225,7 @@
                         <input type="hidden" name="assignment_id" value="{{ row.assignment.id }}">
                     <input type="hidden" name="apu_override_present" value="1">
                     <input type="hidden" name="apu_override_enabled" value="{{ '1' if row.apu_override_enabled else '0' }}" data-apu-override-enabled>
-                    <div class="neoscorpion-apu-controls">
+                    {% set apu_controls %}<div class="neoscorpion-apu-controls">
                         <label>APU Running
                             <select name="apu_running" data-apu-running>
                                 <option value="not_confirmed" {% if row.apu_running is none %}selected{% endif %}>Not Confirmed</option>
@@ -246,8 +271,10 @@
                                 {% endif %}
                             </small>
                         </div>
-                    </div>
+                    </div>{% endset %}
+                    {% if dispatcher_panel|default(false) %}{{ apu_controls }}{% endif %}
                     {% if row.tank_rows %}
+                    {% if not dispatcher_panel|default(false) %}<h2 class="scorpion-fueler-section-title">TANK READINGS <small>K LBS</small></h2>{% endif %}
                     <p class="neoscorpion-helper" data-planned-entry-cue {% if row.planned_ready %}hidden{% endif %}>Enter all Remaining readings to calculate Planned fuel.</p>
                     <div class="neoscorpion-fuel-tank-grid" role="table" aria-label="{{ row.detailed_aircraft_type }} fuel tank readings">
                         <div class="neoscorpion-fuel-tank-row neoscorpion-fuel-tank-head" role="row">
@@ -273,14 +300,17 @@
                     {% else %}
                     <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
                     {% endif %}
-                    {{ estimated_gallons(row) }}
+                    {% if dispatcher_panel|default(false) %}{{ estimated_gallons(row) }}{% else %}
+                    <section class="scorpion-fueler-apu"><h2 class="scorpion-fueler-section-title">APU</h2>{{ apu_controls }}</section>
+                    <dl class="scorpion-fueler-calculated"><div><dt>Target Onboard</dt><dd data-fuel-load-output>{{ row.fuel_load_display }}</dd></div><div><dt>NEO Fuel</dt><dd>{{ row.neo_fuel_display }}</dd></div></dl>
+                    {% endif %}
                     <label>T/F
                         <input name="transfer_fuel_gallons" value="{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '' }}" inputmode="numeric" min="0" placeholder="Gallons">
                     </label>
                     <label class="neoscorpion-fueler-notes">Notes
-                        <textarea name="notes" rows="3">{{ row.fueler_notes }}</textarea>
+                        <textarea name="notes" rows="2">{{ row.fueler_notes }}</textarea>
                     </label>
-                    <button class="action-button neoscorpion-save-button" type="submit">Save Fuel Entry</button>
+                    {% if dispatcher_panel|default(false) %}<button class="action-button neoscorpion-save-button" type="submit">Save Fuel Entry</button>{% endif %}
                 </form>
                 {% else %}
                 {% if row.tank_rows %}
@@ -292,8 +322,9 @@
                 {% else %}
                 <p class="neoscorpion-fuel-tank-unconfigured">{{ row.fuel_configuration_message or "Tank entry is not configured for this aircraft." }}</p>
                 {% endif %}
-                {{ estimated_gallons(row) }}
+                {% if dispatcher_panel|default(false) %}{{ estimated_gallons(row) }}{% endif %}
                 <dl class="neoscorpion-fueler-readout">
+                    {% if not dispatcher_panel|default(false) %}<div><dt>APU Running</dt><dd>{{ row.apu_running_label }}</dd></div><div><dt>APU / Source</dt><dd>{{ row.apu_allowance_display }} · {{ row.apu_source_tank_label }}</dd></div><div><dt>NEO Fuel</dt><dd>{{ row.neo_fuel_display }}</dd></div>{% endif %}
                     <div><dt>T/F</dt><dd>{{ row.transfer_fuel_gallons if row.transfer_fuel_gallons is not none else '-' }} gal</dd></div>
                     <div><dt>Notes</dt><dd>{{ row.fueler_notes or '-' }}</dd></div>
                 </dl>
@@ -303,6 +334,13 @@
                 {% endif %}
                 {% if can_edit and row.truck_verification_available %}
                 <details class="scorpion-optional-verification"><summary>OPTIONAL TRUCK FUEL CHECK · SKIP</summary><form method="post" action="{{ url_for('scorpion_vendor.fuel_reading') }}">{{ csrf_field() }}<input type="hidden" name="operation_id" value="{{ row.assignment.sort_date_operation_id }}"><input type="hidden" name="truck_id" value="{{ row.assigned_truck.id }}"><label>Actual current truck gallons<input name="gallons" inputmode="numeric" required></label><button class="action-button">SUBMIT READING</button><button class="action-button" type="button" data-fuel-verification-skip>SKIP</button></form></details>
+                {% endif %}
+                {% if not dispatcher_panel|default(false) and row.assignment %}
+                <div class="scorpion-fueler-finish">
+                {% if row.is_off %}<strong>TRUCK OFF {{ row.off_time }} · CONFIRMED</strong>{% elif can_edit %}
+                <form method="post" action="{{ fuel_off_url }}" class="neoscorpion-fueler-off-form">{{ csrf_field() }}<input type="hidden" name="expected" value='{{ row.edit_baseline|tojson }}'><input type="hidden" name="assignment_id" value="{{ row.assignment.id }}"><button class="action-button" type="submit" {% if not row.off_ready %}disabled aria-disabled="true" title="{{ row.off_reason }}"{% endif %}>TRUCK OFF</button>{% if not row.off_ready %}<small>{{ row.off_reason }}</small>{% endif %}</form>
+                {% endif %}
+                </div>
                 {% endif %}
                 {% if can_edit and not dispatcher_panel|default(false) and not row.administratively_complete and not row.physical_finalized %}
                 <form method="post" action="{{ fuel_submit_url }}" data-fueler-submit-form>

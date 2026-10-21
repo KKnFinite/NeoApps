@@ -83,7 +83,7 @@ class TruckQueueBrowserTest(unittest.TestCase):
                                 if not index:card.locator(f'[name=remaining_{code}]').fill('0' if code=='ctr' else '6')
                                 card.locator(f'[name=actual_{code}]').fill('0' if code=='ctr' else str(15+index*4))
                             card.locator('[name=transfer_fuel_gallons]').fill(str(100+index))
-                            card.locator('[data-fuel-planning-form] button[type=submit]').click()
+                            expect(card.locator('[data-fuel-data-status]')).to_have_text('Saved',timeout=15000)
                             card.locator('.neoscorpion-fueler-off-form button').click()
                             expect(card.locator('[data-fueler-submit-form] button')).to_be_enabled()
                             card.locator('[data-fueler-submit-form] button').click()

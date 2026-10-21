@@ -30,8 +30,13 @@
         if (!response.ok || !payload.ok) throw new Error(payload.error || "Save failed.");
         render(payload, "Saved");
     };
+    const entryChanges = (fields, baseline, apuIntent, running) => fields.filter(c=>c.value!==baseline(c)
+        && (!['apu_override_allowance','apu_override_enabled'].includes(c.name) || apuIntent || running!=='yes'));
+    const newerDrafts = (fields, baseline, snapshot, submitted, conflict) => fields.filter(c=>
+        c.value!==snapshot.get(c.name) || (conflict && c.value!==baseline(c))
+        || (!submitted.has(c.name) && c.value!==baseline(c))).map(c=>[c.name,c.value]);
     if (typeof module !== "undefined" && module.exports) {
-        module.exports = {createRefreshGate, acceptSaveResponse};
+        module.exports = {createRefreshGate, acceptSaveResponse, entryChanges, newerDrafts};
     }
     if (typeof document === "undefined") return;
 
@@ -43,9 +48,10 @@
     let generation = 0;
     const controls = (scope) => Array.from(scope.querySelectorAll(
         "input[name], select[name], textarea[name]"
-    )).filter(control => !["csrf_token", "expected", "assignment_id", "apu_override_present"].includes(control.name));
+    )).filter(control => !control.closest('.scorpion-optional-verification')
+        && !["csrf_token", "expected", "assignment_id", "apu_override_present"].includes(control.name));
     const hasDirty = (scope) => Boolean(scope && (
-        scope.querySelector('[data-fuel-data-busy="true"]')
+        scope.matches?.('[data-fuel-data-busy="true"]') || scope.querySelector('[data-fuel-data-busy="true"]')
         || controls(scope).some(control => baselines.has(control) && control.value !== baselines.get(control))
     ));
     const initialize = (scope) => {
@@ -97,7 +103,92 @@
     };
     initialize(document);
 
+    // One in-flight entry save per physical card. Typing stays enabled; only
+    // changed fields are sent with the server's field-level optimistic baseline.
+    const autoStates = new WeakMap();
+    const autoState = card => {
+        if (!autoStates.has(card)) autoStates.set(card,{timer:null,busy:false,again:false,apu:false,action:null});
+        return autoStates.get(card);
+    };
+    const scheduleEntrySave = (form, delay=650) => {
+        const card=form?.closest('[data-fuel-data-card]');
+        if (!card?.isConnected || !form.matches('[data-fuel-autosave]')) return;
+        const state=autoState(card);
+        clearTimeout(state.timer);
+        if(state.busy || card.dataset.fuelDataBusy==='true') { state.again=true; return; }
+        status(card,'Pending autosave…');
+        state.timer=setTimeout(()=>saveEntryAutomatically(form),delay);
+    };
+    const saveEntryAutomatically = async form => {
+        const card=form.closest('[data-fuel-data-card]');
+        if(!card?.isConnected) return;
+        const state=autoState(card);
+        if(state.busy || card.dataset.fuelDataBusy==='true') { state.again=true; return; }
+        if(!form.checkValidity()) { status(card,'Autosave pending · complete the indicated APU source / input.'); return; }
+        const fields=controls(form), snapshot=new Map(fields.map(c=>[c.name,c.value]));
+        const body=new FormData(); body.set('expected',card.dataset.editBaseline);
+        body.set('assignment_id',form.elements.assignment_id.value);
+        const apuIntent=state.apu;
+        entryChanges(fields,c=>baselines.get(c),apuIntent,form.elements.apu_running.value)
+            .forEach(c=>body.set(c.name,c.value));
+        if(body.has('apu_override_enabled') || body.has('apu_override_allowance')) body.set('apu_override_present','1');
+        if(Array.from(body.keys()).length===2) { status(card,hasDirty(form)?'Manual APU draft · press APPLY to use it.':'Saved'); return; }
+        state.busy=true;state.again=false;state.apu=false;
+        card.dataset.fuelDataBusy='true';status(card,'Saving…');
+        const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),30000);
+        let currentCard=card, accepted=false;
+        try {
+            const response=await fetch(form.getAttribute('action'),{method:'POST',body,signal:abort.signal,
+                cache:'no-store',credentials:'same-origin',headers:headers()});
+            const payload=await response.json();
+            if(response.status!==409 && (!response.ok || payload.ok!==true)) throw new Error(payload.error || 'Autosave failed.');
+            const holder=document.createElement('div');holder.innerHTML=payload.html || '';
+            const incoming=holder.querySelector('[data-fuel-data-card]');
+            const original=JSON.parse(card.dataset.editBaseline), latest=incoming && JSON.parse(incoming.dataset.editBaseline);
+            if(!incoming || ['operation_id','mission_id','cycle','tail','assigned_fueler_user_id','assigned_truck_id'].some(k=>original[k]!==latest[k])
+                    || (original.work_ref && original.work_ref!==latest.work_ref))
+                throw new Error('Assignment / visit changed. Draft retained; review the current assignment before continuing.');
+            const drafts=newerDrafts(fields,c=>baselines.get(c),snapshot,body,response.status===409);
+            const active=document.activeElement, focus=card.contains(active)?{name:active.name,start:active.selectionStart,end:active.selectionEnd}:null;
+            const scroll={x:window.scrollX,y:window.scrollY};
+            const disclosures=Array.from(card.querySelectorAll('details')).map(d=>d.open);
+            initialize(holder);
+            card.replaceWith(incoming);currentCard=incoming;
+            for(const [name,value] of drafts) {
+                const control=controls(incoming).find(c=>c.name===name);
+                if(control) {control.value=value;control.dispatchEvent(new Event('input',{bubbles:true}));}
+            }
+            Array.from(incoming.querySelectorAll('details')).forEach((d,i)=>d.open=disclosures[i] || false);
+            const next=focus && controls(incoming).find(c=>c.name===focus.name);
+            if(next) {next.focus({preventScroll:true});if(focus.start!==null && next.setSelectionRange) next.setSelectionRange(focus.start,focus.end);}
+            window.scrollTo(scroll.x,scroll.y);
+            accepted=response.ok;
+            status(incoming,accepted ? (drafts.length?'Saved · newer draft retained':'Saved')
+                : 'DATA CHANGED · draft retained. Review current values before editing again.');
+            document.dispatchEvent(new CustomEvent('neoscorpion:fuel-data-saved',{detail:payload}));
+        } catch(error) {
+            status(card,`Autosave failed · ${error.name==='AbortError'?'result unknown; check current readings before retrying':error.message}. Draft retained; edit to retry.`);
+        } finally {
+            clearTimeout(timer);state.busy=false;card.dataset.fuelDataBusy='false';
+            const nextState=autoState(currentCard);nextState.apu ||= state.apu;
+            if(!accepted) {clearTimeout(nextState.timer);nextState.timer=null;}
+            const action=state.action;
+            // Never retry a rejected/uncertain save or overwrite a concurrent
+            // operator automatically. A new intentional edit can try again.
+            if(accepted && (state.again || hasDirty(currentCard.querySelector('[data-fuel-autosave]'))))
+                scheduleEntrySave(currentCard.querySelector('[data-fuel-autosave]'));
+            if(action && currentCard.isConnected) currentCard.querySelector(action)?.requestSubmit();
+        }
+    };
+    ['input','change'].forEach(name=>document.addEventListener(name,event=>{
+        const form=event.target.closest?.('[data-fuel-autosave]');
+        if(form && !event.target.matches('[data-apu-override-value]')) scheduleEntrySave(form);
+    }));
+
     document.addEventListener("click", async (event) => {
+        const apu=event.target.closest('[data-apu-use-manual], [data-apu-use-recommended]');
+        const auto=apu?.closest('[data-fuel-autosave]');
+        if(auto) { autoState(auto.closest('[data-fuel-data-card]')).apu=true;scheduleEntrySave(auto,0); }
         const open = event.target.closest("[data-fuel-data-open]");
         if (open) {
             panelUrl = open.dataset.fuelDataOpen;
@@ -133,11 +224,23 @@
         const form = event.target;
         const card = form.closest("[data-fuel-data-card]");
         if (!card) return;
+        if(form.closest('.scorpion-optional-verification')) {
+            // This existing native action has its own operation/truck/gallons
+            // contract and redirects after committing. It is not a fuel entry.
+            if(hasDirty(card)) {event.preventDefault();status(card,'Finish autosaving fuel entry first, or SKIP this optional check.');}
+            return;
+        }
         if (form.matches("[data-source-verification-form]")) return; // Explicit Dispatcher verification, not a Fueler data save.
         event.preventDefault();
-        if (card.dataset.fuelDataBusy === "true") return;
+        if(form.matches('[data-fuel-autosave]')) { scheduleEntrySave(form,0);return; }
+        if (card.dataset.fuelDataBusy === "true") {
+            const state=autoState(card);
+            if(state.busy) state.action=form.matches('.neoscorpion-fueler-off-form')?'.neoscorpion-fueler-off-form'
+                :form.matches('[data-truck-on-form]')?'[data-truck-on-form]':null;
+            status(card,'Saving current entry · physical action queued.');return;
+        }
         if (form.matches("[data-new-visit-form], [data-fueler-submit-form]") && hasDirty(card)) {
-            status(card, form.matches("[data-fueler-submit-form]") ? "Save Fuel Entry before COMPLETE ASSIGNMENT." : "Save existing fuel entry before starting another visit.");
+            status(card, form.matches("[data-fueler-submit-form]") ? "Wait for autosave, or resolve its error / APPLY the manual APU draft before COMPLETE ASSIGNMENT." : "Finish autosaving the existing fuel entry before starting another visit.");
             return;
         }
         const physicalAction = form.matches(".neoscorpion-fueler-off-form, [data-truck-on-form]");
@@ -222,6 +325,7 @@
         finally {
             card.dataset.fuelDataBusy = "false";
             enabled.forEach(control => { control.disabled = false; });
+            if(autoState(card).again && card.isConnected) scheduleEntrySave(card.querySelector('[data-fuel-autosave]'));
         }
     });
 })();

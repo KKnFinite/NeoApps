@@ -1034,6 +1034,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     driver_names = {}
     for row in rows:
         work = row["fuel_work_state"]
+        row['fueler_display_name'] = operational_name if row['assigned_fueler'] and row['assigned_fueler'].id==user.id else row['assigned_fueler'].display_name if row['assigned_fueler'] else '—'
         row["edit_baseline"] = fueler_edit_state(
             row["assignment"], row["mission"], work, row["tail_fuel_state"],
             work.tank_states if work else [],
@@ -6896,9 +6897,17 @@ def _fuel_rows(
             threshold=getattr(status_settings, "red_assignment_alert_threshold_minutes", 30),
         ))
     if nightly_truck_states_by_truck_id is not None:
+        from app.services.neoscorpion_projection import inventory_reservations
+        balances=inventory_reservations(operation,nightly_truck_states_by_truck_id,rows,all_work(fuel_work_states))
+        projection_rows=sorted(rows,key=lambda r:(
+            not bool(r.get('fuel_work_state') and (r['fuel_work_state'].on_at_utc or r['fuel_work_state'].manual_on_at_utc)),
+            (r['mission'].eta_datetime_utc or r['mission'].planned_datetime_utc) is None,
+            r['mission'].eta_datetime_utc or r['mission'].planned_datetime_utc or datetime.max,
+            r['mission'].flight_number or '',r['mission'].id))
+        for rank,row in enumerate(projection_rows):row['truck_projection_order']=rank
         projections = project_truck_remaining(
             {
-                truck_id: (truck_state.current_gallons if truck_state.inventory_verified else None)
+                truck_id: balances.get(truck_id) if truck_state.status=='available' else None
                 for truck_id, truck_state in nightly_truck_states_by_truck_id.items()
                 if truck_state.status != "needs_sump"
             },
@@ -6908,7 +6917,7 @@ def _fuel_rows(
                     row["assignment"].assigned_truck_id,
                     row["truck_projection_demand_gallons"],
                 )
-                for row in rows
+                for row in projection_rows
                 if row["assignment"] is not None
                 and row["assignment"].assigned_truck_id is not None
                 and not row["administratively_complete"]
@@ -7280,7 +7289,7 @@ def _hanzo_fuel_short(required_fuel_lbs, neo_fuel_lbs):
 def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
     """Decorate existing dispatch projections for the read-only truck visual aid."""
     projections_by_truck_id = {}
-    for row in rows:
+    for row in sorted(rows,key=lambda r:r.get('truck_projection_order',0)):
         assignment = row["assignment"]
         if assignment is None or assignment.assigned_truck_id is None:
             continue

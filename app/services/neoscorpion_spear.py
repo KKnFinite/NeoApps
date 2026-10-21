@@ -355,6 +355,7 @@ def build_spear_plan(
         for item in nightly_trucks
         if item.get("truck") is not None and item.get("selection") is not None
     }
+    inventory_bases=next((r['inventory_projection_bases'] for r in rows if 'inventory_projection_bases' in r),{})
     usable_trucks = {
         identifier: item
         for identifier, item in truck_rows.items()
@@ -362,15 +363,17 @@ def build_spear_plan(
         and item["truck"].is_active
         and not item["truck"].is_out_of_service
         and item["truck"].capacity_gallons is not None
-        and item["selection"].current_gallons is not None
-        and getattr(item["selection"], "inventory_verified", True)
+        and inventory_bases.get(identifier,item["selection"].current_gallons) is not None
+        and (getattr(item["selection"], "inventory_verified", True) or
+            getattr(item['selection'],'inventory_pending_epoch',None) is not None
+            and item['selection'].inventory_pending_epoch==item['selection'].inventory_epoch)
     }
     truck_state = {
         identifier: _ResourceState(now_utc, spear_settings.truck_begins_at)
         for identifier in usable_trucks
     }
     truck_gallons = {
-        identifier: int(item["selection"].current_gallons)
+        identifier: int(inventory_bases.get(identifier,item["selection"].current_gallons))
         for identifier, item in usable_trucks.items()
     }
     _adopt_completed_locations(rows, fueler_state, truck_state)
@@ -455,7 +458,7 @@ def build_spear_plan(
             _advance_resources(
                 fueler_state[assigned_fueler], truck_state[assigned_truck], ramp, finish, finishing_minutes=timing.finishing_minutes
             )
-            _apply_demand(truck_gallons, assigned_truck, demand)
+            _apply_demand(truck_gallons, assigned_truck, _decimal_or_none(row.get('inventory_demand_gallons',demand)))
             continue
 
         fueler_ids = tuple(identifier for identifier in

@@ -145,7 +145,7 @@ def fuel_reading():
         db.session.commit();flash('Fuel reading recorded. High discrepancies await Dispatch approval.','success')
     except (ValueError,TypeError,IntegrityError) as exc:
         db.session.rollback();flash(str(exc) if isinstance(exc,ValueError) else 'Reading changed. Refresh.','error')
-    return redirect(url_for('scorpion_vendor.my_truck' if account else 'neoscorpion.fuel_assignments'))
+    return redirect(url_for('scorpion_vendor.my_truck' if account else 'neoscorpion.fueler'))
 
 
 @bp.post('/inventory')

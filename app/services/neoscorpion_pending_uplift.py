@@ -532,4 +532,11 @@ def attach_pending(context):
             row['pending_uplift_warning']='; '.join(messages)
             row['plan_requires_review']=any(planned.console_review for planned in queue)
         else:row['plan_requires_review']=False
+    # A future truck has no verified handoff measurement yet. Do not present
+    # its current balance (or repeat its parent's demand) as a final forecast.
+    planned_ids={p.proposed_truck_id for p in pending if p.proposed_truck_id}
+    for visual in context.get('truck_visuals',[]):
+        if visual['truck_id'] in planned_ids:
+            visual.update(projected_gallons=None,projected_display='INCOMPLETE',projected_percent=None,
+                projected_gauge_percent=None,projected_usage_gallons=None,projected_short=False,projected_incomplete=True)
     return context
