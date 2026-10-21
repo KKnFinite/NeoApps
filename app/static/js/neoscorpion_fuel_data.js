@@ -181,7 +181,9 @@
             ["expected_cycle", "expected_tail", "expected_truck_id", "expected_work_ref"].forEach(name => {
                 body.set(name, form.elements[name].value);
             });
+            if (form.elements.resume_off_at) body.set('resume_off_at',form.elements.resume_off_at.value);
         }
+        if (form.matches('[data-new-visit-form]') && form.elements.separate_visit_confirmed?.checked) body.set('separate_visit_confirmed','1');
         if (body.has("apu_override_enabled") || body.has("apu_override_allowance")) body.set("apu_override_present", "1");
         card.dataset.fuelDataBusy = "true";
         const enabled = Array.from(card.querySelectorAll("input, select, textarea, button")).filter(control => !control.disabled);

@@ -43,7 +43,8 @@ def report_context(gateway, operation, *, truck_id=None):
     selections = {s.fuel_truck_id:s for s in load(Selection.query.filter_by(sort_date_operation_id=operation.id).order_by(Selection.id))}
     posted = load(FuelEvent.query.filter_by(sort_date_operation_id=operation.id).order_by(FuelEvent.id))
     works = load(Work.query.join(Assignment, Assignment.id == Work.fuel_assignment_id).filter(
-        Assignment.sort_date_operation_id == operation.id).order_by(Work.id))
+        Assignment.sort_date_operation_id == operation.id,
+        Work.performance_context['duplicate_of_work_id'].as_integer().is_(None)).order_by(Work.id))
     work_by_id = {work.id:work for work in works}
     inventory = load(InventoryAudit.query.filter_by(sort_date_operation_id=operation.id).order_by(InventoryAudit.id))
     fuel_audits = load(FuelAudit.query.filter_by(sort_date_operation_id=operation.id).order_by(FuelAudit.id))
@@ -259,7 +260,7 @@ def report_context(gateway, operation, *, truck_id=None):
             after=row.gallons if row.inventory_verified else None,duration=duration,
             note=f'Inventory epoch {row.inventory_epoch}.'+(' Sent record unavailable; historical trip boundaries unknown.' if row.kind == 'returned' and not sent else ''))
     for row in fuel_audits:
-        if row.action not in {'swap_truck','unassign_truck','auto_hold','resume_hold'}:
+        if row.action not in {'swap_truck','unassign_truck','auto_hold','resume_hold','reopen_off'} and row.field_name != 'duplicate_visit_reconciliation':
             continue
         work=work_by_id.get(row.fuel_work_state_id)
         identifiers=set()
@@ -270,7 +271,8 @@ def report_context(gateway, operation, *, truck_id=None):
                 if str(value or '').isdigit():identifiers.add(int(value))
         for identifier in identifiers:
             add(identifier,row.created_at,row.action.replace('_',' ').upper(),f'audit:{row.id}',
-                actor=row.changed_by_user_id,work=work,note=f'{row.old_value or "—"} → {row.new_value or "—"}. {row.reason}')
+                actor=row.changed_by_user_id,work=work,note=(f'{row.new_value}. {row.reason}' if row.field_name=='duplicate_visit_reconciliation'
+                    else f'{row.old_value or "—"} → {row.new_value or "—"}. {row.reason}'))
     events.sort(key=lambda e:(e['at'] or datetime.min,e['source']))
     summaries=list(summary.values())
     fleet={key:sum(s[key] for s in summaries) if all(s[key] is not None for s in summaries) else None

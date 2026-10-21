@@ -2193,6 +2193,7 @@ def fueler_edit_state(assignment, mission, work, tail, tanks):
         "transfer_fuel_gallons": assignment.transfer_fuel_gallons,
         "notes": (work.notes or "") if work else "",
         "submission_version": int(work.fueler_submission_version or 0) if work else 0,
+        "fueling_resume_version": int((work.performance_context or {}).get('fueling_resume_version',0)) if work else 0,
         "physical_sequence": work.physical_sequence_number if work else None,
         "work_ref": getattr(assignment, "active_work_state_id", None),
     }
@@ -2226,6 +2227,8 @@ def _check_fueler_expected(expected, current, requested):
     if expected.get("physical_sequence") != current.get("physical_sequence") and "physical_sequence" in current:
         raise FuelerDataConflict()
     if "submission_version" in current and expected.get("submission_version", 0) != current["submission_version"]:
+        raise FuelerDataConflict()
+    if "fueling_resume_version" in current and expected.get("fueling_resume_version",0) != current["fueling_resume_version"]:
         raise FuelerDataConflict()
     if "work_ref" in current and expected.get("work_ref") != current["work_ref"]:
         raise FuelerDataConflict()
@@ -2817,7 +2820,7 @@ def mark_ready_for_fuel(gateway, user, assignment_id, *, now_utc=None):
 
 def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
                             expected_tail, expected_truck_id, now_utc=None, expected_work_ref=None,
-                            require_work_ref=False):
+                            require_work_ref=False, resume_off_at=None):
     """Record a Fueler's physical arrival once for this cycle and truck segment."""
     operation = current_sort_operation(gateway)
     if operation is None:
@@ -2847,6 +2850,10 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     _validate_fueler_work_access(assignment, mission, work)
     if work and work.continuation_review_reason:
         raise ValueError(work.continuation_review_reason)
+    if resume_off_at is not None:
+        from app.services.neoscorpion_resume import resume_same_visit
+        return resume_same_visit(gateway,user,operation,asset_state,assignment,mission,work,
+                                 resume_off_at,now_utc)
     if work and work.off_at_utc is not None:
         raise ValueError("Fueler is already OFF for this cycle.")
     if assignment.assigned_truck_id is None:
@@ -2891,7 +2898,8 @@ def confirm_fueler_truck_on(gateway, user, assignment_id, *, expected_cycle,
     return True, int(asset_state.revision), work
 
 
-def begin_physical_visit(gateway, user, assignment_id, *, expected, now_utc=None, dispatcher=False):
+def begin_physical_visit(gateway, user, assignment_id, *, expected, now_utc=None, dispatcher=False,
+                         separate_visit_confirmed=False):
     operation = current_sort_operation(gateway)
     if operation is None:
         raise ValueError("No current sort for a physical visit.")
@@ -2910,6 +2918,9 @@ def begin_physical_visit(gateway, user, assignment_id, *, expected, now_utc=None
         "work_ref":assignment.active_work_state_id,"physical_sequence":work.physical_sequence_number if work else None}, {})
     if work is None or not (work.off_at_utc or work.ended_early_at_utc or work.physical_finalized_at_utc):
         raise ValueError("Record physical TRUCK OFF before beginning another visit.")
+    if (not dispatcher and not separate_visit_confirmed and not work.fueler_submitted_at_utc
+            and not work.physical_finalized_at_utc and not work.ended_early_at_utc):
+        raise ValueError("Use RESUME FUELING for this unfinished job. A genuinely separate physical visit requires explicit confirmation.")
     now = now_utc or datetime.utcnow()
     fresh = new_work(assignment, work.tail_number, user, now)
     fresh.physical_required_fuel_lbs = mission.planned_fuel_load
@@ -2927,6 +2938,10 @@ def begin_physical_visit(gateway, user, assignment_id, *, expected, now_utc=None
 
 
 def submit_fueler_assignment(gateway,user,assignment_id,*,expected,now_utc=None,physical_work_id=None,physical_sequence=None):
+    # Pre-hotfix pages have no resume token. They still represent version zero,
+    # never permission to submit stale evidence after an actual resumption.
+    if expected is not None:
+        expected=dict(expected);expected.setdefault('fueling_resume_version',0)
     operation=current_sort_operation(gateway)
     if operation is None:raise ValueError("No current sort operation.")
     operation,asset_state=lock_nightly_asset_scope_for_mutation(operation)
@@ -3040,6 +3055,8 @@ def mark_fueler_off(gateway, user, assignment_id, *, now_utc=None, dispatcher=Fa
             revision=int(asset_state.revision if asset_state else 0),
             fuel_work_state=fuel_work_state,
         )
+    if expected is not None and int(expected.get('fueling_resume_version',0)) != int((fuel_work_state.performance_context or {}).get('fueling_resume_version',0)):
+        raise FuelerDataConflict()
     _validate_fueler_work_access(assignment, mission, fuel_work_state)
 
     if assignment.assigned_truck_id is None:

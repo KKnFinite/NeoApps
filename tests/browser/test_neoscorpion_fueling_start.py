@@ -111,6 +111,8 @@ class FuelingStartBrowserTest(unittest.TestCase):
                 clock[0]+=timedelta(minutes=10)
                 card(a2).locator('.neoscorpion-fueler-off-form button').click()
                 expect(card(a2)).to_contain_text("Truck released")
+                card(a2).locator('.neoscorpion-separate-visit summary').click()
+                card(a2).locator('[name=separate_visit_confirmed]').check()
                 card(a2).locator('[data-new-visit-form] button').click()
                 expect(card(a2)).to_have_count(0)
                 a3=current_id()

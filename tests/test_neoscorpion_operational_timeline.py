@@ -523,7 +523,7 @@ class OperationalTimelineTest(unittest.TestCase):
             remaining_right="6",transfer_fuel_gallons="3000"); self.off()
         old=self.work
         baseline=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline,
+        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline,separate_visit_confirmed=True,
                                     now_utc=self.start+timedelta(minutes=13))
         db.session.commit()
         new=service._locked_current_fuel_work_state(self.assignment,self.mission)
@@ -566,7 +566,7 @@ class OperationalTimelineTest(unittest.TestCase):
             service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id)
         db.session.rollback()
         baseline=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline)
+        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline,separate_visit_confirmed=True)
         db.session.commit()
         self.assertNotEqual(self.assignment.active_work_state_id,original.id)
         self.assertIsNone(self.assignment.transfer_fuel_gallons)

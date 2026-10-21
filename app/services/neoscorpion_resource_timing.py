@@ -242,6 +242,7 @@ def load_visits(operation):
         SortDateOperation,SortDateOperation.id==Assignment.sort_date_operation_id).filter(
         SortDateOperation.gateway_id==operation.gateway_id,
         Work.physical_sequence_number.is_not(None),
+        Work.performance_context['duplicate_of_work_id'].as_integer().is_(None),
         db.or_(Work.created_at >= datetime.combine(operation.sort_date,time.min)-timedelta(days=7),
                Work.physical_finalized_at_utc.is_(None))).order_by(Work.id.desc())
     works=query.limit(5001).all()

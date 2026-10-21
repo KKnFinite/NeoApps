@@ -203,7 +203,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
             db.session.rollback()
         self.assertEqual(self.work.physical_transfer_gallons,3000)
         baseline=service.fueler_edit_state(self.assignment,self.mission,self.work,None,list(self.work.tank_states))
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline)
+        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline,separate_visit_confirmed=True)
         db.session.commit()
         new_id=self.assignment.active_work_state_id
         self.assertNotEqual(new_id,work_id)
@@ -360,7 +360,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def test_duplicate_new_visit_does_not_allocate_two_records(self):
         self.off()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        result=self.concurrent(lambda i,g,f,d: service.begin_physical_visit(g,f,self.ids[3],expected=expected).changed)
+        result=self.concurrent(lambda i,g,f,d: service.begin_physical_visit(g,f,self.ids[3],expected=expected,separate_visit_confirmed=True).changed)
         self.assertEqual(result.count("conflict"),1)
         self.assertEqual(result.count(True),1)
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),2)
@@ -368,7 +368,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def test_duplicate_on_does_not_create_extra_segment(self):
         self.off()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected)
+        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
         db.session.commit()
         work_id=self.assignment.active_work_state_id
         result=self.concurrent(lambda i,g,f,d: service.confirm_fueler_truck_on(g,f,self.ids[3],
@@ -380,7 +380,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def test_competing_truck_on_freshly_rechecks_other_occupation(self):
         self.off()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected)
+        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
         other_mission=self.fixture._mission("UPS902","N492UP",25000,2)
         other_assignment=self.fixture._assignment(other_mission,truck=self.truck)
         other_assignment.assigned_fueler_user_id=self.dispatcher.id
@@ -409,7 +409,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     def test_overlapping_sort_requests_cannot_double_occupy_one_truck(self):
         self.off()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected)
+        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
         first_operation_id,truck_id=self.operation.id,self.truck.id
         other_operation=service.SortDateOperation(generated_by_user_id=self.dispatcher.id,gateway_id=self.gateway.id,
             gateway_code=self.gateway.code,sort_date=self.operation.sort_date+timedelta(days=1),sort_name="night",window_minutes=60)

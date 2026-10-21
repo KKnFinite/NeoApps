@@ -26,7 +26,8 @@ def truck_works(operation, truck_id):
     return NeoScorpionFuelWorkState.query.join(NeoScorpionFuelAssignment,
         NeoScorpionFuelAssignment.id == NeoScorpionFuelWorkState.fuel_assignment_id).filter(
             NeoScorpionFuelAssignment.sort_date_operation_id == operation.id,
-            NeoScorpionFuelWorkState.physical_truck_id == truck_id)
+            NeoScorpionFuelWorkState.physical_truck_id == truck_id,
+            NeoScorpionFuelWorkState.performance_context['duplicate_of_work_id'].as_integer().is_(None))
 
 
 def physical_interval(operation, truck_id):

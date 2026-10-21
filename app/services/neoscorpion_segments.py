@@ -47,6 +47,9 @@ def new_work(assignment, tail, user, now):
 class WorkIndex(dict):
     def __init__(self, assignments, works):
         super().__init__()
+        # Explicitly reconciled duplicate containers retain their raw records
+        # and audits, but are not a second physical job or resource occupation.
+        works=[w for w in works if not (w.performance_context or {}).get('duplicate_of_work_id')]
         self.all_segments = tuple(works)
         by_id = {work.id: work for work in works}
         by_owner = {}

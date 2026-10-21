@@ -1117,7 +1117,8 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
                 physical_sequence=form.get("physical_sequence"))
         elif new_visit:
             result = begin_physical_visit(gateway,current_user,assignment_id,
-                expected=_fueler_expected(form,required=True),dispatcher=dispatcher)
+                expected=_fueler_expected(form,required=True),dispatcher=dispatcher,
+                separate_visit_confirmed=form.get('separate_visit_confirmed') == '1')
         elif truck_on:
             if dispatcher:
                 raise ValueError("Only the assigned Fueler can confirm TRUCK ON.")
@@ -1127,6 +1128,7 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
                 expected_tail=form.get("expected_tail"),
                 expected_truck_id=form.get("expected_truck_id"),
                 expected_work_ref=form.get("expected_work_ref"), require_work_ref=True,
+                resume_off_at=form.get("resume_off_at",request.args.get('resume_off_at')),
             )
             result = SimpleNamespace(changed=changed, revision=revision, fuel_work_state=_work)
         elif off:

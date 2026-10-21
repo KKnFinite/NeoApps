@@ -164,10 +164,19 @@
                 {% if row.physical_finalized and not row.administratively_complete %}<p class="neoscorpion-helper">This visit is finalized. A new physical visit requires its own record.</p>
                 {% elif row.is_off and not row.administratively_complete %}<p class="neoscorpion-helper">Truck released. {% if row.fueler_submitted %}Submitted; awaiting Dispatcher verification.{% else %}Save final readings/APU/T/F, then submit COMPLETE ASSIGNMENT for Dispatcher verification.{% endif %}</p>{% endif %}
                 {% if row.is_off and not row.is_source_segment and can_edit and not dispatcher_panel|default(false) and not row.fueler_work_blocked %}
+                {% if not row.physical_finalized and not row.fueler_submitted and row.fuel_work_state.physical_fueler_user_id == row.assigned_fueler.id and row.fuel_work_state.physical_truck_id == row.assigned_truck.id %}
+                <form method="post" action="{{ url_for('neoscorpion.fueler_assignment_on',assignment_id=row.assignment.id,resume_off_at=row.fuel_work_state.off_at_utc.isoformat()) }}" data-truck-on-form data-resume-fueling-form>{{ csrf_field() }}
+                    <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}"><input type="hidden" name="expected_tail" value="{{ row.tail_number }}"><input type="hidden" name="expected_truck_id" value="{{ row.assigned_truck.id }}"><input type="hidden" name="expected_work_ref" value="{{ row.edit_baseline.work_ref }}"><input type="hidden" name="resume_off_at" value="{{ row.fuel_work_state.off_at_utc.isoformat() }}">
+                    <button class="action-button" type="submit">RESUME FUELING</button><small>Accidental OFF? Continue this same visit; all saved fuel data stays.</small>
+                </form>
+                {% endif %}
+                <details class="neoscorpion-separate-visit"><summary>Start a genuinely separate truck visit</summary>
                 <form method="post" action="{{ url_for('neoscorpion.fueler_new_visit',assignment_id=row.assignment.id) }}" data-new-visit-form>{{ csrf_field() }}
+                    <label><input type="checkbox" name="separate_visit_confirmed" value="1" required>This is separate physical work, not resuming an accidental OFF.</label>
                     <button class="action-button" type="submit">NEW TRUCK VISIT</button>
                     <small>Preserves this visit and its outstanding final data.</small>
                 </form>
+                </details>
                 {% endif %}
                 {% if can_edit and row.assignment and not row.fueler_work_blocked and not row.physical_finalized %}
                 <form
