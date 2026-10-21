@@ -2918,9 +2918,15 @@ def begin_physical_visit(gateway, user, assignment_id, *, expected, now_utc=None
         "work_ref":assignment.active_work_state_id,"physical_sequence":work.physical_sequence_number if work else None}, {})
     if work is None or not (work.off_at_utc or work.ended_early_at_utc or work.physical_finalized_at_utc):
         raise ValueError("Record physical TRUCK OFF before beginning another visit.")
-    if (not dispatcher and not separate_visit_confirmed and not work.fueler_submitted_at_utc
-            and not work.physical_finalized_at_utc and not work.ended_early_at_utc):
-        raise ValueError("Use RESUME FUELING for this unfinished job. A genuinely separate physical visit requires explicit confirmation.")
+    if not dispatcher and not work.physical_finalized_at_utc:
+        from app.services.neoscorpion_submission import state as submission_state
+        submitted = submission_state(assignment, mission, work, _locked_tank_states(work),
+            on_trusted=bool(work.manual_on_at_utc or work.confirmed_on_at_utc))["fueler_submitted"]
+        # A checkbox cannot turn an accidental OFF into separate physical work.
+        # Require the valid receipt, not a stale/invalidated submission timestamp.
+        if not submitted:
+            raise ValueError("Use TRUCK ON / RESUME FUELING for this unfinished visit. "
+                             "Submit COMPLETE ASSIGNMENT before starting a new visit.")
     now = now_utc or datetime.utcnow()
     fresh = new_work(assignment, work.tail_number, user, now)
     fresh.physical_required_fuel_lbs = mission.planned_fuel_load

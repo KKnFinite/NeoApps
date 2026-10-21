@@ -167,16 +167,18 @@
                 {% if not row.physical_finalized and not row.fueler_submitted and row.fuel_work_state.physical_fueler_user_id == row.assigned_fueler.id and row.fuel_work_state.physical_truck_id == row.assigned_truck.id %}
                 <form method="post" action="{{ url_for('neoscorpion.fueler_assignment_on',assignment_id=row.assignment.id,resume_off_at=row.fuel_work_state.off_at_utc.isoformat()) }}" data-truck-on-form data-resume-fueling-form>{{ csrf_field() }}
                     <input type="hidden" name="expected_cycle" value="{{ row.assignment.current_cycle_number }}"><input type="hidden" name="expected_tail" value="{{ row.tail_number }}"><input type="hidden" name="expected_truck_id" value="{{ row.assigned_truck.id }}"><input type="hidden" name="expected_work_ref" value="{{ row.edit_baseline.work_ref }}"><input type="hidden" name="resume_off_at" value="{{ row.fuel_work_state.off_at_utc.isoformat() }}">
-                    <button class="action-button" type="submit">RESUME FUELING</button><small>Accidental OFF? Continue this same visit; all saved fuel data stays.</small>
+                    <button class="action-button" type="submit">TRUCK ON / RESUME FUELING</button><small>Accidental OFF? Resume this visit, cancel its OFF, and keep all saved fuel data. The earlier OFF remains in audit history.</small>
                 </form>
                 {% endif %}
+                {% if row.fueler_submitted or row.physical_finalized %}
                 <details class="neoscorpion-separate-visit"><summary>Start a genuinely separate truck visit</summary>
                 <form method="post" action="{{ url_for('neoscorpion.fueler_new_visit',assignment_id=row.assignment.id) }}" data-new-visit-form>{{ csrf_field() }}
                     <label><input type="checkbox" name="separate_visit_confirmed" value="1" required>This is separate physical work, not resuming an accidental OFF.</label>
                     <button class="action-button" type="submit">NEW TRUCK VISIT</button>
-                    <small>Preserves this visit and its outstanding final data.</small>
+                    <small>Preserves this completed visit and its saved fuel data.</small>
                 </form>
                 </details>
+                {% endif %}
                 {% endif %}
                 {% if can_edit and row.assignment and not row.fueler_work_blocked and not row.physical_finalized %}
                 <form

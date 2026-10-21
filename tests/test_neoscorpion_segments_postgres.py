@@ -358,7 +358,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
     test_pending_same_tail_visit_preserves_old_actuals = timeline.OperationalTimelineTest.test_same_tail_pending_actuals_survive_a_new_visit_and_stale_form
 
     def test_duplicate_new_visit_does_not_allocate_two_records(self):
-        self.off()
+        self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit_current()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
         result=self.concurrent(lambda i,g,f,d: service.begin_physical_visit(g,f,self.ids[3],expected=expected,separate_visit_confirmed=True).changed)
         self.assertEqual(result.count("conflict"),1)
@@ -366,7 +366,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),2)
 
     def test_duplicate_on_does_not_create_extra_segment(self):
-        self.off()
+        self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit_current()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
         service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
         db.session.commit()
@@ -378,7 +378,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),2)
 
     def test_competing_truck_on_freshly_rechecks_other_occupation(self):
-        self.off()
+        self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit_current()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
         service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
         other_mission=self.fixture._mission("UPS902","N492UP",25000,2)
@@ -407,7 +407,7 @@ class PhysicalSegmentPostgresTest(unittest.TestCase):
         self.assertEqual(len(active),1)
 
     def test_overlapping_sort_requests_cannot_double_occupy_one_truck(self):
-        self.off()
+        self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit_current()
         expected=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
         service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=expected,separate_visit_confirmed=True)
         first_operation_id,truck_id=self.operation.id,self.truck.id

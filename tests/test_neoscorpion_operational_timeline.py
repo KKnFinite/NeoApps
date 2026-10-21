@@ -523,7 +523,9 @@ class OperationalTimelineTest(unittest.TestCase):
             remaining_right="6",transfer_fuel_gallons="3000"); self.off()
         old=self.work
         baseline=service.fueler_context(self.gateway,self.fueler)["rows"][0]["edit_baseline"]
-        service.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=baseline,separate_visit_confirmed=True,
+        # Explicit Dispatcher recovery can preserve historical outstanding work;
+        # the Fueler must resume rather than split this unfinished visit.
+        service.begin_physical_visit(self.gateway,self.dispatcher,self.assignment.id,expected=baseline,dispatcher=True,
                                     now_utc=self.start+timedelta(minutes=13))
         db.session.commit()
         new=service._locked_current_fuel_work_state(self.assignment,self.mission)

@@ -58,7 +58,7 @@ class ResumeTest(unittest.TestCase):
         self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)
         self.assertTrue(self.row()['normal_completion_ready'])
 
-    def test_old_on_and_unconfirmed_new_visit_do_not_resume_or_allocate(self):
+    def test_old_on_and_any_new_visit_do_not_resume_or_allocate(self):
         self.prepare();self.off()
         with self.assertRaisesRegex(ValueError,'already OFF'):
             fuel.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,expected_cycle=1,
@@ -67,8 +67,30 @@ class ResumeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'RESUME FUELING'):
             fuel.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=self.baseline())
         db.session.rollback();self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)
-        fuel.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=self.baseline(),separate_visit_confirmed=True)
-        db.session.commit();self.assertEqual(NeoScorpionFuelWorkState.query.count(),2)
+        with self.assertRaisesRegex(ValueError,'COMPLETE ASSIGNMENT'):
+            fuel.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=self.baseline(),separate_visit_confirmed=True)
+        db.session.rollback();self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)
+
+    def test_new_visit_requires_valid_submission_not_dispatcher_verification(self):
+        self.prepare();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
+        old=self.work;old_tanks=[(t.id,t.remaining_lbs,t.actual_lbs) for t in old.tank_states]
+        self.assertIsNone(self.assignment.completed_at_utc)
+        new=fuel.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=self.baseline()).fuel_work_state
+        db.session.commit()
+        self.assertNotEqual(old.id,new.id);self.assertIsNotNone(old.fueler_submitted_at_utc)
+        self.assertEqual(old_tanks,[(t.id,t.remaining_lbs,t.actual_lbs) for t in old.tank_states])
+        self.assertIsNone(new.manual_on_at_utc);self.assertIsNone(new.off_at_utc)
+        self.assertIsNone(new.physical_transfer_gallons);self.assertFalse(any(t.actual_lbs is not None for t in new.tank_states))
+        self.assertEqual(NeoScorpionFuelingEvent.query.count(),0)
+
+    def test_invalidated_submission_cannot_bypass_same_visit_resume(self):
+        from app.services.neoscorpion_submission import invalidate
+        self.prepare();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off();self.submit()
+        invalidate(self.work);db.session.commit()
+        self.assertIsNotNone(self.work.fueler_submitted_at_utc)
+        with self.assertRaisesRegex(ValueError,'COMPLETE ASSIGNMENT'):
+            fuel.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=self.baseline(),separate_visit_confirmed=True)
+        db.session.rollback();self.assertEqual(NeoScorpionFuelWorkState.query.count(),1)
 
     def test_cached_zero_version_submit_still_works_but_resumed_stale_submit_does_not(self):
         self.prepare();self.save(self.start+timedelta(minutes=1),**self.final_data());self.off()
@@ -88,8 +110,10 @@ class ResumeTest(unittest.TestCase):
     def duplicate_fixture(self):
         self.prepare();self.save(self.start+timedelta(minutes=1),apu_running='no',remaining_left='4.6',remaining_ctr='0',remaining_right='5.9');self.off()
         off=self.work.off_at_utc
-        new=fuel.begin_physical_visit(self.gateway,self.fueler,self.assignment.id,expected=self.baseline(),
-            separate_visit_confirmed=True,now_utc=off+timedelta(seconds=6)).fuel_work_state;db.session.commit()
+        # Seed a legacy duplicate through the explicit administrative recovery path;
+        # Fuelers can no longer create this unfinished duplicate themselves.
+        new=fuel.begin_physical_visit(self.gateway,self.dispatcher,self.assignment.id,expected=self.baseline(),
+            dispatcher=True,now_utc=off+timedelta(seconds=6)).fuel_work_state;db.session.commit()
         fuel.confirm_fueler_truck_on(self.gateway,self.fueler,self.assignment.id,expected_cycle=1,
             expected_tail='N491UP',expected_truck_id=self.truck.id,now_utc=off+timedelta(seconds=8));db.session.commit()
         fuel.save_fueler_entry(self.gateway,self.fueler,dict(assignment_id=self.assignment.id,
