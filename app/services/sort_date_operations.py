@@ -32,7 +32,7 @@ def create_sort_date_operation(
     gateway_code = str(gateway_code).strip().upper()
     window_minutes = normalize_optional_window_minutes(window_minutes)
     gateway = Gateway.query.filter_by(code=gateway_code).first() if has_app_context() else None
-    return SortDateOperation(
+    operation = SortDateOperation(
         sort_date=sort_date,
         gateway_id=gateway.id if gateway else None,
         gateway_code=gateway_code,
@@ -40,6 +40,13 @@ def create_sort_date_operation(
         window_minutes=window_minutes,
         generated_by_user_id=generated_by_user_id,
     )
+    if gateway:
+        from app.models import NeoRainReportEntry
+        from app.services.neorain_ground_time_settings import default_planned_fph
+        operation.neorain_report_entries.append(NeoRainReportEntry(
+            gateway_id=gateway.id, sort_date=sort_date, sort_name=sort_name,
+            field_name='planned_fph', data_source='manual', value=str(default_planned_fph(gateway))))
+    return operation
 
 
 def generate_sort_date_operation_from_master(

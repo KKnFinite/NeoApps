@@ -20,20 +20,18 @@ class RainUICorrectionsTest(unittest.TestCase):
         self.assertEqual(response.status_code,200)
         return response.get_data(as_text=True)
 
-    def test_missing_report_metrics_are_concise_and_zero_remains_available(self):
+    def test_missing_report_metrics_are_truthful_placeholders_and_zero_remains_available(self):
         html=self.report_html()
-        self.assertIn('data-report-volume-unavailable',html)
-        self.assertIn('data-report-staffing-unavailable',html)
-        self.assertNotIn('class="rain-report-metric"',html)
-        self.assertNotIn('aria-label="Separate Hub / Shift and Ramp staffing"',html)
+        self.assertEqual(html.count('data-rainrock-value='),9)
+        self.assertIn('aria-label="Ramp and Hub staffing"',html)
+        self.assertIn('data-rainrock-value="actual_volume">—</strong>',html)
+        self.assertIn('data-rainrock-value="briefing_ramp_staffing_planned" title="NeoRain entry">—</td>',html)
         save_report_entry(self.f.operation,'actual_volume','0',0,self.f.actor.id)
         save_report_entry(self.f.operation,'ramp_planned_payroll','0',0,self.f.actor.id)
         html=self.report_html()
-        self.assertNotIn('data-report-volume-unavailable',html)
-        self.assertNotIn('data-report-staffing-unavailable',html)
-        self.assertIn('class="rain-report-metric"',html)
-        self.assertIn('<strong>0</strong>',html)
-        self.assertIn('aria-label="Separate Hub / Shift and Ramp staffing"',html)
+        self.assertIn('data-rainrock-value="actual_volume">0</strong>',html)
+        self.assertIn('data-rainrock-value="briefing_ramp_staffing_planned" title="Previous Rainrock input">0</td>',html)
+        self.assertEqual(html.count('data-rainrock-value='),9)
 
     def test_briefing_content_exactly_matches_existing_projection(self):
         with patch('app.services.neorain_reports.snapshot_current_google',return_value='Google unavailable'):

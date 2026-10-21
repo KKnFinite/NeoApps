@@ -12,6 +12,14 @@
     </header>
     {% if current_user.role == 'grandmaster' %}<a href="{{ url_for('neorain.google_certification') }}">GOOGLE CERTIFICATION · READ ONLY</a>{% endif %}
 
+    <section class="neorain-settings-panel" aria-labelledby="neorain-fph-title">
+        <header><div><h2 id="neorain-fph-title">DEFAULT PLANNED FPH</h2><p>Captured for new sorts only. Existing sort values and overrides are unchanged.</p></div></header>
+        <form method="post" class="neorain-refresh-form">
+            <input type="hidden" name="action" value="save_planned_fph">
+            <label for="rain-default-fph">Planned FPH</label><input id="rain-default-fph" name="default_planned_fph" inputmode="numeric" value="{{ default_planned_fph }}"{% if not can_edit %} readonly{% endif %}>
+            {% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+        </form>
+    </section>
     <section class="neorain-settings-panel" aria-labelledby="neorain-ground-time-title">
         <header><div><h2 id="neorain-ground-time-title">GROUND TIME THRESHOLD</h2><p>Flag connected arrivals below this gateway threshold.</p></div></header>
         <form method="post" class="neorain-refresh-form">

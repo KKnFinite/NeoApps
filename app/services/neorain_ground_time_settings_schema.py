@@ -19,6 +19,7 @@ def ensure_neorain_ground_time_settings_table(app):
             connection.execute(text(f"SET LOCAL lock_timeout = '{NEORAIN_GROUND_TIME_SETTINGS_LOCK_TIMEOUT}'"))
             connection.execute(text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": NEORAIN_GROUND_TIME_SETTINGS_LOCK_KEY})
             NeoRainOperationalSetting.__table__.create(bind=connection, checkfirst=True)
+            connection.execute(text('ALTER TABLE neorain_operational_settings ADD COLUMN IF NOT EXISTS default_planned_fph INTEGER NOT NULL DEFAULT 75000'))
             db.session.commit()
         except Exception as exc:
             db.session.rollback()

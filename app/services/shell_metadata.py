@@ -586,6 +586,8 @@ def _neoscorpion_labels(path):
 
 
 def _neorain_labels(path):
+    if path.startswith("/neorain/rainrock"):
+        return "RAINROCK", "RAINROCK"
     if path.startswith("/neorain/daily-briefing"):
         return "DAILY BRIEFING", "DAILY BRIEFING"
     if path.startswith("/neorain/outbound"):

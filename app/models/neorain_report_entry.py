@@ -27,4 +27,4 @@ class NeoRainReportEntry(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
-    operation = db.relationship("SortDateOperation")
+    operation = db.relationship("SortDateOperation", back_populates="neorain_report_entries")

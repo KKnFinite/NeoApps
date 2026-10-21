@@ -13,6 +13,7 @@ class NeoRainOperationalSetting(db.Model):
     gateway_id = db.Column(db.Integer, db.ForeignKey("gateways.id"), nullable=False, index=True)
     gateway_code = db.Column(db.String(8), nullable=False, index=True)
     ground_time_threshold_minutes = db.Column(db.Integer, nullable=False, default=120)
+    default_planned_fph = db.Column(db.Integer, nullable=False, default=75000, server_default="75000")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

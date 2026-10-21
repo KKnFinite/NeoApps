@@ -60,6 +60,7 @@ class SortDateOperation(db.Model):
     )
 
     missions = db.relationship("SortDateMission", back_populates="sort_date_operation")
+    neorain_report_entries = db.relationship("NeoRainReportEntry", back_populates="operation")
     google_mission_links = db.relationship(
         "SortDateGoogleMissionLink",
         back_populates="sort_date_operation",

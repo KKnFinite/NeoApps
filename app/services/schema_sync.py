@@ -10,6 +10,7 @@ LOCAL_SQLITE_GATEWAY_COLUMNS = {
 }
 
 LOCAL_SQLITE_OPTIONAL_COLUMNS = {
+    "neorain_operational_settings": {"default_planned_fph": "INTEGER NOT NULL DEFAULT 75000"},
     "neoscorpion_pending_uplifts": {"plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'", "handoff_snapshot": "JSON"},
     "neoscorpion_dispatch_preferences": {
         "board_truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",
@@ -327,6 +328,7 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
 }
 
 POSTGRES_OPTIONAL_COLUMNS = {
+    "neorain_operational_settings": {"default_planned_fph": "INTEGER NOT NULL DEFAULT 75000"},
     "neoscorpion_pending_uplifts": {"plan_kind": "VARCHAR(16) NOT NULL DEFAULT 'uplift'", "handoff_snapshot": "JSON"},
     "neoscorpion_dispatch_preferences": {
         "board_truck_cards_collapsed": "BOOLEAN NOT NULL DEFAULT FALSE",

@@ -45,28 +45,30 @@ class BriefingConflict(ValueError):
     pass
 
 
-def _normalize(key, raw):
+def _normalize(key, raw, specs=None):
+    specs = specs or INPUTS
     if not isinstance(raw, str):
         raise ValueError('Enter text or a whole-number count.')
-    if INPUTS[key][1] == 'number':
+    if specs[key][1] in ('number', 'percent'):
         if len(raw) > 32:
             raise ValueError('Enter a whole-number count of at most 999,999,999.')
         # All briefing counts use the established count validation; field names
         # remain separate from unrelated Rainrock metrics.
-        return normalize_report_value('planned_volume', raw)
+        return normalize_report_value(key if key in ('smalls_percent',) else 'planned_volume', raw)
     text = raw.replace('\r\n', '\n').replace('\r', '\n').strip()
     if '\x00' in text or len(text) > 2000:
         raise ValueError('Each note must contain at most 2,000 characters and no null characters.')
     return text or None
 
 
-def save_inputs(operation, values, versions, user_id, *, current=False):
+def save_inputs(operation, values, versions, user_id, *, current=False, specs=None):
     """Validate every changed field before an atomic, version-checked update."""
-    if not isinstance(values, dict) or not values or set(values) - INPUTS.keys():
+    specs = specs or INPUTS
+    if not isinstance(values, dict) or not values or set(values) - specs.keys():
         raise ValueError('Choose valid briefing inputs.')
     if not isinstance(versions, dict) or set(versions) != set(values):
         raise ValueError('Provide the saved version of each changed input.')
-    normalized = {key: _normalize(key, raw) for key, raw in values.items()}
+    normalized = {key: _normalize(key, raw, specs) for key, raw in values.items()}
     if any(type(value) is not int or value < 0 for value in versions.values()):
         raise ValueError('Input versions must be nonnegative integers.')
     # Serialize first inserts as well as edits, without changing the sort itself.
@@ -78,7 +80,7 @@ def save_inputs(operation, values, versions, user_id, *, current=False):
     for key in values:
         row = rows.get(key)
         if (row.version if row else 0) != versions[key]:
-            raise BriefingConflict(f'{INPUTS[key][0]} changed. Reload the saved inputs before retrying.')
+            raise BriefingConflict(f'{specs[key][0]} changed. Reload the saved inputs before retrying.')
     gateway_id = _report_gateway_id(operation)
     if gateway_id is None:
         raise ValueError('This sort does not have a valid gateway.')
@@ -135,9 +137,21 @@ def briefing_context(operation, *, current=False):
               and row.field_name in ('planned_volume', 'actual_volume')
               and row.source_report_date == operation.sort_date and row.value}
     fields = {}
+    legacy_staffing = {
+        'briefing_ramp_staffing_planned': 'ramp_planned_payroll',
+        'briefing_ramp_staffing_actual': 'ramp_actual_working',
+        'briefing_hub_staffing_planned': 'hub_planned_payroll',
+        'briefing_hub_staffing_actual': 'hub_actual_working',
+    }
     for key, (label, kind) in INPUTS.items():
         row = rows.get(key)
         fallback = volume.get(key)
+        legacy = legacy_staffing.get(key)
+        if legacy:
+            fallback = rows.get(legacy)
+            if not (fallback and fallback.value):
+                fallback = next((entry for entry in entries if entry.field_name == legacy and entry.data_source == 'google'
+                    and entry.source_report_date == operation.sort_date and entry.value), None)
         raw = row.value if row and row.value else (fallback.value if fallback else None)
         if raw is not None and kind == 'number':
             try:
@@ -146,7 +160,8 @@ def briefing_context(operation, *, current=False):
                 raw = None
         fields[key] = dict(label=label, kind=kind, version=row.version if row else 0,
             manual_value=row.value if row else '', editable=True, value=raw,
-            source='Rainrock snapshot' if fallback and not (row and row.value) else 'NeoRain entry')
+            source=('Rainrock snapshot' if fallback.data_source == 'google' else 'Previous Rainrock input')
+                if fallback and not (row and row.value) else 'NeoRain entry')
     inbound, outbound = _mission_rows(operation)
     return dict(operation=operation, fields=fields,
         inbound=_performance(inbound, arrival=True), outbound=_performance(outbound, arrival=False),

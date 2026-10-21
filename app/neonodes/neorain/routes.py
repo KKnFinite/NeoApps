@@ -172,6 +172,7 @@ def _report_choices(gateway):
 @bp.route("/rainrock")
 @gateway_node_required("rain")
 def rainrock():
+    from app.services.neorain_rainrock import dashboard_context, INPUT_GROUPS
     access = permission_access("neorain.rainrock.view", "neorain.rainrock.edit")
     if not access["can_view"]:
         abort(403)
@@ -182,10 +183,54 @@ def rainrock():
     return render_template(
         "neonodes/neorain/rainrock.html", gateway=gateway, operation=operation,
         operations=_report_choices(gateway), can_edit=access["can_edit"],
-        report=report_context(operation, current=is_current) if operation else None,
+        report=dashboard_context(operation, current=is_current) if operation else None,
         is_current=is_current,
-        report_fields=REPORT_FIELDS,
+        report_fields=REPORT_FIELDS, input_groups=INPUT_GROUPS,
     )
+
+
+def _rainrock_payload(operation, current):
+    from app.services.neorain_rainrock import dashboard_context
+    report = dashboard_context(operation, current=bool(current and current.id == operation.id))
+    return dict(operation_id=operation.id, fields=report['inputs'], html=render_template(
+        'neonodes/neorain/_rainrock_report.html', report=report, operation=operation))
+
+
+@bp.route('/rainrock/state')
+@gateway_node_required('rain')
+def rainrock_state():
+    if not user_can('neorain.rainrock.view'):
+        abort(403)
+    operation, current = _selected_report_operation(get_current_gateway())
+    if operation is None:
+        abort(404)
+    response = jsonify(ok=True, **_rainrock_payload(operation, current))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@bp.route('/rainrock/inputs', methods=['POST'])
+@gateway_node_required('rain')
+def rainrock_inputs():
+    from app.services.neorain_rainrock import save_dashboard_inputs
+    from app.services.neorain_daily_briefing import BriefingConflict
+    if not user_can('neorain.rainrock.view') or not user_can('neorain.rainrock.edit'):
+        abort(403)
+    operation, current = _selected_report_operation(get_current_gateway())
+    if operation is None:
+        abort(404)
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or set(payload) != {'values', 'versions'}:
+            raise ValueError('Provide report inputs and their saved versions.')
+        save_dashboard_inputs(operation, payload['values'], payload['versions'], current_user.id)
+        db.session.commit()
+    except (ValueError, IntegrityError) as exc:
+        db.session.rollback()
+        return jsonify(ok=False, error=str(exc) if isinstance(exc, ValueError) else 'Inputs changed; reload before retrying.'), 409 if isinstance(exc, (BriefingConflict, IntegrityError)) else 400
+    response = jsonify(ok=True, **_rainrock_payload(operation, current))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @bp.route("/rainrock/entry", methods=["POST"])
@@ -961,7 +1006,7 @@ def settings():
                 message=("Access denied.", "error"),
             )
             return response
-        if action != "save_ground_time_threshold":
+        if action not in ("save_ground_time_threshold", "save_planned_fph"):
             return _render_neorain_settings(
                 gateway,
                 access,
@@ -969,9 +1014,13 @@ def settings():
                 message=("Choose a valid NeoRain settings action.", "error"),
             )
         try:
-            set_neorain_ground_time_threshold_minutes(
-                gateway, request.form.get("ground_time_threshold_minutes")
-            )
+            if action == 'save_planned_fph':
+                from app.services.neorain_rainrock import set_default_planned_fph
+                set_default_planned_fph(gateway, request.form.get('default_planned_fph'))
+            else:
+                set_neorain_ground_time_threshold_minutes(
+                    gateway, request.form.get("ground_time_threshold_minutes")
+                )
             result = type("Result", (), {"changed": True})()
         except (IntegrityError, ValueError) as exc:
             db.session.rollback()
@@ -989,7 +1038,7 @@ def settings():
         if result.changed:
             db.session.commit()
             flash(
-                "GROUND TIME THRESHOLD SAVED.",
+                "DEFAULT PLANNED FPH SAVED." if action == 'save_planned_fph' else "GROUND TIME THRESHOLD SAVED.",
                 "success",
             )
         else:
@@ -1013,6 +1062,7 @@ def _render_neorain_settings(
     status_code=200,
     message=None,
 ):
+    from app.services.neorain_rainrock import default_planned_fph
     session[NEORAIN_LAST_PAGE_SESSION_KEY] = "neorain.settings"
     if message:
         flash(*message)
@@ -1023,6 +1073,7 @@ def _render_neorain_settings(
         page_label="Settings",
         can_edit_ground_time=access["can_edit"],
         ground_time_threshold_minutes=neorain_ground_time_threshold_minutes(gateway),
+        default_planned_fph=default_planned_fph(gateway),
     )
     return response, status_code
 

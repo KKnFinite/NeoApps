@@ -273,6 +273,7 @@ def report_context(operation, *, current=False):
     fields, google_status = resolved_report_fields(operation, current=current)
     inbound, outbound = _mission_rows(operation)
     inbound_rows = [{
+        "mission_id": m.id,
         "flight": m.flight_number, "tail": m.assigned_tail_number, "place": m.origin,
         "scheduled": format_local_hhmm(m.planned_datetime_utc, m.timezone or None),
         "actual": format_local_hhmm(m.actual_block_in_datetime_utc, m.timezone or None),
@@ -280,6 +281,7 @@ def report_context(operation, *, current=False):
         "delay_details": tuple(sorted(m.delay_info_rows, key=lambda row: row.id)),
     } for m in inbound]
     outbound_rows = [{
+        "mission_id": m.id,
         "flight": m.flight_number, "tail": m.assigned_tail_number, "place": m.destination,
         "scheduled": format_local_hhmm(m.planned_datetime_utc, m.timezone or None),
         "actual": format_local_hhmm(m.actual_block_out_datetime_utc, m.timezone or None),

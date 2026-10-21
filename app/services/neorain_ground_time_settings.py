@@ -5,6 +5,13 @@ from app.models import NeoRainOperationalSetting
 
 
 DEFAULT_NEORAIN_GROUND_TIME_THRESHOLD_MINUTES = 120
+DEFAULT_NEORAIN_PLANNED_FPH = 75000
+
+
+def default_planned_fph(gateway):
+    """Read the shared default; sort creation freezes it in that sort's facts."""
+    setting = NeoRainOperationalSetting.query.filter_by(gateway_id=gateway.id).one_or_none()
+    return setting.default_planned_fph if setting else DEFAULT_NEORAIN_PLANNED_FPH
 
 
 def neorain_ground_time_threshold_minutes(gateway, *, setting=None):
