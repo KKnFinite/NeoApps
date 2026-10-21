@@ -1653,3 +1653,61 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] > .neos
     .neoscorpion-dispatch-table--compact th:nth-child(16) { width: 78px; white-space: nowrap; }
 }
 .neoscorpion-screen[data-fuel-dispatch-live] .neoscorpion-mobile-details { border: 1px solid #81743e; border-radius: 3px; background: #211d0f; color: #ffe79a; }
+
+/* Read-only Fueling Board only: do not apply editable Fueler/mobile tank tracks. */
+.neoscorpion-fueling-board .neoscorpion-board-panel { padding: 8px; gap: 8px; }
+.neoscorpion-fueling-board .neoscorpion-board-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
+    align-items: start; padding: 0; gap: 8px;
+}
+.neoscorpion-fueling-board .neoscorpion-board-card {
+    padding: 8px; font: 12px/1.3 NeoFontPlain, var(--font-sans);
+}
+.neoscorpion-fueling-board .neoscorpion-board-card-head {
+    grid-template-columns: 42px minmax(0, 1fr) minmax(90px, 1fr);
+    gap: 6px; padding-bottom: 5px;
+}
+.neoscorpion-fueling-board .neoscorpion-board-card-head strong { font-size: 14px; }
+.neoscorpion-fueling-board .neoscorpion-board-card-head small,
+.neoscorpion-fueling-board .neoscorpion-board-facts dt {
+    font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+}
+.neoscorpion-fueling-board .neoscorpion-board-card-head > .neoscorpion-fuel-status {
+    grid-column: auto; justify-self: end; width: 100%; max-width: 150px;
+    align-items: flex-end; gap: 2px; text-align: right;
+}
+.neoscorpion-fueling-board .neoscorpion-fuel-status .neoscorpion-fuel-status-chip {
+    padding: 3px 5px; font-size: 12px;
+    white-space: normal; overflow: visible; text-overflow: clip;
+}
+.neoscorpion-fueling-board .neoscorpion-fuel-status .neoscorpion-fuel-status-warning {
+    font-size: 10px; white-space: normal; overflow: visible; text-overflow: clip;
+}
+.neoscorpion-fueling-board .neoscorpion-board-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px 8px; margin: 6px 0 0;
+}
+.neoscorpion-fueling-board .neoscorpion-board-facts > :first-child { grid-column: span 2; }
+.neoscorpion-fueling-board .neoscorpion-board-facts dd { margin-top: 1px; font-size: 12px; }
+.neoscorpion-fueling-board .neoscorpion-readonly-tanks {
+    --fuel-tank-columns: minmax(84px, 1.2fr) repeat(3, minmax(0, 1fr));
+    --fuel-tank-gap: 4px;
+    gap: 0; margin: 7px 0 0; padding: 0; border-bottom: 0;
+}
+.neoscorpion-fueling-board .neoscorpion-readonly-tanks > .neoscorpion-fuel-tank-row {
+    padding: 3px 0; min-height: 22px; box-sizing: border-box;
+    border-bottom: 1px solid #20384a;
+}
+.neoscorpion-fueling-board .neoscorpion-readonly-tanks > .neoscorpion-fuel-tank-row > * {
+    grid-column: auto; overflow-wrap: normal;
+}
+.neoscorpion-fueling-board .neoscorpion-readonly-tanks [role=columnheader],
+.neoscorpion-fueling-board .neoscorpion-readonly-tanks [role=rowheader] {
+    font-size: 10px; line-height: 1.25;
+}
+.neoscorpion-fueling-board .neoscorpion-readonly-tanks [role=cell] {
+    font-size: 13px; line-height: 1.25; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.neoscorpion-fueling-board .neoscorpion-board-exception,
+.neoscorpion-fueling-board .neoscorpion-board-card > .neoscorpion-helper {
+    margin: 5px 0 0; font-size: 12px; line-height: 1.3; overflow-wrap: anywhere;
+}
