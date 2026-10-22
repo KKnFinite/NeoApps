@@ -1,5 +1,5 @@
 import json
-from math import ceil
+from math import ceil, isfinite
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
@@ -268,7 +268,10 @@ def gallons_to_lbs(gallons, density_lbs_per_gallon):
         return None
     if gallons_value < 0:
         raise ValueError("Fuel gallons cannot be negative.")
-    return int((gallons_value * density).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    try:
+        return int((gallons_value * density).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, OverflowError) as exc:
+        raise ValueError("Fuel conversion is outside the supported numeric range.") from exc
 
 
 def lbs_to_gallons(lbs, density_lbs_per_gallon):
@@ -278,7 +281,10 @@ def lbs_to_gallons(lbs, density_lbs_per_gallon):
         return None
     if lbs_value < 0:
         raise ValueError("Fuel pounds cannot be negative.")
-    return int((lbs_value / density).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    try:
+        return int((lbs_value / density).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, OverflowError) as exc:
+        raise ValueError("Fuel conversion is outside the supported numeric range.") from exc
 
 
 @dataclass(frozen=True)
@@ -5582,6 +5588,9 @@ def save_truck(gateway, form, user=None):
         if current_operation is not None:
             availability_scope=lock_nightly_asset_scope_for_mutation(current_operation)
         truck=NeoScorpionFuelTruck.query.filter_by(id=truck.id).with_for_update().populate_existing().one()
+        if ('expected_capacity_gallons' in form
+                and str(form.get('expected_capacity_gallons') or '') != str(truck.capacity_gallons if truck.capacity_gallons is not None else '')):
+            raise ValueError('Truck capacity changed. Reload Fuel Trucks and check the current capacity before saving again.')
     became_blocked = bool(
         truck.id
         and not truck.is_out_of_service
@@ -5604,6 +5613,27 @@ def save_truck(gateway, form, user=None):
         if capacity is not None and capacity <= 0:
             raise ValueError('Truck capacity must be positive whole gallons.')
         if capacity is not None:
+            if truck.id and capacity != truck.capacity_gallons:
+                # TOP OFF and inventory actions also lock this master truck.
+                # Read fresh selections only AFTER that lock so concurrent
+                # RETURN/corrections cannot slip between validation and commit.
+                selections = NeoScorpionSortTruck.query.filter_by(fuel_truck_id=truck.id).populate_existing().all()
+                reducing = truck.capacity_gallons is None or capacity < truck.capacity_gallons
+                if reducing and any(row.status == 'topping_off' for row in selections):
+                    raise ValueError('Cannot reduce capacity during an open TOP OFF trip. Record RETURN with the current capacity first, then review Fuel Trucks.')
+                relevant = {current_operation.id} if current_operation is not None else set()
+                relevant.update(row.sort_date_operation_id for row in selections if row.status == 'topping_off')
+                # Physical work can outlive a sort rollover. Never lower the
+                # physical truck limit beneath inventory on that still-live job.
+                relevant.update(op_id for (op_id,) in db.session.query(NeoScorpionFuelAssignment.sort_date_operation_id).join(
+                    NeoScorpionFuelWorkState, NeoScorpionFuelWorkState.fuel_assignment_id == NeoScorpionFuelAssignment.id).filter(
+                        NeoScorpionFuelWorkState.physical_truck_id == truck.id,
+                        NeoScorpionFuelWorkState.physical_finalized_at_utc.is_(None),
+                        NeoScorpionFuelAssignment.completed_at_utc.is_(None)).all())
+                if any(row.sort_date_operation_id in relevant and any(
+                        value is not None and value > capacity for value in (row.starting_gallons, row.current_gallons))
+                        for row in selections):
+                    raise ValueError('Truck capacity cannot be below the current sort starting/current gallons or live-work inventory. Keep the existing capacity; verify inventory and close the sort before reducing below its opening snapshot.')
             truck.capacity_gallons = capacity
     elif truck.capacity_gallons is None and not truck.id:
         truck.capacity_gallons = 10000
@@ -5702,7 +5732,19 @@ def save_settings(gateway, form):
         raise ValueError("Red assignment alert threshold is too large.")
     threshold_changed = settings.red_assignment_alert_threshold_minutes != threshold
     settings.red_assignment_alert_threshold_minutes = threshold
-    density = _decimal_or_none(form.get("fuel_density_lbs_per_gallon"))
+    try:
+        density_text = str(form.get('fuel_density_lbs_per_gallon') or '').strip()
+        if density_text and not re.fullmatch(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?', density_text):
+            raise ValueError('Invalid fuel density format.')
+        density = _decimal_or_none(form.get("fuel_density_lbs_per_gallon"))
+        if density is not None:
+            density = _positive_decimal(density, "Fuel density must be greater than zero.")
+            # Storage is a floating-point column: reject overflow AND underflow
+            # instead of persisting Infinity or silently rounding density to 0.
+            if not isfinite(float(density)) or float(density) <= 0:
+                raise ValueError('Fuel density is outside the supported numeric range.')
+    except (ValueError, OverflowError) as exc:
+        raise ValueError('Fuel density must be a finite numeric value greater than zero (lb/gal), or blank to unset.') from exc
     if density is None:
         settings.fuel_density_lbs_per_gallon = None
     else:
@@ -7854,7 +7896,10 @@ def _decimal_or_none(value):
     if value in (None, ""):
         return None
     try:
-        return Decimal(str(value).strip())
+        amount = Decimal(str(value).strip())
+        if not amount.is_finite():
+            raise ValueError("Fuel value must be finite.")
+        return amount
     except (InvalidOperation, ValueError) as exc:
         raise ValueError("Fuel value must be numeric.") from exc
 

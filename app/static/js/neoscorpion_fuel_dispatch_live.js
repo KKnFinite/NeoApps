@@ -691,6 +691,7 @@
     ));
 
     const hasUnsavedControls = () => (
+        !!root.querySelector('[data-assignment-saving="true"], [data-assignment-failed="true"]') ||
         lifecycleSaving || !!root.querySelector('[data-truck-card-busy="true"]') || document.activeElement?.matches?.(".scorpion-desktop-console input:not([type=hidden]), .scorpion-desktop-console select, .scorpion-desktop-console textarea, [data-assets-workspace] input:not([type=hidden]), [data-assets-workspace] select, [data-assets-workspace] textarea") ||
         Array.from(root.querySelectorAll("[data-tail-note-form]")).some(form =>
             form.dataset.saving === "true" || form.elements.notes.value !== form.elements.notes.defaultValue) ||
@@ -802,7 +803,7 @@
             }
         }
         let regrouped = false;
-        const groupDirty = nodes => nodes.some(node => Array.from(node.querySelectorAll('input,select,textarea')).some(control => {
+        const groupDirty = nodes => nodes.some(node => node.querySelector?.('[data-assignment-saving="true"], [data-assignment-failed="true"]') || Array.from(node.querySelectorAll('input,select,textarea')).some(control => {
             if (control.type === 'hidden' || control.disabled || control.readOnly) return false;
             if (initialControlValues.has(control)) return initialControlValues.get(control) !== controlValue(control);
             if (control.matches('[data-dispatch-autosave]')) return control.dataset.autosaveSaving === 'true' || control.value.trim() !== (control.dataset.savedValue || '');
@@ -1399,7 +1400,12 @@
         if (form.dataset.assignmentSaving === "true") {
             return;
         }
-        const status = form.querySelector("[data-assignment-save-status]");
+        // The compact table uses external form-associated controls. Feedback
+        // lives in the ACTION cell, not inside its hidden-input-only form.
+        const status = form.closest('[data-dispatch-mission-id]')?.querySelector("[data-assignment-save-status]")
+            || form.querySelector("[data-assignment-save-status]");
+        const errors = root.querySelector('[data-assignment-errors]');
+        const previousError = errors?.querySelector(`[data-assignment-error-form="${form.id}"]`);
         const resetApu = button.matches("[data-dispatch-apu-reset]");
         const editingApu = Boolean(button.closest("[data-dispatch-apu-editor]"));
         const apuEnabled = form.elements.namedItem("apu_override_enabled");
@@ -1428,14 +1434,19 @@
         );
 
         form.dataset.assignmentSaving = "true";
+        form.dataset.assignmentFailed = "false";
         button.disabled = true;
         setStatus(status, "Saving...");
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 30000);
+        let rejected = false;
         try {
             const response = await fetch(form.action, {
                 method: "POST",
                 body: new FormData(form),
                 cache: "no-store",
                 credentials: "same-origin",
+                signal: controller.signal,
                 headers: {
                     "Accept": "application/json",
                     "X-Requested-With": "XMLHttpRequest",
@@ -1443,10 +1454,13 @@
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.ok !== true) {
+                rejected = response.status >= 400 && response.status < 500 && payload.ok === false;
                 throw new Error(payload.error || "Assignment save failed.");
             }
             adoptFingerprint(payload);
             updateAssignmentBaseline(form, payload);
+            previousError?.remove();
+            if (errors) errors.hidden = !errors.children.length;
             updateApuAllowanceDisplay(form, payload, button);
             updateNeoFuel(form.elements.namedItem("mission_id")?.value, payload.neo_fuel);
             if (payload.changed) pendingFuelDataRefresh = true;
@@ -1457,12 +1471,21 @@
                 return;
             }
         } catch (error) {
-            setStatus(
-                status,
-                `Save Failed: ${error.message || "Unable to update this assignment."}`,
-                "error"
-            );
+            form.dataset.assignmentFailed = "true";
+            const message = rejected
+                    ? `NOT SAVED: ${error.message || "Unable to update this assignment."} Your selections are unsaved. Reload Fuel Dispatch to check the saved assignment before trying again.`
+                    : "RESULT UNKNOWN: Assignment confirmation was not received. Your selections are unsaved. Reload Fuel Dispatch and check the saved assignment before trying again; do not resend blindly.";
+            setStatus(status, errors ? (rejected ? 'NOT SAVED · SEE ERROR' : 'RESULT UNKNOWN · SEE ERROR') : message, "error");
+            if (errors) {
+                const item = previousError || document.createElement('p');
+                item.dataset.assignmentErrorForm = form.id;
+                item.textContent = `Mission ${form.elements.namedItem('mission_id')?.value || ''}: ${message}`;
+                if (!previousError) errors.appendChild(item);
+                errors.hidden = false;
+                errors.focus();
+            }
         } finally {
+            window.clearTimeout(timeout);
             form.dataset.assignmentSaving = "false";
             button.disabled = false;
             syncDirtyState();

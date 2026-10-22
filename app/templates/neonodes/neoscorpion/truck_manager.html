@@ -39,6 +39,7 @@
             {% set nightly_truck = nightly_trucks_by_id.get(truck.id) %}
             <form class="neoscorpion-truck-card" method="post">
                 <input type="hidden" name="truck_id" value="{{ truck.id }}">
+                <input type="hidden" name="expected_capacity_gallons" value="{{ truck.capacity_gallons if truck.capacity_gallons is not none else '' }}">
                 <label>Truck
                     <input name="truck_number" value="{{ truck.truck_number }}" {% if not can_edit %}readonly{% endif %}>
                 </label>

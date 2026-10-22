@@ -961,7 +961,7 @@ def _truck_for_operation(operation, fuel_truck):
     truck = NeoScorpionFuelTruck.query.filter_by(
         id=truck_id,
         gateway_id=gateway_id,
-    ).first()
+    ).with_for_update().populate_existing().first()
     if truck is None:
         raise ValueError("Select a fuel truck for this gateway.")
     return truck
@@ -992,7 +992,9 @@ def _validate_truck_state(truck, status, starting_gallons, current_gallons):
         (current_gallons, "Current gallons"),
     ):
         if value is not None and value > capacity:
-            raise ValueError(f"{label} cannot exceed truck capacity.")
+            if label == 'Starting gallons':
+                raise ValueError('Starting gallons cannot exceed truck capacity. Restore the correct master capacity in Fuel Trucks before RETURN; the historical opening snapshot cannot be reduced.')
+            raise ValueError(f"{label} cannot exceed truck capacity. Check the reading and the master capacity in Fuel Trucks; no gallons were changed.")
 
 
 def _truck_values(nightly_truck):
