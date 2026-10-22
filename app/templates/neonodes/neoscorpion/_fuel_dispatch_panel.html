@@ -103,7 +103,7 @@
         </header>
         <div class="neoscorpion-truck-visual-list" id="dispatch-truck-cards" data-dispatch-section="trucks"{% if dispatch_preferences.truck_cards_collapsed %} hidden{% endif %}>
             {% for truck in truck_visuals %}
-            <article data-dispatch-truck-id="{{ truck.truck_id }}" data-truck-operational-status="{{ truck.status }}" class="neoscorpion-truck-visual-card neoscorpion-truck-visual-card--{{ truck.status }}{% if truck.projected_short %} is-short{% endif %}">
+            <article data-dispatch-truck-id="{{ truck.truck_id }}" data-truck-operational-status="{{ truck.status }}" data-top-off-return-utc="{{ truck.top_off_return_utc }}" class="neoscorpion-truck-visual-card neoscorpion-truck-visual-card--{{ truck.status }}{% if truck.projected_short %} is-short{% endif %}">
                 <header>
                     <strong>TRUCK {{ truck.truck_number }}</strong>
                     <span class="neoscorpion-truck-status neoscorpion-truck-activity"{% if truck.activity_travel_until %} data-truck-travel-until="{{ truck.activity_travel_until }}" data-truck-travel-origin="{{ truck.activity_travel_origin }}"{% endif %}><span data-fueler-off-estimate-text>{{ truck.activity_label }}</span></span>
@@ -193,14 +193,18 @@
     {% else %}
     <div class="neoscorpion-dispatch-sort">
         <div role="group" aria-label="Primary sort Arrived First">
-            <span>PRIMARY SORT: ARRIVED FIRST</span>
+            <span class="dispatch-sort-label" data-compact-label="ARRIVED" title="Primary sort: Arrived First">PRIMARY SORT: ARRIVED FIRST</span>
             <button type="button" class="action-button" data-dispatch-arrived-first="1" aria-pressed="{{ 'true' if dispatch_preferences.arrived_first else 'false' }}">ON</button>
             <button type="button" class="action-button" data-dispatch-arrived-first="0" aria-pressed="{{ 'false' if dispatch_preferences.arrived_first else 'true' }}">OFF</button>
         </div>
         <div role="group" aria-label="Secondary sort">
-            <span>SECONDARY SORT:</span>
+            <span class="dispatch-sort-label" data-compact-label="SORT" title="Secondary sort">SECONDARY SORT:</span>
             <button type="button" class="action-button" data-dispatch-sort-mode="etd" aria-pressed="{{ 'true' if dispatch_preferences.secondary_sort == 'etd' else 'false' }}">ETD</button>
-            <button type="button" class="action-button" data-dispatch-sort-mode="arrival" aria-pressed="{{ 'true' if dispatch_preferences.secondary_sort == 'arrival' else 'false' }}">TAIL ARRIVAL</button>
+            <button type="button" class="action-button" data-dispatch-sort-mode="arrival" aria-label="Tail Arrival" aria-pressed="{{ 'true' if dispatch_preferences.secondary_sort == 'arrival' else 'false' }}"><span class="dispatch-sort-label" data-compact-label="TAIL">TAIL ARRIVAL</span></button>
+        </div>
+        <div class="neoscorpion-dispatch-search" role="search" aria-label="Locate Dispatch missions">
+            <input type="search" data-dispatch-search aria-label="Search missions" placeholder="Search" autocomplete="off" spellcheck="false">
+            <button type="button" data-dispatch-search-clear aria-label="Clear mission search" hidden>×</button>
         </div>
         <span data-dispatch-preference-status role="status" aria-live="polite"></span>
     </div>

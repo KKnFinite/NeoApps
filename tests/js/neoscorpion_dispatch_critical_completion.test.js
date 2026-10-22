@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../../app/static/js/neoscorpion_fuel_dispatch_live.js"), "utf8");
-const expression = source.slice(source.indexOf("    const applyCriticalCompletion = (nextPanel) => {"),
+const expression = 'const updateTopOffAlerts = () => {}; const applyMissionSearch = () => {};\n' + source.slice(source.indexOf("    const applyCriticalCompletion = (nextPanel) => {"),
     source.indexOf("    const refreshCriticalCompletion = async", source.indexOf("    const applyCriticalCompletion = (nextPanel) => {")));
 
 test('independent visit completion lines refresh while a mission draft stays protected',()=>{

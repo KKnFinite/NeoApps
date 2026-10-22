@@ -69,6 +69,7 @@
         preferenceMessage = "SAVING…";
         if (section) renderSortControls(root);
         else applyDispatchSort(root);
+        applyMissionSearch(root);
         // An intentional sort must expose the new order at the same scroll
         // offset, not scroll back to the former first mission and conceal it.
         // Automatic live refresh still restores its mission anchor separately.
@@ -121,6 +122,83 @@
     }
     const preserveDispatchScroll = () => dispatchScroll.preserve();
     window.addEventListener("pagehide", preserveDispatchScroll);
+    let missionSearch = '';
+    root.addEventListener('input', event => {
+        if (event.target.matches('[data-dispatch-search]')) {
+            missionSearch = event.target.value;
+            applyMissionSearch(root);
+        }
+    });
+    root.addEventListener('change', () => applyMissionSearch(root));
+    window.addEventListener('resize', () => { if (missionSearch) applyMissionSearch(root); });
+    root.addEventListener('click', event => {
+        if (!event.target.closest('[data-dispatch-search-clear]')) return;
+        missionSearch = '';
+        const input = root.querySelector('[data-dispatch-search]');
+        if (input) { input.value = ''; input.focus({preventScroll:true}); }
+        applyMissionSearch(root);
+    });
+    function applyMissionSearch(scope) {
+        const query = missionSearch.trim().toLocaleLowerCase();
+        scope.querySelectorAll('[data-dispatch-search]').forEach(input => {
+            if (input.value !== missionSearch) input.value = missionSearch;
+        });
+        const groups = new Map();
+        scope.querySelectorAll('tbody > tr[data-dispatch-sort-group]').forEach(row => {
+            const id = row.dataset.dispatchSortGroup;
+            if (!groups.has(id)) groups.set(id, []);
+            groups.get(id).push(row);
+        });
+        groups.forEach(rows => {
+            // Search the displayed mission line, never hidden option lists,
+            // CSRF values, history/DETAILS or another visit's evidence.
+            const primary = rows.find(row => row.matches('.neoscorpion-dispatch-primary-row'));
+            const values = primary ? Array.from(primary.querySelectorAll('input:not([type=hidden]), select'))
+                .filter(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden')
+                .map(el => el.tagName === 'SELECT' ? el.selectedOptions[0]?.textContent || '' : el.value) : [];
+            const labels = [];
+            if (primary) {
+                const walker = document.createTreeWalker(primary, NodeFilter.SHOW_TEXT);
+                while (walker.nextNode()) {
+                    const parent = walker.currentNode.parentElement;
+                    if (!parent.closest('select, option, script, style') && parent.getClientRects().length
+                            && getComputedStyle(parent).visibility !== 'hidden') labels.push(walker.currentNode.textContent);
+                }
+            }
+            const text = [...labels, ...values].join(' ').toLocaleLowerCase();
+            const match = !!query && text.includes(query);
+            rows.forEach(row => {
+                row.classList.toggle('is-search-match', match);
+                row.classList.toggle('is-search-dim', !!query && !match);
+            });
+        });
+        scope.querySelectorAll('[data-dispatch-search-clear]').forEach(button => button.hidden = !missionSearch);
+    }
+    let topOffAlertTimer = null;
+    function updateTopOffAlerts(scope) {
+        if (topOffAlertTimer !== null) window.clearTimeout(topOffAlertTimer);
+        const now = Date.now();
+        let next = 60000;
+        scope.querySelectorAll('[data-dispatch-truck-id]').forEach(card => {
+            const raw = card.dataset.topOffReturnUtc || '';
+            // Only explicit timezone-bearing instants; no local HH:MM guessing.
+            const eta = /(?:Z|[+-]\d\d:\d\d)$/.test(raw) ? Date.parse(raw) : NaN;
+            const active = card.dataset.truckOperationalStatus === 'topping_off'
+                && !card.querySelector('.neoscorpion-truck-activity')?.textContent.trim().startsWith('FUELING');
+            const overdue = active && Number.isFinite(eta) && now > eta;
+            if (overdue && !card.classList.contains('is-top-off-overdue')) {
+                // A refreshed card resumes the same wall-clock animation phase.
+                card.style.setProperty('--top-off-pulse-delay', `${-(now % 3000)}ms`);
+            }
+            card.classList.toggle('is-top-off-overdue', overdue);
+            if (active && Number.isFinite(eta) && !overdue) next = Math.min(next, eta - now + 1);
+        });
+        topOffAlertTimer = window.setTimeout(() => updateTopOffAlerts(root), Math.max(1,next));
+    }
+    updateTopOffAlerts(root);
+    document.addEventListener('visibilitychange', () => updateTopOffAlerts(root));
+    window.addEventListener('pagehide', () => window.clearTimeout(topOffAlertTimer));
+    window.addEventListener('pageshow', () => updateTopOffAlerts(root));
     let assignmentAlertTimer = null;
     function updateAssignmentAlerts(scope) {
         if (assignmentAlertTimer !== null) window.clearTimeout(assignmentAlertTimer);
@@ -1100,6 +1178,7 @@
                 if (oldNotes && newNotes) oldNotes.replaceWith(newNotes.cloneNode(true));
             }
             currentCard.dataset.truckOperationalStatus=nextCard.dataset.truckOperationalStatus;
+            currentCard.dataset.topOffReturnUtc=nextCard.dataset.topOffReturnUtc || '';
             reconcileTruckActions(currentCard.querySelector('[data-truck-card-actions]'),nextCard.querySelector('[data-truck-card-actions]'));
             ['.neoscorpion-truck-visual-values','.neoscorpion-truck-gauges','.neoscorpion-truck-driver-name'].forEach(selector=>{
                 const oldValue=currentCard.querySelector(selector),nextValue=nextCard.querySelector(selector);
@@ -1107,6 +1186,8 @@
             });
         });
         updateAssignmentAlerts(root);
+        updateTopOffAlerts(root);
+        applyMissionSearch(root);
         if (rowHeightChanged && !regrouped && scrollState) dispatchScroll.restoreSnapshot(scrollState);
     };
 
@@ -1187,7 +1268,18 @@
             // Restore the working position at replacement, not request start.
             const saved = dispatchScroll.prepareRefresh(dispatchScroll.snapshot(), nextPanel);
             initializeDispatchRowHeight(nextPanel);
+            // Keep the actual toolbar node, query and selection through refresh.
+            const toolbar = currentPanel.querySelector('.neoscorpion-dispatch-sort');
+            const search = toolbar?.querySelector('[data-dispatch-search]');
+            const searchFocused = search === document.activeElement;
+            const selection = searchFocused ? [search.selectionStart, search.selectionEnd] : null;
+            const incomingToolbar = nextPanel.querySelector('.neoscorpion-dispatch-sort');
+            if (toolbar && incomingToolbar) incomingToolbar.replaceWith(toolbar);
             currentPanel.replaceWith(nextPanel);
+            if (searchFocused && search?.isConnected) {
+                search.focus({preventScroll:true});
+                search.setSelectionRange(...selection);
+            }
             const preferences = nextPanel.matches("[data-dispatch-preferences]") ? nextPanel : nextPanel.querySelector("[data-dispatch-preferences]");
             if (preferences && Number(preferences.dataset.preferenceVersion || 0) >= preferenceVersion && !preferenceMessage.startsWith("NOT SAVED")) {
                 adoptPreferences({secondary_sort: preferences.dataset.sortMode,
@@ -1200,6 +1292,8 @@
             }
             applyDispatchSort(root);
             updateAssignmentAlerts(root);
+            updateTopOffAlerts(root);
+            applyMissionSearch(root);
             adoptFingerprint(payload);
             root.dataset.spearPlanToken = payload.spear_plan_token || "";
             root.dataset.spearAutomaticReference = payload.spear_automatic_reference || "";

@@ -7357,6 +7357,25 @@ def _hanzo_fuel_short(required_fuel_lbs, neo_fuel_lbs):
 
 def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
     """Decorate existing dispatch projections for the read-only truck visual aid."""
+    # Presentation consumes the immutable SENT forecast, not a new client-side
+    # duration estimate. Unknown legacy forecasts must remain unknown.
+    from app.models import NeoScorpionTopOffEvent
+    active = {(item['selection'].sort_date_operation_id, item['truck'].id): item['selection']
+              for item in nightly_trucks if item['selection'].status == 'topping_off'
+              and item['selection'].top_off_sent_at_utc is not None}
+    estimates = {}
+    if active:
+        events = NeoScorpionTopOffEvent.query.filter(
+            NeoScorpionTopOffEvent.sort_date_operation_id.in_({key[0] for key in active}),
+            NeoScorpionTopOffEvent.fuel_truck_id.in_({key[1] for key in active}),
+        ).all()
+        returned = {event.sent_event_id for event in events if event.kind == 'returned'}
+        for event in events:
+            selection = active.get((event.sort_date_operation_id, event.fuel_truck_id))
+            if (selection and event.kind == 'sent' and event.id not in returned
+                    and event.occurred_at_utc == selection.top_off_sent_at_utc):
+                estimate = utc_naive(event.spear_predicted_return_at_utc)
+                estimates[event.fuel_truck_id] = estimate.replace(tzinfo=timezone.utc).isoformat() if estimate else ''
     projections_by_truck_id = {}
     for row in sorted(rows,key=lambda r:r.get('truck_projection_order',0)):
         assignment = row["assignment"]
@@ -7383,6 +7402,7 @@ def _dispatch_truck_visuals(nightly_trucks, rows, *, timezone_name=None):
                 "truck_id": truck.id,
                 "truck_number": truck.truck_number,
                 "status": selection.status,
+                "top_off_return_utc": estimates.get(truck.id) or '',
                 "status_label": _dispatch_truck_status_label(selection.status),
                 "top_off_sent_time": (
                     format_local_hhmm(selection.top_off_sent_at_utc, timezone_name)

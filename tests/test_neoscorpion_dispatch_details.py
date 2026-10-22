@@ -56,8 +56,9 @@ class DetailsTest(unittest.TestCase):
         self.assertFalse(before.controls-current.controls,'An original operational control was removed')
         # The newly repeatable planner stays available with an outstanding
         # plan. Its one creation form and queue-tail token are intentional.
+        # The presentation-only mission locator adds exactly one unnamed input.
         allowed={('form','/neoscorpion/fuel-dispatch/pending-uplift'),
-            ('select','proposed_truck_id',None),*(('input',name,None) for name in (
+            ('select','proposed_truck_id',None),('input',None,None),*(('input',name,None) for name in (
                 'expected_last_plan_ref','expected_work_ref','plan_kind','pending_action',
                 'assignment_id','expected_cycle','expected_tail'))}
         # Package 1 adds identity/state guards to the two existing TOP OFF

@@ -19,7 +19,7 @@ function harness() {
     const context={root,document:{querySelector:()=>({content:'csrf'}),body:{classList:{contains:c=>classes.has(c)}}},URLSearchParams,
         MutationObserver:class {constructor(callback){observer=callback;}observe(){}},
         initializeDispatchScroll:()=>({snapshot:()=>saved,restoreSnapshot:s=>restored=s}),
-        applyDispatchSort:()=>{},fetch(url,options){return new Promise(resolve=>requests.push({options,
+        applyDispatchSort:()=>{},applyMissionSearch:()=>{},fetch(url,options){return new Promise(resolve=>requests.push({options,
             resolve(payload,ok=true){resolve({ok,json:async()=>payload});}}));}};
     const fragment=source.slice(source.indexOf('    let dispatchSortMode'),source.indexOf('    const preserveDispatchScroll'));
     const render=source.slice(source.indexOf('    function renderSortControls'),source.indexOf('    function applyDispatchSort'));

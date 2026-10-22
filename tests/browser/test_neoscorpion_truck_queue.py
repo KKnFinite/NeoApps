@@ -79,6 +79,17 @@ class TruckQueueBrowserTest(unittest.TestCase):
                         measurements.append({'engine':engine.name,'view':'four-plans','height':sum(dispatch.locator(f'[data-truck-lines-mission="{mid}"]').evaluate_all('ns=>ns.map(n=>n.getBoundingClientRect().height)'))})
                         dispatch.screenshot(path=str(evidence/f'{"before" if baseline else "after"}-{engine.name}-four-plans.png'),full_page=True)
                         if not baseline:
+                            # Locator highlights/dims the whole five-truck group;
+                            # it never filters, splits or reorders planned lines.
+                            search=dispatch.locator('[data-dispatch-search]')
+                            keys=dispatch.locator('tbody > tr[data-dispatch-sort-group]').evaluate_all('ns=>ns.map(n=>n.dataset.dispatchRowKey)')
+                            search.fill(f'UPS{800+cases.index((aid,mid,trucks))}')
+                            group=dispatch.locator(f'tr[data-dispatch-sort-group="{mid}"]')
+                            self.assertTrue(group.evaluate_all("ns=>ns.every(n=>n.classList.contains('is-search-match'))"))
+                            search.fill('no matching mission')
+                            self.assertTrue(group.evaluate_all("ns=>ns.every(n=>n.classList.contains('is-search-dim'))"))
+                            self.assertEqual(dispatch.locator('tbody > tr[data-dispatch-sort-group]').evaluate_all('ns=>ns.map(n=>n.dataset.dispatchRowKey)'),keys)
+                            dispatch.locator('[data-dispatch-search-clear]').click()
                             self.assertEqual(dispatch.locator('.scorpion-truck-lines,.scorpion-truck-line-readings').count(),0)
                             for line in dispatch.locator(f'tr[data-truck-lines-mission="{mid}"]').all():
                                 self.assertEqual(line.locator(':scope > td').count(),16)

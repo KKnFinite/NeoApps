@@ -15,7 +15,7 @@ test("intentional sort preserves offsets without restoring the obsolete mission 
         root: {dataset: {sortPreferenceKey: "gateway.1.user.2"}, addEventListener: (_name, callback) => {click = callback;}},
         dispatchScroll: {snapshot: () => saved, restoreSnapshot: value => {restored = value;}},
         saveSortPreferences: () => {savedMode = context.dispatchSortMode;},
-        applyDispatchSort: () => {applied++;}, window: {localStorage: {setItem: (key, value) => storage.set(key, value)}}};
+        applyDispatchSort: () => {applied++;}, applyMissionSearch: () => {}, window: {localStorage: {setItem: (key, value) => storage.set(key, value)}}};
     vm.runInNewContext(source.slice(start, end), context);
     click({target: {closest: () => ({dataset: {dispatchSortMode: "etd"}, hasAttribute: () => true})}});
     assert.equal(context.dispatchSortMode, "etd");
