@@ -6,7 +6,7 @@ from unittest.mock import patch
 from app.extensions import db
 from app.models import Gateway, NeoRainDelayInfo, NeoRainReportEntry, SortDateMission, SortDateOperation
 from app.services.neorain_daily_briefing import (
-    BriefingConflict, briefing_context, format_briefing, save_inputs,
+    BriefingConflict, briefing_context, briefing_payload, format_briefing, save_inputs,
 )
 from tests import test_neorain_overrides as fixtures
 
@@ -182,3 +182,63 @@ class DailyBriefingTest(TestCase):
         self.assertIn('Earlier saved note',html)
         self.assertIn('&lt;script&gt;not executable&lt;/script&gt;',html)
         self.assertNotIn('<script>not executable</script>',html)
+
+    def test_optional_delay_details_preserve_concise_text_order_zero_and_full_notes(self):
+        long_note = 'Complete saved note ' * 150 + 'END\nOriginal second line'
+        db.session.add_all([
+            NeoRainDelayInfo(sort_date_mission_id=self.arrival.id, minutes=10, code='GL', notes='Arrival only'),
+            NeoRainDelayInfo(sort_date_mission_id=self.departure.id, minutes=0, code='WS', notes=long_note),
+            NeoRainDelayInfo(sort_date_mission_id=self.departure.id, minutes=5, code='RS', notes='Last entry'),
+        ])
+        db.session.commit()
+        context = briefing_context(self.operation)
+        concise = format_briefing(context)
+        self.assertEqual(concise, format_briefing(context, include_delay_details=False))
+        self.assertIn('RFD-SDF UPS948 N948UP +11 RS/WS', concise)
+        self.assertNotIn('Late inbound', concise)
+        detailed = format_briefing(context, include_delay_details=True)
+        arrival = 'SDF-RFD UPS1487 N438UP +15 — 10 GL - Arrival only'
+        departure = 'RFD-SDF UPS948 N948UP +11 — 11 RS, 0 WS, 5 RS - Late inbound; ' + long_note + '; Last entry'
+        self.assertIn(arrival, detailed)
+        self.assertIn(departure, detailed)
+        # Nothing outside the two existing flight lines is reformatted.
+        self.assertEqual(detailed.replace(arrival, 'SDF-RFD UPS1487 N438UP +15 GL')
+                         .replace(departure, 'RFD-SDF UPS948 N948UP +11 RS/WS'), concise)
+        payload = briefing_payload(context)
+        self.assertEqual(payload['briefing'], concise)
+        self.assertEqual(payload['briefing_detailed'], detailed)
+        html = self.client.get('/neorain/daily-briefing').get_data(as_text=True)
+        self.assertIn('id="briefing-delay-details"', html)
+        self.assertNotIn('id="briefing-delay-details" checked', html)
+
+    def test_detailed_projection_is_readonly_scoped_and_keeps_eligibility(self):
+        old = SortDateOperation(gateway_id=self.f.gateway.id, gateway_code='RFD',
+            sort_date=self.operation.sort_date-timedelta(days=1), sort_name='night')
+        db.session.add(old); db.session.flush()
+        mission = self.f.fixture._mission(old, self.departure.flight_number, 'DEN',
+            planned=self.departure.planned_datetime_utc-timedelta(days=1), tail=self.departure.assigned_tail_number)
+        mission.actual_block_out_datetime_utc = mission.planned_datetime_utc+timedelta(minutes=8)
+        db.session.add(NeoRainDelayInfo(sort_date_mission_id=mission.id, minutes=8, code='GL', notes='OTHER SORT ONLY'))
+        # An early/included flight and an explicitly excluded late flight must
+        # not acquire new report lines just because delay records exist.
+        self.arrival.actual_block_in_datetime_utc = self.arrival.planned_datetime_utc-timedelta(minutes=2)
+        db.session.add(NeoRainDelayInfo(sort_date_mission_id=self.arrival.id, minutes=1, code='MX', notes='EARLY ONLY'))
+        db.session.commit()
+        def reject_write(session, flush_context, instances):
+            self.fail('Reading either projection must not flush operational data')
+        from sqlalchemy import event
+        event.listen(db.session(), 'before_flush', reject_write)
+        try:
+            current = self.client.get('/neorain/daily-briefing/state').json
+            historical = self.client.get('/neorain/daily-briefing/state?operation_id='+str(old.id)).json
+        finally:
+            event.remove(db.session(), 'before_flush', reject_write)
+        self.assertIn('Late inbound', current['briefing_detailed'])
+        self.assertNotIn('OTHER SORT ONLY', current['briefing_detailed'])
+        self.assertNotIn('EARLY ONLY', current['briefing_detailed'])
+        self.assertIn('OTHER SORT ONLY', historical['briefing_detailed'])
+        self.assertNotIn('Late inbound', historical['briefing_detailed'])
+        self.departure.late_metrics_included_override = False; db.session.commit()
+        context = briefing_context(self.operation)
+        self.assertEqual(format_briefing(context, include_delay_details=True), format_briefing(context))
+        self.assertEqual(NeoRainReportEntry.query.count(), 0)

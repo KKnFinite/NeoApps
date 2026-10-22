@@ -170,11 +170,12 @@ def briefing_context(operation, *, current=False):
 
 
 def briefing_payload(context):
-    return dict(briefing=format_briefing(context), fields=context['fields'])
+    return dict(briefing=format_briefing(context),
+        briefing_detailed=format_briefing(context, include_delay_details=True), fields=context['fields'])
 
 
-def format_briefing(context):
-    """The copy text is one plain-text projection, shared by render/save/refresh."""
+def format_briefing(context, *, include_delay_details=False):
+    """Plain-text report projection; the default preserves the concise format."""
     operation, fields = context['operation'], context['fields']
     def value(key):
         raw = fields[key]['value']
@@ -192,7 +193,18 @@ def format_briefing(context):
         for row in data['details']:
             codes = '/'.join(dict.fromkeys(delay['code'] for delay in row['delays'] if delay['code']))
             line = f"{row['origin'] or 'UNAVAILABLE'}-{row['destination'] or 'UNAVAILABLE'} {row['flight'] or 'UNAVAILABLE'} {row['tail'] or 'UNAVAILABLE'} +{row['late_minutes']}"
-            result.append(line + (' ' + codes if codes else ''))
+            if include_delay_details and row['delays']:
+                entries = [' '.join(str(value) for value in (delay['minutes'], delay['code'])
+                    if value is not None and value != '') for delay in row['delays']]
+                detail = ', '.join(entry for entry in entries if entry)
+                notes = '; '.join(delay['notes'] for delay in row['delays'] if delay['notes'])
+                if notes:
+                    detail += (' - ' if detail else '') + notes
+                result.append(line + (' — ' + detail if detail else ''))
+            else:
+                # Keep the established concise projection byte-for-byte,
+                # including its pre-existing abbreviated code suffix.
+                result.append(line + (' ' + codes if codes else ''))
         return result
 
     counts = [fields[key]['value'] for key in ('briefing_inbound_missorts', 'briefing_libs')]

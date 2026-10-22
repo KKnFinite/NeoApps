@@ -272,6 +272,7 @@ def daily_briefing():
         input_versions={key: field['version'] for key, field in report['fields'].items()} if report else {},
         can_edit=user_can('neorain.rainrock.edit'),
         briefing=format_briefing(report) if report else "No selected sort.",
+        briefing_detailed=format_briefing(report, include_delay_details=True) if report else "No selected sort.",
     )
 
 
