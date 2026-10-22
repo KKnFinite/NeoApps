@@ -57,6 +57,25 @@
     margin: 0 auto;
 }
 
+/* Keep the tablet hero's unbroken brand from sizing the entire dashboard track.
+   Scale against the available hero width, not the viewport or an overflowed grid. */
+.neoscorpion-dashboard-shell {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.neoscorpion-dashboard-hero {
+    min-width: 0;
+    width: 100%;
+    container-type: inline-size;
+}
+
+.neoscorpion-dashboard-hero h1 {
+    min-width: 0;
+    max-width: 100%;
+    font-size: clamp(1rem, 6cqi, 5.8rem);
+}
+
 .neoscorpion-panel-head {
     display: flex;
     align-items: center;
@@ -1055,6 +1074,39 @@
     text-decoration: none;
 }
 
+/* Local to Settings: an auto-minimum label/select must not widen the page.
+   Preserve the existing two-column desktop and single-column phone layout. */
+.neoscorpion-admin-settings {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.neoscorpion-admin-settings :is(.neoscorpion-panel, .neoscorpion-settings-form),
+.neoscorpion-admin-settings .neoscorpion-settings-form > * {
+    min-width: 0;
+}
+
+.neoscorpion-admin-settings .neoscorpion-settings-form label {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-wrap: anywhere;
+}
+
+.neoscorpion-admin-settings .neoscorpion-settings-form :is(input, select) {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+}
+
+.neoscorpion-admin-settings .neoscorpion-panel-head {
+    flex-wrap: wrap;
+}
+
+.neoscorpion-admin-settings .action-button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+}
+
 .neoscorpion-settings-link-card:hover,
 .neoscorpion-settings-link-card:focus-visible {
     border-color: #62b5df;
@@ -1081,8 +1133,14 @@
 }
 
 .neoscorpion-spear-setting-grid label:has(input[type="checkbox"]) {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
+}
+
+/* Help belongs below both checkbox columns; auto-placement otherwise gives
+   the help text the checkbox track and squeezes its label into a narrow strip. */
+.neoscorpion-spear-setting-grid label:has(input[type="checkbox"]) small {
+    grid-column: 1 / -1;
 }
 
 .neoscorpion-spear-setting-grid :is(input:not([type="checkbox"]), select) {

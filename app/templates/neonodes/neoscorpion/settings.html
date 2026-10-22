@@ -3,7 +3,7 @@
 {% block title %}Settings | NeoScorpion{% endblock %}
 
 {% block content %}
-<section class="neoscorpion-shell neoscorpion-screen" aria-label="NeoScorpion Settings">
+<section class="neoscorpion-shell neoscorpion-screen neoscorpion-admin-settings" aria-label="NeoScorpion Settings">
     <header class="neoscorpion-screen-head mobile-shell-duplicate-title">
         {% with neoscorpion_brand_class="neoscorpion-screen-brand" %}
         {% include "neonodes/neoscorpion/_brand_title.html" %}
@@ -47,10 +47,10 @@
                     {% set row_height = settings.mission_row_height_percent|default(100) %}
                     {% if row_height not in [75, 85, 100, 115, 130, 150] %}<option value="{{ row_height }}" selected>{{ row_height }}%</option>{% endif %}
                     {% for percent in [75, 85, 100, 115, 130, 150] %}
-                    <option value="{{ percent }}" {% if row_height == percent %}selected{% endif %}>{{ 'Restore Default · ' if percent == 100 else '' }}{{ percent }}% · {{ (98 * percent / 100)|round|int }}px desktop / {{ (73 * percent / 100)|round|int }}px mobile</option>
+                    <option value="{{ percent }}" {% if row_height == percent %}selected{% endif %}>{% if percent == 100 %}Restore Default · 100%{% else %}{{ percent }}% · {{ (98 * percent / 100)|round|int }}px / {{ (73 * percent / 100)|round|int }}px{% endif %}</option>
                     {% endfor %}
                 </select>
-                <small>Shared across Dispatchers. Rows expand when content needs more space.</small>
+                <small>Heights: desktop / mobile. Default: 98px desktop / 73px mobile. Shared across Dispatchers. Rows expand when content needs more space.</small>
             </label>
             <label>Neo Fuel Excess Alert (gallons)
                 <input type="number" name="neo_fuel_excess_alert_gallons" value="{{ settings.neo_fuel_excess_alert_gallons }}" min="0" step="1" inputmode="numeric" {% if not can_edit %}readonly{% endif %}>
