@@ -1,0 +1,40 @@
+/* SubZero uses the operational shell, not the older 292px node sidebar.
+   Scope the sizing contract to this node; other operational apps are unchanged. */
+body.blueprint-neosubzero.operational-shell-page > .shell > main.content {
+    width:100%; max-width:none; min-width:0; box-sizing:border-box;
+}
+.blueprint-neosubzero .neosubzero-shell {
+    width:100%; max-width:none; min-width:0; box-sizing:border-box;
+}
+@media (min-width:901px) {
+    body.blueprint-neosubzero.operational-shell-page > .shell > main.content {
+        padding:calc(var(--operational-topbar-height) + 12px) 12px 32px calc(var(--operational-sidebar-width) + 12px);
+    }
+}
+@media (max-width:900px) {
+    .blueprint-neosubzero .neosubzero-shell { padding:8px; }
+}
+/* Preserve TV's edge-to-edge board after the ordinary shell contract above. */
+body.blueprint-neosubzero.neosubzero-ucc-tv-mode > .shell > main.content { padding:0 !important; }
+
+/* Grid items may shrink with the workspace; wide tables scroll locally. */
+.blueprint-neosubzero .neosubzero-shell :is(section,article,form,fieldset,details,label),
+.blueprint-neosubzero .neosubzero-coordinator-layout > * { min-width:0; }
+.blueprint-neosubzero .neosubzero-desktop { max-width:100%; overflow-x:auto; }
+.blueprint-neosubzero .neosubzero-head { flex-wrap:wrap; gap:6px; }
+.blueprint-neosubzero .neosubzero-head h1 { overflow-wrap:anywhere; }
+.blueprint-neosubzero .neosubzero-settings { max-width:none; }
+.blueprint-neosubzero .neosubzero-settings form.neosubzero-settings-grid {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));
+}
+.blueprint-neosubzero .neosubzero-shell :is(input,select,textarea) { min-width:0; max-width:100%; box-sizing:border-box; }
+.blueprint-neosubzero .neosubzero-staffing-search input { width:100%; }
+.blueprint-neosubzero .neosubzero-deice-log-groups > article > header { flex-wrap:wrap; gap:8px; }
+.blueprint-neosubzero .neosubzero-deice-log-groups > article > header > div:last-child { display:flex; flex-wrap:wrap; gap:4px 8px; min-width:0; }
+.blueprint-neosubzero .neosubzero-coordinator-layout { grid-template-columns:minmax(190px,250px) minmax(0,1fr); }
+@media (min-width:701px) {
+    .blueprint-neosubzero .neosubzero-mission-facts { grid-template-columns:repeat(auto-fit,minmax(78px,1fr)); }
+}
+@media (min-width:901px) and (max-width:1250px) {
+    .blueprint-neosubzero .neosubzero-deice-form { grid-template-columns:1fr; }
+}

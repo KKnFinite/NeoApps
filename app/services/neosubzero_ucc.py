@@ -205,11 +205,20 @@ def _parking_projection(ramp, parked, queue):
     return tuple(parking)
 
 
+def _tail_parking_location(state):
+    """Read canonical named areas as well as numbered stands; never guess one."""
+    from app.services.parking_rules import normalize_parking_position_code
+    recorded = str(getattr(state, 'parking_position', '') or '').strip()
+    stand = normalize_parking_position_code(recorded)
+    if stand:
+        return stand, stand[0]
+    return {'REMOTE': ('REMOTE', 'R'), 'MOTHERBRAIN': ('MotherBrain', 'MB')}.get(recorded.upper())
+
+
 def _physical_aircraft_rows(operation, departure_context):
     """Read-only, same-sort aircraft projection; never infer a parking assignment."""
     from app.services.neosubzero_departure_deice import _departure_row, _ramp_name
     from app.services.time_display import format_local_hhmm
-    from app.services.parking_rules import normalize_parking_position_code
     from app.services.parking_plan import tail_operational_status, tail_operational_status_label
 
     parking = {str(row.tail_number).strip().upper(): row for row in SortDateParkingAssignment.query.filter_by(sort_date_operation_id=operation.id).all()}
@@ -229,21 +238,23 @@ def _physical_aircraft_rows(operation, departure_context):
     pretreat = {str(row.tail_number).strip().upper(): row for row in NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id).all()}
     for mission in arrival_missions:
         tail = str(mission.assigned_tail_number or "").strip().upper()
-        if not tail or tail in departure_tails or tail not in parking or getattr(mission, "arrival_status", None) == "cancelled":
+        if not tail or tail in departure_tails or (tail not in parking and not _tail_parking_location(states.get(tail))) or getattr(mission, "arrival_status", None) == "cancelled":
             continue
-        row = _departure_row(mission, operation, parking[tail], states.get(tail), pretreat.get(tail), None, departure_context["fluid_settings"], datetime.utcnow())
+        row = _departure_row(mission, operation, parking.get(tail), states.get(tail), pretreat.get(tail), None, departure_context["fluid_settings"], datetime.utcnow())
         row["departure_time_label"] = "ATA" if mission.actual_block_in_datetime_utc else "ETA"
         row["destination"] = str(mission.origin or "").strip()
         row["departure_time"] = format_local_hhmm(mission.actual_block_in_datetime_utc or mission.eta_datetime_utc or mission.planned_datetime_utc, mission.timezone or None)
         rows.append(row)
         departure_tails.add(tail)
-    for tail, assignment in parking.items():
-        if tail in departure_tails:
+    located_tails = dict.fromkeys((*parking, *(tail for tail, state in states.items() if _tail_parking_location(state))))
+    for tail in located_tails:
+        if not tail or tail in departure_tails:
             continue
+        assignment = parking.get(tail)
         state, treatment = states.get(tail), pretreat.get(tail)
         rows.append({
-            "mission_id": None, "identity_key": f"parking-{assignment.id}",
-            "flight": "", "tail": tail, "destination": "", "parking": assignment.position_code or "TBD",
+            "mission_id": None, "identity_key": f"parking-{assignment.id}" if assignment else f"tail-state-{state.id}",
+            "flight": "", "tail": tail, "destination": "", "parking": getattr(assignment, 'position_code', None) or "TBD",
             "sort_time": None, "block_out_at_utc": None, "departure_time": "", "departure_time_label": "",
             "tail_status": tail_operational_status_label(tail_operational_status(state, assignment=assignment)),
             "pretreat_complete": bool(state and state.pretreat_status),
@@ -271,10 +282,9 @@ def _physical_aircraft_rows(operation, departure_context):
         if not item.get("parking") or item["parking"] == "TBD":
             # MotherBrain's stored tail parking is additional canonical evidence,
             # never a guessed stand or a write back to the parking plan.
-            recorded = str(getattr(state, "parking_position", "") or "").strip()
-            normalized = normalize_parking_position_code(recorded)
-            if normalized:
-                item["parking"], code = normalized, normalized[0]
+            location = _tail_parking_location(state)
+            if location:
+                item["parking"], code = location
                 item["parking_source"] = "MotherBrain tail parking"
         item["ramp"] = _ramp_name(code) or ("MotherBrain" if code.upper() in {"M", "MB", "MOTHERBRAIN"} else "Unlocated")
         item["lane"] = getattr(assignment, "lane_number", None)

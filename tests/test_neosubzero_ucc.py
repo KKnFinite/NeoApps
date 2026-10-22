@@ -876,6 +876,35 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertEqual(row["mission_id"],self.alpha.id)
         self.assertEqual(SortDateParkingAssignment.query.filter_by(tail_number="N200").count(),0)
 
+    def test_remote_named_tail_parking_is_visible_without_fabricating_a_stand(self):
+        SortDateParkingAssignment.query.filter_by(tail_number='N200').delete()
+        state=SortDateTailState(sort_date=self.operation.sort_date,gateway_code='RFD',sort_name='night',
+            tail_number='N200',parking_position='REMOTE')
+        db.session.add(state);db.session.commit()
+        remote=self._ramp_context('Remote')
+        row=next(row for row in remote['aircraft'] if row['tail']=='N200')
+        self.assertEqual(row['mission_id'],self.alpha.id)
+        self.assertEqual(row['parking'],'REMOTE')
+        self.assertEqual(row['parking_source'],'MotherBrain tail parking')
+        self.assertEqual(state.parking_position,'REMOTE')
+        self.assertEqual(SortDateParkingAssignment.query.filter_by(tail_number='N200').count(),0)
+
+    def test_remote_arrival_and_state_only_parking_keep_identity_and_disappear_when_unused(self):
+        self.remote.actual_block_out_datetime_utc=datetime(2026,9,1,1)
+        arrival=self._departure('5X-REMOTE','N-REMOTE','RFD',2)
+        arrival.mission_type='arrival';arrival.origin='SDF'
+        db.session.add_all([SortDateTailState(sort_date=self.operation.sort_date,gateway_code='RFD',sort_name='night',
+            tail_number='N-REMOTE',parking_position='REMOTE'),
+            SortDateTailState(sort_date=self.operation.sort_date,gateway_code='RFD',sort_name='night',tail_number='SPARE-REMOTE',parking_position='R02')])
+        db.session.commit()
+        rows={row['tail']:row for row in self._ramp_context('Remote')['aircraft']}
+        self.assertEqual(rows['N-REMOTE']['mission_id'],arrival.id)
+        self.assertIsNone(rows['SPARE-REMOTE']['mission_id'])
+        self.assertTrue(rows['SPARE-REMOTE']['identity_key'].startswith('tail-state-'))
+        SortDateTailState.query.filter(SortDateTailState.tail_number.in_(('N-REMOTE','SPARE-REMOTE'))).delete()
+        db.session.commit()
+        self.assertNotIn('Remote',[row['name'] for row in neosubzero_ucc_context(self.gateway,self.operation)['ramps']])
+
     def test_a_future_sort_never_occupies_current_sort_positions(self):
         other = SortDateOperation(sort_date=self.operation.sort_date+timedelta(days=1),gateway_id=self.gateway.id,gateway_code="RFD",sort_name="night")
         db.session.add(other); db.session.flush()

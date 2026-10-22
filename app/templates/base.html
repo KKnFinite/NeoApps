@@ -90,6 +90,9 @@
     {% if request.endpoint == 'neoermac.view_outbound' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neoermac_view_outbound.css', v=config.STATIC_ASSET_VERSION, ui='20260930-stacked-timing-v1') }}">
     {% endif %}
+    {% if request.blueprint == 'neosubzero' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_workspace.css', v='20261022-full-width-v1') }}">
+    {% endif %}
     {% if uses_operational_shell and operational_shell_supports_board_view %}
     <script>
     (() => {
