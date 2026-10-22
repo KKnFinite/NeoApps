@@ -1,5 +1,3 @@
 <nav class="neosubzero-nav" aria-label="NeoSub-Zero navigation">
-    {% for label, endpoint in neosubzero_menu_items() %}
-    <a class="{{ 'active' if request.endpoint == endpoint else '' }}" href="{{ url_for(endpoint) }}">{{ label|upper }}</a>
-    {% endfor %}
+    {% with subzero_nav_mode='inline' %}{% include 'neonodes/neosubzero/_navigation_items.html' %}{% endwith %}
 </nav>

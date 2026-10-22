@@ -28,7 +28,7 @@
         {% elif is_neorain_page %}
         {% for item in neorain_menu_items() %}<a class="motherbrain-desktop-side-link{% if item.active %} is-active{% endif %}" href="{{ url_for(item.endpoint) }}"><span class="operational-side-link-icon">{{ item.label[0] }}</span><span class="operational-side-link-label">{{ item.label }}</span></a>{% endfor %}
         {% elif is_neosubzero_page %}
-        {% for label, endpoint in neosubzero_menu_items() %}<a class="motherbrain-desktop-side-link{% if request.endpoint == endpoint %} is-active{% endif %}" href="{{ url_for(endpoint) }}"><span class="operational-side-link-icon">{{ label[0] }}</span><span class="operational-side-link-label">{{ label }}</span></a>{% endfor %}
+        {% with subzero_nav_mode='desktop' %}{% include 'neonodes/neosubzero/_navigation_items.html' %}{% endwith %}
         {% elif is_neoreptile_page %}
         <a class="motherbrain-desktop-side-link is-active" href="{{ url_for('neoreptile.index') }}"><span class="operational-side-link-icon">D</span><span class="operational-side-link-label">Dashboard</span></a>
         {% endif %}

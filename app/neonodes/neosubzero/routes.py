@@ -97,13 +97,13 @@ NEOSUBZERO_PAGES = (
         "neosubzero.coordinator.edit",
     ),
     (
-        "UCC",
+        "DUCC",
         "neosubzero.ucc",
         "neosubzero.ucc.view",
         "neosubzero.ucc.edit",
     ),
     (
-        "Deicer Mobile",
+        "Deicer",
         "neosubzero.deicer_mobile",
         "neosubzero.deicer_mobile.view",
         "neosubzero.deicer_mobile.view",
@@ -133,13 +133,33 @@ NEOSUBZERO_PAGES = (
         "neosubzero.settings.edit",
     ),
 )
+NEOSUBZERO_NAV_SECTIONS = (
+    (None, ("neosubzero.ucc", "neosubzero.outbound", "neosubzero.coordinator",
+            "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.settings")),
+    ("UNDER CONSTRUCTION", ("neosubzero.callouts",)),
+)
+
+
+def neosubzero_navigation_sections():
+    # Navigation visibility is separate from direct-route authorization.
+    pages = {page[1]: page for page in NEOSUBZERO_PAGES}
+    sections = []
+    for heading, endpoints in NEOSUBZERO_NAV_SECTIONS:
+        items = [(pages[endpoint][0], endpoint) for endpoint in endpoints
+                 if user_can(pages[endpoint][2])]
+        if items:
+            sections.append((heading, items))
+    return sections
+
+
 @bp.context_processor
 def navigation():
     return {
+        "neosubzero_menu_sections": neosubzero_navigation_sections,
         "neosubzero_menu_items": lambda: [
             (label, endpoint)
-            for label, endpoint, view_permission, _edit_permission in NEOSUBZERO_PAGES
-            if user_can(view_permission)
+            for _heading, items in neosubzero_navigation_sections()
+            for label, endpoint in items
         ]
     }
 

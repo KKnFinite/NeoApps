@@ -37,7 +37,7 @@
         {% elif is_neorain_page %}
         {% for item in neorain_menu_items() if item.endpoint != node_home_endpoint %}<a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>{% endfor %}
         {% elif is_neosubzero_page %}
-        {% for label, endpoint in neosubzero_menu_items() if endpoint != node_home_endpoint %}<a href="{{ url_for(endpoint) }}">{{ label }}</a>{% endfor %}
+        {% with subzero_nav_mode='mobile' %}{% include 'neonodes/neosubzero/_navigation_items.html' %}{% endwith %}
         {% elif is_motherbrain_page %}
         {% set motherbrain_mobile_item_class = "" %}{% set hide_mobile_manage_sort = true %}{% include "neomotherbrain/_motherbrain_mobile_nav_items.html" %}
         {% endif %}

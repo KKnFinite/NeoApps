@@ -1,3 +1,17 @@
+/* Navigation grouping only; collapsed links keep their accessible names. */
+.blueprint-neosubzero .subzero-nav-section {
+    margin-top:4px; padding:8px 9px 2px; border-top:1px solid #334b5d;
+    color:#a9c8df; font-size:.65rem; line-height:1.4; letter-spacing:.06em;
+    min-width:0; overflow-wrap:anywhere;
+}
+.blueprint-neosubzero .neo-drawer-links .subzero-nav-section { margin-top:8px; padding:10px 4px 4px; font-size:.7rem; }
+.blueprint-neosubzero .neo-drawer-links a[aria-current="page"] { border-color:#56bdff; background:#132532; color:#fff; }
+.blueprint-neosubzero .neosubzero-nav .subzero-nav-section { flex-basis:100%; }
+@media (min-width:901px) {
+    body.blueprint-neosubzero.operational-sidebar-collapsed .operational-desktop-sidebar .subzero-nav-section { padding:4px 0 0; }
+    body.blueprint-neosubzero.operational-sidebar-collapsed .operational-desktop-sidebar .subzero-nav-section > span { display:none; }
+}
+
 /* SubZero uses the operational shell, not the older 292px node sidebar.
    Scope the sizing contract to this node; other operational apps are unchanged. */
 body.blueprint-neosubzero.operational-shell-page > .shell > main.content {
