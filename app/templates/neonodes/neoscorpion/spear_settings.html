@@ -11,9 +11,11 @@
         <p>Scorpion Planning Engine for Assignment &amp; Routing</p>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+    {% include "neonodes/neoscorpion/_admin_form_feedback.html" %}
     {% if user_can('neoscorpion.history.view') %}<p><a class="action-button" href="{{ url_for('neoscorpion.spear_scorecard') }}">INTELLIGENCE SCORECARD</a></p>{% endif %}
 
-    <form class="neoscorpion-spear-settings-form" method="post" data-spear-settings-form>
+    <form class="neoscorpion-spear-settings-form" method="post" data-spear-settings-form data-admin-form="spear" data-interaction-form>
+        <input type="hidden" name="settings_baseline" value="{{ settings_baselines.spear }}">
         <section class="neoscorpion-panel">
             <div class="neoscorpion-panel-head"><span>Operational Controls</span><strong>{{ gateway.code }}</strong></div>
             <div class="neoscorpion-spear-setting-grid">
@@ -87,4 +89,5 @@
     {% if can_edit %}<form id="spear-vault-test-form" method="post" action="{{ url_for('neoscorpion.spear_vault_test') }}"></form>{% endif %}
 </section>
 <script src="{{ url_for('static', filename='js/neoscorpion_spear_settings.js', v=config.STATIC_ASSET_VERSION) }}" defer></script>
+<script src="{{ url_for('static', filename='js/neoscorpion_admin_forms.js', v='20261021-package2') }}" defer></script>
 {% endblock %}

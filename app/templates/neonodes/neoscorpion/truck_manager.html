@@ -11,6 +11,7 @@
         <h1>Truck Manager</h1>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+    {% include "neonodes/neoscorpion/_admin_form_feedback.html" %}
 
     <section class="neoscorpion-panel">
         <div class="neoscorpion-panel-head">
@@ -18,7 +19,7 @@
             <strong>{{ trucks|length }}</strong>
         </div>
         {% if can_edit %}
-        <form class="neoscorpion-truck-form neoscorpion-new-truck-form" method="post">
+        <form class="neoscorpion-truck-form neoscorpion-new-truck-form" method="post" data-admin-form="truck-new" data-interaction-form>
             <input type="hidden" name="action" value="save_truck">
             <label>Truck
                 <input name="truck_number" required placeholder="TRUCK 12">
@@ -37,7 +38,7 @@
         <div class="neoscorpion-truck-list">
             {% for truck in trucks %}
             {% set nightly_truck = nightly_trucks_by_id.get(truck.id) %}
-            <form class="neoscorpion-truck-card" method="post">
+            <form class="neoscorpion-truck-card" method="post" data-admin-form="truck-{{ truck.id }}" data-interaction-form>
                 <input type="hidden" name="truck_id" value="{{ truck.id }}">
                 <input type="hidden" name="expected_capacity_gallons" value="{{ truck.capacity_gallons if truck.capacity_gallons is not none else '' }}">
                 <label>Truck
@@ -75,4 +76,5 @@
         </div>
     </section>
 </section>
+<script src="{{ url_for('static', filename='js/neoscorpion_admin_forms.js', v='20261021-package2') }}" defer></script>
 {% endblock %}

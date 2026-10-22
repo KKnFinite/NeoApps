@@ -62,7 +62,9 @@ class DispatchChecksExcessIntegrationTest(unittest.TestCase):
         return self.client.post("/neoscorpion/fuel-dispatch/check", data=data)
 
     def _settings(self, threshold, **overrides):
+        from app.services.neoscorpion_admin_forms import settings_baseline
         return self.client.post("/neoscorpion/settings", data={"action": "save_settings",
+            "settings_baseline": settings_baseline(self.gateway,'save_settings'),
             "red_assignment_alert_threshold_minutes": "30", "fuel_density_lbs_per_gallon": "6.7",
             "planning_inbound_fuel_fallback": "12.0", "neo_fuel_excess_alert_gallons": threshold, **overrides})
 

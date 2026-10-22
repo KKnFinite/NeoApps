@@ -1,4 +1,5 @@
 import unittest
+from app.services.neoscorpion_admin_forms import settings_baseline
 from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import patch
@@ -159,7 +160,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
 
         allowed = self.client.post(
             "/neoscorpion/settings",
-            data={"action": "save_apu_rates", "apu_rate_b757": "0.42"},
+            data={"action": "save_apu_rates", "apu_rate_b757": "0.42", "settings_baseline":settings_baseline(self.gateway,'save_apu_rates')},
         )
         self.assertEqual(allowed.status_code, 302)
         setting = NeoScorpionAircraftFuelSetting.query.one()

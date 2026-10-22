@@ -15,8 +15,10 @@ class OperationalSafeguardsTest(unittest.TestCase):
     _login_user = fixtures.NeoScorpionDispatchPlanningTest._login_user
 
     def settings_form(self, density):
+        from app.services.neoscorpion_admin_forms import settings_baseline
         return dict(fuel_density_lbs_per_gallon=density,
-                    red_assignment_alert_threshold_minutes='30')
+                    red_assignment_alert_threshold_minutes='30',
+                    settings_baseline=settings_baseline(self.gateway, 'save_settings'))
 
     def test_nonfinite_density_is_validation_error_not_persisted(self):
         for value in ('NaN', 'sNaN', 'Infinity', '-Infinity', 'inf', '-inf', 'abc', '6_7', '0', '-1', '1e9999', '1e-9999'):

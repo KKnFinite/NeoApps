@@ -134,10 +134,12 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertEqual(NeoScorpionSettings.query.count(), 0)
 
         user = self._login_user("planner_master", "master")
+        from app.services.neoscorpion_admin_forms import settings_baseline
         response = self.client.post(
             "/neoscorpion/settings",
             data={
                 "fuel_density_lbs_per_gallon": "6.7",
+                "settings_baseline": settings_baseline(self.gateway, 'save_settings'),
                 "planning_inbound_fuel_fallback": "15.5",
                 "fob_difference_threshold_lbs": "",
                 "tf_vs_estimated_threshold_lbs": "",

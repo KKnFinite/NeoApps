@@ -5572,6 +5572,14 @@ def save_truck(gateway, form, user=None):
     truck_number = (form.get("truck_number") or "").strip().upper()
     if not truck_number:
         raise ValueError("Truck number is required.")
+    # Keep the established trim/uppercase, gateway-scoped identity contract.
+    # The unique constraint still arbitrates simultaneous creates/renames.
+    with db.session.no_autoflush:
+        duplicate = NeoScorpionFuelTruck.query.filter_by(gateway_id=gateway.id, truck_number=truck_number)
+        if truck_id:
+            duplicate = duplicate.filter(NeoScorpionFuelTruck.id != truck_id)
+        if duplicate.first() is not None:
+            raise ValueError('A truck with this number already exists at this gateway. Use its existing record or enter a different truck number.')
 
     truck = None
     if truck_id:

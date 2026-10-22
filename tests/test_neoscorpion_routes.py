@@ -789,11 +789,13 @@ class NeoScorpionRoutesTest(unittest.TestCase):
 
     def test_settings_shell_saves_thresholds(self):
         self._login_approved_user(role="master")
+        from app.services.neoscorpion_admin_forms import settings_baseline
 
         response = self.client.post(
             "/neoscorpion/settings",
             data={
                 "fuel_density_lbs_per_gallon": "6.8",
+                "settings_baseline": settings_baseline(self.gateway,'save_settings'),
                 "red_assignment_alert_threshold_minutes": "25",
                 "fob_difference_threshold_lbs": "500",
                 "tf_vs_estimated_threshold_lbs": "750",
@@ -812,6 +814,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         self.assertIn(b"Detailed aircraft-specific fuel calculations are not configured yet.", response.data)
 
     def test_assignment_alert_threshold_validation_and_permission(self):
+        from app.services.neoscorpion_admin_forms import settings_baseline
         self._login_approved_user(role="operator")
         denied = self.client.post("/neoscorpion/settings", data={
             "red_assignment_alert_threshold_minutes": "15",
@@ -822,18 +825,21 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         for value in ("", "-1", "1.5", "oops"):
             with self.subTest(value=value):
                 invalid = self.client.post("/neoscorpion/settings", data={
+                    "settings_baseline": settings_baseline(self.gateway,'save_settings'),
                     "red_assignment_alert_threshold_minutes": value,
                 })
                 self.assertEqual(invalid.status_code, 400)
                 self.assertIn(b"nonnegative whole number", invalid.data)
                 self.assertEqual(NeoScorpionSettings.query.count(), 0)
         valid = self.client.post("/neoscorpion/settings", data={
+            "settings_baseline": settings_baseline(self.gateway,'save_settings'),
             "red_assignment_alert_threshold_minutes": "0",
         })
         self.assertEqual(valid.status_code, 302)
         self.assertEqual(NeoScorpionSettings.query.one().red_assignment_alert_threshold_minutes, 0)
 
     def test_assignment_planning_settings_defaults_validation_and_readiness(self):
+        from app.services.neoscorpion_admin_forms import settings_baseline
         initial = assignment_planning_settings(self.gateway)
         self.assertEqual(initial.setup_minutes, Decimal("10"))
         self.assertEqual(initial.finishing_minutes, Decimal("5"))
@@ -860,6 +866,7 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         user = self._login_approved_user(role="master")
         valid_data = {
             "action": "save_assignment_planning_settings",
+            "settings_baseline": settings_baseline(self.gateway,'save_assignment_planning_settings'),
             "assignment_setup_minutes": "12.5",
             "assignment_finishing_minutes": "8",
             "assignment_eta_safety_buffer_minutes": "0",
@@ -914,7 +921,8 @@ class NeoScorpionRoutesTest(unittest.TestCase):
         ):
             invalid = self.client.post(
                 "/neoscorpion/settings",
-                data={"action": "save_assignment_planning_settings", field_name: value},
+                data={"action": "save_assignment_planning_settings", field_name: value,
+                    "settings_baseline": settings_baseline(self.gateway,'save_assignment_planning_settings')},
             )
             self.assertEqual(invalid.status_code, 400)
             self.assertIn(expected.encode(), invalid.data)

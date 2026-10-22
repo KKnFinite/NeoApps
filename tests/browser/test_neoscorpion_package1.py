@@ -106,7 +106,7 @@ class Package1BrowserTest(unittest.TestCase):
                         with b.expect_response(lambda r:r.request.method=='POST' and '/truck-manager' in r.url) as bad_capacity:
                             truck_form.get_by_role('button', name='Save', exact=True).click()
                         self.assertEqual(bad_capacity.value.status, 400)
-                        expect(b.locator('.flash-error')).to_contain_text('capacity')
+                        expect(b.locator('.flash-error').first).to_contain_text('capacity')
                         b.goto(F.origin+'/neoscorpion/fuel-dispatch')
                         card = b.locator(f'[data-dispatch-truck-id="{trucks[2]}"]')
                         card.get_by_role('button', name='TOP OFF', exact=True).click()
@@ -114,7 +114,7 @@ class Package1BrowserTest(unittest.TestCase):
                         b.goto(F.origin+'/neoscorpion/truck-manager')
                         truck_form.locator('[name=capacity_gallons]').fill('9000')
                         truck_form.get_by_role('button', name='Save', exact=True).click()
-                        expect(b.locator('.flash-error')).to_contain_text('open TOP OFF trip')
+                        expect(b.locator('.flash-error').first).to_contain_text('open TOP OFF trip')
                         b.goto(F.origin+'/neoscorpion/fuel-dispatch')
                         card.locator('[name=current_gallons]').fill('9500')
                         card.get_by_role('button', name='RETURN', exact=True).click()

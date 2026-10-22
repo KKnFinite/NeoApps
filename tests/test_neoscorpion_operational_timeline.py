@@ -76,9 +76,12 @@ class OperationalTimelineTest(unittest.TestCase):
         # Dispatch edit authority alone is not Settings edit authority.
         manager=self.fixture._login_user("timeline-settings-master","master")
         self.login(manager)
+        from app.services.neoscorpion_admin_forms import settings_baseline
+        form['settings_baseline']=settings_baseline(self.gateway,'save_assignment_planning_settings')
         self.assertEqual(self.client.post("/neoscorpion/settings",data=form).status_code,302)
         db.session.expire_all()
         self.assertEqual(self.settings.advance_setup_window_minutes,10)
+        form['settings_baseline']=settings_baseline(self.gateway,'save_assignment_planning_settings')
         for invalid in ("-1","1.5","unknown"):
             self.assertEqual(self.client.post("/neoscorpion/settings",data={**form,"advance_setup_window_minutes":invalid}).status_code,400)
             self.assertEqual(self.settings.advance_setup_window_minutes,10)

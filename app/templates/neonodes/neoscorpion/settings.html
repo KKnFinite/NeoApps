@@ -11,6 +11,7 @@
         <h1>Settings</h1>
     </header>
     {% include "neonodes/neoscorpion/_menu.html" %}
+    {% include "neonodes/neoscorpion/_admin_form_feedback.html" %}
     <a class="action-button" href="{{ url_for('neoscorpion.truck_manager') }}">FUEL TRUCKS · PERMANENT CAPACITY</a>
 
     <a class="neoscorpion-panel neoscorpion-settings-link-card" href="{{ url_for('neoscorpion.spear_settings') }}">
@@ -26,7 +27,8 @@
             <span>Fuel Settings Shell</span>
             <strong>{{ gateway.code }}</strong>
         </div>
-        <form class="neoscorpion-settings-form" method="post">
+        <form class="neoscorpion-settings-form" method="post" data-admin-form="save_settings" data-interaction-form>
+            <input type="hidden" name="settings_baseline" value="{{ settings_baselines.save_settings }}">
             <input type="hidden" name="action" value="save_settings">
             <label>Fuel Density, lb/gal
                 <input name="fuel_density_lbs_per_gallon" value="{{ settings.fuel_density_lbs_per_gallon if settings.fuel_density_lbs_per_gallon is not none else '' }}" inputmode="decimal" {% if not can_edit %}readonly{% endif %}>
@@ -77,8 +79,9 @@
             <span>Assignment Planning</span>
             <strong>FUTURE RECOMMENDATIONS</strong>
         </div>
-        <form class="neoscorpion-settings-form" method="post">
+        <form class="neoscorpion-settings-form" method="post" data-admin-form="save_assignment_planning_settings" data-interaction-form>
             <input type="hidden" name="action" value="save_assignment_planning_settings">
+            <input type="hidden" name="settings_baseline" value="{{ settings_baselines.save_assignment_planning_settings }}">
             <p class="neoscorpion-helper">Global Timing</p>
             <label>Setup Time, minutes
                 <input name="assignment_setup_minutes" value="{{ assignment_planning.setup_minutes if assignment_planning.setup_minutes is not none else '' }}" inputmode="decimal" min="0" step="0.01" {% if not can_edit %}readonly{% endif %}>
@@ -116,8 +119,9 @@
             <span>Aircraft APU Rates</span>
             <strong>THOUSAND LB / HR</strong>
         </div>
-        <form class="neoscorpion-settings-form" method="post">
+        <form class="neoscorpion-settings-form" method="post" data-admin-form="save_apu_rates" data-interaction-form>
             <input type="hidden" name="action" value="save_apu_rates">
+            <input type="hidden" name="settings_baseline" value="{{ settings_baselines.save_apu_rates }}">
             {% for item in apu_rate_settings %}
             <label>{{ item.aircraft_type }}
                 <input
@@ -137,5 +141,6 @@
     </section>
 
 </section>
+<script src="{{ url_for('static', filename='js/neoscorpion_admin_forms.js', v='20261021-package2') }}" defer></script>
 <script src="{{ url_for('static', filename='js/neoscorpion_settings_validation.js', v='20261021-package1') }}" defer></script>
 {% endblock %}

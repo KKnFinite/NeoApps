@@ -1,4 +1,5 @@
 from app.services.neoscorpion_tail_notes import tail_notes_revision
+from app.services.neoscorpion_admin_forms import (SettingsConflict, guard_settings, admin_form_context, truck_integrity_message)
 from flask import send_file, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy.exc import IntegrityError
@@ -1445,18 +1446,19 @@ def truck_manager():
                     request.form.get("current_gallons"),
                     changed_by_user=current_user,
                 )
-                flash("FUEL TRUCK MARKED SUMPED.", "success")
+                success_message = "FUEL TRUCK MARKED SUMPED."
             elif action == "deactivate_truck":
                 deactivate_truck(gateway, request.form, current_user)
-                flash("FUEL TRUCK DEACTIVATED.", "success")
+                success_message = "FUEL TRUCK DEACTIVATED."
             else:
                 save_truck(gateway, request.form, current_user)
-                flash("FUEL TRUCK SAVED.", "success")
-        except ValueError as exc:
+                success_message = "FUEL TRUCK SAVED."
+            db.session.commit()
+        except (IntegrityError, ValueError) as exc:
             db.session.rollback()
-            flash(str(exc), "error")
+            flash(str(exc) if isinstance(exc, ValueError) else truck_integrity_message(exc), "error")
             return _truck_manager_response(gateway, access, status_code=400)
-        db.session.commit()
+        flash(success_message, "success")
         return redirect(url_for("neoscorpion.truck_manager"))
 
     if not access["can_view"]:
@@ -1479,6 +1481,7 @@ def settings():
                 flash("Access denied.", "error")
                 return _settings_response(gateway, access, status_code=403)
             try:
+                guard_settings(gateway, action, request.form)
                 result = save_aircraft_fuel_settings(
                     gateway,
                     current_user,
@@ -1492,7 +1495,7 @@ def settings():
                     else "APU rates changed. Reload Settings and try again."
                 )
                 flash(message, "error")
-                return _settings_response(gateway, access, status_code=400)
+                return _settings_response(gateway, access, status_code=409 if isinstance(exc, SettingsConflict) else 400)
             if result.changed:
                 db.session.commit()
                 flash("AIRCRAFT APU RATES SAVED.", "success")
@@ -1506,6 +1509,7 @@ def settings():
                 flash("Access denied.", "error")
                 return _settings_response(gateway, access, status_code=403)
             try:
+                guard_settings(gateway, action, request.form)
                 result = save_assignment_planning_settings(
                     gateway,
                     current_user,
@@ -1519,7 +1523,7 @@ def settings():
                     else "Assignment planning settings changed. Reload Settings and try again."
                 )
                 flash(message, "error")
-                return _settings_response(gateway, access, status_code=400)
+                return _settings_response(gateway, access, status_code=409 if isinstance(exc, SettingsConflict) else 400)
             if result.changed:
                 db.session.commit()
                 flash("ASSIGNMENT PLANNING SETTINGS SAVED.", "success")
@@ -1532,11 +1536,12 @@ def settings():
             flash("Access denied.", "error")
             return _settings_response(gateway, access, status_code=403)
         try:
+            guard_settings(gateway, 'save_settings', request.form)
             save_settings(gateway, request.form)
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "error")
-            return _settings_response(gateway, access, status_code=400)
+            return _settings_response(gateway, access, status_code=409 if isinstance(exc, SettingsConflict) else 400)
         db.session.commit()
         flash("NEOSCORPION SETTINGS SAVED.", "success")
         return redirect(url_for("neoscorpion.settings"))
@@ -1561,6 +1566,7 @@ def spear_settings():
             NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
         ).learning_capture_enabled
         try:
+            guard_settings(gateway, 'spear', request.form)
             result = save_spear_settings(gateway, current_user, request.form)
         except (IntegrityError, ValueError) as exc:
             db.session.rollback()
@@ -1568,7 +1574,7 @@ def spear_settings():
                 str(exc) if isinstance(exc, ValueError) else "SPEAR settings changed. Reload and try again.",
                 "error",
             )
-            return _spear_settings_response(gateway, access, status_code=400)
+            return _spear_settings_response(gateway, access, status_code=409 if isinstance(exc, SettingsConflict) else 400)
         db.session.commit()
         learning_capture_now = request.form.get("learning_capture_enabled") == "1"
         if learning_capture_now and not previous_learning_capture:
@@ -2131,34 +2137,41 @@ def _fueler_response(gateway, access, status_code=200):
 
 
 def _truck_manager_response(gateway, access, status_code=200):
+    admin = admin_form_context(gateway, (), status_code, can_edit=access['can_edit'])
     response = render_template(
         "neonodes/neoscorpion/truck_manager.html",
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        **admin,
         **truck_manager_context(gateway),
     )
     return response, status_code
 
 
 def _settings_response(gateway, access, status_code=200):
+    admin = admin_form_context(gateway, ('save_settings', 'save_assignment_planning_settings', 'save_apu_rates'),
+        status_code, can_edit=access['can_edit'] or (access['can_view'] and user_can(APU_RATES_EDIT_PERMISSION)))
     response = render_template(
         "neonodes/neoscorpion/settings.html",
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
         can_edit_apu_rates=user_can(APU_RATES_EDIT_PERMISSION),
+        **admin,
         **settings_context(gateway),
     )
     return response, status_code
 
 
 def _spear_settings_response(gateway, access, status_code=200):
+    admin = admin_form_context(gateway, ('spear',), status_code, can_edit=access['can_edit'])
     response = render_template(
         "neonodes/neoscorpion/spear_settings.html",
         gateway=gateway,
         can_view=access["can_view"],
         can_edit=access["can_edit"],
+        **admin,
         **settings_context(gateway),
     )
     return response, status_code

@@ -1,0 +1,8 @@
+/* Failed-submit feedback only. The separate Settings layout is unchanged. */
+[data-admin-form-error] {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    max-width: calc(100vw - 32px);
+    overflow-wrap: anywhere;
+}

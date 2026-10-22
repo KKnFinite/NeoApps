@@ -14,7 +14,9 @@ class RowHeightTest(unittest.TestCase):
     login=fixtures.StatusIntegrationTest.login
 
     def save(self, value=None):
+        from app.services.neoscorpion_admin_forms import settings_baseline
         data=dict(action='save_settings',red_assignment_alert_threshold_minutes='30',
+                  settings_baseline=settings_baseline(self.gateway,'save_settings'),
                   fuel_density_lbs_per_gallon='6.7',planning_inbound_fuel_fallback='12')
         if value is not None:data['mission_row_height_percent']=value
         return self.client.post('/neoscorpion/settings',data=data)

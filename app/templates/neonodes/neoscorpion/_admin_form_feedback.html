@@ -1,0 +1,10 @@
+{% if admin_form_draft %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neoscorpion_admin_forms.css', v='20261021-package2') }}">
+<div class="flash flash-error" role="alert" tabindex="-1" data-admin-form-error>
+    <p>{{ admin_form_error }}</p>
+    <a class="action-button action-button-secondary" href="{{ request.path }}" target="_blank" rel="noopener">Open current values in a new tab</a>
+    <small>Keep this tab open to compare your entries. Resolve conflicts in the current-values tab before saving; this form is not automatically rebased.</small>
+    <details><summary>Unsaved entries</summary><dl>{% for name, value in admin_form_draft['values'].items() if name not in ['settings_baseline', 'action'] %}<dt>{{ name }}</dt><dd>{{ value or '—' }}</dd>{% endfor %}</dl></details>
+</div>
+<script type="application/json" data-admin-form-draft>{{ admin_form_draft|tojson }}</script>
+{% endif %}
