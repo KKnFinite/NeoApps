@@ -956,7 +956,7 @@ def fueler_context(gateway, user, *, assignment_id=None, dispatcher=False, physi
     # this user's cards. Reuse this batch and its work states for truck status.
     visible_assignments = [assignment for assignment in assignments
                            if (assignment.assigned_truck_id == truck_id if truck_id is not None else
-                               assignment.assigned_fueler_user_id is not None if dispatcher
+                               (assignment.assigned_fueler_user_id is not None or assignment_id is not None) if dispatcher
                                else assignment.assigned_fueler_user_id == user.id)
                            and (assignment_id is None or assignment.id == assignment_id)
                            and (include_completed or (assignment.review_status != "complete"
@@ -6068,6 +6068,39 @@ def _fuel_work_calculation(
     )
 
 
+def load_planning_text(mission, tail_number, neo_fuel_lbs, center_actual_lbs):
+    text = f"{mission.flight_number or '-'} {mission.destination or '-'} {tail_number or '-'}"
+    if neo_fuel_lbs is not None:
+        text += f" NEO > {format_display_thousands(neo_fuel_lbs)}"
+    if center_actual_lbs is not None:
+        text += f" CF > {int(center_actual_lbs)}"
+    return text
+
+
+def tank_presentation(tank_layout, tanks, planned, apu_running, allowance):
+    """Shared measured tank cells/totals for all Fueler-screen modes."""
+    cells = []
+    for code, label in tank_layout:
+        state = tanks.get(code)
+        planned_lbs = planned.get(code) if planned is not None else None
+        cells.append(dict(code=code, label=label,
+            remaining_lbs=state.remaining_lbs if state else None,
+            actual_lbs=state.actual_lbs if state else None, planned_lbs=planned_lbs,
+            remaining_display=format_dispatch_thousands(state.remaining_lbs if state else None),
+            actual_display=format_dispatch_thousands(state.actual_lbs if state else None),
+            planned_display=format_display_thousands(planned_lbs) if planned_lbs is not None else '-'))
+    remaining, remaining_lbs, actual, actual_lbs, neo_lbs = _fuel_work_calculation(
+        tank_layout, tanks, apu_running, allowance)
+    return dict(tank_rows=cells, planned_ready=remaining,
+        remaining_complete=remaining, actual_complete=actual,
+        remaining_total_lbs=remaining_lbs, actual_total_lbs=actual_lbs, neo_fuel_lbs=neo_lbs,
+        remaining_total_display=format_display_thousands(remaining_lbs) if remaining else 'INCOMPLETE',
+        actual_total_display=format_display_thousands(actual_lbs) if actual else 'INCOMPLETE',
+        actual_fuel_display=format_display_thousands(actual_lbs) if actual else 'INCOMPLETE',
+        planned_total_display=format_display_thousands(sum(planned.values())) if planned is not None else 'INCOMPLETE',
+        neo_fuel_display=format_display_thousands(neo_lbs))
+
+
 def classify_fuel_movement(assignment, fuel_work_state, *, tank_states=None):
     if assignment is not None and assignment.fuel_on_board_at_utc is not None:
         return "not_moved"
@@ -6204,6 +6237,13 @@ def _fuel_rows(
     event_cycle_keys = fueling_event_cycle_keys or set()
     effective_apu_rates = apu_rates_by_aircraft_type or {}
     effective_lateral_limits = lateral_imbalance_limits_by_aircraft_type or {}
+
+    from app.models import NeoScorpionDirectEntry
+    from app.services.neoscorpion_direct_entry import project as project_direct_entry, conflict_reason as direct_conflict, history_assignment_ids
+    direct_entries = {record.sort_date_mission_id:record for record in NeoScorpionDirectEntry.query.filter_by(
+        sort_date_operation_id=operation.id).all()}
+    direct_history_ids = history_assignment_ids(a for a in assignments_by_mission.values()
+        if not a.assigned_fueler_user_id and not a.assigned_truck_id and not a.active_work_state_id)
 
     rows = []
     for mission, source_assignment, source_work in [*((item, None, None) for item in missions), *projection_sources]:
@@ -6361,34 +6401,8 @@ def _fuel_rows(
             if remaining_readings_complete
             else None
         )
-        tank_rows = []
-        for tank_code, tank_label in tank_layout:
-            tank_state = tank_states_by_code.get(tank_code)
-            planned_lbs = (
-                planned_by_tank.get(tank_code)
-                if planned_by_tank is not None
-                else None
-            )
-            tank_rows.append(
-                {
-                    "code": tank_code,
-                    "label": tank_label,
-                    "remaining_lbs": tank_state.remaining_lbs if tank_state else None,
-                    "actual_lbs": tank_state.actual_lbs if tank_state else None,
-                    "planned_lbs": planned_lbs,
-                    "remaining_display": format_dispatch_thousands(
-                        tank_state.remaining_lbs if tank_state else None
-                    ),
-                    "planned_display": (
-                        format_display_thousands(planned_lbs)
-                        if planned_lbs is not None
-                        else "-"
-                    ),
-                    "actual_display": format_dispatch_thousands(
-                        tank_state.actual_lbs if tank_state else None
-                    ),
-                }
-            )
+        tank_rows = tank_presentation(tank_layout, tank_states_by_code, planned_by_tank,
+                                     apu_running, apu_allowance_lbs)['tank_rows']
         (
             remaining_complete,
             remaining_total_lbs,
@@ -6449,14 +6463,7 @@ def _fuel_rows(
             and tank_states_by_code.get("ctr") is not None
             else None
         )
-        load_planning_output = (
-            f"{mission.flight_number or '-'} {mission.destination or '-'} "
-            f"{tail_number or '-'}"
-        )
-        if neo_fuel_lbs is not None:
-            load_planning_output += f" NEO > {format_display_thousands(neo_fuel_lbs)}"
-        if detailed_aircraft_type == "A300" and center_actual_lbs is not None:
-            load_planning_output += f" CF > {int(center_actual_lbs)}"
+        load_planning_output = load_planning_text(mission, tail_number, neo_fuel_lbs, center_actual_lbs)
         fuel_on_board_complete = bool(
             assignment and assignment.fuel_on_board_at_utc
         )
@@ -6942,6 +6949,18 @@ def _fuel_rows(
                 "tail_fuel_state": tail_fuel_state,
             }
         )
+        direct_record = direct_entries.get(mission.id)
+        rows[-1]['direct_entry_record'] = direct_record
+        rows[-1]['direct_entry_available'] = bool(not direct_conflict(mission, assignment,
+            has_work=bool(fuel_work_state or prior_tail_work_state or (assignment and assignment.id in direct_history_ids)),
+            has_record=bool(direct_record))
+            and tank_layout and tail_number)
+        if direct_record:
+            if direct_record.tail_number == tail_number:
+                project_direct_entry(rows[-1], direct_record.snapshot)
+            else:
+                rows[-1].update(administratively_complete=False, effective_hold=True,
+                    hold_reason_display='Direct-entry evidence belongs to another aircraft. Review the replacement tail.')
         rows[-1].update(fueling_status(
             rows[-1], now=now_utc,
             threshold=getattr(status_settings, "red_assignment_alert_threshold_minutes", 30),

@@ -1,4 +1,5 @@
 <div class="scorpion-work-timeline" data-dispatch-work-timeline>
+{% if row.direct_entry_record %}<p data-direct-entry-evidence><strong>DISPATCHER DIRECT ENTRY · COMPLETE {{ row.direct_entry_record.completed_at_utc|local_time(timezone) }}</strong> · {{ row.direct_entry_record.completed_by.display_name }} · {{ row.direct_entry_record.tail_number }} · Record {{ row.direct_entry_record.id }}. Measured fuel recorded; no Neo truck visit.</p>{% endif %}
 {% for visit in row.console_visits if visit.id == row.physical_work_id %}
 {% include "neonodes/neoscorpion/_dispatch_visit.html" %}
 {% else %}

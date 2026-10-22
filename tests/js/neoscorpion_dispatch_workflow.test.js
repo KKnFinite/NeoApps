@@ -211,7 +211,7 @@ test("Hanzo live refresh uses the shared revision endpoint only while visible", 
 });
 
 
-test("APU allowance UI is collapsed to the effective value and keeps inline edit controls", () => {
+test("Dispatch retains compact APU edit; shared Fueler screen uses its current dedicated APU controls", () => {
     const dispatch = readScript("neoscorpion_fuel_dispatch_live.js");
     const editor = readScript("neoscorpion_fuel_data.js");
     const dispatchTemplate = readDispatchTemplate();
@@ -223,7 +223,10 @@ test("APU allowance UI is collapsed to the effective value and keeps inline edit
     assert.match(dispatchTemplate, /data-dispatch-apu-effective/);
     assert.match(fuelerTemplate, /data-apu-allowance-output/);
     assert.match(dispatchTemplate, /<summary>EDIT<\/summary>/);
-    assert.match(fuelerTemplate, /<summary>EDIT<\/summary>/);
+    assert.match(fuelerTemplate, /class="scorpion-fueler-apu"/);
+    assert.match(fuelerTemplate, /data-apu-use-manual>APPLY/);
+    assert.match(fuelerTemplate, /data-apu-use-recommended>USE RECOMMENDED/);
+    assert.doesNotMatch(fuelerTemplate, /data-apu-editor-form/);
     assert.doesNotMatch(dispatchTemplate, /Effective Auto/);
     assert.doesNotMatch(fuelerTemplate, /Effective Auto/);
     assert.doesNotMatch(fuelerTemplate, /Override APU/);

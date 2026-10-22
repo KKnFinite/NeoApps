@@ -1074,7 +1074,7 @@ def _fuel_data_payload(gateway, assignment_id, dispatcher, *, error=None, status
             physical_work_id=None;physical_sequence=None
     context = fueler_context(gateway, current_user, assignment_id=assignment_id,
                              dispatcher=dispatcher, physical_work_id=physical_work_id,
-                             physical_sequence=physical_sequence)
+                             physical_sequence=physical_sequence, include_completed=dispatcher)
     row = context["rows"][0] if context["rows"] else None
     return _json_no_store({
         "ok": error is None,
@@ -1097,7 +1097,7 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
             return _json_no_store({"ok": False, "error": "Access denied."}, 403)
         context = fueler_context(gateway, current_user, assignment_id=assignment_id,
                                  dispatcher=dispatcher, physical_work_id=request.args.get("physical_work_id"),
-                                 physical_sequence=request.args.get("physical_sequence"))
+                                 physical_sequence=request.args.get("physical_sequence"), include_completed=dispatcher)
         if not context["rows"]:
             return _json_no_store({"ok": False, "error": "Active assignment not found."}, 404)
         row = context["rows"][0]
@@ -1212,6 +1212,78 @@ def fueler_new_visit(assignment_id):
 @gateway_node_required("scorpion")
 def dispatch_fueler_data(assignment_id):
     return _fuel_data_request(assignment_id, dispatcher=True)
+
+
+@bp.route('/fuel-dispatch/missions/<int:mission_id>/direct-entry', methods=['GET', 'POST'])
+@gateway_node_required('scorpion')
+def dispatch_direct_entry(mission_id):
+    from app.services import neoscorpion_direct_entry as direct
+    from app.services.time_display import format_local_hhmm
+    from app.services.gateway_matrix import gateway_timezone
+    gateway = get_current_gateway()
+    if not user_can(FUEL_DISPATCH_VIEW_PERMISSION) or (request.method == 'POST' and not user_can(FUEL_DISPATCH_EDIT_PERMISSION)):
+        return _json_no_store({'ok':False, 'error':'Dispatcher permission is required.'}, 403)
+    if request.method == 'POST':
+        try:
+            record, changed = direct.complete_entry(gateway, current_user, mission_id, request.form)
+            db.session.commit()
+        except PermissionError as exc:
+            db.session.rollback()
+            return _json_no_store({'ok':False, 'error':str(exc)}, 403)
+        except direct.DirectEntryConflict as exc:
+            db.session.rollback()
+            return _json_no_store({'ok':False, 'error':str(exc)}, 409)
+        except IntegrityError as exc:
+            db.session.rollback()
+            # Operation/mission locks serialize ordinary contenders; the unique
+            # key is the final guard against a completion outside that path.
+            constraint=getattr(getattr(exc.orig,'diag',None),'constraint_name','') or ''
+            if ('neoscorpion_direct_entries' not in constraint
+                    and 'neoscorpion_direct_entries.' not in str(exc.orig)):
+                raise
+            return _json_no_store({'ok':False, 'error':'Completion conflicts with an existing record. Draft retained; open current values before resolving.'},409)
+        except ValueError as exc:
+            db.session.rollback()
+            return _json_no_store({'ok':False, 'error':str(exc)}, 400)
+        current_app.logger.info('scorpion_direct_entry_committed actor=%s mission=%s record=%s changed=%s',
+            current_user.id, mission_id, record.id, changed)
+    context = fuel_dispatch_context(gateway)
+    operation = context['operation']
+    row = next((row for row in context['rows'] if row['mission'].id == mission_id and not row.get('is_source_segment')), None)
+    if not row or not operation:
+        return _json_no_store({'ok':False, 'error':'Current-sort mission not found.'}, 404)
+    record = row['direct_entry_record']
+    if not record and not user_can(FUEL_DISPATCH_EDIT_PERMISSION):
+        return _json_no_store({'ok':False, 'error':'Dispatcher edit permission is required.'}, 403)
+    if not record and not row['direct_entry_available']:
+        return _json_no_store({'ok':False, 'error':'Direct entry is unavailable: active resources or existing fuel evidence.'}, 409)
+    if not record:
+        assignment = row['assignment']
+        reason = direct.conflict_reason(row['mission'],assignment,has_work=direct._has_history(assignment))
+        if reason:
+            return _json_no_store({'ok':False,'error':reason},409)
+    # OPEN a completed attestation using its recorded aircraft/target, never
+    # today's replacement tail or changed planning data. Main Dispatch still
+    # evaluates the real current mission and its review requirements.
+    row = dict(row)
+    if record:
+        from app.services.neoscorpion import format_display_thousands
+        row.update(direct_entry_current_tail=row['tail_number'],tail_number=record.tail_number,
+            detailed_aircraft_type=record.aircraft_type,required_fuel_lbs=record.snapshot['required_fuel_lbs'],
+            required_display=format_display_thousands(record.snapshot['required_fuel_lbs']))
+        direct.project(row,record.snapshot)
+    else:
+        row['estimated_fuel_display'] = 'UNKNOWN'
+    row['edit_baseline'] = {}
+    row['fueler_display_name'] = '—'
+    return _json_no_store({'ok':True, **fuel_assignments_live_revision(gateway),
+        'direct_entry_receipt': {'id':record.id, 'completed_at':record.completed_at_utc.isoformat(),
+            'actor_id':record.completed_by_user_id} if record else None,
+        'html':render_template('neonodes/neoscorpion/_fueler_card.html', row=row,
+            can_edit=not bool(record), dispatcher_panel=True, direct_entry=True,
+            direct_entry_url=url_for('neoscorpion.dispatch_direct_entry', mission_id=mission_id),
+            direct_entry_token=direct.token_for(operation,row['mission'],current_user) if not record else '',
+            direct_completed_time=format_local_hhmm(record.completed_at_utc,gateway_timezone(gateway)) if record else '')})
 
 
 @bp.post("/fuel-dispatch/fueler-data/<int:assignment_id>/off")

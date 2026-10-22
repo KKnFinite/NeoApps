@@ -35,8 +35,14 @@
     const newerDrafts = (fields, baseline, snapshot, submitted, conflict) => fields.filter(c=>
         c.value!==snapshot.get(c.name) || (conflict && c.value!==baseline(c))
         || (!submitted.has(c.name) && c.value!==baseline(c))).map(c=>[c.name,c.value]);
+    const directReceipt = (response, payload) => {
+        if (!response.ok || !payload.ok) throw new Error(payload.error || 'Completion failed. Draft retained.');
+        if (!payload.direct_entry_receipt?.id || !payload.direct_entry_receipt.completed_at)
+            throw new Error('Completion not confirmed. Draft retained; retry this same entry to recover its receipt.');
+        return payload;
+    };
     if (typeof module !== "undefined" && module.exports) {
-        module.exports = {createRefreshGate, acceptSaveResponse, entryChanges, newerDrafts};
+        module.exports = {createRefreshGate, acceptSaveResponse, entryChanges, newerDrafts, directReceipt};
     }
     if (typeof document === "undefined") return;
 
@@ -49,7 +55,7 @@
     const controls = (scope) => Array.from(scope.querySelectorAll(
         "input[name], select[name], textarea[name]"
     )).filter(control => !control.closest('.scorpion-optional-verification')
-        && !["csrf_token", "expected", "assignment_id", "apu_override_present"].includes(control.name));
+        && !["csrf_token", "expected", "assignment_id", "apu_override_present", "direct_entry_token"].includes(control.name));
     const hasDirty = (scope) => Boolean(scope && (
         scope.matches?.('[data-fuel-data-busy="true"]') || scope.querySelector('[data-fuel-data-busy="true"]')
         || controls(scope).some(control => baselines.has(control) && control.value !== baselines.get(control))
@@ -61,7 +67,7 @@
         controls(scope).forEach(control => baselines.set(control, control.value));
     };
     const status = (scope, message) => {
-        const outputs = scope.querySelectorAll("[data-fuel-data-status], [data-fuel-action-feedback]");
+        const outputs = scope.querySelectorAll("[data-fuel-data-status], [data-fuel-action-feedback], [data-direct-entry-feedback]");
         outputs.forEach(output => { output.textContent = message; });
         const output = outputs[0];
         if (!output && scope === content) content.textContent = message;
@@ -232,6 +238,36 @@
         }
         if (form.matches("[data-source-verification-form]")) return; // Explicit Dispatcher verification, not a Fueler data save.
         event.preventDefault();
+        if (form.matches('[data-direct-entry-form]')) {
+            if (card.dataset.fuelDataBusy === 'true') return;
+            if (!form.reportValidity()) return;
+            // Keep the complete signed request for idempotent, intentional retry.
+            // Neither a 409 nor a network failure replaces the entered draft.
+            const body=new FormData(form), enabled=Array.from(form.elements).filter(c=>!c.disabled);
+            const requestGeneration=generation,requestPanel=panelUrl;
+            const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),30000);
+            card.dataset.fuelDataBusy='true';enabled.forEach(c=>c.disabled=true);
+            status(card,'Saving direct-entry completion…');
+            try {
+                const response=await fetch(form.action,{method:'POST',body,signal:abort.signal,
+                    cache:'no-store',credentials:'same-origin',headers:headers()});
+                const payload=directReceipt(response,await response.json().catch(()=>({ok:false,
+                    error:'Unable to read completion response. Draft retained; retry the unchanged entry to recover its receipt.'})));
+                if(dialog?.open && content.contains(card) && generation===requestGeneration && panelUrl===requestPanel) {
+                    generation+=1;
+                    renderPanel(payload,'COMPLETE · Dispatcher direct entry recorded');
+                    refreshGate.reset();
+                }
+                document.dispatchEvent(new CustomEvent('neoscorpion:fuel-data-saved',{detail:payload}));
+            } catch(error) {
+                status(card,error.name==='AbortError'
+                    ? 'Response timed out. Draft retained; retry this unchanged entry to check its completion receipt.'
+                    : (error.message || 'Completion failed. Draft retained.'));
+            } finally {
+                clearTimeout(timer);card.dataset.fuelDataBusy='false';enabled.forEach(c=>c.disabled=false);
+            }
+            return;
+        }
         if(form.matches('[data-fuel-autosave]')) { scheduleEntrySave(form,0);return; }
         if (card.dataset.fuelDataBusy === "true") {
             const state=autoState(card);

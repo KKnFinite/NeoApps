@@ -82,6 +82,7 @@ from app.models.neoscorpion_fuel import (
 from app.models.neo_node import NeoNode
 from app.models.neoscorpion_driver import NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit
 from app.models.neoscorpion_top_off import NeoScorpionTopOffEvent
+from app.models.neoscorpion_direct_entry import NeoScorpionDirectEntry
 from app.models.neoscorpion_vendor import (NeoScorpionVendorAccount, NeoScorpionVendorNight,
     NeoScorpionVendorRequest, NeoScorpionVendorAudit, NeoScorpionInventoryReading)
 from app.models.permission_rule import PermissionRule

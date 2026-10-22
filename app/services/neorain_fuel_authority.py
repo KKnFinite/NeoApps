@@ -15,6 +15,8 @@ from app.models import (
     NeoRainGoogleFuelValue,
     NeoScorpionFuelAssignment,
     NeoScorpionFuelingEvent,
+    NeoScorpionDirectEntry,
+    SortDateMission,
 )
 from app.services.google_rain_integration_mode import (
     DEFAULT_RAIN_SORT,
@@ -110,6 +112,20 @@ def completed_scorpion_fuel_by_mission(operation, *, include_identity=False):
             "is_correction": change_number > 0,
             **({"tail": event.tail_number, "cycle": event.cycle_number} if include_identity else {}),
         }
+    # Direct-entry attestations are a canonical completed source, but never a
+    # physical fueling event or inventory transfer. Unknown APU stays unknown.
+    from app.services.neoscorpion_direct_entry import completed_values
+    for record,mission in db.session.query(NeoScorpionDirectEntry,SortDateMission).join(
+            SortDateMission,SortDateMission.id==NeoScorpionDirectEntry.sort_date_mission_id).filter(
+            NeoScorpionDirectEntry.sort_date_operation_id==operation.id,
+            NeoScorpionDirectEntry.gateway_id==operation.gateway_id,
+            SortDateMission.fuel_status=='complete').all():
+        if record.tail_number != str(mission.assigned_tail_number or '').strip().upper():
+            continue
+        neo,center=completed_values(record)
+        values.setdefault(mission.id,dict(neo_fuel=_fuel_value(neo),center_fuel=_fuel_value(center),
+            revision=_fuel_revision(mission.id,0,neo,center),is_correction=False,
+            **({'tail':record.tail_number,'cycle':1,'source':'dispatcher_direct_entry'} if include_identity else {})))
     return values
 
 
@@ -148,6 +164,9 @@ def scorpion_board_fuel_by_mission(operation, missions):
         if row['fuel_on_board_complete'] and row['fob_verified'] and row['fob_projected_neo_lbs'] is not None:
             verified = True
             quantity = scorpion.format_display_thousands(row['fob_projected_neo_lbs'])
+        if row.get('direct_entry_record') and row['administratively_complete'] and row['neo_fuel_lbs'] is not None:
+            verified=True
+            quantity=scorpion.format_display_thousands(row['neo_fuel_lbs'])
         result[mission.id] = dict(
             scorpion_fuel_display=quantity if verified else row['dispatch_status_label'],
             scorpion_fuel_status=row['dispatch_status_key'], scorpion_fuel_final=verified,

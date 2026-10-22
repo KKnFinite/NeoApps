@@ -239,7 +239,7 @@
     scope.querySelectorAll("[data-fuel-planning-form]").forEach((form) => {
         if (form.dataset.planningReady) return;
         form.dataset.planningReady = "true";
-        const card = form.closest("[data-fuel-assignment-id]");
+        const card = form.closest("[data-fuel-data-card]");
         const apuRunningInput = form.querySelector("[data-apu-running]");
         const apuSourceInput = form.querySelector("[data-apu-source]");
         const apuSourceWrap = form.querySelector("[data-apu-source-wrap]");
@@ -383,6 +383,27 @@
                     ? value.toFixed(1)
                     : "-";
             });
+            // Shared live readouts use complete measured input, never the
+            // planning algorithm's zero placeholder for missing Actuals.
+            const sumReadings = kind => {
+                const fields=Array.from(form.querySelectorAll(`[data-fuel-reading="${kind}"]`));
+                const values=fields.map(c=>numberOrNull(c.value));
+                return values.length && values.every(v=>v!==null && v>=0)
+                    ? values.reduce((a,b)=>a+b,0) : null;
+            };
+            const actualTotal=sumReadings('actual'),remainingTotal=sumReadings('remaining');
+            [['[data-actual-total]',actualTotal],['[data-remaining-total]',remainingTotal],
+                ['[data-planned-total]',planned && tankCodes.every(c=>Number.isFinite(planned[c]))
+                    ? tankCodes.reduce((n,c)=>n+planned[c],0) : null],
+                ['[data-neo-fuel-output]',actualTotal!==null && allowance!==null ? actualTotal-allowance : null]]
+                .forEach(([selector,value])=>{const output=card.querySelector(selector);if(output)output.textContent=value===null?'INCOMPLETE':displayFuel(value);});
+            const directButton=form.querySelector('[data-direct-entry-complete]');
+            if(directButton) {
+                const ready=actualTotal!==null && (!sourceRequired || (apuSourceInput.value && allowance!==null));
+                directButton.disabled=!ready;
+                const feedback=form.querySelector('[data-direct-entry-feedback]');
+                if(feedback)feedback.textContent=ready?'Ready to record Dispatcher completion. No truck inventory movement.':'Enter measured Actual for every tank; confirm APU source if APU YES is selected.';
+            }
         };
 
         apuUseRecommended?.addEventListener("click", () => {
