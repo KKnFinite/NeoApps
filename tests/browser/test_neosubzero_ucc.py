@@ -25,6 +25,8 @@ class UccBrowserTest(unittest.TestCase):
         with cls.app.app_context():
             fixture = NeoSubZeroUccTest()
             gateway = Gateway.query.filter_by(code="RFD").one()
+            from app.services.parking_rules import ensure_parking_settings
+            ensure_parking_settings(gateway).include_throat_default=True
             fixture.operation = SortDateOperation(sort_date=datetime(2026, 10, 22).date(), gateway_id=gateway.id, gateway_code="RFD", sort_name="night")
             db.session.add(fixture.operation)
             db.session.flush()
@@ -94,7 +96,8 @@ class UccBrowserTest(unittest.TestCase):
                     self.assertLess(bounds['A10']['x'],bounds['A05']['x'])
                     self.assertLess(bounds['A01']['y'],bounds['A04']['y'])
                     self.assertLess(bounds['A10']['y'],bounds['A09']['y'])
-                    self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-throat-position]').count(),3)
+                    self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-deice-pad]').count(),1)
+                    self.assertEqual(page.locator('[data-ucc-ramp="Alpha"] [data-ucc-queue-position]').count(),2)
                 else:
                     expect(page.locator('.ucc-ramp-diagram').first).to_be_hidden()
                 measurements.append({"engine":engine, **geometry})
@@ -182,13 +185,14 @@ class UccBrowserTest(unittest.TestCase):
             mobile.screenshot(path=str(self.evidence / f"ucc-{engine}-mobile-staff-editor.png"), full_page=True)
             with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=None), patch("app.neonodes.neosubzero.routes.neosubzero_weather_context",return_value={**self.weather_data,"current_sort":None}):
                 self.ready(page,"/neosubzero/ucc")
-                self.assertEqual(page.locator('[data-ucc-ramp]').count(),5)
-                self.assertEqual(page.locator('[data-ucc-parking]').count(),50)
+                self.assertEqual(page.locator('[data-ucc-ramp]').count(),6)
+                self.assertEqual(page.locator('[data-ucc-parking]').count(),54)
                 self.assertEqual(page.locator('[data-ucc-assignment-form]').count(),0)
                 expect(page.locator('[data-ucc-ramp="Echo"]')).to_be_visible()
                 page.screenshot(path=str(self.evidence / f"ucc-{engine}-off-sort.png"),full_page=True)
                 self.ready(mobile,"/neosubzero/ucc")
-                expect(mobile.locator('.ucc-ramp-board')).to_be_hidden()
+                expect(mobile.locator('[data-ucc-ramp="Alpha"]')).to_be_hidden()
+                expect(mobile.locator('[data-ucc-upcoming]')).to_be_visible()
                 self.assertEqual(mobile.locator('[data-ucc-assignment-form]').count(),0)
             # A newly active sort reaches both displays without borrowing future data.
             expect(page.locator('[data-ucc-editor="Alpha-1"]')).to_have_count(1,timeout=10000)

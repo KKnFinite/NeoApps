@@ -392,6 +392,16 @@
                 next.querySelectorAll("[data-ucc-ramp]").forEach((ramp) => {
                     if (!root.querySelector(`[data-ucc-ramp="${CSS.escape(ramp.dataset.uccRamp)}"]`)) root.querySelector(".ucc-ramp-board").append(ramp);
                 });
+                // Forecasts and unresolved locations must stay live even while
+                // a staffing draft prevents replacement of the full board.
+                const upcoming = root.querySelector('[data-ucc-upcoming]');
+                const upcomingNext = next.querySelector('[data-ucc-upcoming]');
+                if (upcoming && upcomingNext) upcoming.replaceWith(upcomingNext);
+                const locations = root.querySelector('[data-ucc-location-exceptions]');
+                const locationsNext = next.querySelector('[data-ucc-location-exceptions]');
+                if (locations && locationsNext) locations.replaceWith(locationsNext);
+                else if (locations) locations.remove();
+                else if (locationsNext) root.querySelector('.ucc-ramp-board').before(locationsNext);
                 root.querySelector("[data-ucc-info]")?.replaceWith(next.querySelector("[data-ucc-info]"));
             } else {
                 root.querySelector("[data-ucc-live-board]").replaceWith(next.querySelector("[data-ucc-live-board]"));

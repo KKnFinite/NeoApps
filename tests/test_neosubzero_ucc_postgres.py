@@ -117,3 +117,30 @@ class UccPostgresTest(unittest.TestCase):
         self.assertEqual((event.id,event.tail_number,event.updated_at),original)
         self.assertIsNone(event.ucc_queue_order)
         self.assertIsNone(event.ucc_queue_history)
+
+    def test_pad_plus_three_survives_commits_and_clear_without_replacing_events(self):
+        from datetime import datetime
+        from app.services.neosubzero_departure_deice import mutate_departure_deice
+        f=self.fixture
+        missions=[f.alpha]
+        for i in range(3):
+            mission=f._departure(f'5X-PG{i}',f'N-PG{i}','SDF',3)
+            db.session.add(SortDateParkingAssignment(sort_date_operation_id=f.operation.id,
+                tail_number=mission.assigned_tail_number,ramp_code='A',position_code=f'A0{i+4}'))
+            missions.append(mission)
+        events=[]
+        for i,mission in enumerate(missions):
+            mission.actual_block_out_datetime_utc=datetime(2026,9,1,1,i)
+            events.append(f._deice_event(mission,'deice_planned'))
+        db.session.commit();ids=[event.id for event in events]
+        before=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
+        self.assertEqual(before['pad']['mission_id'],missions[0].id)
+        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions[1:]])
+        events[0].status='finished';events[0].pass1_ended_at_utc=datetime(2026,9,1,1,5)
+        mutate_departure_deice(f.operation,missions[0],'clear',{},event=events[0]);db.session.commit()
+        db.session.expire_all()
+        after=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
+        self.assertEqual(after['pad']['mission_id'],missions[1].id)
+        self.assertEqual([row['queue_position'] for row in after['waiting_queue']],[1,2])
+        self.assertEqual([event.id for event in NeoSubZeroDepartureDeiceEvent.query.order_by(NeoSubZeroDepartureDeiceEvent.id)],ids)
+        self.assertEqual(db.session.get(NeoSubZeroDepartureDeiceEvent,ids[0]).pass1_ended_at_utc,datetime(2026,9,1,1,5))

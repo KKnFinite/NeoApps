@@ -20,6 +20,7 @@ from app.models import (
     SortDateMission,
     SortDateParkingAssignment,
     SortDateTailState,
+    MotherBrainParkingSettings,
 )
 from app.services.live_collaboration import entity_version
 from app.services.memory_diagnostics import memory_diagnostics
@@ -31,6 +32,13 @@ UCC_REFRESH_KEY = "neosubzero.ucc"
 UCC_POSITIONS = (1, 2, 3, 4)
 UCC_ROLES = ("driver", "flyer")
 UCC_RAMP_ORDER = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
+UCC_DISPLAY_RAMPS = (*UCC_RAMP_ORDER, "Remote")
+
+
+def _parking_9_10_enabled(gateway):
+    # Consume MotherBrain's existing gateway setting without creating/updating it.
+    settings = MotherBrainParkingSettings.query.filter_by(gateway_id=gateway.id).first()
+    return bool(settings and settings.include_throat_default)
 
 
 class NeoSubZeroUccError(ValueError):
@@ -46,15 +54,17 @@ def neosubzero_ucc_context(gateway, operation):
 
     departure_context = departure_deice_context(gateway, operation)
     fluid_settings = departure_context["fluid_settings"]
+    parking_9_10_enabled = _parking_9_10_enabled(gateway)
     if operation is None:
         return {
             "operation": None,
             "ramps": tuple({
-                "name": name, "aircraft": (), "queue": (), "throat": None,
+                "name": name, "aircraft": (), "queue": (), "throat": None, "pad": None,
                 "waiting_queue": (), "slots": (), "exceptions": (),
-                "location_exceptions": (), "position_conflicts": (),
-                "parking_positions": _parking_projection(name, (), ()),
-            } for name in UCC_RAMP_ORDER),
+                "location_exceptions": (), "parking_exceptions": (), "active_conflicts": (),
+                "parking_positions": _parking_projection(name, (), parking_9_10_enabled),
+            } for name in UCC_DISPLAY_RAMPS),
+            "unlocated_aircraft": (),
             "staffing_pool": (),
             "fluid_settings": fluid_settings,
             "assignment_index": {},
@@ -84,7 +94,7 @@ def neosubzero_ucc_context(gateway, operation):
     available_people = {
         item["person"].id: item for item in staffing_pool
     }
-    rows_by_ramp = {ramp: [] for ramp in (*UCC_RAMP_ORDER, "Remote", "MotherBrain", "Unlocated")}
+    rows_by_ramp = {ramp: [] for ramp in (*UCC_DISPLAY_RAMPS, "Unlocated")}
     for row in departure_rows:
         ramp = row.get("ramp")
         ramp = ramp if ramp in rows_by_ramp else "Unlocated"
@@ -94,19 +104,18 @@ def neosubzero_ucc_context(gateway, operation):
         rows_by_ramp[ramp].append(item)
 
     ramps = []
-    for ramp in rows_by_ramp:
+    for ramp in UCC_DISPLAY_RAMPS:
         aircraft = rows_by_ramp[ramp]
-        if not aircraft and ramp not in UCC_RAMP_ORDER:
-            continue
         aircraft.sort(key=_aircraft_sort_key)
-        queue = _physical_queue(aircraft) if ramp in RAMP_ORDER else []
+        queue = _physical_queue(aircraft) if ramp in UCC_RAMP_ORDER else []
         throat = queue[0] if queue else None
-        waiting_rows = queue[1:3]
+        waiting_rows = queue[1:4]
         for queue_position, row in enumerate(waiting_rows, start=1):
             row["queue_position"] = queue_position
         waiting_queue = tuple(waiting_rows)
         parked = [row for row in aircraft if row.get("block_out_at_utc") is None]
-        parking = _parking_projection(ramp, parked, queue)
+        parking = _parking_projection(ramp, parked, parking_9_10_enabled)
+        visible_codes = {place["code"] for place in parking}
         slots = []
         for position in UCC_POSITIONS if ramp in RAMP_ORDER else ():
             roles = {}
@@ -134,23 +143,22 @@ def neosubzero_ucc_context(gateway, operation):
                 "name": ramp,
                 "aircraft": tuple(aircraft),
                 "throat": throat,
+                "pad": throat,
                 "waiting_queue": waiting_queue,
-                "throat_positions": tuple(
-                    {"label": label, "aircraft": queue[index] if index < len(queue) else None}
-                    for index, label in enumerate(("10", "10 → 9", "9"))
-                ),
                 "queue": tuple(queue),
                 "queue_version": _queue_version(aircraft),
-                "exceptions": tuple(queue[3:]),
-                "location_exceptions": tuple(row for row in aircraft if row.get("block_out_at_utc") and ramp not in RAMP_ORDER),
+                "exceptions": tuple(queue[4:]),
+                "location_exceptions": tuple(row for row in aircraft if row.get("block_out_at_utc") and ramp not in UCC_RAMP_ORDER),
                 "parking_positions": parking,
-                "position_conflicts": tuple(place for place in parking if place["throat_aircraft"] and place["aircraft"]),
+                "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes),
+                "active_conflicts": tuple(row for row in queue[1:] if _is_active_throat(row)),
                 "slots": tuple(slots),
             }
         )
     return {
         "operation": operation,
         "ramps": tuple(ramps),
+        "unlocated_aircraft": tuple(sorted(rows_by_ramp["Unlocated"], key=_aircraft_sort_key)),
         "staffing_pool": staffing_pool,
         "fluid_settings": fluid_settings,
         "staffing_version": ucc_staffing_version(operation),
@@ -158,49 +166,32 @@ def neosubzero_ucc_context(gateway, operation):
             str(row.person_id): {"assignmentId": str(row.id), "assignmentVersion": entity_version(row)}
             for row in assignment_rows if row.person_id is not None
         },
-        "detached_units": tuple(
-            {"ramp": "Remote", "position": position,
-             "truck": getattr(truck_by_position.get(("Remote", position)), "truck_number", None) or ""}
-            for position in UCC_POSITIONS
-            if not rows_by_ramp["Remote"] and (
-                any(getattr(assignment_by_slot.get(("Remote", position, role)), "person_id", None) for role in UCC_ROLES)
-                or getattr(truck_by_position.get(("Remote", position)), "truck_number", None)
-            )
-        ),
+        "detached_units": (),  # Remote teams are now always in the visible roster.
     }
 
 
-def _parking_projection(ramp, parked, queue):
-    from app.services.parking_plan import PARKING_RAMP_GROUPS, _position_layout
+def _parking_projection(ramp, parked, parking_9_10_enabled):
+    from app.services.parking_plan import PARKING_RAMP_GROUPS
     positions_by_ramp = {name: positions for name, _code, positions in PARKING_RAMP_GROUPS}
     parking_codes = list(positions_by_ramp.get(ramp, ()))
-    parking_codes.extend(row["parking"] for row in parked if row["parking"] not in parking_codes)
+    if ramp in UCC_RAMP_ORDER and not parking_9_10_enabled:
+        parking_codes = [code for code in parking_codes if _position_number(code) not in (9, 10)]
     parking = []
     for code in dict.fromkeys(parking_codes):
-        layout = _position_layout(code[:1], code)
         number = _position_number(code)
         grid_row, grid_column = None, None
         if ramp in UCC_RAMP_ORDER:
-            if layout["side"] == "left":
-                grid_row, grid_column = number + 1, 1
-            elif layout["side"] == "right":
-                grid_row, grid_column = number - 3, 3
-            elif layout["side"] == "top":
-                grid_row, grid_column = 1, 2
-            elif layout["side"] == "bottom":
-                grid_row, grid_column = 6, 2
-        throat_index = 0 if number == 10 else 2 if number == 9 else None
+            if 1 <= number <= 4:
+                grid_row, grid_column = number, 1
+            elif 5 <= number <= 8:
+                grid_row, grid_column = number - 4, 3
+            else:
+                grid_row, grid_column = (1 if number == 10 else 4), 2
         parking.append({
             "code": code,
             "aircraft": tuple(row for row in parked if row["parking"] == code),
             "grid_row": grid_row,
             "grid_column": grid_column,
-            "throat_label": str(number) if throat_index is not None and ramp in UCC_RAMP_ORDER else None,
-            "throat_aircraft": (
-                queue[throat_index]
-                if throat_index is not None and ramp in UCC_RAMP_ORDER and len(queue) > throat_index
-                else None
-            ),
         })
     return tuple(parking)
 
@@ -286,7 +277,7 @@ def _physical_aircraft_rows(operation, departure_context):
             if location:
                 item["parking"], code = location
                 item["parking_source"] = "MotherBrain tail parking"
-        item["ramp"] = _ramp_name(code) or ("MotherBrain" if code.upper() in {"M", "MB", "MOTHERBRAIN"} else "Unlocated")
+        item["ramp"] = _ramp_name(code) or "Unlocated"
         item["lane"] = getattr(assignment, "lane_number", None)
         item["canonical_departure_required"] = bool(state and state.deice_status in {"required", "configured"})
         # Treatment evidence belonging to a former tail must never move aircraft.
@@ -643,7 +634,8 @@ def neosubzero_ucc_revision(gateway, operation, *, weather_revision=None):
     from app.services.neosubzero_departure_deice import departure_deice_revision
 
     operation_id = getattr(operation, "id", None)
-    payload = [("departure", departure_deice_revision(gateway, operation))]
+    payload = [("departure", departure_deice_revision(gateway, operation)),
+               ("parking_9_10_enabled", _parking_9_10_enabled(gateway))]
     if weather_revision is not None:
         payload.append(("weather", weather_revision))
     models = (

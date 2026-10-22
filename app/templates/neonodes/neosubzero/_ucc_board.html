@@ -4,18 +4,30 @@
     {% if row.flight or row.lane %}<span>{{ row.flight }}{% if row.lane %} · L{{ row.lane }}{% endif %}</span>{% endif %}<small>{{ row.visual_label }}</small>
 </button>
 {%- endmacro %}
+{% macro parking_place(place, positioned=true) -%}
+<div class="ucc-parking-place" data-ucc-parking="{{ place.code }}" {% if positioned and place.grid_row %}style="grid-row:{{ place.grid_row }};grid-column:{{ place.grid_column }}"{% endif %}>
+    <b>{{ place.code }}</b>
+    {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code) }}{% else %}<span>EMPTY</span>{% endfor %}
+</div>
+{%- endmacro %}
 {% macro physical_ramp(ramp) -%}
-<div class="ucc-ramp-diagram ucc-desktop-label {{ 'is-main-ramp' if ramp.name in ('Alpha','Bravo','Charlie','Delta','Echo') else 'is-additional-location' }}" aria-label="{{ ramp.name }} physical parking and throat">
-    {% for place in ramp.parking_positions %}
-    <div class="ucc-parking-place {{ 'is-throat-stand' if place.throat_label else '' }}" data-ucc-parking="{{ place.code }}" {% if place.grid_row %}style="grid-row:{{ place.grid_row }};grid-column:{{ place.grid_column }}"{% endif %}>
-        <b>{{ place.code }}</b>
-        {% if place.throat_label %}<div class="ucc-throat-place" data-ucc-throat-position="{{ place.throat_label }}"><small>{% if place.aircraft and not place.throat_aircraft %}PARKED{% else %}THROAT {{ place.throat_label }}{% endif %}</small>{% if place.throat_aircraft %}{{ aircraft(place.throat_aircraft, 'throat ' ~ place.throat_label) }}{% elif not place.aircraft %}<span>EMPTY</span>{% endif %}</div>{% endif %}
-        {% if not place.throat_aircraft %}{% for row in place.aircraft %}{{ aircraft(row, place.code) }}{% else %}{% if not place.throat_label %}<span>EMPTY</span>{% endif %}{% endfor %}{% endif %}
-        {% if place.throat_aircraft and place.aircraft %}<small class="ucc-warning">LOCATION CONFLICT · REVIEW</small>{% endif %}
+<div class="ucc-ramp-diagram ucc-desktop-label {{ 'is-main-ramp' if ramp.name != 'Remote' else 'is-remote' }}" aria-label="{{ ramp.name }} physical parking and deice planning">
+    {% if ramp.name != 'Remote' %}
+    <div class="ucc-deice-pad" data-ucc-deice-pad><b>DEICE PAD</b>{% if ramp.pad %}{{ aircraft(ramp.pad, 'DEICE PAD') }}{% else %}<span>EMPTY</span>{% endif %}</div>
+    <div class="ucc-parking-grid">
+        {% for place in ramp.parking_positions if place.code[-2:] not in ('09','10') %}{{ parking_place(place) }}{% endfor %}
+        {% for level in range(1,5) %}
+        {% set stand = ramp.parking_positions|selectattr('grid_column','equalto',2)|selectattr('grid_row','equalto',level)|first %}
+        {% set waiting = ramp.waiting_queue[level-1] if level <= ramp.waiting_queue|length else none %}
+        {% if stand or waiting %}<div class="ucc-center-position" style="grid-row:{{ level }};grid-column:2">
+            {% if waiting %}<div class="ucc-deice-waiting" data-ucc-queue-position="{{ level }}"><b>DEICE QUEUE {{ level }}</b>{{ aircraft(waiting, 'DEICE QUEUE ' ~ level) }}</div>{% endif %}
+            {% if stand %}{{ parking_place(stand, false) }}{% endif %}
+        </div>{% endif %}
+        {% endfor %}
     </div>
-    {% endfor %}
-    {% if ramp.name in ('Alpha','Bravo','Charlie','Delta','Echo') %}<div class="ucc-throat-middle ucc-throat-place" data-ucc-throat-position="10 → 9"><small>10 → 9</small>{% if ramp.waiting_queue %}{{ aircraft(ramp.waiting_queue[0], 'between positions 10 and 9') }}{% else %}<span>EMPTY</span>{% endif %}</div>{% endif %}
-    {% if ramp.name == 'Remote' %}<div class="ucc-remote-throat">{% for place in ramp.throat_positions %}<div class="ucc-throat-place" data-ucc-throat-position="{{ place.label }}"><small>THROAT {{ place.label }}</small>{% if place.aircraft %}{{ aircraft(place.aircraft, 'throat ' ~ place.label) }}{% else %}<span>EMPTY</span>{% endif %}</div>{% endfor %}</div>{% endif %}
+    {% else %}
+    <div class="ucc-remote-parking">{% for place in ramp.parking_positions %}{{ parking_place(place) }}{% endfor %}</div>
+    {% endif %}
 </div>
 {%- endmacro %}
 <div data-ucc-live-board>
@@ -24,15 +36,17 @@
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>
 <aside class="ucc-aircraft-panel ucc-desktop-label" aria-label="Aircraft planning information" data-ucc-info hidden>
     <p data-ucc-info-empty>Select an aircraft above. This board does not record sprays.</p>
-    {% for ramp in ramps %}{% for row in ramp.aircraft %}
+    {% set information_groups = ramps + ({'name':'LOCATION REVIEW','aircraft':unlocated_aircraft,'queue':[],'exceptions':[],'slots':[]},) %}
+    {% for ramp in information_groups %}{% for row in ramp.aircraft %}
     <article data-ucc-info-mission="{{ row.identity_key }}" hidden><header><h2>{{ row.tail }}{% if row.flight %} · {{ row.flight }}{% endif %}</h2><button type="button" data-ucc-info-close aria-label="Close aircraft information">×</button></header>
-        <dl><div><dt>LOCATION</dt><dd>{{ ramp.name }} · {% if row in ramp.queue[:3] %}THROAT {{ ramp.throat_positions[ramp.queue.index(row)].label }}{% elif row in ramp.exceptions %}UNPLACED · CAPACITY REVIEW{% else %}{{ row.parking }}{% endif %}</dd></div>{% if row.destination or row.departure_time %}<div><dt>ROUTE / {{ row.departure_time_label }}</dt><dd>{{ row.destination }} · {{ row.departure_time }}</dd></div>{% endif %}<div><dt>AIRCRAFT</dt><dd>{{ row.tail_status }}</dd></div><div><dt>PRETREAT</dt><dd>{{ row.pretreat_status }}</dd></div><div><dt>DEPARTURE DEICE</dt><dd>{{ row.deice_status }}</dd></div></dl>
+        <dl><div><dt>LOCATION</dt><dd>{{ ramp.name }} · {% if row in ramp.queue[:4] %}{% set index=ramp.queue.index(row) %}{{ 'DEICE PAD' if index == 0 else 'DEICE QUEUE ' ~ index }}{% elif row in ramp.exceptions %}UNPLACED · CAPACITY REVIEW{% else %}{{ row.parking }}{% endif %}</dd></div>{% if row.destination or row.departure_time %}<div><dt>ROUTE / {{ row.departure_time_label }}</dt><dd>{{ row.destination }} · {{ row.departure_time }}</dd></div>{% endif %}<div><dt>AIRCRAFT</dt><dd>{{ row.tail_status }}</dd></div><div><dt>PRETREAT</dt><dd>{{ row.pretreat_status }}</dd></div><div><dt>DEPARTURE DEICE</dt><dd>{{ row.deice_status }}</dd></div></dl>
         {% if row.identity_note %}<p class="ucc-warning">{{ row.identity_note }}</p>{% endif %}
         <div class="ucc-resource-context">{% for owner in ramp.slots if owner.truck_number or owner.roles.driver.person or owner.roles.flyer.person %}<span>P{{ owner.position }} · {{ owner.truck_number or 'No truck' }} · {{ owner.roles.driver.person.full_name if owner.roles.driver.person else 'No driver' }} / {{ owner.roles.flyer.person.full_name if owner.roles.flyer.person else 'No flyer' }}</span>{% endfor %}</div>
         {% if row in ramp.queue and can_edit %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='queue') }}" data-ucc-queue-form><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="expected_version" value="{{ ramp.queue_version }}"><span>COORDINATOR QUEUE CORRECTION</span><button type="submit" name="direction" value="forward">MOVE FORWARD</button><button type="submit" name="direction" value="back">MOVE BACK</button></form>{% endif %}
         <a href="{{ url_for('neosubzero.coordinator', mission=row.mission_id, ramp=ramp.name) }}">OPEN DEICE OPERATIONS</a>
     </article>{% endfor %}{% endfor %}
 </aside>
+{% if unlocated_aircraft %}<section class="ucc-location-exceptions ucc-desktop-label" data-ucc-location-exceptions><strong>LOCATION REVIEW</strong><p>Canonical parking does not identify a physical ramp. Records are preserved; confirm the actual location in MotherBrain.</p>{% for row in unlocated_aircraft %}<div>{{ aircraft(row, 'location review: ' ~ row.parking) }}<span>{{ row.parking }} · {{ row.parking_source }}</span></div>{% endfor %}</section>{% endif %}
 <div class="ucc-ramp-board {{ 'is-no-sort' if not operation else '' }}">
 {% for ramp in ramps %}
 <section class="ucc-ramp" data-ucc-ramp="{{ ramp.name }}">
@@ -62,9 +76,11 @@
             </div>
         </details>{% endfor %}
     </div>
-    {% if ramp.exceptions %}<details class="ucc-queue-exception ucc-desktop-label"><summary>THROAT CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</summary><p>Three positions maximum. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}{{ aircraft(row, 'unplaced; throat capacity review') }}{% endfor %}</details>{% endif %}
+    {% if ramp.exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>DEICE CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</strong><p>One pad and three waiting aircraft maximum. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}{{ aircraft(row, 'unplaced; deice capacity review') }}{% endfor %}</div>{% endif %}
     {% if ramp.location_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>LOCATION REVIEW · AFTER BLOCK-OUT</strong>{% for row in ramp.location_exceptions %}{{ aircraft(row, 'location unconfirmed after Block-Out') }}{% endfor %}</div>{% endif %}
-    {% for place in ramp.position_conflicts %}<div class="ucc-queue-exception ucc-desktop-label"><strong>PARKING CONFLICT · {{ place.code }}</strong><p>Recorded parking conflicts with throat occupancy. Confirm actual location.</p>{% for row in place.aircraft %}{{ aircraft(row, 'parking conflict; actual location needs review') }}{% endfor %}</div>{% endfor %}
+    {% if ramp.parking_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>PARKING REVIEW</strong><p>Recorded stand is disabled or unresolved. No parking assignment was changed.</p>{% for row in ramp.parking_exceptions %}{{ aircraft(row, 'parking review: ' ~ row.parking) }}<span>{{ row.parking }}</span>{% endfor %}</div>{% endif %}
+    {% if ramp.active_conflicts %}<p class="ucc-queue-exception ucc-desktop-label">ACTIVE DEICE CONFLICT · More than one active event is recorded. Coordinator review required: {% for row in ramp.active_conflicts %}{{ row.tail }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
 </section>{% endfor %}
+{% include 'neonodes/neosubzero/_ucc_forecast.html' %}
 </div>
 </div>

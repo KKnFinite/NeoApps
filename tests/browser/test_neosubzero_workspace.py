@@ -105,8 +105,10 @@ class SubZeroWorkspaceBrowserTest(unittest.TestCase):
             page=browser.new_page(viewport={'width':1440,'height':1000})
             self.login(page);self.ready(page,'/neosubzero/ucc')
             remote=page.locator('[data-ucc-ramp="Remote"]')
-            expect(remote).to_have_count(0)
-            expect(page.locator('[data-ucc-ramp="MotherBrain"]')).to_contain_text('N-MOTHERBRAIN')
+            expect(remote).to_be_visible()
+            expect(remote.locator('[data-ucc-aircraft]')).to_have_count(0)
+            expect(page.locator('[data-ucc-location-exceptions]')).to_contain_text('N-MOTHERBRAIN')
+            expect(page.locator('[data-ucc-ramp="MotherBrain"]')).to_have_count(0)
             with self.app.app_context():
                 db.session.get(SortDateTailState,sid).parking_position='REMOTE';db.session.commit()
             expect(remote).to_contain_text('N-REMOTE-LIVE',timeout=10000)
@@ -117,6 +119,7 @@ class SubZeroWorkspaceBrowserTest(unittest.TestCase):
             remote.screenshot(path=str(evidence/f'{engine}-remote-live.png'))
             with self.app.app_context():
                 db.session.get(SortDateTailState,sid).parking_position=None;db.session.commit()
-            expect(remote).to_have_count(0,timeout=10000)
-            expect(page.locator('[data-ucc-ramp="MotherBrain"]')).to_be_visible()
+            expect(remote.locator('[data-ucc-aircraft]')).to_have_count(0,timeout=10000)
+            expect(remote).to_be_visible()
+            expect(page.locator('[data-ucc-location-exceptions]')).to_contain_text('N-MOTHERBRAIN')
             browser.close()

@@ -10,17 +10,18 @@ function fixture() {
     const classList = {add(){}, remove(){}, toggle(){}};
     const feedback = {hidden:true, textContent:'', classList};
     const currentLink = {hidden:true};
-    let replacements = 0, poll, serverRevision = 'r2', getCount = 0;
+    let replacements = 0, forecastReplacements = 0, poll, serverRevision = 'r2', getCount = 0;
     const board = {replaceWith(){ replacements++; }};
+    const upcoming = {replaceWith(){ forecastReplacements++; }};
     const root = {
         dataset:{revision:'r1',revisionUrl:'/neosubzero/ucc/revision',refreshIntervalMs:'1000',refreshStatus:'{}'}, classList,
         querySelectorAll(){return [];},
         querySelector(selector){
-            return {'[data-ucc-feedback]':feedback,'[data-ucc-current-link]':currentLink,'[data-ucc-live-board]':board}[selector] || null;
+            return {'[data-ucc-feedback]':feedback,'[data-ucc-current-link]':currentLink,'[data-ucc-live-board]':board,'[data-ucc-upcoming]':upcoming}[selector] || null;
         },
         addEventListener(name, callback){listeners[name] = callback;},
     };
-    const next = {dataset:{revision:'r2'},querySelectorAll(){return [];},querySelector(selector){return selector === '[data-ucc-live-board]' ? {} : null;}};
+    const next = {dataset:{revision:'r2'},querySelectorAll(){return [];},querySelector(selector){return ['[data-ucc-live-board]','[data-ucc-upcoming]'].includes(selector) ? {} : null;}};
     const document = {body:{classList},documentElement:{},querySelector(){return root;},addEventListener(){},activeElement:null};
     const window = {
         matchMedia(){return {matches:false};},localStorage:{getItem(){return null;}},
@@ -41,7 +42,7 @@ function fixture() {
         },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../app/static/js/neosubzero_ucc.js'),'utf8'),context);
-    return {root,feedback,currentLink,calls,listeners,poll:()=>poll(),get replacements(){return replacements;},get getCount(){return getCount;}};
+    return {root,feedback,currentLink,calls,listeners,poll:()=>poll(),get replacements(){return replacements;},get forecastReplacements(){return forecastReplacements;},get getCount(){return getCount;}};
 }
 
 (async () => {
@@ -50,6 +51,7 @@ function fixture() {
     await f.poll();
     assert.equal(f.root.dataset.revision,'r1','A deferred draft must not consume the server revision');
     assert.equal(f.replacements,0,'Staffing forms are not replaced during a draft');
+    assert.equal(f.forecastReplacements,1,'Relocated forecasts stay live without replacing focused staffing forms');
     delete f.root.dataset.dirty;
     await f.poll();
     assert.equal(f.root.dataset.revision,'r2','The same pending revision reconciles after editing');

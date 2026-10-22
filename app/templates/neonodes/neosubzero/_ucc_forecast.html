@@ -1,0 +1,21 @@
+<section class="neosubzero-ucc-upcoming" data-ucc-upcoming aria-label="Upcoming operational sort forecasts">
+        <div class="neosubzero-weather-forecast-head">
+            <strong>UPCOMING OPERATIONAL SORT WINDOWS</strong>
+            <span>{{ weather.sources.forecast }} · {{ weather.forecast_status.issued_at_label }}{% if weather.forecast_status.stale %} · STALE{% endif %}</span>
+        </div>
+        {% if weather.future_forecast %}
+        <div class="neosubzero-weather-forecast">
+            {% for card in weather.future_forecast %}
+            <article>
+                <span><b>{{ card.date_label }}</b><small>{{ card.window_label }}</small></span>
+                <span><b>{{ card.temperature_range }}</b><small>TEMP</small></span>
+                <span><b>{{ card.dewpoint_range }}</b><small>DEW</small></span>
+                <span><b>{{ card.spread_range }}</b><small>SPREAD</small></span>
+                <span><b>{{ card.precipitation_probability }}</b><small>PRECIP</small></span>
+                <span><b>{{ card.gust }}</b><small>MAX GUST</small></span>
+                <em>{{ card.conditions }} · WIND {{ card.wind }}</em>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}<p class="neosubzero-weather-note">{{ weather.forecast_status.error or 'No upcoming operational sort forecast is available.' }}</p>{% endif %}
+</section>
