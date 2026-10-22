@@ -21,6 +21,7 @@ from app.models import (
     NeoScorpionTailFuelState,
     SortDateMission,
     SortDateOperation,
+    SortDateParkingAssignment,
     SortDateTailState,
     User,
 )
@@ -139,6 +140,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             "/neoscorpion/settings",
             data={
                 "fuel_density_lbs_per_gallon": "6.7",
+                "red_assignment_alert_threshold_minutes": "30",
                 "settings_baseline": settings_baseline(self.gateway, 'save_settings'),
                 "planning_inbound_fuel_fallback": "15.5",
                 "fob_difference_threshold_lbs": "",
@@ -317,7 +319,10 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
                                    sort_date_mission=SimpleNamespace(fuel_status="waiting"))
 
         def record(number, *, on=None, parking="-", release=None):
-            return {"id": number, "truck_id": 1, "on": on, "parking": parking, "release": release}
+            # Physical-start evidence now distinguishes legacy ON from an
+            # explicit confirmation. The badge unit test mocks that policy below.
+            return {"id": number, "truck_id": 1, "on": on, "confirmed_on": None,
+                    "parking": parking, "release": release}
 
         def badge(records=(), releases=(), status="available", state=None):
             visual = {"truck_id": 1}
@@ -411,13 +416,15 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         db.session.commit()
 
         initial = {row["mission"].flight_number: row for row in fuel_dispatch_context(self.gateway)["rows"]}
-        self.assertEqual(initial["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP")
+        # Approved lifecycle contract: measured NEO/CF is usable before
+        # administrative verification; COMPLETE must not gate planning text.
+        self.assertEqual(initial["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP NEO > 60.7 CF > 4700")
         self.assertTrue(all(row["load_planning_ready"] for row in initial.values()))
         work.off_at_utc = non_a300_work.off_at_utc = datetime(2026, 8, 18, 4, 30)
         db.session.commit()
         off_rows = {row["mission"].flight_number: row for row in fuel_dispatch_context(self.gateway)["rows"]}
-        self.assertEqual(off_rows["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP")
-        self.assertEqual(off_rows["UPS777"]["load_planning_output"], "UPS777 SDF N412UP")
+        self.assertEqual(off_rows["UPS0952"]["load_planning_output"], "UPS0952 MHR N160UP NEO > 60.7 CF > 4700")
+        self.assertEqual(off_rows["UPS777"]["load_planning_output"], "UPS777 SDF N412UP NEO > 50.0")
         assignment.completed_at_utc = non_a300_assignment.completed_at_utc = datetime(2026, 8, 18, 4, 35)
         db.session.commit()
         rows = {
@@ -480,11 +487,11 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
             html = self.client.get("/neoscorpion/fuel-dispatch/live-panel").get_json()["html"]
             return html.split(f'data-dispatch-mission-id="{mission.id}"', 1)[1].split("</tr>", 1)[0]
 
-        self.assertIn("Center fuel: CF 400", row_html(a300))
-        self.assertNotIn("Center fuel:", row_html(other))
+        self.assertIn("CF 400", row_html(a300))
+        self.assertNotIn("CF ", row_html(other))
         center.actual_lbs = None
         db.session.commit()
-        self.assertIn("Center fuel: CF -", row_html(a300))
+        self.assertIn("CF -", row_html(a300))
 
     def test_inline_spear_hides_only_after_complete_or_fob(self):
         mission = self._mission("UPS552", "N412UP", 50000, 1)
@@ -510,6 +517,7 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self._login_user("dispatch_simulator", "simulator")
         mission = self._mission("UPS888", "N412UP", 25_400, 1)
         self._tail_fuel(mission, inbound_lbs=12_000)
+        self._nightly_truck()
         db.session.commit()
         counts_before = self._row_counts()
 
@@ -519,44 +527,71 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         self.assertIn(b"2,000 gal", response.data)
         self.assertNotIn(b"ACTUAL INBOUND", response.data)
         self.assertNotIn(b"ASSUMPTION", response.data)
-        self.assertIn(b"Projected Truck", response.data)
+        self.assertIn(b"neoscorpion-truck-visual-list", response.data)
         self.assertEqual(self._row_counts(), counts_before)
 
     def test_dispatch_queries_remain_bounded_for_representative_fixture(self):
         truck = self._nightly_truck(current_gallons=50_000)
-        for index in range(150):
-            mission = self._mission(
-                f"UPS{1000 + index}",
-                f"N4{100 + index}UP",
-                25_400,
-                index,
-            )
-            self._assignment(mission, truck, transfer=100 if index % 2 else None)
-        db.session.commit()
-
         statements = []
 
         def capture(_connection, _cursor, statement, _parameters, _context, _many):
             if statement.lstrip().upper().startswith("SELECT"):
                 statements.append(statement)
 
-        event.listen(db.engine, "before_cursor_execute", capture)
-        try:
-            context = fuel_dispatch_context(self.gateway)
-        finally:
-            event.remove(db.engine, "before_cursor_execute", capture)
-
-        self.assertEqual(len(context["rows"]), 150)
-        # Includes current/prior-date scope selection and the current SPEAR
-        # calibration/history contract plus one display-cycle history query.
-        # These remain batch reads for 150 rows.
-        # Same 35 reads with read-only truck activity enrichment disabled;
-        # the older 27-read expectation predates the current planning paths.
-        self.assertEqual(len(statements), 35)
+        query_counts=[]
+        for start,end in ((0,15),(15,150)):
+            for index in range(start,end):
+                mission=self._mission(f"UPS{1000+index}",f"N4{100+index}UP",25_400,index)
+                self._assignment(mission,truck,transfer=100 if index%2 else None)
+            db.session.commit();statements.clear()
+            event.listen(db.engine,"before_cursor_execute",capture)
+            try:
+                # Measure canonical Dispatch independently of the optional
+                # optimizer's job-bound fallback (150 jobs exceeds it).
+                context=fuel_dispatch_context(self.gateway,include_spear=False)
+            finally:
+                event.remove(db.engine,"before_cursor_execute",capture)
+            self.assertEqual(len(context['rows']),end)
+            query_counts.append(len(statements))
+        # A tenfold row increase must not introduce per-mission reads. Avoid
+        # pinning an obsolete absolute count as batch enrichment evolves.
+        self.assertEqual(query_counts[0],query_counts[1],query_counts)
         self.assertEqual(sum("FROM neoscorpion_fuel_cycle_history " in sql for sql in statements), 1)
-        for table in ("neoscorpion_fuel_assignments", "neoscorpion_fuel_work_states",
-                      "neoscorpion_spear_calibration_resets"):
-            self.assertEqual(sum(f"FROM {table} " in sql for sql in statements), 1)
+        for table,expected in (("neoscorpion_fuel_assignments",1),("neoscorpion_fuel_work_states",2)):
+            self.assertEqual(sum(f"FROM {table} " in sql for sql in statements),expected)
+
+    def test_spear_queries_remain_batched_within_and_beyond_optimizer_job_limit(self):
+        from app.services.neoscorpion_spear_optimizer import MAX_JOBS
+        truck = self._nightly_truck(current_gallons=50_000)
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        counts = []
+        end = 0
+        for target in (15, MAX_JOBS - 1, MAX_JOBS + 5, MAX_JOBS * 2):
+            start, end = end, target
+            for index in range(start, end):
+                mission = self._mission(f"UPS{1000 + index}", f"N4{100 + index}UP", 25_400, index)
+                self._assignment(mission, truck, transfer=100 if index % 2 else None)
+            db.session.commit()
+            # Exclude one-time settings/materialization reads from the steady
+            # live-refresh comparison; measure the same warm state at each size.
+            fuel_dispatch_context(self.gateway)
+            statements.clear()
+            event.listen(db.engine, "before_cursor_execute", capture)
+            try:
+                context = fuel_dispatch_context(self.gateway)
+            finally:
+                event.remove(db.engine, "before_cursor_execute", capture)
+            self.assertEqual(len(context["rows"]), end)
+            counts.append(len(statements))
+        # Crossing the existing optimizer job limit can change the read
+        # path. Neither side may grow per mission, including the fallback.
+        self.assertEqual(counts[0], counts[1], counts)
+        self.assertEqual(counts[2], counts[3], counts)
 
     def test_dispatch_recommendations_are_advisory_and_support_partial_assignments(self):
         fueler = self._login_user("suggested_fueler", "operator")
@@ -603,47 +638,68 @@ class NeoScorpionDispatchPlanningTest(unittest.TestCase):
         db.session.commit()
 
         frozen_now = datetime(2026, 8, 19, 1, 0)
-        with patch("app.services.neoscorpion.datetime") as mocked_datetime:
+        # Current SPEAR requires canonical arrival/parking evidence and verified
+        # gallons. A departure ETA is not an inbound aircraft-access timestamp.
+        for index,mission in enumerate((unassigned,partial,fully_assigned,deadline_risk)):
+            db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id,
+                tail_number=mission.assigned_tail_number,ramp_code='C',position_code=f'{index+1:02}',lane_number=1))
+            arrival=SortDateMission(sort_date_operation_id=self.operation.id,sort_date=self.operation.sort_date,
+                gateway_code=self.gateway.code,sort_name='night',mission_type='arrival',mission_source='manual',
+                flight_number=f'UPS8{index}',assigned_tail_number=mission.assigned_tail_number,
+                origin='SDF',destination=self.gateway.code,arrival_status='scheduled',
+                eta_datetime_utc=frozen_now if mission!=deadline_risk else mission.planned_datetime_utc+timedelta(minutes=40))
+            db.session.add(arrival)
+        for selection in NeoScorpionSortTruck.query.all():selection.inventory_verified=True
+        db.session.commit()
+        with patch("app.services.neoscorpion.datetime") as mocked_datetime, \
+                patch("app.services.neoscorpion_spear_replanning.datetime") as planner_clock:
             mocked_datetime.utcnow.return_value = frozen_now
+            planner_clock.utcnow.return_value = frozen_now
             context = fuel_dispatch_context(self.gateway, include_asset_choices=True)
 
         rows = {row["mission"].flight_number: row for row in context["rows"]}
         self.assertTrue(rows["UPS701"]["assignment_recommendation"].available)
         self.assertEqual(
             rows["UPS701"]["assignment_recommendation_display"],
-            "Dispatch Planner · Truck 654321",
+            "Dispatch Planner / Truck 654321",
         )
-        self.assertTrue(rows["UPS702"]["assignment_recommendation"].available)
+        # The shared truck is first forecast for UPS701. UPS702 is advisory
+        # future work, not a claim that the same resource is free twice.
+        self.assertFalse(rows["UPS702"]["assignment_recommendation"].available)
+        self.assertGreaterEqual(rows['UPS702']['assignment_recommendation'].feasible_start_utc,
+                                rows['UPS701']['assignment_recommendation'].predicted_finish_utc)
         self.assertEqual(
             rows["UPS702"]["assignment_recommendation_display"],
-            "Truck 654321",
+            "Dispatch Planner / Truck 654321",
         )
         self.assertIsNone(rows["UPS703"]["assignment_recommendation_display"])
         self.assertEqual(
-            rows["UPS704"]["assignment_recommendation_reason_display"],
-            "DEADLINE AT RISK",
+            rows["UPS704"]["spear_waiting_for_data"],
+            "Block-In / Staging Window",
         )
 
         self._login_user("render_dispatcher", "simulator")
-        with patch("app.services.neoscorpion.datetime") as mocked_datetime:
+        with patch("app.services.neoscorpion.datetime") as mocked_datetime, \
+                patch("app.services.neoscorpion_spear_replanning.datetime") as planner_clock:
             mocked_datetime.utcnow.return_value = frozen_now
+            planner_clock.utcnow.return_value = frozen_now
             response = self.client.get("/neoscorpion/fuel-dispatch")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("SUGGESTED Dispatch Planner · Truck 654321".encode(), response.data)
-        self.assertIn(b"DEADLINE AT RISK", response.data)
-        self.assertIn(b"654321 (Recommended)</option>", response.data)
-        self.assertNotIn(b"123456 (Recommended)</option>", response.data)
+        self.assertIn("SPEAR → Dispatch Planner".encode(), response.data)
+        self.assertIn(b"Block-In / Staging Window", response.data)
+        self.assertIn(b"654321 (SPEAR Recommended)</option>", response.data)
+        self.assertNotIn(b"123456 (SPEAR Recommended)</option>", response.data)
         self.assertIn(
-            b"Dispatch Planner (Recommended)</option>", response.data
+            b"Dispatch Planner (SPEAR Recommended)</option>", response.data
         )
         self.assertNotIn(
-            b'<option value="654321" selected>654321 (Recommended)</option>',
+            f'<option value="{NeoScorpionFuelTruck.query.filter_by(truck_number="654321").one().id}" selected>654321 (SPEAR Recommended)</option>'.encode(),
             response.data,
         )
         self.assertNotIn(
             (
                 f'<option value="{fueler.id}" selected>'
-                "Dispatch Planner (Recommended)</option>"
+                "Dispatch Planner (SPEAR Recommended)</option>"
             ).encode(),
             response.data,
         )

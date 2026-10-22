@@ -4,6 +4,7 @@ import unittest
 import time
 from unittest.mock import patch
 from playwright.sync_api import expect
+from tests.browser.neoscorpion_helpers import wait_for_fuel_saved
 from app.extensions import db
 from app.models import (User,SortDateOperation,SortDateMission,NeoScorpionFuelAssignment,NeoScorpionFuelTruck,
     NeoScorpionSortTruck,NeoScorpionSortFueler,NeoScorpionFuelWorkState,NeoScorpionFuelingEvent)
@@ -72,7 +73,7 @@ class SubmissionBrowserTest(unittest.TestCase):
                         expect(off).to_be_visible();expect(off).to_be_disabled();expect(submit).to_be_disabled()
                         card.locator('[name="apu_running"]').select_option('no')
                         for code in ('left','ctr','right'):card.locator(f'[name="remaining_{code}"]').fill('0' if code=='ctr' else '6')
-                        card.locator('[data-fuel-planning-form] button[type="submit"]').click()
+                        wait_for_fuel_saved(card)
                         expect(card.locator('[data-fuel-data-status]')).to_contain_text('Saved');expect(off).to_be_disabled()
                         with F.app.app_context():
                             work=NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=aid).one();self.assertIsNone(work.manual_on_at_utc);self.assertIsNone(work.on_at_utc)
@@ -83,20 +84,26 @@ class SubmissionBrowserTest(unittest.TestCase):
                         page.bring_to_front();card.locator('[data-truck-on-form] button').click()
                         expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('CONFIRMED');expect(off).to_be_enabled()
                         for _ in range(2):
-                            card.locator('[data-fuel-planning-form] button[type="submit"]').click();expect(off).to_be_visible();expect(off).to_be_enabled()
-                        off.click();expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('TRUCK OFF');expect(submit).to_be_disabled()
+                            wait_for_fuel_saved(card);expect(off).to_be_visible();expect(off).to_be_enabled()
+                        off.click();expect(card.locator('.scorpion-fueler-finish')).to_contain_text('TRUCK OFF');expect(submit).to_be_disabled()
                         for code in ('left','ctr','right'):card.locator(f'[name="actual_{code}"]').fill('0' if code=='ctr' else '15')
                         card.locator('[name="transfer_fuel_gallons"]').fill('3000')
-                        card.locator('[data-fuel-planning-form] button[type="submit"]').click();expect(submit).to_be_enabled()
+                        wait_for_fuel_saved(card);expect(submit).to_be_enabled()
                         submit.click();expect(card.locator('[data-fueler-submission-status]')).to_contain_text('READY FOR DISPATCHER COMPLETE')
-                        card.locator('[name="actual_left"]').fill('16');card.locator('[data-fuel-planning-form] button[type="submit"]').click();expect(submit).to_be_enabled()
+                        card.locator('[name="actual_left"]').fill('16');wait_for_fuel_saved(card);expect(submit).to_be_enabled()
                         submit.click();expect(card.locator('[data-fueler-submission-status]')).to_contain_text('READY FOR DISPATCHER COMPLETE')
                         for width in (1440,390):
                             page.set_viewport_size({'width':width,'height':844});expect(submit).to_be_visible();self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
                         dispatch.bring_to_front();expect(row.locator('select[name="assigned_fueler_user_id"]')).to_have_count(0,timeout=20000)
                         expect(row.locator('button[formaction$="/fuel-dispatch/complete"]')).to_be_visible(timeout=20000)
                         dispatch.locator(f'[data-dispatch-mission-id="{mid}"] [data-neoscorpion-dispatch-details]').click()
-                        expect(dispatch.locator(f'#neoscorpion-dispatch-detail-{mid}-1 [data-dispatch-fueler-submission]')).to_have_text('READY FOR DISPATCHER COMPLETE')
+                        # The compact DETAILS console no longer duplicates the
+                        # main-row completion status. Verify the real receipt
+                        # plus the already-visible, independently actionable button.
+                        with F.app.app_context():
+                            submitted=NeoScorpionFuelWorkState.query.filter_by(fuel_assignment_id=aid).one()
+                            self.assertIsNotNone(submitted.fueler_submitted_at_utc)
+                            self.assertGreater(submitted.fueler_submission_version,0)
                         row.locator('button[formaction$="/fuel-dispatch/complete"]').click()
                         expect(row).to_have_class(__import__('re').compile('is-complete'),timeout=20000)
                         with F.app.app_context():self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).count(),1)
@@ -148,23 +155,30 @@ class SubmissionBrowserTest(unittest.TestCase):
                         card.locator('[data-truck-on-form] button').click();expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('CONFIRMED')
                         page.reload();expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('CONFIRMED')
                         card.locator('.neoscorpion-fueler-off-form button').click()
-                        expect(card.locator('.neoscorpion-truck-on-row')).to_contain_text('TRUCK OFF')
+                        expect(card.locator('.scorpion-fueler-finish')).to_contain_text('TRUCK OFF')
                         card.locator('[name="apu_running"]').select_option('no')
                         for code in ('left','ctr','right'):
                             card.locator(f'[name="remaining_{code}"]').fill('0' if code=='ctr' else '6')
                             card.locator(f'[name="actual_{code}"]').fill('0' if code=='ctr' else '15')
                         card.locator('[name="transfer_fuel_gallons"]').fill('3000')
-                        card.locator('[data-fuel-planning-form] button[type="submit"]').click()
+                        wait_for_fuel_saved(card)
                         submit=card.locator('[data-fueler-submit-form] button');expect(submit).to_be_enabled()
-                        # Reproduce the old silent mobile dirty-form rejection.
-                        card.locator('[name="actual_left"]').fill('16');submit.click()
+                        # Deterministic rejected-autosave draft, not a race
+                        # against the removed manual SAVE button/debounce timer.
+                        endpoint=f'**/neoscorpion/fueler/assignments/{aid}*'
+                        page.route(endpoint,lambda route:route.fulfill(status=503,json={'ok':False,'error':'Synthetic outage'}),times=1)
+                        card.locator('[name="actual_left"]').fill('16')
+                        expect(card.locator('[data-fuel-data-status]')).to_contain_text('Autosave failed',timeout=10000)
+                        submit.click()
                         feedback=card.locator('[data-fuel-action-feedback]')
-                        expect(feedback).to_contain_text('Save Fuel Entry before COMPLETE ASSIGNMENT')
+                        expect(feedback).to_contain_text('Wait for autosave, or resolve its error')
                         self.assertLess(feedback.bounding_box()['y'],844)
                         with F.app.app_context():
                             a=db.session.get(NeoScorpionFuelAssignment,aid)
                             self.assertIsNone(db.session.get(NeoScorpionFuelWorkState,a.active_work_state_id).fueler_submitted_at_utc)
-                        card.locator('[data-fuel-planning-form] button[type="submit"]').click();expect(submit).to_be_enabled()
+                        page.unroute(endpoint)
+                        card.locator('[name="actual_left"]').fill('16.1')
+                        wait_for_fuel_saved(card);expect(submit).to_be_enabled()
                         started=time.monotonic();submit.click()
                         expect(card.locator('[data-fuel-action-feedback]')).to_contain_text('SUBMITTED')
                         dispatch.bring_to_front()

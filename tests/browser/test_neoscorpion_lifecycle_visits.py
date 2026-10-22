@@ -3,6 +3,7 @@ from datetime import date,datetime,timedelta
 import unittest
 from unittest.mock import patch
 from playwright.sync_api import expect
+from tests.browser.neoscorpion_helpers import wait_for_fuel_saved
 from app.extensions import db
 from app.models import (User,SortDateOperation,SortDateMission,NeoScorpionFuelAssignment,NeoScorpionFuelTruck,
     NeoScorpionSortTruck,NeoScorpionSortFueler,NeoScorpionFuelWorkState,NeoScorpionFuelingEvent)
@@ -49,7 +50,7 @@ class VisitLifecycleBrowserTest(unittest.TestCase):
                                 if remaining is not None:card.locator(f'[name="remaining_{code}"]').fill('0' if code=='ctr' else str(remaining))
                                 if actual is not None:card.locator(f'[name="actual_{code}"]').fill('0' if code=='ctr' else str(actual))
                             card.locator('[name="transfer_fuel_gallons"]').fill(str(transfer))
-                            card.locator('[data-fuel-planning-form] button[type="submit"]').click()
+                            wait_for_fuel_saved(card)
                             expect(card.locator('[data-fuel-data-status]')).to_contain_text('Saved')
                         def verify_current():
                             d.bring_to_front();button=row.locator('button[formaction$="/fuel-dispatch/complete"]')
@@ -90,12 +91,15 @@ class VisitLifecycleBrowserTest(unittest.TestCase):
                         self.assertEqual(len({first_id,b_id,last_id}),3)
                         a.locator('[data-truck-on-form] button').click();expect(a.locator('[data-fuel-data-status]')).to_contain_text('TRUCK STILL FUELING')
                         b=p.locator(f'[data-physical-work-id="{b_id}"]');b.locator('.neoscorpion-fueler-off-form button').click()
-                        expect(b.locator('.neoscorpion-truck-on-row')).to_contain_text('TRUCK OFF')
+                        expect(b.locator('.scorpion-fueler-finish')).to_contain_text('TRUCK OFF')
                         a.locator('[data-truck-on-form] button').click();expect(a.locator('.neoscorpion-truck-on-row')).to_contain_text('CONFIRMED')
                         save(a,6,14,2000);a.locator('.neoscorpion-fueler-off-form button').click();a.locator('[data-fueler-submit-form] button').click()
                         expect(a.locator('[data-fueler-submission-status]')).to_contain_text('SUBMITTED');verify_current()
-                        p.bring_to_front();save(b,None,10,1000);b.locator('[data-fueler-submit-form] button').click()
-                        expect(b.locator('[data-fueler-submission-status]')).to_contain_text('SUBMITTED')
+                        p.bring_to_front();save(b,None,10,1000)
+                        with p.expect_response(lambda response:response.request.method=='POST' and '/submit' in response.url) as submitted:
+                            b.locator('[data-fueler-submit-form] button').click()
+                        self.assertEqual(submitted.value.status,200,submitted.value.text())
+                        expect(b.locator('[data-fueler-submission-status]')).to_contain_text('SUBMITTED',timeout=10000)
                         F().ready(d,'/neoscorpion/fuel-dispatch')
                         if row.locator('[data-neoscorpion-dispatch-details]').get_attribute('aria-expanded')!='true':row.locator('[data-neoscorpion-dispatch-details]').click()
                         # Original-tail verification is directly actionable in

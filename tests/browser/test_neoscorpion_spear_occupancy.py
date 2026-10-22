@@ -5,13 +5,15 @@ from unittest.mock import patch
 from playwright.sync_api import expect
 
 from app.extensions import db
-from app.models import (NeoScorpionFuelAssignment, NeoScorpionFuelTruck, NeoScorpionFuelWorkState,
+from app.models import (NeoScorpionFuelAssignment, NeoScorpionFuelTruck,
     NeoScorpionSettings, NeoScorpionSortAssetState, NeoScorpionSortFueler, NeoScorpionSortTruck,
     NeoScorpionSpearAuditEntry, NeoScorpionTailFuelState, SortDateMission, SortDateOperation,
     SortDateParkingAssignment, SortDateTailState, User)
 from app.services.access_control import ensure_default_gateway_and_nodes, backfill_default_gateway_node_roles
 from app.services.neoscorpion_assets import record_nightly_operational_change
 from app.services.neoscorpion import _attach_spear_plan
+from app.services import neoscorpion as fuel
+from tests.neoscorpion_handoff_fixture import submit_and_verify
 from tests.browser import test_mobile_drawer as fixture_module
 
 
@@ -152,8 +154,25 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                     expect(busy_card.locator('[data-spear-action-form]')).to_have_count(0)
                     expect(row.locator('xpath=following-sibling::tr[1]')).to_contain_text('NO AVAILABLE TRUCK — active assignment')
                     page.screenshot(path=str(Fixture.evidence/f'spear-display-no-truck-{width}.png'),full_page=True)
-                change(lambda:db.session.add(NeoScorpionFuelWorkState(fuel_assignment_id=ownerid,tail_number='N42OCCUPIED',
-                    on_at_utc=datetime.utcnow()-timedelta(minutes=20),off_at_utc=datetime.utcnow())))
+                def verified_release():
+                    # Legacy ON/OFF alone is not proof of Fueler work-end or
+                    # reconciled inventory. Exercise the real physical/data/
+                    # submission/verification stages instead of fabricating a
+                    # resource-release timestamp in a mutable Work row.
+                    assignment=db.session.get(NeoScorpionFuelAssignment,ownerid)
+                    actor=db.session.get(User,assignment.assigned_fueler_user_id)
+                    gateway=ensure_default_gateway_and_nodes()
+                    at=datetime.utcnow()-timedelta(minutes=20)
+                    assignment.fueler_assigned_at_utc=assignment.truck_assigned_at_utc=at-timedelta(minutes=5)
+                    fuel.confirm_fueler_truck_on(gateway,actor,ownerid,expected_cycle=1,
+                        expected_tail='N42OCCUPIED',expected_truck_id=trucks[0],now_utc=at)
+                    fuel.save_fueler_entry(gateway,actor,dict(assignment_id=ownerid,
+                        remaining_left='6',remaining_ctr='0',remaining_right='6',
+                        actual_left='15',actual_ctr='0',actual_right='15',apu_running='no',transfer_fuel_gallons='3000'),
+                        now_utc=at+timedelta(minutes=10))
+                    fuel.mark_fueler_off(gateway,actor,ownerid,now_utc=at+timedelta(minutes=12))
+                    submit_and_verify(gateway,actor,ownerid,now_utc=at+timedelta(minutes=13))
+                change(verified_release)
                 expect(row.locator('.neoscorpion-dispatch-recommendation').last).to_have_text('SPEAR → BUSY',timeout=20000)
                 expect(busy_card.locator('.neoscorpion-truck-spear')).to_contain_text('FLIGHT UPS0910')
                 expect(busy_card.locator('[data-spear-action-form]')).to_have_count(1)
@@ -176,7 +195,11 @@ class SpearOccupancyBrowserTest(unittest.TestCase):
                     for width in (1440,390,320):
                         page.set_viewport_size({'width':width,'height':900}); verify_compact()
                         page.screenshot(path=str(Fixture.evidence/f'spear-severity-{width}.png'),full_page=True)
-                    page.wait_for_timeout(5500)
+                    with page.expect_response(lambda response:'/fuel-dispatch/live-panel' in response.url and response.request.method=='GET',timeout=15000):
+                        # Unchanged revision polls intentionally do not fetch
+                        # another panel. Publish a real synthetic revision and
+                        # wait for its HTTP response, not an arbitrary delay.
+                        change(lambda: None)
                     verify_compact()
                 with Fixture.app.app_context():
                     self.assertEqual(NeoScorpionFuelAssignment.query.count(),1)

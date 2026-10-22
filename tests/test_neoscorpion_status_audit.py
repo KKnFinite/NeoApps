@@ -178,7 +178,9 @@ class StatusIntegrationTest(unittest.TestCase):
         self.login(self.dispatcher)
         html=self.client.get('/neoscorpion/fuel-dispatch').get_data(as_text=True)
         self.assertNotIn('>NOT READY<',html)
-        self.assertIn('data-action-key="mission-data"',html)
+        # Missing data remains visible in the row/DETAILS, not a duplicated
+        # mandatory Action Center item on every untouched mission.
+        self.assertNotIn('data-action-key="mission-data"',html)
         self.assertIn('Required Fuel Load',html);self.assertIn('Inbound Fuel / verified measurement',html)
         self.assertNotIn('id="scorpion-complete-',html)
         fr=next(item for item in fuel.fueler_context(self.gateway,self.fueler)['rows']

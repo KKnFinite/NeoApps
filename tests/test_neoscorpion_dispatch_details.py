@@ -60,9 +60,15 @@ class DetailsTest(unittest.TestCase):
             ('select','proposed_truck_id',None),*(('input',name,None) for name in (
                 'expected_last_plan_ref','expected_work_ref','plan_kind','pending_action',
                 'assignment_id','expected_cycle','expected_tail'))}
+        # Package 1 adds identity/state guards to the two existing TOP OFF
+        # forms. They are safety fields, not duplicated operational actions.
+        guard_additions={('input','operation_id',None):2,
+                         ('input','top_off_action_state',None):2}
+        allowed.update(guard_additions)
         extra=current.controls-before.controls
         self.assertTrue(set(extra)<=allowed,extra)
-        self.assertTrue(all(count==1 for count in extra.values()),extra)
+        self.assertTrue(all(count==guard_additions.get(control,1)
+                            for control,count in extra.items()),extra)
 
     def html(self):
         self.login(self.dispatcher)

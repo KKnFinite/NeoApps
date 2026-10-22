@@ -22,7 +22,8 @@ function actionHarness({confirmed=true, ok=true, changed=true}={}) {
     vm.createContext(context);
     vm.runInContext(source.slice(start,end)+'\nglobalThis.submit = submitLifecycleAction;',context);
     const button={disabled:false};
-    const form={elements:[],dataset:{confirm:'Confirm action?'},matches:()=>false,querySelector:()=>({}),getAttribute:()=>'/cancel-uplift'};
+    const form={elements:[],dataset:{confirm:'Confirm action?'},matches:()=>false,
+        closest:()=>null,querySelector:()=>({}),getAttribute:()=>'/cancel-uplift'};
     return {context,button,form,messages,requests,refreshes,finish:()=>finish()};
 }
 
@@ -90,7 +91,7 @@ test('cancel refresh restores details and scroll when the active cycle key chang
     const wrap={scrollTop:120,scrollLeft:90,getBoundingClientRect:()=>({top:100,bottom:500})};
     const detail={hidden:false,setAttribute(){}};
     let key='7-2';
-    const toggle={getAttribute:()=>`neoscorpion-dispatch-detail-${key}`,setAttribute(){}};
+    const toggle={getAttribute:()=>`neoscorpion-dispatch-detail-${key}`,setAttribute(){},closest:()=>null};
     const row={classList:{contains:()=>false},dataset:{dispatchRowKey:key},getBoundingClientRect:()=>({top:110,bottom:150}),querySelector:()=>toggle};
     const scope={
         querySelector(selector){
@@ -98,7 +99,8 @@ test('cancel refresh restores details and scroll when the active cycle key chang
             if(selector.includes('aria-controls'))return selector.includes(`detail-${key}`)?toggle:null;
             return selector.includes(`"${key}"`)?row:null;
         },
-        querySelectorAll:selector=>selector.includes('aria-expanded')?[toggle]:[row],
+        querySelectorAll:selector=>selector.includes('aria-expanded')?[toggle]
+            :selector.includes('data-dispatch-row-key')?[row]:[],
     };
     const window={location:{pathname:'/neoscorpion/fuel-dispatch'},scrollX:4,scrollY:60,
         scrollTo({top,left}){this.scrollY=top;this.scrollX=left;},requestAnimationFrame:fn=>fn(),

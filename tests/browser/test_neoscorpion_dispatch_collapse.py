@@ -66,15 +66,17 @@ class DispatchCollapseBrowserTest(unittest.TestCase):
                             toggle(trucks);expect(select).to_have_value(value);expect(detail).to_have_attribute('aria-expanded','true')
                             # Restore the pristine choice before testing canonical live-panel replacement.
                             select.select_option(index=0)
-                            # A single shared truck presentation serves Board View.
+                            # Board and normal Dispatch have independent shared-
+                            # profile preferences; entering Board must not inherit
+                            # the normal view's collapsed state.
                             page.locator('[data-operational-board-toggle]:visible').first.click()
                             expect(page.locator('body')).to_have_class(__import__('re').compile('operational-board-view'))
-                            expect(cards).to_be_hidden()
-                            before=page.locator('.neoscorpion-table-wrap--sticky').bounding_box()['height']
-                            toggle(trucks);expect(cards).to_be_visible()
+                            expect(cards).to_be_visible()
                             expanded=page.locator('.neoscorpion-table-wrap--sticky').bounding_box()['height']
-                            self.assertGreater(before,expanded+50)
                             toggle(trucks);expect(cards).to_be_hidden()
+                            collapsed=page.locator('.neoscorpion-table-wrap--sticky').bounding_box()['height']
+                            self.assertGreater(collapsed,expanded+50)
+                            toggle(trucks);expect(cards).to_be_visible()
                             page.locator('.operational-board-exit').click();expect(cards).to_be_hidden()
                         else:
                             toggle(trucks);expect(cards).to_be_hidden()
@@ -102,12 +104,30 @@ class DispatchCollapseBrowserTest(unittest.TestCase):
                         toggle(trucks);expect(cards).to_be_hidden()
                         expect(page.locator('[data-fueling-performance]')).to_be_visible()
                         visible=page.locator('.neoscorpion-dispatch-primary-row td').evaluate_all("cells=>cells.filter(c=>getComputedStyle(c).display!=='none').length")
-                        self.assertEqual(visible,16 if width>900 else 5)
+                        # Count the canonical rendered headers, not the obsolete
+                        # pre-redesign fixed count of sixteen desktop columns.
+                        headers=page.locator('.neoscorpion-dispatch-table--compact thead th').evaluate_all("cells=>cells.filter(c=>getComputedStyle(c).display!=='none').length")
+                        self.assertEqual(visible,headers)
+                        if width<=900:self.assertEqual(visible,5)
                         self.assertTrue(page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'))
                         page.screenshot(path=str(Fixture.evidence/f'scorpion-collapse-{engine}.png'),full_page=True)
                         self.assertEqual(errors,[])
                         with Fixture.app.app_context():
                             pref=NeoScorpionDispatchPreference.query.one();self.assertTrue(pref.truck_cards_collapsed);self.assertTrue(pref.spear_data_collapsed)
+                            self.assertFalse(pref.board_truck_cards_collapsed)
+                        if width>900:
+                            # Prove the reverse combination and restoration too.
+                            toggle(trucks);expect(cards).to_be_visible()
+                            page.locator('[data-operational-board-toggle]:visible').first.click()
+                            expect(cards).to_be_visible();toggle(trucks);expect(cards).to_be_hidden()
+                            page.locator('.operational-board-exit').click();expect(cards).to_be_visible()
+                            page.reload();expect(cards).to_be_visible()
+                            page.locator('[data-operational-board-toggle]:visible').first.click()
+                            expect(cards).to_be_hidden()
+                            with Fixture.app.app_context():
+                                pref=NeoScorpionDispatchPreference.query.one()
+                                self.assertFalse(pref.truck_cards_collapsed)
+                                self.assertTrue(pref.board_truck_cards_collapsed)
                         context.close()
                 finally:
                     if browser:browser.close()

@@ -10,6 +10,7 @@ from app.services import neoscorpion_vendors as vendors, neoscorpion_inventory a
 from app.services.neoscorpion_schema import ensure_neoscorpion_production_schema
 from tests import test_neoscorpion_segments_postgres as segments
 from tests import test_neoscorpion_vendor_workflow as workflow
+from tests import test_neoscorpion_fueler_submission as submissions
 
 
 @unittest.skipUnless(segments.URI,'Requires disposable local PostgreSQL')
@@ -24,6 +25,9 @@ class VendorPostgresTest(unittest.TestCase):
     off=workflow.VendorWorkflowTest.off
     final_data=workflow.VendorWorkflowTest.final_data
     next_visit=workflow.VendorWorkflowTest.next_visit
+    row=submissions.SubmissionTest.row
+    baseline=submissions.SubmissionTest.baseline
+    submit=submissions.SubmissionTest.submit
 
     def test_competing_baselines_accept_one_version_without_duplicate_epochs(self):
         operation_id,truck_id=self.operation.id,self.truck.id
@@ -58,6 +62,9 @@ class VendorPostgresTest(unittest.TestCase):
     def test_dispatcher_baseline_racing_completion_never_erases_posted_transfer(self):
         self.selection.current_gallons=6000;db.session.commit()
         self.save(self.start+timedelta(minutes=10),**{**self.final_data(),'transfer_fuel_gallons':'1200'});self.off()
+        # Dispatcher verification is intentionally independent of physical OFF
+        # and requires a durable Fueler receipt before this inventory race.
+        self.submit()
         operation_id,truck_id,assignment_id=self.operation.id,self.truck.id,self.assignment.id
         def action(index,gateway,fueler,dispatcher):
             if index==0:
@@ -145,6 +152,7 @@ class VendorPostgresTest(unittest.TestCase):
 
     def test_bootstrap_additive_idempotent_preserves_existing_inventory_and_capacity(self):
         self.save(self.start+timedelta(minutes=10),**self.final_data());self.off()
+        self.submit()
         service.complete_fueled_assignment(self.gateway,self.dispatcher,self.assignment.id);db.session.commit()
         event=NeoScorpionFuelingEvent.query.one()
         event_before=(event.id,event.fuel_work_state_id,event.transfer_fuel_gallons,event.started_at_utc,event.ended_at_utc)

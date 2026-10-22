@@ -288,7 +288,10 @@ class VendorWorkflowTest(TestCase):
         self.login(self.fueler)
         self.assertEqual(self.client.post('/neoscorpion/settings',data=data).status_code,403)
         manager=self.fixture._login_user('vendor-settings','master');self.login(manager)
+        from app.services.neoscorpion_admin_forms import settings_baseline
+        data['settings_baseline']=settings_baseline(self.gateway,'save_settings')
         self.assertEqual(self.client.post('/neoscorpion/settings',data=data).status_code,302)
+        data['settings_baseline']=settings_baseline(self.gateway,'save_settings')
         db.session.expire_all();self.assertEqual(self.settings.truck_fuel_discrepancy_threshold_gallons,0)
         for value in ('-1','1.5','','9999999999','unknown'):
             self.assertEqual(self.client.post('/neoscorpion/settings',data={**data,'truck_fuel_discrepancy_threshold_gallons':value}).status_code,400)

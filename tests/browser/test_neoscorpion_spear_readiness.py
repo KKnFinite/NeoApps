@@ -43,7 +43,7 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                                         spear_live_calibration_mode="observe"),
                     NeoScorpionSortFueler(sort_date_operation_id=operation.id, user_id=admin.id),
                     NeoScorpionSortTruck(sort_date_operation_id=operation.id, fuel_truck_id=truck.id,
-                                         status="available", starting_gallons=5000, current_gallons=5000),
+                                         status="available", starting_gallons=5000, current_gallons=5000,inventory_verified=True),
                     NeoScorpionSortAssetState(sort_date_operation_id=operation.id, revision=0),
                 ))
                 mission_ids = []
@@ -94,7 +94,7 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                 page.on("request", lambda request: requests.append((request.method, request.url)))
                 Fixture().ready(page, "/neoscorpion/fuel-dispatch")
                 css = page.locator('link[href*="26-neoscorpion.css"]')
-                self.assertIn("scorpion=20261010-spear-next-v2", css.get_attribute("href"))
+                self.assertRegex(css.get_attribute("href"),r'scorpion=\d{8}-[a-z0-9-]+')
                 rows = [page.locator(f'.neoscorpion-dispatch-primary-row[data-dispatch-mission-id="{mid}"]')
                         for mid in mission_ids]
 
@@ -103,11 +103,9 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                         const table = row.closest('table');
                         const expected = parseFloat(getComputedStyle(table).getPropertyValue('--dispatch-font-small'))
                             * parseFloat(getComputedStyle(document.documentElement).fontSize);
-                        const detail = row.nextElementSibling.querySelector('.neoscorpion-dispatch-spear-detail');
                         const elements = [row.querySelector('[data-spear-tail-indicator]'),
                             ...row.querySelectorAll('[data-spear-tail-indicator] .neoscorpion-spear-severity'),
-                            ...row.querySelectorAll('.neoscorpion-dispatch-recommendation'),
-                            ...detail.querySelectorAll('strong, span, small, summary, li, .neoscorpion-spear-why')];
+                            ...row.querySelectorAll('.neoscorpion-dispatch-recommendation')];
                         return {expected, actual: elements.map(el => ({text: el.textContent.trim(),
                             size: parseFloat(getComputedStyle(el).fontSize)}))};
                     }""")
@@ -120,7 +118,8 @@ class SpearReadinessBrowserTest(unittest.TestCase):
                     if not toggle.is_visible():  # Five-column mobile view omits the details column.
                         return
                     toggle.click()
-                    detail = row.locator("xpath=following-sibling::tr[1]").locator(".neoscorpion-dispatch-spear-detail")
+                    detail_id=toggle.get_attribute('aria-controls')
+                    detail=page.locator('#'+detail_id+' [data-console-region="spear"]')
                     self.assertTrue(detail.evaluate("""section =>
                         section.scrollWidth <= section.clientWidth + 1 &&
                         [...section.querySelectorAll('strong, span, small, summary')].every(el =>

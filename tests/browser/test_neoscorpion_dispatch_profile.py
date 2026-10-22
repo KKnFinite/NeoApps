@@ -66,7 +66,7 @@ class DispatchProfileBrowserTest(unittest.TestCase):
                 row=lambda i:page.locator(f'tr[data-dispatch-mission-id="{ids[i]}"]:not([data-cycle-history])')
                 def select(selector):
                     page.locator(selector).click()
-                    expect(page.locator('[data-dispatch-preference-status]')).to_have_text('SAVED')
+                    expect(page.locator('[data-dispatch-preference-status]').first).to_have_text('SAVED')
                 self.assertEqual(order(),[ids[2],ids[1],ids[0],ids[3],ids[4]])
                 for i,color,weight in ((0,'rgb(213, 216, 222)','400'),(1,'rgb(143, 255, 168)','700'),(2,'rgb(255, 240, 176)','700')):
                     for text in row(i).locator('.neoscorpion-dispatch-arrival-text').all():
@@ -129,7 +129,7 @@ class DispatchProfileBrowserTest(unittest.TestCase):
                 self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
                 page.route('**/fuel-dispatch/preferences',lambda route:route.fulfill(status=503,content_type='application/json',body='{"ok":false,"error":"Synthetic save outage"}'))
                 page.locator('[data-dispatch-sort-mode="etd"]').click()
-                expect(page.locator('[data-dispatch-preference-status]')).to_contain_text('NOT SAVED')
+                expect(page.locator('[data-dispatch-preference-status]').first).to_contain_text('NOT SAVED')
                 self.assertFalse(errors,errors)
         finally:
             if browser:browser.close()

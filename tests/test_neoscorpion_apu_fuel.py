@@ -82,8 +82,9 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
             set(inspect(db.engine).get_table_names()),
         )
         for columns in (LOCAL_SQLITE_OPTIONAL_COLUMNS, POSTGRES_OPTIONAL_COLUMNS):
-            self.assertEqual(
-                set(columns["neoscorpion_fuel_work_states"]),
+            # This is the required APU/physical-OFF subset, not an exhaustive
+            # schema: submission, visit and provenance columns are additive.
+            self.assertTrue(
                 {
                     "apu_running",
                     "apu_confirmed_at_utc",
@@ -99,7 +100,7 @@ class NeoScorpionApuFuelTest(unittest.TestCase):
                     "ended_early_at_utc",
                     "ended_early_by_user_id",
                     "ended_early_reason",
-                },
+                } <= set(columns["neoscorpion_fuel_work_states"]),
             )
 
         valid = NeoScorpionAircraftFuelSetting(

@@ -347,9 +347,11 @@ class MobileDrawerBrowserTest(unittest.TestCase):
             self.assertIn("operational-sidebar-collapsed", desktop_page.locator("body").get_attribute("class"))
             desktop_page.screenshot(path=str(self.evidence / f"{engine}-desktop-sidebar.png"))
             self.ready(desktop_page, "/neostaffing")
-            self.assertEqual(desktop_page.locator("[data-mobile-navigation]").count(), 0)
+            # Shared shell now retains mobile navigation in the DOM. Desktop
+            # must hide it, then reveal the same controls at the phone breakpoint.
+            expect(desktop_page.locator("[data-mobile-navigation]")).to_be_hidden()
             desktop_page.set_viewport_size({"width":390,"height":844})
-            expect(desktop_page.locator("[data-mobile-bottom-nav]")).to_be_visible()
+            expect(desktop_page.locator(".neo-mobile-bottom")).to_be_visible()
             desktop.close()
             # Restricted real account and server permission filtering.
             context.clear_cookies()
@@ -408,8 +410,11 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 (self.evidence/f'{engine}-dock-geometry.json').write_text(json.dumps(evidence,indent=2))
                 # Reuse existing focus, scrolling, swipe, Escape and breakpoint checks.
                 self.exercise(page,engine,'/rfd',390,760)
+                # A compact menu legitimately fits at 760px. Use a genuinely
+                # short viewport to exercise scroll/boundary behavior.
+                page.set_viewport_size({'width':390,'height':400})
                 self.ready(page,'/motherbrain')
-                page.locator('[data-drawer-toggle]').click()
+                page.locator('[data-drawer-nodes]').click()
                 panel=page.locator('[data-mobile-drawer]')
                 panel.evaluate('async e=>{await Promise.all(e.getAnimations().map(a=>a.finished));}')
                 self.assertTrue(panel.evaluate('e=>e.scrollHeight>e.clientHeight'))
@@ -495,11 +500,11 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                 for path in ('/portal','/rfd','/motherbrain'):
                     with self.subTest(width=width,path=path):
                         self.ready(page,path)
-                        header = page.locator(('[data-mobile-topbar]' if path=='/portal' else '.gateway-mobile-header' if path=='/rfd' else '.operational-mobile-header') if width<=900 else '.gateway-shell-topbar' if path=='/rfd' else '.topbar').first
+                        header = page.locator(('[data-mobile-topbar]' if path=='/portal' else '.gateway-mobile-header' if path=='/rfd' else '.operational-mobile-header') if width<=900 else '.gateway-shell-topbar' if path=='/rfd' else '[data-operational-topbar]' if path=='/motherbrain' else '.topbar').first
                         expect(header).to_be_visible()
                         icons = header.locator(f'img[src*="{icon_path}"]')
                         # Operational mobile headers keep their node-specific logo.
-                        if path != '/motherbrain' or width>900:
+                        if path != '/motherbrain':
                             self.assertEqual(icons.count(),1)
                             icon=header.locator('img[alt="NeoApps"]').first
                             expect(icon).to_be_in_viewport(ratio=1)
@@ -514,7 +519,12 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                                 self.assertEqual(header.bounding_box(),geometry)
                                 icon.evaluate('(e,src)=>{e.src=src;return e.decode();}',current_src)
                         else:
-                            self.assertIn('newlogo_motherbrain',header.locator('img').first.get_attribute('src'))
+                            if width<=900:
+                                self.assertIn('newlogo_motherbrain',header.locator('img').first.get_attribute('src'))
+                            else:
+                                # The operational desktop identity is text;
+                                # images inside Change Characters are not its logo.
+                                expect(header.locator('.operational-node-identity')).to_have_attribute('aria-label','NeoMotherBrain home')
                         page.screenshot(path=str(self.evidence / f'neoapps-icon-{path.strip("/")}-{width}.png'))
         finally:
             context.close()
@@ -645,7 +655,10 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                     self.assertTrue(page.locator('.command-enter-button strong, .command-link-row a').evaluate_all("es=>es.every(e=>getComputedStyle(e).fontFamily.includes('NeoFont'))"))
                     expect(form).to_be_in_viewport(ratio=1)
                     self.assertFalse(page.evaluate('document.documentElement.scrollWidth>innerWidth'))
-                    expect(page.locator('#dashboard-email')).to_have_attribute('autocomplete','email')
+                    # Login identity is an email address, but username is the
+                    # correct password-manager autocomplete token for sign-in.
+                    expect(page.locator('#dashboard-email')).to_have_attribute('type','email')
+                    expect(page.locator('#dashboard-email')).to_have_attribute('autocomplete','username')
                     expect(page.locator('#dashboard-password')).to_have_attribute('autocomplete','current-password')
                     page.evaluate('scrollTo(0,0)')
                     page.screenshot(path=str(self.evidence / f'{engine}-login-hero-{width}-{height}.png'), full_page=True)
@@ -684,7 +697,7 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                         page.set_viewport_size({'width':width,'height':height})
                         self.ready(page, '/rfd')
                         self.assertEqual(page.locator('.gateway-dashboard-hero img').count(),1)
-                        self.assertTrue(page.locator('.gateway-dashboard-hero img').evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes('hero_gateway') && getComputedStyle(e).objectFit==='contain'"))
+                        self.assertTrue(page.locator('.gateway-dashboard-hero img').evaluate("e => e.complete && e.naturalWidth>0 && e.currentSrc.includes(innerWidth<=900 ? 'hero_gateway' : 'neo_gateway_red_energy_portal_fade') && getComputedStyle(e).objectFit==='contain'"))
                         self.assertTrue(page.evaluate('''() => [...document.querySelectorAll('.gateway-node-name')].filter(e=>e.getClientRects().length).every(e=>{
                             const range=document.createRange(); range.selectNodeContents(e);
                             const r=range.getBoundingClientRect(), c=e.closest('.gateway-node-card').getBoundingClientRect();
@@ -700,7 +713,10 @@ class MobileDrawerBrowserTest(unittest.TestCase):
                             self.assertLessEqual(hero['y']+hero['height'],controls.bounding_box()['y'])
                             expect(controls.locator('a').first).to_have_attribute('href','/rfd')
                         else:
-                            self.assertLessEqual(hero['height'],300)
+                            # Approved desktop artwork is now an absolute
+                            # full-workspace background, not a 300px banner.
+                            self.assertEqual(page.locator('.gateway-dashboard-hero').evaluate('e=>getComputedStyle(e).position'),'absolute')
+                            self.assertGreaterEqual(hero['height'],page.locator('.gateway-node-grid').bounding_box()['height'])
                             expect(page.locator('[data-gateway-shell-header]')).to_be_visible()
                         page.screenshot(path=str(self.evidence / f'{engine}-gateway-hero-{width}.png'))
                         if width<=900:

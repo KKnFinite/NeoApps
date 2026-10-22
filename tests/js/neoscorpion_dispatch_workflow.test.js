@@ -10,6 +10,17 @@ const readScript = (name) => fs.readFileSync(
     "utf8"
 );
 
+// Dispatch is composed from partials. Inspect its real template dependency
+// tree instead of assuming all operational markup lives in the page shell.
+function readDispatchTemplate(name='fuel_dispatch.html', seen=new Set()) {
+    const file=path.join(__dirname,'../../app/templates/neonodes/neoscorpion',name);
+    if(seen.has(file))return '';
+    seen.add(file);
+    const text=fs.readFileSync(file,'utf8');
+    return text+[...text.matchAll(/\{%\s*(?:include|from)\s+"neonodes\/neoscorpion\/([^"\n]+)"/g)]
+        .map(match=>readDispatchTemplate(match[1],seen)).join('\n');
+}
+
 test("refresh restores the specific cycle row and its details for a shared mission", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
     const source = script.slice(script.indexOf("function initializeDispatchScroll"),
@@ -18,18 +29,19 @@ test("refresh restores the specific cycle row and its details for a shared missi
     const wrap = {scrollTop: 120, scrollLeft: 90,
         getBoundingClientRect: () => ({top: 100, bottom: 500})};
     const rows = [
-        {dataset: {dispatchRowKey: "7-1"}, getBoundingClientRect: () => ({top: 20, bottom: 60})},
-        {dataset: {dispatchRowKey: "7-2"}, getBoundingClientRect: () => ({top: 110, bottom: 150})},
+        {dataset: {dispatchRowKey: "7-1"}, classList:{contains:()=>false}, getBoundingClientRect: () => ({top: 20, bottom: 60})},
+        {dataset: {dispatchRowKey: "7-2"}, classList:{contains:()=>false}, getBoundingClientRect: () => ({top: 110, bottom: 150})},
     ];
     const detail = {hidden: false, setAttribute() {}};
-    const toggle = {getAttribute: () => "detail-7-2", setAttribute() {}};
+    const toggle = {getAttribute: () => "detail-7-2", setAttribute() {}, closest:()=>null};
     const scope = {
         querySelector(selector) {
             if (selector === ".neoscorpion-table-wrap--sticky") return wrap;
             if (selector.includes("aria-controls")) return toggle;
-            return rows.find(row => selector.includes(`"${row.dataset.dispatchRowKey}"`));
+            return rows.find(row => selector.includes(`"${row.dataset.dispatchRowKey}"`)) || null;
         },
-        querySelectorAll: selector => selector.includes("aria-expanded") ? [toggle] : rows,
+        querySelectorAll: selector => selector.includes("aria-expanded") ? [toggle]
+            : selector.includes('data-dispatch-row-key') ? rows : [],
     };
     const window = {
         location: {pathname: "/neoscorpion/fuel-dispatch"}, scrollX: 4, scrollY: 60,
@@ -41,7 +53,8 @@ test("refresh restores the specific cycle row and its details for a shared missi
     const initialize = vm.runInNewContext(`(${source.trim()})`, {
         window, document: {getElementById: () => detail},
     });
-    initialize(scope)();
+    const scroll=initialize(scope);
+    scroll.preserve();
     const saved = JSON.parse([...stored.values()][0]);
     assert.equal(saved.rowKey, "7-2");
     assert.deepEqual(saved.openDetails, ["detail-7-2"]);
@@ -58,10 +71,7 @@ test("refresh restores the specific cycle row and its details for a shared missi
 
 test("dispatch autosave adopts its own revision and excludes autosave fields from dirty controls", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
-    const template = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
-        "utf8"
-    );
+    const template = readDispatchTemplate();
 
     assert.match(script, /const adoptFingerprint/);
     assert.match(script, /revision = Number\(payload\.revision/);
@@ -74,22 +84,22 @@ test("dispatch autosave adopts its own revision and excludes autosave fields fro
     const protectedControls = script.split("const protectedControls =")[1].split("protectedControls().forEach")[0];
     assert.match(protectedControls, /select\[name='assigned_fueler_user_id'\]:not\(\[disabled\]\)/);
     assert.match(protectedControls, /select\[name='assigned_truck_id'\]:not\(\[disabled\]\)/);
-    assert.doesNotMatch(protectedControls, /textarea|data-dispatch-autosave/);
+    // Notes/reviews now participate in draft protection; autosaved mission
+    // numeric fields still must not be treated as unsent assignment controls.
+    assert.doesNotMatch(protectedControls, /data-dispatch-autosave|name='required_fuel'|name='inbound_fuel'/);
+    assert.match(protectedControls, /scorpion-desktop-console textarea/);
     assert.match(protectedControls, /data-cycle-start/);
     assert.match(script, /input\.dataset\.autosaveFailed = "true"/);
     assert.match(script, /input\.dataset\.autosaveFailed = "false"/);
     assert.match(script, /event\.preventDefault\(\)/);
     assert.match(script, /data-dispatch-assignment-submit/);
     assert.match(script, /button\?\.form \|\| button\?\.closest\("\[data-dispatch-assignment-form\]"\)/);
-    assert.match(script, /window\.location\.reload\(\)/);
+    assert.match(script, /currentPanel\.replaceWith\(nextPanel\)/);
 });
 
 
 test("dispatch compact rows retain authoritative copy data and exceptional fuel badges", () => {
-    const template = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
-        "utf8"
-    );
+    const template = readDispatchTemplate();
 
     assert.doesNotMatch(template, /<th>Truck Fuel<\/th>/);
     assert.match(template, /neoscorpion-mission-truck-bars/);
@@ -101,9 +111,9 @@ test("dispatch compact rows retain authoritative copy data and exceptional fuel 
     assert.match(template, />COPY<\/button>/);
     assert.doesNotMatch(template, /COPY LOAD PLANNING/);
     assert.doesNotMatch(template, /load_planning_note/);
-    assert.match(template, /row\.aircraft_type if row\.aircraft_type and row\.aircraft_type != "UNKNOWN" else "-"/);
+    assert.match(template, /row\.detailed_aircraft_type/);
     assert.match(template, /row\.apu_allowance_lbs is none/);
-    assert.match(template, /load_planning_placeholder/);
+    assert.match(template, /if row\.load_planning_ready/);
 });
 
 
@@ -120,10 +130,7 @@ test("dispatch clipboard fallback and shared live updates avoid inline style mut
 
 test("dispatch live refresh is clean except for changed assignment resource selections", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
-    const dispatchTemplate = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
-        "utf8"
-    );
+    const dispatchTemplate = readDispatchTemplate();
     const assetsTemplate = fs.readFileSync(
         path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "_nightly_assets.html"),
         "utf8"
@@ -143,10 +150,7 @@ test("dispatch live refresh is clean except for changed assignment resource sele
 
 test("dispatch truck card actions stay on Fuel Dispatch and guard rapid submits", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
-    const template = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
-        "utf8"
-    );
+    const template = readDispatchTemplate();
 
     assert.match(template, /data-dispatch-truck-card-form/);
     assert.match(template, /name="dispatch_truck_card" value="1"/);
@@ -160,22 +164,19 @@ test("dispatch truck card actions stay on Fuel Dispatch and guard rapid submits"
     assert.match(script, /const response = await fetch\(actionUrl, \{/);
     assert.match(script, /X-Requested-With": "XMLHttpRequest"/);
     assert.match(script, /reloadPage\(\)/);
-    assert.doesNotMatch(template, /assets=open|manage-tonights-assets/);
+    assert.match(template, /data-assets-open/);
 });
 
 
 test("dispatch assignment controls remain compact while silent dirty protection remains", () => {
     const script = readScript("neoscorpion_fuel_dispatch_live.js");
-    const template = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
-        "utf8"
-    );
+    const template = readDispatchTemplate();
     const cssRoot = path.join(__dirname, "..", "..", "app", "static", "css");
     const css = JSON.parse(fs.readFileSync(path.join(cssRoot, "sequence.json"), "utf8"))
         .stylesheets.map(row => fs.readFileSync(path.join(cssRoot, row.file), "utf8")).join("");
 
     assert.match(script, /if \(!hasUnsavedControls\(\)\)/);
-    assert.match(script, /window\.location\.reload\(\)/);
+    assert.match(script, /currentPanel\.replaceWith\(nextPanel\)/);
     assert.match(template, /data-dispatch-assignment-submit/);
     assert.match(template, /neoscorpion-dispatch-action-cell/);
     assert.match(css, /neoscorpion-dispatch-assignment-action/);
@@ -213,10 +214,7 @@ test("Hanzo live refresh uses the shared revision endpoint only while visible", 
 test("APU allowance UI is collapsed to the effective value and keeps inline edit controls", () => {
     const dispatch = readScript("neoscorpion_fuel_dispatch_live.js");
     const editor = readScript("neoscorpion_fuel_data.js");
-    const dispatchTemplate = fs.readFileSync(
-        path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "fuel_dispatch.html"),
-        "utf8"
-    );
+    const dispatchTemplate = readDispatchTemplate();
     const fuelerTemplate = fs.readFileSync(
         path.join(__dirname, "..", "..", "app", "templates", "neonodes", "neoscorpion", "_fueler_card.html"),
         "utf8"

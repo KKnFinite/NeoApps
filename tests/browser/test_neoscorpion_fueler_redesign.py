@@ -6,6 +6,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 from playwright.sync_api import expect
+from tests.browser.neoscorpion_helpers import wait_for_fuel_saved
 from app.extensions import db
 from app.models import (User, SortDateOperation, SortDateMission, SortDateParkingAssignment,
     NeoScorpionFuelAssignment, NeoScorpionFuelTruck, NeoScorpionSortTruck,
@@ -99,7 +100,7 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                                 '[name=notes]','.scorpion-fueler-finish','[data-fueler-submit-form]']
                                 .map(s=>c.querySelector(s).getBoundingClientRect().top)""")
                             self.assertEqual(ordered,sorted(ordered))
-                            page.evaluate("document.activeElement.blur();scrollTo({top:0,behavior:'instant'})")
+                            page.evaluate("document.activeElement?.blur();scrollTo({top:0,behavior:'instant'})")
                             page.screenshot(path=str(evidence/f'active-apu-{engine}-390.png'),full_page=True)
                             card.locator('[data-apu-use-recommended]').click()
                             expect(card.locator('[data-fuel-data-status]')).to_have_text('Saved',timeout=15000)
@@ -149,6 +150,7 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                                 expect(card.locator('[data-fuel-data-status]')).to_have_text('Saved',timeout=15000)
                             expect(card.locator('[name=notes]')).to_be_focused()
                             with F.app.app_context():self.assertEqual(db.session.get(NeoScorpionFuelWorkState,int(wid)).notes,'Newer value during save')
+                            wait_for_fuel_saved(card)
                             # Early OFF resumes the same physical visit and data.
                             card.locator('.neoscorpion-fueler-off-form button').click()
                             expect(card.locator('[data-resume-fueling-form]')).to_be_visible()
@@ -171,7 +173,7 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                             self.assertEqual(measured.value.status,302)
                             page.wait_for_url('**/neoscorpion/fueler')
                             expect(card.locator('.scorpion-optional-verification')).to_have_count(0)
-                            page.evaluate("document.activeElement.blur();scrollTo({top:0,behavior:'instant'})")
+                            page.evaluate("document.activeElement?.blur();scrollTo({top:0,behavior:'instant'})")
                             page.screenshot(path=str(evidence/f'off-ready-{engine}-390.png'),full_page=True)
                             card.locator('[data-fueler-submit-form] button').click()
                             expect(card.locator('[data-fueler-submission-status]')).to_contain_text('SUBMITTED',timeout=10000)

@@ -1,3 +1,4 @@
+import re
 import unittest
 from datetime import date, datetime, time
 from unittest.mock import patch
@@ -220,7 +221,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self._login(self.fueler)
         fueler_page = self.client.get("/neoscorpion/fueler")
         self.assertEqual(fueler_page.status_code, 200)
-        self.assertIn(b">UPLIFT<", fueler_page.data)
+        self.assertIn(b"UPLIFT 2", fueler_page.data)
         self.assertIn(b'name="remaining_left" value="11.0"', fueler_page.data)
 
         revision = self._revision(operation)
@@ -511,12 +512,18 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         asset_page = self.client.get("/neoscorpion/fuel-dispatch?assets=open")
         self.assertEqual(asset_page.status_code, 200)
         self.assertIn(b"NEEDS SUMP", asset_page.data)
-        self.assertIn(b"TRUCK HAS BEEN SUMPED", asset_page.data)
-        self.assertIn(
-            f'name="current_gallons" value="{nightly.current_gallons}"'.encode(),
-            asset_page.data,
-        )
         self.assertIn(b"VERIFY READY", asset_page.data)
+        self.assertIn(b'value="mark_sumped"', asset_page.data)
+        # VERIFY READY requires an actual post-sumping reading. Prefilling the
+        # calculated inventory would falsely present that balance as measured.
+        sump_form = asset_page.data.split(b'value="mark_sumped"', 1)[1].split(b'</form>', 1)[0]
+        reading = re.search(rb'<input\b[^>]*name="current_gallons"[^>]*>', sump_form).group()
+        self.assertIn(b'required', reading)
+        self.assertIn(b'aria-label=', reading)
+        self.assertIn(f'current gallons for truck {truck.truck_number}'.encode(), reading)
+        self.assertIn(f'max="{truck.capacity_gallons}"'.encode(), reading)
+        self.assertNotIn(b'value=', reading)
+        self.assertEqual(nightly.current_gallons, 315)
 
         verify_ready = self.client.post(
             "/neoscorpion/fuel-dispatch/assets",
@@ -723,8 +730,7 @@ class NeoScorpionUpliftDefuelTest(unittest.TestCase):
         self._login(self.other_fueler)
         readonly = self.client.get("/neoscorpion/fuel-dispatch")
         self.assertEqual(readonly.status_code, 200)
-        self.assertNotIn(b"START UPLIFT", readonly.data)
-        self.assertNotIn(b"START DEFUEL", readonly.data)
+        self.assertNotIn(b'action="/neoscorpion/fuel-dispatch/start-follow-up"',readonly.data)
         denied = self.client.post("/neoscorpion/fuel-dispatch/start-follow-up", data={
             "assignment_id": assignment.id, "cycle_type": "uplift",
         })
