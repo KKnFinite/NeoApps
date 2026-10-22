@@ -20,6 +20,8 @@ NEOSUBZERO_OPTIONAL_COLUMNS = {
     },
     NeoSubZeroDepartureDeiceEvent.__tablename__: {
         "reason_for_application": "VARCHAR(120)",
+        "ucc_queue_order": "INTEGER",
+        "ucc_queue_history": "TEXT",
     },
     NeoSubZeroPretreatState.__tablename__: {
         "reason_for_application": "VARCHAR(120)",

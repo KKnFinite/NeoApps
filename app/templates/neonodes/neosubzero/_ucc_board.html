@@ -1,0 +1,71 @@
+{% macro aircraft(row, location) -%}
+<button type="button" class="ucc-plane state-{{ row.visual_state }}" data-ucc-aircraft="{{ row.identity_key }}" aria-label="{{ row.tail }} {{ row.flight }}, {{ location }}, {{ row.visual_label }}">
+    <span class="ucc-plane-icon" aria-hidden="true">✈</span><strong>{{ row.tail }}</strong>
+    {% if row.flight or row.lane %}<span>{{ row.flight }}{% if row.lane %} · L{{ row.lane }}{% endif %}</span>{% endif %}<small>{{ row.visual_label }}</small>
+</button>
+{%- endmacro %}
+{% macro physical_ramp(ramp) -%}
+<div class="ucc-ramp-diagram ucc-desktop-label {{ 'is-main-ramp' if ramp.name in ('Alpha','Bravo','Charlie','Delta','Echo') else 'is-additional-location' }}" aria-label="{{ ramp.name }} physical parking and throat">
+    {% for place in ramp.parking_positions %}
+    <div class="ucc-parking-place {{ 'is-throat-stand' if place.throat_label else '' }}" data-ucc-parking="{{ place.code }}" {% if place.grid_row %}style="grid-row:{{ place.grid_row }};grid-column:{{ place.grid_column }}"{% endif %}>
+        <b>{{ place.code }}</b>
+        {% if place.throat_label %}<div class="ucc-throat-place" data-ucc-throat-position="{{ place.throat_label }}"><small>{% if place.aircraft and not place.throat_aircraft %}PARKED{% else %}THROAT {{ place.throat_label }}{% endif %}</small>{% if place.throat_aircraft %}{{ aircraft(place.throat_aircraft, 'throat ' ~ place.throat_label) }}{% elif not place.aircraft %}<span>EMPTY</span>{% endif %}</div>{% endif %}
+        {% if not place.throat_aircraft %}{% for row in place.aircraft %}{{ aircraft(row, place.code) }}{% else %}{% if not place.throat_label %}<span>EMPTY</span>{% endif %}{% endfor %}{% endif %}
+        {% if place.throat_aircraft and place.aircraft %}<small class="ucc-warning">LOCATION CONFLICT · REVIEW</small>{% endif %}
+    </div>
+    {% endfor %}
+    {% if ramp.name in ('Alpha','Bravo','Charlie','Delta','Echo') %}<div class="ucc-throat-middle ucc-throat-place" data-ucc-throat-position="10 → 9"><small>10 → 9</small>{% if ramp.waiting_queue %}{{ aircraft(ramp.waiting_queue[0], 'between positions 10 and 9') }}{% else %}<span>EMPTY</span>{% endif %}</div>{% endif %}
+    {% if ramp.name == 'Remote' %}<div class="ucc-remote-throat">{% for place in ramp.throat_positions %}<div class="ucc-throat-place" data-ucc-throat-position="{{ place.label }}"><small>THROAT {{ place.label }}</small>{% if place.aircraft %}{{ aircraft(place.aircraft, 'throat ' ~ place.label) }}{% else %}<span>EMPTY</span>{% endif %}</div>{% endfor %}</div>{% endif %}
+</div>
+{%- endmacro %}
+<div data-ucc-live-board>
+{% if operation %}
+<script type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
+<header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>
+<aside class="ucc-aircraft-panel ucc-desktop-label" aria-label="Aircraft planning information" data-ucc-info hidden>
+    <p data-ucc-info-empty>Select an aircraft above. This board does not record sprays.</p>
+    {% for ramp in ramps %}{% for row in ramp.aircraft %}
+    <article data-ucc-info-mission="{{ row.identity_key }}" hidden><header><h2>{{ row.tail }}{% if row.flight %} · {{ row.flight }}{% endif %}</h2><button type="button" data-ucc-info-close aria-label="Close aircraft information">×</button></header>
+        <dl><div><dt>LOCATION</dt><dd>{{ ramp.name }} · {% if row in ramp.queue[:3] %}THROAT {{ ramp.throat_positions[ramp.queue.index(row)].label }}{% elif row in ramp.exceptions %}UNPLACED · CAPACITY REVIEW{% else %}{{ row.parking }}{% endif %}</dd></div>{% if row.destination or row.departure_time %}<div><dt>ROUTE / {{ row.departure_time_label }}</dt><dd>{{ row.destination }} · {{ row.departure_time }}</dd></div>{% endif %}<div><dt>AIRCRAFT</dt><dd>{{ row.tail_status }}</dd></div><div><dt>PRETREAT</dt><dd>{{ row.pretreat_status }}</dd></div><div><dt>DEPARTURE DEICE</dt><dd>{{ row.deice_status }}</dd></div></dl>
+        {% if row.identity_note %}<p class="ucc-warning">{{ row.identity_note }}</p>{% endif %}
+        <div class="ucc-resource-context">{% for owner in ramp.slots if owner.truck_number or owner.roles.driver.person or owner.roles.flyer.person %}<span>P{{ owner.position }} · {{ owner.truck_number or 'No truck' }} · {{ owner.roles.driver.person.full_name if owner.roles.driver.person else 'No driver' }} / {{ owner.roles.flyer.person.full_name if owner.roles.flyer.person else 'No flyer' }}</span>{% endfor %}</div>
+        {% if row in ramp.queue and can_edit %}<form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='queue') }}" data-ucc-queue-form><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="expected_version" value="{{ ramp.queue_version }}"><span>COORDINATOR QUEUE CORRECTION</span><button type="submit" name="direction" value="forward">MOVE FORWARD</button><button type="submit" name="direction" value="back">MOVE BACK</button></form>{% endif %}
+        <a href="{{ url_for('neosubzero.coordinator', mission=row.mission_id, ramp=ramp.name) }}">OPEN DEICE OPERATIONS</a>
+    </article>{% endfor %}{% endfor %}
+</aside>
+<div class="ucc-ramp-board">
+{% for ramp in ramps %}
+<section class="ucc-ramp" data-ucc-ramp="{{ ramp.name }}">
+    <header><h2>{{ ramp.name|upper }}</h2><span class="ucc-desktop-label">{{ ramp.aircraft|length }} aircraft</span></header>
+    <div class="ucc-treatment-layout">
+        {{ physical_ramp(ramp) }}
+        {% for slot in ramp.slots %}
+        <details class="ucc-team position-{{ slot.position }}" data-ucc-editor="{{ ramp.name }}-{{ slot.position }}">
+            <summary><b>{{ slot.position }}</b><span><strong>{{ slot.truck_number or 'NO TRUCK' }}</strong><small title="{{ slot.roles.driver.person.full_name if slot.roles.driver.person else 'Unassigned' }}">D · {{ slot.roles.driver.person.full_name if slot.roles.driver.person else 'Unassigned' }}</small><small title="{{ slot.roles.flyer.person.full_name if slot.roles.flyer.person else 'Unassigned' }}">F · {{ slot.roles.flyer.person.full_name if slot.roles.flyer.person else 'Unassigned' }}</small></span>{% if can_edit %}<em>EDIT</em>{% endif %}</summary>
+            <div class="ucc-team-editor">
+            <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" data-ucc-truck-form>
+                <input type="hidden" name="board" value="ucc"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ slot.truck_version }}">
+                <label>TRUCK{% if can_edit %}<input name="truck_number" maxlength="32" value="{{ slot.truck_number }}" placeholder="Truck #">{% else %}<strong>{{ slot.truck_number or 'Unassigned' }}</strong>{% endif %}</label>{% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+            </form>
+            {% for role in ('driver', 'flyer') %}{% set person_slot = slot.roles[role] %}
+            <form method="post" action="{{ url_for('neosubzero.ucc') }}" data-ucc-assignment-form data-current-person-id="{{ person_slot.person.id if person_slot.person else '' }}" data-current-person-name="{{ person_slot.person.full_name if person_slot.person else '' }}" data-assignment-id="{{ person_slot.assignment.id if person_slot.assignment else '' }}" data-assignment-version="{{ person_slot.version }}">
+                <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="team_role" value="{{ role }}"><input type="hidden" name="expected_version" value="{{ person_slot.version }}"><input type="hidden" name="source_assignment_id" value=""><input type="hidden" name="source_expected_version" value=""><input type="hidden" name="move_resolution" value="">
+                <label>{{ role|upper }}{% if can_edit %}<select name="person_id" aria-label="{{ ramp.name }} position {{ slot.position }} {{ role }}"><option value="">UNASSIGNED</option>{% if person_slot.person and not person_slot.available %}<option value="{{ person_slot.person.id }}" selected disabled>{{ person_slot.person.full_name }} · AVAILABILITY REVIEW</option>{% endif %}{% for person_row in staffing_pool %}<option value="{{ person_row.person.id }}" {% if person_slot.person and person_slot.person.id == person_row.person.id %}selected{% endif %}>{{ person_row.person.full_name }} · {{ person_row.source|upper }}</option>{% endfor %}</select>{% else %}<strong>{{ person_slot.person.full_name if person_slot.person else 'Unassigned' }}</strong>{% endif %}</label>{% if can_edit %}<button type="submit">SAVE</button>{% endif %}
+                {% if can_edit and person_slot.person %}<button type="button" class="ucc-move-person" draggable="true" data-ucc-drag-assignee data-person-id="{{ person_slot.person.id }}">MOVE {{ person_slot.person.full_name }}</button>{% endif %}
+            </form>{% endfor %}
+            {% if can_edit %}
+            <details data-ucc-editor="unit-{{ ramp.name }}-{{ slot.position }}"><summary>MOVE / SWAP WHOLE UNIT</summary><form method="post" action="{{ url_for('neosubzero.ucc_planning_mutate', planning_action='unit') }}" data-ucc-unit-form>
+                <input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="ramp" value="{{ ramp.name }}"><input type="hidden" name="position_number" value="{{ slot.position }}"><input type="hidden" name="expected_version" value="{{ staffing_version }}">
+                {% if detached_units %}<label>SOURCE UNIT<select name="source_slot"><option value="{{ ramp.name }}|{{ slot.position }}">THIS POSITION</option>{% for unit in detached_units %}<option value="{{ unit.ramp }}|{{ unit.position }}">{{ unit.ramp }} P{{ unit.position }} · {{ unit.truck or 'TEAM' }}</option>{% endfor %}</select></label>{% endif %}
+                <label>TO RAMP<select name="destination_ramp">{% for destination in ramps if destination.slots %}<option>{{ destination.name }}</option>{% endfor %}</select></label><label>POSITION<select name="destination_position">{% for position in range(1,5) %}<option>{{ position }}</option>{% endfor %}</select></label><label>RESOLUTION<select name="resolution"><option value="move">MOVE TO EMPTY</option><option value="swap">SWAP UNITS</option></select></label><button type="submit">APPLY UNIT MOVE</button>
+            </form></details>{% endif %}
+            </div>
+        </details>{% endfor %}
+    </div>
+    {% if ramp.exceptions %}<details class="ucc-queue-exception ucc-desktop-label"><summary>THROAT CAPACITY REVIEW · {{ ramp.exceptions|length }} unplaced</summary><p>Three positions maximum. Confirm actual location and correct the departure queue.</p>{% for row in ramp.exceptions %}{{ aircraft(row, 'unplaced; throat capacity review') }}{% endfor %}</details>{% endif %}
+    {% if ramp.location_exceptions %}<div class="ucc-queue-exception ucc-desktop-label"><strong>LOCATION REVIEW · AFTER BLOCK-OUT</strong>{% for row in ramp.location_exceptions %}{{ aircraft(row, 'location unconfirmed after Block-Out') }}{% endfor %}</div>{% endif %}
+    {% for place in ramp.position_conflicts %}<div class="ucc-queue-exception ucc-desktop-label"><strong>PARKING CONFLICT · {{ place.code }}</strong><p>Recorded parking conflicts with throat occupancy. Confirm actual location.</p>{% for row in place.aircraft %}{{ aircraft(row, 'parking conflict; actual location needs review') }}{% endfor %}</div>{% endfor %}
+</section>{% endfor %}
+</div>
+{% else %}<p class="neosubzero-empty">No current sort.</p>{% endif %}
+</div>

@@ -48,6 +48,9 @@ from app.services.neosubzero_ucc import (
     move_neosubzero_ucc_assignment,
     neosubzero_ucc_context,
     neosubzero_ucc_revision,
+    move_ucc_unit,
+    reorder_ucc_queue,
+    validate_ucc_truck_unique,
 )
 from app.services.neosubzero_weather import (
     neosubzero_weather_context,
@@ -293,6 +296,7 @@ def ucc():
             ).with_for_update().one_or_none()
             if locked_operation is None:
                 raise NeoSubZeroUccError("The current sort changed. Reload UCC.")
+            _validate_ucc_sort(locked_operation)
             ramp = str(request.form.get("ramp") or "").strip().title()
             active_ramps = {
                 item["name"]
@@ -300,7 +304,7 @@ def ucc():
             }
             if ramp not in active_ramps:
                 raise NeoSubZeroUccError(
-                    "Choose a ramp with current departure aircraft."
+                    "Choose a current UCC ramp."
                 )
             position = request.form.get("position_number", type=int)
             role = str(request.form.get("team_role") or "").strip().casefold()
@@ -313,10 +317,7 @@ def ucc():
             expected_version = str(
                 request.form.get("expected_version") or ""
             ).strip()
-            if assignment and (
-                not expected_version
-                or version_conflict(assignment, expected_version)
-            ):
+            if (assignment and (not expected_version or version_conflict(assignment, expected_version))) or (assignment is None and expected_version):
                 raise NeoSubZeroUccError(
                     "UCC staffing changed while you were editing. Review current values."
                 )
@@ -373,12 +374,16 @@ def ucc():
                 source_assignment=source_assignment,
             )
             db.session.commit()
+            if _ucc_json_request():
+                return jsonify(ok=True, message="UCC staffing saved." if result["changed"] else "UCC staffing unchanged.")
             flash(
                 "UCC STAFFING SAVED." if result["changed"] else "UCC STAFFING UNCHANGED.",
                 "success" if result["changed"] else "info",
             )
         except (NeoSubZeroUccError, IntegrityError) as exc:
             db.session.rollback()
+            if _ucc_json_request():
+                return jsonify(ok=False, error=str(exc) if isinstance(exc, NeoSubZeroUccError) else "Unable to save UCC staffing. Review current values before retrying."), 409
             flash(
                 str(exc)
                 if isinstance(exc, NeoSubZeroUccError)
@@ -407,6 +412,65 @@ def ucc():
         application_context=_application_context(operation),
         **neosubzero_ucc_context(gateway, operation),
     )
+
+
+def _ucc_json_request():
+    return request.headers.get("X-UCC-Request") == "1"
+
+
+def _validate_ucc_sort(operation):
+    submitted = request.form.get("operation_id")
+    if submitted is not None and str(operation.id) != submitted:
+        raise NeoSubZeroUccError("The current sort changed. Your draft was not applied; reload current UCC.")
+
+
+@bp.route("/ucc/<any(unit,queue):planning_action>", methods=["POST"])
+@gateway_node_required("subzero")
+def ucc_planning_mutate(planning_action):
+    if not user_can("neosubzero.ucc.edit"):
+        return jsonify(ok=False, error="Access denied."), 403
+    gateway = get_current_gateway()
+    operation = current_neosubzero_operation(gateway)
+    try:
+        if operation is None:
+            raise NeoSubZeroUccError("No current sort is available.")
+        operation = SortDateOperation.query.filter_by(id=operation.id, gateway_code=gateway.code).with_for_update().one()
+        _validate_ucc_sort(operation)
+        if not request.form.get("operation_id"):
+            raise NeoSubZeroUccError("Reload current UCC before making this change.")
+        if planning_action == "unit":
+            if request.form.get("resolution") not in {"move", "swap"}:
+                raise NeoSubZeroUccError("Choose MOVE TO EMPTY or SWAP UNITS.")
+            source_ramp, source_position = request.form.get("ramp"), request.form.get("position_number")
+            if request.form.get("source_slot"):
+                source_ramp, separator, source_position = request.form["source_slot"].partition("|")
+                if not separator:
+                    raise NeoSubZeroUccError("Choose a valid source unit.")
+            move_ucc_unit(
+                operation, source_ramp, source_position,
+                request.form.get("destination_ramp"), request.form.get("destination_position"),
+                expected_version=request.form.get("expected_version"),
+                swap=request.form.get("resolution") == "swap", user_id=current_user.id,
+            )
+            message = "UCC unit moved. Existing spray records are unchanged."
+        else:
+            reorder_ucc_queue(
+                gateway, operation, request.form.get("ramp"),
+                request.form.get("mission_id", type=int), request.form.get("direction"),
+                expected_version=request.form.get("expected_version"), user_id=current_user.id,
+            )
+            message = "Departure queue corrected."
+        db.session.commit()
+        if _ucc_json_request():
+            return jsonify(ok=True, message=message)
+        flash(message, "success")
+    except (NeoSubZeroUccError, IntegrityError) as exc:
+        db.session.rollback()
+        message = str(exc) if isinstance(exc, NeoSubZeroUccError) else "UCC changed concurrently. Review current values before retrying."
+        if _ucc_json_request():
+            return jsonify(ok=False, error=message), 409
+        flash(message, "error")
+    return redirect(url_for("neosubzero.ucc"))
 
 
 @bp.route("/ucc/revision")
@@ -510,6 +574,11 @@ def truck_mutate():
         ).with_for_update().one_or_none()
         if locked_operation is None:
             raise NeoSubZeroSprayError("The current sort changed. Reload NeoSub-Zero.")
+        if board == "ucc":
+            try:
+                _validate_ucc_sort(locked_operation)
+            except NeoSubZeroUccError as exc:
+                raise NeoSubZeroSprayError(str(exc)) from exc
         if not _can_edit_position(
             board, locked_operation, ramp, position, allow_ucc=True
         ):
@@ -520,12 +589,15 @@ def truck_mutate():
             position_number=position,
         ).with_for_update().one_or_none()
         expected_version = str(request.form.get("expected_version") or "").strip()
-        if truck and (
-            not expected_version or version_conflict(truck, expected_version)
-        ):
+        if (truck and (not expected_version or version_conflict(truck, expected_version))) or (board == "ucc" and truck is None and expected_version):
             raise NeoSubZeroSprayError(
                 "Truck assignment changed while you were editing. Review current values."
             )
+        if board == "ucc":
+            try:
+                validate_ucc_truck_unique(locked_operation, request.form.get("truck_number"), truck)
+            except NeoSubZeroUccError as exc:
+                raise NeoSubZeroSprayError(str(exc)) from exc
         set_neosubzero_ucc_truck(
             locked_operation,
             ramp,
@@ -535,9 +607,13 @@ def truck_mutate():
             assignment=truck,
         )
         db.session.commit()
+        if board == "ucc" and _ucc_json_request():
+            return jsonify(ok=True, message="UCC truck saved.")
         flash("UCC TRUCK SAVED.", "success")
     except (NeoSubZeroSprayError, IntegrityError) as exc:
         db.session.rollback()
+        if board == "ucc" and _ucc_json_request():
+            return jsonify(ok=False, error=str(exc) if isinstance(exc, NeoSubZeroSprayError) else "Unable to save truck. Review current values."), 409
         flash(
             str(exc) if isinstance(exc, NeoSubZeroSprayError) else "Unable to save truck.",
             "error",

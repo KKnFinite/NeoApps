@@ -38,6 +38,9 @@ class NeoSubZeroDepartureDeiceEvent(db.Model):
     tail_number = db.Column(db.String(32), nullable=False, index=True)
     status = db.Column(db.String(24), nullable=False, default="deice_planned")
     configured_at_utc = db.Column(db.DateTime, nullable=True)
+    # Optional coordinator ordering, on the canonical event (not another queue).
+    ucc_queue_order = db.Column(db.Integer, nullable=True)
+    ucc_queue_history = db.Column(db.Text, nullable=True)
     treatment_plan = db.Column(db.String(24), nullable=True)
     reason_for_application = db.Column(db.String(120), nullable=True)
     pass1_surface_area = db.Column(db.String(32), nullable=True)

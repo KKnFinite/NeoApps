@@ -192,6 +192,7 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None):
     if action in {"initial_contact", "move_to_planned"}:
         event = event or _new_event(operation, mission)
         _reset_for_new_departure_event(event)
+        event.ucc_queue_order = None
         event.status = "deice_planned"
     elif action == "set_negative":
         event = event or _new_event(operation, mission)
