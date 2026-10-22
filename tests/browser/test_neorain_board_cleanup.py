@@ -58,8 +58,10 @@ class RainBoardCleanupBrowserTest(unittest.TestCase):
                         self.assertEqual(table.locator('thead th').count(),13 if board=='inbound' else 21)
                         if board=='inbound':
                             clocks=row.locator('.neorain-arrival-clocks');expect(clocks).to_be_visible()
-                            boxes=clocks.locator('label,.neorain-eta').evaluate_all('els=>els.map(el=>el.getBoundingClientRect().y)')
-                            self.assertLess(max(boxes)-min(boxes),8)
+                            self.assertNotRegex(clocks.inner_text(),r'\b(?:STA|ETA)\b')
+                            boxes=clocks.locator('.rain-override,.neorain-eta').evaluate_all('els=>els.map(el=>{const r=el.getBoundingClientRect();return r.y+r.height/2;})')
+                            self.assertLess(max(boxes)-min(boxes),1)
+                            self.assertEqual(table.locator('th.neorain-arrival-clocks-heading').evaluate('e=>getComputedStyle(e).textAlign'),'center')
                             sta=clocks.locator('[data-rain-override-time]')
                             with page.expect_response(lambda r:'/neorain/override' in r.url and r.request.method=='POST') as response:sta.fill('0235')
                             self.assertEqual(response.value.status,200);expect(sta).to_have_value('02:35')

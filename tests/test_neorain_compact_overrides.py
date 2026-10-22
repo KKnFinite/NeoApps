@@ -49,6 +49,15 @@ class CompactRainTemplateTest(unittest.TestCase):
         self.assertNotIn('>Include</label>', html)
         self.assertNotIn('>No Return</label>', html)
 
+    def test_inbound_times_rely_on_header_not_repeated_visible_labels(self):
+        html = self.fixture.client.get('/neorain/inbound').get_data(as_text=True)
+        self.assertIn('<th class="neorain-arrival-clocks-heading">STA / ETA</th>', html)
+        clocks = re.search(r'<div class="neorain-arrival-clocks">(.*?)</time></div>', html, re.S).group(1)
+        self.assertNotRegex(clocks, r'>\s*(?:STA|ETA)\s*<')
+        self.assertIn('aria-label="STA for UPS1487 (HHMM)"', clocks)
+        self.assertIn('aria-label="ETA for UPS1487"', clocks)
+        self.assertIn('class="neorain-clock-divider" aria-hidden="true">/</span>', clocks)
+
     def test_cancelled_mission_has_no_override_edit_or_reset_controls(self):
         self.fixture.arrival.arrival_status = 'cancelled'
         self.fixture.departure.departure_status = 'cancelled'

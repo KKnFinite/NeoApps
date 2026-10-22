@@ -520,15 +520,16 @@ body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page="outbound
     text-align: center;
 }
 /* Identical aircraft-row geometry on both live boards; reports are untouched. */
+body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] th.neorain-arrival-clocks-heading {text-align:center;}
 body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-arrival-clocks {
-    display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px 6px; white-space:nowrap;
+    display:grid; grid-template-columns:54px 8px 54px; align-items:center;
+    justify-content:center; gap:4px; white-space:nowrap;
 }
-body.blueprint-neorain .neorain-arrival-clocks > label,
 body.blueprint-neorain .neorain-arrival-clocks > .neorain-eta {
-    display:flex; flex-shrink:0; align-items:center; gap:3px; margin:0; min-width:0; font:inherit;
+    min-width:0; text-align:center; font:inherit; font-variant-numeric:tabular-nums;
 }
-body.blueprint-neorain .neorain-arrival-clocks :is(label > span, small) {font-size:9px; color:#b7a9d8;}
-body.blueprint-neorain .neorain-arrival-clocks .rain-override {width:54px; flex:0 0 54px;}
+body.blueprint-neorain .neorain-arrival-clocks > .neorain-clock-divider {text-align:center; opacity:.65;}
+body.blueprint-neorain .neorain-arrival-clocks .rain-override {width:54px;}
 body.blueprint-neorain [data-neorain-scorpion-fuel] {font:inherit; font-variant-numeric:tabular-nums;}
 @media (min-width:901px) {
     body.blueprint-neorain .neorain-outbound-shell[data-neorain-board-page] .neorain-desktop-board {display:block;}
