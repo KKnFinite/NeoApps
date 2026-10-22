@@ -277,6 +277,8 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neosubzero_departure_deice_events": {
         "reason_for_application": "VARCHAR(120)",
+        "ucc_queue_order": "INTEGER",
+        "ucc_queue_history": "TEXT",
     },
     "neosubzero_pretreat_states": {
         "reason_for_application": "VARCHAR(120)",
@@ -572,6 +574,17 @@ POSTGRES_OPTIONAL_COLUMNS = {
         "spear_top_off_roundtrip_minutes": "INTEGER NOT NULL DEFAULT 40 CHECK (spear_top_off_roundtrip_minutes > 0)",
         "spear_use_learned_top_off": "BOOLEAN NOT NULL DEFAULT FALSE",
         "spear_priority_order_json": "TEXT",
+    },
+    "neosubzero_departure_deice_events": {
+        "reason_for_application": "VARCHAR(120)",
+        "ucc_queue_order": "INTEGER",
+        "ucc_queue_history": "TEXT",
+    },
+    "neosubzero_pretreat_states": {
+        "reason_for_application": "VARCHAR(120)",
+    },
+    "neosubzero_user_preferences": {
+        "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
     },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",

@@ -60,6 +60,22 @@ def _missing_optional_columns(connection):
     return tuple(missing)
 
 
+
+def verify_neosubzero_schema_contract(connection):
+    """Fail a pre-deploy bootstrap if the live SubZero model columns are absent."""
+    inspector = inspect(connection)
+    for table_name, required_columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
+        if not inspector.has_table(table_name):
+            raise RuntimeError(f"NeoSubZero schema missing table: {table_name}")
+        available = {column["name"] for column in inspector.get_columns(table_name)}
+        missing = sorted(set(required_columns) - available)
+        if missing:
+            raise RuntimeError(
+                f"NeoSubZero schema missing columns in {table_name}: "
+                + ", ".join(missing)
+            )
+
+
 def ensure_neosubzero_pretreat_table(app):
     uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).lower()
     if app.config.get("TESTING") or not uri.startswith(("postgresql:", "postgresql+", "postgres:", "postgres+")):

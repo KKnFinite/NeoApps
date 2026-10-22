@@ -111,6 +111,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
             "neoscorpion_settings": list(SPEAR_SETTINGS_COLUMNS),
             "neoscorpion_fuel_assignments": list(SPEAR_ASSIGNMENT_COLUMNS),
             "motherbrain_google_integration_settings": ["rain_integration_mode", "rain_fuel_data_source"],
+            "neosubzero_departure_deice_events": ["ucc_queue_order", "ucc_queue_history"],
         }
         for table, columns in missing_columns.items():
             # Model-derived legacy fixture without constraints referencing the
@@ -137,6 +138,11 @@ class DatabaseBootstrapTest(unittest.TestCase):
             for model in missing_tables:
                 self.assertTrue(inspector.has_table(model.__tablename__))
             self.assertEqual(User.query.count(), 1)
+
+        from app.services.neosubzero_schema import NEOSUBZERO_OPTIONAL_COLUMNS
+        for table_name, expected in NEOSUBZERO_OPTIONAL_COLUMNS.items():
+            self.assertTrue(set(expected) <= POSTGRES_OPTIONAL_COLUMNS[table_name].keys())
+            self.assertTrue(set(expected) <= LOCAL_SQLITE_OPTIONAL_COLUMNS[table_name].keys())
 
         # Both dialect maps, not duplicate bootstrap ALTERs, own the columns.
         for column, ddl in SPEAR_SETTINGS_COLUMNS.items():
@@ -175,6 +181,27 @@ class DatabaseBootstrapTest(unittest.TestCase):
         for column in columns:
             expected = "INTEGER NOT NULL DEFAULT " + ("1" if column == "spotter_mode" else "0")
             self.assertEqual(POSTGRES_OPTIONAL_COLUMNS["neosektor_ballmat_counts"][column], expected)
+
+    def test_subzero_schema_verifies_and_bootstrap_repairs_missing_queue_column(self):
+        from app.services.neosubzero_schema import verify_neosubzero_schema_contract
+
+        db.create_all()
+        db.session.execute(
+            text("ALTER TABLE neosubzero_departure_deice_events DROP COLUMN ucc_queue_order")
+        )
+        db.session.commit()
+        with self.assertRaisesRegex(RuntimeError, "ucc_queue_order"):
+            verify_neosubzero_schema_contract(db.session.connection())
+        db.session.rollback()
+
+        bootstrap_database(self.app)
+        verify_neosubzero_schema_contract(db.session.connection())
+        self.assertIn(
+            "ucc_queue_history",
+            {column["name"] for column in inspect(db.engine).get_columns(
+                "neosubzero_departure_deice_events"
+            )},
+        )
 
     def test_schema_sync_creates_missing_rain_and_calibration_tables_only_once(self):
         from app.models import NeoRainFuelReviewAcknowledgement, NeoRainGoogleFuelValue, NeoScorpionSpearCalibrationReset

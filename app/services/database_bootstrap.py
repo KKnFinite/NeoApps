@@ -57,6 +57,9 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
         from app.services.neoscorpion_spear_schema import _verify_spear_schema_contract
 
         _verify_spear_schema_contract(db.session.connection())
+        from app.services.neosubzero_schema import verify_neosubzero_schema_contract
+
+        verify_neosubzero_schema_contract(db.session.connection())
     gateway = ensure_default_gateway_and_nodes()
     ensure_default_permission_rules()
     ensure_sheets_compatibility_setting(gateway)
