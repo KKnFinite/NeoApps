@@ -100,4 +100,3 @@ class OperationalSafeguardsTest(unittest.TestCase):
         self.assertEqual(self.client.post('/neoscorpion/truck-manager', data=dict(action='save_truck',
             truck_id=truck.id, truck_number=truck.truck_number, capacity_gallons='1000')).status_code, 403)
         self.assertEqual(truck.capacity_gallons, 10000)
-
