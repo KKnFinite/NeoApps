@@ -2286,42 +2286,9 @@ def _apply_person_values(person, person_values):
     return person
 
 
-def delete_person(person):
-    affiliation_count = StaffingTwentyCAffiliation.query.filter(
-        or_(
-            StaffingTwentyCAffiliation.twenty_c_person_id == person.id,
-            StaffingTwentyCAffiliation.ft_supervisor_person_id == person.id,
-        )
-    ).count()
-    if affiliation_count:
-        raise ValueError(
-            "This person has 20C affiliation history and cannot be deleted. Deactivate the person instead."
-        )
-    reporting_count = StaffingReportingRelationship.query.filter(
-        or_(
-            StaffingReportingRelationship.person_id == person.id,
-            StaffingReportingRelationship.reports_to_person_id == person.id,
-        )
-    ).count()
-    if reporting_count:
-        raise ValueError(
-            "This person has Reports To history and cannot be deleted. Deactivate the person instead."
-        )
-    change_request_count = StaffingChangeRequest.query.filter(
-        or_(
-            StaffingChangeRequest.person_id == person.id,
-            StaffingChangeRequest.submitted_by_person_id == person.id,
-        )
-    ).count()
-    if change_request_count:
-        raise ValueError(
-            "This person has employee change-request history and cannot be deleted. "
-            "Deactivate the person instead."
-        )
-    StaffingWorkAssignment.query.filter_by(person_id=person.id).delete()
-    StaffingLeadershipAssignment.query.filter_by(person_id=person.id).delete()
-    db.session.delete(person)
-    db.session.flush()
+def delete_person(person, *, actor, confirmation):
+    from app.services.neostaffing_employee_recovery import delete_employee
+    return delete_employee(actor,person.id,confirmation)
 
 
 def toggle_person_active(person):

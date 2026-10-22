@@ -111,13 +111,13 @@ class EmployeeEditorBrowserTest(unittest.TestCase):
                 self.assertEqual(service.assignment_service.shift_home(person).work_area_unit_id,self.areas['Door 32'])
             card=page.locator(f'[data-roster-person="{pid}"]'); expect(card).to_have_class('shift-door-person is-at-door')
             card.tap(); expect(dialog).to_be_visible()
-            messages=[]
-            dismiss = lambda prompt: (messages.append(prompt.message), prompt.dismiss())
-            page.on('dialog', dismiss)
             dialog.locator('[data-employee-delete]').tap(); expect(dialog).to_be_visible()
-            self.assertIn('Mobile Seasonal',messages[0]); self.assertIn('MOBILE-SEASONAL',messages[0])
-            page.remove_listener('dialog', dismiss); page.on('dialog',lambda prompt:prompt.accept())
-            dialog.locator('[data-employee-delete]').tap(); expect(dialog).not_to_be_visible()
+            confirmation=page.locator('[data-employee-delete-confirm]')
+            expect(confirmation).to_contain_text('Mobile Seasonal'); expect(confirmation).to_contain_text('MOBILE-SEASONAL')
+            confirmation.get_by_role('button',name='CANCEL',exact=True).tap()
+            dialog.locator('[data-employee-delete]').tap()
+            confirmation.get_by_role('button',name='YES, DELETE EMPLOYEE',exact=True).tap()
+            expect(dialog).not_to_be_visible()
             expect(page.locator(f'[data-roster-person="{pid}"]')).to_have_count(0)
             self.assertFalse(errors)
         finally: browser.close()
@@ -159,7 +159,7 @@ class EmployeeEditorBrowserTest(unittest.TestCase):
                 context.close()
         finally: browser.close()
 
-    def test_blocked_delete_keeps_editor_open_and_shows_history_error(self):
+    def test_rejected_delete_keeps_editor_open_and_preserves_draft(self):
         pid=self.person('DELETE-BLOCKED')
         target=self.person('REPORTS-TARGET')
         with self.fixture.app.app_context():
@@ -170,7 +170,11 @@ class EmployeeEditorBrowserTest(unittest.TestCase):
             page=browser.new_page(viewport={'width':1280,'height':900}); helper=self.fixture(); helper.login(page)
             helper.ready(page,f'/neostaffing/people?person_id={pid}')
             dialog=page.locator('[data-employee-editor]'); expect(dialog).to_be_visible()
-            page.on('dialog',lambda prompt:prompt.accept()); dialog.locator('[data-employee-delete]').click()
-            expect(dialog.locator('[data-employee-error]')).to_contain_text('history'); expect(dialog).to_be_visible()
+            dialog.locator('[name="first_name"]').fill('Preserved draft')
+            page.route('**/people/*/delete',lambda route:route.fulfill(status=400,json={'ok':False,'error':'Backup unavailable; nothing deleted.'}))
+            dialog.locator('[data-employee-delete]').click()
+            page.locator('[data-employee-delete-confirmed]').click()
+            expect(dialog.locator('[data-employee-error]')).to_contain_text('Backup unavailable'); expect(dialog).to_be_visible()
+            expect(dialog.locator('[name="first_name"]')).to_have_value('Preserved draft')
             dialog.locator('[data-employee-close]').click(); expect(dialog).not_to_be_visible()
         finally: browser.close()

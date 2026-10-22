@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Employee Recovery | NeoStaffing{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_employee_editor.css', v='20261022-recovery-v1') }}">
+<section class="employee-recovery theme-staffing">
+  <a href="{{ url_for('neostaffing.people') }}">BACK TO PEOPLE</a>
+  <h1>Employee Recovery</h1>
+  <p>Restore deleted employees within 24 hours. Restoration preserves original identities and rejects conflicting newer records. Expiry is shown in UTC.</p>
+  {% for backup in recoveries %}
+  <article data-recovery-id="{{ backup.id }}">
+    <strong>{{ backup.name }} · Employee ID: {{ backup.employee_id }}</strong>
+    <p>Deleted {{ backup.created_at.strftime('%m/%d/%Y %H:%M:%S') }} UTC · Expires <time datetime="{{ backup.expires_at.isoformat() }}Z">{{ backup.expires_at.strftime('%m/%d/%Y %H:%M:%S') }} UTC</time></p>
+    <form method="post" action="{{ url_for('neostaffing.restore_employee', recovery_id=backup.id) }}" data-employee-restore>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">RESTORE EMPLOYEE</button>
+      <span role="status" data-restore-status></span>
+    </form>
+  </article>
+  {% else %}<p>No deleted employees are available for recovery.</p>{% endfor %}
+  <nav>{% if page>1 %}<a href="{{ url_for('neostaffing.employee_recovery',page=page-1) }}">PREVIOUS</a>{% endif %} {% if has_next %}<a href="{{ url_for('neostaffing.employee_recovery',page=page+1) }}">NEXT</a>{% endif %}</nav>
+</section>
+<script src="{{ url_for('static', filename='js/neostaffing_employee_recovery.js', v='20261022-recovery-v1') }}"></script>
+{% endblock %}

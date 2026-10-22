@@ -11,7 +11,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.extensions import db
 from app.services.operator_errors import safe_mutation_error
@@ -71,6 +71,7 @@ STAFFING_SCREEN_ITEMS = (
     ("Notifications", "neostaffing.staffing_notifications", CHANGE_REQUEST_VIEW_PERMISSION, "Operational alerts", False, True),
     ("Bulk Change", "neostaffing.bulk_change", BULK_CHANGE_PERMISSION, "Session change workspace", False, True),
     ("Employee Records", "neostaffing.employee_records", PEOPLE_VIEW_PERMISSION, "Employee documentation", False, True),
+    ("Employee Recovery", "neostaffing.employee_recovery", PEOPLE_EDIT_PERMISSION, "Restore deleted employees within 24 hours", False, False),
     ("Timecards", "neostaffing.timecards", PEOPLE_VIEW_PERMISSION, "Employee hours", False, True),
     ("Accountability", "neostaffing.accountability", PEOPLE_VIEW_PERMISSION, "Discipline tracker", False, True),
     ("Vacation Selection", "neostaffing.vacation_selection", VACATION_SELECTION_VIEW_PERMISSION, "Vacation calendars", False, True),
@@ -109,7 +110,8 @@ def staffing_screen_items():
             ),
         }
         for label, endpoint, permission, description, priority, under_construction in STAFFING_SCREEN_ITEMS
-        if permission is None or user_can(permission)
+        if (permission is None or user_can(permission)) and (
+            endpoint != 'neostaffing.employee_recovery' or user_can_access_app(current_user,'neostaffing',minimum_role='master'))
     ]
 
 
@@ -2444,19 +2446,52 @@ def toggle_person_active(person_id):
 @bp.route("/app-management/people/<int:person_id>/delete", methods=["POST"])
 @neostaffing_app_required(permission_key=PEOPLE_EDIT_PERMISSION)
 def delete_person(person_id):
-    person = _get_person(person_id)
-    if request.form.get("shared_editor") == "1":
-        try:
-            person = StaffingPerson.query.filter_by(id=person.id).populate_existing().with_for_update().one()
-            if request.form.get("expected_person_version") != staffing_service.entity_version(person):
-                raise ValueError("Employee changed while you were editing. Close and reopen the editor.")
-            staffing_service.delete_person(person)
-            db.session.commit()
-        except (ValueError, IntegrityError) as error:
-            db.session.rollback()
-            return jsonify(ok=False, error=safe_mutation_error(error, "delete employee")), 400
-        return jsonify(ok=True)
-    return _mutate_to_people(lambda: staffing_service.delete_person(person), "Person deleted.")
+    from app.services import neostaffing_employee_recovery as recovery
+    try:
+        backup=recovery.delete_employee(current_user,person_id,request.form)
+        recovery_id,expires_at=backup.id,backup.expires_at
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        status=409 if isinstance(error,recovery.RecoveryConflict) else 400
+        message = safe_mutation_error(error,'delete employee') if isinstance(error,(ValueError,SQLAlchemyError)) else 'Deletion failed. Nothing was deleted; your entries are preserved. Please retry or contact an administrator.'
+        if not isinstance(error,(ValueError,SQLAlchemyError)):
+            current_app.logger.error('Employee deletion failed: %s',type(error).__name__)
+        return jsonify(ok=False,error=message),status
+    from app.services.neostaffing_employee_recovery_worker import notify_recovery_worker
+    notify_recovery_worker(current_app._get_current_object())
+    flash('Employee deleted. Authorized administrators can restore it from Employee Recovery for 24 hours.','success')
+    return jsonify(ok=True,recovery_id=recovery_id,expires_at=expires_at.isoformat()+'Z')
+
+
+@bp.route('/app-management/employee-recovery',methods=['GET'])
+@neostaffing_app_required(minimum_role='master')
+def employee_recovery():
+    from app.services import neostaffing_employee_recovery as recovery
+    try:
+        rows,page,has_next=recovery.recovery_list(current_user,page=max(1,request.args.get('page',1,type=int)))
+    except (ValueError,SQLAlchemyError) as error:
+        db.session.rollback()
+        return safe_mutation_error(error,'open employee recovery'),403
+    response=current_app.make_response(render_template('neostaffing/employee_recovery.html',recoveries=rows,page=page,has_next=has_next))
+    response.headers['Cache-Control']='no-store, private'
+    return response
+
+
+@bp.route('/app-management/employee-recovery/<recovery_id>/restore',methods=['POST'])
+@neostaffing_app_required(minimum_role='master')
+def restore_employee(recovery_id):
+    from app.services import neostaffing_employee_recovery as recovery
+    try:
+        person_id=recovery.restore_employee(current_user,recovery_id)
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        message=safe_mutation_error(error,'restore employee') if isinstance(error,(ValueError,SQLAlchemyError)) else 'Restore failed. No employee records were changed. Please retry or contact an administrator.'
+        if not isinstance(error,(ValueError,SQLAlchemyError)):
+            current_app.logger.error('Employee restore failed: %s',type(error).__name__)
+        return jsonify(ok=False,error=message),409 if isinstance(error,recovery.RecoveryConflict) else 400
+    return jsonify(ok=True,person_id=person_id)
 
 
 @bp.route("/app-management/work-assignments")

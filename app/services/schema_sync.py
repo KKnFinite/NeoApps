@@ -1845,6 +1845,7 @@ def _create_missing_application_tables(existing_table_names):
     from app.models import (NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit, NeoScorpionVendorAccount,
         NeoScorpionVendorNight, NeoScorpionVendorRequest, NeoScorpionVendorAudit, NeoScorpionInventoryReading, NeoScorpionTopOffEvent)
     from app.models.staffing_employee_record import StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent
+    from app.models.staffing_employee_recovery import StaffingEmployeeRecovery, StaffingEmployeeRecoveryAudit
     # Parent tables already exist on production; create these after the normal
     # registry below on fresh databases as well.
     from app.models import (
@@ -2029,10 +2030,14 @@ def _create_missing_application_tables(existing_table_names):
     for model in (NeoScorpionTruckDriver, NeoScorpionTruckDriverAudit,
                   NeoScorpionVendorAccount, NeoScorpionVendorNight, NeoScorpionVendorRequest,
                   NeoScorpionVendorAudit, NeoScorpionInventoryReading, NeoScorpionTopOffEvent,
+                  StaffingEmployeeRecovery, StaffingEmployeeRecoveryAudit,
                   StaffingEmployeeRecordSetting, StaffingEmployeeRecord, StaffingEmployeeRecordEvent):
         model.__table__.create(bind=db.engine, checkfirst=True)
     from app.services.neostaffing_employee_record_schema import ensure_employee_record_delivery
     ensure_employee_record_delivery()
+    from app.services.neostaffing_employee_recovery_schema import install_recovery_guards
+    with db.engine.begin() as connection:
+        install_recovery_guards(connection)
 
 
 def _create_google_mission_link_table():

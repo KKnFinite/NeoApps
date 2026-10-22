@@ -151,18 +151,22 @@ class EmployeeEditorTest(unittest.TestCase):
         roster = service.shift_flow_context()['flow_map']['door_roster']
         self.assertEqual([row['person'].id for row in roster['needs_assignment']],[incomplete.id])
 
-    def test_delete_history_error_and_success_preserve_linked_login(self):
+    def test_delete_requires_confirmation_then_handles_history_and_preserves_linked_login(self):
         db.session.add(StaffingReportingRelationship(person=self.primary, reports_to_person=self.secondary, active=False))
         db.session.commit()
         response = self.client.post(f'/neostaffing/app-management/people/{self.primary.id}/delete',
             data={'shared_editor':'1','expected_person_version':service.entity_version(self.primary)})
         self.assertEqual(response.status_code,400)
-        self.assertIn('history',response.json['error'])
+        self.assertIn('confirmation',response.json['error'])
+        response = self.client.post(f'/neostaffing/app-management/people/{self.primary.id}/delete',
+            data={'shared_editor':'1','confirm_delete':'yes','confirmed_employee_id':self.primary.employee_id,
+                'expected_person_version':service.entity_version(self.primary)})
+        self.assertEqual(response.status_code,200,response.text)
         person = self.employee()
         user = self._user('linked-login'); user.employee_id = person.employee_id
         db.session.commit(); uid = user.id; pid = person.id
         response = self.client.post(f'/neostaffing/app-management/people/{pid}/delete',
-            data={'shared_editor':'1','expected_person_version':service.entity_version(person)})
+            data={**self.values(person),'confirm_delete':'yes','confirmed_employee_id':person.employee_id})
         self.assertEqual(response.status_code,200,response.text)
         self.assertIsNone(db.session.get(StaffingPerson,pid))
         self.assertIsNotNone(db.session.get(User,uid))

@@ -3,6 +3,8 @@
   const dialog = document.querySelector('[data-employee-editor]');
   if (!dialog) return;
   const content = dialog.querySelector('[data-employee-editor-content]');
+  const confirmation = document.querySelector('[data-employee-delete-confirm]');
+  let confirmedForm = null;
   const stateKey = 'neostaffing.employee-editor.return';
   let busy = false, opener = null;
   const error = message => {
@@ -26,12 +28,22 @@
     sessionStorage.setItem(stateKey, JSON.stringify(saved));
     location.replace(saved.url);
   };
-  const post = async (url, form) => {
-    const response = await fetch(url, {method:'POST', body:new FormData(form),
-      headers:{'X-CSRFToken':document.querySelector('meta[name="csrf-token"]')?.content || ''}});
-    const payload = await response.json().catch(() => ({error:'Unable to save. Please try again.'}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || 'Unable to save. Please try again.');
-    return payload;
+  const post = async (url, form, extra = {}) => {
+    const body = new FormData(form);
+    Object.entries(extra).forEach(([key,value]) => body.set(key,value));
+    const controller = extra.confirm_delete === 'yes' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(),30000) : null;
+    const unknown = 'Deletion could not be confirmed. Check the roster or Employee Recovery before retrying; your entries remain here.';
+    try {
+      let response;
+      try {
+        response = await fetch(url, {method:'POST', body,signal:controller?.signal,
+          headers:{'X-CSRFToken':document.querySelector('meta[name="csrf-token"]')?.content || ''}});
+      } catch (cause) { if (controller) throw new Error(unknown); throw cause; }
+      const payload = await response.json().catch(() => ({error:controller ? unknown : 'Unable to save. Please try again.'}));
+      if (!response.ok || payload.ok !== true) throw new Error(payload.error || (controller ? unknown : 'Unable to save. Please try again.'));
+      return payload;
+    } finally { if (timer !== null) clearTimeout(timer); }
   };
   const open = async (id, origin = 'people') => {
     if (busy) return;
@@ -69,22 +81,38 @@
         date.value = digits.length > 4 ? `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}` :
           digits.length > 2 ? `${digits.slice(0,2)}/${digits.slice(2)}` : digits;
       });
-      const mutate = async url => {
+      const mutate = async (url, extra = {}) => {
         if (busy) return;
         busy = true; form.setAttribute('aria-busy','true');
         form.querySelectorAll('button').forEach(button => { button.disabled = true; });
-        try { await post(url, form); reload(); }
+        try { await post(url, form, extra); reload(); }
         catch (cause) { error(cause.message); }
         finally { busy = false; form.removeAttribute('aria-busy'); form.querySelectorAll('button').forEach(button => { button.disabled = false; }); }
       };
       form.addEventListener('submit', event => { event.preventDefault(); syncStart(); void mutate(form.action); });
       content.querySelector('[data-employee-close]').addEventListener('click', close);
       form.querySelector('[data-employee-delete]')?.addEventListener('click', () => {
-        if (confirm(`Permanently delete ${form.dataset.deleteName} (Employee ID: ${form.dataset.deleteId})? This cannot be undone. Linked login accounts will be preserved.`)) void mutate(form.dataset.deleteUrl);
+        if (busy || !confirmation) return;
+        confirmedForm = form;
+        confirmation.querySelector('[data-delete-employee-name]').textContent = form.dataset.deleteName;
+        confirmation.querySelector('[data-delete-employee-id]').textContent = form.dataset.deleteId;
+        confirmation.showModal();
       });
+      form.employeeDelete = () => mutate(form.dataset.deleteUrl,
+        {confirm_delete:'yes',confirmed_employee_id:form.dataset.deleteId});
     } catch (cause) { content.textContent = cause.message; if (!dialog.open) dialog.showModal(); }
   };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+  confirmation?.querySelector('[data-employee-delete-cancel]').addEventListener('click', () => {
+    confirmation.close(); confirmedForm = null;
+    content.querySelector('[data-employee-delete]')?.focus({preventScroll:true});
+  });
+  confirmation?.querySelector('[data-employee-delete-confirmed]').addEventListener('click', () => {
+    if (busy || !confirmedForm || !content.contains(confirmedForm)) return;
+    const form = confirmedForm; confirmedForm = null; confirmation.close();
+    void form.employeeDelete();
+  });
+  confirmation?.addEventListener('cancel', () => { confirmedForm = null; });
   document.addEventListener('click', event => {
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const add = event.target.closest('[data-employee-add]');

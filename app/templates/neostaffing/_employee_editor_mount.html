@@ -1,5 +1,11 @@
-<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_employee_editor.css', v='20261010-editor-actions-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_employee_editor.css', v='20261022-recovery-v1') }}">
 <dialog class="employee-editor theme-staffing" data-employee-editor data-editor-url="{{ url_for('neostaffing.employee_editor') }}"{% if selected %} data-initial-person="{{ selected.person.id }}"{% endif %}>
   <div data-employee-editor-content></div>
 </dialog>
-<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='20261009-unified-editor-v1') }}"></script>
+<dialog class="employee-editor employee-delete-confirm theme-staffing" data-employee-delete-confirm aria-labelledby="employee-delete-title" aria-describedby="employee-delete-warning">
+  <h2 id="employee-delete-title">ARE YOU SURE?</h2>
+  <p><strong data-delete-employee-name></strong> · Employee ID: <strong data-delete-employee-id></strong></p>
+  <p id="employee-delete-warning">Deletion removes this employee and associated employee data. Linked NeoApps User accounts and unrelated employee data are preserved. Authorized administrators can restore the employee for 24 hours; afterward the recovery backup and related stored files are purged.</p>
+  <div class="employee-editor-actions"><button type="button" data-employee-delete-cancel>CANCEL</button><button type="button" class="employee-delete" data-employee-delete-confirmed>YES, DELETE EMPLOYEE</button></div>
+</dialog>
+<script src="{{ url_for('static', filename='js/neostaffing_employee_editor.js', v='20261022-recovery-v1') }}"></script>

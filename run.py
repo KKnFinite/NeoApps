@@ -14,6 +14,9 @@ app = (
     else create_app(RunEnvironmentConfig, auto_bootstrap=False)
 )
 
+from app.services.neostaffing_employee_recovery_worker import start_recovery_worker
+start_recovery_worker(app)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
