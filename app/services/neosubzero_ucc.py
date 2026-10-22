@@ -49,9 +49,17 @@ def neosubzero_ucc_context(gateway, operation):
     if operation is None:
         return {
             "operation": None,
-            "ramps": (),
+            "ramps": tuple({
+                "name": name, "aircraft": (), "queue": (), "throat": None,
+                "waiting_queue": (), "slots": (), "exceptions": (),
+                "location_exceptions": (), "position_conflicts": (),
+                "parking_positions": _parking_projection(name, (), ()),
+            } for name in UCC_RAMP_ORDER),
             "staffing_pool": (),
             "fluid_settings": fluid_settings,
+            "assignment_index": {},
+            "detached_units": (),
+            "staffing_version": "",
         }
 
     departure_rows = _physical_aircraft_rows(operation, departure_context)
@@ -86,8 +94,6 @@ def neosubzero_ucc_context(gateway, operation):
         rows_by_ramp[ramp].append(item)
 
     ramps = []
-    from app.services.parking_plan import PARKING_RAMP_GROUPS, _position_layout
-    positions_by_ramp = {name: positions for name, _code, positions in PARKING_RAMP_GROUPS}
     for ramp in rows_by_ramp:
         aircraft = rows_by_ramp[ramp]
         if not aircraft and ramp not in UCC_RAMP_ORDER:
@@ -100,36 +106,7 @@ def neosubzero_ucc_context(gateway, operation):
             row["queue_position"] = queue_position
         waiting_queue = tuple(waiting_rows)
         parked = [row for row in aircraft if row.get("block_out_at_utc") is None]
-        parking_codes = list(positions_by_ramp.get(ramp, ()))
-        parking_codes.extend(row["parking"] for row in parked if row["parking"] not in parking_codes)
-        parking = []
-        for code in dict.fromkeys(parking_codes):
-            layout = _position_layout(code[:1], code)
-            number = _position_number(code)
-            grid_row, grid_column = None, None
-            if ramp in UCC_RAMP_ORDER:
-                if layout["side"] == "left":
-                    grid_row, grid_column = number + 1, 1
-                elif layout["side"] == "right":
-                    grid_row, grid_column = number - 3, 3
-                elif layout["side"] == "top":
-                    grid_row, grid_column = 1, 2
-                elif layout["side"] == "bottom":
-                    grid_row, grid_column = 6, 2
-            throat_index = 0 if number == 10 else 2 if number == 9 else None
-            parking.append({
-                "code": code,
-                "aircraft": tuple(row for row in parked if row["parking"] == code),
-                "grid_row": grid_row,
-                "grid_column": grid_column,
-                "throat_label": str(number) if throat_index is not None and ramp in UCC_RAMP_ORDER else None,
-                "throat_aircraft": (
-                    queue[throat_index]
-                    if throat_index is not None and ramp in UCC_RAMP_ORDER and len(queue) > throat_index
-                    else None
-                ),
-            })
-        parking = tuple(parking)
+        parking = _parking_projection(ramp, parked, queue)
         slots = []
         for position in UCC_POSITIONS if ramp in RAMP_ORDER else ():
             roles = {}
@@ -191,6 +168,41 @@ def neosubzero_ucc_context(gateway, operation):
             )
         ),
     }
+
+
+def _parking_projection(ramp, parked, queue):
+    from app.services.parking_plan import PARKING_RAMP_GROUPS, _position_layout
+    positions_by_ramp = {name: positions for name, _code, positions in PARKING_RAMP_GROUPS}
+    parking_codes = list(positions_by_ramp.get(ramp, ()))
+    parking_codes.extend(row["parking"] for row in parked if row["parking"] not in parking_codes)
+    parking = []
+    for code in dict.fromkeys(parking_codes):
+        layout = _position_layout(code[:1], code)
+        number = _position_number(code)
+        grid_row, grid_column = None, None
+        if ramp in UCC_RAMP_ORDER:
+            if layout["side"] == "left":
+                grid_row, grid_column = number + 1, 1
+            elif layout["side"] == "right":
+                grid_row, grid_column = number - 3, 3
+            elif layout["side"] == "top":
+                grid_row, grid_column = 1, 2
+            elif layout["side"] == "bottom":
+                grid_row, grid_column = 6, 2
+        throat_index = 0 if number == 10 else 2 if number == 9 else None
+        parking.append({
+            "code": code,
+            "aircraft": tuple(row for row in parked if row["parking"] == code),
+            "grid_row": grid_row,
+            "grid_column": grid_column,
+            "throat_label": str(number) if throat_index is not None and ramp in UCC_RAMP_ORDER else None,
+            "throat_aircraft": (
+                queue[throat_index]
+                if throat_index is not None and ramp in UCC_RAMP_ORDER and len(queue) > throat_index
+                else None
+            ),
+        })
+    return tuple(parking)
 
 
 def _physical_aircraft_rows(operation, departure_context):

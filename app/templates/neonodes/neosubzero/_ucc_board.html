@@ -19,7 +19,7 @@
 </div>
 {%- endmacro %}
 <div data-ucc-live-board>
-{% if operation %}
+{% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
 <script type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>
 <aside class="ucc-aircraft-panel ucc-desktop-label" aria-label="Aircraft planning information" data-ucc-info hidden>
@@ -33,7 +33,7 @@
         <a href="{{ url_for('neosubzero.coordinator', mission=row.mission_id, ramp=ramp.name) }}">OPEN DEICE OPERATIONS</a>
     </article>{% endfor %}{% endfor %}
 </aside>
-<div class="ucc-ramp-board">
+<div class="ucc-ramp-board {{ 'is-no-sort' if not operation else '' }}">
 {% for ramp in ramps %}
 <section class="ucc-ramp" data-ucc-ramp="{{ ramp.name }}">
     <header><h2>{{ ramp.name|upper }}</h2><span class="ucc-desktop-label">{{ ramp.aircraft|length }} aircraft</span></header>
@@ -67,5 +67,4 @@
     {% for place in ramp.position_conflicts %}<div class="ucc-queue-exception ucc-desktop-label"><strong>PARKING CONFLICT · {{ place.code }}</strong><p>Recorded parking conflicts with throat occupancy. Confirm actual location.</p>{% for row in place.aircraft %}{{ aircraft(row, 'parking conflict; actual location needs review') }}{% endfor %}</div>{% endfor %}
 </section>{% endfor %}
 </div>
-{% else %}<p class="neosubzero-empty">No current sort.</p>{% endif %}
 </div>

@@ -375,6 +375,8 @@
             }
             const expanded = Array.from(root.querySelectorAll("[data-ucc-editor][open]")).map((el) => el.dataset.uccEditor);
             const scroll = window.scrollY;
+            const sortLabel = root.querySelector('.neosubzero-ucc-head-actions > strong');
+            if (sortLabel) sortLabel.textContent = next.querySelector('.neosubzero-ucc-head-actions > strong').textContent;
             if (deferred) {
                 root.querySelectorAll("[data-ucc-ramp]").forEach((ramp) => {
                     const newRamp = next.querySelector(`[data-ucc-ramp="${CSS.escape(ramp.dataset.uccRamp)}"]`);

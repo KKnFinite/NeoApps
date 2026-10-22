@@ -839,6 +839,19 @@ class NeoSubZeroUccTest(unittest.TestCase):
             self.assertEqual(ramp["aircraft"], ())
             self.assertEqual(len(ramp["slots"]), 4)
 
+    def test_off_sort_still_shows_five_empty_ramps_without_future_records(self):
+        context=neosubzero_ucc_context(self.gateway,None)
+        self.assertEqual([r["name"] for r in context["ramps"]],["Alpha","Bravo","Charlie","Delta","Echo"])
+        self.assertTrue(all(len(r["parking_positions"])==10 and not r["aircraft"] and not r["slots"] for r in context["ramps"]))
+        watcher=self._user("ucc_off_sort","watcher")
+        client=self.app.test_client(); self._login(client,watcher)
+        with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=None),patch("app.neonodes.neosubzero.routes.neosubzero_weather_context",return_value=self._weather_context_fixture()):
+            page=client.get("/neosubzero/ucc")
+        self.assertEqual(page.status_code,200)
+        self.assertEqual(page.data.count(b'data-ucc-ramp="'),5)
+        self.assertIn(b'No current sort',page.data)
+        self.assertNotIn(b'data-ucc-assignment-form',page.data)
+
     def test_parking_without_a_departure_and_arrival_only_aircraft_have_real_identity(self):
         db.session.add(SortDateParkingAssignment(sort_date_operation_id=self.operation.id,tail_number="SPARE1",ramp_code="D",position_code="D02"))
         arrival = self._departure("5X-ARR", "N-ARR", "RFD", 2)

@@ -58,6 +58,7 @@ class UccBrowserTest(unittest.TestCase):
             hour["time"] = f"{(18+i)%24:02d}00"
             weather["current_sort"]["hours"].append(hour)
         cls.weather = patch("app.neonodes.neosubzero.routes.neosubzero_weather_context", return_value=weather)
+        cls.weather_data = weather
         cls.weather_revision = patch("app.neonodes.neosubzero.routes.neosubzero_weather_revision", return_value="weather-r1")
         cls.refresh = patch("app.neonodes.neosubzero.routes.subzero_refresh_status", return_value={"live_screen_refresh_interval_ms":1000})
         for item in (cls.current, cls.weather, cls.weather_revision, cls.refresh):
@@ -179,6 +180,20 @@ class UccBrowserTest(unittest.TestCase):
             expect(page.locator('[data-ucc-editor="Bravo-2"] > summary')).to_contain_text('UCC-831',timeout=10000)
             self.assertLessEqual(mobile.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
             mobile.screenshot(path=str(self.evidence / f"ucc-{engine}-mobile-staff-editor.png"), full_page=True)
+            with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=None), patch("app.neonodes.neosubzero.routes.neosubzero_weather_context",return_value={**self.weather_data,"current_sort":None}):
+                self.ready(page,"/neosubzero/ucc")
+                self.assertEqual(page.locator('[data-ucc-ramp]').count(),5)
+                self.assertEqual(page.locator('[data-ucc-parking]').count(),50)
+                self.assertEqual(page.locator('[data-ucc-assignment-form]').count(),0)
+                expect(page.locator('[data-ucc-ramp="Echo"]')).to_be_visible()
+                page.screenshot(path=str(self.evidence / f"ucc-{engine}-off-sort.png"),full_page=True)
+                self.ready(mobile,"/neosubzero/ucc")
+                expect(mobile.locator('.ucc-ramp-board')).to_be_hidden()
+                self.assertEqual(mobile.locator('[data-ucc-assignment-form]').count(),0)
+            # A newly active sort reaches both displays without borrowing future data.
+            expect(page.locator('[data-ucc-editor="Alpha-1"]')).to_have_count(1,timeout=10000)
+            expect(mobile.locator('[data-ucc-editor="Alpha-1"]')).to_have_count(1,timeout=10000)
+            expect(page.locator('.neosubzero-ucc-head-actions > strong')).to_contain_text('NIGHT')
             self.assertEqual(errors, [])
             other.close(); context.close(); browser.close()
             # Restore only isolated fixture staffing for the second engine.
