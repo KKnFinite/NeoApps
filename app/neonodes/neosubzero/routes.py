@@ -78,6 +78,7 @@ from app.services.permission_rules import permission_access, user_can
 
 LAST_PAGE_KEY = "neosubzero.last_page"
 NEOSUBZERO_PAGES = (
+    ('Deice Operations', 'neosubzero.operations', 'neosubzero.outbound.view', 'neosubzero.outbound.edit'),
     (
         "Pretreat",
         "neosubzero.pretreat",
@@ -134,7 +135,7 @@ NEOSUBZERO_PAGES = (
     ),
 )
 NEOSUBZERO_NAV_SECTIONS = (
-    (None, ("neosubzero.ucc", "neosubzero.outbound", "neosubzero.coordinator",
+    (None, ("neosubzero.ucc", "neosubzero.operations", "neosubzero.coordinator",
             "neosubzero.deicer_mobile", "neosubzero.deice_log", "neosubzero.settings")),
     ("UNDER CONSTRUCTION", ("neosubzero.callouts",)),
 )
@@ -146,10 +147,14 @@ def neosubzero_navigation_sections():
     sections = []
     for heading, endpoints in NEOSUBZERO_NAV_SECTIONS:
         items = [(pages[endpoint][0], endpoint) for endpoint in endpoints
-                 if user_can(pages[endpoint][2])]
+                 if _navigation_page_allowed(endpoint, pages[endpoint][2])]
         if items:
             sections.append((heading, items))
     return sections
+
+
+def _navigation_page_allowed(endpoint, permission):
+    return any(user_can(key) for key in ('neosubzero.pretreat.view', 'neosubzero.outbound.view', 'neosubzero.coordinator.view')) if endpoint == 'neosubzero.operations' else user_can(permission)
 
 
 @bp.context_processor
@@ -170,7 +175,7 @@ def navigation():
 def index():
     endpoint = session.get(LAST_PAGE_KEY)
     permitted_endpoints = [
-        page[1] for page in NEOSUBZERO_PAGES if user_can(page[2])
+        page[1] for page in NEOSUBZERO_PAGES if _navigation_page_allowed(page[1], page[2])
     ]
     if endpoint not in permitted_endpoints:
         endpoint = permitted_endpoints[0] if permitted_endpoints else None
@@ -187,19 +192,8 @@ def pretreat():
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosubzero.index"))
-    session[LAST_PAGE_KEY] = "neosubzero.pretreat"
-    gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
-    return render_template(
-        "neonodes/neosubzero/pretreat.html",
-        gateway=gateway,
-        can_edit=access["can_edit"],
-        revision=pretreat_revision(gateway, operation),
-        refresh_status=pretreat_refresh_status(gateway, operation),
-        gateway_timezone=gateway_timezone(gateway),
-        surface_labels=SURFACE_LABELS,
-        **pretreat_context(gateway, operation),
-    )
+    from app.neonodes.neosubzero.operations_routes import render_operations
+    return render_operations("pretreat")
 
 
 @bp.route("/pretreat/revision")
@@ -227,24 +221,8 @@ def outbound():
     if not access["can_view"]:
         flash("Access denied.", "error")
         return redirect(url_for("neosubzero.index"))
-    session[LAST_PAGE_KEY] = "neosubzero.outbound"
-    gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
-    context = departure_deice_context(gateway, operation)
-    return render_template(
-        "neonodes/neosubzero/outbound.html",
-        gateway=gateway,
-        can_edit=access["can_edit"],
-        plan_labels=PLAN_LABELS,
-        surface_labels=SURFACE_LABELS,
-        revision=departure_deice_revision(gateway, operation),
-        refresh_status=subzero_refresh_status(
-            gateway, operation, OUTBOUND_REFRESH_KEY
-        ),
-        gateway_timezone=gateway_timezone(gateway),
-        application_context=_application_context(operation),
-        **context,
-    )
+    from app.neonodes.neosubzero.operations_routes import render_operations
+    return render_operations("outbound")
 
 
 @bp.route("/outbound/revision")

@@ -285,6 +285,10 @@ LOCAL_SQLITE_OPTIONAL_COLUMNS = {
     },
     "neosubzero_user_preferences": {
         "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT 1",
+        "operations_mode": "VARCHAR(16)",
+        "operations_layout": "VARCHAR(16)",
+        "operations_ramp": "VARCHAR(24)",
+        "operations_sort_id": "INTEGER",
     },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",
@@ -585,6 +589,10 @@ POSTGRES_OPTIONAL_COLUMNS = {
     },
     "neosubzero_user_preferences": {
         "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "operations_mode": "VARCHAR(16)",
+        "operations_layout": "VARCHAR(16)",
+        "operations_ramp": "VARCHAR(24)",
+        "operations_sort_id": "INTEGER",
     },
     "neoscorpion_aircraft_fuel_settings": {
         "assignment_pump_rate_gallons_per_minute": "NUMERIC(10, 2)",

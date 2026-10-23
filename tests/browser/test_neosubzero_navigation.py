@@ -65,7 +65,11 @@ class SubZeroNavigationBrowserTest(unittest.TestCase):
                 expect(page.locator('.node-desktop-side-menu a')).to_have_count(7)
             for path in ('pretreat', 'qualifications'):
                 self.ready(page, '/neosubzero/' + path)
-                expect(page.locator('.node-desktop-side-menu [aria-current="page"]')).to_have_count(0)
+                active=page.locator('.node-desktop-side-menu [aria-current="page"]')
+                if path == 'pretreat':
+                    expect(active).to_have_attribute('aria-label','Deice Operations')
+                else:
+                    expect(active).to_have_count(0)
             self.assertFalse(errors, errors)
             context.close()
             browser.close()

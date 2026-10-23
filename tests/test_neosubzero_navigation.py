@@ -8,8 +8,8 @@ from app.services.neosubzero_ucc import set_neosubzero_ucc_assignment
 from tests import test_neosubzero_ucc as fixtures
 
 
-LABELS = ['DUCC', 'Outbound', 'Coordinator', 'Deicer', 'Deice Log', 'Settings', 'Callout Management']
-PATHS = ['ucc', 'outbound', 'coordinator', 'deicer-mobile', 'deice-log', 'settings', 'callouts']
+LABELS = ['DUCC', 'Deice Operations', 'Coordinator', 'Deicer', 'Deice Log', 'Settings', 'Callout Management']
+PATHS = ['ucc', 'operations', 'coordinator', 'deicer-mobile', 'deice-log', 'settings', 'callouts']
 
 
 class SubZeroNavigationTest(unittest.TestCase):

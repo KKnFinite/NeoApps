@@ -2,7 +2,7 @@
 {% for heading, items in neosubzero_menu_sections() %}
 {% if heading %}<div class="subzero-nav-section" role="heading" aria-level="2" aria-label="{{ heading }}" title="{{ heading }}"><span>{{ heading }}</span></div>{% endif %}
 {% for label, endpoint in items %}
-{% set active = request.endpoint == endpoint %}
+{% set active = request.endpoint == endpoint or (endpoint == 'neosubzero.operations' and request.endpoint in ('neosubzero.pretreat', 'neosubzero.outbound')) %}
 <a class="{% if subzero_nav_mode == 'desktop' %}motherbrain-desktop-side-link{% endif %}{% if active %} {{ 'active' if subzero_nav_mode == 'inline' else 'is-active' }}{% endif %}" href="{{ url_for(endpoint) }}" aria-label="{{ label }}" title="{{ label }}"{% if active %} aria-current="page"{% endif %}>{% if subzero_nav_mode == 'desktop' %}<span class="operational-side-link-icon" aria-hidden="true">{{ label[0] }}</span><span class="operational-side-link-label">{{ label }}</span>{% else %}{{ label }}{% endif %}</a>
 {% endfor %}
 {% endfor %}

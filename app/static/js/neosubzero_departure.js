@@ -1,7 +1,7 @@
 (() => {
     "use strict";
 
-    const root = document.querySelector("[data-subzero-departure-board]");
+    const root = document.querySelector("[data-subzero-departure-board], [data-ops-workspace]");
     if (!root) return;
 
     const timezone = root.dataset.timezone || "America/Chicago";
@@ -57,6 +57,10 @@
             select.disabled = !unlocked;
         });
     };
+
+    // The unified workspace uses the same treatment dependencies and clock.
+    window.NeoSubZeroDepartureForms = {syncForm, operationalHHMM};
+    if (root.matches('[data-ops-workspace]')) return;
 
     root.querySelectorAll("[data-subzero-deice-form]").forEach((form) => {
         form.dataset.unlocked = form.dataset.locked === "true" ? "false" : "true";

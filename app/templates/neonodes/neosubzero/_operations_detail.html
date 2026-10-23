@@ -1,0 +1,23 @@
+{% from 'neonodes/neosubzero/_departure_deice.html' import mission_workspace with context %}
+{% from 'neonodes/neosubzero/_pretreat_editor.html' import pretreat_editor with context %}
+{% if selected %}
+<div data-ops-detail-content data-detail-key="{{ selected.detail_key }}" data-mission-id="{{ selected.mission_id }}" data-tail="{{ selected.tail }}">
+    <header class="ops-detail-head"><div><strong>{{ selected.flight }} · {{ selected.tail }}</strong><span>{{ selected.parking }} · {{ selected.ramp }}</span></div><button type="button" data-ops-close>BACK TO AIRCRAFT</button></header>
+    <p class="ops-detail-feedback" data-ops-detail-feedback role="status" hidden></p>
+    <p class="ops-draft-status" data-ops-draft-status role="status" hidden></p>
+    <div data-ops-detail-body>
+    {% if selected.identity_conflict %}
+        <p class="ops-review">TAIL IDENTITY REVIEW · This departure event belongs to {{ selected.history_event.tail_number }}, not {{ selected.tail }}. Original evidence is preserved; do not apply it to the replacement aircraft.</p>
+        <dl><dt>RECORDED PHYSICAL TAIL</dt><dd>{{ selected.history_event.tail_number }}</dd><dt>RECORDED STATE</dt><dd>{{ selected.history_event.status }}</dd><dt>PASS 1 · UTC</dt><dd>{{ selected.history_event.pass1_started_at_utc or '—' }} → {{ selected.history_event.pass1_ended_at_utc or '—' }}</dd><dt>PASS 2 · UTC</dt><dd>{{ selected.history_event.pass2_started_at_utc or '—' }} → {{ selected.history_event.pass2_ended_at_utc or '—' }}</dd></dl>
+    {% elif mode == 'pretreat' %}
+        <dl class="ops-pretreat-facts"><div><dt>TAIL STATUS</dt><dd>{{ selected.tail_status }}</dd></div><div><dt>GROUND TIME</dt><dd>{{ selected.ground_time }}</dd></div><div><dt>CONFIGURED</dt><dd>{{ selected.configured or '—' }}</dd></div></dl>
+        {{ pretreat_editor(selected) }}
+    {% else %}
+        {% if selected.script %}<section class="ops-readback"><h2>PILOT READBACK · FINAL PASS START</h2><p>{{ selected.script.text }}</p></section>{% endif %}
+        <p class="ops-fluids">TYPE I · {{ fluid_settings.type_i_concentration_percent }}% {{ fluid_settings.type_i_fluid_name }} · TYPE IV · 100% {{ fluid_settings.type_iv_fluid_name }}</p>
+        <article data-subzero-mission data-terminal="false">{{ mission_workspace(selected, can_edit, board, selected.ramp, true) }}</article>
+        {% if can_manage_staff %}<a class="ops-staff-link" href="{{ url_for('neosubzero.ucc') }}">DRIVER / FLYER / WHOLE-TEAM MANAGEMENT IN DUCC</a>{% endif %}
+    {% endif %}
+    </div>
+</div>
+{% endif %}

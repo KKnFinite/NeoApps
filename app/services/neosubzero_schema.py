@@ -17,6 +17,10 @@ LOCK_KEY = 7_483_327_341_930
 NEOSUBZERO_OPTIONAL_COLUMNS = {
     NeoSubZeroUserPreference.__tablename__: {
         "frost_risk_explanations_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "operations_mode": "VARCHAR(16)",
+        "operations_layout": "VARCHAR(16)",
+        "operations_ramp": "VARCHAR(24)",
+        "operations_sort_id": "INTEGER",
     },
     NeoSubZeroDepartureDeiceEvent.__tablename__: {
         "reason_for_application": "VARCHAR(120)",

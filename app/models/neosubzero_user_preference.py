@@ -30,6 +30,11 @@ class NeoSubZeroUserPreference(db.Model):
         default=True,
     )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Presentation only. Nullable additions keep older users/releases compatible.
+    operations_mode = db.Column(db.String(16), nullable=True)
+    operations_layout = db.Column(db.String(16), nullable=True)
+    operations_ramp = db.Column(db.String(24), nullable=True)
+    operations_sort_id = db.Column(db.Integer, nullable=True)
     updated_at = db.Column(
         db.DateTime,
         nullable=False,

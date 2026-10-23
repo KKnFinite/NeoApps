@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% from 'neonodes/neosubzero/_departure_deice.html' import application_context_form with context %}
+{% block title %}Deice Operations | NeoSub-Zero{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261023-release1-v1') }}">
+<section class="neosubzero-shell neosubzero-operations" data-ops-workspace data-mode="{{ mode }}" data-layout="{{ preferences.layout }}" data-ramp="{{ preferences.ramp }}" data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.operations_revision_endpoint') }}" data-workspace-url="{{ url_for('neosubzero.operations') }}" data-preference-url="{{ url_for('neosubzero.operations_preferences_mutate') }}" data-mutate-url="{{ url_for('neosubzero.operations_mutate') }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}">
+    <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE OPERATIONS</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
+    {% include 'neonodes/neosubzero/_nav.html' %}
+    <nav class="ops-toolbar" aria-label="Deice Operations presentation">
+        <div class="ops-modes" aria-label="Operational mode">{% for choice in modes %}<button type="button" data-ops-mode="{{ choice }}" aria-pressed="{{ 'true' if mode == choice else 'false' }}">{{ choice|upper }}</button>{% endfor %}</div>
+        <div class="ops-layouts" aria-label="Display layout"><button type="button" data-ops-layout="list" aria-pressed="{{ 'true' if preferences.layout == 'list' else 'false' }}"><span class="ops-desktop">DISPATCH LIST</span><span class="ops-mobile">LIST</span></button><button type="button" data-ops-layout="visual" aria-pressed="{{ 'true' if preferences.layout == 'visual' else 'false' }}"><span class="ops-desktop">RAMP COLUMNS</span><span class="ops-mobile">VISUAL</span></button></div>
+        <label>RAMP<select data-ops-ramp aria-label="Ramp filter"><option value="All">ALL RAMPS</option>{% for ramp in ramps %}<option value="{{ ramp }}" {% if preferences.ramp == ramp %}selected{% endif %}>{{ ramp|upper }}</option>{% endfor %}</select></label>
+        {% if mode == 'outbound' and can_edit %}<details data-ops-context><summary>APPLICATION CONTEXT</summary>{{ application_context_form(application_context, board) }}</details>{% endif %}
+    </nav>
+    <p class="ops-feedback" data-ops-feedback role="status" hidden></p>
+    {% if not operation %}<p class="neosubzero-empty">No current sort.</p>{% endif %}
+    <div class="ops-aircraft-board" data-ops-board>
+        {% for row in rows %}
+        <article class="ops-aircraft state-{{ row.visual_state }}" data-ops-row data-mission-id="{{ row.mission_id }}" data-detail-key="{{ row.detail_key }}" data-tail="{{ row.tail }}" data-ramp="{{ row.ramp }}" data-status="{{ row.visual_state }}">
+            <a href="{{ url_for('neosubzero.operations',mode=mode,mission=row.mission_id) }}" data-ops-open aria-label="Open {{ row.flight }} {{ row.tail }}">
+                <div class="ops-identity"><span>{{ row.flight }}</span><strong>{{ row.tail }}</strong></div>
+                <div class="ops-location"><span>PARKING <b>{{ row.parking }}</b></span><span>ETD <b>{{ row.etd }}</b></span>{% if mode == 'pretreat' %}<span>ETA <b>{{ row.inbound_eta or '—' }}</b></span>{% endif %}</div>
+                {% for pass in row.primary_passes %}<div class="ops-pass" data-ops-primary-pass="{{ pass.number }}"><span>PASS {{ pass.number }}</span><strong>{{ pass.type|upper if pass.type else '—' }}</strong><span>{{ pass.surface|upper if pass.surface else '—' }}</span></div>{% endfor %}
+                <div class="ops-status"><strong>{{ row.visual_label }}</strong>{% if mode == 'pretreat' %}<span>DEPARTURE · {{ row.departure_status }}</span>{% elif row.pretreat_complete %}<span class="ops-pretreated">PRETREATED</span>{% endif %}</div>
+            </a>
+        </article>
+        {% else %}<p class="neosubzero-empty">No applicable aircraft in the current sort.</p>{% endfor %}
+    </div>
+    <aside class="ops-detail" data-ops-detail aria-label="Aircraft operational details" {% if not selected %}hidden{% endif %}>
+        {% include 'neonodes/neosubzero/_operations_detail.html' %}
+    </aside>
+</section>
+<script src="{{ url_for('static',filename='js/neosubzero_departure.js',ops='20261023-shared-forms-v1') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neosubzero_operations.js',v='20261023-release1-v1') }}" defer></script>
+{% endblock %}
