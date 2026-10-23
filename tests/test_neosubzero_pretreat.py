@@ -44,8 +44,10 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         mutate_pretreat(self.operation, self.departure, "toggle_configured", {}, state)
         first_configured = state.configured_at_utc; self.assertIsNotNone(first_configured)
         mutate_pretreat(self.operation, self.departure, "toggle_configured", {}, state); self.assertIsNone(state.configured_at_utc)
+        db.session.commit()
         with self.assertRaises(NeoSubZeroPretreatError):
             mutate_pretreat(self.operation, self.departure, "save_treatment", {"pass1_surface_area":"wings_only","pass2_surface_area":"entire_aircraft","pass1_start":"2300","pass1_end":"2259"}, state)
+        db.session.rollback()  # Match the route's rejected-mutation transaction boundary.
         values = {"pass1_surface_area":"wings_only","pass2_surface_area":"wings_tail","pass1_start":"2300","pass1_end":"2310","pass2_start":"2310","pass2_end":"2320","notes":"  done  "}
         mutate_pretreat(self.operation, self.departure, "save_treatment", values, state); db.session.flush()
         tail_state = SortDateTailState.query.filter_by(tail_number="T1").one(); self.assertTrue(tail_state.pretreat_status); self.assertEqual(state.notes,"done")

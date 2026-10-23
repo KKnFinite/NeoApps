@@ -190,7 +190,9 @@ class Release2Test(unittest.TestCase):
         self.assertEqual(event.sort_date_mission_id,original_mid)
         self.assertEqual(event.flight_number_snapshot,'5X200')
         self.assertEqual(record.tail_number_snapshot,old)
-        self.assertEqual(record.sort_date_mission_id,other.id)
+        # Release 3 freezes original pass context at START, not the END-time flight.
+        self.assertEqual(record.sort_date_mission_id,original_mid)
+        self.assertEqual(record.flight_number_snapshot,'5X200')
         mutate_departure_deice(f.operation,other,'clear',{},event=event);db.session.commit()
         f.alpha.assigned_tail_number=old;other.assigned_tail_number='REPLACEMENT';db.session.commit()
         self.assertEqual(departure_event_for_tail(f.operation,f.alpha).status,'cleared')

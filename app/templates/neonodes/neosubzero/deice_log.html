@@ -2,12 +2,27 @@
 {% block title %}Deice Log | NeoSub-Zero{% endblock %}
 {% from 'neonodes/neosubzero/_departure_deice.html' import crew_inputs with context %}
 {% block content %}
-<section class="neosubzero-shell neosubzero-deice-log" data-evidence-root data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_reporting.css',v=STATIC_ASSET_VERSION) }}">
+<section class="neosubzero-shell neosubzero-deice-log sz-reporting sz-log" data-evidence-root data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-subzero-departure-board data-revision="{{ report_revision }}" data-revision-url="{{ url_for('neosubzero.deice_log_revision',operation_id=request.args.get('operation_id'),activity=activity,tail=tail_filter) }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
 <p data-evidence-feedback role="status" hidden></p>
-<button type="button" data-evidence-reload>RELOAD CURRENT VALUES</button>
-<a href="{{ url_for('neosubzero.deice_log') }}" target="_blank" rel="noopener">OPEN CURRENT VALUES IN NEW TAB</a>
-    <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE LOG</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
+    <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE LOG</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_date }} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include "neonodes/neosubzero/_nav.html" %}
+<form method="get" class="sz-log-filters" data-subzero-operational-form><label>Sort<select name="operation_id"><option value="">CURRENT SORT</option>{% for op in operations %}<option value="{{ op.id }}" {% if operation and operation.id==op.id %}selected{% endif %}>{{ op.sort_date }} · {{ op.sort_name|upper }}</option>{% endfor %}</select></label>
+<label>Activity<select name="activity">{% for value in ('all','pretreat','departure') %}<option value="{{ value }}" {% if activity==value %}selected{% endif %}>{{ value|upper }}</option>{% endfor %}</select></label>
+<label>Tail<input name="tail" value="{{ tail_filter }}" maxlength="32" placeholder="Tail lookup"></label><button>VIEW</button><button type="button" data-spray-copy="sz-report-copy">COPY REPORT</button></form>
+<pre id="sz-report-copy" hidden>{{ report_text }}</pre><p data-spray-copy-feedback role="status" hidden></p>
+<details class="sz-recovery"><summary>Current values / draft recovery</summary><button type="button" data-evidence-reload>RELOAD CURRENT VALUES</button> <a href="{{ request.url }}" target="_blank" rel="noopener">OPEN CURRENT VALUES IN NEW TAB</a></details>
+{% if archive_status %}<p class="sz-archive" role="status">ARCHIVE · {% if not archive_status.configured %}VAULT NOT CONFIGURED — administrator action required{% elif archive_status.pending %}{{ archive_status.pending }} / {{ archive_status.total }} passes awaiting synchronization{% else %}{{ archive_status.total }} passes synchronized{% endif %}{% if archive_status.errors %} · {{ archive_status.errors }} retry failures — operational work remains available{% endif %}</p>{% endif %}
+{% for pass in passes %}<article class="sz-log-pass" data-report-pass="{{ pass.id }}">
+<header><strong>{{ pass.tail }} · {{ pass.flight or 'ORIGINAL FLIGHT NOT RECORDED' }}</strong><span>{{ pass.activity|upper }} · PASS {{ pass.pass_number }}</span><button type="button" data-spray-copy="sz-pass-{{ loop.index }}">COPY PASS</button></header>
+<pre id="sz-pass-{{ loop.index }}" hidden>{{ pass.copy_text }}</pre>
+<div class="sz-pass-facts"><span>{{ pass.type or 'TYPE NOT RECORDED' }} · {{ pass.fluid or 'PRODUCT NOT RECORDED' }} · {{ pass.concentration if pass.concentration is not none else '—' }}%</span><span>{{ pass.surface or 'SURFACE NOT RECORDED' }}</span><span>{{ pass.ramp or 'RAMP NOT RECORDED' }} / {{ pass.location or 'LOCATION NOT RECORDED' }}</span><span>{{ pass.start }}–{{ pass.end }}</span></div>
+<p>TEMP {{ pass.temperature or '—' }} · DEW {{ pass.dew_point or '—' }} · PRECIP {{ pass.precipitation or '—' }} · REASON {{ pass.reason or 'NOT RECORDED' }}</p>
+<small>Weather/context: {{ pass.weather_label }} · Original mission {{ pass.original_mission_id or 'NOT RECORDED' }}</small>
+{% if pass.notes %}<p>{{ pass.notes }}</p>{% endif %}
+{% for record in pass.records %}<div class="sz-contribution"><b>TRUCK {{ record.truck_number_snapshot }}</b><span>DRIVER {{ record.driver_name_snapshot or 'NOT RECORDED' }}</span><span>FLYER {{ record.flyer_name_snapshot or 'NOT RECORDED' }}</span><strong class="{{ 'sz-missing' if record.gallons is none else '' }}">{{ record.gallons if record.gallons is not none else 'GALLONS NOT ENTERED' }}</strong></div>{% else %}<p class="sz-missing">PARTICIPATION NOT RECORDED — COORDINATOR REVIEW</p>{% endfor %}
+</article>{% else %}{% if operation %}<p>No actual spray applications match this report.</p>{% endif %}{% endfor %}
+<details class="sz-correction"><summary>TRUCK EVIDENCE &amp; AUDITED CORRECTIONS</summary>
     {% if not operation %}<p class="neosubzero-empty">No current sort.</p>
     {% elif not groups %}<p class="neosubzero-empty">No spray applications recorded.</p>
     {% else %}
@@ -44,7 +59,10 @@
         {% endfor %}
     </div>
     {% endif %}
+</details>
 {% if audits %}<details><summary>OPERATIONAL AUDIT · APPEND-ONLY</summary>{% for entry in audits %}<details><summary>{{ entry.recorded_at_utc }} UTC · {{ entry.action }} · {{ entry.tail_number or 'DUCC / SORT' }} · ACTOR {{ entry.actor_user_id or 'NOT RECORDED' }}</summary><p>{{ entry.reason or '' }} · MISSION {{ entry.mission_id or '—' }} · EVENT {{ entry.event_id or '—' }} · RECORD {{ entry.spray_record_id or '—' }}</p><pre>{{ entry.before_values|tojson(indent=2) }}</pre><pre>{{ entry.after_values|tojson(indent=2) }}</pre></details>{% endfor %}</details>{% endif %}
 </section>
 <script src="{{ url_for('static',filename='js/neosubzero_evidence.js',v=STATIC_ASSET_VERSION) }}" defer></script>
+<script src="{{ url_for('static',filename='js/neosubzero_departure.js',v='20261023-release3-v1') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neosubzero_reporting.js',v=STATIC_ASSET_VERSION) }}" defer></script>
 {% endblock %}

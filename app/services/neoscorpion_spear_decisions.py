@@ -468,7 +468,13 @@ def schedule_delivery(app, gateway_id):
         try:
             with app.app_context():
                 try:
-                    drain(gateway_id)
+                    try:
+                        drain(gateway_id)
+                    except Exception:
+                        db.session.rollback()
+                        app.logger.warning('SPEAR archive delivery deferred safely', exc_info=True)
+                    from app.services.neosubzero_archive import drain as drain_subzero
+                    drain_subzero(gateway_id)
                 finally:
                     db.session.remove()
         except Exception:

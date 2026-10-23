@@ -167,11 +167,12 @@
             const response = await fetch(url, {cache: "no-store"});
             const payload = await response.json();
             controller.setServerStatus(payload.refresh || {});
-            revision = payload.revision || revision;
+            // Keep observing an unapplied revision while a draft/focus blocks reload.
+            if (!payload.changed) revision = payload.revision || revision;
             if (
                 payload.changed
                 && root.dataset.dirty !== "true"
-                && !root.querySelector(":focus")
+                && !root.querySelector('input:focus,textarea:focus,select:focus,[contenteditable="true"]:focus')
             ) {
                 window.location.reload();
             }

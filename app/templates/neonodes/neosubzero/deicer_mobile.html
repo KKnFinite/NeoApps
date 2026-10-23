@@ -1,35 +1,33 @@
 {% extends "base.html" %}
+{% from 'neonodes/neosubzero/_gallons_entry.html' import gallons_entry with context %}
 {% block title %}Deicer | NeoSub-Zero{% endblock %}
 {% block content %}
-<section class="neosubzero-shell neosubzero-departure-board neosubzero-deicer-mobile" data-evidence-root data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-subzero-departure-board data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.deicer_mobile_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
-<header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICER</h1></div><strong>{% if assignment %}{{ assignment.ramp|upper }} · POSITION {{ assignment.position_number }} · {{ assignment.team_role|upper }}{% endif %}</strong></header>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_reporting.css',v=STATIC_ASSET_VERSION) }}">
+<section class="neosubzero-shell sz-reporting sz-driver" data-evidence-root data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-subzero-departure-board data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.deicer_mobile_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
+<header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICER</h1></div><strong>{% if assigned_truck %}TRUCK {{ assigned_truck.truck_number }} · {% endif %}{{ assignment.ramp|upper if assignment else 'EARLIER PARTICIPATION' }}{% if assignment %} · {{ assignment.team_role|upper }}{% endif %}</strong></header>
 {% include "neonodes/neosubzero/_nav.html" %}
 <p data-evidence-feedback role="status" hidden></p>
-<button type="button" data-evidence-reload>RELOAD CURRENT VALUES</button>
-<a href="{{ url_for('neosubzero.deicer_mobile') }}" target="_blank" rel="noopener">OPEN CURRENT VALUES IN NEW TAB</a>
+<details class="sz-recovery"><summary>Current values / draft recovery</summary><button type="button" data-evidence-reload>RELOAD CURRENT VALUES</button>
+<a href="{{ url_for('neosubzero.deicer_mobile') }}" target="_blank" rel="noopener">OPEN CURRENT VALUES IN NEW TAB</a></details>
 {% if not operation %}<p class="neosubzero-empty">No current sort.</p>{% endif %}
-{% if rows %}
-<nav class="neosubzero-deicer-mission-list" aria-label="Assigned ramp missions">{% for row in rows %}<a class="{{ 'active' if row.mission_id == selected_mission_id else '' }}" href="{{ url_for('neosubzero.deicer_mobile',mission=row.mission_id) }}"><strong>{{ row.flight }}</strong><span>{{ row.tail }} · {{ row.departure_time }}</span><em>{{ row.deice_status }}</em></a>{% endfor %}</nav>
-{% for row in rows if row.mission_id == selected_mission_id %}
-<article class="neosubzero-deicer-workspace"><header><strong>{{ row.flight }} · {{ row.tail }}</strong><b>{{ row.deice_status }}</b></header>
-<dl><div><dt>Parking</dt><dd>{{ row.parking }}</dd></div><div><dt>Plan</dt><dd>{{ row.plan_label or 'NOT SELECTED' }}</dd></div><div><dt>Reason</dt><dd>{{ row.reason_for_application }}</dd></div></dl>
-{% for pass_row in row.application_passes %}<section class="neosubzero-deicer-pass"><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><p>{{ (pass_row.surface or 'NOT SELECTED')|replace('_',' ')|upper }} · {{ pass_row.start or '—' }}–{{ pass_row.end or '—' }}</p>
-{% for position in pass_row.positions %}<p>TRUCK {{ position.truck_number }} · {{ position.driver_name or 'DRIVER NOT RECORDED' }} / {{ position.flyer_name or 'FLYER NOT RECORDED' }}</p>{% endfor %}
-{% for position in pass_row.implicit %}<p>TRUCK {{ position.truck_number }} · DUCC PRESELECTED</p>{% endfor %}
-</section>{% endfor %}</article>{% endfor %}
-{% else %}<p class="neosubzero-empty">No current aircraft for your assigned ramp. Your documented passes remain below after reassignment.</p>{% endif %}
-{% if own_records %}<h2>YOUR DOCUMENTED TRUCK / PASS GALLONS</h2>
-{% for record in own_records %}{% set parent=record.pretreat_state or record.departure_deice_event %}
-<article class="neosubzero-deicer-pass" data-own-participant="{{ record.id }}">
-<strong>{{ record.tail_number_snapshot or parent.tail_number }} · TRUCK {{ record.truck_number_snapshot }} · PASS {{ record.pass_number }} · {{ 'PRETREAT' if record.pretreat_state_id else 'DEPARTURE' }}</strong>
-<p>{{ record.driver_name_snapshot or 'DRIVER NOT RECORDED' }} / {{ record.flyer_name_snapshot or 'FLYER NOT RECORDED' }} · {{ record.started_at_utc|local_time(record.timezone_snapshot) }}–{{ record.ended_at_utc|local_time(record.timezone_snapshot) }}</p>
-{% if can_edit %}<form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-evidence-form>
-<input type="hidden" name="board" value="deicer"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="record_id" value="{{ record.id }}"><input type="hidden" name="physical_tail" value="{{ record.tail_number_snapshot or parent.tail_number }}"><input type="hidden" name="expected_version" value="{{ entity_version(record) }}">
-<label>Gallons<input name="gallons" inputmode="decimal" value="{{ record.gallons if record.gallons is not none else '' }}" placeholder="NOT ENTERED"></label>
-<label>Correction note<input name="correction_reason" maxlength="500"></label><button>SAVE GALLONS</button></form>
-{% else %}<p>GALLONS {{ record.gallons if record.gallons is not none else 'NOT ENTERED' }}</p>{% endif %}</article>
-{% endfor %}{% endif %}
+<div class="sz-driver-cards">
+{% for row in rows %}
+<article class="sz-aircraft state-{{ row.visual_state }}" data-driver-aircraft="{{ row.mission_id }}">
+<header><strong>{{ row.tail }} <span>{{ row.flight }}</span></strong><b>{{ row.visual_label }}</b></header>
+<div class="sz-aircraft-facts"><span>{{ row.parking or '—' }}</span><span>ETD {{ row.etd }}</span>{% if row.pretreat_complete %}<span>PRETREATED</span>{% endif %}</div>
+{% for pass in row.primary_passes %}<p class="sz-pass-line"><b>PASS {{ pass.number }}</b> {{ (pass.type or '—')|upper }} · {{ (pass.surface or '—')|upper }}</p>{% endfor %}
+{% set own=namespace(count=0) %}{% for record in own_records if (record.tail_number_snapshot or (record.pretreat_state or record.departure_deice_event).tail_number)==row.tail %}
+{% set own.count=own.count+1 %}{{ gallons_entry(record) }}{% endfor %}
+{% if not own.count %}<small>No official truck/pass participation recorded for you on this aircraft. Gallons become available after the coordinator records END.</small>{% endif %}
+</article>
+{% else %}{% if operation %}<p>No current aircraft for your assigned ramp.</p>{% endif %}{% endfor %}
+</div>
+{% set visible_tails=rows|map(attribute='tail')|list %}
+{% for record in own_records if (record.tail_number_snapshot or (record.pretreat_state or record.departure_deice_event).tail_number) not in visible_tails %}
+{% if loop.first %}<h2>EARLIER DOCUMENTED PARTICIPATION</h2>{% endif %}
+<article class="sz-earlier"><header><strong>{{ record.tail_number_snapshot or (record.pretreat_state or record.departure_deice_event).tail_number }}</strong><span>{{ record.flight_number_snapshot or 'ORIGINAL FLIGHT NOT RECORDED' }} · {{ record.ramp_snapshot or 'LOCATION NOT RECORDED' }}</span></header>{{ gallons_entry(record) }}</article>
+{% endfor %}
 </section>
-<script src="{{ url_for('static',filename='js/neosubzero_departure.js',v=STATIC_ASSET_VERSION) }}" defer></script>
+<script src="{{ url_for('static',filename='js/neosubzero_departure.js',v='20261023-release3-v1') }}" defer></script>
 <script src="{{ url_for('static',filename='js/neosubzero_evidence.js',v=STATIC_ASSET_VERSION) }}" defer></script>
 {% endblock %}

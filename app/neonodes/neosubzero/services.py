@@ -124,7 +124,7 @@ def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=
         if not state.original_mission_id and not (before or {}).get('pass1_ended_at_utc'):
             state.original_mission_id=mission.id;state.flight_number_snapshot=mission.flight_number
         gateway=db.session.get(Gateway,operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
-        snapshot_treatment_passes(operation,mission,state,neosubzero_fluid_settings(gateway),kind='pretreat',actor_id=actor_id,previous=before)
+        snapshot_treatment_passes(operation,mission,state,neosubzero_fluid_settings(gateway),kind='pretreat',actor_id=actor_id,previous=before,correction_reason=values.get('correction_reason'))
     audit_change(operation,'pretreat_'+action,actor_id=actor_id,mission=mission,tail=tail,
         reason=values.get('correction_reason'),before=before,after=evidence_values(state))
     return state

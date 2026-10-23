@@ -274,7 +274,7 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
                 event.status=previous_status
             from app.services.neosubzero_participation import snapshot_treatment_passes
             gateway=db.session.get(Gateway,operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
-            snapshot_treatment_passes(operation,mission,event,neosubzero_fluid_settings(gateway),actor_id=actor_id,previous=before)
+            snapshot_treatment_passes(operation,mission,event,neosubzero_fluid_settings(gateway),actor_id=actor_id,previous=before,correction_reason=values.get('correction_reason'))
         else:
             raise NeoSubZeroDepartureDeiceError("Choose a valid departure-deice action.")
 

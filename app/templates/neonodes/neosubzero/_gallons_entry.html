@@ -1,0 +1,14 @@
+{% macro gallons_entry(record) %}
+{% set parent=record.pretreat_state or record.departure_deice_event %}
+<section class="sz-gallons" data-own-participant="{{ record.id }}">
+<strong>TRUCK {{ record.truck_number_snapshot }} · PASS {{ record.pass_number }} · {{ 'TYPE IV' if record.pass_type=='type_iv' else 'TYPE I' }}</strong>
+<span>{{ {'wings_only':'WINGS ONLY','wings_tail':'WINGS + TAIL','entire_aircraft':'ENTIRE AIRCRAFT'}.get(record.surface_area,'SURFACE NOT RECORDED') }} · {{ 'PRETREAT' if record.pretreat_state_id else 'DEPARTURE' }}</span>
+<small>{{ record.flight_number_snapshot or 'ORIGINAL FLIGHT NOT RECORDED' }} · {{ record.driver_name_snapshot or 'DRIVER NOT RECORDED' }} / {{ record.flyer_name_snapshot or 'FLYER NOT RECORDED' }} · {{ record.started_at_utc|local_time(record.timezone_snapshot) }}–{{ record.ended_at_utc|local_time(record.timezone_snapshot) }}</small>
+{% if can_edit %}<details {% if record.gallons is none %}open{% endif %}><summary>{{ 'ENTER' if record.gallons is none else 'EDIT' }} GALLONS{% if record.gallons is not none %} · {{ record.gallons }}{% endif %}</summary>
+<form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-evidence-form>
+<input type="hidden" name="board" value="deicer"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="record_id" value="{{ record.id }}"><input type="hidden" name="physical_tail" value="{{ record.tail_number_snapshot or parent.tail_number }}"><input type="hidden" name="expected_version" value="{{ entity_version(record) }}">
+<label>Gallons<input name="gallons" type="number" min="0.01" max="999999.99" step="0.01" inputmode="decimal" value="{{ record.gallons if record.gallons is not none else '' }}" placeholder="NOT ENTERED" required></label>
+<label>Correction note<input name="correction_reason" maxlength="500"></label><button>SAVE GALLONS</button></form></details>
+{% else %}<b>GALLONS {{ record.gallons if record.gallons is not none else 'NOT ENTERED' }}</b>{% endif %}
+</section>
+{% endmacro %}

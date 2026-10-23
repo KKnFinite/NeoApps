@@ -77,12 +77,22 @@ def _pass_evidence(operation, mission, parent, kind, number, settings):
     context=application_context(operation)
     ramp,parking=physical_location(operation,parent.tail_number)
     type_iv=pass_types(parent,kind)[number-1]=='Type IV'
+    if kind=='departure' and mission.actual_block_out_datetime_utc and ramp in ('Alpha','Bravo','Charlie','Delta','Echo'):
+        # Consume the existing canonical queue. Parking position 10 is never a pad.
+        from app.services.neosubzero_departure_deice import departure_deice_context
+        from app.services.neosubzero_ucc import _physical_queue
+        from app.models import Gateway
+        gateway=db.session.get(Gateway,operation.gateway_id)
+        rows=departure_deice_context(gateway,operation)['rows']
+        queue=_physical_queue([row for row in rows if row.get('ramp')==ramp])
+        if queue and queue[0]['event'] and queue[0]['event'].id==parent.id:
+            parking='DEICE PAD'
     return dict(tail=normalized_tail(parent.tail_number),mission_id=mission.id,flight=mission.flight_number,
         original_mission_id=getattr(parent,'sort_date_mission_id',None) or getattr(parent,'original_mission_id',None),
         kind=kind,pass_type='type_iv' if type_iv else 'type_i',operation_id=operation.id,sort_date=operation.sort_date.isoformat(),sort_name=operation.sort_name,
         ramp=ramp or None,parking=parking,fluid=settings.type_iv_fluid_name if type_iv else settings.type_i_fluid_name,
         concentration=100 if type_iv else settings.type_i_concentration_percent,
-        reason=parent.reason_for_application or context['reason_for_application'] or ('Pretreat' if kind=='pretreat' else 'Frost'),
+        reason=parent.reason_for_application or context['reason_for_application'] or ('Pretreat' if kind=='pretreat' else None),
         active_precipitation=context['active_precipitation'] or None,ambient_temperature=context['ambient_temperature'] or None,
         dew_point=context['dew_point'] or None,notes=context['notes'] or None)
 
@@ -92,28 +102,44 @@ def _apply_official(record, evidence, parent, number):
         record.pass_type=evidence['pass_type']
     if evidence.get('mission_id'):
         record.sort_date_mission_id=evidence['mission_id']
-    record.surface_area=getattr(parent,f'pass{number}_surface_area')
+    record.surface_area=evidence.get('surface') or getattr(parent,f'pass{number}_surface_area')
     record.started_at_utc=getattr(parent,f'pass{number}_started_at_utc')
     record.ended_at_utc=getattr(parent,f'pass{number}_ended_at_utc')
     for column,key in (('tail_number_snapshot','tail'),('flight_number_snapshot','flight'),('ramp_snapshot','ramp'),('parking_snapshot','parking'),('fluid_name_snapshot','fluid'),('concentration_percent_snapshot','concentration'),('reason_for_application','reason'),('active_precipitation','active_precipitation'),('ambient_temperature','ambient_temperature'),('dew_point','dew_point'),('notes','notes')):
         setattr(record,column,evidence.get(key))
 
 
-def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='departure', actor_id=None, previous=None):
-    """END freezes each pass independently, in the caller's locked transaction."""
+def snapshot_treatment_passes(operation, mission, parent, settings, *, kind='departure', actor_id=None, previous=None, correction_reason=None):
+    """Freeze context at START and official crew at END in the caller's transaction."""
     db.session.flush()
     evidence=dict(parent.pass_evidence or {})
     for number,_type in enumerate(pass_types(parent,kind),1):
+        if (previous or {}).get(f'pass{number}_ended_at_utc'):
+            after=evidence_values(parent)
+            changed=any((previous or {}).get(f'pass{number}_{field}')!=after.get(f'pass{number}_{field}')
+                        for field in ('surface_area','started_at_utc','ended_at_utc'))
+            if changed and not str(correction_reason or '').strip():
+                raise NeoSubZeroEvidenceError('Enter a correction reason before changing an ended pass. Original spray evidence must remain auditable.')
+        start=getattr(parent,f'pass{number}_started_at_utc')
         end=getattr(parent,f'pass{number}_ended_at_utc')
-        if not end: continue
+        if not start: continue
         old=evidence.get(str(number))
         # A pre-upgrade completed pass is not proof of its former staffing or
         # fluid. Require an explicit historical correction; never backfill now.
         if not old and (previous or {}).get(f'pass{number}_ended_at_utc'):
             continue
-        captured=old or _pass_evidence(operation,mission,parent,kind,number,settings)
-        evidence[str(number)]={**captured,'start':getattr(parent,f'pass{number}_started_at_utc').isoformat(),'end':end.isoformat(),'surface':getattr(parent,f'pass{number}_surface_area')}
-        records=participation_query(parent,kind).filter_by(pass_number=number).all() if old else ensure_planned_participants(operation,mission,parent,kind,number,settings)
+        captured=dict(old or _pass_evidence(operation,mission,parent,kind,number,settings))
+        if not old:
+            captured['context_capture']='with_end' if end else 'with_start'
+            captured['context_captured_at_utc']=datetime.utcnow().isoformat()
+            # A retrospectively entered END does not establish pass-start weather.
+            if (previous or {}).get(f'pass{number}_started_at_utc'):
+                captured['context_capture']='start_not_snapshotted'
+        captured.update(start=start.isoformat(),end=end.isoformat() if end else None,
+                        surface=getattr(parent,f'pass{number}_surface_area'))
+        evidence[str(number)]=captured
+        if not end: continue  # Crew becomes official only at END.
+        records=ensure_planned_participants(operation,mission,parent,kind,number,settings)
         for record in records:
             if not record.participation_selected and not record.gallons: continue
             before=evidence_values(record)

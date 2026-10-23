@@ -129,6 +129,48 @@ def export_decision_record(record, _config=None):
     return {'key': key, 'checksum': checksum, 'already_saved': False}
 
 
+def export_subzero_record(record, *, learning=False, _config=None):
+    """SubZero evidence uses the same private Vault client and immutable revisions."""
+    expected = 'neofrost-treatment-context/v1' if learning else 'subzero-spray/v1'
+    if record.get('schema_version') != expected:
+        raise ValueError('Invalid SubZero archive schema.')
+    source = record.get('treatment') if learning else record
+    if (not isinstance(source, dict) or source.get('record_type') not in {'actual_fluid_application','spray_evidence_correction'}
+            or not re.fullmatch(r'(departure|pretreat):[1-9][0-9]*:pass:[12]', str(source.get('id', '')))
+            or not source.get('tail') or (source.get('record_type')=='actual_fluid_application' and not source.get('start_utc'))
+            or (source.get('record_type')=='spray_evidence_correction' and (source.get('state')!='start_retracted' or not source.get('audit_provenance')))):
+        raise ValueError('Only actual, tail-owned spray applications may be archived.')
+    if learning and (record.get('frost_observed') is not None or record.get('training_eligible') is not False):
+        raise ValueError('Treatment context must remain unlabeled.')
+    body = _canonical_json(record)
+    if len(body) > MAX_DECOMPRESSED_REVIEW_BYTES:
+        raise LearningVaultUnavailable('SubZero evidence exceeds the archive size limit; administrator review required.')
+    checksum = hashlib.sha256(body).hexdigest()
+    identity = source['id'].replace(':', '/')
+    prefix = 'neofrost-treatment-context/v1' if learning else 'subzero-spray/v1'
+    key = f"{prefix}/{int(source['gateway_id'])}/{int(source['operation_id'])}/{identity}/{checksum}.json.gz"
+    config = _require_r2_config(_config)
+    client = _r2_client(config)
+    try:
+        existing = client.head_object(Bucket=config['bucket'], Key=key)
+        if existing.get('Metadata', {}).get('checksum') != checksum:
+            raise LearningVaultUnavailable('Stored SubZero archive checksum requires review.')
+        return dict(key=key, checksum=checksum, already_saved=True)
+    except LearningVaultUnavailable:
+        raise
+    except Exception as exc:
+        if getattr(exc, 'response', {}).get('ResponseMetadata', {}).get('HTTPStatusCode') != 404:
+            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    try:
+        client.put_object(Bucket=config['bucket'], Key=key, Body=gzip.compress(body),
+            ContentType='application/json', ContentEncoding='gzip',
+            Metadata={'schema-version': expected, 'record-type': record['record_type'], 'checksum': checksum,
+                      'training-eligible': 'false'})
+    except Exception as exc:
+        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
+    return dict(key=key, checksum=checksum, already_saved=False)
+
+
 def list_learning_records(*, limit=50, _config=None):
     config = _require_r2_config(_config)
     try:

@@ -1,0 +1,58 @@
+/* Scoped reporting and Driver workspace; Operations and DUCC are unchanged. */
+.sz-reporting { min-width:0; font-family:var(--font-sans); }
+.sz-reporting * { box-sizing:border-box; }
+.sz-reporting :is(header,form,section,article,div,label) { min-width:0; }
+.sz-reporting .neosubzero-head { flex-wrap:wrap; gap:6px; }
+.sz-reporting .neosubzero-head h1 { font-size:1.35rem; }
+.sz-reporting h2 { font-size:.85rem; margin:12px 0 6px; }
+.sz-reporting :is(button,summary,input,select) { font:inherit; font-size:.8rem; }
+.sz-reporting :is(button,input,select) { min-height:36px; max-width:100%; }
+.sz-reporting input,.sz-reporting select { width:100%; min-width:0; }
+.sz-reporting :is(input,select,textarea,button) { border:1px solid #49677a; border-radius:3px; background:#091c29; color:#e9f5fe; padding:7px; }
+.sz-reporting :is(input,textarea):focus { outline:2px solid #78cfff; outline-offset:1px; }
+.sz-reporting button { padding:6px 9px; white-space:normal; }
+.sz-reporting :is(p,small,span,summary,strong) { overflow-wrap:anywhere; }
+.sz-reporting :is(p,small) { margin:5px 0; font-size:.78rem; }
+.sz-reporting small { display:block; opacity:.85; }
+.sz-reporting .sz-recovery { margin:6px 0 10px; font-size:.75rem; }
+.sz-reporting summary { cursor:pointer; padding:6px 0; }
+.sz-reporting [hidden] { display:none !important; }
+.sz-driver-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:8px; align-items:start; }
+.sz-reporting :is(.sz-aircraft,.sz-earlier,.sz-log-pass) { padding:10px; border:1px solid #527286; border-radius:5px; color:#edf6ff; background:#132431; margin-bottom:8px; }
+.sz-reporting .state-planned { background:#c3a135; color:#121a10; border-color:#e8ca69; }
+.sz-reporting .state-configured { background:#245c3d; }
+.sz-reporting .state-deicing { background:#1b7042; border-color:#74d298; }
+.sz-reporting .state-fin { background:#204d83; }
+.sz-reporting .state-negative { background:#641e29; }
+.sz-reporting .state-cleared { background:#30363c; }
+.sz-reporting .state-review { background:#593726; }
+.sz-reporting :is(.sz-aircraft,.sz-earlier,.sz-log-pass) > header { display:flex; flex-wrap:wrap; gap:5px 12px; justify-content:space-between; align-items:center; }
+.sz-reporting .sz-aircraft > header strong { font-size:1.15rem; }
+.sz-reporting .sz-aircraft > header span { font-size:.85rem; }
+.sz-reporting .sz-aircraft > header b { font-size:.8rem; }
+.sz-reporting .state-deicing > header b { font-size:1rem; }
+.sz-aircraft-facts,.sz-pass-facts { display:flex; flex-wrap:wrap; gap:4px 14px; margin:7px 0; font-size:.8rem; }
+.sz-reporting .sz-pass-line { display:grid; grid-template-columns:56px 1fr; gap:6px; font-size:.8rem; }
+.sz-reporting .sz-gallons { background:#071a27eb; color:#edf6ff; border-radius:3px; padding:7px; margin-top:8px; }
+.sz-reporting .sz-gallons > strong,.sz-reporting .sz-gallons > span { display:block; font-size:.8rem; }
+.sz-reporting form[data-evidence-form] { display:flex; flex-wrap:wrap; align-items:end; gap:7px; }
+.sz-reporting form[data-evidence-form] > label { flex:1 1 115px; }
+.sz-reporting label { display:grid; gap:4px; font-size:.75rem; }
+.sz-reporting .sz-log-filters { display:flex; flex-wrap:wrap; align-items:end; gap:7px; margin:10px 0; }
+.sz-reporting .sz-log-filters label { flex:1 1 125px; }
+.sz-reporting .sz-log-pass { margin:8px 0; }
+.sz-reporting .sz-log-pass > header { padding-bottom:6px; border-bottom:1px solid #365165; font-size:.85rem; }
+.sz-reporting .sz-contribution { display:grid; grid-template-columns:90px 1fr 1fr 150px; gap:5px 10px; align-items:center; font-size:.78rem; padding:7px 0; }
+.sz-reporting .sz-missing { color:#ffe39b; }
+.sz-reporting .sz-correction { border-bottom:1px solid #304c5e; padding:0 0 5px; }
+.sz-reporting .sz-correction form { margin:6px 0; }
+.sz-reporting .sz-archive { padding:7px; border:1px solid #476277; }
+.sz-reporting [data-evidence-feedback],.sz-reporting [data-spray-copy-feedback] { position:sticky; top:75px; z-index:20; padding:9px; background:#123e32; color:#eafff7; border:1px solid #71ad8c; }
+.sz-reporting [data-evidence-feedback].ops-review { background:#58252a; color:#ffe8e8; }
+.sz-reporting pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+@media(max-width:600px) {
+ .sz-reporting .sz-contribution { grid-template-columns:1fr 1fr; }
+ .sz-reporting .sz-contribution > strong { grid-column:2; grid-row:1; }
+ .sz-reporting :is(.sz-aircraft,.sz-earlier,.sz-log-pass) { padding:8px; }
+ .sz-reporting .sz-log-pass > header > strong { flex:1 1 100%; }
+}

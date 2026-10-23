@@ -734,12 +734,15 @@ def deicer_mobile():
     gateway = get_current_gateway()
     operation = current_neosubzero_operation(gateway)
     assignment = current_user_ucc_assignment(operation, current_user)
-    from app.services.neosubzero_spray import driver_owns_participation
-    own_records=[record for record in NeoSubZeroSprayRecord.query.filter_by(sort_date_operation_id=operation.id).all()
-                 if driver_owns_participation(current_user,record)] if operation else []
+    from app.services.neosubzero_spray import driver_owns_participation, user_staffing_person
+    person=user_staffing_person(current_user)
+    own_records=[record for record in NeoSubZeroSprayRecord.query.filter_by(sort_date_operation_id=operation.id,
+                 driver_person_id=person.id).order_by(NeoSubZeroSprayRecord.ended_at_utc.desc(),NeoSubZeroSprayRecord.id.desc()).all()
+                 if driver_owns_participation(current_user,record)] if operation and person else []
     if operation is not None and assignment is None and not own_records:
         return "A current UCC assignment or documented Driver participation is required.", 403
-    context = departure_deice_context(gateway, operation)
+    from app.services.neosubzero_operations import operations_context
+    context = operations_context(gateway, operation, 'outbound')
     rows = [
         row for row in context["rows"]
         if assignment is not None and row.get("ramp") == assignment.ramp
@@ -752,6 +755,8 @@ def deicer_mobile():
         gateway=gateway,
         operation=operation,
         assignment=assignment,
+        assigned_truck=NeoSubZeroUccTruckAssignment.query.filter_by(sort_date_operation_id=operation.id,
+            ramp=assignment.ramp,position_number=assignment.position_number).one_or_none() if operation and assignment else None,
         can_edit=user_can("neosubzero.deicer_mobile.edit"),
         own_records=own_records,
         entity_version=entity_version,
@@ -782,19 +787,69 @@ def deice_log():
         return "Access denied.", 403
     session[LAST_PAGE_KEY] = "neosubzero.deice_log"
     gateway = get_current_gateway()
-    operation = current_neosubzero_operation(gateway)
+    current_operation = current_neosubzero_operation(gateway)
+    from app.models import SortDateOperation
+    from app.services.neosubzero_reporting import actual_passes, report_text,gateway_operations,report_version
+    operations=gateway_operations(gateway).order_by(SortDateOperation.sort_date.desc(),SortDateOperation.id.desc()).all()
+    selected=request.args.get('operation_id',type=int)
+    operation=next((op for op in operations if op.id==selected),None) if selected else current_operation
+    if selected and operation is None: return 'Sort not found for this gateway.',404
+    activity=request.args.get('activity','all').lower()
+    if activity not in ('all','pretreat','departure'): return 'Invalid activity filter.',400
+    tail=request.args.get('tail','').strip()[:32]
+    passes=actual_passes(operation,activity=activity,tail=tail)
+    can_correct=bool(operation and current_operation and operation.id==current_operation.id and
+        (user_can('neosubzero.coordinator.edit') or user_can('neosubzero.outbound.edit')))
     from app.services.neosubzero_evidence import evidence_values
     from app.models import NeoSubZeroAuditEntry
     return render_template(
         "neonodes/neosubzero/deice_log.html",
         gateway=gateway,
         operation=operation,
-        groups=neosubzero_deice_log(operation),
+        operations=operations,activity=activity,tail_filter=tail,passes=passes,report_text=report_text(passes),
+        report_revision=report_version(operation,passes),
+        refresh_status=subzero_refresh_status(gateway,operation,DEICER_REFRESH_KEY),
+        archive_status=_subzero_archive_status(operation) if user_can('neosubzero.settings.edit') else None,
+        groups=[group for group in neosubzero_deice_log(operation) if activity in ('all',group['kind']) and (not tail or tail.casefold() in group['tail'].casefold())],
         entity_version=entity_version,
-        can_correct=user_can('neosubzero.coordinator.edit') or user_can('neosubzero.outbound.edit'),
+        can_correct=can_correct,
         staffing_pool=current_subzero_staffing_pool(operation) if operation else (),
         audits=NeoSubZeroAuditEntry.query.filter_by(sort_date_operation_id=operation.id).order_by(NeoSubZeroAuditEntry.recorded_at_utc.desc()).all() if operation else (),
     )
+
+
+def _subzero_archive_status(operation):
+    from app.services.neosubzero_archive import status
+    return status(operation)
+
+
+@bp.route('/deice-log/revision')
+@gateway_node_required('subzero')
+def deice_log_revision():
+    if not user_can('neosubzero.deice_log.view'): return 'Access denied.',403
+    from app.services.neosubzero_reporting import actual_passes,gateway_operations,report_version
+    gateway=get_current_gateway()
+    selected=request.args.get('operation_id',type=int)
+    operation=gateway_operations(gateway).filter_by(id=selected).one_or_none() if selected else current_neosubzero_operation(gateway)
+    if selected and operation is None: return 'Sort not found.',404
+    revision=report_version(operation,actual_passes(operation,activity=request.args.get('activity','all'),tail=request.args.get('tail','')[:32]))
+    return jsonify(ok=True,revision=revision,changed=revision!=request.args.get('revision'),
+        refresh=subzero_refresh_status(gateway,operation,DEICER_REFRESH_KEY))
+
+
+@bp.after_request
+def schedule_subzero_archive(response):
+    # Reuse the existing bounded Vault retry worker, never remote I/O in a mutation.
+    if response.status_code < 400 and current_user.is_authenticated:
+        from flask import current_app
+        try:
+            gateway=get_current_gateway()
+            if gateway:
+                from app.services.neoscorpion_spear_decisions import schedule_delivery
+                schedule_delivery(current_app._get_current_object(),gateway.id)
+        except Exception:
+            current_app.logger.warning('SubZero archive scheduling deferred; operational response preserved.',exc_info=True)
+    return response
 
 
 @bp.route("/callouts", methods=["GET", "POST"])

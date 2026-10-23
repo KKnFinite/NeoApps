@@ -112,6 +112,7 @@ class Release2BrowserTest(unittest.TestCase):
             expect(own.locator('[name="gallons"]')).to_have_value('17.50')
             expect(pane.locator(f'[data-participant-id="{rid}"] [name="gallons"]')).to_have_value('17.5',timeout=10000)
             # A concurrent measurement cannot overwrite the Driver's draft.
+            own.locator('summary').click()
             own.locator('[name="gallons"]').fill('18')
             with self.app.app_context():
                 from app.services.neosubzero_spray import set_neosubzero_spray_gallons
@@ -124,7 +125,8 @@ class Release2BrowserTest(unittest.TestCase):
             self.assertEqual(rejected.value.status,409)
             expect(driver.locator('[data-evidence-feedback]')).to_contain_text('changed')
             expect(own.locator('[name="gallons"]')).to_have_value('18');expect(own.locator('button')).to_be_enabled()
-            driver.reload();expect(own.locator('[name="gallons"]')).to_have_value('18')
+            driver.reload();own.locator('summary').click();expect(own.locator('[name="gallons"]')).to_have_value('18')
+            driver.locator('.sz-recovery > summary').click()
             driver.once('dialog',lambda dialog:dialog.dismiss());driver.locator('[data-evidence-reload]').click()
             expect(own.locator('[name="gallons"]')).to_have_value('18')
             driver.once('dialog',lambda dialog:dialog.accept());driver.locator('[data-evidence-reload]').click()
