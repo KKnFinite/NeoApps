@@ -363,6 +363,11 @@ def move_ucc_unit(
             if row:
                 _stage_slot_person(row, None, user_id=None)
     db.session.flush()
+    # Release both truck numbers before a transactional move/swap, just as
+    # personnel are released above. Per-pass historical snapshots are untouched.
+    for key in (source,destination):
+        if trucks.get(key): trucks[key].truck_number=None
+    db.session.flush()
     for key, baseline in ((destination, source), (source, destination if swap else None)):
         for role in UCC_ROLES:
             set_neosubzero_ucc_assignment(

@@ -130,7 +130,7 @@ class OperationsTest(unittest.TestCase):
         event=NeoSubZeroDepartureDeiceEvent.query.one();old_tail=event.tail_number
         self.f.alpha.assigned_tail_number='REPLACEMENT';db.session.commit()
         row=next(r for r in operations_context(self.f.gateway,self.f.operation,'outbound')['rows'] if r['mission_id']==self.f.alpha.id)
-        self.assertTrue(row['identity_conflict']);self.assertIsNone(row['primary_passes'][0]['type'])
+        self.assertFalse(row['identity_conflict']);self.assertIsNone(row['event']);self.assertIsNone(row['primary_passes'][0]['type'])
         self.assertEqual(self.post(action='set_negative',expected_version=entity_version(event),physical_tail='REPLACEMENT').status_code,409)
         self.assertEqual(event.tail_number,old_tail);self.assertEqual(event.status,'deice_planned')
         self.assertEqual(self.post(action='set_negative',expected_version=entity_version(event),mode='pretreat').status_code,403)

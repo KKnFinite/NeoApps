@@ -57,6 +57,10 @@
 .neosubzero-operations .ops-readback h2 { font-size:.72rem; color:#9ed7fb; }.neosubzero-operations .ops-fluids,.neosubzero-operations .ops-staff-link { font-size:.75rem; color:#a5d8ed; }
 .neosubzero-operations .ops-draft-status { position:sticky; top:61px; z-index:4; padding:7px; color:#ffdc9c; background:#3d2b15; font-size:.75rem; }
 .neosubzero-operations .ops-pretreat-facts { display:flex; flex-wrap:wrap; gap:12px; font-size:.75rem; }.neosubzero-operations .ops-pretreat-facts dd { margin:0; }
+.neosubzero-operations .ops-team-controls section { padding:8px 0; border-bottom:1px solid #294357; }
+.neosubzero-operations .ops-detail .ops-confirm { display:flex; align-items:center; gap:6px; }
+.neosubzero-operations .ops-confirm input[type=checkbox] { width:auto; min-height:0; }
+.neosubzero-operations .neosubzero-spray-position-grid article { min-width:0; overflow-wrap:anywhere; }
 @media (max-width:1100px) {
     .neosubzero-operations:not([data-layout="visual"]) .ops-aircraft > a { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }

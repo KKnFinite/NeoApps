@@ -11,6 +11,8 @@ PRIMARY_RAMPS = ('Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo')
 
 def departure_presentation(row, tail_state):
     event = row.get('event')
+    if row.get('ownership_review'):
+        return 'review', 'TREATMENT OWNERSHIP REVIEW'
     if event and event.tail_number.strip().upper() != row['tail']:
         return 'review', 'TAIL IDENTITY REVIEW'
     status = getattr(event, 'status', None)
@@ -54,7 +56,8 @@ def operations_context(gateway, operation, mode):
         row['departure_status'] = departure_presentation(departure,tail_states.get(row['tail']))[1]
         row['pretreat_complete'] = bool(row.get('completed') if mode == 'pretreat' else row.get('pretreat_complete'))
         event = departure.get('event')
-        row['identity_conflict'] = bool(mode == 'outbound' and event and event.tail_number.strip().upper() != row['tail'])
+        row['identity_conflict'] = bool(mode == 'outbound' and (departure.get('ownership_review') or (event and event.tail_number.strip().upper() != row['tail'])))
+        row['ownership_review'] = departure.get('ownership_review')
         row['history_event'] = event if row['identity_conflict'] else None
         row['primary_passes'] = []
         if mode == 'pretreat':
@@ -71,7 +74,14 @@ def operations_context(gateway, operation, mode):
             row['primary_passes'].append({'number': number, 'type': types[number-1] if len(types) >= number else None,
                 'surface': SURFACE_LABELS.get(surfaces[number-1]) if len(types) >= number else None})
         row['detail_key'] = f"{mode}:{mission.id}:{row['tail']}:{getattr(event if mode == 'outbound' else row.get('state'), 'id', 0)}"
-    rows.sort(key=lambda row: (mode == 'outbound' and row['visual_state'] == 'cleared', row['sort_time'] is None,
-                               row['sort_time'] or datetime.max, row['flight'], row['mission_id']))
+    def order(row):
+        cleared=mode=='outbound' and row['visual_state']=='cleared'
+        timestamp=getattr(row.get('event'),'cleared_at_utc',None)
+        return (cleared, datetime.max-(timestamp or datetime.min) if cleared else timedelta(0),
+                row['sort_time'] is None,row['sort_time'] or datetime.max,row['flight'],row['mission_id'])
+    rows.sort(key=order)
+    if mode=='pretreat':
+        from app.services.neosubzero_spray import decorate_departure_rows_with_spray
+        decorate_departure_rows_with_spray(operation,rows,kind='pretreat')
     extras = tuple(ramp for ramp in ('Remote', 'Location Review') if any(row['ramp'] == ramp for row in rows))
     return {**context, 'rows': rows, 'ramps': (*PRIMARY_RAMPS, *extras)}

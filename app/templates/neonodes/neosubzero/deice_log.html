@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Deice Log | NeoSub-Zero{% endblock %}
+{% from 'neonodes/neosubzero/_departure_deice.html' import crew_inputs with context %}
 {% block content %}
-<section class="neosubzero-shell neosubzero-deice-log">
+<section class="neosubzero-shell neosubzero-deice-log" data-evidence-root data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}">
+<p data-evidence-feedback role="status" hidden></p>
+<button type="button" data-evidence-reload>RELOAD CURRENT VALUES</button>
+<a href="{{ url_for('neosubzero.deice_log') }}" target="_blank" rel="noopener">OPEN CURRENT VALUES IN NEW TAB</a>
     <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE LOG</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include "neonodes/neosubzero/_nav.html" %}
     {% if not operation %}<p class="neosubzero-empty">No current sort.</p>
@@ -22,9 +26,25 @@
             <div class="neosubzero-deice-log-table-wrap"><table><thead><tr><th>Pass</th><th>Fluid</th><th>Concentration</th><th>Gallons</th><th>Surface</th><th>Start</th><th>End</th><th>Duration</th><th>Position</th></tr></thead><tbody>
                 {% for application in group.applications %}<tr><td>{{ application.type }} · P{{ application.pass_number }}</td><td>{{ application.fluid }}</td><td>{{ application.concentration }}%</td><td>{{ application.gallons }}</td><td>{{ application.surface }}</td><td>{{ application.start }}</td><td>{{ application.end }}</td><td>{{ application.duration }} min</td><td>{{ application.position }}</td></tr>{% endfor %}
             </tbody></table></div>
+{% for application in group.applications %}{% set record=application.record %}{% set parent=record.pretreat_state or record.departure_deice_event %}
+<details><summary>PASS {{ application.pass_number }} · EVIDENCE / CORRECTION</summary>
+<p>{{ group.kind|upper }} · ORIGINAL MISSION {{ group.original_mission_id or 'NOT RECORDED' }} · PHYSICAL TAIL {{ group.tail }} · LOCATION {{ application.ramp or 'NOT RECORDED' }} / {{ application.parking or 'NOT RECORDED' }}</p>
+<p>DRIVER {{ application.driver or 'NOT RECORDED' }} · FLYER {{ application.flyer or 'NOT RECORDED' }} · UTC {{ record.started_at_utc }}–{{ record.ended_at_utc }} · RECORD {{ record.id }}</p>
+{% if can_correct %}
+<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-evidence-form>
+<input type="hidden" name="return_to" value="log"><input type="hidden" name="historical_record" value="yes"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="record_id" value="{{ record.id }}"><input type="hidden" name="physical_tail" value="{{ group.tail }}"><input type="hidden" name="expected_version" value="{{ entity_version(parent) }}"><input type="hidden" name="record_version" value="{{ entity_version(record) }}"><input type="hidden" name="pass_number" value="{{ record.pass_number }}"><input type="hidden" name="action" value="correct_participant">
+<label>Truck<input name="truck_number" value="{{ record.truck_number_snapshot }}" maxlength="32" required></label>
+{{ crew_inputs({'record':record,'driver_name':application.driver,'flyer_name':application.flyer},true) }}
+<label>Correction reason<input name="correction_reason" maxlength="500" required></label><button>SAVE PARTICIPANT CORRECTION</button></form>
+<form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-evidence-form>
+<input type="hidden" name="board" value="{{ 'coordinator' if user_can('neosubzero.coordinator.edit') else 'outbound' }}"><input type="hidden" name="return_to" value="log"><input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="record_id" value="{{ record.id }}"><input type="hidden" name="physical_tail" value="{{ group.tail }}"><input type="hidden" name="expected_version" value="{{ entity_version(record) }}">
+<label>Gallons<input name="gallons" value="{{ record.gallons if record.gallons is not none else '' }}" inputmode="decimal"></label><label>Correction reason<input name="correction_reason" maxlength="500" required></label><button>SAVE GALLONS</button></form>
+{% endif %}</details>{% endfor %}
         </article>
         {% endfor %}
     </div>
     {% endif %}
+{% if audits %}<details><summary>OPERATIONAL AUDIT · APPEND-ONLY</summary>{% for entry in audits %}<details><summary>{{ entry.recorded_at_utc }} UTC · {{ entry.action }} · {{ entry.tail_number or 'DUCC / SORT' }} · ACTOR {{ entry.actor_user_id or 'NOT RECORDED' }}</summary><p>{{ entry.reason or '' }} · MISSION {{ entry.mission_id or '—' }} · EVENT {{ entry.event_id or '—' }} · RECORD {{ entry.spray_record_id or '—' }}</p><pre>{{ entry.before_values|tojson(indent=2) }}</pre><pre>{{ entry.after_values|tojson(indent=2) }}</pre></details>{% endfor %}</details>{% endif %}
 </section>
+<script src="{{ url_for('static',filename='js/neosubzero_evidence.js',v=STATIC_ASSET_VERSION) }}" defer></script>
 {% endblock %}

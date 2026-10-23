@@ -159,7 +159,7 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
             with self.app.app_context():
                 mission=db.session.get(SortDateMission,self.missions[0]);mission.assigned_tail_number='N-REPLACED';db.session.commit()
-            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')).to_have_attribute('data-status','review',timeout=10000)
+            expect(page.locator(f'[data-ops-row][data-mission-id="{self.missions[0]}"]')).to_have_attribute('data-status','not-sprayed',timeout=10000)
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')
             pane.locator('[data-subzero-deice-form] button[type="submit"]').click();expect(page.locator('[data-ops-feedback]')).to_contain_text('identity changed')
             expect(pane.locator('[name="pass1_start"]')).to_have_value('21:45')

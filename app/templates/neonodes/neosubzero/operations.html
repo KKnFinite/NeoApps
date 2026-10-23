@@ -2,7 +2,7 @@
 {% from 'neonodes/neosubzero/_departure_deice.html' import application_context_form with context %}
 {% block title %}Deice Operations | NeoSub-Zero{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261023-release1-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/neosubzero_operations.css',v='20261023-release2-v1') }}">
 <section class="neosubzero-shell neosubzero-operations" data-ops-workspace data-mode="{{ mode }}" data-layout="{{ preferences.layout }}" data-ramp="{{ preferences.ramp }}" data-user-id="{{ current_user.id }}" data-operation-id="{{ operation.id if operation else '' }}" data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.operations_revision_endpoint') }}" data-workspace-url="{{ url_for('neosubzero.operations') }}" data-preference-url="{{ url_for('neosubzero.operations_preferences_mutate') }}" data-mutate-url="{{ url_for('neosubzero.operations_mutate') }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}">
     <header class="neosubzero-head"><div><p>NEOSUB-ZERO</p><h1>DEICE OPERATIONS</h1></div><strong>{{ gateway.code }}{% if operation %} · {{ operation.sort_name|upper }}{% endif %}</strong></header>
     {% include 'neonodes/neosubzero/_nav.html' %}
@@ -31,5 +31,5 @@
     </aside>
 </section>
 <script src="{{ url_for('static',filename='js/neosubzero_departure.js',ops='20261023-shared-forms-v1') }}" defer></script>
-<script src="{{ url_for('static',filename='js/neosubzero_operations.js',v='20261023-release1-v3') }}" defer></script>
+<script src="{{ url_for('static',filename='js/neosubzero_operations.js',v='20261023-release2-v1') }}" defer></script>
 {% endblock %}

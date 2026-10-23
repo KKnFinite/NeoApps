@@ -266,7 +266,8 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
                 "/neosubzero/application-context",
                 data={
                     "board": "outbound",
-                    "reason_for_application": "Must not become global context",
+                    "operation_id": self.operation.id,
+                    "reason_for_application": "Shared current-sort context",
                     "active_precipitation": "Light Snow",
                     "ambient_temperature": "20 F",
                     "dew_point": "17 F",
@@ -279,15 +280,17 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
                     "board": "outbound",
                     "mission_id": self.mission.id,
                     "expected_version": entity_version(self.event),
+                    "operation_id": self.operation.id,
+                    "physical_tail": self.mission.assigned_tail_number,
                     "reason_for_application": "Ice Crystals",
                 },
             )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(reason_response.status_code, 302)
-        with client.session_transaction() as working_session:
-            context = working_session[f"neosubzero.application_context.{self.operation.id}"]
+        from app.services.neosubzero_evidence import application_context
+        context=application_context(self.operation)
         self.assertEqual(context["active_precipitation"], "Light Snow")
-        self.assertNotIn("reason_for_application", context)
+        self.assertEqual(context["reason_for_application"],"Shared current-sort context")
         db.session.refresh(self.event)
         self.assertEqual(self.event.reason_for_application, "Ice Crystals")
 
@@ -307,90 +310,16 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
         )
         self.assertEqual(groups[0]["applications"][0]["duration"], 10)
 
-    def test_deicer_mobile_requires_current_assignment_and_limits_slot_mutation(self):
-        assigned = self._user("assigned_deicer", "operator", self.driver.employee_id)
-        client = self.app.test_client()
-        self._login(client, assigned)
-        with patch(
-            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
-            return_value=self.operation,
-        ):
-            response = client.get("/neosubzero/deicer-mobile")
-            self.assertEqual(response.status_code, 200)
-            self.assertIn(b"POSITION 1", response.data)
-            allowed = client.post(
-                "/neosubzero/truck",
-                data={
-                    "board": "deicer",
-                    "ramp": "Alpha",
-                    "position_number": 1,
-                    "truck_number": "55",
-                    "expected_version": "",
-                    "mission_id": self.mission.id,
-                },
-            )
-            denied = client.post(
-                "/neosubzero/truck",
-                data={
-                    "board": "deicer",
-                    "ramp": "Alpha",
-                    "position_number": 2,
-                    "truck_number": "66",
-                    "expected_version": "",
-                    "mission_id": self.mission.id,
-                },
-            )
-            own_gallons = client.post(
-                "/neosubzero/spray-gallons",
-                data={
-                    "board": "deicer",
-                    "mission_id": self.mission.id,
-                    "ramp": "Alpha",
-                    "pass_number": 1,
-                    "position_number": 1,
-                    "gallons": "12",
-                    "expected_version": "",
-                },
-            )
-            other_gallons = client.post(
-                "/neosubzero/spray-gallons",
-                data={
-                    "board": "deicer",
-                    "mission_id": self.mission.id,
-                    "ramp": "Alpha",
-                    "pass_number": 1,
-                    "position_number": 2,
-                    "gallons": "12",
-                    "expected_version": "",
-                },
-            )
-        self.assertEqual(allowed.status_code, 302)
-        self.assertEqual(denied.status_code, 403)
-        self.assertEqual(own_gallons.status_code, 302)
-        self.assertEqual(other_gallons.status_code, 403)
-        self.assertEqual(
-            NeoSubZeroUccTruckAssignment.query.filter_by(position_number=1).one().truck_number,
-            "55",
-        )
-        self.assertEqual(
-            NeoSubZeroSprayRecord.query.filter_by(position_number=1).one().gallons,
-            Decimal("12"),
-        )
-
-        driver_assignment = NeoSubZeroUccAssignment.query.filter_by(
-            sort_date_operation_id=self.operation.id,
-            person_id=self.driver.id,
-        ).one()
-        db.session.delete(driver_assignment)
-        db.session.commit()
-        with patch(
-            "app.neonodes.neosubzero.routes.current_neosubzero_operation",
-            return_value=self.operation,
-        ):
-            response = client.get("/neosubzero/deicer-mobile")
-            revision = client.get("/neosubzero/deicer-mobile/revision")
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(revision.status_code, 403)
+    def test_deicer_cannot_change_shared_truck_assignment(self):
+        assigned=self._user("assigned_deicer","operator",self.driver.employee_id)
+        client=self.app.test_client();self._login(client,assigned)
+        with patch("app.neonodes.neosubzero.routes.current_neosubzero_operation",return_value=self.operation):
+            response=client.get("/neosubzero/deicer-mobile")
+            self.assertEqual(response.status_code,200);self.assertNotIn(b"SAVE TRUCK",response.data)
+            for position in (1,2):
+                response=client.post("/neosubzero/truck",data=dict(board="deicer",ramp="Alpha",position_number=position,truck_number="55",expected_version=""))
+                self.assertEqual(response.status_code,403)
+        self.assertEqual(NeoSubZeroUccTruckAssignment.query.count(),0)
 
     def test_deice_log_page_is_read_only_and_uses_snapshot_grouping(self):
         viewer = self._user("log_viewer", "watcher", "LOG-1")
@@ -455,6 +384,7 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
                     "position_number": 1,
                     "truck_number": "3",
                     "expected_version": stale_truck_version,
+                    "operation_id": self.operation.id,
                 },
                 follow_redirects=True,
             )
@@ -468,17 +398,32 @@ class NeoSubZeroSprayOperationsTest(unittest.TestCase):
                     "position_number": 1,
                     "gallons": "12",
                     "expected_version": stale_record_version,
+                    "operation_id": self.operation.id,
+                    "physical_tail": self.mission.assigned_tail_number,
+                    "record_id": record.id,
                 },
                 follow_redirects=True,
             )
         self.assertIn(b"Truck assignment changed while you were editing", truck_response.data)
-        self.assertIn(b"Gallons changed while you were editing", gallons_response.data)
+        self.assertIn(b"Gallons or participation changed", gallons_response.data)
         db.session.refresh(truck)
         db.session.refresh(record)
         self.assertEqual(truck.truck_number, "2")
         self.assertEqual(record.gallons, Decimal("11"))
 
     def _set_gallons(self, pass_number, position, gallons, *, record=None, context=None):
+        # Release 2 measurements reference an already documented END snapshot.
+        # This factory supplies known isolated historical evidence; the service
+        # may never infer it from current staffing when recording gallons.
+        if record is None and Decimal(gallons)>0:
+            from app.services.neosubzero_participation import _new_participant, _apply_official
+            truck=NeoSubZeroUccTruckAssignment.query.filter_by(sort_date_operation_id=self.operation.id,ramp='Alpha',position_number=position).one()
+            record=_new_participant(self.operation,self.mission,self.event,'departure',pass_number,position,truck.truck_number,neosubzero_fluid_settings(self.gateway))
+            evidence=dict(tail=self.event.tail_number,flight=self.mission.flight_number,ramp='Alpha',parking='A03',
+                fluid=record.fluid_name_snapshot,concentration=record.concentration_percent_snapshot,reason=departure_deice_reason(self.event),**(context or {}))
+            evidence['reason']=departure_deice_reason(self.event)
+            _apply_official(record,evidence,self.event,pass_number);record.official_at_utc=datetime(2026,9,1,1,32)
+            db.session.flush()
         return set_neosubzero_spray_gallons(
             self.operation,
             self.mission,

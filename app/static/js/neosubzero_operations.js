@@ -24,7 +24,8 @@
     };
     const formAction = form => new URL(form.getAttribute('action'), location.origin).pathname;
     const formKey = form => [formAction(form), form.elements.pass_number?.value || '',
-        form.elements.position_number?.value || '', form.querySelector('input[name="action"]')?.value || ''].join(':');
+        form.elements.position_number?.value || '', form.elements.record_id?.value || '',
+        form.querySelector('input[name="action"]')?.value || form.querySelector('button[name="action"]')?.value || ''].join(':');
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const detail = () => pane.querySelector('[data-ops-detail-content]');
@@ -81,6 +82,9 @@
             draft.fields.forEach(saved => {
                 const field = form.elements[saved.name];
                 if (!field || !('value' in field)) return;
+                if (field.tagName === 'SELECT' && saved.value && ![...field.options].some(option=>option.value===saved.value)) {
+                    const option=document.createElement('option');option.value=saved.value;option.textContent='PREVIOUS SELECTION ('+saved.value+') — REVIEW';field.append(option);
+                }
                 field.value = saved.value;
                 if (['checkbox', 'radio'].includes(field.type)) field.checked = saved.checked;
             });
@@ -132,10 +136,11 @@
             notify('The canonical sort changed. Draft retained for the original sort; reload current operations in another tab before continuing.', true); return;
         }
         const scroll = window.scrollY, paneScroll = pane.scrollTop;
-        if (next.dataset.operationId !== root.dataset.operationId) {
+        const contextForm=root.querySelector('[data-ops-context] form');
+        if (next.dataset.operationId !== root.dataset.operationId || (!contextForm?.dataset.dirty && !contextForm?.contains(document.activeElement))) {
             const previous = root.querySelector('[data-ops-context]');
             const incoming = next.querySelector('[data-ops-context]');
-            if (previous && incoming) previous.replaceWith(incoming);
+            if (previous && incoming) {incoming.open=previous.open;previous.replaceWith(incoming);}
         }
         root.querySelector('[data-ops-board]').replaceWith(next.querySelector('[data-ops-board]'));
         ['operationId','layout','ramp'].forEach(key => { root.dataset[key] = next.dataset[key]; });
@@ -143,13 +148,25 @@
         const current = detail();
         if (current && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail === incoming.dataset.tail && (dirty() || pane.contains(document.activeElement))) {
             const freshForms = [...incoming.querySelectorAll('form')];
+            const active=document.activeElement;
+            const caret=active && 'selectionStart' in active ? [active.selectionStart,active.selectionEnd] : null;
+            const expansionKey=element=>[element.closest('[data-participant-id]')?.dataset.participantId || '',element.querySelector(':scope > summary')?.textContent].join(':');
+            const opened=new Set([...current.querySelectorAll('details[open]')].map(expansionKey));
+            incoming.querySelectorAll('details').forEach(element=>{if(opened.has(expansionKey(element)))element.open=true;});
             current.querySelectorAll('form').forEach(form => {
-                if (form.dataset.dirty === 'true' || (form.contains(document.activeElement) && formKey(form) !== saved)) return;
+                if (form.dataset.dirty !== 'true' && (!form.contains(active) || formKey(form) === saved)) return;
                 const replacement = freshForms.find(e => formKey(e) === formKey(form));
-                if (replacement) form.replaceWith(replacement);
+                if (replacement) replacement.replaceWith(form);
+                else {
+                    const review=document.createElement('section');review.className='ops-review';
+                    const note=document.createElement('p');note.textContent='This action changed on the server. Original draft retained for review; reload current values before retrying.';
+                    review.append(note,form);incoming.querySelector('[data-ops-detail-body]').append(review);
+                }
             });
+            current.replaceWith(incoming);
+            if (active?.isConnected) {active.focus({preventScroll:true});if(caret)active.setSelectionRange(...caret);}
             draftMessage('LIVE DATA UPDATED · Unsaved entries and their original versions were kept. Conflicting saves require review.');
-            initialize();
+            initialize();saveDraft();
         } else if (current && (dirty() || pane.contains(document.activeElement)) && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail !== incoming.dataset.tail) {
             draftMessage('TAIL CHANGED · Original-tail draft preserved. Close these details and review the replacement aircraft.');
             notify('Aircraft identity changed; original physical evidence has not been reassigned.', true);

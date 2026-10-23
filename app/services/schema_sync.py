@@ -636,6 +636,15 @@ POSTGRES_OPTIONAL_COLUMNS = {
 }
 
 
+# One SubZero contract feeds both canonical dialect registries.
+from app.services.neosubzero_schema import NEOSUBZERO_OPTIONAL_COLUMNS
+for _table, _columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
+    POSTGRES_OPTIONAL_COLUMNS.setdefault(_table, {}).update(_columns)
+    LOCAL_SQLITE_OPTIONAL_COLUMNS.setdefault(_table, {}).update({
+        key: value.replace('TIMESTAMP', 'DATETIME') for key, value in _columns.items()
+    })
+
+
 def sync_local_sqlite_schema(app):
     database_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", ""))
     if not database_uri.startswith("sqlite:"):
@@ -736,6 +745,8 @@ def sync_database_schema(app):
     database_uri = str(app.config.get("SQLALCHEMY_DATABASE_URI", ""))
     if database_uri.startswith("sqlite:"):
         sync_local_sqlite_schema(app)
+        from app.services.neosubzero_release2_schema import sync_release2_schema
+        sync_release2_schema()
         from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
         sync_staffing_assignment_schema()
         return
@@ -805,6 +816,8 @@ def sync_database_schema(app):
         backfill_lineup_flight_identities()
     from app.services.neostaffing_assignment_schema import sync_staffing_assignment_schema
     sync_staffing_assignment_schema()
+    from app.services.neosubzero_release2_schema import sync_release2_schema
+    sync_release2_schema()
     db.session.flush()
 
 
@@ -1895,6 +1908,8 @@ def _create_missing_application_tables(existing_table_names):
         NeoSubZeroUccAssignment,
         NeoSubZeroUccTruckAssignment,
         NeoSubZeroSprayRecord,
+        NeoSubZeroOperationContext,
+        NeoSubZeroAuditEntry,
         NeoScorpionAircraftFuelSetting,
         NeoScorpionDispatcherCheck,
         NeoScorpionCallDispatchAck,
@@ -1983,6 +1998,8 @@ def _create_missing_application_tables(existing_table_names):
         NeoSubZeroUccAssignment,
         NeoSubZeroUccTruckAssignment,
         NeoSubZeroSprayRecord,
+        NeoSubZeroOperationContext,
+        NeoSubZeroAuditEntry,
         NeoScorpionTailFuelState,
         NeoScorpionFuelTruck,
         NeoScorpionFuelerNickname,

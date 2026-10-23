@@ -18,7 +18,10 @@
 {% set context = application_context|default({}, true) %}
 <form method="post" action="{{ url_for('neosubzero.application_context_mutate') }}" class="neosubzero-application-context" data-subzero-operational-form>
     <input type="hidden" name="board" value="{{ board }}">
-    <h2>APPLICATION CONTEXT</h2>
+    <input type="hidden" name="operation_id" value="{{ operation.id if operation else '' }}">
+    <input type="hidden" name="expected_version" value="{{ context.get('version','') }}">
+    <h2>APPLICATION CONTEXT · CURRENT SORT</h2>
+    <label>Reason for Application<input name="reason_for_application" maxlength="120" value="{{ context.get('reason_for_application','') }}"></label>
     <label>Active Precipitation
         <input name="active_precipitation" maxlength="120" value="{{ context.get('active_precipitation', '') }}" placeholder="Enter precipitation">
     </label>
@@ -41,7 +44,7 @@
     <form method="post" action="{{ url_for('neosubzero.spray_reason_mutate') }}" data-subzero-operational-form>
         {{ mutation_identity(row, board, selected_ramp) }}
         <label>Reason for Application
-            <input name="reason_for_application" maxlength="120" value="{{ row.event.reason_for_application or '' }}" placeholder="Frost">
+            <input name="reason_for_application" maxlength="120" value="{{ row.event.reason_for_application or '' }}" placeholder="{{ row.reason_for_application }}">
         </label>
         <small>{{ 'DEFAULT · FROST' if not row.event.reason_for_application else 'EXPLICIT REASON' }}</small>
         <button type="submit">SAVE REASON</button>
@@ -57,12 +60,12 @@
     <strong>{{ row.flight }}</strong>
     <span>{{ row.tail }}</span>
     {% if row.collapse_state == 'cleared' %}
-        <span>{{ row.final_fluid.concentration }}% {{ row.final_fluid.name }}</span>
-        <span>START TIME {{ row.final_start|replace(':', '') }} LOCAL</span>
-        <button type="button" data-subzero-script="{{ row.script.text if row.script else '' }}">AIR-TO-GROUND</button>
+        {% if row.final_start %}<span>{{ (row.final_fluid.concentration|string + '% ') if row.final_fluid.concentration is not none else '' }}{{ row.final_fluid.name }}</span>
+        <span>START TIME {{ row.final_start|replace(':', '') }} LOCAL</span>{% endif %}
+        {% if row.script %}<button type="button" data-subzero-script="{{ row.script.text }}">AIR-TO-GROUND</button>{% endif %}
     {% elif row.collapse_state == 'pretreated' %}
         <span>PRETREATED</span>
-        {% if row.pretreat_reference %}<span>{{ row.pretreat_reference.concentration }}% {{ row.pretreat_reference.fluid }} · START {{ row.pretreat_reference.start|replace(':', '') }}</span>{% endif %}
+        {% if row.pretreat_reference %}<span>{{ (row.pretreat_reference.concentration|string + '% ') if row.pretreat_reference.concentration is not none else '' }}{{ row.pretreat_reference.fluid }} · START {{ row.pretreat_reference.start|replace(':', '') }}</span>{% endif %}
     {% elif row.collapse_state == 'negative' %}
         <span>NEGATIVE DEICE</span>
     {% else %}
@@ -82,7 +85,7 @@
 <section class="neosubzero-mission-workspace" data-subzero-workspace {% if row.terminal and not open %}hidden{% endif %}>
     {{ mission_facts(row) }}
     {% if row.pretreat_complete and row.pretreat_reference %}
-    <p class="neosubzero-pretreat-reference">PRETREATED · {{ row.pretreat_reference.concentration }}% {{ row.pretreat_reference.fluid }} · START {{ row.pretreat_reference.start|replace(':', '') }} LOCAL</p>
+    <p class="neosubzero-pretreat-reference">PRETREATED · {{ (row.pretreat_reference.concentration|string + '% ') if row.pretreat_reference.concentration is not none else '' }}{{ row.pretreat_reference.fluid }} · START {{ row.pretreat_reference.start|replace(':', '') }} LOCAL</p>
     {% endif %}
 
     {% if row.event and row.event.status in ('negative', 'not_sprayed') %}
@@ -133,60 +136,102 @@
         {% endif %}
         {{ treatment_form(row, can_edit, board, selected_ramp) }}
         {{ spray_position_forms(row, can_edit, board, selected_ramp) }}
-        {% if can_edit and row.event.status == 'finished' %}
+        {% if false %}
         <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}">
             {{ mutation_identity(row, board, selected_ramp) }}
             <button class="is-clear" name="action" value="clear">CLEAR</button>
         </form>
         {% endif %}
     {% endif %}
+{% if can_edit and not row.ownership_review and (not row.event or row.event.status != 'cleared') %}
+<form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-operational-form>
+{{ mutation_identity(row, board, selected_ramp) }}<button class="is-clear" name="action" value="clear">CLEAR</button>
+</form>{% endif %}
 </section>
+{% endmacro %}
+
+{% macro participation_identity(row, board, pass_row, position=none, gallons=false) %}
+<input type="hidden" name="board" value="{{ 'pretreat' if row.participation_kind == 'pretreat' else board }}"><input type="hidden" name="operation_id" value="{{ operation.id }}">
+<input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="physical_tail" value="{{ row.tail }}">
+<input type="hidden" name="kind" value="{{ row.participation_kind }}"><input type="hidden" name="event_id" value="{{ row.event.id if row.event else '' }}">
+<input type="hidden" name="expected_version" value="{{ position.record_version if gallons else row.version if row.participation_kind == 'pretreat' else row.event_version }}">
+<input type="hidden" name="pass_number" value="{{ pass_row.number }}">
+{% if position %}<input type="hidden" name="record_id" value="{{ position.record.id if position.record else '' }}"><input type="hidden" name="record_version" value="{{ position.record_version or '' }}"><input type="hidden" name="position_number" value="{{ position.position }}">{% endif %}
+{% endmacro %}
+
+{% macro correction_inputs(pass_row) %}
+{% if pass_row.end %}<label>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
+{% endmacro %}
+
+{% macro crew_inputs(position=none, confirmed=false) %}
+<label>Driver<select name="driver_person_id"><option value="">NOT RECORDED / NONE</option>{% for member in staffing_pool|default(()) %}<option value="{{ member.person.id }}" {% if position and position.record and position.record.driver_person_id == member.person.id %}selected{% endif %}>{{ member.person.full_name }}</option>{% endfor %}{% if position and position.record and position.record.driver_person and position.record.driver_person_id not in staffing_pool|default(())|map(attribute='person.id')|list %}<option value="{{ position.record.driver_person_id }}" selected>{{ position.driver_name }}</option>{% endif %}</select></label>
+<label>Flyer<select name="flyer_person_id"><option value="">NOT RECORDED / NONE</option>{% for member in staffing_pool|default(()) %}<option value="{{ member.person.id }}" {% if position and position.record and position.record.flyer_person_id == member.person.id %}selected{% endif %}>{{ member.person.full_name }}</option>{% endfor %}{% if position and position.record and position.record.flyer_person and position.record.flyer_person_id not in staffing_pool|default(())|map(attribute='person.id')|list %}<option value="{{ position.record.flyer_person_id }}" selected>{{ position.flyer_name }}</option>{% endif %}</select></label>
+<label class="ops-confirm"><input type="checkbox" name="crew_confirmed" value="yes" {% if confirmed %}required{% endif %}>CONFIRM ACTUAL CREW{% if not confirmed %} (otherwise use DUCC crew at END){% endif %}</label>
 {% endmacro %}
 
 {% macro spray_position_forms(row, can_edit, board, selected_ramp='') %}
 {% if row.application_passes %}
-{% set spray_locked = not can_edit or row.event.status == 'cleared' %}
 <section class="neosubzero-spray-positions" data-subzero-spray-positions>
-    <h3>TRUCK / POSITION GALLONS</h3>
-    {% for pass_row in row.application_passes %}
-    <section class="neosubzero-spray-pass {{ 'type-iv' if pass_row.type == 'Type IV' else 'type-i' }}">
-        <header><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><span>{{ pass_row.start or '-' }}–{{ pass_row.end or '-' }}</span></header>
-        <div class="neosubzero-spray-position-grid">
-            {% for position_row in pass_row.positions %}
-            <article>
-                <h4>POSITION {{ position_row.position }}</h4>
-                <p>{{ position_row.driver.full_name if position_row.driver else 'NO DRIVER' }} · {{ position_row.flyer.full_name if position_row.flyer else 'NO FLYER' }}</p>
-                <form method="post" action="{{ url_for('neosubzero.truck_mutate') }}" data-subzero-operational-form>
-                    <input type="hidden" name="board" value="{{ board }}">
-                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
-                    <input type="hidden" name="ramp" value="{{ row.ramp }}">
-                    <input type="hidden" name="position_number" value="{{ position_row.position }}">
-                    <input type="hidden" name="expected_version" value="{{ position_row.truck_version }}">
-                    <label>Truck
-                        <input name="truck_number" maxlength="32" value="{{ position_row.truck_number }}" placeholder="Truck #" data-subzero-spray-control {% if spray_locked %}readonly{% endif %}>
-                    </label>
-                    {% if can_edit %}<button type="submit" data-subzero-spray-save {% if spray_locked %}hidden{% endif %}>SAVE TRUCK</button>{% endif %}
-                </form>
-                <form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-subzero-operational-form>
-                    <input type="hidden" name="board" value="{{ board }}">
-                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
-                    <input type="hidden" name="ramp" value="{{ selected_ramp or row.ramp }}">
-                    <input type="hidden" name="pass_number" value="{{ pass_row.number }}">
-                    <input type="hidden" name="position_number" value="{{ position_row.position }}">
-                    <input type="hidden" name="expected_version" value="{{ position_row.record_version }}">
-                    <label>Gallons
-                        <input name="gallons" inputmode="decimal" value="{{ position_row.gallons }}" placeholder="—" data-subzero-spray-control data-spray-ready="{{ 'true' if pass_row.end else 'false' }}" {% if spray_locked or not pass_row.end %}readonly{% endif %}>
-                    </label>
-                    {% if can_edit and pass_row.end %}<button type="submit" data-subzero-spray-save {% if spray_locked %}hidden{% endif %}>SAVE GALLONS</button>{% endif %}
-                </form>
-                {% if position_row.recorded_truck and position_row.recorded_truck != position_row.truck_number %}<small>RECORDED WITH TRUCK {{ position_row.recorded_truck }}</small>{% endif %}
-            </article>
-            {% endfor %}
-        </div>
-    </section>
-    {% endfor %}
+<h3>AIRCRAFT PASS PARTICIPATION</h3>
+{% for pass_row in row.application_passes %}
+<section class="neosubzero-spray-pass">
+<header><strong>PASS {{ pass_row.number }} · {{ pass_row.type }}</strong><span>{{ pass_row.start or '—' }}–{{ pass_row.end or '—' }}</span></header>
+{% if pass_row.participation_review %}<p class="ops-review">Official participation missing — confirm actual truck, crew and product through an audited correction. Current staffing is not historical proof.</p>{% endif %}
+<div class="neosubzero-spray-position-grid">
+{% for position in pass_row.positions if not position.excluded or position.gallons %}
+<article data-participant-id="{{ position.record.id }}">
+<strong>TRUCK {{ position.truck_number }}</strong>
+<p>{{ position.driver_name or 'DRIVER NOT RECORDED' }} · {{ position.flyer_name or 'FLYER NOT RECORDED' }}</p>
+<small>{{ 'OFFICIAL' if position.official else 'SELECTED FOR END SNAPSHOT' }}{% if not position.selected %} · REMOVED FROM FUTURE PARTICIPATION · APPLIED GALLONS RETAINED{% endif %}</small>
+{% if can_edit and position.official and not position.excluded %}
+<form method="post" action="{{ url_for('neosubzero.spray_gallons_mutate') }}" data-subzero-operational-form>
+{{ participation_identity(row,board,pass_row,position,true) }}
+<label>Gallons<input name="gallons" inputmode="decimal" value="{{ position.gallons }}" placeholder="NOT ENTERED"></label><button>SAVE GALLONS</button>
+</form>
+{% else %}<p>GALLONS {{ position.gallons or 'NOT ENTERED' }}</p>{% endif %}
+{% if can_edit %}
+<details><summary>PARTICIPANT / CORRECTION</summary>
+<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>
+{{ participation_identity(row,board,pass_row,position) }}<input type="hidden" name="action" value="correct_participant">
+<label>Truck<input name="truck_number" maxlength="32" value="{{ position.truck_number }}" required></label>
+{{ crew_inputs(position,pass_row.end) }}{{ correction_inputs(pass_row) }}
+{% if pass_row.participation_review %}<label>Actual fluid<input name="fluid_name" maxlength="80" required></label><label>Actual concentration %<input name="concentration_percent" inputmode="numeric" required></label>{% endif %}
+<button>SAVE PARTICIPANT CORRECTION</button></form>
+{% if position.selected %}<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>
+{{ participation_identity(row,board,pass_row,position) }}{{ correction_inputs(pass_row) }}<button name="action" value="remove_truck">REMOVE TRUCK</button></form>{% endif %}
+</details>{% endif %}
+</article>
+{% endfor %}
+{% for position in pass_row.implicit %}<article><strong>TRUCK {{ position.truck_number }}</strong><p>{{ position.driver.full_name if position.driver else 'NO DRIVER' }} · {{ position.flyer.full_name if position.flyer else 'NO FLYER' }}</p><small>DUCC PRESELECTED · CREW SNAPSHOT AT END</small>
+{% if can_edit %}<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>{{ participation_identity(row,board,pass_row,position) }}<button name="action" value="remove_truck">REMOVE TRUCK</button></form>{% endif %}</article>{% endfor %}
+</div>
+{% if can_edit %}<details><summary>ADD TRUCK · PASS {{ pass_row.number }}</summary>
+<form method="post" action="{{ url_for('neosubzero.participation_mutate') }}" data-subzero-operational-form>
+{{ participation_identity(row,board,pass_row) }}<input type="hidden" name="action" value="add_truck">
+<label>Truck<input name="truck_number" maxlength="32" list="subzero-shared-trucks" required></label>
+{{ crew_inputs(none,pass_row.end) }}{{ correction_inputs(pass_row) }}
+{% if pass_row.participation_review %}<label>Actual fluid<input name="fluid_name" maxlength="80" required></label><label>Actual concentration %<input name="concentration_percent" inputmode="numeric" required></label>{% endif %}
+<button>ADD TRUCK</button></form></details>{% endif %}
 </section>
-{% endif %}
+{% endfor %}
+</section>{% endif %}
+{% endmacro %}
+
+{% macro team_controls(row, board) %}
+{% if can_edit and row.spray_positions and (user_can('neosubzero.coordinator.edit') or user_can('neosubzero.outbound.edit')) %}
+<details class="ops-team-controls"><summary>SHARED DUCC · CHANGE DEICERS / CHANGE TRUCK</summary>
+<datalist id="subzero-shared-trucks">{% for position in row.spray_positions if position.truck_number %}<option value="{{ position.truck_number }}">{% endfor %}</datalist>
+{% for position in row.spray_positions if position.truck_number %}
+<section><strong>POSITION {{ position.position }} · TRUCK {{ position.truck_number }}</strong><p>{{ position.driver.full_name if position.driver else 'NO DRIVER' }} · {{ position.flyer.full_name if position.flyer else 'NO FLYER' }}</p>
+<form method="post" action="{{ url_for('neosubzero.team_mutate') }}" data-subzero-operational-form>
+<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="physical_tail" value="{{ row.tail }}"><input type="hidden" name="board" value="{{ board }}"><input type="hidden" name="ramp" value="{{ row.ramp }}"><input type="hidden" name="position_number" value="{{ position.position }}"><input type="hidden" name="staffing_version" value="{{ staffing_version }}">
+<label>Replacement truck<input name="truck_number" maxlength="32" required></label><button name="action" value="change_truck">CHANGE TRUCK</button></form>
+<details><summary>CHANGE DEICERS</summary><form method="post" action="{{ url_for('neosubzero.team_mutate') }}" data-subzero-operational-form>
+<input type="hidden" name="operation_id" value="{{ operation.id }}"><input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="physical_tail" value="{{ row.tail }}"><input type="hidden" name="board" value="{{ board }}"><input type="hidden" name="ramp" value="{{ row.ramp }}"><input type="hidden" name="position_number" value="{{ position.position }}"><input type="hidden" name="staffing_version" value="{{ staffing_version }}">
+{% for role in ('driver','flyer') %}<label>{{ role|upper }}<select name="{{ role }}_person_id"><option value="">REMOVE</option>{% for member in staffing_pool %}<option value="{{ member.person.id }}" {% if position[role] and position[role].id == member.person.id %}selected{% endif %}>{{ member.person.full_name }}</option>{% endfor %}</select></label>{% endfor %}
+<label class="ops-confirm"><input type="checkbox" name="swap_occupied" value="yes">SWAP OCCUPIED PERSONNEL</label><button name="action" value="change_deicers">CHANGE DEICERS</button>
+</form></details></section>{% endfor %}
+</details>{% endif %}
 {% endmacro %}
 
 {% macro treatment_form(row, can_edit, board, selected_ramp='') %}
@@ -208,6 +253,7 @@
         <legend data-subzero-pass2-type>PASS 2 · {{ row.pass_types[1] if row.pass_types|length > 1 else 'TYPE I' }}</legend>
         {{ pass_controls(row, 2, locked) }}
     </fieldset>
+    {% if can_edit and row.event.status in ('finished','cleared') %}<label>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
     {% if can_edit %}
         <button type="button" data-subzero-edit {% if row.event.status != 'cleared' %}hidden{% endif %}>EDIT</button>
         <button type="submit" {% if row.event.status == 'cleared' %}hidden{% endif %}>SAVE TREATMENT</button>
@@ -234,6 +280,9 @@
 
 {% macro mutation_identity(row, board, selected_ramp='') %}
 <input type="hidden" name="board" value="{{ board }}">
+<input type="hidden" name="operation_id" value="{{ operation.id }}">
+<input type="hidden" name="physical_tail" value="{{ row.tail }}">
+<input type="hidden" name="event_id" value="{{ row.event.id if row.event else '' }}">
 <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
 <input type="hidden" name="expected_version" value="{{ row.event_version }}">
 {% if selected_ramp %}<input type="hidden" name="ramp" value="{{ selected_ramp }}">{% endif %}

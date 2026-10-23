@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "neonodes/neosubzero/_departure_deice.html" import application_context_form, terminal_summary, mission_workspace with context %}
+{% from "neonodes/neosubzero/_departure_deice.html" import application_context_form, terminal_summary, mission_workspace, team_controls with context %}
 {% block title %}Coordinator | NeoSub-Zero{% endblock %}
 {% block content %}
 <section class="neosubzero-shell neosubzero-departure-board neosubzero-coordinator" data-subzero-departure-board data-timezone="{{ gateway_timezone }}" data-revision="{{ revision }}" data-revision-url="{{ url_for('neosubzero.coordinator_revision_endpoint') }}" data-refresh-interval-ms="{{ refresh_status.live_screen_refresh_interval_ms }}" data-refresh-status="{{ refresh_status|tojson|forceescape }}">
@@ -34,6 +34,7 @@
             <article class="neosubzero-departure-mission {{ 'is-terminal' if row.terminal else 'is-active' }}" data-subzero-mission data-terminal="{{ 'true' if row.terminal else 'false' }}">
                 {% if row.terminal %}{{ terminal_summary(row, can_edit, 'coordinator', selected_ramp, true) }}{% endif %}
                 {{ mission_workspace(row, can_edit, 'coordinator', selected_ramp, true) }}
+                {{ team_controls(row, 'coordinator') }}
             </article>
             {% else %}<p class="neosubzero-empty">Select a mission.</p>{% endfor %}
         </main>

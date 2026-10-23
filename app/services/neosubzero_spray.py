@@ -57,6 +57,10 @@ def set_neosubzero_ucc_truck(
     if operation is None:
         raise NeoSubZeroSprayError("No current sort is available.")
     truck = _short_text(truck_number, "Truck number", 32)
+    from app.models import SortDateOperation
+    from app.services.neosubzero_ucc import validate_ucc_truck_unique
+    SortDateOperation.query.filter_by(id=operation.id).with_for_update().one()
+    validate_ucc_truck_unique(operation,truck,assignment)
     if assignment is not None and (
         assignment.sort_date_operation_id != operation.id
         or assignment.ramp != ramp
@@ -77,199 +81,74 @@ def set_neosubzero_ucc_truck(
     return assignment
 
 
-def decorate_departure_rows_with_spray(operation, rows):
-    """Attach bounded current ownership and spray data to departure rows."""
-    if operation is None or not rows:
-        return rows
-    staffing_rows = (
-        NeoSubZeroUccAssignment.query.options(joinedload(NeoSubZeroUccAssignment.person))
-        .filter_by(sort_date_operation_id=operation.id)
-        .all()
-    )
-    truck_rows = NeoSubZeroUccTruckAssignment.query.filter_by(
-        sort_date_operation_id=operation.id
-    ).all()
-    spray_rows = NeoSubZeroSprayRecord.query.filter_by(
-        sort_date_operation_id=operation.id
-    ).all()
-    staffing = {
-        (row.ramp, row.position_number, row.team_role): row
-        for row in staffing_rows
-    }
-    trucks = {(row.ramp, row.position_number): row for row in truck_rows}
-    sprays = {
-        (row.departure_deice_event_id, row.pass_number, row.position_number): row
-        for row in spray_rows
-    }
-    for departure in rows:
-        event = departure.get("event")
-        ramp = departure.get("ramp")
-        ownership = []
-        for position in range(1, 5):
-            driver = staffing.get((ramp, position, "driver"))
-            flyer = staffing.get((ramp, position, "flyer"))
-            truck = trucks.get((ramp, position))
-            ownership.append(
-                {
-                    "position": position,
-                    "driver": driver.person if driver else None,
-                    "flyer": flyer.person if flyer else None,
-                    "truck": truck,
-                    "truck_number": getattr(truck, "truck_number", None) or "",
-                    "truck_version": entity_version(truck),
-                }
-            )
-        departure["spray_positions"] = tuple(ownership)
-        departure["reason_for_application"] = departure_deice_reason(event)
-        passes = []
-        for pass_number, pass_type in enumerate(departure.get("pass_types") or (), 1):
-            positions = []
-            for owner in ownership:
-                position = owner["position"]
-                record = sprays.get((getattr(event, "id", None), pass_number, position))
-                positions.append(
-                    {
-                        **owner,
-                        "record": record,
-                        "record_version": entity_version(record),
-                        "gallons": _decimal_display(getattr(record, "gallons", None)),
-                        "recorded_truck": getattr(record, "truck_number_snapshot", None),
-                    }
-                )
-            passes.append(
-                {
-                    "number": pass_number,
-                    "type": pass_type,
-                    "surface": departure.get(f"pass{pass_number}_surface"),
-                    "start": departure.get(f"pass{pass_number}_start"),
-                    "end": departure.get(f"pass{pass_number}_end"),
-                    "positions": tuple(positions),
-                }
-            )
-        departure["application_passes"] = tuple(passes)
+def decorate_departure_rows_with_spray(operation, rows, *, kind='departure'):
+    """Combine current shared staffing with independently frozen participation."""
+    from app.services.neosubzero_participation import pass_types
+    from app.services.neosubzero_evidence import application_context
+    if operation is None or not rows: return rows
+    shared_context=application_context(operation)
+    staffing={(r.ramp,r.position_number,r.team_role):r for r in NeoSubZeroUccAssignment.query.options(joinedload(NeoSubZeroUccAssignment.person)).filter_by(sort_date_operation_id=operation.id).all()}
+    trucks={(r.ramp,r.position_number):r for r in NeoSubZeroUccTruckAssignment.query.filter_by(sort_date_operation_id=operation.id).all()}
+    records=NeoSubZeroSprayRecord.query.filter_by(sort_date_operation_id=operation.id).all()
+    for row in rows:
+        parent=row.get('state') if kind=='pretreat' else row.get('event')
+        ramp=row.get('ramp')
+        owners=[]
+        for slot in range(1,5):
+            driver,flyer=staffing.get((ramp,slot,'driver')),staffing.get((ramp,slot,'flyer'))
+            truck=trucks.get((ramp,slot))
+            owners.append(dict(position=slot,driver=getattr(driver,'person',None),flyer=getattr(flyer,'person',None),
+                truck=truck,truck_number=getattr(truck,'truck_number',None) or '',truck_version=entity_version(truck)))
+        row['spray_positions']=tuple(owners)
+        if kind=='departure':
+            row['reason_for_application']=getattr(parent,'reason_for_application',None) or shared_context['reason_for_application'] or (DEFAULT_DEPARTURE_REASON if parent else '')
+        passes=[]
+        for number,type_name in enumerate(pass_types(parent,kind) if parent else (),1):
+            saved=[r for r in records if (r.pretreat_state_id==parent.id if kind=='pretreat' else r.departure_deice_event_id==parent.id) and r.pass_number==number]
+            positions=[]
+            for record in sorted(saved,key=lambda r:r.position_number):
+                positions.append(dict(position=record.position_number,record=record,record_version=entity_version(record),
+                    driver=record.driver_person,flyer=record.flyer_person,driver_name=record.driver_name_snapshot,
+                    flyer_name=record.flyer_name_snapshot,truck_number=record.truck_number_snapshot,
+                    recorded_truck=record.truck_number_snapshot,gallons=_decimal_display(record.gallons),
+                    official=bool(record.official_at_utc or record.gallons),excluded=bool(record.excluded_at_utc),
+                    selected=bool(record.participation_selected)))
+            end=getattr(parent,f'pass{number}_ended_at_utc')
+            passes.append(dict(number=number,type=type_name,surface=getattr(parent,f'pass{number}_surface_area'),
+                start=row.get(f'pass{number}_start'),end=row.get(f'pass{number}_end'),positions=tuple(positions),
+                implicit=tuple(owner for owner in owners if owner['truck_number']) if not saved and not end else (),
+                participation_review=bool(end and not any(p['official'] and (not p['excluded'] or p['gallons']) for p in positions))))
+        row['application_passes']=tuple(passes)
+        row['participation_kind']=kind
     return rows
 
 
-def set_neosubzero_spray_gallons(
-    operation,
-    mission,
-    event,
-    pass_number,
-    position_number,
-    gallons,
-    *,
-    fluid_settings,
-    application_context=None,
-    user_id=None,
-    record=None,
-):
-    """Stage one position/pass gallon record or explicit removal."""
-    from app.services.neosubzero_departure_deice import PLAN_PASS_TYPES
-
-    if operation is None or mission is None or event is None:
-        raise NeoSubZeroSprayError("Choose a current departure-deice mission.")
-    if (
-        event.sort_date_operation_id != operation.id
-        or event.sort_date_mission_id != mission.id
-        or mission.sort_date_operation_id != operation.id
-        or mission.mission_type != "departure"
-    ):
-        raise NeoSubZeroSprayError("Spray record does not match this current departure.")
-    try:
-        pass_index = int(pass_number)
-        position = int(position_number)
-    except (TypeError, ValueError) as exc:
-        raise NeoSubZeroSprayError("Choose a valid pass and position.") from exc
-    pass_types = PLAN_PASS_TYPES.get(event.treatment_plan, ())
-    if pass_index < 1 or pass_index > len(pass_types) or position not in range(1, 5):
-        raise NeoSubZeroSprayError("Choose a valid pass and position.")
-    if record is not None and (
-        record.departure_deice_event_id != event.id
-        or record.pass_number != pass_index
-        or record.position_number != position
-    ):
-        raise NeoSubZeroSprayError("Spray record does not match this pass position.")
-    raw_gallons = str(gallons or "").strip()
-    if not raw_gallons:
-        if record is not None:
-            db.session.delete(record)
-        return None
-    try:
-        amount = Decimal(raw_gallons)
-    except InvalidOperation as exc:
-        raise NeoSubZeroSprayError("Gallons must be a positive number.") from exc
-    if not amount.is_finite() or amount <= 0 or amount.as_tuple().exponent < -2:
-        raise NeoSubZeroSprayError(
-            "Gallons must be positive with no more than two decimal places."
-        )
-
-    start = getattr(event, f"pass{pass_index}_started_at_utc")
-    end = getattr(event, f"pass{pass_index}_ended_at_utc")
-    surface = getattr(event, f"pass{pass_index}_surface_area")
-    if not start or not end or not surface:
-        raise NeoSubZeroSprayError(
-            "Complete this pass timing and surface before recording gallons."
-        )
-    ramp = _mission_ramp_from_rows(operation, mission)
-    truck = NeoSubZeroUccTruckAssignment.query.filter_by(
-        sort_date_operation_id=operation.id,
-        ramp=ramp,
-        position_number=position,
-    ).one_or_none()
-    if not truck or not str(truck.truck_number or "").strip():
-        raise NeoSubZeroSprayError("Assign a truck before recording gallons.")
-
-    if record is None:
-        staffing = {
-            row.team_role: row
-            for row in NeoSubZeroUccAssignment.query.options(
-                joinedload(NeoSubZeroUccAssignment.person)
-            ).filter_by(
-                sort_date_operation_id=operation.id,
-                ramp=ramp,
-                position_number=position,
-            ).all()
-        }
-        driver = staffing.get("driver")
-        flyer = staffing.get("flyer")
-        context = application_context or {}
-        pass_type = "type_iv" if pass_types[pass_index - 1] == "Type IV" else "type_i"
-        record = NeoSubZeroSprayRecord(
-            sort_date_operation_id=operation.id,
-            sort_date_mission_id=mission.id,
-            departure_deice_event_id=event.id,
-            pass_number=pass_index,
-            position_number=position,
-            truck_number_snapshot=str(truck.truck_number).strip(),
-            pass_type=pass_type,
-            fluid_name_snapshot=(
-                fluid_settings.type_iv_fluid_name
-                if pass_type == "type_iv"
-                else fluid_settings.type_i_fluid_name
-            ),
-            concentration_percent_snapshot=(
-                100 if pass_type == "type_iv" else fluid_settings.type_i_concentration_percent
-            ),
-            surface_area=surface,
-            started_at_utc=start,
-            ended_at_utc=end,
-            driver_person_id=getattr(driver, "person_id", None),
-            driver_name_snapshot=getattr(getattr(driver, "person", None), "full_name", None),
-            flyer_person_id=getattr(flyer, "person_id", None),
-            flyer_name_snapshot=getattr(getattr(flyer, "person", None), "full_name", None),
-            reason_for_application=departure_deice_reason(event),
-            active_precipitation=_short_text(
-                context.get("active_precipitation"), "Active Precipitation", 120
-            ) or None,
-            ambient_temperature=_short_text(
-                context.get("ambient_temperature"), "Ambient temperature", 32
-            ) or None,
-            dew_point=_short_text(context.get("dew_point"), "Dew point", 32) or None,
-            notes=_notes(context.get("notes")),
-            recorded_by_user_id=user_id,
-        )
-        db.session.add(record)
-    record.gallons = amount
+def set_neosubzero_spray_gallons(operation, mission, event, pass_number, position_number, gallons, *,
+    fluid_settings=None, application_context=None, user_id=None, record=None, correction_reason=None):
+    """Change only a documented participant's measurement; never resnapshot crew."""
+    from app.services.neosubzero_evidence import audit_change,evidence_values
+    if operation is None or record is None or record.sort_date_operation_id!=operation.id:
+        raise NeoSubZeroSprayError('Record the actual pass participants before entering gallons.')
+    if record.pass_number!=int(pass_number) or record.position_number!=int(position_number):
+        raise NeoSubZeroSprayError('Spray record does not match this pass participant.')
+    if not record.started_at_utc or not record.ended_at_utc or not (record.official_at_utc or record.gallons):
+        raise NeoSubZeroSprayError('The coordinator must save this pass END and official participation before gallons entry.')
+    if event is None or event.sort_date_operation_id!=operation.id or (record.departure_deice_event_id is not None and record.departure_deice_event_id!=event.id) or (record.pretreat_state_id is not None and record.pretreat_state_id!=event.id) or (record.tail_number_snapshot and record.tail_number_snapshot.strip().upper()!=event.tail_number.strip().upper()):
+        raise NeoSubZeroSprayError('Spray record does not match this physical treatment.')
+    before=evidence_values(record)
+    raw=str(gallons or '').strip()
+    if not raw:
+        if record.gallons: raise NeoSubZeroSprayError('Blank gallons cannot erase applied fuel. Enter a corrected positive amount.')
+        return record
+    try: amount=Decimal(raw)
+    except InvalidOperation as exc: raise NeoSubZeroSprayError('Gallons must be a positive number.') from exc
+    if not amount.is_finite() or amount<=0 or amount.as_tuple().exponent < -2 or amount>=Decimal('1000000'):
+        raise NeoSubZeroSprayError('Gallons must be positive, below 1,000,000 and have no more than two decimal places.')
+    record.gallons=amount;record.recorded_by_user_id=user_id
+    if record.excluded_at_utc: raise NeoSubZeroSprayError('This participant was excluded. A coordinator must resolve participation before entering gallons.')
+    audit_change(operation,'spray_gallons',actor_id=user_id,mission=mission,
+        event=event if record.departure_deice_event_id else None,record=record,
+        reason=correction_reason,before=before,after=evidence_values(record))
     return record
 
 
@@ -294,58 +173,50 @@ def current_user_ucc_assignment(operation, user):
     )
 
 
+def user_staffing_person(user):
+    employee=str(getattr(user,'employee_id',None) or '').strip().casefold()
+    return StaffingPerson.query.filter(StaffingPerson.active.is_(True),func.lower(func.trim(StaffingPerson.employee_id))==employee).one_or_none() if employee else None
+
+
+def driver_owns_participation(user, record):
+    person=user_staffing_person(user)
+    return bool(person and record and record.driver_person_id==person.id and record.ended_at_utc
+        and (record.official_at_utc or record.gallons) and not record.excluded_at_utc)
+
+
 def neosubzero_deice_log(operation):
-    """Build Cryotech-oriented application groups from immutable spray snapshots."""
-    if operation is None:
-        return ()
-    records = (
-        NeoSubZeroSprayRecord.query.options(joinedload(NeoSubZeroSprayRecord.mission))
-        .filter_by(sort_date_operation_id=operation.id)
-        .all()
-    )
-    grouped = {}
+    """Actual physical applications only, including missing-gallon evidence."""
+    if operation is None: return ()
+    records=NeoSubZeroSprayRecord.query.options(joinedload(NeoSubZeroSprayRecord.mission),
+        joinedload(NeoSubZeroSprayRecord.departure_deice_event),joinedload(NeoSubZeroSprayRecord.pretreat_state)).filter_by(sort_date_operation_id=operation.id).all()
+    grouped={}
     for record in records:
-        key = (record.truck_number_snapshot.casefold(), record.departure_deice_event_id)
-        grouped.setdefault(key, []).append(record)
-    result = []
-    for (_truck_key, _event_id), group_records in grouped.items():
-        group_records.sort(key=lambda row: (row.started_at_utc, row.pass_number, row.position_number))
-        first = group_records[0]
-        operators = []
-        for row in group_records:
-            for name in (row.driver_name_snapshot, row.flyer_name_snapshot):
-                if name and name not in operators:
-                    operators.append(name)
-        result.append(
-            {
-                "truck": first.truck_number_snapshot,
-                "tail": str(first.mission.assigned_tail_number or "").strip().upper() or "-",
-                "flight": str(first.mission.flight_number or "").strip() or "-",
-                "reason": first.reason_for_application or "-",
-                "precipitation": first.active_precipitation or "-",
-                "ambient_temperature": first.ambient_temperature or "-",
-                "dew_point": first.dew_point or "-",
-                "notes": first.notes or "",
-                "operators": tuple(operators),
-                "sort_time": min(row.started_at_utc for row in group_records),
-                "applications": tuple(
-                    {
-                        "pass_number": row.pass_number,
-                        "type": "Type IV" if row.pass_type == "type_iv" else "Type I",
-                        "fluid": row.fluid_name_snapshot,
-                        "concentration": row.concentration_percent_snapshot,
-                        "gallons": _decimal_display(row.gallons),
-                        "surface": row.surface_area.replace("_", " ").title(),
-                        "start": format_local_hhmm(row.started_at_utc, row.mission.timezone or None),
-                        "end": format_local_hhmm(row.ended_at_utc, row.mission.timezone or None),
-                        "duration": int((row.ended_at_utc - row.started_at_utc).total_seconds() // 60),
-                        "position": row.position_number,
-                    }
-                    for row in group_records
-                ),
-            }
-        )
-    result.sort(key=lambda row: (row["truck"].casefold(), row["sort_time"], row["tail"]))
+        if not record.started_at_utc or not record.ended_at_utc or (record.excluded_at_utc and not record.gallons): continue
+        parent=record.pretreat_state or record.departure_deice_event
+        tail=record.tail_number_snapshot or getattr(parent,'tail_number',None)
+        if not tail: continue  # Missing ownership must never be borrowed from a replacement tail.
+        key=(record.truck_number_snapshot.casefold(),'pretreat' if record.pretreat_state_id else 'departure',getattr(parent,'id',None),tail)
+        grouped.setdefault(key,[]).append(record)
+    result=[]
+    for (_truck,kind,_event,tail),items in grouped.items():
+        items.sort(key=lambda r:(r.started_at_utc,r.pass_number,r.position_number))
+        first=items[0];parent=first.pretreat_state or first.departure_deice_event
+        operators=list(dict.fromkeys(name for r in items for name in (r.driver_name_snapshot,r.flyer_name_snapshot) if name))
+        result.append(dict(truck=first.truck_number_snapshot,tail=tail,
+            flight=first.flight_number_snapshot or getattr(parent,'flight_number_snapshot',None) or 'ORIGINAL FLIGHT NOT SNAPSHOTTED',
+            original_mission_id=getattr(parent,'sort_date_mission_id',None) or getattr(parent,'original_mission_id',None),
+            kind=kind,reason=first.reason_for_application or '—',precipitation=first.active_precipitation or '—',
+            ambient_temperature=first.ambient_temperature or '—',dew_point=first.dew_point or '—',notes=first.notes or '',
+            operators=tuple(operators),sort_time=first.started_at_utc,
+            applications=tuple(dict(pass_number=r.pass_number,type='Type IV' if r.pass_type=='type_iv' else 'Type I',
+                fluid=r.fluid_name_snapshot,concentration=r.concentration_percent_snapshot,gallons=_decimal_display(r.gallons) or 'NOT ENTERED',
+                surface=(r.surface_area or 'unrecorded').replace('_',' ').title(),
+                start=format_local_hhmm(r.started_at_utc,r.timezone_snapshot or r.mission.timezone or None),
+                end=format_local_hhmm(r.ended_at_utc,r.timezone_snapshot or r.mission.timezone or None),
+                duration=int((r.ended_at_utc-r.started_at_utc).total_seconds()//60),position=r.position_number,record=r,
+                driver=r.driver_name_snapshot,flyer=r.flyer_name_snapshot,ramp=r.ramp_snapshot,parking=r.parking_snapshot)
+                for r in items)))
+    result.sort(key=lambda r:(r['truck'].casefold(),r['sort_time'],r['tail']))
     return tuple(result)
 
 
@@ -393,5 +264,6 @@ def _notes(value):
 def _decimal_display(value):
     if value is None:
         return ""
-    normalized = format(Decimal(value), "f").rstrip("0").rstrip(".")
+    normalized = format(Decimal(value), "f")
+    if '.' in normalized: normalized=normalized.rstrip('0').rstrip('.')
     return normalized or "0"

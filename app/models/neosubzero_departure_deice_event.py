@@ -6,10 +6,6 @@ from app.extensions import db
 class NeoSubZeroDepartureDeiceEvent(db.Model):
     __tablename__ = "neosubzero_departure_deice_events"
     __table_args__ = (
-        db.UniqueConstraint(
-            "sort_date_mission_id",
-            name="uq_neosubzero_departure_deice_mission",
-        ),
         db.CheckConstraint(
             "status IN ('deice_planned', 'configured', 'finished', 'cleared', "
             "'negative', 'not_sprayed')",
@@ -36,6 +32,11 @@ class NeoSubZeroDepartureDeiceEvent(db.Model):
         index=True,
     )
     tail_number = db.Column(db.String(32), nullable=False, index=True)
+    # The mission FK is original context; physical ownership never follows a swap.
+    flight_number_snapshot = db.Column(db.String(32), nullable=True)
+    cleared_at_utc = db.Column(db.DateTime, nullable=True)
+    clear_outcome = db.Column(db.String(32), nullable=True)
+    pass_evidence = db.Column(db.JSON, nullable=True)
     status = db.Column(db.String(24), nullable=False, default="deice_planned")
     configured_at_utc = db.Column(db.DateTime, nullable=True)
     # Optional coordinator ordering, on the canonical event (not another queue).

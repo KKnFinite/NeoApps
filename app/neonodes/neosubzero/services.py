@@ -81,18 +81,24 @@ def pretreat_context(gateway, operation=_OPERATION_UNSET):
     return {"operation": operation, "rows": rows}
 
 
-def mutate_pretreat(operation, mission, action, values, state=None):
+def mutate_pretreat(operation, mission, action, values, state=None, *, actor_id=None):
+    from app.services.neosubzero_evidence import evidence_values,audit_change
+    before=evidence_values(state)
     tail = _tail(getattr(mission, "assigned_tail_number", None))
     if mission is None or mission.mission_type != "departure" or mission.sort_date_operation_id != operation.id or not tail:
         raise NeoSubZeroPretreatError("Choose a current departure with an assigned tail.")
     if state is None:
         state = NeoSubZeroPretreatState(sort_date_operation_id=operation.id, tail_number=tail)
         db.session.add(state)
+    elif state.tail_number != tail or state.sort_date_operation_id != operation.id:
+        raise NeoSubZeroPretreatError('Pretreat evidence belongs to another physical tail.')
     if action == "toggle_planned":
         state.pretreat_planned = not state.pretreat_planned
     elif action == "toggle_configured":
         state.configured_at_utc = None if state.configured_at_utc else datetime.utcnow().replace(second=0, microsecond=0)
     elif action == "save_treatment":
+        if (before or {}).get('pass2_ended_at_utc') and not str(values.get('correction_reason') or '').strip():
+            raise NeoSubZeroPretreatError('Enter a reason for correcting completed Pretreat evidence.')
         if "reason_for_application" in values or not state.reason_for_application:
             state.reason_for_application = _pretreat_reason_value(
                 values.get("reason_for_application")
@@ -105,10 +111,22 @@ def mutate_pretreat(operation, mission, action, values, state=None):
         state.pass2_ended_at_utc = _parse_hhmm(values.get("pass2_end"), operation, mission)
         state.notes = str(values.get("notes") or "").strip() or None
         _validate_sequence(state)
+        for number in (1,2):
+            if (before or {}).get(f'pass{number}_ended_at_utc') and not getattr(state,f'pass{number}_ended_at_utc'):
+                raise NeoSubZeroPretreatError('Recorded physical treatment cannot be erased.')
     else:
         raise NeoSubZeroPretreatError("Choose a valid Pretreat action.")
     if action == "save_treatment":
         _sync_completion(operation, tail, state)
+        from app.models import Gateway
+        from app.services.neosubzero_departure_deice import neosubzero_fluid_settings
+        from app.services.neosubzero_participation import snapshot_treatment_passes
+        if not state.original_mission_id and not (before or {}).get('pass1_ended_at_utc'):
+            state.original_mission_id=mission.id;state.flight_number_snapshot=mission.flight_number
+        gateway=db.session.get(Gateway,operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
+        snapshot_treatment_passes(operation,mission,state,neosubzero_fluid_settings(gateway),kind='pretreat',actor_id=actor_id,previous=before)
+    audit_change(operation,'pretreat_'+action,actor_id=actor_id,mission=mission,tail=tail,
+        reason=values.get('correction_reason'),before=before,after=evidence_values(state))
     return state
 
 

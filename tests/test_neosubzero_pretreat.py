@@ -49,7 +49,10 @@ class NeoSubZeroPretreatTest(unittest.TestCase):
         values = {"pass1_surface_area":"wings_only","pass2_surface_area":"wings_tail","pass1_start":"2300","pass1_end":"2310","pass2_start":"2310","pass2_end":"2320","notes":"  done  "}
         mutate_pretreat(self.operation, self.departure, "save_treatment", values, state); db.session.flush()
         tail_state = SortDateTailState.query.filter_by(tail_number="T1").one(); self.assertTrue(tail_state.pretreat_status); self.assertEqual(state.notes,"done")
-        values["pass2_end"] = ""; mutate_pretreat(self.operation, self.departure, "save_treatment", values, state); self.assertFalse(tail_state.pretreat_status)
+        values["pass2_end"] = ""; values["correction_reason"]="Do not erase real treatment"
+        with self.assertRaises(NeoSubZeroPretreatError):
+            mutate_pretreat(self.operation, self.departure, "save_treatment", values, state)
+        self.assertTrue(tail_state.pretreat_status)
 
     def test_compact_and_colon_pretreat_times_share_operational_date(self):
         expected = _parse_hhmm("0930", self.operation, self.departure)

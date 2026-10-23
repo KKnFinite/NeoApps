@@ -1020,7 +1020,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         row=context['unlocated_aircraft'][0]
         self.assertEqual(row['parking'],'MB01')
         self.assertIsNone(row['event'])
-        self.assertIn('different tail',row['identity_note'])
+        self.assertNotIn('identity_note',row)  # Release 2 resolves physical-tail ownership, not former mission linkage.
         self.assertEqual(event.tail_number, "OLD-TAIL")
 
     def test_unit_move_swap_and_stale_guard_preserve_canonical_people_and_trucks(self):

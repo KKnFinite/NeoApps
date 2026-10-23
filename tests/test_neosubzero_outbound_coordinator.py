@@ -126,7 +126,7 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
         self.assertEqual(rows[1]["block_out_variance"], "+7")
         self.assertNotIn("w_and_b", rows[1])
 
-    def test_one_pass_completion_clear_and_correction_revokes_clear(self):
+    def test_one_pass_completion_clear_and_audited_correction_preserves_clear(self):
         event = mutate_departure_deice(
             self.operation, self.first, "initial_contact", {}, event=None
         )
@@ -156,18 +156,21 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
                 "treatment_plan": "one_type_i",
                 "pass1_surface_area": "wings_tail",
                 "pass1_start": "2000",
-                "pass1_end": "",
+                "pass1_end": "2010",
+                "correction_reason": "Verified actual treated surface",
             },
             event=event,
         )
-        self.assertEqual(event.status, "configured")
+        self.assertEqual(event.status, "cleared")
         tail = SortDateTailState.query.filter_by(tail_number="N101").one()
-        self.assertEqual(tail.deice_status, "configured")
+        self.assertEqual(tail.deice_status, "cleared")
 
     def test_two_pass_plan_types_chronology_and_minutes(self):
         event = mutate_departure_deice(
             self.operation, self.first, "initial_contact", {}, event=None
         )
+        db.session.commit()
+        event_id=event.id
         with self.assertRaises(NeoSubZeroDepartureDeiceError):
             mutate_departure_deice(
                 self.operation,
@@ -184,6 +187,8 @@ class NeoSubZeroOutboundCoordinatorTest(unittest.TestCase):
                 },
                 event=event,
             )
+        db.session.rollback()
+        event=db.session.get(NeoSubZeroDepartureDeiceEvent,event_id)
         mutate_departure_deice(
             self.operation,
             self.first,

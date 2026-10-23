@@ -44,11 +44,15 @@ def render_operations(forced_mode=None):
     board = 'coordinator' if user_can('neosubzero.coordinator.edit') else 'outbound'
     can_edit = user_can('neosubzero.pretreat.edit') if mode == 'pretreat' else user_can('neosubzero.' + board + '.edit')
     context = operations_context(gateway, operation, mode)
+    from app.services.neosubzero_ucc import ucc_staffing_version
+    from app.services.neosubzero_staffing import current_subzero_staffing_pool
     selected = next((row for row in context['rows'] if row['mission_id'] == request.args.get('mission', type=int)), None)
     session[legacy.LAST_PAGE_KEY] = 'neosubzero.operations'
     return render_template('neonodes/neosubzero/operations.html', gateway=gateway,
         mode=mode, modes=modes, preferences=preferences, board=board, can_edit=can_edit,
         can_manage_staff=user_can('neosubzero.ucc.view'), selected=selected,
+        staffing_version=ucc_staffing_version(operation) if operation else '',
+        staffing_pool=current_subzero_staffing_pool(operation) if operation else (),
         plan_labels=legacy.PLAN_LABELS, surface_labels=legacy.SURFACE_LABELS,
         gateway_timezone=legacy.gateway_timezone(gateway), application_context=legacy._application_context(operation),
         revision=operations_revision(gateway, operation, preferences),
@@ -111,7 +115,7 @@ def operations_mutate():
     current = legacy.current_neosubzero_operation(gateway)
     mode = request.form.get('mode')
     target = request.form.get('target')
-    if mode not in available_modes() or ((target == url_for('neosubzero.pretreat_mutate')) != (mode == 'pretreat')):
+    if mode not in available_modes() or (target == url_for('neosubzero.pretreat_mutate') and mode != 'pretreat') or (target == url_for('neosubzero.departure_deice_mutate') and mode != 'outbound'):
         return jsonify(ok=False, error='Choose an authorized action for this operational mode.'), 403
     if current is None or request.form.get('operation_id', type=int) != current.id:
         return jsonify(ok=False, error='The current sort changed. Your draft was kept; open current operations.'), 409
@@ -120,13 +124,10 @@ def operations_mutate():
     if mission_id:
         mission = SortDateMission.query.filter_by(id=mission_id, sort_date_operation_id=operation.id, mission_type='departure').with_for_update().one_or_none()
         expected_tail = str(request.form.get('physical_tail') or '').strip().upper()
-        event = NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id, sort_date_mission_id=mission_id).with_for_update().one_or_none()
-        if mission is None or not expected_tail or expected_tail != str(mission.assigned_tail_number or '').strip().upper() or (
-            mode == 'outbound' and event and event.tail_number.strip().upper() != expected_tail
-        ):
+        if mission is None or not expected_tail or expected_tail != str(mission.assigned_tail_number or '').strip().upper():
             db.session.rollback()
             return jsonify(ok=False, error='Aircraft identity changed. Your draft is preserved; review the physical tail before continuing.'), 409
-        if mode == 'pretreat':
+        if target == url_for('neosubzero.pretreat_mutate'):
             state = NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id,tail_number=expected_tail).with_for_update().one_or_none()
             expected = str(request.form.get('expected_version') or '').strip()
             if (state and (not expected or version_conflict(state,expected))) or (state is None and expected):
@@ -135,6 +136,8 @@ def operations_mutate():
     handlers = {url_for('neosubzero.' + endpoint): getattr(legacy, endpoint) for endpoint in (
         'pretreat_mutate', 'departure_deice_mutate', 'truck_mutate', 'spray_gallons_mutate',
         'spray_reason_mutate', 'application_context_mutate')}
+    from app.neonodes.neosubzero.release2_routes import participation_mutate,team_mutate
+    handlers.update({url_for('neosubzero.participation_mutate'):participation_mutate,url_for('neosubzero.team_mutate'):team_mutate})
     handler = handlers.get(request.form.get('target'))
     if handler is None:
         db.session.rollback()

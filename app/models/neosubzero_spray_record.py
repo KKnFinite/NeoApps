@@ -4,10 +4,11 @@ from app.extensions import db
 
 
 class NeoSubZeroSprayRecord(db.Model):
-    """One position's nonzero gallons for one departure-deice pass."""
+    """One tail-owned pass participant; measured gallons are independent evidence."""
 
     __tablename__ = "neosubzero_spray_records"
     __table_args__ = (
+        db.CheckConstraint('(departure_deice_event_id IS NOT NULL AND pretreat_state_id IS NULL) OR (departure_deice_event_id IS NULL AND pretreat_state_id IS NOT NULL)',name='ck_neosubzero_spray_one_parent'),
         db.CheckConstraint("pass_number IN (1, 2)", name="ck_neosubzero_spray_pass"),
         db.CheckConstraint(
             "position_number BETWEEN 1 AND 4",
@@ -28,6 +29,7 @@ class NeoSubZeroSprayRecord(db.Model):
             "position_number",
             name="uq_neosubzero_spray_event_pass_position",
         ),
+        db.UniqueConstraint('pretreat_state_id','pass_number','position_number',name='uq_neosubzero_spray_pretreat_pass_position'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -46,19 +48,29 @@ class NeoSubZeroSprayRecord(db.Model):
     departure_deice_event_id = db.Column(
         db.Integer,
         db.ForeignKey("neosubzero_departure_deice_events.id"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    pretreat_state_id = db.Column(db.Integer, db.ForeignKey('neosubzero_pretreat_states.id'), nullable=True, index=True)
+    tail_number_snapshot = db.Column(db.String(32), nullable=True)
+    flight_number_snapshot = db.Column(db.String(32), nullable=True)
+    timezone_snapshot = db.Column(db.String(64), nullable=True)
+    ramp_snapshot = db.Column(db.String(16), nullable=True)
+    parking_snapshot = db.Column(db.String(32), nullable=True)
+    official_at_utc = db.Column(db.DateTime, nullable=True)
+    participation_selected = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    crew_override = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    excluded_at_utc = db.Column(db.DateTime, nullable=True)
     pass_number = db.Column(db.Integer, nullable=False)
     position_number = db.Column(db.Integer, nullable=False)
-    gallons = db.Column(db.Numeric(8, 2), nullable=False)
+    gallons = db.Column(db.Numeric(8, 2), nullable=True)
     truck_number_snapshot = db.Column(db.String(32), nullable=False)
     pass_type = db.Column(db.String(16), nullable=False)
     fluid_name_snapshot = db.Column(db.String(80), nullable=False)
     concentration_percent_snapshot = db.Column(db.Integer, nullable=False)
-    surface_area = db.Column(db.String(32), nullable=False)
-    started_at_utc = db.Column(db.DateTime, nullable=False)
-    ended_at_utc = db.Column(db.DateTime, nullable=False)
+    surface_area = db.Column(db.String(32), nullable=True)
+    started_at_utc = db.Column(db.DateTime, nullable=True)
+    ended_at_utc = db.Column(db.DateTime, nullable=True)
     driver_person_id = db.Column(db.Integer, db.ForeignKey("staffing_people.id"), nullable=True)
     driver_name_snapshot = db.Column(db.String(160), nullable=True)
     flyer_person_id = db.Column(db.Integer, db.ForeignKey("staffing_people.id"), nullable=True)
@@ -80,6 +92,7 @@ class NeoSubZeroSprayRecord(db.Model):
     operation = db.relationship("SortDateOperation")
     mission = db.relationship("SortDateMission")
     departure_deice_event = db.relationship("NeoSubZeroDepartureDeiceEvent")
+    pretreat_state = db.relationship('NeoSubZeroPretreatState')
     driver_person = db.relationship("StaffingPerson", foreign_keys=[driver_person_id])
     flyer_person = db.relationship("StaffingPerson", foreign_keys=[flyer_person_id])
     recorded_by_user = db.relationship("User")

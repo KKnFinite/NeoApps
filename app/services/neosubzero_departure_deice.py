@@ -18,6 +18,8 @@ from app.models import (
     SortDateMission,
     SortDateParkingAssignment,
     SortDateTailState,
+    NeoSubZeroUccAssignment,
+    NeoSubZeroOperationContext,
 )
 from app.neonodes.neosubzero.services import (
     SURFACE_LABELS,
@@ -152,12 +154,12 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             sort_date_operation_id=operation.id
         ).all()
     }
-    events = {
-        row.sort_date_mission_id: row
-        for row in NeoSubZeroDepartureDeiceEvent.query.filter_by(
-            sort_date_operation_id=operation.id
-        ).all()
-    }
+    from app.services.neosubzero_evidence import select_tail_event
+    events, reviews = {}, {}
+    for event in NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_operation_id=operation.id).all():
+        events.setdefault(_tail(event.tail_number), []).append(event)
+    for tail, candidates in events.items():
+        events[tail], reviews[tail] = select_tail_event(candidates)
     now_utc = now_utc or datetime.utcnow()
     rows = [
         _departure_row(
@@ -166,12 +168,14 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
             parking_by_tail.get(_tail(mission.assigned_tail_number)),
             tail_states.get(_tail(mission.assigned_tail_number)),
             pretreat_states.get(_tail(mission.assigned_tail_number)),
-            events.get(mission.id),
+            events.get(_tail(mission.assigned_tail_number)),
             settings,
             now_utc,
         )
         for mission in missions
     ]
+    for row in rows:
+        row['ownership_review'] = reviews.get(row['tail'])
     rows.sort(
         key=lambda row: (
             row["sort_time"] is None,
@@ -186,24 +190,51 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     return {"operation": operation, "rows": rows, "fluid_settings": settings}
 
 
-def mutate_departure_deice(operation, mission, action, values, *, event=None):
+def mutate_departure_deice(operation, mission, action, values, *, event=None, actor_id=None):
     _validate_mission(operation, mission)
+    from app.services.neosubzero_evidence import audit_change, evidence_values, departure_event_for_tail
+    from app.models import SortDateOperation
+    SortDateOperation.query.filter_by(id=operation.id).with_for_update().one()
+    event = event or departure_event_for_tail(operation,mission,lock=True)
+    if event and _tail(event.tail_number) != _tail(mission.assigned_tail_number):
+        raise NeoSubZeroDepartureDeiceError('Treatment belongs to another physical tail. Reload current aircraft.')
+    before=evidence_values(event)
     action = str(action or "").strip().lower()
+    if event and event.status=='cleared' and action not in {'initial_contact','move_to_planned','clear','save_treatment'}:
+        raise NeoSubZeroDepartureDeiceError('CLEARED evidence cannot be reset. Start an explicit new event or use audited corrections.')
+    from app.models import NeoSubZeroSprayRecord
+    has_actual=bool(event and (event.pass1_started_at_utc or NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id).filter(NeoSubZeroSprayRecord.ended_at_utc.is_not(None)).first()))
     if action in {"initial_contact", "move_to_planned"}:
+        if event and event.status == 'cleared': event=None
+        if event and has_actual:
+            raise NeoSubZeroDepartureDeiceError('Actual treatment cannot be reset. Use the audited correction controls.')
         event = event or _new_event(operation, mission)
         _reset_for_new_departure_event(event)
         event.ucc_queue_order = None
         event.status = "deice_planned"
     elif action == "set_negative":
         event = event or _new_event(operation, mission)
+        if has_actual: raise NeoSubZeroDepartureDeiceError('Actual spray evidence cannot become NEGATIVE DEICE.')
         _clear_treatment(event)
         event.configured_at_utc = None
         event.status = "negative"
     elif action == "manual_not_sprayed":
         event = event or _new_event(operation, mission)
+        if has_actual: raise NeoSubZeroDepartureDeiceError('Actual spray evidence cannot become NOT SPRAYED.')
         _clear_treatment(event)
         event.configured_at_utc = None
         event.status = "not_sprayed"
+    elif action == 'clear':
+        event=event or _new_event(operation,mission)
+        if event.status == 'cleared': return event
+        if has_actual and event.status != 'finished':
+            raise NeoSubZeroDepartureDeiceError('Complete the final required pass before CLEAR. Recorded spray evidence must be preserved.')
+        prior=event.status
+        event.clear_outcome = 'sprayed' if prior == 'finished' else prior if prior in {'negative','not_sprayed'} else 'not_sprayed' if event.treatment_plan else 'no_deice'
+        if prior not in {'negative','not_sprayed'} and not event.pass1_started_at_utc and NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id,tail_number=event.tail_number).first():
+            state=SortDateTailState.query.filter_by(sort_date=operation.sort_date,gateway_code=operation.gateway_code,sort_name=operation.sort_name,tail_number=event.tail_number).first()
+            if state and state.pretreat_status: event.clear_outcome='pretreated'
+        event.status='cleared';event.cleared_at_utc=datetime.utcnow()
     else:
         if event is None:
             raise NeoSubZeroDepartureDeiceError(
@@ -227,17 +258,29 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None):
                 raise NeoSubZeroDepartureDeiceError(
                     "Move this mission to Deice Planned before entering treatment."
                 )
+            previous_status=event.status
+            previous_types=PLAN_PASS_TYPES.get(event.treatment_plan,())
+            proposed_types=PLAN_PASS_TYPES.get(values.get('treatment_plan'),())
+            for number in (1,2):
+                if getattr(event,f'pass{number}_started_at_utc') and (len(proposed_types)<number or len(previous_types)<number or proposed_types[number-1]!=previous_types[number-1]):
+                    raise NeoSubZeroDepartureDeiceError('An actual pass fluid type cannot be changed by editing the treatment plan. Preserve its reporting evidence.')
+            if previous_status in {'finished','cleared'} and not str(values.get('correction_reason') or '').strip():
+                raise NeoSubZeroDepartureDeiceError('Enter a correction reason for completed treatment changes.')
+            if event.pass2_started_at_utc and values.get('treatment_plan') == 'one_type_i':
+                raise NeoSubZeroDepartureDeiceError('Recorded Pass 2 evidence cannot be removed.')
             _save_treatment(operation, mission, event, values)
-        elif action == "clear":
-            if event.status != "finished":
-                raise NeoSubZeroDepartureDeiceError(
-                    "Clear is available only after treatment is Finished."
-                )
-            event.status = "cleared"
+            if previous_status in {'finished','cleared'}:
+                if event.status != 'finished': raise NeoSubZeroDepartureDeiceError('Completed pass evidence cannot be erased.')
+                event.status=previous_status
+            from app.services.neosubzero_participation import snapshot_treatment_passes
+            gateway=db.session.get(Gateway,operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
+            snapshot_treatment_passes(operation,mission,event,neosubzero_fluid_settings(gateway),actor_id=actor_id,previous=before)
         else:
             raise NeoSubZeroDepartureDeiceError("Choose a valid departure-deice action.")
 
     _sync_tail_deice_status(operation, mission, event)
+    audit_change(operation,'departure_'+action,actor_id=actor_id,mission=mission,event=event,
+        reason=values.get('correction_reason'),before=before,after=evidence_values(event))
     return event
 
 
@@ -299,6 +342,8 @@ def departure_deice_revision(gateway, operation):
             NeoSubZeroSprayRecord.updated_at,
             NeoSubZeroSprayRecord.sort_date_operation_id == operation_id,
         ),
+        _aggregate('ucc_people',NeoSubZeroUccAssignment,NeoSubZeroUccAssignment.updated_at,NeoSubZeroUccAssignment.sort_date_operation_id==operation_id),
+        _aggregate('application_context',NeoSubZeroOperationContext,NeoSubZeroOperationContext.updated_at,NeoSubZeroOperationContext.sort_date_operation_id==operation_id),
     )
     values = db.session.execute(union_all(*aggregates)).all()
     payload = [
@@ -366,6 +411,14 @@ def _departure_row(
         else getattr(event, "pass1_ended_at_utc", None)
     )
     fluid = _fluid_reference(final_type, settings)
+    final_evidence=(getattr(event,'pass_evidence',None) or {}).get(str(final_pass_index))
+    if final_evidence:
+        fluid={'name':final_evidence['fluid'],'concentration':final_evidence['concentration'],'type':final_type}
+    elif final_end:
+        from app.models import NeoSubZeroSprayRecord
+        recorded={(r.fluid_name_snapshot,r.concentration_percent_snapshot) for r in NeoSubZeroSprayRecord.query.filter_by(departure_deice_event_id=event.id,pass_number=final_pass_index).all() if r.ended_at_utc}
+        product,concentration=next(iter(recorded)) if len(recorded)==1 else ('PRODUCT NOT RECORDED',None)
+        fluid={'name':product,'concentration':concentration,'type':final_type}
     pretreat_reference = _pretreat_reference(pretreat, mission, settings)
     pretreat_status = "-"
     if pretreat_complete:
@@ -380,7 +433,7 @@ def _departure_row(
     elif pretreat and pretreat.pretreat_planned:
         pretreat_status = "PRETREAT PLANNED"
     script = None
-    if event and event.status == "cleared" and final_start:
+    if event and event.status == "cleared" and final_start and fluid['concentration'] is not None:
         script = {
             "flight": mission.flight_number,
             "tail": tail,
@@ -443,12 +496,7 @@ def _departure_row(
         "final_fluid": fluid,
         "final_start": format_local_hhmm(final_start, mission.timezone or None),
         "collapse_state": collapse_state,
-        "terminal": collapse_state in {
-            "cleared",
-            "pretreated",
-            "negative",
-            "not_sprayed",
-        },
+        "terminal": bool(event and event.status == 'cleared'),
         "script": script,
         "sort_time": mission.planned_datetime_utc,
     }
@@ -512,7 +560,7 @@ def _validate_chronology(event, pass_count):
 
 
 def _sync_tail_deice_status(operation, mission, event):
-    tail = _tail(mission.assigned_tail_number)
+    tail = _tail(event.tail_number)
     row = (
         SortDateTailState.query.filter_by(
             sort_date=operation.sort_date,
@@ -573,11 +621,12 @@ def _pretreat_reference(pretreat, mission, settings):
     start = pretreat.pass2_started_at_utc or pretreat.pass1_started_at_utc
     if not start:
         return None
+    evidence=(pretreat.pass_evidence or {}).get('2' if pass2 else '1')
     return {
-        "fluid": (
+        "fluid": evidence['fluid'] if evidence else 'PRODUCT NOT RECORDED' if pretreat.pass2_ended_at_utc else (
             settings.type_iv_fluid_name if pass2 else settings.type_i_fluid_name
         ),
-        "concentration": (
+        "concentration": evidence['concentration'] if evidence else None if pretreat.pass2_ended_at_utc else (
             100 if pass2 else settings.type_i_concentration_percent
         ),
         "surface": SURFACE_LABELS.get(
@@ -609,6 +658,7 @@ def _new_event(operation, mission):
         sort_date_operation_id=operation.id,
         sort_date_mission_id=mission.id,
         tail_number=_tail(mission.assigned_tail_number),
+        flight_number_snapshot=mission.flight_number,
         status="deice_planned",
     )
     db.session.add(event)
@@ -662,8 +712,8 @@ def _validate_ramp_configuration_available(operation, mission, event):
         )
         .join(
             SortDateMission,
-            SortDateMission.id
-            == NeoSubZeroDepartureDeiceEvent.sort_date_mission_id,
+            (SortDateMission.sort_date_operation_id == NeoSubZeroDepartureDeiceEvent.sort_date_operation_id)
+            & (func.upper(func.trim(SortDateMission.assigned_tail_number)) == func.upper(func.trim(NeoSubZeroDepartureDeiceEvent.tail_number))),
         )
         .filter(
             NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation.id,
@@ -682,7 +732,7 @@ def _validate_ramp_configuration_available(operation, mission, event):
         (
             active_event
             for active_event, active_tail in active_events
-            if ramp_by_tail.get(_tail(active_tail or active_event.tail_number))
+            if ramp_by_tail.get(_tail(active_event.tail_number))
             == mission_ramp
         ),
         None,
