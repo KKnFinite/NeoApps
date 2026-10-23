@@ -13,6 +13,7 @@
 <pre id="sz-report-copy" hidden>{{ report_text }}</pre><p data-spray-copy-feedback role="status" hidden></p>
 <details class="sz-recovery"><summary>Current values / draft recovery</summary><button type="button" data-evidence-reload>RELOAD CURRENT VALUES</button> <a href="{{ request.url }}" target="_blank" rel="noopener">OPEN CURRENT VALUES IN NEW TAB</a></details>
 {% if archive_status %}<p class="sz-archive" role="status">ARCHIVE · {% if not archive_status.configured %}VAULT NOT CONFIGURED — administrator action required{% elif archive_status.pending %}{{ archive_status.pending }} / {{ archive_status.total }} passes awaiting synchronization{% else %}{{ archive_status.total }} passes synchronized{% endif %}{% if archive_status.errors %} · {{ archive_status.errors }} retry failures — operational work remains available{% endif %}</p>{% endif %}
+{% if not operation %}<p>No current sort. Select a historical sort to view recorded applications.</p>{% endif %}
 {% for pass in passes %}<article class="sz-log-pass" data-report-pass="{{ pass.id }}">
 <header><strong>{{ pass.tail }} · {{ pass.flight or 'ORIGINAL FLIGHT NOT RECORDED' }}</strong><span>{{ pass.activity|upper }} · PASS {{ pass.pass_number }}</span><button type="button" data-spray-copy="sz-pass-{{ loop.index }}">COPY PASS</button></header>
 <pre id="sz-pass-{{ loop.index }}" hidden>{{ pass.copy_text }}</pre>

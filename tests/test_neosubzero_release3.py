@@ -161,6 +161,7 @@ class Release3Test(r2.Release2Test):
     def test_historical_report_filters_and_gateway_permissions(self):
         f=self.f;self.flow();client=self.client()
         with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=None):
+            self.assertIn(b'No current sort. Select a historical sort',client.get('/neosubzero/deice-log').data)
             response=client.get('/neosubzero/deice-log',query_string=dict(operation_id=f.operation.id,activity='departure',tail=f.alpha.assigned_tail_number))
             self.assertEqual(response.status_code,200)
             self.assertIn(b'COPY PASS',response.data);self.assertNotIn(b'SAVE GALLONS',response.data)
