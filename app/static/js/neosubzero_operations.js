@@ -9,6 +9,9 @@
     const primaryRamps = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
     let selected = pane.querySelector('[data-mission-id]')?.dataset.missionId || null;
     let epoch = 0, busy = false, preferenceBusy = false;
+    let controller = null;
+    const navigationAbort = new AbortController();
+    const stopLive = () => { navigationAbort.abort(); controller?.destroy(); };
     let revision = root.dataset.revision;
     const syncFeedback = () => {
         const inline = pane.querySelector('[data-ops-detail-feedback]');
@@ -120,7 +123,7 @@
     };
     const fetchPage = async (mission = selected, saved = null) => {
         const requestEpoch = ++epoch;
-        const response = await fetch(currentUrl(mission), {cache:'no-store'});
+        const response = await fetch(currentUrl(mission), {cache:'no-store',signal:navigationAbort.signal});
         if (!response.ok) throw new Error(`Unable to load current operations (${response.status}). Your draft is kept.`);
         const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('[data-ops-workspace]');
         if (!next) throw new Error('Session expired. Sign in in another tab before continuing; your draft is kept.');
@@ -129,6 +132,11 @@
             notify('The canonical sort changed. Draft retained for the original sort; reload current operations in another tab before continuing.', true); return;
         }
         const scroll = window.scrollY, paneScroll = pane.scrollTop;
+        if (next.dataset.operationId !== root.dataset.operationId) {
+            const previous = root.querySelector('[data-ops-context]');
+            const incoming = next.querySelector('[data-ops-context]');
+            if (previous && incoming) previous.replaceWith(incoming);
+        }
         root.querySelector('[data-ops-board]').replaceWith(next.querySelector('[data-ops-board]'));
         ['operationId','layout','ramp'].forEach(key => { root.dataset[key] = next.dataset[key]; });
         const incoming = next.querySelector('[data-ops-detail-content]');
@@ -197,6 +205,7 @@
             saveDraft();
             if (await preferences({mode:mode.dataset.opsMode})) {
                 // Navigation, not a form save: drafts remain isolated by mode/tail/sort.
+                stopLive();
                 location.assign(new URL(root.dataset.workspaceUrl,location.origin));
             }
             return;
@@ -253,14 +262,18 @@
     tagOrder(); applyLayout(); initialize(true); syncFeedback();
     root.dataset.ready = 'true';
     media.addEventListener('change',applyLayout);
-    window.addEventListener('beforeunload',saveDraft);
+    window.addEventListener('beforeunload',()=>{ saveDraft(); stopLive(); });
+    window.addEventListener('pagehide',stopLive);
+    // A back/forward-cache restore needs a fresh controller and canonical scope;
+    // reload restores any saved draft with its original concurrency token.
+    window.addEventListener('pageshow',event=>{ if (event.persisted) location.reload(); });
     const interval = Number(root.dataset.refreshIntervalMs);
     if (!window.NeoLiveUpdates || interval < 1000) return;
-    const controller = window.NeoLiveUpdates.create({intervalMs:interval,continuousWhileVisible:true,poll:async()=>{
+    controller = window.NeoLiveUpdates.create({intervalMs:interval,continuousWhileVisible:true,poll:async()=>{
         if (busy || preferenceBusy) return;
         const url = new URL(root.dataset.revisionUrl,location.origin); url.searchParams.set('revision',revision);
         url.searchParams.set('mode',root.dataset.mode);
-        const response = await fetch(url,{cache:'no-store'});
+        const response = await fetch(url,{cache:'no-store',signal:navigationAbort.signal});
         if (!response.ok) throw new Error('Unable to refresh operations.');
         const payload = await response.json(); controller.setServerStatus(payload.refresh || {});
         if (payload.changed && !busy && !preferenceBusy) await fetchPage();

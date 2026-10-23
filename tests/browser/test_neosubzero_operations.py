@@ -23,6 +23,20 @@ class OperationsBrowserTest(unittest.TestCase):
         self.assertEqual(response.status,200,response.text())
         self.assertTrue(response.json()['ok'],response.json())
 
+    def layout(self, page, value):
+        with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:
+            page.locator(f'[data-ops-layout="{value}"]').click()
+        self.assertEqual(pending.value.status,200,pending.value.text())
+        self.assertTrue(pending.value.json()['ok'])
+        expect(page.locator(f'[data-ops-layout="{value}"]')).to_be_enabled()
+
+    def ramp(self, page, value):
+        with page.expect_response(lambda r:r.url.endswith('/operations/preferences') and r.request.method=='POST') as pending:
+            page.locator('[data-ops-ramp]').select_option(value)
+        self.assertEqual(pending.value.status,200,pending.value.text())
+        self.assertTrue(pending.value.json()['ok'])
+        expect(page.locator('[data-ops-ramp]')).to_be_enabled()
+
     @classmethod
     def setUpClass(cls):
         fixtures.UccBrowserTest.setUpClass.__func__(cls)
@@ -70,10 +84,10 @@ class OperationsBrowserTest(unittest.TestCase):
                     page.set_viewport_size({'width':width,'height':1000})
                     page.wait_for_function('(w)=>document.documentElement.clientWidth===w',arg=width)
                     for layout in ('list','visual'):
-                        page.locator(f'[data-ops-layout="{layout}"]').click()
+                        self.layout(page,layout)
                         expect(root).to_have_attribute('data-layout',layout)
                         if layout=='list':
-                            page.locator('[data-ops-ramp]').select_option('All');expect(root).to_have_attribute('data-ramp','All')
+                            self.ramp(page,'All');expect(root).to_have_attribute('data-ramp','All')
                         if layout=='visual':
                             expect(page.locator('.ops-ramp-column')).to_have_count(5)
                             self.assertEqual(page.locator('.ops-ramp-column h2').all_text_contents(),['ALPHA','BRAVO','CHARLIE','DELTA','ECHO'])
@@ -92,7 +106,7 @@ class OperationsBrowserTest(unittest.TestCase):
                         measurements.append(dict(engine=engine,mode=mode,width=width,layout=layout,overflow=page.evaluate('document.documentElement.scrollWidth-innerWidth')))
                         page.screenshot(path=str(evidence/f'{engine}-{mode}-{layout}-{width}.png'))
             # A shared ramp survives mode changes and reload; mode/layout are user preferences.
-            page.set_viewport_size({'width':1440,'height':1000});page.locator('[data-ops-layout="list"]').click();expect(root).to_have_attribute('data-layout','list')
+            page.set_viewport_size({'width':1440,'height':1000});self.layout(page,'list');expect(root).to_have_attribute('data-layout','list')
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound');expect(root).to_have_attribute('data-ready','true')
             page.locator('[data-ops-context] summary').click()
             page.locator('[data-ops-context] [name="notes"]').fill('Context draft survives modes')
@@ -103,14 +117,14 @@ class OperationsBrowserTest(unittest.TestCase):
             self.submit(page,page.locator('[data-ops-context] button[type="submit"]'))
             expect(page.locator('[data-ops-feedback]')).to_contain_text('SAVED')
             page.locator('[data-ops-context] summary').click()
-            page.locator('[data-ops-ramp]').select_option('Bravo');expect(root).to_have_attribute('data-ramp','Bravo')
+            self.ramp(page,'Bravo');expect(root).to_have_attribute('data-ramp','Bravo')
             other=browser.new_context(viewport={'width':375,'height':900});other_page=other.new_page()
             self.login(other_page,'drawer-watcher');self.ready(other_page,'/neosubzero/operations')
             expect(other_page.locator('[data-ops-workspace]')).to_have_attribute('data-mode','outbound')
             expect(other_page.locator('[data-ops-workspace]')).to_have_attribute('data-ramp','All');other.close()
             page.locator('[data-ops-mode="outbound"]').click();expect(root).to_have_attribute('data-mode','outbound');expect(root).to_have_attribute('data-ramp','Bravo')
             page.reload();expect(root).to_have_attribute('data-ready','true');expect(root).to_have_attribute('data-ramp','Bravo')
-            page.locator('[data-ops-ramp]').select_option('All');expect(root).to_have_attribute('data-ramp','All')
+            self.ramp(page,'All');expect(root).to_have_attribute('data-ramp','All')
             # Every required color covers the card, not just an accent.
             for status in ('planned','configured','deicing','fin','negative','cleared'):
                 card=page.locator('[data-ops-row][data-status="'+status+'"]').first
@@ -196,7 +210,7 @@ class OperationsBrowserTest(unittest.TestCase):
             with self.app.app_context():
                 self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.filter_by(sort_date_mission_id=self.missions[1]).one().status,'configured')
             # Shared filter resets on the next canonical operation, not a wall-clock guess.
-            page.locator('[data-ops-ramp]').select_option('Bravo');expect(root).to_have_attribute('data-ramp','Bravo')
+            self.ramp(page,'Bravo');expect(root).to_have_attribute('data-ramp','Bravo')
             old_operation_id=type(self).operation_id
             with self.app.app_context():
                 operation=db.session.get(SortDateOperation,old_operation_id)
@@ -207,6 +221,7 @@ class OperationsBrowserTest(unittest.TestCase):
             expect(root).to_have_attribute('data-operation-id',str(type(self).operation_id),timeout=10000)
             expect(root).to_have_attribute('data-ramp','All');expect(root).to_have_attribute('data-mode','outbound')
             expect(page.locator('[data-ops-row]')).to_have_count(0)
+            expect(page.locator('[data-ops-context] [name="notes"]')).to_have_value('')
             type(self).operation_id=old_operation_id
             self.assertFalse(errors,errors)
             context.close();browser.close()
