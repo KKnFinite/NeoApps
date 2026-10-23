@@ -5,11 +5,12 @@ from flask import jsonify, make_response, render_template, request, session, url
 from flask_login import current_user
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import SortDateMission, SortDateOperation, NeoSubZeroDepartureDeiceEvent
+from app.models import SortDateMission, SortDateOperation, NeoSubZeroDepartureDeiceEvent, NeoSubZeroPretreatState
 from app.neonodes.neosubzero import bp
 from app.neonodes.neosubzero import routes as legacy
 from app.services.neosubzero_preferences import neosubzero_operations_preferences, set_neosubzero_operations_preferences
 from app.services.permission_rules import user_can
+from app.services.live_collaboration import version_conflict
 
 
 def available_modes():
@@ -125,6 +126,12 @@ def operations_mutate():
         ):
             db.session.rollback()
             return jsonify(ok=False, error='Aircraft identity changed. Your draft is preserved; review the physical tail before continuing.'), 409
+        if mode == 'pretreat':
+            state = NeoSubZeroPretreatState.query.filter_by(sort_date_operation_id=operation.id,tail_number=expected_tail).with_for_update().one_or_none()
+            expected = str(request.form.get('expected_version') or '').strip()
+            if (state and (not expected or version_conflict(state,expected))) or (state is None and expected):
+                db.session.rollback()
+                return jsonify(ok=False,error='Pretreat changed while you were editing. Your draft is kept; use RELOAD CURRENT VALUES to resolve the conflict.'),409
     handlers = {url_for('neosubzero.' + endpoint): getattr(legacy, endpoint) for endpoint in (
         'pretreat_mutate', 'departure_deice_mutate', 'truck_mutate', 'spray_gallons_mutate',
         'spray_reason_mutate', 'application_context_mutate')}

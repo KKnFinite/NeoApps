@@ -141,3 +141,11 @@ class OperationsTest(unittest.TestCase):
         self.assertEqual(self.client.get('/neosubzero/operations').status_code,200)
         self.assertEqual(self.post(action='initial_contact').status_code,403)
         self.assertEqual(NeoSubZeroDepartureDeiceEvent.query.count(),0)
+
+    def test_concurrent_pretreat_creation_rejects_missing_original_version(self):
+        state=NeoSubZeroPretreatState(sort_date_operation_id=self.f.operation.id,tail_number=self.f.alpha.assigned_tail_number,pretreat_planned=True,notes='Other operator evidence')
+        db.session.add(state);db.session.commit()
+        result=self.post(target='pretreat/mutate',mode='pretreat',action='save_treatment',expected_version='',notes='Stale draft')
+        self.assertEqual(result.status_code,409)
+        self.assertIn('draft is kept',result.json['error'])
+        self.assertEqual(state.notes,'Other operator evidence')

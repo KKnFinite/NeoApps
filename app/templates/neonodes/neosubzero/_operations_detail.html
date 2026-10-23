@@ -5,6 +5,7 @@
     <header class="ops-detail-head"><div><strong>{{ selected.flight }} · {{ selected.tail }}</strong><span>{{ selected.parking }} · {{ selected.ramp }}</span></div><button type="button" data-ops-close>BACK TO AIRCRAFT</button></header>
     <p class="ops-detail-feedback" data-ops-detail-feedback role="status" hidden></p>
     <p class="ops-draft-status" data-ops-draft-status role="status" hidden></p>
+    <button type="button" data-ops-reload>RELOAD CURRENT VALUES</button>
     <div data-ops-detail-body>
     {% if selected.identity_conflict %}
         <p class="ops-review">TAIL IDENTITY REVIEW · This departure event belongs to {{ selected.history_event.tail_number }}, not {{ selected.tail }}. Original evidence is preserved; do not apply it to the replacement aircraft.</p>

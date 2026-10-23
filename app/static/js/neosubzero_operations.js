@@ -23,7 +23,7 @@
     const formKey = form => [formAction(form), form.elements.pass_number?.value || '',
         form.elements.position_number?.value || '', form.querySelector('input[name="action"]')?.value || ''].join(':');
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
-        root.dataset.operationId, detail.dataset.detailKey].join(':');
+        root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const detail = () => pane.querySelector('[data-ops-detail-content]');
     const dirty = () => !!root.querySelector('form[data-dirty="true"]');
     const draftMessage = text => {
@@ -133,7 +133,7 @@
         ['operationId','layout','ramp'].forEach(key => { root.dataset[key] = next.dataset[key]; });
         const incoming = next.querySelector('[data-ops-detail-content]');
         const current = detail();
-        if (current && incoming && current.dataset.detailKey === incoming.dataset.detailKey && (dirty() || pane.contains(document.activeElement))) {
+        if (current && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail === incoming.dataset.tail && (dirty() || pane.contains(document.activeElement))) {
             const freshForms = [...incoming.querySelectorAll('form')];
             current.querySelectorAll('form').forEach(form => {
                 if (form.dataset.dirty === 'true' || (form.contains(document.activeElement) && formKey(form) !== saved)) return;
@@ -183,6 +183,15 @@
         if (open) { event.preventDefault(); saveDraft(); const mission = open.closest('[data-ops-row]').dataset.missionId; try { pane.querySelector(':focus')?.blur(); selected = mission; await fetchPage(mission); } catch(error) { notify(error.message,true); } return; }
         const close = event.target.closest('[data-ops-close]');
         if (close) { saveDraft(); pane.hidden = true; selected = null; history.replaceState(null,'',currentUrl(null)); return; }
+        const reload = event.target.closest('[data-ops-reload]');
+        if (reload) {
+            if (pane.querySelector('form[data-dirty="true"]') && !window.confirm('Discard unsaved entries for this aircraft and reload current server values?')) return;
+            const current = detail();
+            if (current) { try { sessionStorage.removeItem(draftKey(current)); } catch (_) { /* Refresh still works in memory. */ } }
+            pane.replaceChildren();
+            try { await fetchPage(selected); notify('Current aircraft values loaded.'); } catch(error) { notify(error.message,true); }
+            return;
+        }
         const mode = event.target.closest('[data-ops-mode]');
         if (mode && mode.dataset.opsMode !== root.dataset.mode) {
             saveDraft();
