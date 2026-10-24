@@ -75,6 +75,8 @@ def sync_release2_schema():
             connection.execute(text(f"CREATE TRIGGER IF NOT EXISTS neosubzero_audit_no_{action.lower()} BEFORE {action} ON neosubzero_audit_entries BEGIN SELECT RAISE(ABORT,'SubZero audit evidence is append-only'); END"))
     else:
         raise RuntimeError('Unsupported SubZero schema dialect.')
+    from app.services.frost_schema import install
+    install(connection)
     verify_release2_contract(connection)
 
 

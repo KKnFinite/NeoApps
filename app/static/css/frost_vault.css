@@ -1,0 +1,14 @@
+.frost-workspace {min-width:0;max-width:100%;font-family:NeoFontPlain,Arial,sans-serif;}
+.frost-workspace form,.frost-document header,.frost-document>div {display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.frost-workspace input[type=file] {max-width:100%;min-width:0;}
+.frost-workspace label {min-width:0;max-width:100%;}
+.frost-workspace p,.frost-workspace code,.frost-document strong {overflow-wrap:anywhere;}
+.frost-document {padding:10px 0;border-top:1px solid #36556b;}
+.frost-document p {margin:5px 0;}
+.frost-document code {display:block;font-size:.75rem;}
+.frost-document header {justify-content:space-between;}
+.frost-workspace [data-frost-error],.frost-workspace [data-error=true] {color:#ffb3b3;}
+.frost-workspace h2 {font-size:1rem;}
+.frost-workspace .neosubzero-head h1 {font-size:clamp(1.35rem,2.4vw,2rem);margin:0;}
+.frost-workspace form {margin:12px 0;}
+.frost-workspace button {min-height:34px;padding:5px 12px;border:1px solid #548cb1;background:#102a3d;color:#e2f2ff;border-radius:3px;font:inherit;}

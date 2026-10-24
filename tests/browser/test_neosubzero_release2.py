@@ -29,9 +29,13 @@ class Release2BrowserTest(unittest.TestCase):
         if '/operations' in path:expect(page.locator('[data-ops-workspace]')).to_have_attribute('data-ready','true')
 
     def submit(self,page,button):
+        previous=button.element_handle()
         with page.expect_response(lambda r:r.url.endswith('/operations/mutate') and r.request.method=='POST') as pending:button.click()
         result=pending.value
         self.assertEqual(result.status,200,result.text());self.assertTrue(result.json()['ok'],result.json())
+        # A successful mutation starts a GET/reconciliation. Wait for that actual
+        # replacement, not just the earlier success message preceding the GET.
+        page.wait_for_function('element=>!element.isConnected',arg=previous)
         expect(page.locator('[data-ops-detail-feedback]')).not_to_contain_text('SAVING')
 
     def test_participation_team_handoff_clear_corrections_and_driver_mobile(self):
@@ -77,7 +81,10 @@ class Release2BrowserTest(unittest.TestCase):
             truck_form=team.locator('form').filter(has=page.locator('button[value="change_truck"]')).first
             truck_form.locator('[name="truck_number"]').fill('R2-T18')
             self.submit(page,truck_form.locator('button'))
-            team.locator(':scope > summary').click()
+            # Live reconciliation preserves expanded sections. Do not toggle an
+            # already-open team closed before selecting its personnel control.
+            if not team.evaluate('element=>element.open'):
+                team.locator(':scope > summary').click()
             team.locator('summary',has_text='CHANGE DEICERS').last.click()
             crew=team.locator('form').filter(has=page.locator('button[value="change_deicers"]')).first
             crew.locator('[name="driver_person_id"]').select_option(str(self.people[2]))

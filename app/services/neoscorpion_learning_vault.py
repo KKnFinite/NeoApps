@@ -147,8 +147,9 @@ def export_subzero_record(record, *, learning=False, _config=None):
         raise LearningVaultUnavailable('SubZero evidence exceeds the archive size limit; administrator review required.')
     checksum = hashlib.sha256(body).hexdigest()
     identity = source['id'].replace(':', '/')
-    prefix = 'neofrost-treatment-context/v1' if learning else 'subzero-spray/v1'
-    key = f"{prefix}/{int(source['gateway_id'])}/{int(source['operation_id'])}/{identity}/{checksum}.json.gz"
+    from app.services.frost_vault import namespace
+    prefix = namespace(source['gateway_id'], 'treatment-context' if learning else 'spray-history').rstrip('/')
+    key = f"{prefix}/{int(source['operation_id'])}/{identity}/{checksum}.json.gz"
     config = _require_r2_config(_config)
     client = _r2_client(config)
     try:

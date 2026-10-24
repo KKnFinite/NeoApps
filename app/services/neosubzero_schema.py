@@ -14,6 +14,8 @@ from app.models import (
     NeoSubZeroOperationContext,
     NeoSubZeroAuditEntry,
     NeoSubZeroArchiveDelivery,
+    FrostDocument,
+    FrostDocumentAudit,
 )
 
 LOCK_KEY = 7_483_327_341_930
@@ -66,6 +68,8 @@ NEOSUBZERO_TABLES = (
     NeoSubZeroOperationContext.__table__,
     NeoSubZeroAuditEntry.__table__,
     NeoSubZeroArchiveDelivery.__table__,
+    FrostDocument.__table__,
+    FrostDocumentAudit.__table__,
 )
 
 
@@ -93,7 +97,7 @@ def _missing_optional_columns(connection):
 def verify_neosubzero_schema_contract(connection):
     """Fail a pre-deploy bootstrap if the live SubZero model columns are absent."""
     inspector = inspect(connection)
-    for table in (NeoSubZeroOperationContext.__table__,NeoSubZeroAuditEntry.__table__,NeoSubZeroArchiveDelivery.__table__):
+    for table in (NeoSubZeroOperationContext.__table__,NeoSubZeroAuditEntry.__table__,NeoSubZeroArchiveDelivery.__table__,FrostDocument.__table__,FrostDocumentAudit.__table__):
         if not inspector.has_table(table.name) or set(table.columns.keys()) - {column['name'] for column in inspector.get_columns(table.name)}:
             raise RuntimeError('NeoSubZero schema missing required table/columns: '+table.name)
     for table_name, required_columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
@@ -108,6 +112,8 @@ def verify_neosubzero_schema_contract(connection):
             )
     from app.services.neosubzero_release2_schema import verify_release2_contract
     verify_release2_contract(connection)
+    from app.services.frost_schema import verify
+    verify(connection)
 
 
 def ensure_neosubzero_pretreat_table(app):

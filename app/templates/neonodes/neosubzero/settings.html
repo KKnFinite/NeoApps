@@ -6,6 +6,7 @@
         <div><p>NEOSUB-ZERO</p><h1>SETTINGS</h1></div>
     </header>
     {% include "neonodes/neosubzero/_nav.html" %}
+    {% if can_edit %}<p><a href="{{ url_for('neosubzero.frost_vault') }}">FROST VAULT · SOURCE EVIDENCE</a></p>{% endif %}
 
     <section class="neosubzero-settings" aria-labelledby="subzero-fluid-settings">
         <h2 id="subzero-fluid-settings">DEICE FLUIDS</h2>

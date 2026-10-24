@@ -474,7 +474,13 @@ def schedule_delivery(app, gateway_id):
                         db.session.rollback()
                         app.logger.warning('SPEAR archive delivery deferred safely', exc_info=True)
                     from app.services.neosubzero_archive import drain as drain_subzero
-                    drain_subzero(gateway_id)
+                    try:
+                        drain_subzero(gateway_id)
+                    except Exception:
+                        db.session.rollback()
+                        app.logger.warning('SubZero archive delivery deferred safely',exc_info=True)
+                    from app.services.frost_documents import drain as drain_frost_documents
+                    drain_frost_documents(gateway_id)
                 finally:
                     db.session.remove()
         except Exception:

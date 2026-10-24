@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}FROST Vault | NeoSubZero{% endblock %}
+{% block content %}
+<section class="neosubzero-shell frost-workspace" data-frost-vault data-status-url="{{ url_for('neosubzero.frost_vault_status') }}">
+    <header class="neosubzero-head"><div><p>{{ gateway.code }} · PRIVATE EVIDENCE</p><h1>FROST VAULT</h1></div><a href="{{ url_for('neosubzero.settings') }}">SETTINGS</a></header>
+    <p>{{ 'Private off-site storage configured.' if vault_status.configured else 'Off-site storage is not configured. Encrypted originals remain safely staged for retry.' }}</p>
+    <form method="post" action="{{ url_for('neosubzero.frost_vault') }}" enctype="multipart/form-data" data-frost-upload>
+        <label>Original Xchange CSV <input required type="file" name="document" accept=".csv,text/csv"></label>
+        <button type="submit">IMPORT ORIGINAL</button>
+        <output aria-live="polite" data-frost-feedback>{{ error or '' }}</output>
+    </form>
+    <p>CSV originals are preserved byte-for-byte. Extraction retains source rows, truck contributions, units and local clocks. Missing surfaces and uncertain date/clock relationships remain unknown. No live spray records or frost training labels are created.</p>
+    <h2>SOURCE DOCUMENTS</h2>
+    {% for document in documents %}
+    <article class="frost-document" data-frost-document="{{ document.id }}">
+        <header><strong>{{ document.original_filename }}</strong><span data-frost-delivery>{{ 'OFF-SITE VERIFIED' if document.archived_at_utc else 'ENCRYPTED STAGING · DELIVERY PENDING' }}</span></header>
+        <p>{{ document.imported_at_utc }} UTC · User {{ document.imported_by_user_id }} · {{ document.byte_length }} bytes · {{ document.extraction_status|upper|replace('_',' ') }}</p>
+        <p>{{ document.date_start or 'DATE UNKNOWN' }} – {{ document.date_end or 'DATE UNKNOWN' }} · {{ document.extraction_summary.source_row_count }} source rows · {{ document.extraction_summary.contribution_count }} fluid contributions</p>
+        <code>{{ document.sha256 }}</code>
+        <p data-frost-error>{{ document.last_error or '' }}</p>
+        <div><a href="{{ url_for('neosubzero.frost_document',identifier=document.id) }}">DOWNLOAD ORIGINAL</a> <a href="{{ url_for('neosubzero.frost_document',identifier=document.id,view='extracted') }}" data-frost-extracted {% if not document.archived_at_utc %}hidden{% endif %}>EXTRACTED EVIDENCE</a></div>
+        {% if document.extraction_summary.issues %}<details><summary>EXTRACTION REVIEW · {{ document.extraction_summary.issues|length }}</summary><ul>{% for issue in document.extraction_summary.issues %}<li>Source row {{ issue.source_row }}: {{ issue.message }}</li>{% endfor %}</ul></details>{% endif %}
+        {% if document.extraction_summary.missing_contract_fields %}<p>Unsupported CSV schema. Original retained; no successful extraction claimed.</p>{% endif %}
+    </article>
+    {% else %}<p>No documents imported.</p>{% endfor %}
+    {% if next_before %}<a href="{{ url_for('neosubzero.frost_vault',before=next_before) }}">OLDER DOCUMENTS</a>{% endif %}
+    <details><summary>SPRAY ARCHIVE REFERENCES · {{ receipts|length }} most recent</summary>
+        <p>Legacy SubZero objects remain at their original keys. New revisions use the FROST namespace. Stable source IDs and audit revisions are preserved.</p>
+        {% for receipt in receipts %}<p>{{ receipt.source_id }} · Sort {{ receipt.operation_id }} · {% if receipt.vault_key %}<a href="{{ url_for('neosubzero.frost_spray_evidence',identifier=receipt.id) }}">VERIFIED READ</a>{% else %}PENDING{% endif %} · {{ receipt.last_error or '' }}</p>{% endfor %}
+    </details>
+    <details><summary>STORAGE CONTRACT</summary><p>Independent FROST prefixes and manifests use the existing private provider. Evidence has no automatic expiration. No SPEAR object is moved or deleted.</p><p>{{ categories|join(' · ') }}</p></details>
+</section>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_vault.css',v=config.STATIC_ASSET_VERSION) }}">
+<script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION) }}"></script>
+{% endblock %}
