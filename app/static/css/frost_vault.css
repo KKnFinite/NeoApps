@@ -1,6 +1,13 @@
 .frost-workspace {min-width:0;max-width:100%;font-family:NeoFontPlain,Arial,sans-serif;}
 .frost-workspace form,.frost-document header,.frost-document>div {display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
-.frost-workspace input[type=file] {max-width:100%;min-width:0;}
+.frost-workspace .frost-file-picker {position:relative;display:inline-flex;align-items:center;justify-content:center;min-height:46px;min-width:132px;padding:0 14px;box-sizing:border-box;border:1px solid #72b6de;border-radius:4px;background:#163e59;color:#e2f2ff;cursor:pointer;}
+.frost-workspace .frost-file-picker input[type=file] {position:absolute;inset:0;width:100%;height:100%;min-height:44px;box-sizing:border-box;opacity:0;min-width:0;margin:0;padding:0;cursor:pointer;}
+.frost-workspace .frost-file-picker:focus-within {outline:2px solid #a3ddff;outline-offset:3px;}
+.frost-workspace .frost-file-picker:has(input:disabled) {opacity:.65;cursor:wait;}
+.frost-workspace [data-frost-filename] {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.frost-workspace [data-frost-feedback] {flex-basis:100%;overflow-wrap:anywhere;}
+.frost-workspace progress {flex-basis:100%;max-width:100%;accent-color:#78c6f4;}
+.frost-workspace [hidden] {display:none !important;}
 .frost-workspace label {min-width:0;max-width:100%;}
 .frost-workspace p,.frost-workspace code,.frost-document strong {overflow-wrap:anywhere;}
 .frost-document {padding:10px 0;border-top:1px solid #36556b;}
@@ -11,4 +18,4 @@
 .frost-workspace h2 {font-size:1rem;}
 .frost-workspace .neosubzero-head h1 {font-size:clamp(1.35rem,2.4vw,2rem);margin:0;}
 .frost-workspace form {margin:12px 0;}
-.frost-workspace button {min-height:34px;padding:5px 12px;border:1px solid #548cb1;background:#102a3d;color:#e2f2ff;border-radius:3px;font:inherit;}
+.frost-workspace button {min-height:44px;padding:5px 12px;border:1px solid #548cb1;background:#102a3d;color:#e2f2ff;border-radius:3px;font:inherit;}

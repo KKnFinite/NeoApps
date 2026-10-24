@@ -52,8 +52,11 @@ def frost_vault():
     query=catalog(gateway)
     if before: query=query.filter(FrostDocument.id<before)
     items=query.limit(51).all()
+    imported_id=request.args.get('imported',type=int)
+    imported=catalog(gateway).filter_by(id=imported_id).one_or_none() if imported_id else None
+    import_message=f'IMPORTED: {imported.original_filename}. Original securely saved.' if imported else None
     return render_template('neonodes/neosubzero/frost_vault.html',gateway=gateway,
-        documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,
+        documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
 

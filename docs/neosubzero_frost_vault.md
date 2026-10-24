@@ -26,6 +26,10 @@ retired, renamed, or deleted; source IDs, revisions and previous keys survive.
 
 Settings links to `/neosubzero/frost-vault`. Import and retrieval reuse
 MotherBrain's `neosubzero.settings.edit` rule and current gateway authority.
+IMPORT CSV is a touch-sized real HTML file input on desktop and mobile, using
+the native Files picker rather than drag-and-drop or extension automation.
+Selection uploads immediately; transfer progress, processing and failure/retry
+feedback preserve the selected file on errors. Seasons are separate documents.
 Original and extracted downloads are authenticated attachments, never public
 object URLs. Uploads use existing CSRF enforcement. Paths, binary input,
 malformed CSV, oversized files and wrong-gateway exports are rejected.

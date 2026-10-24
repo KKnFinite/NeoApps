@@ -5,10 +5,16 @@
     <header class="neosubzero-head"><div><p>{{ gateway.code }} · PRIVATE EVIDENCE</p><h1>FROST VAULT</h1></div><a href="{{ url_for('neosubzero.settings') }}">SETTINGS</a></header>
     <p>{{ 'Private off-site storage configured.' if vault_status.configured else 'Off-site storage is not configured. Encrypted originals remain safely staged for retry.' }}</p>
     <form method="post" action="{{ url_for('neosubzero.frost_vault') }}" enctype="multipart/form-data" data-frost-upload>
-        <label>Original Xchange CSV <input required type="file" name="document" accept=".csv,text/csv"></label>
-        <button type="submit">IMPORT ORIGINAL</button>
-        <output aria-live="polite" data-frost-feedback>{{ error or '' }}</output>
+        <label class="frost-file-picker">IMPORT CSV
+            <input required type="file" name="document" aria-label="IMPORT CSV" aria-describedby="frost-file-help"
+                accept=".csv,text/csv,application/csv,text/comma-separated-values,application/vnd.ms-excel,text/plain">
+        </label>
+        <span data-frost-filename>No CSV selected</span>
+        <button type="submit" data-frost-submit>UPLOAD SELECTED CSV</button>
+        <progress max="100" value="0" aria-label="CSV upload progress" data-frost-progress hidden></progress>
+        <output role="status" aria-live="polite" data-frost-feedback>{{ error or import_message or '' }}</output>
     </form>
+    <p id="frost-file-help">Choose a CSV from Files, Downloads or iCloud Drive. Selection starts the import. Up to 10 MiB per file; import each season separately.</p>
     <p>CSV originals are preserved byte-for-byte. Extraction retains source rows, truck contributions, units and local clocks. Missing surfaces and uncertain date/clock relationships remain unknown. No live spray records or frost training labels are created.</p>
     <h2>SOURCE DOCUMENTS</h2>
     {% for document in documents %}
@@ -30,6 +36,6 @@
     </details>
     <details><summary>STORAGE CONTRACT</summary><p>Independent FROST prefixes and manifests use the existing private provider. Evidence has no automatic expiration. No SPEAR object is moved or deleted.</p><p>{{ categories|join(' · ') }}</p></details>
 </section>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_vault.css',v=config.STATIC_ASSET_VERSION) }}">
-<script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION) }}"></script>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_vault.css',v=config.STATIC_ASSET_VERSION ~ '-frost-upload-v2') }}">
+<script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION ~ '-frost-upload-v2') }}"></script>
 {% endblock %}
