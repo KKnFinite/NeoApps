@@ -111,6 +111,10 @@
     color: #728194;
     font-size: .66rem;
 }
+.neorain-delay-feedback { display: block; font-size: .72rem; overflow-wrap: anywhere; }
+.neorain-delay-feedback[data-error="true"] { color: #ffb1b1; }
+.neorain-delay-line-form button:disabled,
+.neorain-delay-delete-form button:disabled { opacity: .65; cursor: wait; }
 
 .neorain-outbound-table tbody tr[data-neorain-inbound-row].neorain-row--late > td:nth-child(-n+9),
 .neorain-outbound-table tbody tr[data-neorain-outbound-row].neorain-row--late > td:nth-child(-n+18) {
@@ -325,6 +329,7 @@
     }
 }
 </style>
+<script defer src="{{ url_for('static', filename='js/neorain_delay_info.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script>
 (() => {
     const initDelayPanels = () => {

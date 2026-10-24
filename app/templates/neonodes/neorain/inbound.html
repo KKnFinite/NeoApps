@@ -345,19 +345,9 @@
                     {% if can_edit %}
                     <div data-neorain-inbound-edit-protected {% if row.status == 'CANCELLED' %}hidden{% endif %}>
                         <div class="neorain-delay-existing-list">
-                            {% for delay in row.delay_info %}
-                            <div class="neorain-delay-existing-row">
-                                <div class="neorain-delay-existing-copy"><strong>{{ delay.minutes }} {{ delay.code }}</strong>{% if delay.notes %}<span>{{ delay.notes }}</span>{% endif %}</div>
-                                <form class="neorain-delay-delete-form" method="post" action="{{ url_for('neorain.delay_info') }}">
-                                    <input type="hidden" name="board" value="inbound">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="mission_id" value="{{ row.mission_id }}">
-                                    <input type="hidden" name="delay_id" value="{{ delay.id }}">
-                                    <input type="hidden" name="expected_version" value="{{ delay.version }}">
-                                    <button type="submit">DELETE</button>
-                                </form>
-                            </div>
-                            {% endfor %}
+{% for delay in row.delay_info %}
+{% with mission_id=row.mission_id, board='inbound', mobile=false %}{% include "neonodes/neorain/_delay_entry.html" %}{% endwith %}
+{% endfor %}
                         </div>
                         <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
                             <input type="hidden" name="board" value="inbound">
@@ -399,7 +389,7 @@
     if (!root || !window.NeoLiveUpdates) return;
     let revision = root.dataset.inboundRevision || "";
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-inbound-hhmm][data-neorain-dirty='true'], [data-neorain-inbound-hhmm][data-neorain-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-crew-dirty='true'], [data-rain-override-dirty='true']"
+        "[data-neorain-inbound-hhmm][data-neorain-dirty='true'], [data-neorain-inbound-hhmm][data-neorain-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-crew-dirty='true'], [data-rain-override-dirty='true'], [data-neorain-delay-dirty='true'], [data-neorain-delay-saving='true']"
     ));
     root.addEventListener("neorain:inbound-revision", (event) => {
         const nextRevision = event.detail?.revision;

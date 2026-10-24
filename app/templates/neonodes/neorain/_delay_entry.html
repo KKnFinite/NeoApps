@@ -1,0 +1,25 @@
+<div class="neorain-delay-existing-row">
+    <form class="neorain-delay-line-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+        {{ csrf_field() }}
+        <input type="hidden" name="board" value="{{ board }}">
+        <input type="hidden" name="action" value="update">
+        {% if mobile %}<input type="hidden" name="return_view" value="mobile">{% endif %}
+        <input type="hidden" name="mission_id" value="{{ mission_id }}">
+        <input type="hidden" name="delay_id" value="{{ delay.id }}">
+        <input type="hidden" name="expected_version" value="{{ delay.version }}">
+        <input required name="minutes" inputmode="numeric" value="{{ delay.minutes }}" aria-label="Minutes">
+        <input required name="code" maxlength="2" value="{{ delay.code }}" aria-label="Code">
+        <input name="notes" value="{{ delay.notes }}" aria-label="Notes">
+        <button type="submit">SAVE</button>
+    </form>
+    <form class="neorain-delay-delete-form" method="post" action="{{ url_for('neorain.delay_info') }}">
+        {{ csrf_field() }}
+        <input type="hidden" name="board" value="{{ board }}">
+        <input type="hidden" name="action" value="delete">
+        {% if mobile %}<input type="hidden" name="return_view" value="mobile">{% endif %}
+        <input type="hidden" name="mission_id" value="{{ mission_id }}">
+        <input type="hidden" name="delay_id" value="{{ delay.id }}">
+        <input type="hidden" name="expected_version" value="{{ delay.version }}">
+        <button type="submit">DELETE</button>
+    </form>
+</div>

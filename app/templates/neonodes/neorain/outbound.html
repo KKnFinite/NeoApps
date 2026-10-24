@@ -57,7 +57,7 @@
         });
     };
     const hasPendingEdit = () => Boolean(root.querySelector(
-        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-service-field][data-neorain-service-dirty='true'], [data-neorain-service-field][data-neorain-service-saving='true'], [data-rain-override-dirty='true']"
+        "[data-neorain-hhmm][data-neorain-dirty='true'], [data-neorain-hhmm][data-neorain-saving='true'], [data-neorain-no-return-saving='true'], [data-neorain-late-inclusion-saving='true'], [data-neorain-service-field][data-neorain-service-dirty='true'], [data-neorain-service-field][data-neorain-service-saving='true'], [data-rain-override-dirty='true'], [data-neorain-delay-dirty='true'], [data-neorain-delay-saving='true']"
     ));
     root.addEventListener("neorain:revision", (event) => {
         const nextRevision = event.detail?.revision;
