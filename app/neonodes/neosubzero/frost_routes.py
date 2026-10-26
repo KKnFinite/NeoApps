@@ -6,12 +6,13 @@ from sqlalchemy.exc import IntegrityError
 from app.neonodes.neosubzero import bp
 from app.auth.decorators import gateway_node_required
 from app.extensions import db
-from app.models import FrostDocument,FrostDocumentAudit,NeoSubZeroArchiveDelivery
+from app.models import FrostDocument,FrostDocumentAudit,NeoSubZeroArchiveDelivery,FrostHistoryTask
 from app.services.access_control import get_current_gateway
 from app.services.permission_rules import user_can
 from app.services import frost_documents as documents,frost_vault as vault
 from app.services.frost_xchange import MAX_DOCUMENT_BYTES
 from app.services.neoscorpion_learning_vault import learning_vault_status
+from app.services import frost_history as history, frost_analysis
 
 
 @bp.before_app_request
@@ -57,7 +58,7 @@ def frost_vault():
     import_message=f'IMPORTED: {imported.original_filename}. Original securely saved.' if imported else None
     return render_template('neonodes/neosubzero/frost_vault.html',gateway=gateway,
         documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
-        vault_status=learning_vault_status(),categories=vault.CATEGORIES,
+        vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
 
 
@@ -66,10 +67,27 @@ def frost_vault():
 def frost_vault_status():
     gateway=authorized()
     rows=catalog(gateway).limit(100).all()
-    response=jsonify(ok=True,documents=[dict(id=row.id,archived=bool(row.archived_at_utc),error=row.last_error,
+    response=jsonify(ok=True,history=history.health(gateway.id),documents=[dict(id=row.id,archived=bool(row.archived_at_utc),error=row.last_error,
         attempts=row.attempts) for row in rows])
     response.headers['Cache-Control']='no-store'
     return response
+
+
+@bp.route('/frost-vault/history/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_history_evidence(identifier):
+    gateway=authorized()
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='partition',version=frost_analysis.VERSION).first_or_404()
+    if not row.result_key or row.status in ('pending','retry','superseded'):
+        return 'Current historical dataset is not ready; previous evidence is retained.',409
+    try:
+        payload=vault.read_json(row.result_key,gateway.id)
+        response=send_file(io.BytesIO(vault.canonical(payload)),mimetype='application/octet-stream',as_attachment=True,
+            download_name=f'frost-research-{row.identity}-{frost_analysis.VERSION}.json')
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"})
+        return response
+    except (ValueError,RuntimeError):
+        return 'Historical evidence could not be verified. Retry later; original sources remain preserved.',503
 
 
 @bp.route('/frost-vault/documents/<int:identifier>')

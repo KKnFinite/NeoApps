@@ -481,6 +481,8 @@ def schedule_delivery(app, gateway_id):
                         app.logger.warning('SubZero archive delivery deferred safely',exc_info=True)
                     from app.services.frost_documents import drain as drain_frost_documents
                     drain_frost_documents(gateway_id)
+                    from app.services.frost_history import drain as drain_frost_history
+                    drain_frost_history(gateway_id)
                 finally:
                     db.session.remove()
         except Exception:
@@ -488,3 +490,31 @@ def schedule_delivery(app, gateway_id):
         finally:
             _worker_lock.release()
     threading.Thread(target=run, daemon=True, name='spear-learning-outbox').start()
+
+
+def initialize_delivery_heartbeat(app):
+    """Wake the existing leased archive worker even with no open browser.
+
+    No provider I/O on a web request/startup, no new queue/service or operational
+    mutations. Durable task leases coordinate multiple gunicorn processes.
+    """
+    if app.config.get('TESTING') or not app.config.get('SQLALCHEMY_DATABASE_URI') or app.extensions.get('archive_delivery_heartbeat'):
+        return
+    app.extensions['archive_delivery_heartbeat'] = True
+    def wake():
+        try:
+            with app.app_context():
+                from app.models import FrostDocument
+                gateways = [item[0] for item in db.session.query(FrostDocument.gateway_id).distinct().all()]
+                db.session.remove()
+                for gateway_id in gateways:
+                    schedule_delivery(app,gateway_id)
+        except Exception:
+            app.logger.warning('Archive delivery wake-up deferred safely',exc_info=True)
+        finally:
+            timer = threading.Timer(60,wake)
+            timer.daemon = True
+            timer.start()
+    timer = threading.Timer(10,wake)
+    timer.daemon = True
+    timer.start()

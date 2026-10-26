@@ -1,0 +1,25 @@
+<section class="frost-history" aria-label="Historical data health">
+    <header><h2>HISTORICAL INTELLIGENCE · RESEARCH ONLY</h2><strong data-history-state>{{ history.state }}</strong></header>
+    <dl class="frost-health-grid">
+        {% for key,label in [('documents','Verified documents'),('source_rows','Extracted source rows'),('deduplicated_records','Distinct source records'),('overlapping_rows','Duplicate overlapping rows'),('revisions','Source revisions'),('revision_conflicts','Conflicting revisions')] %}
+        <div><dt>{{ label }}</dt><dd data-history-catalog="{{ key }}">{{ history.catalog.get(key, '—') }}</dd></div>
+        {% endfor %}
+        {% for key,label in [('weather_matched','Weather matched'),('weather_unmatched','Weather unmatched'),('incomplete_windows','Incomplete prior-weather windows'),('LIKELY FROST PRESENT','Likely frost present'),('ANTICIPATED FROST RISK','Anticipated frost / pretreat'),('NON-FROST TREATMENT','Other treatments'),('LIKELY FROST ABSENT','Credible non-spray'),('UNKNOWN','Unknown outcome')] %}
+        <div><dt>{{ label }}</dt><dd data-history-total="{{ key }}">{{ history.totals.get(key, 0) }}</dd></div>
+        {% endfor %}
+    </dl>
+    <p>Coverage: <span data-history-range>{{ history.catalog.get('date_start','—') }} – {{ history.catalog.get('date_end','—') }}</span> · <span data-history-pending>{{ history.pending_partitions }}</span> monthly partitions pending</p>
+    <p>Last successful partition: <span data-history-success>{{ history.last_success or 'Not yet processed' }}</span></p>
+    <p data-history-errors role="status">{% for item in history.errors %}{{ item.month }}: {{ item.error }} {% endfor %}</p>
+    <p>Central local calendar times use historical DST rules. Ambiguous clocks require review. Historical RFD observations: <a href="https://mesonet.agron.iastate.edu/request/download.phtml" target="_blank" rel="noopener">Iowa Environmental Mesonet</a>; missing observations remain missing. A weather match does not imply a complete preceding window.</p>
+    <details><summary>VERSIONED DATA &amp; ANALYSIS</summary>
+        <p>{{ history.version }} · No live model. Frost reasons are likely evidence, not physical confirmation. Preventative spray is anticipated risk, never a frost-negative. Missing spray is not a no-frost observation. No historical stand assignment or aircraft surface temperature is inferred.</p>
+        <p>Monthly JSON includes source document/row/revision links, exact reasons, weather provenance, preceding-hour features and descriptive application-level cohorts. These treatment-selected associations cannot establish causation or predictive skill. No unsprayed comparison population is invented.</p>
+        <div data-history-links>{% for item in history.partition_links %}<a href="{{ url_for('neosubzero.frost_history_evidence',identifier=item.id) }}">{{ item.month }} · {{ item.status|replace('_',' ') }}</a>{% endfor %}</div>
+    </details>
+    <details><summary>SEASONAL ASSOCIATIONS · DESCRIPTIVE, NOT PREDICTIONS</summary>
+        <p>One application/tail/date per cohort, not one vote per truck. Weather-matched applications only. Missing fields have separate sample counts in the research JSON. No reliable untreated comparison population or validated parking effects are currently established.</p>
+        <div class="frost-analysis-scroll"><table><thead><tr><th>Season / evidence</th><th>Applications</th><th>Mean °C</th><th>Spread °C</th><th>Wind kt</th><th>Night fraction</th><th>Clear fraction</th></tr></thead>
+        <tbody data-history-cohorts>{% for cohort in history.descriptive_cohorts %}<tr><td>{{ cohort.season }} · {{ cohort.label }}</td><td>{{ cohort.applications }}</td>{% for key in ['temperature_c','spread_c','wind_kt','night','clear_sky'] %}<td>{{ '%.2f'|format(cohort.fields[key].mean) if key in cohort.fields else '—' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+    </details>
+</section>

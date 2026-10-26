@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const source=fs.readFileSync('app/static/js/frost_vault.js','utf8');
-function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=false,legacy=false}={}){
+function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=false,legacy=false,health=null}={}){
  let submit,change,poll,enabled,redirect,pending,last,requests=0,progressEvent;
  const button={disabled:false},output={textContent:'',dataset:{}},progress={hidden:true,value:0};
  const file={files:[],disabled:false,addEventListener:(_,handler)=>change=handler},filename={textContent:''};
@@ -12,7 +12,9 @@ function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=f
   getAttribute:()=>'/neosubzero/frost-vault',addEventListener:(_,f)=>submit=f};
  button.click=()=>pending=submit({preventDefault(){}});
  if(legacy)delete form.requestSubmit;
- const root={dataset:{statusUrl:'/status'},querySelector:s=>s==='[data-frost-upload]'?form:null};
+ const state={textContent:''},total={dataset:{historyTotal:'weather_matched'},textContent:''},catalog={dataset:{historyCatalog:'documents'},textContent:''};
+ const root={dataset:{statusUrl:'/status'},querySelector:s=>s==='[data-frost-upload]'?form:s==='[data-history-state]'?state:null,
+  querySelectorAll:s=>s==='[data-history-total]'?[total]:s==='[data-history-catalog]'?[catalog]:[]};
  const window={addEventListener(){},location:{href:'https://example.test/neosubzero/frost-vault',assign:u=>redirect=u},NeoLiveUpdates:{create:o=>{
   poll=o.poll;return {setServerStatus:s=>enabled=s.auto_refresh_enabled,destroy(){}};
  }}};
@@ -24,15 +26,24 @@ function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=f
   respond(code=status,payload=result){this.status=code;this.responseText=JSON.stringify(payload);this.onload();}
  }
  vm.runInNewContext(source,{document:{readyState:'complete',querySelector:()=>root},window,
-  fetch:async()=>({ok:true,json:async()=>({documents:[]})}),URL,XMLHttpRequest,
+  fetch:async()=>({ok:true,json:async()=>({documents:[],history:health})}),URL,XMLHttpRequest,
   FormData:class{constructor(){assert.equal(file.disabled,false);}},queueMicrotask});
- return {button,output,file,filename,progress,get requests(){return requests;},get enabled(){return enabled;},get redirect(){return redirect;},
+ return {button,output,file,filename,progress,state,total,catalog,get requests(){return requests;},get enabled(){return enabled;},get redirect(){return redirect;},
   select(files){file.files=files;change();return pending;},respond:(...args)=>last.respond(...args),
   advance:event=>progressEvent(event),submit:()=>submit({preventDefault(){}}),poll:()=>poll()};
 }
 test('shared live controller is explicitly enabled',async()=>{
  const f=fixture();
  assert.equal(f.enabled,true);await f.poll();
+});
+
+test('historical health refresh updates text without replacing upload drafts or controls',async()=>{
+ const health={state:'WEATHER INCOMPLETE',catalog:{documents:11},totals:{weather_matched:150},pending_partitions:2,errors:[],partition_links:[]};
+ const f=fixture({health,failure:'error'});await f.select([{name:'keep.csv'}]);await f.poll();
+ assert.equal(f.state.textContent,'WEATHER INCOMPLETE');assert.equal(f.catalog.textContent,11);assert.equal(f.total.textContent,150);
+ assert.equal(f.file.files[0].name,'keep.csv');assert.equal(f.requests,1);
+ health.state='DATA READY';health.totals.weather_matched=152;await f.poll();
+ assert.equal(f.state.textContent,'DATA READY');assert.equal(f.total.textContent,152);
 });
 test('rejected import recovers controls and reports conflict',async()=>{
  const f=fixture({status:409,result:{message:'Exact duplicate already preserved.'}});

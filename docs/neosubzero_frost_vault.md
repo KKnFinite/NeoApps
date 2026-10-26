@@ -118,3 +118,93 @@ They are not new FROST regressions. The Release 2 browser helper was repaired to
 respect an already-expanded team section preserved by live reconciliation.
 
 No production spray, staffing, inventory or mission data is used as test data.
+# Phase 5 historical research contract
+
+Phase 5 uses the existing FROST/R2 namespace, source catalog and archive worker.
+No imported row creates an operational spray transaction, no SPEAR evidence is
+moved, and no live prediction model is trained or deployed.
+
+The owner confirmed on October 26, 2026 that ApplicationDate is the actual local
+calendar date and START/END clocks are Central local time across all seasons.
+`frost_analysis.TIME_CONTRACT` records this provenance. America/Chicago supplies
+historical offsets; ambiguous fall-back and nonexistent spring-forward times
+remain unmatched. Created/modified UTC values are never spray timestamps.
+An END clock earlier than START crosses into the next local calendar date.
+
+## Identity and incremental processing
+
+Verified source documents are discovered automatically, including those already
+archived before this release. Xchange RecordID is scoped to gateway. Equal IDs
+and raw-row hashes are overlapping exports, not new applications. Different
+hashes preserve source document/row and revision evidence. A unique latest
+LastModifiedUTC determines an explicit source revision; absent/tied modification
+evidence requires review rather than import-order overwrite. Missing IDs do not
+cause guessed tail/date merges. Original bytes and previous derived objects
+remain immutable, content-addressed and retrievable through provenance.
+
+`frost_history_tasks` holds only processing metadata, leases, monthly source and
+result pointers, and selected aggregate features. Full source/weather/research
+records remain in FROST, not duplicated wholesale into Neon. Both canonical
+PostgreSQL and SQLite bootstrap register and verify the additive table.
+
+The existing archive worker is woken every 60 seconds from `run.py`, including
+when no browser is open. Work is bounded, transactionally leased and retried
+with backoff; remote I/O does not hold operational locks. Weather raw-delivery
+checkpoints avoid downloading again after a derived-object delivery failure.
+New source hashes invalidate affected monthly partitions, not historical raw
+evidence. Increment the analysis or weather version for rule reprocessing;
+old versions remain separate. No browser or upload request waits for analysis.
+
+## Weather source and quality
+
+Actual RFD/KRFD routine and special METAR observations come from the
+[Iowa Environmental Mesonet archive](https://mesonet.agron.iastate.edu/request/download.phtml),
+not current forecasts. The [station catalog](https://mesonet.agron.iastate.edu/sites/site.php?network=IL_ASOS&station=RFD)
+identifies IL_ASOS RFD at 42.19151, -89.08760, elevation 220 m, America/Chicago,
+archive beginning 1951-03-01. IEM's [public-domain terms](https://mesonet.agron.iastate.edu/disclaimer.php)
+permit reuse; the observations are as-is, with limited quality control.
+
+Requests use UTC monthly cache partitions, routine=3 and special=4, bounded
+responses/timeouts and a process throttle respecting the documented one-second
+per-IP limit. HTTP 429/503 are failures with retry/backoff, never successful
+empty datasets. Raw provider bytes, request URL, SHA, fetch time, station and
+parser version are archived. Coordinates/station and UTC bounds are validated.
+Conflicting same-time measurements are retained but excluded from joins.
+
+Normalized units: Celsius temperature/dew point/spread, percent RH, knots wind
+and gusts, true degrees direction, statute miles visibility, feet cloud ceiling,
+inches precipitation since hourly reset. Trace and missing values remain
+distinct. Cumulative METAR precipitation is not summed across special reports.
+Calm wind is not classified as a north-wind exposure.
+
+Each application joins only preceding observations (maximum age 90 minutes),
+with 12-hour context, 3/6/12-hour cooling rates, coverage, capped observed-interval
+freezing/saturation/precipitation/fog proxies and cloud/wind context. Proxy
+durations are not continuous measurements; sparse windows remain incomplete.
+[NOAA approximate solar geometry](https://gml.noaa.gov/grad/solcalc/solareqns.PDF)
+provides night, sunrise/sunset and solar elevation, not measured irradiance.
+[NASA ground-icing guidance](https://aircrafticing.grc.nasa.gov/2_2_2_1.html)
+supports retaining moisture, cloud, wind and cold-soak context independently.
+No aircraft surface temperature, surface wind or historical stand is invented.
+
+## Labels and analysis limits
+
+The established Xchange reason map is reused, not extended by guessed codes.
+F/Frost with actual application is LIKELY FROST PRESENT, strong reason evidence,
+not physical confirmation. P/preventative treatment is ANTICIPATED FROST RISK.
+Explicit other causes stay NON-FROST TREATMENT; ambiguous reasons stay UNKNOWN.
+A trustworthy explicit no-treatment observation is only likely negative when
+prior pretreatment is known absent. Missing spray, Posted=False, cancellations,
+and assumed weekday exposure never supply negative labels. No credible
+unsprayed comparison population has been established in these CSVs.
+
+Research JSON retains exact reasons and evidence strength separately from
+features. Monthly/seasonal descriptive cohorts count an application/tail/date,
+not trucks or fluid contributions as independent aircraft. Missing-field sample
+counts and directional sectors remain available. Treatment-selection/reporting
+bias, unknown prior treatment, absent surface/aircraft history and observation
+gaps prevent claims of causation, frost-negative prevalence or predictive skill.
+MotherBrain/DUCC current parking is not historical evidence. The suggested
+position-1/5 southerly shelter effect remains an unvalidated hypothesis; no
+hardcoded parking adjustment is applied. Phase 6 requires independent backtests
+and calibration before a live prediction model.

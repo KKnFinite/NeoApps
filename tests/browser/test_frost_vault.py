@@ -9,6 +9,8 @@ from tests import test_frost_vault as contracts
 from app.extensions import db
 from app.models import Gateway,FrostDocument,User,NeoSubZeroSprayRecord
 from app.services.frost_documents import drain
+from app.services import frost_history as history
+from tests.test_frost_history import weather_csv
 
 
 class FrostVaultBrowserTest(unittest.TestCase):
@@ -25,6 +27,44 @@ class FrostVaultBrowserTest(unittest.TestCase):
     def tearDownClass(cls):
         for item in reversed(cls.patches):item.stop()
         cls.f.tearDownClass()
+
+    def test_historical_health_live_updates_and_mobile_import_stays_accessible(self):
+        with self.f.app.app_context():
+            gateway=Gateway.query.first();user=User.query.filter_by(username='drawer-admin').one()
+            from app.services.frost_documents import stage
+            stage(gateway,user,'historical-fixture.csv',contracts.sample(Reason='F'))
+            db.session.commit();drain(gateway.id)
+            with patch('app.services.frost_weather.fetch',side_effect=lambda start,end:(weather_csv(start,end),'https://fixture.invalid')):
+                history.drain(gateway.id)
+        for engine in ('chromium','webkit'):
+            browser=getattr(self.f.pw,engine).launch(headless=True)
+            try:
+                page=browser.new_page(viewport={'width':375,'height':900},service_workers='block')
+                self.f().login(page);self.f().ready(page,'/neosubzero/frost-vault')
+                expect(page.locator('[data-history-state]')).to_have_text('DATA READY')
+                expect(page.locator('[data-history-total="LIKELY FROST PRESENT"]')).to_have_text('1')
+                expect(page.get_by_label('IMPORT CSV',exact=True)).to_be_visible()
+                page.get_by_text('SEASONAL ASSOCIATIONS · DESCRIPTIVE, NOT PREDICTIONS',exact=True).click()
+                expect(page.locator('[data-history-cohorts]')).to_contain_text('LIKELY FROST PRESENT')
+                for width in (320,375,390,430,768,1440):
+                    page.set_viewport_size({'width':width,'height':900})
+                    self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-window.innerWidth'),1)
+                    page.evaluate('window.scrollTo(0,0)')
+                    page.screenshot(path=str(self.f.evidence/f'frost-history-{engine}-{width}.png'),full_page=True)
+                page.get_by_text('VERSIONED DATA & ANALYSIS',exact=True).click()
+                link=page.locator('[data-history-links] a').first
+                with page.expect_download() as download:link.click()
+                self.assertIn('frost-research',download.value.suggested_filename)
+                # Pending status is reflected without replacing upload form or focus.
+                field=page.get_by_label('IMPORT CSV',exact=True);field.focus()
+                with self.f.app.app_context():
+                    from app.models import FrostHistoryTask
+                    row=FrostHistoryTask.query.filter_by(kind='partition').one();row.status='pending';db.session.commit()
+                expect(page.locator('[data-history-state]')).to_have_text('WEATHER INCOMPLETE',timeout=25000)
+                self.assertTrue(field.evaluate('el=>el===document.activeElement'))
+                with self.f.app.app_context():
+                    row=FrostHistoryTask.query.filter_by(kind='partition').one();row.status='ready';db.session.commit()
+            finally:browser.close()
 
     def test_mobile_native_picker_uploads_seasons_and_recovers_errors(self):
         for engine in ('chromium','webkit'):

@@ -17,6 +17,9 @@ app = (
 from app.services.neostaffing_employee_recovery_worker import start_recovery_worker
 start_recovery_worker(app)
 
+from app.services.neoscorpion_spear_decisions import initialize_delivery_heartbeat
+initialize_delivery_heartbeat(app)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

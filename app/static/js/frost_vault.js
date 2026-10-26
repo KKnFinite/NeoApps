@@ -49,6 +49,44 @@
             const response=await fetch(root.dataset.statusUrl,{credentials:'same-origin',cache:'no-store'});
             if(!response.ok)throw new Error('FROST status refresh failed.');
             const result=await response.json();
+            if(result.history){
+                const health=result.history;
+                const write=(selector,value)=>{const el=root.querySelector(selector);if(el)el.textContent=value;};
+                write('[data-history-state]',health.state);
+                for(const el of root.querySelectorAll('[data-history-catalog]'))el.textContent=health.catalog[el.dataset.historyCatalog]??'—';
+                for(const el of root.querySelectorAll('[data-history-total]'))el.textContent=health.totals[el.dataset.historyTotal]??0;
+                write('[data-history-range]',`${health.catalog.date_start||'—'} – ${health.catalog.date_end||'—'}`);
+                write('[data-history-pending]',health.pending_partitions);
+                write('[data-history-success]',health.last_success||'Not yet processed');
+                write('[data-history-errors]',health.errors.map(item=>`${item.month}: ${item.error}`).join(' · '));
+                const cohorts=root.querySelector('[data-history-cohorts]');
+                if(cohorts){
+                    const signature=JSON.stringify(health.descriptive_cohorts);
+                    if(cohorts.dataset.signature!==signature){
+                        const fragment=document.createDocumentFragment();
+                        for(const cohort of health.descriptive_cohorts||[]){
+                            const row=document.createElement('tr');
+                            const values=[`${cohort.season} · ${cohort.label}`,cohort.applications,
+                                ...['temperature_c','spread_c','wind_kt','night','clear_sky'].map(key=>cohort.fields[key]?.mean?.toFixed(2)??'—')];
+                            for(const value of values){const cell=document.createElement('td');cell.textContent=String(value);row.append(cell);}
+                            fragment.append(row);
+                        }
+                        cohorts.replaceChildren(fragment);cohorts.dataset.signature=signature;
+                    }
+                }
+                const links=root.querySelector('[data-history-links]');
+                if(links){
+                    const signature=JSON.stringify(health.partition_links);
+                    if(links.dataset.signature!==signature){
+                        const fragment=document.createDocumentFragment();
+                        for(const item of health.partition_links){
+                            const link=document.createElement('a');link.href=`/neosubzero/frost-vault/history/${Number(item.id)}`;
+                            link.textContent=`${item.month} · ${item.status.replaceAll('_',' ')}`;fragment.append(link);
+                        }
+                        links.replaceChildren(fragment);links.dataset.signature=signature;
+                    }
+                }
+            }
             for(const row of result.documents){
                 const card=root.querySelector(`[data-frost-document="${row.id}"]`);if(!card)continue;
                 card.querySelector('[data-frost-delivery]').textContent=row.archived?'OFF-SITE VERIFIED':'ENCRYPTED STAGING · DELIVERY PENDING';

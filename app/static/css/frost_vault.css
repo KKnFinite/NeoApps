@@ -19,3 +19,15 @@
 .frost-workspace .neosubzero-head h1 {font-size:clamp(1.35rem,2.4vw,2rem);margin:0;}
 .frost-workspace form {margin:12px 0;}
 .frost-workspace button {min-height:44px;padding:5px 12px;border:1px solid #548cb1;background:#102a3d;color:#e2f2ff;border-radius:3px;font:inherit;}
+.frost-history {border-block:1px solid #36556b;padding:8px 0;margin:12px 0;min-width:0;}
+.frost-history header {display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;justify-content:space-between;}
+.frost-health-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px;margin:8px 0;}
+.frost-health-grid div {min-width:0;}
+.frost-health-grid dt {font-size:.8rem;color:#afc5d6;}
+.frost-health-grid dd {margin:2px 0;font-variant-numeric:tabular-nums;}
+.frost-history p {font-size:.85rem;margin:6px 0;}
+.frost-history [data-history-errors] {color:#ffb3b3;}
+.frost-history [data-history-links] {display:flex;flex-wrap:wrap;gap:6px 18px;}
+.frost-analysis-scroll {max-width:100%;overflow-x:auto;}
+.frost-analysis-scroll table {border-collapse:collapse;width:100%;font-size:.8rem;}
+.frost-analysis-scroll th,.frost-analysis-scroll td {padding:5px 8px;text-align:left;border-bottom:1px solid #36556b;white-space:nowrap;}
