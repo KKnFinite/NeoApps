@@ -4,12 +4,48 @@ import hashlib
 import json
 import re
 import zlib
+from contextlib import contextmanager
+from contextvars import ContextVar
 from app.services import neoscorpion_learning_vault as provider
 
 PREFIX='frost-vault/v1/'
 CATEGORIES=('original-xchange','extracted-xchange','spray-history','weather',
             'frost-observations','evaluations','training-datasets','treatment-context','manifests')
 MAX_OBJECT_BYTES=64*1024*1024
+_transport_scope=ContextVar('frost_transport_scope',default=None)
+
+
+@contextmanager
+def transport_scope():
+    """One existing-provider client per bounded job, closed even on failure.
+
+    Botocore clients own connection pools and cyclic model graphs. Creating
+    hundreds in a single historical batch needlessly grows the web container.
+    Context-local scope cannot leak a client across threads or credential sets.
+    """
+    if _transport_scope.get() is not None:
+        yield
+        return
+    # A paused/idle batch must not construct an SDK client at all.
+    scope={'config':None,'client':None}
+    token=_transport_scope.set(scope)
+    try:
+        yield
+    finally:
+        _transport_scope.reset(token)
+        close=getattr(scope['client'],'close',None)
+        if callable(close): close()
+
+
+def _client(config):
+    scope=_transport_scope.get()
+    if scope is None:
+        return provider._r2_client(config)
+    if scope['client'] is None or scope['config']!=config:
+        close=getattr(scope['client'],'close',None)
+        if callable(close): close()
+        scope['config'],scope['client']=config,provider._r2_client(config)
+    return scope['client']
 
 
 def digest(raw):
@@ -39,7 +75,7 @@ def read_bytes(key,gateway_id,*,legacy=False):
     _authorized_key(key,gateway_id,legacy=legacy)
     config=provider._require_r2_config()
     try:
-        response=provider._r2_client(config).get_object(Bucket=config['bucket'],Key=key)
+        response=_client(config).get_object(Bucket=config['bucket'],Key=key)
         stream=response['Body']
         try: raw=stream.read(MAX_OBJECT_BYTES+1)
         finally: stream.close()
@@ -54,7 +90,7 @@ def read_bytes(key,gateway_id,*,legacy=False):
 def put_bytes(key,raw,gateway_id):
     _authorized_key(key,gateway_id)
     if not raw or len(raw)>MAX_OBJECT_BYTES: raise ValueError('FROST object size is invalid.')
-    config=provider._require_r2_config();client=provider._r2_client(config)
+    config=provider._require_r2_config();client=_client(config)
     expected=digest(raw)
     try:
         existing=client.head_object(Bucket=config['bucket'],Key=key)
@@ -87,7 +123,7 @@ def read_json(key,gateway_id):
     _authorized_key(key,gateway_id,legacy=True)
     config=provider._require_r2_config()
     try:
-        response=provider._r2_client(config).get_object(Bucket=config['bucket'],Key=key)
+        response=_client(config).get_object(Bucket=config['bucket'],Key=key)
         stream=response['Body']
         try: compressed=stream.read(MAX_OBJECT_BYTES+1)
         finally: stream.close()

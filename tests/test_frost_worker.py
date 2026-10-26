@@ -2,9 +2,24 @@
 import unittest
 from unittest.mock import patch,MagicMock
 from app.services.neoscorpion_spear_decisions import initialize_delivery_heartbeat
+from app.services import frost_history as history
 
 
 class WorkerTest(unittest.TestCase):
+    def test_memory_guard_uses_container_headroom_and_fails_closed(self):
+        from unittest.mock import mock_open
+        with patch('pathlib.Path.read_text',side_effect=['300000000','536870912']):
+            self.assertTrue(history.memory_budget()['safe'])
+        with patch('pathlib.Path.read_text',side_effect=['500000000','536870912']):
+            self.assertFalse(history.memory_budget()['safe'])
+        with patch('pathlib.Path.read_text',side_effect=OSError('unavailable')):
+            self.assertFalse(history.memory_budget()['safe'])
+
+    def test_memory_pressure_does_not_open_storage_or_claim_jobs(self):
+        with patch.object(history,'memory_allows_work',return_value=False),patch.object(history.vault,'transport_scope') as transport:
+            self.assertEqual(history.drain(1),0)
+            transport.assert_not_called()
+
     def test_testing_apps_never_start_background_network_or_database_work(self):
         app=MagicMock();app.config={'TESTING':True};app.extensions={}
         with patch('app.services.neoscorpion_spear_decisions.threading.Timer') as timer:

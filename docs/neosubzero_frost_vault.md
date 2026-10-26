@@ -208,3 +208,15 @@ MotherBrain/DUCC current parking is not historical evidence. The suggested
 position-1/5 southerly shelter effect remains an unvalidated hypothesis; no
 hardcoded parking adjustment is applied. Phase 6 requires independent backtests
 and calibration before a live prediction model.
+
+## Memory safety
+
+Historical work uses one monthly job per batch and one scoped existing-provider
+client, explicitly closed on both success and failure. Container cgroup totals
+must show at least 128 MiB headroom and no more than 75% use before a batch may
+start. An unknown production memory budget fails closed. No plan upgrade is
+performed. A database lease serializes batches across gunicorn processes so
+concurrent jobs cannot spend the same container headroom. Deferred retry timestamps are respected: normal polling must not
+resume an administrator-approved temporary pause. The 33,000-row/58-column
+isolated discovery proof measured 60.55 MiB traced allocations; this is not a
+claim about total web-container RSS, which includes multiple processes and SDKs.

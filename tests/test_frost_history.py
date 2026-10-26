@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from flask import g
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 from sqlalchemy import text,inspect
 from app.extensions import db
@@ -176,6 +177,33 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
         self.assertEqual(documents.original(first),contracts.sample(Reason='F'))
 
+    def test_bounded_batch_reuses_and_closes_one_transport_on_success_and_failure(self):
+        store=self.storage();self.fetcher();self.stage();gw=self.f.gateway.id
+        from unittest.mock import Mock
+        store.close=Mock()
+        with patch('app.services.neoscorpion_learning_vault._r2_client',return_value=store) as factory:
+            self.assertEqual(history.drain(gw),1)
+            self.assertEqual(factory.call_count,1)
+            store.close.assert_called_once()
+        store.close.reset_mock()
+        key=FrostHistoryTask.query.filter_by(kind='partition').one().result_key
+        def fail(*args,**kwargs):
+            vault.read_json(key,gw)
+            raise RuntimeError('fixture failure')
+        with patch('app.services.frost_history._drain',side_effect=fail):
+            with self.assertRaises(RuntimeError):history.drain(gw)
+        store.close.assert_called_once()
+
+    def test_paused_jobs_are_not_claimed_or_resumed_by_normal_polling(self):
+        self.storage();self.fetcher();self.stage();gw=self.f.gateway.id;history.discover(gw)
+        row=FrostHistoryTask.query.filter_by(kind='partition').one()
+        row.retry_at=datetime.utcnow()+timedelta(hours=24);db.session.commit()
+        with patch('app.services.frost_weather.fetch') as fetch,patch('app.services.neoscorpion_learning_vault._r2_client') as client:
+            self.assertEqual(history.drain(gw),0)
+            fetch.assert_not_called()
+            client.assert_not_called()
+        self.assertIsNone(row.result_key)
+
     def test_overlap_same_row_and_source_correction_changes_only_affected_partition(self):
         self.storage();self.fetcher();gw=self.f.gateway.id
         self.stage('one.csv',Reason='F',LastModifiedUTC='9/04/2025 09:00')
@@ -338,3 +366,21 @@ class HistoryPostgresTest(PipelineTest):
                 finally:db.session.remove()
         with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(worker,range(2)))
         self.assertEqual(results[0],results[1])
+
+    def test_two_process_equivalent_batches_cannot_spend_the_same_memory_budget(self):
+        self.storage();gw=self.f.gateway.id;db.session.remove()
+        entered,release=Event(),Event()
+        def slow(*args,**kwargs):
+            entered.set();self.assertTrue(release.wait(10));return 1
+        def worker():
+            with self.f.app.app_context():
+                try:return history.drain(gw)
+                finally:db.session.remove()
+        with patch.object(history,'_drain',side_effect=slow):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first=pool.submit(worker)
+                try:
+                    self.assertTrue(entered.wait(10))
+                    self.assertEqual(pool.submit(worker).result(timeout=10),0)
+                finally:release.set()
+                self.assertEqual(first.result(timeout=10),1)

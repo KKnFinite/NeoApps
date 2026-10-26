@@ -7,6 +7,8 @@ FROST objects; catalog pointers change only after read-back verification.
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+import gc
+from pathlib import Path
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +16,29 @@ from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models import FrostDocument, FrostHistoryTask as Task, Gateway
 from app.services import frost_analysis as analysis, frost_vault as vault, frost_weather as weather
+
+
+def memory_budget():
+    """Use container totals, not only one gunicorn process's RSS.
+
+    Fails closed on an unmeasurable production budget. Do not spend money by
+    changing the service plan, or start historical work without safe headroom.
+    """
+    for usage_path,limit_path in (
+        ('/sys/fs/cgroup/memory.current','/sys/fs/cgroup/memory.max'),
+        ('/sys/fs/cgroup/memory/memory.usage_in_bytes','/sys/fs/cgroup/memory/memory.limit_in_bytes')):
+        try:
+            usage=int(Path(usage_path).read_text().strip())
+            limit=int(Path(limit_path).read_text().strip())
+            if 0 < limit < 2**60:
+                return dict(usage=usage,limit=limit,safe=usage <= limit*.75 and limit-usage >= 128*1024*1024)
+        except (OSError,ValueError):
+            continue
+    return dict(usage=None,limit=None,safe=False)
+
+
+def memory_allows_work():
+    return bool(current_app.config.get('TESTING') or memory_budget()['safe'])
 
 
 def task(gateway_id, kind, identity, version=None):
@@ -268,7 +293,32 @@ def process(row):
         return False
 
 
-def drain(gateway_id, *, limit=6):
+def drain(gateway_id, *, limit=1):
+    """Use one transport per small batch; release cyclic SDK resources after it."""
+    if not memory_allows_work():
+        return 0
+    # A gunicorn master and worker can both wake the archive scheduler. The
+    # process-local lock is insufficient: serialize FROST batches in PostgreSQL
+    # so two jobs cannot independently spend the same container headroom.
+    batch=task(gateway_id,'worker','memory-budget','frost-worker-v1')
+    identifier=batch.id
+    token=claim(batch)
+    if not token:
+        return 0
+    failed=False
+    try:
+        with vault.transport_scope():
+            return _drain(gateway_id,limit=limit)
+    except Exception:
+        failed=True
+        raise
+    finally:
+        gc.collect()
+        finish(identifier,token,status='retry' if failed else 'ready',
+            retry_at=datetime.utcnow()+timedelta(seconds=60 if failed else 0))
+
+
+def _drain(gateway_id, *, limit=1):
     """Bounded background work. Never waits in an upload/spray request."""
     discover(gateway_id)
     identifiers = [row.id for row in Task.query.filter_by(gateway_id=gateway_id,kind='partition',version=analysis.VERSION).filter(
