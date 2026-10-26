@@ -97,14 +97,37 @@ def discover(gateway_id):
                 raise ValueError('Extracted source identity/hash mismatch; review required.')
             if extracted.get('missing_contract_fields'):
                 continue
-            records.extend(analysis.compact_row(row,document) for row in extracted['rows'])
+            # Never retain a decade of tank/fluid/raw CSV dictionaries at once.
+            # Archive document/month fragments and keep only compact revision
+            # pointers for global overlap resolution. Source bytes stay intact.
+            fragments = defaultdict(list)
+            for raw_row in extracted['rows']:
+                item = analysis.compact_row(raw_row,document)
+                fragments[(item.get('application_date') or 'unknown')[:7]].append(item)
+            del extracted
+            for month,items in fragments.items():
+                fragment = vault.put_json('training-datasets',gateway_id,f'{analysis.VERSION}-doc-{document.id}-{month}',
+                    dict(schema_version=analysis.VERSION,records=items))
+                records.extend(dict(source_record_id=item['source_record_id'],application_date=item['application_date'],
+                    row_hash=item['row_hash'],modified_utc=item['modified_utc'],source=item['source'],
+                    requires_review=item['requires_review'],fragment_key=fragment) for item in items)
+            del fragments
+            checkpoint = Task.query.filter_by(id=identifier).with_for_update().one()
+            if checkpoint.lease_token != token:
+                db.session.rollback()
+                return False
+            checkpoint.summary = dict(documents=len(docs),documents_scanned=docs.index(document)+1,
+                source_rows_scanned=len(records))
+            checkpoint.updated_at = datetime.utcnow()
+            checkpoint.retry_at = datetime.utcnow()+timedelta(minutes=15)
+            db.session.commit()
         records, summary = analysis.deduplicate(records)
         partitions = defaultdict(list)
         for row in records:
             partitions[(row.get('application_date') or 'unknown')[:7]].append(row)
         saved = {}
         for month, rows in sorted(partitions.items()):
-            payload = dict(schema_version=analysis.VERSION,time_contract=analysis.TIME_CONTRACT,records=rows)
+            payload = dict(schema_version=analysis.VERSION,time_contract=analysis.TIME_CONTRACT,record_pointers=rows)
             digest = vault.digest(vault.canonical(payload))
             source_key = vault.put_json('training-datasets',gateway_id,'source-'+month,payload)
             saved[month] = (digest, source_key, len(rows))
@@ -194,8 +217,26 @@ def process(row):
         source = vault.read_json(source_key,gateway_id)
         if vault.digest(vault.canonical(source)) != digest:
             raise ValueError('Research source partition hash mismatch.')
+        # Resolve just this month's selected rows. Raw and normalized records
+        # from other seasons never enter this worker's working set.
+        fragments = {}
+        records = []
+        for pointer in source['record_pointers']:
+            key = pointer['fragment_key']
+            if key not in fragments:
+                fragment = vault.read_json(key,gateway_id)
+                fragments[key] = {item['source']['source_row']:item for item in fragment['records']}
+            selected = fragments[key][pointer['source']['source_row']]
+            if selected['row_hash'] != pointer['row_hash']:
+                raise ValueError('Historical fragment row hash mismatch.')
+            record = dict(selected,sources=pointer['sources'],revision_evidence=pointer['revision_evidence'],
+                revision_conflict=pointer['revision_conflict'],requires_review=pointer['requires_review'])
+            if pointer['revision_conflict']:
+                record['classification'],record['fluids'] = analysis.classification(None),[]
+            records.append(record)
+        del fragments
         months = set()
-        for record in source['records']:
+        for record in records:
             if record['requires_review']: continue
             for fluid in record['fluids']:
                 if fluid.get('occurred_at_utc'):
@@ -206,7 +247,7 @@ def process(row):
             rows,key = observations(gateway_id,month)
             observed.extend(rows)
             evidence.append(key)
-        dataset = analysis.analyze(source['records'],observed)
+        dataset = analysis.analyze(records,observed)
         dataset.update(source_partition_key=source_key,source_partition_hash=digest,weather_evidence=evidence,
             station=weather.STATION)
         key = vault.put_json('training-datasets',gateway_id,analysis.VERSION+'-'+row.identity,dataset)

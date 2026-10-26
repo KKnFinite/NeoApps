@@ -4,6 +4,7 @@ import csv
 import io
 import os
 import unittest
+import tracemalloc
 from datetime import datetime,timedelta,timezone
 from types import SimpleNamespace
 from flask import g
@@ -243,6 +244,28 @@ class PipelineTest(unittest.TestCase):
         with patch.object(analysis,'analyze',side_effect=invalidate):self.assertFalse(history.process(row))
         self.assertIsNone(db.session.get(FrostHistoryTask,row.id).result_key)
 
+    def test_decade_catalog_is_month_fragmented_with_bounded_working_memory(self):
+        self.storage();actor=self.actor();gw=self.f.gateway.id
+        for year in range(2015,2026):
+            template=list(csv.DictReader(io.StringIO(contracts.sample().decode())))[0]
+            stream=io.StringIO(newline='');writer=csv.DictWriter(stream,fieldnames=list(template));writer.writeheader()
+            for index in range(3000):
+                writer.writerow(dict(template,RecordID=str(year*10000+index),ApplicationDate=f'9/04/{year}',Notes='Source notes '*35))
+            documents.stage(self.f.gateway,actor,f'{year}.csv',stream.getvalue().encode());db.session.commit()
+            documents.drain(gw,limit=20)
+        tracemalloc.start()
+        try:
+            self.assertTrue(history.discover(gw))
+            _,peak=tracemalloc.get_traced_memory()
+        finally:tracemalloc.stop()
+        self.assertLess(peak,160*1024*1024)
+        self.assertEqual(history.health(gw)['catalog']['deduplicated_records'],33000)
+        partitions=FrostHistoryTask.query.filter_by(kind='partition').all()
+        self.assertEqual(len(partitions),11)
+        source=vault.read_json(partitions[0].source_key,gw)
+        self.assertIn('record_pointers',source);self.assertNotIn('records',source)
+        self.assertNotIn('fluids',source['record_pointers'][0])
+
     def test_missing_weather_dst_and_source_error_do_not_become_data_ready(self):
         self.storage();gw=self.f.gateway.id
         self.stage(ApplicationDate='11/02/2025',StartTime1='01:30',EndTime1='01:35',Type4Used='0')
@@ -273,7 +296,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(history.drain(gw),1)
             self.assertEqual(history.health(gw)['version'],'frost-history-test-v2')
         self.assertEqual(fetch.call_count,count)
-        self.assertEqual(vault.read_json(old,gw)['schema_version'],'frost-history-v1')
+        self.assertEqual(vault.read_json(old,gw)['schema_version'],'frost-history-v2')
 
 
 @unittest.skipUnless(os.environ.get('NEOSTAFFING_TEST_POSTGRES_URL'),'Requires disposable loopback PostgreSQL')

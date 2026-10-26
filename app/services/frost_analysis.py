@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from app.services import frost_vault as vault
 from app.services.neosubzero_frost_history import _parse_cryotech_reason, CRYOTECH_REASON_DESCRIPTIONS
 
-VERSION = 'frost-history-v1'
+VERSION = 'frost-history-v2'
 TIME_CONTRACT = 'owner-confirmed-2026-10-26-local-calendar-America_Chicago'
 ZONE = ZoneInfo('America/Chicago')
 UTC = timezone.utc
