@@ -94,34 +94,15 @@ def frost_dataset_manifest():
 @bp.route('/frost-vault/backfill/<int:identifier>')
 @gateway_node_required('subzero')
 def frost_backfill_export(identifier):
-    gateway=authorized()
-    try:
-        envelope=backfill.export(gateway.id,current_user.id,identifier)
-        response=send_file(io.BytesIO(vault.canonical(envelope)),mimetype='application/octet-stream',as_attachment=True,
-            download_name='frost-local-'+envelope['job']['month']+'.json')
-        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
-        return response
-    except (ValueError,RuntimeError) as exc:
-        db.session.rollback();return str(exc),409
+    authorized()
+    return 'Bulk historical publication is retired. Use frost_local assemble and submit only a compact model artifact.',410
 
 
 @bp.route('/frost-vault/backfill/publish',methods=['POST'])
 @gateway_node_required('subzero')
 def frost_backfill_publish():
-    gateway=authorized()
-    published=[]
-    try:
-        uploads=request.files.getlist('result')
-        if not uploads or len(uploads)>4 or any(not u.filename.lower().endswith('.zip') for u in uploads):raise ValueError('Choose one to four locally generated result ZIPs (8 MiB total).')
-        for upload in uploads:
-            row=backfill.publish(gateway.id,current_user.id,upload.stream.read(backfill.MAX_ZIP+1))
-            published.append(row.identity+' · '+row.status)
-        return jsonify(ok=True,message='LOCAL RESULT PUBLISHED: '+', '.join(published)+'.',models=models.status(gateway.id))
-    except (ValueError,RuntimeError,KeyError,TypeError,IntegrityError) as exc:
-        db.session.rollback()
-        error=str(exc) if not isinstance(exc,IntegrityError) else 'Concurrent publication conflict; refresh current values. Original result file retained.'
-        if published:error='Already published: '+', '.join(published)+'. Remaining files retained. '+error
-        return jsonify(ok=False,error=error),409
+    authorized()
+    return jsonify(ok=False,error='Bulk historical publication is retired. Keep completed local results; submit only a compact model artifact.'),410
 
 
 @bp.route('/frost-vault/weather/<int:identifier>')
@@ -129,6 +110,7 @@ def frost_backfill_publish():
 def frost_weather_evidence(identifier):
     from app.services import frost_weather
     gateway=authorized()
+    if not history.memory_allows_work():return 'Historical evidence transfer deferred for memory safety. Originals and archived results are preserved; use verified local caches.',503
     row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='weather',version=frost_weather.VERSION,status='ready').first_or_404()
     try:
         payload=vault.read_json(row.result_key,gateway.id)
@@ -146,6 +128,7 @@ def frost_models():
     if request.method=='POST':
         try:
             action=request.form.get('action')
+            message='Model '+str(action)+' recorded.'
             if action=='import':
                 file=request.files.get('model')
                 if not file or not file.filename.lower().endswith('.json'): raise ValueError('Choose a locally generated JSON model.')
@@ -153,11 +136,15 @@ def frost_models():
             elif action in ('approve','rollback'):
                 models.release(gateway.id,current_user.id,int(request.form.get('model_id','')),
                     int(request.form.get('revision','')),request.form.get('reason','').strip(),rollback=action=='rollback')
+            elif action=='retire-publication':
+                retired=models.retire_publication(gateway.id,current_user.id)
+                message=f'RETIRED {len(retired)} legacy publication jobs. Source documents, archived evidence and local results are preserved.'
             else: raise ValueError('Unknown model action. Training is local-only.')
-            return jsonify(ok=True,message='Model '+action+' recorded.',models=models.status(gateway.id))
+            return jsonify(ok=True,message=message,models=models.status(gateway.id))
         except (ValueError,RuntimeError,KeyError,TypeError) as exc:
             db.session.rollback()
-            return jsonify(ok=False,error=str(exc)),409 if any(term in str(exc).lower() for term in ('changed','gate','snapshot','conflict')) else 400
+            code=503 if 'headroom' in str(exc).lower() else 409 if any(term in str(exc).lower() for term in ('changed','gate','snapshot','conflict')) else 400
+            return jsonify(ok=False,error=str(exc)),code
     response=jsonify(models=models.status(gateway.id))
     response.headers['Cache-Control']='private, no-store'
     return response
@@ -179,8 +166,9 @@ def frost_forecast():
 @gateway_node_required('subzero')
 def frost_history_evidence(identifier):
     gateway=authorized()
+    if not history.memory_allows_work():return 'Historical evidence transfer deferred for memory safety. Preserve local results and reconstruct missing features on the workstation.',503
     row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='partition',version=frost_analysis.VERSION).first_or_404()
-    if not row.result_key or row.status in ('pending','retry','superseded'):
+    if not row.result_key or row.status in ('pending','retry','superseded','local_only'):
         return 'Current historical dataset is not ready; previous evidence is retained.',409
     try:
         payload=vault.read_json(row.result_key,gateway.id)

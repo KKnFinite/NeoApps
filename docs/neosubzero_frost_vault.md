@@ -223,51 +223,28 @@ claim about total web-container RSS, which includes multiple processes and SDKs.
 
 ## Phase 6: workstation training, private artifacts, inference only on Render
 
-### Local historical backfill handoff
+### Local historical evidence; bulk publication retired
 
 Render no longer starts historical catalog discovery, weather reconstruction or
 feature analysis, even after the old retry pause expires. Existing retry dates,
 memory limits and completed results are preserved. This does not stop original
 CSV archival delivery, spray history delivery, or live operations.
 
-For the existing catalog's pending months, expand LOCAL HISTORICAL PROCESSING on
-the authenticated FROST page. Download one source package and run on the local
-workstation:
+The former PUBLISH LOCAL RESULT workflow is obsolete. Authenticated compatibility
+routes return HTTP 410 and never consume old ZIPs. The administration retirement
+action records prior task IDs/status/retry/source/result pointers in existing
+document audit records, marks only pending/retry partitions `local_only`, and
+preserves retry dates, originals, weather, previous results and local packages.
+It does not falsely mark unuploaded rows processed. The live outbox no longer
+invokes historical discovery or processing, but retains operational/source
+archival delivery. The old verification automation was removed.
 
-```powershell
-.venv/Scripts/python.exe -m scripts.frost_backfill --local --job "PATH_TO_DOWNLOADED_MONTH.json"
-```
-
-Publish the generated ZIP through PUBLISH LOCAL RESULT. The signed source
-snapshot is bound to the gateway, authenticated operator, source hash and
-existing result pointer. It expires after 24 hours and is not a login credential.
-The publishing route still requires authentication, administrative permission
-and CSRF. No production DB/R2 credentials are exported to the workstation.
-
-For originals already retrieved privately, publication also accepts a complete
-content-addressed source proof. Its canonical pointer hash must equal the
-persisted source hash; every original fragment must reproduce its archived
-SHA-256, and reconstructed rows must exactly match the local input. Existing
-weather must match the persisted cache key/hash. This is not an unsigned-data
-bypass: authentication, CSRF, input versions, immutable hashes and stale-result
-checks all still apply. It avoids server-side historical downloads. Up to four
-result files can be published per bounded request; each month commits separately
-and partial failures explicitly identify any months already published.
-
-The local command uses the canonical historical parser/features, reuses existing
-verified observations, and caches new provider bytes and parsed months in ignored
-`instance/frost-local/backfill/`. It never trains a model. Render only validates
-bounded results, stores immutable read-back-verified evidence and atomically
-updates the month/weather pointers. It does not fetch historical weather or
-recalculate features during publication. Conflicts preserve both local files
-and previous off-site results; identical publication retries are idempotent.
-
-The transfer limits are 8 MiB compressed / 24 MiB expanded per month, with no
-filesystem extraction. The existing 75%/128-MiB headroom check also protects
-bounded transfers. Unsupported evidence remains missing/review, not fabricated.
-Completed months and the two known unmatched records are not automatically
-reprocessed. New imports remain safely archived; a changed source catalog
-requires local catalog preparation before new monthly jobs can be published.
+`scripts.frost_backfill` remains a local legacy-package reader/writer. Existing
+ZIPs are inputs to `frost_local assemble`, not uploads. All 12,797 previously
+computed local rows remain reusable without another weather/feature pass.
+Earlier archived results can be retrieved with authenticated `refresh`; if the
+web service lacks safe headroom, reconstruct only missing local rows from
+hash-verified originals. Existing published objects remain untouched.
 
 No model is trained or activated by deployment, CSV import, the history worker,
 or a web request. `scripts/frost_local.py` is outside the application import
@@ -297,6 +274,7 @@ public object URLs, or bucket credentials are required.
 ```powershell
 .venv/Scripts/python.exe -m pip install -r tests/requirements-frost-local.txt
 .venv/Scripts/python.exe -m scripts.frost_local --local refresh --origin https://neoapps.onrender.com --email YOUR_EMAIL --with-weather
+.venv/Scripts/python.exe -m scripts.frost_local --local assemble --catalog instance/frost-local/source-catalog.json --originals instance/frost-local/originals --cache instance/frost-local/backfill/publishable-results --cache instance/frost-local/backfill/prepared-results
 .venv/Scripts/python.exe -m scripts.frost_local --local validate
 .venv/Scripts/python.exe -m scripts.frost_local --local prepare --lead-hours 1
 .venv/Scripts/python.exe -m scripts.frost_local --local backtest --version rfd-candidate-h1-v1 --lead-hours 1
@@ -305,18 +283,35 @@ public object URLs, or bucket credentials are required.
 .venv/Scripts/python.exe -m scripts.frost_local --local submit --origin https://neoapps.onrender.com --email YOUR_EMAIL --artifact instance/frost-local/candidates/rfd-candidate-h1-v1.json
 ```
 
-`validate`, `prepare`, `backtest`, and `train` stop when the authenticated Phase 5
-snapshot is not DATA READY. This includes unresolved weather/data-quality gaps;
-there is no force switch. The current two known unmatched weather records need
-an explicit Phase 5 disposition, not fabricated observations. No final
-historical candidate has been produced while the backfill remains incomplete.
+`assemble` verifies every original byte hash, parser version, RecordID/revisions,
+source provenance, local result receipt/hash and exact source-row content. It
+reuses archived JSON, completed ZIPs and verified checkpoints. Only genuinely
+new/changed rows receive local features; overlapping exports do not inflate
+counts. It caches actual historical weather locally and never creates live spray
+events. A private original directory containing the original filenames also
+works; refreshed originals use content-addressed filenames to avoid collisions.
 
-`refresh` is allowed before readiness. It reads one versioned monthly partition
-at a time, verifies SHA-256, reuses verified local objects, and rechecks the
-manifest after transfer. `--with-weather` also retrieves existing private
-monthly observation evidence; it does not ask Render to reconstruct weather.
-Incremental imports change the manifest fingerprint. Old content-addressed
-files remain available; unchanged objects are not downloaded again.
+LOCAL DATA READY is derived from complete original/dedup/month reconciliation,
+weather/classification coverage, explicit quality exclusions and code versions.
+`prepare` adds actual eligible class counts, example SHA-256 and lead time.
+Immutable manifest versions live in `manifests/<fingerprint>.json`; manifest.json
+is only the current pointer. Altered/missing sources, files, counts, versions,
+unresolved revisions or undisposed quality problems fail closed. There is no
+force flag and production's old Phase 5 publication state is not consulted.
+
+The two known gaps (document 4 rows 76/77, RecordIDs 215320/215321) are retained
+as source-traceable exclusions from weather-dependent fitting. At 2018-10-17
+00:39 Central the preceding observation is 105 minutes old, outside the 90-minute
+contract; a future observation is not substituted. Exclusions do not imply a
+frost-negative label or a failed operational transaction.
+
+`refresh` checks the authenticated source catalog, downloads only missing/changed
+originals and available result objects, verifies SHA-256 and rechecks the remote
+snapshot. Optional `--with-weather` reads existing private observations, never
+requests Render reconstruction. Unsafe transfers return 503 rather than spending
+operational headroom; verified objects already downloaded are retained. CSV
+imports update the source fingerprint, not the approved model. No automatic
+training/backfill occurs. Reassemble locally after an incremental refresh.
 
 All downloaded records/checkpoints/candidates default to the already ignored
 `instance/frost-local/` directory. Use a protected workstation account/private
@@ -368,11 +363,23 @@ Method references: [season/group validation](https://scikit-learn.org/stable/mod
 
 The authenticated FROST page imports candidates and reviews validation metadata.
 There is no server TRAIN button. Upload never approves a model. Explicit
-approval checks the current dataset fingerprint/readiness, numerical runtime
+approval checks the local manifest/source-catalog compatibility, numerical runtime
 self-tests, feature/classification versions, declared limitations and evaluation
 criteria. Approval uses a gateway lock and expected registry revision; stale
 conflicts preserve browser entries. Identical retries are idempotent. Rollback
 is limited to a previously approved, still-compatible artifact.
+
+The compact model contains the local validation manifest, source IDs/hashes,
+quality dispositions, eligible class counts and training/evaluation metadata,
+not historical rows. Admission verifies its hash/count reconciliation against
+the current authoritative document catalog, current parser/feature/code versions,
+season/lead contract and numerical self-tests. Evaluation policy is recomputed,
+not accepted from a submitted PASS flag. This is an authenticated local-run
+attestation, not remote reproduction of all backtests or proof of physical frost
+skill. Explicit authorized review is still required; upload never approves.
+Old already-approved legacy artifacts retain their bounded runtime/rollback
+contracts. Model writes/approvals and bulk evidence reads respect the existing
+75% memory ceiling and minimum 128-MiB headroom; no plan changes are made.
 
 Artifacts are bounded (256 KiB) declarative JSON coefficients/trees. No pickle,
 joblib, arbitrary Python deserialization, or executable model formats are
@@ -399,3 +406,40 @@ An authorized manual calculation can persist an immutable FROST evaluation
 record and small last-success metadata. Archive failures remain visible; retry
 does not fabricate successful delivery. There is no new worker, recurring
 training job, automatic promotion, plan increase, or change to live spray data.
+
+### Verified local research run — 2026-10-27
+
+11 byte-hash-verified originals cover seasons 2015–16 through 2025–26: 36,614
+distinct RecordIDs, no overlapping imports/revisions in this catalog. All 12,797
+existing local results were reused. The earlier 23,817 features were reconstructed
+only on the workstation because large web evidence transfers lacked safe
+headroom; all 65 previously published monthly results remain in FROST Vault.
+
+Weather matches: 36,612; unmatched: 2. An additional 70 source rows have an
+incomplete preceding-weather window (these flags already existed in the saved
+local March-2024 result). All 72 quality dispositions retain exact source links;
+none is a negative frost label. Classes at source-row level: 9,664 likely frost,
+13,101 anticipated frost/pretreat, 13,841 other treatment, 8 unknown.
+
+After aircraft/application/night grouping and exclusions, 20,627 examples are
+eligible for the conditional treatment target: 8,427 frost-reason and 12,200
+other explicit departure-treatment reasons. There are no credible untreated
+physical-frost controls. Fit seasons end in 2023–24, calibration is 2024–25,
+untouched test is 2025–26. Seven forward-season development folds compare logistic
+and shallow forest candidates; forest was selected. The zero-hour lead test has
+2,019 applications (690 frost-reason / 1,329 other), recall 0.85652, false-positive
+rate 0.17231 (229 false alarms, 99 misses), Brier 0.09350, log loss 0.29345 and ECE
+0.09833. Climatology Brier is 0.23310; weather-reference Brier is 0.27952. All
+existing research gates pass, but calibration is near the policy boundary and
+these metrics do NOT validate physical frost or future forecast-weather skill.
+
+Candidate `rfd-treatment-h0-20261027-v1` is 141,824 bytes in ignored local
+`instance/frost-local/complete/candidates/`. Its SHA-256 is
+`f395ff1c85693e28d1349560faaf2985a6b2ed7b6dcbec11278dd13454c51e73`.
+Dataset fingerprint is
+`dce4665eeb13bbaf278c84e22be518f29f00d989aa24dabf0be6e5e0e371c1f2`.
+Local training peaked at 587.33 MiB traced Python allocations; the bounded local
+inference self-test used 0.76 MiB traced allocations. Neither is total process
+RSS. No model was approved/activated, and no historical result rows were
+published as part of this run. Model submission remains subject to live memory
+headroom, authentication and explicit review.

@@ -88,9 +88,9 @@ class LocalBackfillTest(unittest.TestCase):
         master=self.base.client('master');watcher=self.base.client('watcher')
         g.pop('_login_user',None);self.assertEqual(watcher.get('/neosubzero/frost-vault/backfill/'+str(self.month.id)).status_code,403)
         g.pop('_login_user',None);response=master.get('/neosubzero/frost-vault/backfill/'+str(self.month.id))
-        self.assertEqual(response.status_code,200);self.assertIn('private',response.headers['Cache-Control'])
+        self.assertEqual(response.status_code,410)
         g.pop('_login_user',None);response=master.post('/neosubzero/frost-vault/backfill/publish',data={'result':(io.BytesIO(b'bad'),'result.zip')},content_type='multipart/form-data')
-        self.assertEqual(response.status_code,409);self.assertFalse(response.json['ok'])
+        self.assertEqual(response.status_code,410);self.assertFalse(response.json['ok'])
 
     def test_orphaned_month_token_does_not_turn_retry_pause_into_active_server_work(self):
         self.month.lease_token='orphaned-before-pause';db.session.commit();paused=self.month.retry_at
@@ -106,16 +106,16 @@ class LocalBackfillTest(unittest.TestCase):
             result=local.publish(self.gw,self.actor.id,raw)
             self.assertEqual(result.status,'ready');self.assertIsNone(result.lease_token)
 
-    def test_partial_batch_is_explicit_and_identical_successful_files_are_safe_to_retry(self):
+    def test_retired_publication_cannot_consume_previously_valid_local_packages(self):
         raw=self.package();master=self.f.app.test_client();self.f._login(master,self.actor);g.pop('_login_user',None)
         response=master.post('/neosubzero/frost-vault/backfill/publish',data={'result':[
             (io.BytesIO(raw),'good.zip'),(io.BytesIO(b'broken'),'bad.zip')]},content_type='multipart/form-data')
-        self.assertEqual(response.status_code,409);self.assertIn('Already published:',response.json['error'])
-        self.assertEqual(db.session.get(Task,self.month.id).status,'ready')
+        self.assertEqual(response.status_code,410);self.assertIn('retired',response.json['error'])
+        self.assertEqual(db.session.get(Task,self.month.id).status,'pending')
         g.pop('_login_user',None)
         response=master.post('/neosubzero/frost-vault/backfill/publish',data={'result':[
             (io.BytesIO(raw),'good.zip'),(io.BytesIO(raw),'again.zip')]},content_type='multipart/form-data')
-        self.assertEqual(response.status_code,200);self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
+        self.assertEqual(response.status_code,410);self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
 
     def test_content_addressed_original_proof_needs_no_server_history_download_or_ticket(self):
         raw=self.package()

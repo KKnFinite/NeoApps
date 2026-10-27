@@ -44,7 +44,18 @@ def write_bytes(path, raw):
     temporary.replace(path)
 
 
+def store_manifest(directory,manifest):
+    """Immutable local versions plus a replaceable current pointer."""
+    root=Path(directory);versioned=root/'manifests'/(manifest['fingerprint']+'.json')
+    raw=vault.canonical(manifest)
+    if versioned.exists() and versioned.read_bytes()!=raw:raise ValueError('Immutable local manifest was altered.')
+    if not versioned.exists():write_bytes(versioned,raw)
+    write_bytes(root/'manifest.json',raw)
+
+
 def validate_manifest(manifest):
+    from app.services import frost_dataset_contract as contract
+    if manifest.get('schema')==contract.VERSION:return contract.validate(manifest)
     body={k:v for k,v in manifest.items() if k!='fingerprint'}
     if vault.digest(vault.canonical(body))!=manifest['fingerprint'] or manifest['version']!=analysis.VERSION or manifest['time_contract']!=analysis.TIME_CONTRACT:
         raise ValueError('Dataset manifest integrity/version mismatch.')
@@ -102,6 +113,21 @@ def refresh(remote, directory, *, with_weather=False):
     local_only();directory=Path(directory)
     manifest=validate_manifest(json.loads(remote.request('GET','/neosubzero/frost-vault/dataset-manifest'))['manifest'])
     downloaded,reused=0,0
+    source=manifest.get('source_catalog')
+    if source:
+        from app.services.frost_dataset_contract import seal
+        if seal(source)['fingerprint']!=source['fingerprint']:raise ValueError('Remote source catalog hash mismatch.')
+        for document in source['documents']:
+            digest=document['sha256']
+            if len(digest)!=64 or any(c not in '0123456789abcdef' for c in digest):raise ValueError('Unsafe original evidence hash.')
+            destination=directory/'originals'/(digest+'.csv')
+            if destination.exists() and vault.digest(destination.read_bytes())==digest:
+                reused+=1;continue
+            if not document['verified']:raise ValueError('Original off-site verification is pending; refresh later.')
+            raw=remote.request('GET','/neosubzero/frost-vault/documents/'+str(int(document['id'])))
+            if len(raw)!=document['bytes'] or vault.digest(raw)!=digest:raise ValueError('Original document failed SHA-256.')
+            write_bytes(destination,raw);downloaded+=1
+        write_json(directory/'source-catalog.json',source)
     for item in manifest['partitions']+(manifest.get('weather',[]) if with_weather else []):
         if item['status'] in ('pending','retry','superseded') or not item['sha256']:continue
         digest=item['sha256']
@@ -122,7 +148,7 @@ def refresh(remote, directory, *, with_weather=False):
         print(f"Verified {item['month']}: {item.get('records','weather')} source rows",flush=True)
     current=validate_manifest(json.loads(remote.request('GET','/neosubzero/frost-vault/dataset-manifest'))['manifest'])
     if current['fingerprint']!=manifest['fingerprint']:raise ValueError('Dataset changed during download. Verified objects are retained; refresh again.')
-    write_json(directory/'manifest.json',manifest)
+    write_json(directory/('remote-manifest.json' if source else 'manifest.json'),manifest)
     print(f'Downloaded {downloaded}; reused {reused}; readiness: {manifest["state"]}',flush=True)
     return manifest
 
@@ -130,6 +156,8 @@ def refresh(remote, directory, *, with_weather=False):
 def prepare(directory, *, lead_hours=0):
     local_only();directory=Path(directory)
     manifest=validate_manifest(read_json(directory/'manifest.json'))
+    if manifest.get('schema')=='frost-local-verified-v2' and (directory/'source-catalog.json').exists():
+        if read_json(directory/'source-catalog.json')!=manifest['source_catalog']:raise ValueError('Local sources changed; assemble newly imported evidence first.')
     if not manifest['ready']:raise ValueError('Phase 5 data-quality/readiness gate blocks training: '+manifest['state'])
     if lead_hours not in (0,1,3,6):raise ValueError('Supported observation-based leads: 0, 1, 3 or 6 hours.')
     from functools import lru_cache
@@ -142,7 +170,7 @@ def prepare(directory, *, lead_hours=0):
         return read_json(path)['observations']
     groups=defaultdict(list);excluded=Counter();source_count=0
     for partition in manifest['partitions']:
-        if partition['status']!='ready':raise ValueError('Historical partition is not data-ready.')
+        if partition['status'] not in ('ready','local_verified'):raise ValueError('Historical partition is not data-ready.')
         path=directory/'objects'/(partition['sha256']+'.json')
         if vault.digest(path.read_bytes())!=partition['sha256']:raise ValueError('Local dataset object failed SHA-256.')
         payload=read_json(path)
@@ -159,6 +187,8 @@ def prepare(directory, *, lead_hours=0):
     if source_count!=manifest['catalog']['deduplicated_records']:raise ValueError('Dataset is incomplete; distinct source count does not reconcile.')
     examples=[]
     for identity, rows in sorted(groups.items()):
+        if manifest.get('schema')=='frost-local-verified-v2' and any(not f.get('weather',{}).get('matched') or f.get('weather',{}).get('incomplete_window',True) for row in rows for f in row.get('fluids',[])):
+            excluded['source_weather_quality_exclusion']+=1;continue
         labels={model.training_label(row) for row in rows}
         if len(labels)!=1 or None in labels:
             excluded['pretreat_unknown_or_ambiguous_outcome']+=1;continue
@@ -182,6 +212,12 @@ def prepare(directory, *, lead_hours=0):
             classifications=[row['classification'] for row in rows]))
     dataset=dict(schema=PIPELINE_VERSION,manifest=manifest,feature_version=model.FEATURE_VERSION,
         source_records=source_count,excluded=dict(excluded),examples=examples,lead_hours=lead_hours)
+    from app.services import frost_dataset_contract as contract
+    if manifest.get('schema')==contract.VERSION:
+        manifest=contract.seal(dict(manifest,eligibility=dict(examples=len(examples),classes=dict(Counter(str(r['label']) for r in examples)),
+            examples_sha256=vault.digest(vault.canonical(examples)),lead_hours=lead_hours,excluded=dict(excluded))))
+        contract.validate(manifest,training=True);dataset['manifest']=manifest
+        store_manifest(directory,manifest)
     write_json(directory/'prepared.json',dataset)
     print(f'Prepared {len(examples)} independent aircraft/applications from {source_count} rows; exclusions {dict(excluded)}',flush=True)
     return dataset
@@ -256,6 +292,11 @@ def train(dataset,version,checkpoint=None):
     local_only()
     rows=dataset['examples'];manifest=validate_manifest(dataset['manifest'])
     if not manifest['ready']:raise ValueError('Phase 5 readiness gate blocks training.')
+    from app.services import frost_dataset_contract as contract
+    if manifest.get('schema')==contract.VERSION:
+        contract.validate(manifest,training=True)
+        if manifest['eligibility']['examples_sha256']!=vault.digest(vault.canonical(rows)) or manifest['eligibility']['lead_hours']!=dataset['lead_hours']:
+            raise ValueError('Prepared training examples differ from the validated local manifest.')
     if dataset['feature_version']!=model.FEATURE_VERSION:raise ValueError('Prepared feature version changed.')
     seasons=sorted({r['season'] for r in rows})
     if len(seasons)<5:raise ValueError('At least five independent seasons are required for development/calibration/test isolation.')
@@ -316,6 +357,7 @@ def train(dataset,version,checkpoint=None):
             numpy=numpy.__version__,scipy=scipy.__version__,python=platform.python_version(),
             excluded=dataset['excluded'],source_records=dataset['source_records']),
         limitations=list(model.LIMITATIONS),evaluation=evaluation,forecast_validated=False,parking_adjustments=None,**candidate)
+    if manifest.get('schema')==contract.VERSION:artifact['local_dataset_manifest']=manifest
     model.decode(vault.canonical(artifact))
     print('Promotion gates: '+json.dumps(model.quality_gates(evaluation)),flush=True)
     return artifact
@@ -332,6 +374,9 @@ def main(argv=None):
         else:item.add_argument('--with-weather',action='store_true')
     for name in ('validate','prepare'):
         item=commands.add_parser(name);item.add_argument('--lead-hours',type=int,choices=(0,1,3,6),default=0)
+    item=commands.add_parser('assemble',help='Verify originals and reuse/reconstruct local monthly evidence; never publish rows.')
+    item.add_argument('--catalog',required=True);item.add_argument('--originals',required=True)
+    item.add_argument('--cache',action='append',default=[])
     for name in ('train','backtest'):
         item=commands.add_parser(name);item.add_argument('--version',required=True);item.add_argument('--lead-hours',type=int,choices=(0,1,3,6),default=0)
     item=commands.add_parser('infer');item.add_argument('--artifact',required=True);item.add_argument('--features')
@@ -352,6 +397,9 @@ def main(argv=None):
                 result=remote.request('POST','/neosubzero/frost-vault/models',data=dict(action='import',csrf_token=remote.csrf),files=dict(model=('model.json',raw,'application/json')))
                 print(result.decode())
         finally:remote.close()
+    elif args.command=='assemble':
+        from scripts.frost_dataset import assemble
+        assemble(directory,read_json(args.catalog),args.originals,caches=args.cache)
     elif args.command in ('validate','prepare'):
         data=prepare(directory,lead_hours=args.lead_hours);print(json.dumps(dict(examples=len(data['examples']),seasons=sorted({r['season'] for r in data['examples']}))))
     elif args.command in ('train','backtest'):

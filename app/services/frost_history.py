@@ -346,7 +346,7 @@ def health(gateway_id):
     for row in partitions:
         # A previous result pointer is retained for history, but never counted
         # as current after a changed import invalidates its source hash.
-        if row.status not in ('pending','retry'):
+        if row.status not in ('pending','retry','local_only'):
             totals.update({key:value for key,value in (row.summary or {}).items() if isinstance(value,int)})
     pending = sum(row.status in ('pending','retry') for row in partitions)
     errors = [dict(month=row.identity,error=row.last_error) for row in rows if row.last_error]
@@ -355,9 +355,10 @@ def health(gateway_id):
     uncataloged = not catalog or catalog.input_hash != fingerprint or catalog.status != 'ready'
     pending_sources = sum(not bool(d.archived_at_utc) for d in documents)
     state = 'REQUIRES REVIEW' if errors or totals.get('review_records') or catalog and catalog.summary.get('source_documents_requiring_review') else 'WEATHER INCOMPLETE' if uncataloged or pending_sources or pending or totals.get('weather_unmatched') or totals.get('incomplete_windows') or not partitions else 'DATA READY'
+    if any(r.status=='local_only' for r in partitions) and state!='REQUIRES REVIEW':state='LOCAL RESEARCH ONLY'
     seasonal = defaultdict(lambda: dict(applications=0,fields=defaultdict(lambda: dict(samples=0,total=0.0)),directions=Counter()))
     for row in partitions:
-        if row.status in ('pending','retry'): continue
+        if row.status in ('pending','retry','local_only'): continue
         year = int(row.identity[:4]) if row.identity != 'unknown' else 0
         first = year - (int(row.identity[5:7]) < 7) if year else 0
         season = f'{first}-{first+1}' if year else 'unknown'
@@ -377,6 +378,7 @@ def health(gateway_id):
     return dict(state=state,version=analysis.VERSION,time_contract=analysis.TIME_CONTRACT,catalog=catalog.summary if catalog else {},
         totals=dict(totals),pending_partitions=pending,partitions=len(partitions),errors=errors,
         pending_sources=pending_sources,uncataloged_sources=uncataloged,
+        local_only_partitions=sum(r.status=='local_only' for r in partitions),
         descriptive_cohorts=cohorts,
-        last_success=max((row.updated_at.isoformat()+'Z' for row in partitions if row.result_key and row.status not in ('pending','retry')),default=None),
-        partition_links=[dict(id=row.id,month=row.identity,status=row.status) for row in partitions if row.result_key and row.status not in ('pending','retry')])
+        last_success=max((row.updated_at.isoformat()+'Z' for row in partitions if row.result_key and row.status not in ('pending','retry','local_only')),default=None),
+        partition_links=[dict(id=row.id,month=row.identity,status=row.status) for row in partitions if row.result_key and row.status not in ('pending','retry','local_only')])

@@ -1,7 +1,8 @@
 """Local historical weather backfill. No production DB/storage credentials.
 
-Download a pending month from authenticated FROST Vault, run locally, publish its
-ZIP through the same authenticated page. Original inputs are never overwritten.
+Legacy monthly-package reader/writer, retained for existing local evidence.
+ZIPs stay local and are consumed by frost_local assemble. Do not publish rows
+to Render. New evidence uses frost_local refresh / assemble instead.
 """
 import argparse
 import io

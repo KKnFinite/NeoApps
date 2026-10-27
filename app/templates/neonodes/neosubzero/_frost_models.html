@@ -1,7 +1,11 @@
 <details class="frost-model-admin" id="frost-model-admin" data-frost-models>
     <summary>LOCAL MODELS · {{ model_status.approved_version or 'NO APPROVED MODEL' }}</summary>
     <p>Training and backtesting run on the local workstation only. Render loads saved, explicitly approved JSON models. No training control is provided here.</p>
-    <p>Dataset {{ history.version }} · {{ history.state }} · Last historical update {{ history.last_success or '—' }}.</p>
+    <p>Archived research {{ history.version }} · {{ history.state }}. This is not the local training-readiness gate.</p>
+    <p>LOCAL DATA READY is validated from source hashes, complete local evidence, quality exclusions and training eligibility. Only the model and compact validation manifest are submitted.</p>
+    {% if local_backfill %}<form method="post" action="{{ url_for('neosubzero.frost_models') }}" data-model-form>
+        <input type="hidden" name="action" value="retire-publication"><button>RETIRE LEGACY PUBLICATION JOBS</button><output aria-live="polite"></output>
+    </form>{% endif %}
     <p>Approved production version: <strong data-model-approved>{{ model_status.approved_version or 'NONE' }}</strong>. Last forecast: {{ model_status.last_forecast or 'not calculated' }}.</p>
     <p><a href="{{ url_for('neosubzero.frost_dataset_manifest') }}">PRIVATE LOCAL-DATASET MANIFEST</a> · Candidates are not live predictions. Treatment likelihood is not physical frost probability.</p>
     <p><a href="{{ url_for('neosubzero.frost_vault') }}#frost-model-admin" target="_blank" rel="noopener">OPEN CURRENT MODEL VALUES</a> · Opens separately so unsaved entries stay here.</p>
@@ -14,6 +18,10 @@
     <div class="frost-model-candidate"><strong>{{ candidate.version }} · {{ candidate.status|upper }}</strong>
         <code>{{ candidate.sha256 }}</code>
         <details><summary>VALIDATION &amp; LIMITATIONS</summary><p>{{ candidate.metadata.target }}</p>
+            {% if candidate.metadata.local_validation %}{% set local=candidate.metadata.local_validation %}
+            <p>{{ local.state }} · {{ local.source_records }} source records · {{ local.eligible_examples }} eligible treatment applications · Classes {{ local.classes }}.</p>
+            <p>Weather matched {{ local.weather_matched }} · unmatched {{ local.weather_unmatched }} · incomplete preceding windows {{ local.incomplete_windows }}. Exclusions remain in the immutable manifest.</p>
+            {% endif %}
             {% set evaluation=candidate.metadata.evaluation %}{% set test=evaluation.test %}
             <p>Seasons {{ candidate.metadata.seasons|join(', ') }} · Untouched test {{ evaluation.test_season }} · {{ test.count }} applications.</p>
             <p>Recall {{ '%.3f'|format(test.recall) if test.recall is not none else '—' }} · False-positive rate {{ '%.3f'|format(test.false_positive_rate) if test.false_positive_rate is not none else '—' }} · Brier {{ '%.3f'|format(test.brier) if test.brier is not none else '—' }} · Calibration ECE {{ '%.3f'|format(test.ece) if test.ece is not none else '—' }}.</p>
@@ -25,12 +33,12 @@
         <form method="post" action="{{ url_for('neosubzero.frost_models') }}" data-model-form>
             <input type="hidden" name="model_id" value="{{ candidate.id }}"><input type="hidden" name="revision" value="{{ model_status.revision }}">
             <label>Reason <input name="reason" maxlength="240" required></label>
-            <button name="action" value="approve" {% if history.state!='DATA READY' %}disabled{% endif %}>APPROVE MODEL</button>
+            <button name="action" value="approve" {% if not candidate.approval_ready %}disabled{% endif %}>APPROVE MODEL</button>
             {% if candidate.previously_approved %}<button name="action" value="rollback">ROLL BACK TO PREVIOUS APPROVAL</button>{% endif %}<output aria-live="polite"></output>
         </form>
         {% endif %}
     </div>
-    {% else %}<p>No candidate model imported. Phase 5 and held-out evaluation gates must pass before approval.</p>{% endfor %}
+    {% else %}<p>No candidate model imported. Verified local readiness and held-out evaluation gates must pass before approval.</p>{% endfor %}
     {% if model_status.next_before %}<a href="{{ url_for('neosubzero.frost_vault',models_before=model_status.next_before) }}#frost-model-admin">OLDER MODEL VERSIONS</a>{% endif %}
     {% if model_status.approved_version %}<form method="post" action="{{ url_for('neosubzero.frost_forecast') }}" data-model-form><button>CALCULATE APPROVED FORECAST</button><output aria-live="polite"></output></form>{% endif %}
 </details>

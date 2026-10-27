@@ -481,8 +481,8 @@ def schedule_delivery(app, gateway_id):
                         app.logger.warning('SubZero archive delivery deferred safely',exc_info=True)
                     from app.services.frost_documents import drain as drain_frost_documents
                     drain_frost_documents(gateway_id)
-                    from app.services.frost_history import drain as drain_frost_history
-                    drain_frost_history(gateway_id)
+                    # Historical weather/features are workstation-only. The
+                    # live outbox retains original and operational archival work.
                 finally:
                     db.session.remove()
         except Exception:
