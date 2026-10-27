@@ -6,6 +6,7 @@ Routine+SPECI METAR, UTC, original provider bytes preserved by the worker.
 import csv
 import io
 import math
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -18,7 +19,8 @@ STATION = dict(icao='KRFD', provider_id='RFD', network='IL_ASOS', latitude=42.19
     longitude=-89.08760, timezone='America/Chicago', archive_begin='1951-03-01',
     documentation='https://mesonet.agron.iastate.edu/request/download.phtml',
     license='IEM public-domain, as-is observations with limited QC')
-VERSION = 'iem-rfd-routine-special-v1'
+LEGACY_VERSION = 'iem-rfd-routine-special-v1'
+VERSION = 'iem-rfd-routine-special-v2'
 _lock = threading.Lock()
 _last = 0.0
 
@@ -53,7 +55,9 @@ def fetch(start, end):
         raise WeatherUnavailable('Historical weather connection failed; automatic retry pending.') from None
 
 
-def parse(raw, start, end):
+def parse(raw, start, end, *, version=VERSION):
+    if version not in (VERSION, LEGACY_VERSION):
+        raise ValueError('Unsupported historical observation parser.')
     def number(value):
         try:
             value = float(value)
@@ -82,6 +86,19 @@ def parse(raw, start, end):
             coverage = [item for item in coverage if item not in ('M','',None)]
             ceilings = [number(raw_row.get('skyl'+str(i))) for i in range(1,5) if raw_row.get('skyc'+str(i)) in ('BKN','OVC','VV')]
             ceilings = [item for item in ceilings if item is not None]
+            if version == VERSION:
+                # IEM skyl* is already feet, but skyc can contain padded VV.
+                # METAR VVhhh is hundreds of feet AGL (FAA AIM 7-1).
+                # Preserve the raw report, and never decode a remark as sky.
+                codes = [(raw_row.get('skyc'+str(i)) or '').strip().upper() for i in range(1,5)]
+                coverage = [code for code in codes if code not in ('M','')]
+                ceilings = [number(raw_row.get('skyl'+str(i))) for i,code in enumerate(codes,1) if code in ('BKN','OVC','VV')]
+                body = raw_row['metar'].split(' RMK',1)[0]
+                vv = re.search(r'(?<!\S)VV\s*(\d{3}|///)(?!\S)',body)
+                if vv and 'VV' in coverage:
+                    ceilings = [number(raw_row.get('skyl'+str(i))) for i,code in enumerate(codes,1) if code in ('BKN','OVC')]
+                    if vv[1] != '///':ceilings.append(int(vv[1])*100)
+                ceilings = [height for height in ceilings if height is not None and height >= 0]
             rh = number(raw_row.get('relh'))
             if rh is None and t is not None and d is not None and t > -243.04 and d > -243.04:
                 rh = 100*math.exp(17.625*d/(243.04+d)-17.625*t/(243.04+t))

@@ -93,6 +93,8 @@ def predict(gateway_id, *, now=None, observations=None, record=False):
     if now.tzinfo is None:raise ValueError('Prediction time must be timezone-aware.')
     row,artifact=approved(gateway_id)
     if artifact is None:return dict(enabled=False,state='NO APPROVED MODEL',physical_frost_probability=False)
+    if artifact['feature_version']!=model.FEATURE_VERSION:
+        return dict(enabled=False,state='WEATHER CONTRACT REVALIDATION REQUIRED',model_version=row.model_version,physical_frost_probability=False)
     from app.services import frost_analysis
     observations=current_observations(now) if observations is None else observations
     observations=[r for r in observations if datetime.fromisoformat(r['utc'])<=now]

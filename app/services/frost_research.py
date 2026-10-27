@@ -13,7 +13,8 @@ REPORT = Path(__file__).resolve().parents[1] / 'data' / 'frost_forecast_research
 
 
 def load():
-    raw = REPORT.read_bytes()
+    with REPORT.open('rb') as handle:
+        raw = handle.read(32769)
     if len(raw) > 32768:
         raise ValueError('Research summary exceeds bounded page metadata.')
     value = json.loads(raw, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid research number.')))
@@ -27,7 +28,14 @@ def load():
         raise ValueError('Missing research interpretation.')
     if not isinstance(value['models'],list) or len(value['models'])>8:
         raise ValueError('Invalid research candidates.')
-    for row in value['models']:
+    corrected=value.get('corrected_models',[])
+    if not isinstance(corrected,list) or len(corrected)>2:raise ValueError('Invalid corrected candidates.')
+    correction=value.get('weather_correction')
+    if correction:
+        if not all(isinstance(correction.get(k),str) for k in ('weather_version','feature_version','history_version','description')):raise ValueError('Missing correction contract.')
+        for key in ('observations','affected_observations','affected_source_records','affected_fluid_windows','affected_h0_applications','affected_h1_applications'):
+            if type(correction.get(key)) is not int or correction[key]<0:raise ValueError('Invalid correction count.')
+    for row in value['models']+corrected:
         for key in ('model_version','test_season','forecast_result'):
             if not isinstance(row[key],str):raise ValueError('Invalid candidate description.')
         for key in ('count','above_positive','above_missed','above_count','above_nights'):

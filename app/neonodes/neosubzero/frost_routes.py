@@ -127,7 +127,7 @@ def frost_weather_evidence(identifier):
     from app.services import frost_weather
     gateway=authorized()
     if not history.memory_allows_work():return 'Historical evidence transfer deferred for memory safety. Originals and archived results are preserved; use verified local caches.',503
-    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='weather',version=frost_weather.VERSION,status='ready').first_or_404()
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='weather',status='ready').filter(FrostHistoryTask.version.in_((frost_weather.VERSION,frost_weather.LEGACY_VERSION))).first_or_404()
     try:
         payload=vault.read_json(row.result_key,gateway.id)
         response=send_file(io.BytesIO(vault.canonical(payload)),mimetype='application/octet-stream',as_attachment=True,
@@ -183,13 +183,13 @@ def frost_forecast():
 def frost_history_evidence(identifier):
     gateway=authorized()
     if not history.memory_allows_work():return 'Historical evidence transfer deferred for memory safety. Preserve local results and reconstruct missing features on the workstation.',503
-    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='partition',version=frost_analysis.VERSION).first_or_404()
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='partition').filter(FrostHistoryTask.version.in_((frost_analysis.VERSION,'frost-history-v2'))).first_or_404()
     if not row.result_key or row.status in ('pending','retry','superseded','local_only'):
         return 'Current historical dataset is not ready; previous evidence is retained.',409
     try:
         payload=vault.read_json(row.result_key,gateway.id)
         response=send_file(io.BytesIO(vault.canonical(payload)),mimetype='application/octet-stream',as_attachment=True,
-            download_name=f'frost-research-{row.identity}-{frost_analysis.VERSION}.json')
+            download_name=f'frost-research-{row.identity}-{row.version}.json')
         response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"})
         return response
     except (ValueError,RuntimeError):

@@ -318,13 +318,14 @@ class PipelineTest(unittest.TestCase):
         row.status='pending';db.session.commit();self.assertEqual(admin.get(url).status_code,409)
 
     def test_versioned_reprocessing_uses_existing_weather_and_keeps_old_evidence(self):
+        starting_version=analysis.VERSION
         self.storage();fetch=self.fetcher();self.stage();gw=self.f.gateway.id;history.drain(gw)
         old=FrostHistoryTask.query.filter_by(kind='partition').one().result_key;count=fetch.call_count
         with patch.object(analysis,'VERSION','frost-history-test-v2'):
             self.assertEqual(history.drain(gw),1)
             self.assertEqual(history.health(gw)['version'],'frost-history-test-v2')
         self.assertEqual(fetch.call_count,count)
-        self.assertEqual(vault.read_json(old,gw)['schema_version'],'frost-history-v2')
+        self.assertEqual(vault.read_json(old,gw)['schema_version'],starting_version)
 
 
 @unittest.skipUnless(os.environ.get('NEOSTAFFING_TEST_POSTGRES_URL'),'Requires disposable loopback PostgreSQL')

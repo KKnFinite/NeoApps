@@ -4,3 +4,7 @@ numpy==2.5.0
 scipy==1.18.1
 joblib==1.6.0
 threadpoolctl==3.7.0
+# LOCAL point extraction only; never install these in the Render runtime.
+pyproj==3.7.2
+numcodecs==0.16.5
+eccodes==2.46.0

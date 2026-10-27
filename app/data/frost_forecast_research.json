@@ -1,7 +1,7 @@
 {
   "schema": "frost-forecast-research-v1",
   "station": "KRFD",
-  "generated_at_utc": "2026-10-27T20:11:49Z",
+  "generated_at_utc": "2026-10-27T23:15:37Z",
   "operationally_validated": false,
   "source_catalog_fingerprint": "7a83f7cd7767a11ba7db052c615c1ae02bf2432125a0344d00d73e115f30614f",
   "documents": 11,
@@ -11,9 +11,53 @@
   "weather_unmatched": 2,
   "incomplete_windows": 70,
   "normalization_findings": 1,
+  "weather_correction": {
+    "weather_version": "iem-rfd-routine-special-v2",
+    "history_version": "frost-history-v3",
+    "feature_version": "frost-weather-vector-v2",
+    "observations": 84894,
+    "affected_observations": 1126,
+    "affected_source_records": 419,
+    "affected_fluid_windows": 684,
+    "affected_h0_applications": 266,
+    "affected_h1_applications": 310,
+    "description": "VV014 is now 1,400 feet; padded cloud codes are normalized. Raw METARs, all originals, previous datasets and candidate artifacts are retained. Frozen original models have unchanged held-out decisions on corrected inputs; newly trained candidates show mixed changes, not universal improvement."
+  },
+  "corrected_models": [
+    {
+      "model_version": "rfd-treatment-h0-20261027-v4",
+      "sha256": "7c217e470196eae820cb52dd351a60345769e6854f0ec56c2867a1bb8dd52d90",
+      "test_season": "2025-2026",
+      "count": 2019,
+      "recall": 0.8594202898550725,
+      "false_positive_rate": 0.1580135440180587,
+      "brier": 0.0921918150811425,
+      "above_count": 460,
+      "above_positive": 26,
+      "above_missed": 22,
+      "above_recall": 0.15384615384615385,
+      "above_nights": 58,
+      "forecast_result": "HRRR partial-input diagnostic: 108 separate held-out nights at 1/3 hours, 107 at 6 hours. Recall 0% at all three warnings; Brier 0.2341 / 0.2335 / 0.2292 versus paired observed-input 0.1339 / 0.1339 / 0.1348. Every frost-reason case missed. This is NOT validated forecast skill."
+    },
+    {
+      "model_version": "rfd-treatment-h1-20261027-v4",
+      "sha256": "604cf092f740bab997c3593f696600a4b1f9b7011e9ee303a57f035c1c27ad1c",
+      "test_season": "2025-2026",
+      "count": 2019,
+      "recall": 0.8289855072463768,
+      "false_positive_rate": 0.22422874341610233,
+      "brier": 0.1171722323070684,
+      "above_count": 466,
+      "above_positive": 34,
+      "above_missed": 22,
+      "above_recall": 0.35294117647058826,
+      "above_nights": 60,
+      "forecast_result": "Same HRRR partial-input nights: 1/3/6-hour recall 92.59 / 92.59 / 92.31%, but false-positive rates 51.85 / 51.85 / 50.62%. Brier 0.2810 / 0.2768 / 0.2608 versus paired observed-input 0.1564 / 0.1564 / 0.1571. Excessive false alarms and incomplete input compatibility prevent an operational claim."
+    }
+  ],
   "complete_forecast_cases": 0,
-  "forecast_coverage": "Issued KRFD TAF evidence sampled across all 11 seasons: 69 applications; 67-69 usable partial forecasts per experiment. GFS MOS returned 21 station forecasts in each of 11 sampled seasonal cycles, but the processed response has no publication timestamp. Three HRRR parameter indexes were verified; full grids were not downloaded.",
-  "shadow_state": "One local METAR + issued TAF + NWS forecast-grid shadow snapshot captured 2026-10-27 at 20:11 UTC. Manual local capture, not continuously scheduled; outcomes pending.",
+  "forecast_coverage": "LOCAL HRRR point data: 108 distinct held-out 2025-26 nights, September 3 through June 24; 108 cases per model at 1/3-hour warnings and 107 at 6 hours. One 6-hour cycle was unavailable; no substitute used. 4,368 source-body hashes verified. Original NOAA file write timestamps precede each accepted prediction cutoff; exact issue/receipt times remain unknown. Seasonal probes cannot establish timely availability for sampled 2015-20 archive objects. MOS still lacks dissemination proof; TAF lacks thermodynamic inputs.",
+  "shadow_state": "Two LOCAL METAR + newly issued TAF + NWS-grid snapshots captured at 22:33 and 23:01 UTC on October 27. Single-command capture, checkpointing, failed-run recovery and offline-gap journal implemented. Hourly workstation scheduling option documented, NOT installed. No subsequent explicit outcome pairs verified.",
   "models": [
     {
       "model_version": "rfd-treatment-h0-20261027-v1",
@@ -46,5 +90,5 @@
       "forecast_result": "Partial TAF stress test on the same 7 held-out applications: 1/3/6-hour recall 50/50/50%; Brier 0.1312/0.1536/0.1120. Shared event-time above-freezing subset: 10/26 frost-reason cases detected (38.46%), versus forest 4/26. No operational forecast claim."
     }
   ],
-  "conclusion": "Useful advance-warning skill is NOT established. Obtain complete meteorological forecasts with proven pre-cutoff availability, collect prospective paired outcomes, and validate a larger untouched season/night cohort. Do not activate either candidate or interpret these treatment-selected scores as physical frost probabilities."
+  "conclusion": "Weather normalization is corrected and versioned. Useful operational advance-warning skill is NOT established: forecast-input compatibility, missingness and calibration remain substantial deficiencies despite the larger 108-night source sample. Three/six-hour scores are transfer diagnostics, not validated horizons. Original artifacts and research history are preserved; no candidate was submitted, approved or activated. Credible untreated aircraft and exposure observations remain necessary for physical frost prediction."
 }

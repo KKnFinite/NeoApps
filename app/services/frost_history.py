@@ -340,6 +340,12 @@ def _drain(gateway_id, *, limit=1):
 
 def health(gateway_id):
     rows = Task.query.filter_by(gateway_id=gateway_id,version=analysis.VERSION).all()
+    archive_version=analysis.VERSION
+    if not rows:
+        # A LOCAL feature revision must not hide immutable published evidence.
+        # This is display/retrieval compatibility, never a readiness upgrade.
+        archive_version='frost-history-v2'
+        rows=Task.query.filter_by(gateway_id=gateway_id,version=archive_version).all()
     catalog = next((row for row in rows if row.kind=='catalog'),None)
     partitions = [row for row in rows if row.kind=='partition' and row.status!='superseded']
     totals = Counter()
@@ -375,7 +381,7 @@ def health(gateway_id):
     cohorts = [dict(season=season,label=label,applications=group['applications'],
         fields={key:dict(samples=values['samples'],mean=values['total']/values['samples']) for key,values in group['fields'].items() if values['samples']},
         wind_sectors=dict(group['directions'])) for (season,label),group in sorted(seasonal.items())]
-    return dict(state=state,version=analysis.VERSION,time_contract=analysis.TIME_CONTRACT,catalog=catalog.summary if catalog else {},
+    return dict(state=state,version=archive_version,current_feature_version=analysis.VERSION,time_contract=analysis.TIME_CONTRACT,catalog=catalog.summary if catalog else {},
         totals=dict(totals),pending_partitions=pending,partitions=len(partitions),errors=errors,
         pending_sources=pending_sources,uncataloged_sources=uncataloged,
         local_only_partitions=sum(r.status=='local_only' for r in partitions),

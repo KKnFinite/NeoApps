@@ -45,13 +45,13 @@ def retire_publication(gateway_id,actor_id):
 
 def dataset_manifest(gateway_id):
     health = frost_history.health(gateway_id)
-    rows = FrostHistoryTask.query.filter_by(gateway_id=gateway_id,kind='partition',version=frost_analysis.VERSION).order_by(FrostHistoryTask.identity).all()
+    rows = FrostHistoryTask.query.filter_by(gateway_id=gateway_id,kind='partition',version=health['version']).order_by(FrostHistoryTask.identity).all()
     partitions = [dict(id=r.id, month=r.identity, status=r.status, input_hash=r.input_hash,
         sha256=r.result_key.rsplit('/',1)[-1].split('.')[0] if r.result_key else None,
         url=f'/neosubzero/frost-vault/history/{r.id}', records=r.summary.get('records',0))
         for r in rows if r.status != 'superseded']
-    weather=FrostHistoryTask.query.filter_by(gateway_id=gateway_id,kind='weather',version=frost_weather.VERSION,status='ready').order_by(FrostHistoryTask.identity).all()
-    snapshot = dict(schema='frost-local-dataset-v1', gateway_id=gateway_id, version=frost_analysis.VERSION,
+    weather=FrostHistoryTask.query.filter_by(gateway_id=gateway_id,kind='weather',status='ready').filter(FrostHistoryTask.version.in_((frost_weather.VERSION,frost_weather.LEGACY_VERSION))).order_by(FrostHistoryTask.identity,FrostHistoryTask.version).all()
+    snapshot = dict(schema='frost-local-dataset-v1', gateway_id=gateway_id, version=health['version'],
         time_contract=frost_analysis.TIME_CONTRACT, source_origin='authenticated_frost_vault',
         catalog=health['catalog'], partitions=partitions, state=health['state'], totals=health['totals'],
         ready=health['state']=='DATA READY', errors=health['errors'], last_success=health['last_success'],
@@ -81,7 +81,7 @@ def status(gateway_id, *, before=None):
     return dict(revision=release.id if release else 0, approved_version=artifact.model_version if artifact else None,
         candidates=[dict(id=r.id, version=r.model_version, status=r.status, sha256=r.sha256,
             metadata=r.metadata_summary,previously_approved=r.id in previously,
-            approval_ready=r.status=='validated' and (r.metadata_summary.get('source_catalog_fingerprint')==catalog_fingerprint if r.metadata_summary.get('local_dataset') else legacy_ready)) for r in rows],
+            approval_ready=r.status=='validated' and r.metadata_summary.get('classification_version')==frost_analysis.VERSION and (r.metadata_summary.get('source_catalog_fingerprint')==catalog_fingerprint if r.metadata_summary.get('local_dataset') else legacy_ready)) for r in rows],
         last_forecast=forecast.summary.get('calculated_at_utc') if forecast else None,
         next_before=rows[-1].id if len(rows)==20 else None,
         message='Local training only. No operational prediction is enabled without an explicit approved release.')

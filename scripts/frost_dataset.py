@@ -18,6 +18,8 @@ from app.services.frost_history import month_bounds
 def assemble(directory,catalog,originals, *, caches=()):
     from scripts.frost_local import local_only,read_json,write_json,write_bytes,store_manifest
     local_only();root=Path(directory);originals=Path(originals)
+    if (root/'manifest.json').exists() and read_json(root/'manifest.json').get('weather_version',weather.VERSION)!=weather.VERSION:
+        raise ValueError('Preserve the legacy dataset; rebuild corrected weather in a new versioned directory.')
     if contract.seal(catalog)['fingerprint']!=catalog['fingerprint']:raise ValueError('Source catalog failed SHA-256.')
     rows=[]
     for item in catalog['documents']:
@@ -75,6 +77,7 @@ def assemble(directory,catalog,originals, *, caches=()):
             return payload['observations']
         if cache.exists() and raw_path.exists():
             payload=read_json(cache);raw=raw_path.read_bytes()
+            if payload.get('schema_version')!=weather.VERSION:raise ValueError('Legacy weather cache requires a versioned local rebuild; original retained.')
             if payload['raw_sha256']!=vault.digest(raw):raise ValueError('Local raw weather integrity mismatch.')
         else:
             raw,url=weather.fetch(start,end);observed=weather.parse(raw,start,end)
@@ -94,6 +97,7 @@ def assemble(directory,catalog,originals, *, caches=()):
             if candidate.exists():
                 if vault.digest(candidate.read_bytes())!=prior['sha256']:raise ValueError('Local completed result hash mismatch.')
                 result=read_json(candidate);origin=prior['origin']
+                if result.get('schema_version')!=analysis.VERSION:result=None;origin=None
         if result is None and month in indexed:
             kind,path=indexed[month]
             if kind=='zip':

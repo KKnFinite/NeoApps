@@ -26,7 +26,7 @@ class Evidence:
     def __init__(self, directory):
         local_only()
         self.root = Path(directory)
-        self.manifest = validate_manifest(read_json(self.root / 'manifest.json'))
+        self.manifest = validate_manifest(read_json(self.root / 'manifest.json'),historical=True)
 
     def object(self, sha):
         raw = (self.root / 'objects' / (sha + '.json')).read_bytes()
@@ -56,9 +56,9 @@ class Evidence:
             if not url.startswith(weather.URL + '?'):
                 raise ValueError('Untrusted original observation request.')
             source, _ = cached_get(self.root.parent / 'phase7' / 'observation-cache',url,maximum=16*1024*1024)
-        if vault.digest(source) != payload['raw_sha256'] or payload['schema_version'] != weather.VERSION:
+        if vault.digest(source) != payload['raw_sha256'] or payload['schema_version'] != self.manifest['weather_version']:
             raise ValueError('Raw weather hash/parser mismatch.')
-        parsed = weather.parse(source, forecast.instant(payload['start_utc']), forecast.instant(payload['end_utc']))
+        parsed = weather.parse(source, forecast.instant(payload['start_utc']), forecast.instant(payload['end_utc']),version=payload['schema_version'])
         if parsed != payload['observations']:
             raise ValueError('Raw source normalization differs from archived observations.')
         return payload
@@ -70,10 +70,15 @@ class Evidence:
 
     def candidates(self):
         result = []
-        for path in sorted((self.root / 'candidates').glob('rfd-treatment-h[01]-*.json')):
+        selection=self.root/'research-candidates.json'
+        chosen=read_json(selection) if selection.exists() else None
+        if chosen is not None and (not isinstance(chosen,list) or len(chosen)!=2):raise ValueError('Explicit local research selection must contain two candidates.')
+        paths=sorted((self.root/'candidates').glob('rfd-treatment-h[01]-*.json')) if chosen is None else [self.root/'candidates'/(r['model_version']+'.json') for r in chosen if re.fullmatch(r'[A-Za-z0-9_-]{1,64}',r.get('model_version',''))]
+        for path in paths:
             raw = path.read_bytes()
+            if chosen is not None and not any(r['model_version']==path.stem and r['sha256']==vault.digest(raw) for r in chosen):raise ValueError('Selected research artifact SHA mismatch.')
             result.append((model.decode(raw), vault.digest(raw)))
-        if len(result) != 2:
+        if len(result) != 2 or {a['evaluation']['lead_hours_validated'][0] for a,_ in result}!={0,1}:
             raise ValueError('Require exactly the existing zero/one-hour research candidates.')
         return result
 
@@ -313,7 +318,9 @@ def shadow(evidence, output):
     raw, receipt = cached_get(capture_cache, url)
     from app.services.frost_inference import normalize_metars
     observations = normalize_metars(json.loads(raw))
-    rows, taf_receipt = taf_day(root / 'shadow-cache', now)
+    # This is a live acquisition, not an immutable historical day query.
+    # Reusing one URL cache all day would miss newly issued/amended TAFs.
+    rows, taf_receipt = taf_day(capture_cache, now)
     points_raw, points_receipt = cached_get(capture_cache,'https://api.weather.gov/points/42.1915,-89.0876')
     points=json.loads(points_raw)
     point=points['geometry']

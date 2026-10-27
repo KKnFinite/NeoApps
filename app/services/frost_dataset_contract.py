@@ -34,12 +34,17 @@ def checksum(value):
     return value
 
 
-def validate(manifest, *, sources=None, training=False):
+def validate(manifest, *, sources=None, training=False, historical=False):
+    if historical and training:raise ValueError('Read-only historical evidence cannot certify current training readiness.')
     if manifest.get('schema')!=VERSION or seal(manifest)['fingerprint']!=manifest.get('fingerprint'):
         raise ValueError('Local dataset manifest integrity mismatch.')
-    if manifest.get('version')!=analysis.VERSION or manifest.get('time_contract')!=analysis.TIME_CONTRACT or manifest.get('parser_version')!=PARSER_VERSION or manifest.get('weather_version')!=weather.VERSION:
+    legacy = historical and (manifest.get('version'),manifest.get('weather_version'),manifest.get('implementation_sha256')) in (
+        ('frost-history-v2',weather.LEGACY_VERSION,'a533954b09bf8f4edc51ccac39471e484ccbee5604d27271b27f1fce131b8c23'),
+        ('frost-history-v3',weather.VERSION,'c613a9e3d7744d919dcc01e47132283fd5bdff30cc6fb479481b11b997187998'),
+        ('frost-history-v3',weather.VERSION,'56760304cc6757276c1ec65ffa3fd9b3c916a38f3dc2f2b68f234f0023bfd186'))
+    if (not legacy and (manifest.get('version')!=analysis.VERSION or manifest.get('weather_version')!=weather.VERSION)) or manifest.get('time_contract')!=analysis.TIME_CONTRACT or manifest.get('parser_version')!=PARSER_VERSION:
         raise ValueError('Local parser/weather/classification contract mismatch.')
-    if manifest.get('implementation_sha256')!=code_hash():raise ValueError('Local validation code changed; revalidate cached evidence locally.')
+    if not legacy and manifest.get('implementation_sha256')!=code_hash():raise ValueError('Local validation code changed; revalidate cached evidence locally.')
     source=manifest['source_catalog']
     if seal(source)['fingerprint']!=source.get('fingerprint') or not source['documents'] or len(source['documents'])>256:
         raise ValueError('Invalid source catalog proof.')

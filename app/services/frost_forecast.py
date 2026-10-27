@@ -208,11 +208,16 @@ def research_vector(observations, selected, *, cutoff, target):
     replace the endpoint. Unknown future T/dew/precip are NEVER observation-filled.
     Missing values use the unchanged model's documented imputation indicators.
     """
-    if instant(selected['issued_at_utc']) > cutoff or instant(selected['target_at_utc']) != target:
+    known_at=selected.get('issued_at_utc')
+    if known_at is None and selected.get('availability_basis')=='NOAA_original_object_Last-Modified':
+        known_at=selected.get('available_by_utc')
+    if known_at is None or instant(known_at) > cutoff or instant(selected['target_at_utc']) != target:
         raise ValueError('Future or misaligned forecast evidence.')
+    valid_at=instant(selected.get('valid_at_utc') or target.isoformat())
+    if valid_at>target:raise ValueError('Forecast value is valid after the requested input time.')
     past = [r for r in observations if instant(r['utc']) <= cutoff]
     features = analysis.features(cutoff.isoformat(), past)
-    features['observation'] = dict(selected['observation'], utc=target.isoformat())
+    features['observation'] = dict(selected['observation'], utc=valid_at.isoformat())
     features['solar'] = analysis.features(target.isoformat(), [])['solar']
     # Twelve-hour history at the input endpoint contains an unknown interval.
     # Do not carry historical duration/changes forward across that gap.

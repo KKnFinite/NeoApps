@@ -8,11 +8,15 @@
             <p>RFD / IL_ASOS · 42.19151, −89.08760 · America/Chicago. Raw METAR/SPECI and preceding 12-hour windows; maximum observation age 90 minutes.</p>
             <p>Complete local dataset: {{ research.weather_unmatched }} legitimate unmatched records retained; {{ research.incomplete_windows }} incomplete 12-hour-window records excluded from fitting. The historical health totals above describe the older published subset, not this complete local study.</p>
             <p>Observation time is not proof of the exact time an operator received the report.</p>
-            <p class="frost-research-warning">One sampled raw-report discrepancy: vertical visibility VV014 was archived as “VV ”. Existing feature code misses that ceiling. Evidence/model artifacts remain unchanged; a versioned feature correction and re-evaluation are required.</p>
+            {% if research.weather_correction %}
+            <p>Corrected LOCAL contract: {{ research.weather_correction.weather_version }} · {{ research.weather_correction.history_version }} · {{ research.weather_correction.feature_version }}.</p>
+            <p>{{ research.weather_correction.affected_observations }} / {{ research.weather_correction.observations }} observations changed; {{ research.weather_correction.affected_source_records }} source rows / {{ research.weather_correction.affected_fluid_windows }} fluid windows; {{ research.weather_correction.affected_h0_applications }} H0 and {{ research.weather_correction.affected_h1_applications }} H1 application vectors changed. Training eligibility and evidence exclusions are unchanged.</p>
+            <p>{{ research.weather_correction.description }}</p>
+            {% else %}<p class="frost-research-warning">One sampled raw-report discrepancy: vertical visibility VV014 was archived as “VV ”. Existing feature code misses that ceiling. Evidence/model artifacts remain unchanged; a versioned feature correction and re-evaluation are required.</p>{% endif %}
         </section>
         <section><h3>ISSUED FORECAST EVIDENCE</h3>
             <p>{{ research.forecast_coverage }}</p>
-            <p>{{ research.complete_forecast_cases }} contract-complete forecast cases. TAF lacks temperature/dew point. MOS cycle time is not verified publication time. No later observations fill missing forecast measurements.</p>
+            <p>{{ research.complete_forecast_cases }} contract-complete model forecast cases. HRRR source data is real, but model input equivalence remains incomplete. Archive write times are available-by bounds, not exact issuance times. No later observations fill missing forecast measurements.</p>
             <p>One-hour model: observations at treatment minus one hour. Three/six-hour experiments remain unvalidated.</p>
         </section>
         <section><h3>PROSPECTIVE SHADOW</h3>
@@ -21,7 +25,8 @@
             <p>Parking adjustments remain disabled. Credible untreated comparison observations are still needed.</p>
         </section>
     </div>
-    {% for candidate in research.models %}
+    {% if research.corrected_models %}<p>Corrected candidates below were trained and evaluated LOCALLY. They have not been submitted, approved or activated. The original imported artifacts remain immutable.</p>{% endif %}
+    {% for candidate in research.corrected_models|default(research.models) %}
     <section class="frost-research-candidate">
         <h3>{{ candidate.model_version }}</h3>
         <p>Untouched {{ candidate.test_season }} observed-input test: {{ candidate.count }} applications · frost-reason recall {{ '%.2f'|format(candidate.recall * 100) }}% · false-positive rate {{ '%.2f'|format(candidate.false_positive_rate * 100) }}% · Brier {{ '%.4f'|format(candidate.brier) }}.</p>
@@ -29,6 +34,13 @@
         <p>{{ candidate.forecast_result }}</p>
     </section>
     {% endfor %}
+    {% if research.corrected_models %}
+    <details><summary>ORIGINAL IMMUTABLE CANDIDATES · PHASE 7 COMPARISON</summary>
+        {% for candidate in research.models %}
+        <p>{{ candidate.model_version }}: recall {{ '%.2f'|format(candidate.recall * 100) }}% · false-positive rate {{ '%.2f'|format(candidate.false_positive_rate * 100) }}% · Brier {{ '%.4f'|format(candidate.brier) }}. Above-freezing recall {{ '%.2f'|format(candidate.above_recall * 100) }}%. {{ candidate.forecast_result }}</p>
+        {% endfor %}
+    </details>
+    {% endif %}
     <p>{{ research.conclusion }}</p>
     <a href="{{ url_for('neosubzero.frost_forecast_validation') }}">DOWNLOAD DATED RESEARCH SUMMARY</a>
     {% else %}<p>Research summary unavailable. No successful validation claimed; CSV import and the model registry remain available.</p>{% endif %}

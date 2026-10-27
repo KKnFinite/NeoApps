@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from app.services import frost_analysis as history
 
 VERSION = 'frost-model-v1'
-FEATURE_VERSION = 'frost-weather-vector-v1'
+FEATURE_VERSION = 'frost-weather-vector-v2'
+LEGACY_FEATURE_VERSION = 'frost-weather-vector-v1'
 TARGET = 'frost_reason_among_recorded_departure_treatments'
 MAX_BYTES = 256 * 1024
 LIMITATIONS = (
@@ -137,14 +138,15 @@ def decode(raw, expected_sha=None):
 
 
 def validate(artifact):
-    if artifact['schema'] != VERSION or artifact['feature_version'] != FEATURE_VERSION or artifact['features'] != list(FEATURES):
+    contracts = {FEATURE_VERSION: history.VERSION, LEGACY_FEATURE_VERSION: 'frost-history-v2'}
+    if artifact['schema'] != VERSION or artifact['feature_version'] not in contracts or artifact['features'] != list(FEATURES):
         raise ValueError('Unsupported model or feature contract.')
     if artifact['feature_definitions'] != FEATURE_DEFINITIONS: raise ValueError('Feature units/definitions changed.')
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', artifact['model_version']):
         raise ValueError('Invalid model version.')
     if artifact['target'] != TARGET or artifact['physical_frost_probability'] is not False:
         raise ValueError('Only the explicitly limited treatment-cohort target is supported.')
-    if artifact['dataset']['version'] != history.VERSION or artifact['classification_version'] != history.VERSION:
+    if artifact['dataset']['version'] != contracts[artifact['feature_version']] or artifact['classification_version'] != contracts[artifact['feature_version']]:
         raise ValueError('Historical/classification version mismatch.')
     if artifact['dataset']['time_contract'] != history.TIME_CONTRACT or not re.fullmatch(r'[0-9a-f]{64}', artifact['dataset']['fingerprint']):
         raise ValueError('Historical identity/time contract mismatch.')

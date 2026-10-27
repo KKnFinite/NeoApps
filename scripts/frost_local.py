@@ -53,11 +53,12 @@ def store_manifest(directory,manifest):
     write_bytes(root/'manifest.json',raw)
 
 
-def validate_manifest(manifest):
+def validate_manifest(manifest, *, historical=False):
     from app.services import frost_dataset_contract as contract
-    if manifest.get('schema')==contract.VERSION:return contract.validate(manifest)
+    if manifest.get('schema')==contract.VERSION:return contract.validate(manifest,historical=historical)
     body={k:v for k,v in manifest.items() if k!='fingerprint'}
-    if vault.digest(vault.canonical(body))!=manifest['fingerprint'] or manifest['version']!=analysis.VERSION or manifest['time_contract']!=analysis.TIME_CONTRACT:
+    versions=(analysis.VERSION,'frost-history-v2') if historical else (analysis.VERSION,)
+    if vault.digest(vault.canonical(body))!=manifest['fingerprint'] or manifest['version'] not in versions or manifest['time_contract']!=analysis.TIME_CONTRACT:
         raise ValueError('Dataset manifest integrity/version mismatch.')
     if manifest.get('source_origin')!='authenticated_frost_vault':raise ValueError('Dataset source is not authenticated FROST evidence.')
     return manifest
@@ -111,7 +112,7 @@ class Remote:
 
 def refresh(remote, directory, *, with_weather=False):
     local_only();directory=Path(directory)
-    manifest=validate_manifest(json.loads(remote.request('GET','/neosubzero/frost-vault/dataset-manifest'))['manifest'])
+    manifest=validate_manifest(json.loads(remote.request('GET','/neosubzero/frost-vault/dataset-manifest'))['manifest'],historical=True)
     downloaded,reused=0,0
     source=manifest.get('source_catalog')
     if source:
@@ -142,11 +143,11 @@ def refresh(remote, directory, *, with_weather=False):
         payload=json.loads(raw)
         if '/weather/' in item['url']:
             from app.services import frost_weather
-            if payload['schema_version']!=frost_weather.VERSION or payload['station']!=frost_weather.STATION:raise ValueError('Historical weather station/version mismatch.')
-        elif payload['schema_version']!=analysis.VERSION or payload['time_contract']!=analysis.TIME_CONTRACT:raise ValueError('Historical feature contract changed.')
+            if payload['schema_version']!=item.get('version',frost_weather.VERSION) or payload['schema_version'] not in (frost_weather.VERSION,frost_weather.LEGACY_VERSION) or payload['station']!=frost_weather.STATION:raise ValueError('Historical weather station/version mismatch.')
+        elif payload['schema_version']!=manifest['version'] or payload['time_contract']!=analysis.TIME_CONTRACT:raise ValueError('Historical feature contract changed.')
         write_bytes(destination,raw);downloaded+=1
         print(f"Verified {item['month']}: {item.get('records','weather')} source rows",flush=True)
-    current=validate_manifest(json.loads(remote.request('GET','/neosubzero/frost-vault/dataset-manifest'))['manifest'])
+    current=validate_manifest(json.loads(remote.request('GET','/neosubzero/frost-vault/dataset-manifest'))['manifest'],historical=True)
     if current['fingerprint']!=manifest['fingerprint']:raise ValueError('Dataset changed during download. Verified objects are retained; refresh again.')
     write_json(directory/('remote-manifest.json' if source else 'manifest.json'),manifest)
     print(f'Downloaded {downloaded}; reused {reused}; readiness: {manifest["state"]}',flush=True)
