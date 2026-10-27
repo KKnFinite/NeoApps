@@ -223,6 +223,42 @@ claim about total web-container RSS, which includes multiple processes and SDKs.
 
 ## Phase 6: workstation training, private artifacts, inference only on Render
 
+### Local historical backfill handoff
+
+Render no longer starts historical catalog discovery, weather reconstruction or
+feature analysis, even after the old retry pause expires. Existing retry dates,
+memory limits and completed results are preserved. This does not stop original
+CSV archival delivery, spray history delivery, or live operations.
+
+For the existing catalog's pending months, expand LOCAL HISTORICAL PROCESSING on
+the authenticated FROST page. Download one source package and run on the local
+workstation:
+
+```powershell
+.venv/Scripts/python.exe -m scripts.frost_backfill --local --job "PATH_TO_DOWNLOADED_MONTH.json"
+```
+
+Publish the generated ZIP through PUBLISH LOCAL RESULT. The signed source
+snapshot is bound to the gateway, authenticated operator, source hash and
+existing result pointer. It expires after 24 hours and is not a login credential.
+The publishing route still requires authentication, administrative permission
+and CSRF. No production DB/R2 credentials are exported to the workstation.
+
+The local command uses the canonical historical parser/features, reuses existing
+verified observations, and caches new provider bytes and parsed months in ignored
+`instance/frost-local/backfill/`. It never trains a model. Render only validates
+bounded results, stores immutable read-back-verified evidence and atomically
+updates the month/weather pointers. It does not fetch historical weather or
+recalculate features during publication. Conflicts preserve both local files
+and previous off-site results; identical publication retries are idempotent.
+
+The transfer limits are 8 MiB compressed / 24 MiB expanded per month, with no
+filesystem extraction. The existing 75%/128-MiB headroom check also protects
+bounded transfers. Unsupported evidence remains missing/review, not fabricated.
+Completed months and the two known unmatched records are not automatically
+reprocessed. New imports remain safely archived; a changed source catalog
+requires local catalog preparation before new monthly jobs can be published.
+
 No model is trained or activated by deployment, CSV import, the history worker,
 or a web request. `scripts/frost_local.py` is outside the application import
 graph. Its preparation/fitting/backtesting entry points reject Render

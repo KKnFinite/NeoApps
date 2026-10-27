@@ -8,14 +8,21 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import gc
+import os
 from pathlib import Path
 
-from flask import current_app
+from flask import current_app,has_app_context
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models import FrostDocument, FrostHistoryTask as Task, Gateway
 from app.services import frost_analysis as analysis, frost_vault as vault, frost_weather as weather
+
+
+def local_execution_required():
+    """Historical computation must never compete with live Render operations."""
+    return bool(os.environ.get('RENDER') or os.environ.get('RENDER_SERVICE_ID') or
+        has_app_context() and current_app.config.get('FROST_HISTORY_EXECUTION') == 'local')
 
 
 def memory_budget():
@@ -100,6 +107,7 @@ def defer(identifier, token, exc):
 
 
 def discover(gateway_id):
+    if local_execution_required(): return False
     gateway = db.session.get(Gateway,gateway_id)
     # KRFD and Central source contract were verified for RFD only.
     if gateway.code.upper() != 'RFD':
@@ -194,6 +202,7 @@ def month_bounds(identity):
 
 
 def observations(gateway_id, identity):
+    if local_execution_required(): raise RuntimeError('Historical weather processing is workstation-only.')
     row = task(gateway_id,'weather',identity,weather.VERSION)
     identifier = row.id
     _, end = month_bounds(identity)
@@ -235,6 +244,7 @@ def observations(gateway_id, identity):
 
 
 def process(row):
+    if local_execution_required(): return False
     identifier, gateway_id, source_key, digest = row.id,row.gateway_id,row.source_key,row.input_hash
     token = claim(row)
     if not token: return False
@@ -244,22 +254,7 @@ def process(row):
             raise ValueError('Research source partition hash mismatch.')
         # Resolve just this month's selected rows. Raw and normalized records
         # from other seasons never enter this worker's working set.
-        fragments = {}
-        records = []
-        for pointer in source['record_pointers']:
-            key = pointer['fragment_key']
-            if key not in fragments:
-                fragment = vault.read_json(key,gateway_id)
-                fragments[key] = {item['source']['source_row']:item for item in fragment['records']}
-            selected = fragments[key][pointer['source']['source_row']]
-            if selected['row_hash'] != pointer['row_hash']:
-                raise ValueError('Historical fragment row hash mismatch.')
-            record = dict(selected,sources=pointer['sources'],revision_evidence=pointer['revision_evidence'],
-                revision_conflict=pointer['revision_conflict'],requires_review=pointer['requires_review'])
-            if pointer['revision_conflict']:
-                record['classification'],record['fluids'] = analysis.classification(None),[]
-            records.append(record)
-        del fragments
+        records = resolve_records(source,lambda key:vault.read_json(key,gateway_id))
         months = set()
         for record in records:
             if record['requires_review']: continue
@@ -295,7 +290,7 @@ def process(row):
 
 def drain(gateway_id, *, limit=1):
     """Use one transport per small batch; release cyclic SDK resources after it."""
-    if not memory_allows_work():
+    if local_execution_required() or not memory_allows_work():
         return 0
     # A gunicorn master and worker can both wake the archive scheduler. The
     # process-local lock is insufficient: serialize FROST batches in PostgreSQL
@@ -316,6 +311,22 @@ def drain(gateway_id, *, limit=1):
         gc.collect()
         finish(identifier,token,status='retry' if failed else 'ready',
             retry_at=datetime.utcnow()+timedelta(seconds=60 if failed else 0))
+
+
+def resolve_records(source, read):
+    """Resolve one existing source partition; no weather requests/calculation."""
+    fragments,records = {},[]
+    for pointer in source['record_pointers']:
+        key=pointer['fragment_key']
+        if key not in fragments:
+            fragments[key]={item['source']['source_row']:item for item in read(key)['records']}
+        selected=fragments[key][pointer['source']['source_row']]
+        if selected['row_hash']!=pointer['row_hash']:raise ValueError('Historical fragment row hash mismatch.')
+        record=dict(selected,sources=pointer['sources'],revision_evidence=pointer['revision_evidence'],
+            revision_conflict=pointer['revision_conflict'],requires_review=pointer['requires_review'])
+        if pointer['revision_conflict']:record['classification'],record['fluids']=analysis.classification(None),[]
+        records.append(record)
+    return records
 
 
 def _drain(gateway_id, *, limit=1):

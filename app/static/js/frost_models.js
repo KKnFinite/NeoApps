@@ -12,10 +12,10 @@
             saving=true;buttons.forEach(b=>b.disabled=true);output.textContent='SAVING…';
             try {
                 const response=await fetch(form.getAttribute('action'),{method:'POST',body:data,credentials:'same-origin',signal:controller.signal,headers:{'X-Requested-With':'XMLHttpRequest'}});
-                if(response.status===413)throw new Error('Model JSON exceeds the 256 KiB upload limit.');
+                if(response.status===413)throw new Error(form.getAttribute('data-size-error')||'Model JSON exceeds the 256 KiB upload limit.');
                 let result;try{result=await response.json();}catch(_){throw new Error('Model action was not confirmed. Check sign-in and current values.');}
                 if(!response.ok||!result.ok)throw new Error(result.error||'Model action was not confirmed.');
-                output.textContent=result.message+' Open current model values to review.';
+                output.textContent=result.message+' '+(form.getAttribute('data-success-suffix')||'Open current model values to review.');
                 const approved=document.querySelector('[data-model-approved]');if(approved)approved.textContent=result.models.approved_version||'NONE';
                 for(const input of document.querySelectorAll('[data-model-form] [name=revision]'))input.value=result.models.revision;
             }catch(error){output.textContent=(error.name==='AbortError'?'Request timed out; check current values before retrying.':error.message||'Request failed.')+' Your file and entries are retained.';}

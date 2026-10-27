@@ -7,3 +7,4 @@
 .frost-model-admin button {max-width:100%;white-space:normal;}
 .frost-model-candidate {padding:8px 0;border-top:1px solid #36556b;min-width:0;}
 .frost-model-candidate code {display:block;overflow-wrap:anywhere;font-size:.75rem;}
+[data-local-backfill] a.button {display:inline-flex;max-width:100%;white-space:normal;box-sizing:border-box;margin:3px 0;}

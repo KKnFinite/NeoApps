@@ -14,6 +14,7 @@ from app.services.frost_xchange import MAX_DOCUMENT_BYTES
 from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services import frost_history as history, frost_analysis
 from app.services import frost_model as model, frost_model_registry as models
+from app.services import frost_local_backfill as backfill
 
 
 @bp.before_app_request
@@ -22,6 +23,8 @@ def frost_upload_limit():
         request.max_content_length=MAX_DOCUMENT_BYTES+65536
     elif request.path=='/neosubzero/frost-vault/models' and request.method=='POST':
         request.max_content_length=model.MAX_BYTES+65536
+    elif request.path=='/neosubzero/frost-vault/backfill/publish' and request.method=='POST':
+        request.max_content_length=backfill.MAX_ZIP+65536
 
 
 def authorized():
@@ -63,6 +66,7 @@ def frost_vault():
         documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
         model_status=models.status(gateway.id,before=request.args.get('models_before',type=int)),
+        local_backfill=backfill.pending(gateway.id),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
 
 
@@ -85,6 +89,34 @@ def frost_dataset_manifest():
     response=jsonify(manifest=models.dataset_manifest(gateway.id),csrf_token=csrf_token())
     response.headers['Cache-Control']='private, no-store'
     return response
+
+
+@bp.route('/frost-vault/backfill/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_backfill_export(identifier):
+    gateway=authorized()
+    try:
+        envelope=backfill.export(gateway.id,current_user.id,identifier)
+        response=send_file(io.BytesIO(vault.canonical(envelope)),mimetype='application/octet-stream',as_attachment=True,
+            download_name='frost-local-'+envelope['job']['month']+'.json')
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        return response
+    except (ValueError,RuntimeError) as exc:
+        db.session.rollback();return str(exc),409
+
+
+@bp.route('/frost-vault/backfill/publish',methods=['POST'])
+@gateway_node_required('subzero')
+def frost_backfill_publish():
+    gateway=authorized()
+    try:
+        upload=request.files.get('result')
+        if not upload or not upload.filename.lower().endswith('.zip'):raise ValueError('Choose a locally generated result ZIP.')
+        row=backfill.publish(gateway.id,current_user.id,upload.stream.read(backfill.MAX_ZIP+1))
+        return jsonify(ok=True,message='LOCAL RESULT PUBLISHED: '+row.identity+' · '+row.status+'.',models=models.status(gateway.id))
+    except (ValueError,RuntimeError,KeyError,TypeError,IntegrityError) as exc:
+        db.session.rollback()
+        return jsonify(ok=False,error=str(exc) if not isinstance(exc,IntegrityError) else 'Concurrent publication conflict; refresh current values. Original result file retained.'),409
 
 
 @bp.route('/frost-vault/weather/<int:identifier>')

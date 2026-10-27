@@ -17,6 +17,16 @@
     <p id="frost-file-help">Choose a CSV from Files, Downloads or iCloud Drive. Selection starts the import. Up to 10 MiB per file; import each season separately.</p>
     <p>CSV originals are preserved byte-for-byte. Extraction retains source rows, truck contributions, units and local clocks. Historical analysis is separate from live operations; no live spray transactions or prediction model are created.</p>
     {% include 'neonodes/neosubzero/_frost_history.html' %}
+    <details class="frost-model-admin" data-local-backfill>
+        <summary>LOCAL HISTORICAL PROCESSING · {{ local_backfill|length }} MONTHS PENDING</summary>
+        <p>Historical weather retrieval and feature calculations run on the workstation, never Render. Completed months are preserved. No model training or live spray transactions are started here.</p>
+        {% if local_backfill %}<p>Download one month, run <code>python -m scripts.frost_backfill --local --job FILE</code> in the local checkout, then publish its result ZIP.</p>
+        <div>{% for item in local_backfill %}<a class="button" data-backfill-month="{{ item.identity }}" href="{{ url_for('neosubzero.frost_backfill_export',identifier=item.id) }}">DOWNLOAD {{ item.identity }} · {{ item.summary.records }} RECORDS</a> {% endfor %}</div>{% endif %}
+        <form method="post" action="{{ url_for('neosubzero.frost_backfill_publish') }}" enctype="multipart/form-data" data-model-form data-size-error="Local result ZIP exceeds the 8 MiB upload limit." data-success-suffix="Reload FROST to see the updated month counts.">
+            <label>Local result ZIP <input type="file" name="result" accept=".zip,application/zip" required></label>
+            <button>PUBLISH LOCAL RESULT</button><output aria-live="polite"></output>
+        </form>
+    </details>
     {% include 'neonodes/neosubzero/_frost_models.html' %}
     <h2>SOURCE DOCUMENTS</h2>
     {% for document in documents %}
@@ -40,6 +50,6 @@
 </section>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/frost_vault.css',v=config.STATIC_ASSET_VERSION ~ '-frost-history-v1') }}">
 <script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION ~ '-frost-history-v1') }}"></script>
-<script defer src="{{ url_for('static',filename='js/frost_models.js',v=config.STATIC_ASSET_VERSION ~ '-frost-model-v1') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_models.css',v=config.STATIC_ASSET_VERSION ~ '-frost-model-v1') }}">
+<script defer src="{{ url_for('static',filename='js/frost_models.js',v=config.STATIC_ASSET_VERSION ~ '-frost-local-v1') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_models.css',v=config.STATIC_ASSET_VERSION ~ '-frost-local-v1') }}">
 {% endblock %}
