@@ -4,8 +4,10 @@ import hashlib
 import json
 import re
 import zlib
+import gc
 from contextlib import contextmanager
 from contextvars import ContextVar
+from functools import wraps
 from app.services import neoscorpion_learning_vault as provider
 
 PREFIX='frost-vault/v1/'
@@ -48,6 +50,24 @@ def _client(config):
     return scope['client']
 
 
+def _bounded_transport(function):
+    """Downloads need the same client cleanup as historical worker batches.
+
+    Nested reads/writes reuse their caller's scope and never collect mid-batch.
+    Standalone requests close pools and reclaim cyclic SDK models on all exits.
+    """
+    @wraps(function)
+    def bounded(*args, **kwargs):
+        if _transport_scope.get() is not None:
+            return function(*args, **kwargs)
+        try:
+            with transport_scope():
+                return function(*args, **kwargs)
+        finally:
+            gc.collect()
+    return bounded
+
+
 def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
@@ -71,6 +91,7 @@ def _authorized_key(key,gateway_id,*,legacy=False):
     if not allowed: raise ValueError('Evidence is outside this gateway FROST namespace.')
 
 
+@_bounded_transport
 def read_bytes(key,gateway_id,*,legacy=False):
     _authorized_key(key,gateway_id,legacy=legacy)
     config=provider._require_r2_config()
@@ -87,6 +108,7 @@ def read_bytes(key,gateway_id,*,legacy=False):
         raise provider.LearningVaultUnavailable('FROST storage is unavailable; evidence has not been discarded.') from None
 
 
+@_bounded_transport
 def put_bytes(key,raw,gateway_id):
     _authorized_key(key,gateway_id)
     if not raw or len(raw)>MAX_OBJECT_BYTES: raise ValueError('FROST object size is invalid.')
@@ -110,6 +132,7 @@ def put_bytes(key,raw,gateway_id):
     return key
 
 
+@_bounded_transport
 def put_json(category,gateway_id,identity,payload):
     if not re.fullmatch(r'[A-Za-z0-9_-]+',str(identity)): raise ValueError('Invalid FROST evidence identity.')
     body=canonical(payload)
@@ -119,6 +142,7 @@ def put_json(category,gateway_id,identity,payload):
     return key
 
 
+@_bounded_transport
 def read_json(key,gateway_id):
     _authorized_key(key,gateway_id,legacy=True)
     config=provider._require_r2_config()

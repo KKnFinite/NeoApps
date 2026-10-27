@@ -60,6 +60,21 @@ class FrostVaultTest(unittest.TestCase):
     def actor(self):
         return self.f._user('frost-admin','master')
 
+    def test_standalone_downloads_close_transport_and_nested_writes_reuse_it(self):
+        """Authenticated downloads run outside the background batch's scope."""
+        from unittest.mock import Mock
+        store=self.storage();store.close=Mock()
+        key=vault.put_json('training-datasets',self.f.gateway.id,'download-fixture',{'records':[]})
+        self.assertEqual(store.close.call_count,1)
+        store.close.reset_mock()
+        for _ in range(3):
+            self.assertEqual(vault.read_json(key,self.f.gateway.id),{'records':[]})
+        self.assertEqual(store.close.call_count,3)
+        store.close.reset_mock()
+        store.get_object=Mock(side_effect=RuntimeError('isolated storage failure'))
+        with self.assertRaises(vault.provider.LearningVaultUnavailable):vault.read_json(key,self.f.gateway.id)
+        store.close.assert_called_once()
+
     def test_original_and_extraction_are_private_immutable_verified_and_not_live_spray(self):
         store=self.storage();raw=sample();actor=self.actor()
         document,created=documents.stage(self.f.gateway,actor,'deicing.csv',raw);db.session.commit()

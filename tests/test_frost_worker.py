@@ -20,6 +20,14 @@ class WorkerTest(unittest.TestCase):
             self.assertEqual(history.drain(1),0)
             transport.assert_not_called()
 
+    def test_memory_threshold_and_minimum_headroom_boundaries(self):
+        mib=1024*1024
+        for usage,limit,safe in ((384*mib,512*mib,True),(384*mib+1,512*mib,False),
+                (128*mib,256*mib,True),(128*mib+1,256*mib,False)):
+            with self.subTest(usage=usage,limit=limit):
+                with patch('pathlib.Path.read_text',side_effect=[str(usage),str(limit)]):
+                    self.assertEqual(history.memory_budget()['safe'],safe)
+
     def test_testing_apps_never_start_background_network_or_database_work(self):
         app=MagicMock();app.config={'TESTING':True};app.extensions={}
         with patch('app.services.neoscorpion_spear_decisions.threading.Timer') as timer:
