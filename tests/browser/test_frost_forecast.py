@@ -16,6 +16,7 @@ class ForecastBrowserTest(FrostVaultBrowserTest):
                 expect(panel).to_contain_text('ABOVE-FREEZING WEAKNESS')
                 expect(panel).to_contain_text('15.38%')
                 expect(panel).to_contain_text('41.18%')
+                expect(panel).to_contain_text('70 incomplete 12-hour-window records')
                 self.assertEqual(panel.get_by_role('button').count(),0)
                 field=page.get_by_label('IMPORT CSV',exact=True);field.focus()
                 page.wait_for_function("document.querySelector('[data-frost-vault]') !== null")

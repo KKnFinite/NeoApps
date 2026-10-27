@@ -6,7 +6,8 @@
         <section><h3>KRFD OBSERVATION AUDIT</h3>
             <p>{{ research.documents }} original sources · {{ research.seasons }} seasons · {{ research.weather_months }} monthly source hashes checked · {{ research.weather_samples }} traced applications.</p>
             <p>RFD / IL_ASOS · 42.19151, −89.08760 · America/Chicago. Raw METAR/SPECI and preceding 12-hour windows; maximum observation age 90 minutes.</p>
-            <p>{{ research.weather_unmatched }} legitimate unmatched records retained. Observation time is not proof of the exact time an operator received the report.</p>
+            <p>Complete local dataset: {{ research.weather_unmatched }} legitimate unmatched records retained; {{ research.incomplete_windows }} incomplete 12-hour-window records excluded from fitting. The historical health totals above describe the older published subset, not this complete local study.</p>
+            <p>Observation time is not proof of the exact time an operator received the report.</p>
             <p class="frost-research-warning">One sampled raw-report discrepancy: vertical visibility VV014 was archived as “VV ”. Existing feature code misses that ceiling. Evidence/model artifacts remain unchanged; a versioned feature correction and re-evaluation are required.</p>
         </section>
         <section><h3>ISSUED FORECAST EVIDENCE</h3>

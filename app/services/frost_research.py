@@ -20,7 +20,7 @@ def load():
     if value['schema'] != forecast.VERSION or value['station'] != 'KRFD' or value['operationally_validated'] is not False:
         raise ValueError('Invalid research-only summary.')
     forecast.instant(value['generated_at_utc'])
-    for name in ('documents','seasons','weather_months','weather_samples','weather_unmatched','complete_forecast_cases'):
+    for name in ('documents','seasons','weather_months','weather_samples','weather_unmatched','incomplete_windows','complete_forecast_cases'):
         if not isinstance(value[name],int) or value[name]<0:
             raise ValueError('Invalid research count.')
     if not all(isinstance(value[k],str) for k in ('forecast_coverage','shadow_state','conclusion')):
