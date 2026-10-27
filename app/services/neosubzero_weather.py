@@ -392,7 +392,7 @@ def _fetch_forecast(*, now):
     return {"hourly": hourly, "grid": grid}
 
 
-def _request_json(url):
+def _request_json(url, *, max_bytes=None):
     request = Request(
         url,
         headers={
@@ -405,7 +405,10 @@ def _request_json(url):
     )
     try:
         with urlopen(request, timeout=8) as response:
-            return json.loads(response.read().decode("utf-8"))
+            raw=response.read(max_bytes+1) if max_bytes is not None else response.read()
+            if max_bytes is not None and len(raw)>max_bytes:
+                raise NeoSubZeroWeatherError('Official weather response exceeds the bounded request limit.')
+            return json.loads(raw.decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
         raise NeoSubZeroWeatherError("Official weather source is unavailable.") from exc
 

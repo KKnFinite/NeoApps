@@ -13,6 +13,14 @@ def install(connection):
         for action in ('UPDATE','DELETE'):
             connection.execute(text(f"CREATE TRIGGER IF NOT EXISTS frost_audit_no_{action.lower()} BEFORE {action} ON frost_document_audits BEGIN SELECT RAISE(ABORT,'FROST import audit is append-only'); END"))
     else: raise RuntimeError('Unsupported FROST schema dialect.')
+    for table in ('frost_model_artifacts', 'frost_model_releases'):
+        if not inspect(connection).has_table(table): continue
+        if connection.dialect.name=='postgresql':
+            connection.execute(text(f'DROP TRIGGER IF EXISTS frost_model_immutable ON {table}'))
+            connection.execute(text(f'CREATE TRIGGER frost_model_immutable BEFORE UPDATE OR DELETE ON {table} FOR EACH ROW EXECUTE FUNCTION frost_audit_immutable()'))
+        else:
+            for action in ('UPDATE','DELETE'):
+                connection.execute(text(f"CREATE TRIGGER IF NOT EXISTS {table}_no_{action.lower()} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'FROST model history is append-only'); END"))
     verify(connection)
 
 
@@ -22,3 +30,12 @@ def verify(connection):
     else:
         guarded=connection.execute(text("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name IN ('frost_audit_no_update','frost_audit_no_delete')")).scalar()==2
     if not guarded: raise RuntimeError('FROST append-only import audit protection is missing.')
+    for table in ('frost_model_artifacts', 'frost_model_releases'):
+        if not inspect(connection).has_table(table): raise RuntimeError('FROST model schema missing: '+table)
+        if connection.dialect.name=='postgresql':
+            count=connection.execute(text(f"SELECT count(*) FROM pg_trigger WHERE tgrelid='{table}'::regclass AND tgname='frost_model_immutable' AND NOT tgisinternal AND tgenabled <> 'D'")).scalar()
+            valid=count==1
+        else:
+            count=connection.execute(text(f"SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name IN ('{table}_no_update','{table}_no_delete')")).scalar()
+            valid=count==2
+        if not valid: raise RuntimeError('FROST model append-only protection missing: '+table)

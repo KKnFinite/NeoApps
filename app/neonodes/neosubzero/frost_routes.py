@@ -13,12 +13,15 @@ from app.services import frost_documents as documents,frost_vault as vault
 from app.services.frost_xchange import MAX_DOCUMENT_BYTES
 from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services import frost_history as history, frost_analysis
+from app.services import frost_model as model, frost_model_registry as models
 
 
 @bp.before_app_request
 def frost_upload_limit():
     if request.path=='/neosubzero/frost-vault' and request.method=='POST':
         request.max_content_length=MAX_DOCUMENT_BYTES+65536
+    elif request.path=='/neosubzero/frost-vault/models' and request.method=='POST':
+        request.max_content_length=model.MAX_BYTES+65536
 
 
 def authorized():
@@ -59,6 +62,7 @@ def frost_vault():
     return render_template('neonodes/neosubzero/frost_vault.html',gateway=gateway,
         documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
+        model_status=models.status(gateway.id,before=request.args.get('models_before',type=int)),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
 
 
@@ -71,6 +75,67 @@ def frost_vault_status():
         attempts=row.attempts) for row in rows])
     response.headers['Cache-Control']='no-store'
     return response
+
+
+@bp.route('/frost-vault/dataset-manifest')
+@gateway_node_required('subzero')
+def frost_dataset_manifest():
+    from app.services.csrf import csrf_token
+    gateway=authorized()
+    response=jsonify(manifest=models.dataset_manifest(gateway.id),csrf_token=csrf_token())
+    response.headers['Cache-Control']='private, no-store'
+    return response
+
+
+@bp.route('/frost-vault/weather/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_weather_evidence(identifier):
+    from app.services import frost_weather
+    gateway=authorized()
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,kind='weather',version=frost_weather.VERSION,status='ready').first_or_404()
+    try:
+        payload=vault.read_json(row.result_key,gateway.id)
+        response=send_file(io.BytesIO(vault.canonical(payload)),mimetype='application/octet-stream',as_attachment=True,
+            download_name=f'frost-weather-{row.identity}.json')
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"})
+        return response
+    except (ValueError,RuntimeError):return 'Weather evidence could not be verified; original evidence is preserved.',503
+
+
+@bp.route('/frost-vault/models',methods=['GET','POST'])
+@gateway_node_required('subzero')
+def frost_models():
+    gateway=authorized()
+    if request.method=='POST':
+        try:
+            action=request.form.get('action')
+            if action=='import':
+                file=request.files.get('model')
+                if not file or not file.filename.lower().endswith('.json'): raise ValueError('Choose a locally generated JSON model.')
+                models.register(gateway.id,current_user.id,file.stream.read(model.MAX_BYTES+1))
+            elif action in ('approve','rollback'):
+                models.release(gateway.id,current_user.id,int(request.form.get('model_id','')),
+                    int(request.form.get('revision','')),request.form.get('reason','').strip(),rollback=action=='rollback')
+            else: raise ValueError('Unknown model action. Training is local-only.')
+            return jsonify(ok=True,message='Model '+action+' recorded.',models=models.status(gateway.id))
+        except (ValueError,RuntimeError,KeyError,TypeError) as exc:
+            db.session.rollback()
+            return jsonify(ok=False,error=str(exc)),409 if any(term in str(exc).lower() for term in ('changed','gate','snapshot','conflict')) else 400
+    response=jsonify(models=models.status(gateway.id))
+    response.headers['Cache-Control']='private, no-store'
+    return response
+
+
+@bp.route('/frost-vault/models/forecast',methods=['POST'])
+@gateway_node_required('subzero')
+def frost_forecast():
+    gateway=authorized()
+    from app.services.frost_inference import predict
+    try:
+        result=predict(gateway.id,record=True)
+        return jsonify(ok=True,message=result['state'],prediction=result,models=models.status(gateway.id))
+    except (ValueError,RuntimeError) as exc:
+        db.session.rollback();return jsonify(ok=False,error=str(exc)),503
 
 
 @bp.route('/frost-vault/history/<int:identifier>')

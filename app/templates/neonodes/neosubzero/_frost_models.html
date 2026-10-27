@@ -1,0 +1,36 @@
+<details class="frost-model-admin" id="frost-model-admin" data-frost-models>
+    <summary>LOCAL MODELS · {{ model_status.approved_version or 'NO APPROVED MODEL' }}</summary>
+    <p>Training and backtesting run on the local workstation only. Render loads saved, explicitly approved JSON models. No training control is provided here.</p>
+    <p>Dataset {{ history.version }} · {{ history.state }} · Last historical update {{ history.last_success or '—' }}.</p>
+    <p>Approved production version: <strong data-model-approved>{{ model_status.approved_version or 'NONE' }}</strong>. Last forecast: {{ model_status.last_forecast or 'not calculated' }}.</p>
+    <p><a href="{{ url_for('neosubzero.frost_dataset_manifest') }}">PRIVATE LOCAL-DATASET MANIFEST</a> · Candidates are not live predictions. Treatment likelihood is not physical frost probability.</p>
+    <p><a href="{{ url_for('neosubzero.frost_vault') }}#frost-model-admin" target="_blank" rel="noopener">OPEN CURRENT MODEL VALUES</a> · Opens separately so unsaved entries stay here.</p>
+    <form method="post" action="{{ url_for('neosubzero.frost_models') }}" enctype="multipart/form-data" data-model-form>
+        <input type="hidden" name="action" value="import">
+        <label>Locally generated JSON model · up to 256 KiB <input type="file" name="model" accept=".json,application/json" required></label>
+        <button type="submit">IMPORT CANDIDATE</button><output aria-live="polite"></output>
+    </form>
+    {% for candidate in model_status.candidates %}
+    <div class="frost-model-candidate"><strong>{{ candidate.version }} · {{ candidate.status|upper }}</strong>
+        <code>{{ candidate.sha256 }}</code>
+        <details><summary>VALIDATION &amp; LIMITATIONS</summary><p>{{ candidate.metadata.target }}</p>
+            {% set evaluation=candidate.metadata.evaluation %}{% set test=evaluation.test %}
+            <p>Seasons {{ candidate.metadata.seasons|join(', ') }} · Untouched test {{ evaluation.test_season }} · {{ test.count }} applications.</p>
+            <p>Recall {{ '%.3f'|format(test.recall) if test.recall is not none else '—' }} · False-positive rate {{ '%.3f'|format(test.false_positive_rate) if test.false_positive_rate is not none else '—' }} · Brier {{ '%.3f'|format(test.brier) if test.brier is not none else '—' }} · Calibration ECE {{ '%.3f'|format(test.ece) if test.ece is not none else '—' }}.</p>
+            <p>Validated observed-weather lead: {{ evaluation.lead_hours_validated|join(', ') }} hours. These are treatment-cohort metrics, not physical frost accuracy.</p>
+            {% for name,passed in candidate.metadata.gates.items() %}<span>{{ name|replace('_',' ') }}: {{ 'PASS' if passed else 'NOT PASSED' }} · </span>{% endfor %}
+            {% for limitation in candidate.metadata.limitations %}<p>{{ limitation }}</p>{% endfor %}
+        </details>
+        {% if candidate.status=='validated' %}
+        <form method="post" action="{{ url_for('neosubzero.frost_models') }}" data-model-form>
+            <input type="hidden" name="model_id" value="{{ candidate.id }}"><input type="hidden" name="revision" value="{{ model_status.revision }}">
+            <label>Reason <input name="reason" maxlength="240" required></label>
+            <button name="action" value="approve" {% if history.state!='DATA READY' %}disabled{% endif %}>APPROVE MODEL</button>
+            {% if candidate.previously_approved %}<button name="action" value="rollback">ROLL BACK TO PREVIOUS APPROVAL</button>{% endif %}<output aria-live="polite"></output>
+        </form>
+        {% endif %}
+    </div>
+    {% else %}<p>No candidate model imported. Phase 5 and held-out evaluation gates must pass before approval.</p>{% endfor %}
+    {% if model_status.next_before %}<a href="{{ url_for('neosubzero.frost_vault',models_before=model_status.next_before) }}#frost-model-admin">OLDER MODEL VERSIONS</a>{% endif %}
+    {% if model_status.approved_version %}<form method="post" action="{{ url_for('neosubzero.frost_forecast') }}" data-model-form><button>CALCULATE APPROVED FORECAST</button><output aria-live="polite"></output></form>{% endif %}
+</details>

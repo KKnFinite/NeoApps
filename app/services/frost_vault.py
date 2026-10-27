@@ -12,7 +12,7 @@ from app.services import neoscorpion_learning_vault as provider
 
 PREFIX='frost-vault/v1/'
 CATEGORIES=('original-xchange','extracted-xchange','spray-history','weather',
-            'frost-observations','evaluations','training-datasets','treatment-context','manifests')
+            'frost-observations','evaluations','training-datasets','treatment-context','manifests','models')
 MAX_OBJECT_BYTES=64*1024*1024
 _transport_scope=ContextVar('frost_transport_scope',default=None)
 
@@ -143,18 +143,18 @@ def put_json(category,gateway_id,identity,payload):
 
 
 @_bounded_transport
-def read_json(key,gateway_id):
+def read_json(key,gateway_id,*,max_bytes=MAX_OBJECT_BYTES):
     _authorized_key(key,gateway_id,legacy=True)
     config=provider._require_r2_config()
     try:
         response=_client(config).get_object(Bucket=config['bucket'],Key=key)
         stream=response['Body']
-        try: compressed=stream.read(MAX_OBJECT_BYTES+1)
+        try: compressed=stream.read(max_bytes+1)
         finally: stream.close()
-        if len(compressed)>MAX_OBJECT_BYTES: raise ValueError('Archived object exceeds the size limit.')
+        if len(compressed)>max_bytes: raise ValueError('Archived object exceeds the size limit.')
         decoder=zlib.decompressobj(31)
-        raw=decoder.decompress(compressed,MAX_OBJECT_BYTES+1)
-        if len(raw)>MAX_OBJECT_BYTES or not decoder.eof or decoder.unused_data:
+        raw=decoder.decompress(compressed,max_bytes+1)
+        if len(raw)>max_bytes or not decoder.eof or decoder.unused_data:
             raise ValueError('Archived evidence is malformed or oversized.')
         checksum=digest(raw)
         # Release 3 metadata hashes the uncompressed JSON; FROST transport hashes

@@ -1,0 +1,9 @@
+.frost-model-admin {min-width:0;margin:10px 0;padding:8px 0;border-bottom:1px solid #36556b;}
+.frost-model-admin p {margin:6px 0;font-size:.85rem;}
+.frost-model-admin form>label {flex:1 1 220px;min-width:0;}
+.frost-model-admin input:not([type=hidden]) {max-width:100%;min-width:0;box-sizing:border-box;font:inherit;}
+.frost-model-admin input[type=file] {display:block;width:100%;margin-top:4px;}
+.frost-model-admin form>output {flex-basis:100%;overflow-wrap:anywhere;}
+.frost-model-admin button {max-width:100%;white-space:normal;}
+.frost-model-candidate {padding:8px 0;border-top:1px solid #36556b;min-width:0;}
+.frost-model-candidate code {display:block;overflow-wrap:anywhere;font-size:.75rem;}

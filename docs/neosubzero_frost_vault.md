@@ -220,3 +220,136 @@ concurrent jobs cannot spend the same container headroom. Deferred retry timesta
 resume an administrator-approved temporary pause. The 33,000-row/58-column
 isolated discovery proof measured 60.55 MiB traced allocations; this is not a
 claim about total web-container RSS, which includes multiple processes and SDKs.
+
+## Phase 6: workstation training, private artifacts, inference only on Render
+
+No model is trained or activated by deployment, CSV import, the history worker,
+or a web request. `scripts/frost_local.py` is outside the application import
+graph. Its preparation/fitting/backtesting entry points reject Render
+environment variables and Flask request contexts before importing training
+libraries. Workstation-only dependencies are in
+`tests/requirements-frost-local.txt`, not production `requirements.txt`.
+
+The initial supported target is **frost reason among recorded departure
+treatments**. F/Frost is the positive class; other explicit departure treatment
+reasons are comparison classes, not proof of frost absence. Pretreat, unknown,
+ambiguous, and no-spray outcomes are not silently converted to negatives. A
+physical-frost probability model is deliberately unsupported without a credible
+untreated observation population. Parking/surface-temperature adjustments and
+forecast-weather skill remain unvalidated. DUCC's existing preliminary frost
+presentation is not replaced or connected to these candidates.
+
+### Repeatable local workflow
+
+Run from the local checkout, never a Render shell. Sign-in uses the application's
+normal username/email/password and CSRF-protected session. Passwords are prompted
+with `getpass`, held in memory, and never stored in command arguments or files.
+Read-only dataset retrieval requires the same gateway-specific MotherBrain
+SubZero administration permission as FROST Vault. No Neon write credentials,
+public object URLs, or bucket credentials are required.
+
+```powershell
+.venv/Scripts/python.exe -m pip install -r tests/requirements-frost-local.txt
+.venv/Scripts/python.exe -m scripts.frost_local --local refresh --origin https://neoapps.onrender.com --email YOUR_EMAIL --with-weather
+.venv/Scripts/python.exe -m scripts.frost_local --local validate
+.venv/Scripts/python.exe -m scripts.frost_local --local prepare --lead-hours 1
+.venv/Scripts/python.exe -m scripts.frost_local --local backtest --version rfd-candidate-h1-v1 --lead-hours 1
+.venv/Scripts/python.exe -m scripts.frost_local --local train --version rfd-candidate-h1-v1 --lead-hours 1
+.venv/Scripts/python.exe -m scripts.frost_local --local infer --artifact instance/frost-local/candidates/rfd-candidate-h1-v1.json
+.venv/Scripts/python.exe -m scripts.frost_local --local submit --origin https://neoapps.onrender.com --email YOUR_EMAIL --artifact instance/frost-local/candidates/rfd-candidate-h1-v1.json
+```
+
+`validate`, `prepare`, `backtest`, and `train` stop when the authenticated Phase 5
+snapshot is not DATA READY. This includes unresolved weather/data-quality gaps;
+there is no force switch. The current two known unmatched weather records need
+an explicit Phase 5 disposition, not fabricated observations. No final
+historical candidate has been produced while the backfill remains incomplete.
+
+`refresh` is allowed before readiness. It reads one versioned monthly partition
+at a time, verifies SHA-256, reuses verified local objects, and rechecks the
+manifest after transfer. `--with-weather` also retrieves existing private
+monthly observation evidence; it does not ask Render to reconstruct weather.
+Incremental imports change the manifest fingerprint. Old content-addressed
+files remain available; unchanged objects are not downloaded again.
+
+All downloaded records/checkpoints/candidates default to the already ignored
+`instance/frost-local/` directory. Use a protected workstation account/private
+disk; operating-system access controls still apply. Repository-relative output
+outside `instance/` or `_local_archive/` is rejected. No model binaries or source
+datasets are committed. `infer` without a feature file performs the artifact's
+numerical self-test, explicitly **not** a current weather forecast.
+
+### Training, evaluation, and honest limits
+
+One application/tail/night is the evaluation unit, not each participating truck
+or fluid contribution. Original source-row/revision links remain in prepared
+examples. Treatment START minus 0, 1, 3, or 6 hours defines the prediction cutoff;
+lead-time preparation recomputes the same `frost_analysis.features` from cached
+actual observations at or before that cutoff. No later observation is used.
+Central calendar/DST rules remain Phase 5's authoritative contract. No weather
+forecast is substituted for a historical observation.
+
+Deterministic regularized logistic regression and a bounded 32-tree/depth-3
+random forest are compared against a documented simple temperature/spread
+reference and training-cohort climatology. Development uses forward whole-season
+folds. The penultimate season is reserved for sigmoid calibration, the latest
+season for untouched evaluation. A 24-hour boundary purge and night separation
+prevent adjacent-event leakage. Imputation/scaling is fitted inside each fold;
+missing indicators are explicit. The final model is **not refitted on the test
+season**. Development checkpoints are reusable only for the same dataset, code,
+dependency, feature, and lead-time contracts.
+
+Reports include Brier/log loss, recall, false alarms/misses, reliability bins,
+ECE, weather-regime slices, feature importance, and the single evaluated lead.
+These measure the conditional treatment-reason target, not physical frost.
+No confidence interval, physical frost prevalence, aircraft surface temperature,
+or validated parking effect is invented. Historical reporting/selection bias
+remains a limitation.
+
+Initial **research promotion criteria**, not operational safety thresholds:
+at least five seasons; untouched test with at least 100 applications and 20 per
+class; recall >= 0.70; false-positive rate <= 0.30; ECE <= 0.10; Brier better than
+climatology and no worse than the simple weather reference. All criteria and
+DATA READY/fresh snapshot gates must pass. Changing research policy requires a
+reviewed code change, not editing a candidate's pass/fail flag. Passing these
+criteria does not by itself authorize operational frost forecasts.
+
+Method references: [season/group validation](https://scikit-learn.org/stable/modules/cross_validation.html),
+[calibration](https://scikit-learn.org/stable/modules/calibration.html),
+[persistence security](https://scikit-learn.org/stable/model_persistence.html).
+
+### Approval, rollback, and bounded serving
+
+The authenticated FROST page imports candidates and reviews validation metadata.
+There is no server TRAIN button. Upload never approves a model. Explicit
+approval checks the current dataset fingerprint/readiness, numerical runtime
+self-tests, feature/classification versions, declared limitations and evaluation
+criteria. Approval uses a gateway lock and expected registry revision; stale
+conflicts preserve browser entries. Identical retries are idempotent. Rollback
+is limited to a previously approved, still-compatible artifact.
+
+Artifacts are bounded (256 KiB) declarative JSON coefficients/trees. No pickle,
+joblib, arbitrary Python deserialization, or executable model formats are
+accepted. Each artifact and its exact dataset manifest is immutable,
+content-addressed, read-back verified in private FROST `models/` / `manifests/`
+namespaces. `frost_model_artifacts` stores only metadata; append-only
+`frost_model_releases` attributes approvals/rollback to the authenticated user.
+Canonical SQLite/PostgreSQL bootstrap creates and verifies both tables and
+immutable-history guards, including upgrades from populated older schemas.
+
+Inference is lazy, never a startup download. A process caches at most two
+bounded models and 32 prediction results (five-minute reuse). Current observed
+weather reuses the existing weather cache and official AviationWeather source,
+with a bounded 14-hour/512-KiB/256-observation request; no historical seasons are
+loaded. Missing/stale or incomplete weather yields an unavailable result.
+Each result carries model/hash, source-weather and calculation timestamps,
+target/lead, missing-input indicators, limitations, and weather contributions.
+Only the artifact's validated observation-based lead receives a score; other
+horizons and forecast-weather inputs remain explicitly unvalidated/withheld.
+The pure forecast-feature adapter keeps forecast issue/valid time distinct for
+future hindcast validation, but does not enable untested forecast scores.
+
+An authorized manual calculation can persist an immutable FROST evaluation
+record and small last-success metadata. Archive failures remain visible; retry
+does not fabricate successful delivery. There is no new worker, recurring
+training job, automatic promotion, plan increase, or change to live spray data.

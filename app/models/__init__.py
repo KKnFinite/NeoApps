@@ -58,6 +58,7 @@ from app.models.neosubzero_audit_entry import NeoSubZeroAuditEntry
 from app.models.neosubzero_archive_delivery import NeoSubZeroArchiveDelivery
 from app.models.frost_document import FrostDocument, FrostDocumentAudit
 from app.models.frost_history import FrostHistoryTask
+from app.models.frost_model import FrostModelArtifact, FrostModelRelease
 from app.models.neosubzero_user_preference import NeoSubZeroUserPreference
 from app.models.neosektor_sort_state import NeoSektorSortState
 from app.models.neosektor_uld_on_the_way_event import NeoSektorUldOnTheWayEvent
@@ -209,6 +210,8 @@ __all__ = [
     "FrostDocument",
     "FrostDocumentAudit",
     "FrostHistoryTask",
+    "FrostModelArtifact",
+    "FrostModelRelease",
     "NeoSubZeroUserPreference",
     "NeoSektorBayStatus",
     "NeoSektorDriverRouteSetting",
