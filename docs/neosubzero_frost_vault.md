@@ -244,6 +244,16 @@ existing result pointer. It expires after 24 hours and is not a login credential
 The publishing route still requires authentication, administrative permission
 and CSRF. No production DB/R2 credentials are exported to the workstation.
 
+For originals already retrieved privately, publication also accepts a complete
+content-addressed source proof. Its canonical pointer hash must equal the
+persisted source hash; every original fragment must reproduce its archived
+SHA-256, and reconstructed rows must exactly match the local input. Existing
+weather must match the persisted cache key/hash. This is not an unsigned-data
+bypass: authentication, CSRF, input versions, immutable hashes and stale-result
+checks all still apply. It avoids server-side historical downloads. Up to four
+result files can be published per bounded request; each month commits separately
+and partial failures explicitly identify any months already published.
+
 The local command uses the canonical historical parser/features, reuses existing
 verified observations, and caches new provider bytes and parsed months in ignored
 `instance/frost-local/backfill/`. It never trains a model. Render only validates

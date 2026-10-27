@@ -23,7 +23,7 @@
         {% if local_backfill %}<p>Download one month, run <code>python -m scripts.frost_backfill --local --job FILE</code> in the local checkout, then publish its result ZIP.</p>
         <div>{% for item in local_backfill %}<a class="button" data-backfill-month="{{ item.identity }}" href="{{ url_for('neosubzero.frost_backfill_export',identifier=item.id) }}">DOWNLOAD {{ item.identity }} · {{ item.summary.records }} RECORDS</a> {% endfor %}</div>{% endif %}
         <form method="post" action="{{ url_for('neosubzero.frost_backfill_publish') }}" enctype="multipart/form-data" data-model-form data-size-error="Local result ZIP exceeds the 8 MiB upload limit." data-success-suffix="Reload FROST to see the updated month counts.">
-            <label>Local result ZIP <input type="file" name="result" accept=".zip,application/zip" required></label>
+            <label>Local result ZIP · up to four files / 8 MiB total <input type="file" name="result" accept=".zip,application/zip" multiple required></label>
             <button>PUBLISH LOCAL RESULT</button><output aria-live="polite"></output>
         </form>
     </details>

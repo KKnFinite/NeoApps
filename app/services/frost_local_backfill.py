@@ -86,7 +86,7 @@ def unpack(raw):
     try:
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             entries=archive.infolist();names=[i.filename for i in entries]
-            if len(entries)>8 or len(set(names))!=len(names) or sum(i.file_size for i in entries)>MAX_EXPANDED:
+            if len(entries)>10 or len(set(names))!=len(names) or sum(i.file_size for i in entries)>MAX_EXPANDED:
                 raise ValueError('Duplicate or oversized result archive.')
             if any('/' in n or '\\' in n or '..' in n or ':' in n for n in names):raise ValueError('Unsafe archive path.')
             files={i.filename:archive.read(i) for i in entries}
@@ -101,14 +101,30 @@ def publish(gateway_id,actor_id,raw):
     if not history.memory_allows_work():raise RuntimeError('Insufficient server headroom for publication. Keep the result file and retry later.')
     envelope,dataset,files=unpack(raw);job=envelope['job']
     digest=vault.digest(vault.canonical(job))
-    try:verified=signer().loads(envelope['ticket'],max_age=86400)
-    except BadSignature as exc:raise ValueError('Expired or invalid source ticket. Download a fresh month; local weather caches are retained.') from exc
+    proof=json.loads(files.pop('proof.json')) if 'proof.json' in files else None
+    if proof is None:
+        try:verified=signer().loads(envelope['ticket'],max_age=86400)
+        except BadSignature as exc:raise ValueError('Expired or invalid source ticket. Download a fresh month; local weather caches are retained.') from exc
+    else:verified=digest # Full content-addressed proof is checked against the DB below.
     if verified!=digest or envelope['sha256']!=digest or job['gateway_id']!=gateway_id or job['actor_id']!=actor_id:
         raise ValueError('Source identity, gateway or operator mismatch.')
     if job['implementation_sha256']!=implementation_sha() or job['historical_version']!=analysis.VERSION or job['time_contract']!=analysis.TIME_CONTRACT:
         raise ValueError('Local processing code changed. Update the checkout and regenerate this result.')
     row=Task.query.filter_by(id=job['task_id'],gateway_id=gateway_id,kind='partition',version=analysis.VERSION).one_or_none()
     if not row or row.input_hash!=job['input_hash'] or row.source_key!=job['source_key']:raise ValueError('Historical source changed; refresh the month.')
+    if proof is not None:
+        if vault.digest(vault.canonical(proof['source']))!=row.input_hash:raise ValueError('Canonical source proof hash mismatch.')
+        expected_keys={p['fragment_key'] for p in proof['source']['record_pointers']}
+        if set(proof['fragments'])!=expected_keys:raise ValueError('Incomplete source fragment proof.')
+        for key,fragment in proof['fragments'].items():
+            if not key.startswith(vault.namespace(gateway_id,'training-datasets')) or not key.endswith('/'+vault.digest(vault.canonical(fragment))+'.json.gz'):
+                raise ValueError('Source fragment content hash mismatch.')
+        if history.resolve_records(proof['source'],lambda key:proof['fragments'][key])!=job['records']:
+            raise ValueError('Local source records differ from the canonical fragment proof.')
+        for month,item in job['weather'].items():
+            cached=Task.query.filter_by(gateway_id=gateway_id,kind='weather',identity=month,version=weather.VERSION,status='ready').one_or_none()
+            if not cached or cached.result_key!=item['key'] or not item['key'].endswith('/'+vault.digest(vault.canonical(item['payload']))+'.json.gz'):
+                raise ValueError('Existing weather proof hash/version mismatch.')
     if dataset['schema_version']!=analysis.VERSION or dataset['time_contract']!=analysis.TIME_CONTRACT or len(dataset['records'])!=len(job['records']):
         raise ValueError('Result contract/count mismatch.')
     counts=Counter()
@@ -128,7 +144,8 @@ def publish(gateway_id,actor_id,raw):
     if dict(counts)!=dataset['summary'] or analysis.cohorts(dataset['records'])!=dataset['descriptive_cohorts']:
         raise ValueError('Result summary does not reconcile.')
     dataset.update(source_partition_key=job['source_key'],source_partition_hash=job['input_hash'],station=weather.STATION,
-        local_processing=dict(actor_id=actor_id,implementation_sha256=job['implementation_sha256'],source_package_sha256=digest,result_zip_sha256=vault.digest(raw)))
+        local_processing=dict(actor_id=actor_id,implementation_sha256=job['implementation_sha256'],source_package_sha256=digest,result_zip_sha256=vault.digest(raw),
+            source_proof_sha256=vault.digest(vault.canonical(proof)) if proof is not None else None))
     needed=months_needed(job['records']);weather_objects={};new_raw={}
     for month in needed:
         if month in job['weather']:

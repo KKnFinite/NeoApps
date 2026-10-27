@@ -109,14 +109,19 @@ def frost_backfill_export(identifier):
 @gateway_node_required('subzero')
 def frost_backfill_publish():
     gateway=authorized()
+    published=[]
     try:
-        upload=request.files.get('result')
-        if not upload or not upload.filename.lower().endswith('.zip'):raise ValueError('Choose a locally generated result ZIP.')
-        row=backfill.publish(gateway.id,current_user.id,upload.stream.read(backfill.MAX_ZIP+1))
-        return jsonify(ok=True,message='LOCAL RESULT PUBLISHED: '+row.identity+' · '+row.status+'.',models=models.status(gateway.id))
+        uploads=request.files.getlist('result')
+        if not uploads or len(uploads)>4 or any(not u.filename.lower().endswith('.zip') for u in uploads):raise ValueError('Choose one to four locally generated result ZIPs (8 MiB total).')
+        for upload in uploads:
+            row=backfill.publish(gateway.id,current_user.id,upload.stream.read(backfill.MAX_ZIP+1))
+            published.append(row.identity+' · '+row.status)
+        return jsonify(ok=True,message='LOCAL RESULT PUBLISHED: '+', '.join(published)+'.',models=models.status(gateway.id))
     except (ValueError,RuntimeError,KeyError,TypeError,IntegrityError) as exc:
         db.session.rollback()
-        return jsonify(ok=False,error=str(exc) if not isinstance(exc,IntegrityError) else 'Concurrent publication conflict; refresh current values. Original result file retained.'),409
+        error=str(exc) if not isinstance(exc,IntegrityError) else 'Concurrent publication conflict; refresh current values. Original result file retained.'
+        if published:error='Already published: '+', '.join(published)+'. Remaining files retained. '+error
+        return jsonify(ok=False,error=error),409
 
 
 @bp.route('/frost-vault/weather/<int:identifier>')

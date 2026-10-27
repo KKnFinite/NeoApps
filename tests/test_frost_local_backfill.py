@@ -106,6 +106,34 @@ class LocalBackfillTest(unittest.TestCase):
             result=local.publish(self.gw,self.actor.id,raw)
             self.assertEqual(result.status,'ready');self.assertIsNone(result.lease_token)
 
+    def test_partial_batch_is_explicit_and_identical_successful_files_are_safe_to_retry(self):
+        raw=self.package();master=self.f.app.test_client();self.f._login(master,self.actor);g.pop('_login_user',None)
+        response=master.post('/neosubzero/frost-vault/backfill/publish',data={'result':[
+            (io.BytesIO(raw),'good.zip'),(io.BytesIO(b'broken'),'bad.zip')]},content_type='multipart/form-data')
+        self.assertEqual(response.status_code,409);self.assertIn('Already published:',response.json['error'])
+        self.assertEqual(db.session.get(Task,self.month.id).status,'ready')
+        g.pop('_login_user',None)
+        response=master.post('/neosubzero/frost-vault/backfill/publish',data={'result':[
+            (io.BytesIO(raw),'good.zip'),(io.BytesIO(raw),'again.zip')]},content_type='multipart/form-data')
+        self.assertEqual(response.status_code,200);self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
+
+    def test_content_addressed_original_proof_needs_no_server_history_download_or_ticket(self):
+        raw=self.package()
+        envelope,dataset,files=local.unpack(raw)
+        source=vault.read_json(self.month.source_key,self.gw)
+        proof=dict(source=source,fragments={p['fragment_key']:vault.read_json(p['fragment_key'],self.gw) for p in source['record_pointers']})
+        envelope['ticket']='NOT_A_SERVER_TICKET'
+        def pack(proof):
+            stream=io.BytesIO()
+            with zipfile.ZipFile(stream,'w',compression=zipfile.ZIP_DEFLATED) as z:
+                for name,value in dict(files,**{'job.json':vault.canonical(envelope),'result.json':vault.canonical(dataset),'proof.json':vault.canonical(proof)}).items():z.writestr(name,value)
+            return stream.getvalue()
+        altered=copy.deepcopy(proof);next(iter(altered['fragments'].values()))['records'][0]['tail']='WRONG'
+        with self.assertRaisesRegex(ValueError,'content hash'):local.publish(self.gw,self.actor.id,pack(altered))
+        with patch.object(vault,'read_json',side_effect=AssertionError('Server downloaded history')):
+            result=local.publish(self.gw,self.actor.id,pack(proof))
+        self.assertEqual(result.status,'ready');self.assertEqual(NeoSubZeroSprayRecord.query.count(),0)
+
 
 @unittest.skipUnless(pg.URI,'Requires disposable loopback PostgreSQL')
 class LocalBackfillPostgresTest(LocalBackfillTest):
