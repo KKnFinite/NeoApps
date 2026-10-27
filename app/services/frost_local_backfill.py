@@ -45,11 +45,22 @@ def pending(gateway_id):
         Task.status.in_(('pending','retry'))).order_by(Task.identity).all()
 
 
+def active_lease(row):
+    if not row.lease_token or row.retry_at<=datetime.utcnow():return False
+    # An administrator's retry pause can outlive an abandoned per-month token.
+    # Once Render computation is disabled, only the actual shared batch lease
+    # proves a server processor could still own work. Never rewrite the pause.
+    if history.local_execution_required():
+        worker=Task.query.filter_by(gateway_id=row.gateway_id,kind='worker',identity='memory-budget',version='frost-worker-v1').one_or_none()
+        return bool(worker and worker.lease_token and worker.retry_at>datetime.utcnow())
+    return True
+
+
 @vault._bounded_transport
 def export(gateway_id,actor_id,identifier):
     row=Task.query.filter_by(id=identifier,gateway_id=gateway_id,kind='partition',version=analysis.VERSION).one_or_none()
     if row is None or row.status not in ('pending','retry'):raise ValueError('This month is not pending. Completed evidence is preserved.')
-    if row.lease_token and row.retry_at>datetime.utcnow():raise ValueError('Another processor owns this month; retry after its lease expires.')
+    if active_lease(row):raise ValueError('Another processor owns this month; retry after its lease expires.')
     if not history.memory_allows_work():raise RuntimeError('Insufficient server headroom for a bounded evidence transfer. Retry later; no job was changed.')
     identifier,month,digest,source_key,previous=row.id,row.identity,row.input_hash,row.source_key,row.result_key
     db.session.commit()
@@ -151,7 +162,7 @@ def publish(gateway_id,actor_id,raw):
     db.session.rollback()
     current=Task.query.filter_by(id=job['task_id'],gateway_id=gateway_id).with_for_update().one()
     if current.result_key==key and current.input_hash==job['input_hash']:db.session.rollback();return current
-    if current.input_hash!=job['input_hash'] or current.result_key!=job['previous_result_key'] or current.status not in ('pending','retry') or (current.lease_token and current.retry_at>datetime.utcnow()):
+    if current.input_hash!=job['input_hash'] or current.result_key!=job['previous_result_key'] or current.status not in ('pending','retry') or active_lease(current):
         db.session.rollback();raise ValueError('Concurrent result/source conflict. Existing evidence was not replaced.')
     for month,item in weather_objects.items():
         entry=history.task(gateway_id,'weather',month,weather.VERSION)

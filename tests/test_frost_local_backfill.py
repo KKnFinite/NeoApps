@@ -92,6 +92,20 @@ class LocalBackfillTest(unittest.TestCase):
         g.pop('_login_user',None);response=master.post('/neosubzero/frost-vault/backfill/publish',data={'result':(io.BytesIO(b'bad'),'result.zip')},content_type='multipart/form-data')
         self.assertEqual(response.status_code,409);self.assertFalse(response.json['ok'])
 
+    def test_orphaned_month_token_does_not_turn_retry_pause_into_active_server_work(self):
+        self.month.lease_token='orphaned-before-pause';db.session.commit();paused=self.month.retry_at
+        self.assertTrue(local.active_lease(self.month))
+        with patch.dict(self.f.app.config,{'FROST_HISTORY_EXECUTION':'local'}):
+            self.assertFalse(local.active_lease(self.month))
+            raw=self.package();self.assertEqual(db.session.get(Task,self.month.id).retry_at,paused)
+            worker=history.task(self.gw,'worker','memory-budget','frost-worker-v1')
+            worker.lease_token='actually-running';worker.retry_at=datetime.utcnow()+timedelta(minutes=5);db.session.commit()
+            with self.assertRaisesRegex(ValueError,'processor owns'):local.export(self.gw,self.actor.id,self.month.id)
+            with self.assertRaisesRegex(ValueError,'conflict'):local.publish(self.gw,self.actor.id,raw)
+            worker.lease_token=None;db.session.commit()
+            result=local.publish(self.gw,self.actor.id,raw)
+            self.assertEqual(result.status,'ready');self.assertIsNone(result.lease_token)
+
 
 @unittest.skipUnless(pg.URI,'Requires disposable loopback PostgreSQL')
 class LocalBackfillPostgresTest(LocalBackfillTest):
