@@ -15,6 +15,7 @@ from app.services.neoscorpion_learning_vault import learning_vault_status
 from app.services import frost_history as history, frost_analysis
 from app.services import frost_model as model, frost_model_registry as models
 from app.services import frost_local_backfill as backfill
+from app.services import frost_research
 
 
 @bp.before_app_request
@@ -66,8 +67,23 @@ def frost_vault():
         documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
         model_status=models.status(gateway.id,before=request.args.get('models_before',type=int)),
+        research=frost_research.status(),
         local_backfill=backfill.pending(gateway.id),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
+
+
+@bp.route('/frost-vault/forecast-validation')
+@gateway_node_required('subzero')
+def frost_forecast_validation():
+    authorized()
+    study=frost_research.status()
+    if study is None:
+        return jsonify(error='Research summary unavailable; no successful validation claimed.'),503
+    response=jsonify(study)
+    response.headers['Cache-Control']='private, no-store'
+    response.headers['Content-Disposition']='attachment; filename="frost-forecast-research.json"'
+    response.headers['X-Content-Type-Options']='nosniff'
+    return response
 
 
 @bp.route('/frost-vault/status')

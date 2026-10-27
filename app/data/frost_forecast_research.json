@@ -1,0 +1,50 @@
+{
+  "schema": "frost-forecast-research-v1",
+  "station": "KRFD",
+  "generated_at_utc": "2026-10-27T20:11:49Z",
+  "operationally_validated": false,
+  "source_catalog_fingerprint": "7a83f7cd7767a11ba7db052c615c1ae02bf2432125a0344d00d73e115f30614f",
+  "documents": 11,
+  "seasons": 11,
+  "weather_months": 95,
+  "weather_samples": 69,
+  "weather_unmatched": 2,
+  "incomplete_windows": 70,
+  "normalization_findings": 1,
+  "complete_forecast_cases": 0,
+  "forecast_coverage": "Issued KRFD TAF evidence sampled across all 11 seasons: 69 applications; 67-69 usable partial forecasts per experiment. GFS MOS returned 21 station forecasts in each of 11 sampled seasonal cycles, but the processed response has no publication timestamp. Three HRRR parameter indexes were verified; full grids were not downloaded.",
+  "shadow_state": "One local METAR + issued TAF + NWS forecast-grid shadow snapshot captured 2026-10-27 at 20:11 UTC. Manual local capture, not continuously scheduled; outcomes pending.",
+  "models": [
+    {
+      "model_version": "rfd-treatment-h0-20261027-v1",
+      "sha256": "f395ff1c85693e28d1349560faaf2985a6b2ed7b6dcbec11278dd13454c51e73",
+      "test_season": "2025-2026",
+      "count": 2019,
+      "recall": 0.8565217391304348,
+      "false_positive_rate": 0.17231000752445447,
+      "brier": 0.09350177416247182,
+      "above_count": 460,
+      "above_positive": 26,
+      "above_missed": 22,
+      "above_recall": 0.15384615384615385,
+      "above_nights": 58,
+      "forecast_result": "Partial TAF stress test on 7 held-out sampled applications (2 frost-reason, 5 other): 1/3/6-hour recall 0/0/0%; Brier 0.2391/0.2390/0.2360. Not a complete-input forecast validation and far too small for a skill claim."
+    },
+    {
+      "model_version": "rfd-treatment-h1-20261027-v1",
+      "sha256": "5356fe7bd0d7f13f5480437bb72b05ee5a6222675fdb89824b2393c147d45612",
+      "test_season": "2025-2026",
+      "count": 2019,
+      "recall": 0.836231884057971,
+      "false_positive_rate": 0.21519939804364183,
+      "brier": 0.1160084479167274,
+      "above_count": 466,
+      "above_positive": 34,
+      "above_missed": 20,
+      "above_recall": 0.4117647058823529,
+      "above_nights": 60,
+      "forecast_result": "Partial TAF stress test on the same 7 held-out applications: 1/3/6-hour recall 50/50/50%; Brier 0.1312/0.1536/0.1120. Shared event-time above-freezing subset: 10/26 frost-reason cases detected (38.46%), versus forest 4/26. No operational forecast claim."
+    }
+  ],
+  "conclusion": "Useful advance-warning skill is NOT established. Obtain complete meteorological forecasts with proven pre-cutoff availability, collect prospective paired outcomes, and validate a larger untouched season/night cohort. Do not activate either candidate or interpret these treatment-selected scores as physical frost probabilities."
+}

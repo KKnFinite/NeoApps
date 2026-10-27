@@ -1,0 +1,34 @@
+<details class="frost-research" data-frost-research>
+    <summary>FORECAST VALIDATION · RESEARCH / NOT OPERATIONAL</summary>
+    {% if research %}
+    <p>Study recorded {{ research.generated_at_utc }}. These models classify frost reasons among recorded departure treatments, not the probability of physical frost on an untreated aircraft. Neither this study nor shadow collection approves a model.</p>
+    <div class="frost-research-grid">
+        <section><h3>KRFD OBSERVATION AUDIT</h3>
+            <p>{{ research.documents }} original sources · {{ research.seasons }} seasons · {{ research.weather_months }} monthly source hashes checked · {{ research.weather_samples }} traced applications.</p>
+            <p>RFD / IL_ASOS · 42.19151, −89.08760 · America/Chicago. Raw METAR/SPECI and preceding 12-hour windows; maximum observation age 90 minutes.</p>
+            <p>{{ research.weather_unmatched }} legitimate unmatched records retained. Observation time is not proof of the exact time an operator received the report.</p>
+            <p class="frost-research-warning">One sampled raw-report discrepancy: vertical visibility VV014 was archived as “VV ”. Existing feature code misses that ceiling. Evidence/model artifacts remain unchanged; a versioned feature correction and re-evaluation are required.</p>
+        </section>
+        <section><h3>ISSUED FORECAST EVIDENCE</h3>
+            <p>{{ research.forecast_coverage }}</p>
+            <p>{{ research.complete_forecast_cases }} contract-complete forecast cases. TAF lacks temperature/dew point. MOS cycle time is not verified publication time. No later observations fill missing forecast measurements.</p>
+            <p>One-hour model: observations at treatment minus one hour. Three/six-hour experiments remain unvalidated.</p>
+        </section>
+        <section><h3>PROSPECTIVE SHADOW</h3>
+            <p>{{ research.shadow_state }}</p>
+            <p>Local-only, bounded source/hash/timestamp capture. Unknown outcomes remain unknown; no inferred frost-negative nights. No Render research worker, training or historical downloads.</p>
+            <p>Parking adjustments remain disabled. Credible untreated comparison observations are still needed.</p>
+        </section>
+    </div>
+    {% for candidate in research.models %}
+    <section class="frost-research-candidate">
+        <h3>{{ candidate.model_version }}</h3>
+        <p>Untouched {{ candidate.test_season }} observed-input test: {{ candidate.count }} applications · frost-reason recall {{ '%.2f'|format(candidate.recall * 100) }}% · false-positive rate {{ '%.2f'|format(candidate.false_positive_rate * 100) }}% · Brier {{ '%.4f'|format(candidate.brier) }}.</p>
+        <p class="frost-research-warning">ABOVE-FREEZING WEAKNESS: {{ candidate.above_positive - candidate.above_missed }}/{{ candidate.above_positive }} frost-reason cases detected ({{ '%.2f'|format(candidate.above_recall * 100) }}%) among {{ candidate.above_count }} applications on {{ candidate.above_nights }} nights. Subsets use each model's own input-time temperature; they are not identical populations.</p>
+        <p>{{ candidate.forecast_result }}</p>
+    </section>
+    {% endfor %}
+    <p>{{ research.conclusion }}</p>
+    <a href="{{ url_for('neosubzero.frost_forecast_validation') }}">DOWNLOAD DATED RESEARCH SUMMARY</a>
+    {% else %}<p>Research summary unavailable. No successful validation claimed; CSV import and the model registry remain available.</p>{% endif %}
+</details>

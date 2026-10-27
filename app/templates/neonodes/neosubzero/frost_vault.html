@@ -19,6 +19,7 @@
     {% include 'neonodes/neosubzero/_frost_history.html' %}
     <p>Historical analysis and training run locally. Archived research remains available; bulk result publication is retired.</p>
     {% include 'neonodes/neosubzero/_frost_models.html' %}
+    {% include 'neonodes/neosubzero/_frost_research.html' %}
     <h2>SOURCE DOCUMENTS</h2>
     {% for document in documents %}
     <article class="frost-document" data-frost-document="{{ document.id }}">
@@ -43,4 +44,5 @@
 <script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION ~ '-frost-history-v1') }}"></script>
 <script defer src="{{ url_for('static',filename='js/frost_models.js',v=config.STATIC_ASSET_VERSION ~ '-frost-local-v1') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/frost_models.css',v=config.STATIC_ASSET_VERSION ~ '-frost-local-v1') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_research.css',v=config.STATIC_ASSET_VERSION ~ '-frost-research-v1') }}">
 {% endblock %}
