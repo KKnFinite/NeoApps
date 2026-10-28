@@ -135,6 +135,16 @@ class InspectionTest(unittest.TestCase):
         watcher=self.fixture.client('watcher')
         self.assertEqual(self.fixture.post(watcher,'frost-inspection',**data).status_code,403)
 
+    def test_changed_assets_have_new_immutable_cache_identities(self):
+        client=self.fixture.client()
+        with patch('app.neonodes.neosubzero.routes.current_neosubzero_operation',return_value=self.f.operation):
+            response=client.get('/neosubzero/operations?mode=outbound')
+        self.assertEqual(response.status_code,200)
+        body=response.get_data(as_text=True)
+        self.assertIn('neosubzero_operations.js?v=20261028-frost-inspections-v1',body)
+        self.assertIn('ucc=20261028-frost-inspections-v1',body)
+        self.assertNotIn('neosubzero_operations.js?v=20261023-release2-v1',body)
+
 
 class WeatherAndCollectionTest(unittest.TestCase):
     def test_original_comparison_uses_actual_precision_not_unbounded_tolerance(self):
