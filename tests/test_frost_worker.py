@@ -1,11 +1,32 @@
 """No extra polling service: wake the existing bounded archive worker."""
 import unittest
+import runpy
+import sys
+from types import SimpleNamespace
 from unittest.mock import patch,MagicMock
 from app.services.neoscorpion_spear_decisions import initialize_delivery_heartbeat
 from app.services import frost_history as history
 
 
 class WorkerTest(unittest.TestCase):
+    def test_gunicorn_parent_defers_timer_and_worker_hook_uses_existing_app(self):
+        app=MagicMock()
+        with patch('app.create_app',return_value=app),patch('app.services.neostaffing_employee_recovery_worker.start_recovery_worker') as recovery,\
+            patch('app.services.neoscorpion_spear_decisions.initialize_delivery_heartbeat') as initialize,\
+            patch.dict(sys.modules,{'gunicorn':MagicMock()}):
+            runpy.run_path('run.py')
+            initialize.assert_not_called();recovery.assert_called_once_with(app)
+            hooks=runpy.run_path('gunicorn.conf.py')
+            hooks['post_worker_init'](SimpleNamespace(wsgi=app,pid=123))
+            initialize.assert_called_once_with(app)
+
+    def test_other_wsgi_hosts_preserve_existing_startup(self):
+        app=MagicMock()
+        modules={key:value for key,value in sys.modules.items() if key!='gunicorn'}
+        with patch('app.create_app',return_value=app),patch('app.services.neostaffing_employee_recovery_worker.start_recovery_worker'),\
+            patch('app.services.neoscorpion_spear_decisions.initialize_delivery_heartbeat') as initialize,patch.dict(sys.modules,modules,clear=True):
+            runpy.run_path('run.py');initialize.assert_called_once_with(app)
+
     def test_memory_guard_uses_container_headroom_and_fails_closed(self):
         from unittest.mock import mock_open
         with patch('pathlib.Path.read_text',side_effect=['300000000','536870912']):
