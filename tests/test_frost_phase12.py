@@ -176,6 +176,17 @@ class ProspectiveTest(unittest.TestCase):
         self.assertEqual(study.night('2026-11-01T06:30:00Z'),study.night('2026-11-01T07:30:00Z'))
         self.assertEqual(study.night('2026-10-29T04:59:00Z'),study.night('2026-10-29T05:01:00Z'))
 
+    def test_existing_canonical_archive_utc_fields_without_suffix(self):
+        # Actual authenticated archive format: canonical DB DateTime is naive
+        # UTC, and archive_payload names this field start_utc explicitly.
+        payload=dict(schema_version='subzero-spray/v1',record_type='actual_fluid_application',activity='departure',
+            id='departure:2:pass:1',tail='N460UP',start_utc='2026-10-28T08:27:00',reason=None)
+        result=study.outcome(payload,'a'*64)
+        self.assertEqual(result['at'],'2026-10-28T08:27:00+00:00')
+        self.assertIsNone(result['label']);self.assertEqual(payload['start_utc'],'2026-10-28T08:27:00')
+        # Unqualified inspection times must not acquire a guessed timezone.
+        with self.assertRaises(ValueError):study.outcome(self.inspection(observed_at_utc='2026-10-28T08:27:00'),'a'*64)
+
     def test_raw_source_hash_and_retrieval_time_rechecked(self):
         raw=b'KRFD original report';digest=vault.digest(raw);path=self.root/'weather'/(digest+'.source')
         path.parent.mkdir();path.write_bytes(raw)

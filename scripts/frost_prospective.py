@@ -255,6 +255,7 @@ def refresh_outcomes(remote, directory):
 def outcome(payload, source_hash):
     """Explicit evidence only. No negative labels from missing activity."""
     schema=payload.get('schema_version'); cohort=None; label=None; confounded=False
+    time_contract='explicit source offset'
     if schema=='subzero-spray/v1' and payload.get('record_type')=='actual_fluid_application' and payload.get('activity') in ('departure','pretreat'):
         from app.services.frost_analysis import classification
         # Canonical Xchange reason mapping is reused, never guessed from absence.
@@ -264,6 +265,13 @@ def outcome(payload, source_hash):
         cohort='treatment_reason' if payload['activity']=='departure' else 'anticipated_pretreatment'
         if cohort=='anticipated_pretreatment':label=None;confounded=True
         at=payload['start_utc']
+        # Existing canonical DateTime columns and archive_payload's explicitly
+        # named start_utc field are UTC even when isoformat omits the suffix.
+        # This narrow schema contract must not relax forecast/inspection clocks.
+        parsed=datetime.fromisoformat(at)
+        if parsed.tzinfo is None:
+            at=parsed.replace(tzinfo=timezone.utc).isoformat()
+            time_contract='subzero-spray/v1 canonical start_utc; naive database UTC normalized, original preserved'
     elif schema=='frost-physical-inspection-v1':
         if not payload.get('evidence_active'): return None
         cohort='physical_inspection'; at=payload['observed_at_utc']
@@ -277,7 +285,7 @@ def outcome(payload, source_hash):
     else: return None
     if not payload.get('tail'): return None
     return dict(source_sha256=source_hash,source_id=payload['id'],tail=payload['tail'],at=clock.instant(at).isoformat(),
-        cohort=cohort,label=label,confounded=confounded,prior_pretreat=payload.get('prior_pretreat'),
+        cohort=cohort,label=label,confounded=confounded,prior_pretreat=payload.get('prior_pretreat'),time_contract=time_contract,
         context=payload,unknown=label is None)
 
 

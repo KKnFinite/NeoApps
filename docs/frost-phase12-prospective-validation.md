@@ -76,6 +76,8 @@ Separate cohorts retain:
 
 Corrected inspection roots retain original evidence and count only their active revision. Actual pretreatment archives can establish a preceding treatment context; missing treatment history is not assumed absent. All forecast snapshots and predictions remain in the dataset even without matched outcomes. Later captured METARs provide subsequent-weather context only and never rescore earlier predictions.
 
+Authenticated production verification exposed the existing `subzero-spray/v1` convention: `start_utc` serializes a canonical naive-UTC database column without an offset suffix. The local adapter explicitly records that schema disposition and normalizes it to UTC without rewriting the original payload. This does not permit naive forecast or inspection timestamps. The retrieved 2026-10-28 08:27 UTC application predates the 19:18 UTC baseline, has no recorded reason and is not a prospective positive or negative.
+
 The local evaluation reports sample counts, independent nights, positives/negatives, misses/false alarms, recall, false-positive rates and Wilson intervals. Conditional treatment-reason evaluation additionally reports Brier/log loss/calibration bins and night-level bootstrap intervals. Physical/no-treatment comparisons are explicitly transfer diagnostics; probability-calibration statistics are suppressed for those cohorts. Regime summaries cover above-freezing cases, low winds, clear/humid forecasts, rapid cooling, cloud clearing and recent wetting. Weather serial dependence can make nominal night-level intervals too narrow.
 
 No finite sample automatically approves a model. Physical-frost validation still needs a representative, independently collected outcome population and a separately reviewed evaluation design. The current live evidence count is zero physical inspections and zero explicit no-spray observations; no prospective accuracy is claimed.
@@ -89,5 +91,7 @@ The authenticated FROST panel shows the frozen identities, dated local capture r
 ## Initial evidence and limitations
 
 The first capture at 2026-10-28 19:19:36 UTC retained 14 KRFD observations and ten HRRR forecast-valid hours. All eight frozen models had contract-complete inputs and produced research scores, two per horizon. Source bytes, original availability receipts, the verified KRFD grid and normalized fields passed local re-audit. There are no matched prospective outcomes or evaluated nights yet. One capture night is not evidence of predictive skill or season-long collection reliability.
+
+The actual authenticated archive response passed canonical SHA-256 verification (`f3e18602370301dab03f2aa0ba2735986af35ea65fef3dfb725f00b7002c0ab0`). Local assembly excluded that one pre-baseline record and retained all eight predictions with UNKNOWN outcomes. The resulting initial evaluation fingerprint is `64e5936aac2d19fdee0dd93d4ae93efba8eae5ec136040fce1eaef7c0a67b491`; its metrics list is empty, not a fabricated zero-error score.
 
 The scheduler XML is prepared but uninstalled. Continued collection depends on an available workstation and authorized scheduling. No daily retraining is needed. Operational physical-frost accuracy, parking shelter adjustments and model promotion remain blocked by the evidence limitations, not bypassed by this release.
