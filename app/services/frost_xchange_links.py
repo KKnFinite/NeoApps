@@ -46,8 +46,10 @@ def link(gateway_id,item,page_key):
     conflict=False
     if row.input_hash:
         previous=old.get('modified_utc')
-        if previous and revision and revision<previous:return
-        conflict=not revision or not previous or revision==previous
+        # Match the established analysis.deduplicate contract: a unique latest
+        # documented modification wins; an undated row cannot replace it.
+        if previous and (not revision or revision<previous):return
+        conflict=revision==previous
     Task.query.filter_by(gateway_id=gateway_id,kind='auto_match',version=auto.VERSION,status='active').filter(
         Task.summary['record_identity'].as_string()==identifier).update(dict(status='superseded'),synchronize_session=False)
     starts=[f['occurred_at_utc'] for f in item.get('fluids',[]) if f.get('occurred_at_utc')]

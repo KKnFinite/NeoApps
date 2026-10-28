@@ -124,6 +124,20 @@ class AutoTest(ArchiveAccessTest):
         self.assertEqual(Task.query.filter_by(kind='xchange_outcome').one().status,'requires_review')
         self.assertEqual(Task.query.filter_by(kind='auto_match',status='active').count(),0)
 
+    def test_revision_index_agrees_with_existing_documented_latest_contract(self):
+        def item(sha,modified):
+            return dict(source_record_id='latest-contract',row_hash=sha,source=dict(document_id=1,source_row=2,document_sha256='a'*64),
+                modified_utc=modified,tail='NREAL',classification=auto.analysis.classification('F'),requires_review=False,fluids=[])
+        links.link(self.f.gateway.id,item('a'*64,None),'undated-page');db.session.commit()
+        newer=item('b'*64,self.t.isoformat())
+        links.link(self.f.gateway.id,newer,'dated-page');db.session.commit()
+        row=Task.query.filter_by(kind='xchange_outcome').one()
+        self.assertEqual(row.input_hash,'b'*64);self.assertFalse(row.summary['revision_conflict'])
+        links.link(self.f.gateway.id,item('c'*64,None),'later-import-without-modification');db.session.commit()
+        self.assertEqual(row.input_hash,'b'*64);self.assertFalse(row.summary['revision_conflict'])
+        links.link(self.f.gateway.id,item('d'*64,self.t.isoformat()),'conflicting-same-modification');db.session.commit()
+        self.assertTrue(row.summary['revision_conflict'])
+
     def test_exact_frozen_research_upload_authorization_and_no_approval(self):
         from pathlib import Path
         helper=self.model_fixture();entry=auto.frozen_models()[0]
