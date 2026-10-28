@@ -9,9 +9,11 @@ signals without turning ordinary request logging into a memory stream.
 from __future__ import annotations
 
 import os
+import json
 import sys
 import threading
 import time
+from pathlib import Path
 from contextlib import contextmanager
 from functools import wraps
 
@@ -88,7 +90,45 @@ def process_memory_snapshot():
         "high_water_bytes": _linux_high_water_bytes(),
         "pid": os.getpid(),
         "python": sys.version.split()[0],
+        "container": container_memory_snapshot(),
+        "heavy_modules": [name for name in ('numpy', 'pandas', 'ortools.sat.python.cp_model', 'boto3', 'sklearn') if name in sys.modules],
     }
+
+
+def container_memory_snapshot(root='/sys/fs/cgroup', proc='/proc'):
+    """Bounded read-only counters. RSS sums are NOT unique/container memory.
+
+    File cache is charged to the cgroup but is not a Python-object leak. PSS
+    apportions shared pages; neither quantity replaces the existing hard guard.
+    No command lines, environments, credentials or heap contents are inspected.
+    """
+    result = {}
+    try:
+        result['usage_bytes'] = int((Path(root)/'memory.current').read_text())
+        result['limit_bytes'] = int((Path(root)/'memory.max').read_text())
+        stat = dict(line.split() for line in (Path(root)/'memory.stat').read_text().splitlines())
+        result['components_bytes'] = {key:int(stat[key]) for key in ('anon','file','kernel','sock','slab') if key in stat}
+    except (OSError, ValueError):
+        pass
+    processes = []
+    try:
+        for index, entry in enumerate(Path(proc).iterdir()):
+            if index >= 512:break
+            if not entry.name.isdigit():continue
+            if len(processes)>=32:break
+            try:
+                status = dict(line.split(':',1) for line in (entry/'status').read_text().splitlines() if ':' in line)
+                row = dict(pid=int(entry.name),ppid=int(status['PPid'].strip()),
+                    rss_bytes=int(status.get('VmRSS','0 kB').split()[0])*1024)
+                try:
+                    rollup=dict(line.split(':',1) for line in (entry/'smaps_rollup').read_text().splitlines() if ':' in line)
+                    row['pss_bytes']=int(rollup['Pss'].split()[0])*1024
+                except (OSError,KeyError,ValueError):pass
+                processes.append(row)
+            except (OSError, KeyError, ValueError):continue
+        result['processes']=processes
+    except OSError:pass
+    return result
 
 
 def clear_memory_diagnostic_samples():
@@ -136,6 +176,8 @@ def _log_sample(app, operation, *, before, after, elapsed_seconds, error_name):
         f"rss_delta_bytes={delta} high_water_bytes={after.get('high_water_bytes')} "
         f"elapsed_seconds={round(elapsed_seconds, 3) if elapsed_seconds is not None else None} "
         f"error={error_name}"
+        f" container={json.dumps(after.get('container',{}),separators=(',',':'))}"
+        f" heavy_modules={','.join(after.get('heavy_modules',[]))}"
     )
 
 

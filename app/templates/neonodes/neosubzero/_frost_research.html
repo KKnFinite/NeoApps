@@ -70,6 +70,21 @@
                 <p>All fitting/backtesting LOCAL. No approved or active model; no DUCC warning changes. This is a dated receipt, not live training progress.</p>
             </section>
         </div>
+        {% if research.native_study.experimental_models %}
+        <details data-native-experiments><summary>EXPERIMENTAL RESEARCH · 8 LOCAL CANDIDATES · NOT INDEPENDENTLY VALIDATED</summary>
+            <p>{{ research.native_study.experimental_interpretation }}</p>
+            <div class="frost-research-grid">
+            {% for candidate in research.native_study.experimental_models %}
+                <section><h3>{{ candidate.hours }}h · {{ candidate.kind|upper }}</h3>
+                    <p>Final fit: {{ candidate.fit_nights }} nights. Forward evaluation: {{ candidate.eval_nights }} nights · {{ candidate.positive }} frost-reason / {{ candidate.other }} other treatments.</p>
+                    <p>Recall {{ '%.1f'|format(candidate.recall*100) }}% (95% {{ '%.1f'|format(candidate.recall_low*100) }}–{{ '%.1f'|format(candidate.recall_high*100) }}%) · false-positive rate {{ '%.1f'|format(candidate.fpr*100) }}% · {{ candidate.missed }} missed / {{ candidate.false_alarms }} false alarms.</p>
+                    <p>Brier {{ '%.4f'|format(candidate.brier) }} · calibration error {{ '%.4f'|format(candidate.ece) }}. Treatment-reason scores, NOT physical frost probabilities.</p>
+                </section>
+            {% endfor %}
+            </div>
+            <p class="frost-research-warning">{{ research.native_study.experimental_weaknesses }}</p>
+        </details>
+        {% endif %}
     </section>
     {% endif %}
     <a href="{{ url_for('neosubzero.frost_forecast_validation') }}">DOWNLOAD DATED RESEARCH SUMMARY</a>

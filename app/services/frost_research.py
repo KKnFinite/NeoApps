@@ -32,6 +32,22 @@ def native_summary():
             raise ValueError('Unsupported independent-validation claim.')
     for key in ('coverage','readiness','collection','limitations','outcomes'):
         if not isinstance(value.get(key),str):raise ValueError('Missing native study interpretation.')
+    if 'experimental_models' in value:
+        models=value['experimental_models']
+        if value.get('research_policy')!='frost-native-exploratory-v2' or not isinstance(models,list) or len(models)!=8 or value['candidate_count']!=8:
+            raise ValueError('Unsupported experimental research policy/count.')
+        if [(r['hours'],r['kind']) for r in models]!=[(h,k) for h in HORIZONS for k in ('logistic','forest')]:
+            raise ValueError('Invalid experimental horizon/model pair.')
+        for row in models:
+            for key in ('recall','recall_low','recall_high','fpr','brier','ece'):
+                if type(row.get(key)) not in (int,float) or not math.isfinite(row[key]) or not 0<=row[key]<=1:raise ValueError('Invalid experimental metric.')
+            for key in ('fit_nights','eval_nights','positive','other','missed','false_alarms'):
+                if type(row.get(key)) is not int or row[key]<0:raise ValueError('Invalid experimental sample count.')
+            horizon=next(h for h in value['horizons'] if h['hours']==row['hours'])
+            if (row['fit_nights']!=horizon['cases'] or row['positive']+row['other']!=row['eval_nights'] or row['eval_nights']>row['fit_nights'] or
+                row['missed']>row['positive'] or row['false_alarms']>row['other'] or not row['recall_low']<=row['recall']<=row['recall_high']):
+                raise ValueError('Experimental counts/intervals do not reconcile.')
+        if not all(isinstance(value.get(k),str) for k in ('experimental_interpretation','experimental_weaknesses')):raise ValueError('Missing experimental limitations.')
     if 'season_coverage' in value:
         coverage=value['season_coverage']
         if not isinstance(coverage,list) or not 1<=len(coverage)<=11:raise ValueError('Invalid seasonal forecast coverage.')

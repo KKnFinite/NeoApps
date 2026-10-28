@@ -195,6 +195,8 @@ def assemble(directory,forecast_root,output):
 
 
 def readiness(rows,test_season):
+    # Legacy strict path retained for independent/approval-oriented training.
+    # Exploratory fitting has an explicit, non-promotable policy, not a bypass.
     seasons=sorted({r['season'] for r in rows});reasons=[]
     if len(seasons)<5:reasons.append('Need at least five forecast-covered seasons for development/calibration/independent test.')
     if not test_season or test_season in REVIEWED_SEASONS or test_season<=max(REVIEWED_SEASONS):
@@ -204,7 +206,10 @@ def readiness(rows,test_season):
         counts=Counter(r['label'] for r in rows if r['season']==season)
         if min(counts.get(0,0),counts.get(1,0))<20 or sum(counts.values())<100:
             reasons.append(season+': insufficient independent seasonal support (100 cases and 20 per class required).')
-    return dict(ready=not reasons,reasons=reasons,seasons=seasons,physical_frost_probability=False)
+    from scripts.frost_native_research import eligibility
+    return dict(ready=not reasons,reasons=reasons,seasons=seasons,physical_frost_probability=False,
+        policy='frost-native-independent-v1',experimental=eligibility(rows) if rows and all('at' in r and 'night' in r for r in rows) else None,
+        operational_approval_eligible=False)
 
 
 def coverage_report(dataset):
@@ -277,22 +282,27 @@ def train(dataset,*,lead_hours,test_season,version):
 
 
 def refresh_outcomes(remote,root):
-    local_only();root=Path(root);before=None;catalog=[]
+    local_only();root=Path(root);before=None;catalog=[];seen=set();cursors=set()
     # Finite, paginated metadata. Cached content hashes avoid duplicate downloads.
     for _ in range(100):
         page=json.loads(remote.request('GET','/neosubzero/frost-vault/observations'+(f'?before={before}' if before else '')))
         if page['schema']!='frost-outcome-catalog-v1':raise ValueError('Unsupported operational evidence catalog.')
         for row in page['observations']:
+            if row['source_id'] in seen:raise ValueError('Duplicate outcome source across pages; retain previous complete catalog.')
+            seen.add(row['source_id'])
             if not re.fullmatch('[a-f0-9]{64}',row['sha256']):raise ValueError('Unsafe outcome hash.')
             catalog.append(row)
             if not row['archived']:continue
             path=root/'objects'/(row['sha256']+'.json')
             raw=path.read_bytes() if path.exists() else remote.request('GET',row['url'])
             payload=json.loads(raw)
-            if vault.digest(vault.canonical(payload))!=row['sha256']:raise ValueError('Outcome source revision mismatch.')
+            if vault.digest(vault.canonical(payload))!=row['sha256'] or payload.get('id')!=row['source_id'] or payload.get('schema_version') not in ('frost-outcome-evidence-v1','frost-physical-inspection-v1'):
+                raise ValueError('Outcome source revision/identity/schema mismatch.')
             if not path.exists():write_json(path,payload)
         before=page['next_before']
         if not before:break
+        if type(before) is not int or before<=0 or before in cursors:raise ValueError('Invalid/repeated outcome page cursor.')
+        cursors.add(before)
     else:raise ValueError('Outcome metadata bound reached; no unbounded download.')
     write_json(root/'catalog.json',sealed(dict(schema='frost-outcome-catalog-v1',observations=catalog)))
     return catalog
@@ -304,6 +314,8 @@ def main(argv=None):
     p.add_argument('--output',default='instance/frost-local/phase9')
     commands=p.add_subparsers(dest='command',required=True);commands.add_parser('assemble');commands.add_parser('validate');commands.add_parser('coverage')
     t=commands.add_parser('train');t.add_argument('--lead-hours',required=True,type=int,choices=native.HORIZONS);t.add_argument('--test-season',required=True);t.add_argument('--version',required=True)
+    t=commands.add_parser('explore',help='LOCAL non-promotable forward-season research; never independent operational validation.')
+    t.add_argument('--lead-hours',required=True,type=int,choices=native.HORIZONS);t.add_argument('--version',required=True)
     t=commands.add_parser('refresh-outcomes');t.add_argument('--origin',required=True);t.add_argument('--email',required=True)
     a=p.parse_args(argv);local_only();root=Path(a.output)
     repository=Path(__file__).resolve().parents[1]
@@ -323,6 +335,18 @@ def main(argv=None):
             elif a.command=='coverage':
                 report=coverage_report(dataset);write_json(root/'coverage-report.json',report)
                 print(json.dumps(report),flush=True)
+            elif a.command=='explore':
+                from scripts.frost_native_research import evaluate
+                if not re.fullmatch('[A-Za-z0-9_-]{1,48}',a.version):raise ValueError('Unsafe research version.')
+                destination=root/'research'/(a.version+'.json')
+                if destination.exists():raise ValueError('Immutable research report exists; choose a new version.')
+                report,candidates=evaluate(dataset,a.lead_hours,a.version)
+                for candidate in candidates:
+                    path=root/'candidates'/(candidate['model_version']+'.json')
+                    if path.exists():raise ValueError('Immutable candidate already exists.')
+                for candidate in candidates:write_json(root/'candidates'/(candidate['model_version']+'.json'),candidate)
+                write_json(destination,report)
+                print(json.dumps(dict(report=str(destination),summary=report['summary'],approved=False)),flush=True)
             else:
                 if not re.fullmatch('[A-Za-z0-9_-]{1,64}',a.version):raise ValueError('Unsafe model version.')
                 destination=root/'candidates'/(a.version+'.json')

@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
 from app.services import neoscorpion_learning_vault as provider
+from app.services.memory_diagnostics import observe_process_memory
 
 PREFIX='frost-vault/v1/'
 CATEGORIES=('original-xchange','extracted-xchange','spray-history','weather',
@@ -60,11 +61,12 @@ def _bounded_transport(function):
     def bounded(*args, **kwargs):
         if _transport_scope.get() is not None:
             return function(*args, **kwargs)
-        try:
-            with transport_scope():
-                return function(*args, **kwargs)
-        finally:
-            gc.collect()
+        with observe_process_memory('frost_vault_transport'):
+            try:
+                with transport_scope():
+                    return function(*args, **kwargs)
+            finally:
+                gc.collect()
     return bounded
 
 

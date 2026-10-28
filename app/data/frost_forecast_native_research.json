@@ -1,15 +1,28 @@
 {
   "schema": "frost-forecast-native-study-v1",
   "feature_version": "krfd-forecast-native-v1",
-  "generated_at_utc": "2026-10-28T06:42:41Z",
+  "generated_at_utc": "2026-10-28T10:09:04Z",
   "operationally_validated": false,
   "approved": false,
   "eligible_cases": 1117,
   "eligible_nights": 283,
-  "dataset_fingerprint": "931bd62b91a921e8f0af723bb433fc1537d856124891fd29497e243f6b43f1c6",
+  "dataset_fingerprint": "c5760b5e99389eeb5fec79105b755047e1fd6215632cba3f96437ea728ef7b61",
   "credible_likely_negatives": 0,
   "confirmed_physical_positives": 0,
-  "candidate_count": 0,
+  "candidate_count": 8,
+  "research_policy": "frost-native-exploratory-v2",
+  "experimental_models": [
+    {"hours":0,"kind":"logistic","fit_nights":280,"eval_nights":200,"positive":61,"other":139,"recall":0.7868852459,"recall_low":0.6687758460,"recall_high":0.8710022626,"fpr":0.1654676259,"brier":0.1255751402,"ece":0.0674010896,"missed":13,"false_alarms":23},
+    {"hours":0,"kind":"forest","fit_nights":280,"eval_nights":200,"positive":61,"other":139,"recall":0.4754098361,"recall_low":0.3553048742,"recall_high":0.5984284308,"fpr":0.0287769784,"brier":0.1433476275,"ece":0.1095810605,"missed":32,"false_alarms":4},
+    {"hours":1,"kind":"logistic","fit_nights":280,"eval_nights":200,"positive":61,"other":139,"recall":0.7540983607,"recall_low":0.6331557589,"recall_high":0.8449334230,"fpr":0.1654676259,"brier":0.1372495127,"ece":0.0766642576,"missed":15,"false_alarms":23},
+    {"hours":1,"kind":"forest","fit_nights":280,"eval_nights":200,"positive":61,"other":139,"recall":0.5081967213,"recall_low":0.3860261849,"recall_high":0.6293960468,"fpr":0.0647482014,"brier":0.1471563120,"ece":0.0941175701,"missed":30,"false_alarms":9},
+    {"hours":3,"kind":"logistic","fit_nights":280,"eval_nights":200,"positive":61,"other":139,"recall":0.5901639344,"recall_low":0.4649979227,"recall_high":0.7046466257,"fpr":0.1438848921,"brier":0.1413786880,"ece":0.0742183466,"missed":25,"false_alarms":20},
+    {"hours":3,"kind":"forest","fit_nights":280,"eval_nights":200,"positive":61,"other":139,"recall":0.4262295082,"recall_low":0.3101522194,"recall_high":0.5510476956,"fpr":0.0503597122,"brier":0.1563115093,"ece":0.0925954993,"missed":35,"false_alarms":7},
+    {"hours":6,"kind":"logistic","fit_nights":277,"eval_nights":199,"positive":60,"other":139,"recall":0.5333333333,"recall_low":0.4089342703,"recall_high":0.6537209396,"fpr":0.1582733813,"brier":0.1692415141,"ece":0.1211614975,"missed":28,"false_alarms":22},
+    {"hours":6,"kind":"forest","fit_nights":277,"eval_nights":199,"positive":60,"other":139,"recall":0.3166666667,"recall_low":0.2130586755,"recall_high":0.4423376703,"fpr":0.0719424460,"brier":0.1638622469,"ece":0.0813053011,"missed":41,"false_alarms":10}
+  ],
+  "experimental_interpretation": "Four forward-season folds: fit earlier seasons, evaluate 2022-23 through reviewed 2025-26. One row per night per horizon. Fixed 0.5 threshold, fitting-only imputation/scaling and missingness; no tuned cutoff or post-hoc calibration. Wilson 95% recall intervals assume independent nights; small seasons and serial weather dependence limit precision. All metrics are retrospective EXPERIMENTAL RESEARCH, not an unseen final test. Final local candidates refit all 280/277 nights; their out-of-fold metrics describe the procedure, not independent validation of that refit.",
+  "experimental_weaknesses": "Logistic above-freezing recall: 10/18 (0h), 12/18 (1h), 5/18 (3h), 3/16 (6h). Clear/humid subsets have false-positive rates 37.5%, 50%, 43.75%, 50% with only 16 other-treatment nights per horizon. At 1h, seasonal recall ranges 45.5% to 92.6%. Forests trade substantially lower recall for fewer false alarms. No model was selected for promotion. Meteorological-reference Brier: 0.2290/0.2290/0.2140/0.2149; prior-only Brier: 0.2141/0.2141/0.2141/0.2128. No physical frost/no-frost cohort exists.",
   "horizons": [
     {"hours": 0, "cases": 280, "likely_positive": 83, "other_treatment": 197, "validated_cases": 0},
     {"hours": 1, "cases": 280, "likely_positive": 83, "other_treatment": 197, "validated_cases": 0},
@@ -26,8 +39,8 @@
   ],
   "coverage": "Six covered seasons, up from three; 283 independent nights, up from 114. LOCAL sampled-cycle retrieval: 837/849 cycles retained, 12 explicit archive gaps (11 in 2020-21 and one in 2025-26). 11,402 forecast source-body hashes verified. Ten bounded original NOAA GRIB comparisons passed across the five priority seasons. Earlier 2015-16 through 2019-20 probes still lack pre-cutoff availability proof; no fabricated cases.",
   "missing_features": "At 0/1 hours, forecast cloud fraction is missing for 4/280 cases, gusts for 7, precipitation amount for 6 and precipitation type for 17. At 3 hours the respective counts are 4/5/5/14; at 6 hours 1/3/2/14 of 277. One derived RH value at 0/1 hours is outside 0..100 and stays missing, not clamped. Modeled temperature/dew point/wind speed are present in retained cases. Aircraft exposure/prior treatment remain unknown throughout this treatment corpus; no stands are invented.",
-  "readiness": "BLOCKED at each horizon: five earlier sampled seasons remain below 100 independent cases and/or 20 per class. No genuinely new reserved holdout follows the reviewed 2025-26 sample. Gates unchanged; no experimental fit, independent metrics or new candidate claimed.",
+  "readiness": "Historical source/feature checks passed for the retained sample. LOCAL experimental policy frost-native-exploratory-v2 supports pooled real seasons (150 total nights, 30 per class, four seasons, two supported forward folds); it does not require an impossible 100 nights in every season. Eight non-promotable candidates fitted. Operational approval remains BLOCKED: no genuinely unseen post-review holdout, insufficient physical frost/no-frost evidence and no independent calibration. No production registry or approval gate was relaxed.",
   "outcomes": "Read-only production audit found zero direct physical inspections, zero explicit NOT SPRAYED audit records and zero actual spray contributions. Across the union of forecast-covered treatment nights, 85 distinct frost-reason examples and 198 other treatments are NOT a physical positive/negative comparison cohort. The local operational-outcome catalog has not been refreshed; zero downloaded observations must not be mistaken for verified future absence.",
-  "collection": "Optional FROST INSPECTION in aircraft Operations details records PRESENT / ABSENT / UNCERTAIN, actual Central time, observer, verified context and audited corrections without delaying FIN/CLEAR. Compact evidence uses the existing private Vault outbox and memory guards. Phase 9 explicit NOT SPRAYED capture remains; generic CLEAR, NEGATIVE DEICE, cancellation and missing records do not create negatives. A LOCAL prospective capture succeeded at 2026-10-28T06:13:25Z; an offline capture gap remains explicit.",
-  "limitations": "No validated performance at 0/1/3/6 hours and no physical-frost probability model. Exact historical operator receipt/issue times remain unknown; NOAA object write time is an available-by bound. Float16 source precision is retained and documented. Pretreatment can prevent frost and confounds untreated comparisons. Parking refinements disabled. All bulk work LOCAL; no scheduler or Render worker installed. Existing imported/approved-model gates unchanged; no model approved or activated."
+  "collection": "Optional FROST INSPECTION in aircraft Operations details records PRESENT / ABSENT / UNCERTAIN, actual Central time, observer, verified context and audited corrections without delaying FIN/CLEAR. Compact evidence uses the existing private Vault outbox and memory guards. Phase 9 explicit NOT SPRAYED capture remains; generic CLEAR, NEGATIVE DEICE, cancellation and missing records do not create negatives. Latest LOCAL prospective capture succeeded at 2026-10-28T10:09:04Z; this collector's missed/offline interval remains explicit. No unattended scheduling installed.",
+  "limitations": "No independently validated operational performance at 0/1/3/6 hours and no physical-frost probability model. Exact historical operator receipt/issue times remain unknown; NOAA object write time is an available-by bound. Float16 source precision is retained and documented. Pretreatment can prevent frost and confounds untreated comparisons. Parking refinements disabled. All bulk work LOCAL; no scheduler or Render worker installed. Existing imported/approved-model gates unchanged; no model approved or activated."
 }

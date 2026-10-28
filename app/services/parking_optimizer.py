@@ -3,8 +3,6 @@ from datetime import datetime, timedelta, timezone
 import logging
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from ortools.sat.python import cp_model
-
 from app.extensions import db
 from app.services.memory_diagnostics import memory_diagnostics
 from app.models import MotherBrainParkingRule, MotherBrainParkingSettings, SortDateParkingAssignment
@@ -57,6 +55,15 @@ from app.services.building_lineup_parking_preferences import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def __getattr__(name):
+    # Preserve the existing diagnostic/test access without loading the native
+    # solver (and pandas/NumPy) in every ordinary web worker at startup.
+    if name == 'cp_model':
+        from ortools.sat.python import cp_model
+        return cp_model
+    raise AttributeError(name)
 
 PARKING_OPTIMIZER_TIME_LIMIT_SECONDS = 8.0
 PARKING_OPTIMIZER_SEARCH_WORKERS = 1
@@ -1228,6 +1235,7 @@ def _solve_optimizer_stage(
             ],
         }
 
+    from ortools.sat.python import cp_model
     model = cp_model.CpModel()
     try:
         variables = {
