@@ -208,6 +208,16 @@
         }
     });
     root.addEventListener('click', async event => {
+        const inspection = event.target.closest('[data-open-frost-inspection]');
+        if (inspection) {
+            const section = pane.querySelector('.neosubzero-frost-inspection');
+            if (section) {
+                section.open = true;
+                section.querySelector('select[name="frost_result"]')?.focus();
+                section.scrollIntoView({block:'nearest'});
+            }
+            return;
+        }
         const open = event.target.closest('[data-ops-open]');
         if (open) { event.preventDefault(); saveDraft(); const mission = open.closest('[data-ops-row]').dataset.missionId; try { pane.querySelector(':focus')?.blur(); selected = mission; await fetchPage(mission); } catch(error) { notify(error.message,true); } return; }
         const close = event.target.closest('[data-ops-close]');

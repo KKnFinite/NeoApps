@@ -2,6 +2,20 @@
     <summary>FORECAST VALIDATION · RESEARCH / NOT OPERATIONAL</summary>
     {% if research %}
     <p>Study recorded {{ research.generated_at_utc }}. These models classify frost reasons among recorded departure treatments, not the probability of physical frost on an untreated aircraft. Neither this study nor shadow collection approves a model.</p>
+    {% if research.prospective %}
+    <section class="frost-research-candidate" data-frost-prospective>
+        <h2>PROSPECTIVE VALIDATION · RESEARCH — NOT OPERATIONAL</h2>
+        <p>Dated LOCAL receipt, not a live workstation connection. Baseline frozen {{ research.prospective.frozen_at_utc }}. {{ research.prospective.feature_version }} · {{ research.prospective.research_policy }}. All eight fixed thresholds: 0.5.</p>
+        <p>{{ research.prospective.capture_count }} weather capture(s) across {{ research.prospective.captured_nights }} Central operational night(s). Last successful capture: {{ research.prospective.last_capture_at_utc }}. {{ research.prospective.missed_intervals }} missed intervals recorded; {{ research.prospective.unavailable_predictions }} unavailable predictions.</p>
+        <p>Frozen predictions: {% for hours,count in research.prospective.scored_predictions.items() %}{{ hours }}h: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}. Outcomes remain UNKNOWN until later evidence is verified and matched. {{ research.prospective.matched_outcomes }} matched outcomes / {{ research.prospective.evaluated_nights }} evaluated nights in this receipt.</p>
+        {% if research.physical_observations %}<p>Current attributed inspections: {{ research.physical_observations.physical_present }} FROST PRESENT · {{ research.physical_observations.physical_absent }} NO FROST OBSERVED · {{ research.physical_observations.uncertain }} UNCERTAIN · {{ research.physical_observations.prior_pretreated }} known pretreated. These live counts are not automatically matched evaluation cases.</p>{% endif %}
+        <p>LOCAL hourly scheduler integration prepared, NOT INSTALLED. No Render research worker. Independent validation: NOT READY — insufficient prospective outcome evidence. Treatment-reason evaluation and physical-inspection transfer diagnostics remain separate; no physical-frost probability claim.</p>
+        <details><summary>FROZEN MODEL IDENTITIES AND MATCHING CONTRACT</summary>
+        <p>Baseline SHA-256: {{ research.prospective.baseline }}. Tail / Central noon-to-noon night / model / horizon / cohort. First eligible subsequent outcome, target window [0, 60 minutes); prediction commit must precede outcome. Missing activity, generic CLEAR and cancelled flights never become negatives. Pretreated outcomes remain confounded. One primary aircraft per independent night; source corrections retained.</p>
+        {% for candidate in research.prospective.models %}<p>{{ candidate.model_version }}<br>SHA-256: {{ candidate.sha256 }}</p>{% endfor %}
+        </details>
+    </section>
+    {% endif %}
     <div class="frost-research-grid">
         <section><h3>KRFD OBSERVATION AUDIT</h3>
             <p>{{ research.documents }} original sources · {{ research.seasons }} seasons · {{ research.weather_months }} monthly source hashes checked · {{ research.weather_samples }} traced applications.</p>

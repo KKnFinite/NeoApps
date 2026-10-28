@@ -33,9 +33,15 @@ def exclusive(root):
             else:fcntl.flock(handle,fcntl.LOCK_UN)
 
 
-def once(directory,output,*,interval=3600,now=None):
+def once(directory,output,*,interval=3600,now=None,baseline=None):
     local_only();root=Path(output);now=now or datetime.now(timezone.utc)
     if now.tzinfo is None or not 300<=interval<=86400:raise ValueError('Use an aware clock and a bounded 5-minute to daily interval.')
+    if baseline:
+        from scripts.frost_prospective import capture
+        result=capture(baseline,root,interval=interval)
+        return dict(state='CAPTURED',snapshot_sha256=result['fingerprint'],
+            scored=sum(p['state']=='SCORED' for p in result['predictions']),
+            unavailable=sum(p['state']=='UNAVAILABLE' for p in result['predictions']))
     with exclusive(root):
         state_path=root/'collector-state.json'
         prior=read_json(state_path) if state_path.exists() else {}
@@ -67,12 +73,13 @@ def main(argv=None):
     p.add_argument('--directory',default='instance/frost-local/phase8/dataset')
     p.add_argument('--output',default='instance/frost-local/phase8/prospective')
     p.add_argument('--interval-seconds',type=int,default=3600)
+    p.add_argument('--baseline',help='Frozen Phase 12 baseline; uses native models instead of legacy diagnostics')
     group=p.add_mutually_exclusive_group(required=True);group.add_argument('--once',action='store_true');group.add_argument('--count',type=int)
     args=p.parse_args(argv);local_only();count=1 if args.once else args.count
     if not 1<=count<=168 or not 300<=args.interval_seconds<=86400:raise ValueError('Bound the local collection interval/count.')
     failed=False
     for index in range(count):
-        try:print(once(args.directory,args.output,interval=args.interval_seconds)['state'],flush=True)
+        try:print(once(args.directory,args.output,interval=args.interval_seconds,baseline=args.baseline)['state'],flush=True)
         except Exception as error:
             failed=True
             print('Capture failed: '+type(error).__name__+'. Check local collector journal; no operational prediction made.',flush=True)

@@ -9,7 +9,7 @@ from tests.browser.test_neosubzero_operations import OperationsBrowserTest
 
 class InspectionBrowserTest(OperationsBrowserTest):
     def test_optional_inspection_drafts_errors_correction_and_mobile(self):
-        evidence=Path('instance/browser-evidence/frost-phase10').resolve();evidence.mkdir(parents=True,exist_ok=True)
+        evidence=Path('instance/browser-evidence/frost-phase12').resolve();evidence.mkdir(parents=True,exist_ok=True)
         for engine in ('chromium','webkit'):
             browser=getattr(self.pw,engine).launch()
             try:
@@ -17,8 +17,9 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
                 self.login(page);self.ready(page,f'/neosubzero/operations?mode=outbound&mission={self.flow_id}')
                 panel=page.locator('.neosubzero-frost-inspection').first
-                panel.locator(':scope > summary').click()
+                page.get_by_role('button',name='OPTIONAL FROST INSPECTION',exact=True).click()
                 form=panel.locator('form').first
+                expect(form.locator('[name=frost_result]')).to_be_focused()
                 self.assertEqual(form.locator('[name=frost_result]').input_value(),'')
                 form.locator('[name=frost_result]').select_option('absent')
                 form.locator('[name=inspected_local]').fill('2026-10-22T12:00')
@@ -75,6 +76,8 @@ class InspectionBrowserTest(OperationsBrowserTest):
                 expect(page.locator('[data-ops-detail-feedback]')).to_contain_text('INSPECTION SAVED')
                 for width,height in ((1920,900),(1920,1080),(1366,768),(3840,2160),(768,1024),(430,900),(390,900),(375,900),(320,900)):
                     page.set_viewport_size(dict(width=width,height=height))
+                    page.get_by_role('button',name='OPTIONAL FROST INSPECTION',exact=True).click()
+                    expect(page.locator('[name=frost_result]').first).to_be_focused()
                     panel=page.locator('.neosubzero-frost-inspection').first
                     if not panel.evaluate('e=>e.open'):panel.locator(':scope > summary').click()
                     field=panel.locator('[name=inspection_location]').first

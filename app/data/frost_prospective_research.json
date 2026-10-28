@@ -1,0 +1,82 @@
+{
+  "schema": "frost-prospective-summary-v1",
+  "baseline": "b8f33680a91ae65b650b69b2c0872ed024356d3c741651e2e52d4a62bbafb783",
+  "frozen_at_utc": "2026-10-28T19:18:23.022502+00:00",
+  "feature_version": "krfd-forecast-native-v1",
+  "research_policy": "frost-native-exploratory-v2",
+  "models": [
+    {
+      "model_version": "rfd-native-h0-20261028-experimental-v1-logistic",
+      "sha256": "386006d811e2a8651284f55e22e306dc1a28576ff3de8797b862dd2cffd43e79",
+      "hours": 0,
+      "kind": "logistic",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h0-20261028-experimental-v1-forest",
+      "sha256": "f83dbef382ee922d86fe915999ca251f40b1d89de64649bfc37a9f77e985b3bf",
+      "hours": 0,
+      "kind": "forest",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h1-20261028-experimental-v1-logistic",
+      "sha256": "a69b01875bbaa9661755a52daab5ccbfce063278b44d0a5cd7792423813fdb45",
+      "hours": 1,
+      "kind": "logistic",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h1-20261028-experimental-v1-forest",
+      "sha256": "de9b55eced33377f22ca353f14d3d4e9454904e5f76334ea6d665dd9137bdf12",
+      "hours": 1,
+      "kind": "forest",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h3-20261028-experimental-v1-logistic",
+      "sha256": "3187e4770df84ff0a16fcfcc9c861a0feee94d004168fc79e54d324f56619175",
+      "hours": 3,
+      "kind": "logistic",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h3-20261028-experimental-v1-forest",
+      "sha256": "56914ebd04186d14c60689b2a654d7f6ae4ecdd88d5395c098a313578f6adeb5",
+      "hours": 3,
+      "kind": "forest",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h6-20261028-experimental-v1-logistic",
+      "sha256": "b0bb1c98520da0e5f33e751bec93b0dccde3e99aedd848e6a3bab8739450fe84",
+      "hours": 6,
+      "kind": "logistic",
+      "threshold": 0.5
+    },
+    {
+      "model_version": "rfd-native-h6-20261028-experimental-v1-forest",
+      "sha256": "8647c7b9cce61e5a72e1669668c30ee8d1e6f2171e99352fbf3e305f4047b611",
+      "hours": 6,
+      "kind": "forest",
+      "threshold": 0.5
+    }
+  ],
+  "last_capture_at_utc": "2026-10-28T19:19:36.762033+00:00",
+  "capture_count": 1,
+  "captured_nights": 1,
+  "scored_predictions": {
+    "0": 2,
+    "1": 2,
+    "3": 2,
+    "6": 2
+  },
+  "unavailable_predictions": 0,
+  "missed_intervals": 0,
+  "evaluated_nights": 0,
+  "matched_outcomes": 0,
+  "validation_eligible": false,
+  "scheduler_installed": false,
+  "approved": false,
+  "operationally_validated": false
+}

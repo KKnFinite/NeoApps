@@ -12,6 +12,30 @@ from app.services import frost_forecast as forecast
 
 REPORT = Path(__file__).resolve().parents[1] / 'data' / 'frost_forecast_research.json'
 NATIVE_REPORT = REPORT.with_name('frost_forecast_native_research.json')
+PROSPECTIVE_REPORT = REPORT.with_name('frost_prospective_research.json')
+
+
+def prospective_summary():
+    """Small dated LOCAL receipt, never weather acquisition or model execution."""
+    with PROSPECTIVE_REPORT.open('rb') as handle:raw=handle.read(16385)
+    if len(raw)>16384:raise ValueError('Prospective metadata exceeds page budget.')
+    value=json.loads(raw,parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid prospective number.')))
+    if value.get('schema')!='frost-prospective-summary-v1' or value.get('feature_version')!='krfd-forecast-native-v1' or value.get('research_policy')!='frost-native-exploratory-v2':
+        raise ValueError('Invalid prospective research contract.')
+    if any(value.get(k) is not False for k in ('approved','operationally_validated','scheduler_installed','validation_eligible')):
+        raise ValueError('Dated receipt cannot approve a model, install a schedule or claim independent validation.')
+    if not re.fullmatch('[a-f0-9]{64}',value.get('baseline','')):raise ValueError('Missing frozen baseline identity.')
+    forecast.instant(value['frozen_at_utc']);forecast.instant(value['last_capture_at_utc'])
+    if len(value.get('models',[]))!=8 or [(m['hours'],m['kind']) for m in value['models']]!=[(h,k) for h in (0,1,3,6) for k in ('logistic','forest')]:
+        raise ValueError('Missing frozen horizon/model pairs.')
+    for row in value['models']:
+        if row['threshold']!=.5 or not re.fullmatch('[a-f0-9]{64}',row['sha256']) or not re.fullmatch('[A-Za-z0-9_-]{1,80}',row['model_version']):raise ValueError('Invalid frozen model metadata.')
+    for key in ('capture_count','captured_nights','unavailable_predictions','missed_intervals','evaluated_nights','matched_outcomes'):
+        if type(value.get(key)) is not int or value[key]<0:raise ValueError('Invalid prospective count.')
+    if set(value.get('scored_predictions',{}))!={'0','1','3','6'} or any(type(n) is not int or n<0 for n in value['scored_predictions'].values()):raise ValueError('Invalid prediction counts.')
+    if value['captured_nights']>value['capture_count'] or sum(value['scored_predictions'].values())+value['unavailable_predictions']!=8*value['capture_count']:
+        raise ValueError('Prospective counts do not reconcile.')
+    return value
 
 
 def native_summary():
@@ -93,6 +117,7 @@ def load():
             if not isinstance(row[key],(int,float)) or not math.isfinite(row[key]) or not 0<=row[key]<=1:
                 raise ValueError('Invalid candidate metric.')
     if NATIVE_REPORT.exists():value['native_study']=native_summary()
+    if PROSPECTIVE_REPORT.exists():value['prospective']=prospective_summary()
     return value
 
 

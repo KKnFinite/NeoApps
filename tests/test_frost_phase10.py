@@ -141,7 +141,7 @@ class InspectionTest(unittest.TestCase):
             response=client.get('/neosubzero/operations?mode=outbound')
         self.assertEqual(response.status_code,200)
         body=response.get_data(as_text=True)
-        self.assertIn('neosubzero_operations.js?v=20261028-frost-inspections-v1',body)
+        self.assertIn('neosubzero_operations.js?v=20261028-frost-prospective-v1',body)
         self.assertIn('ucc=20261028-frost-inspections-v1',body)
         self.assertNotIn('neosubzero_operations.js?v=20261023-release2-v1',body)
 

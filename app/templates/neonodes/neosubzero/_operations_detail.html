@@ -6,6 +6,7 @@
     <p class="ops-detail-feedback" data-ops-detail-feedback role="status" hidden></p>
     <p class="ops-draft-status" data-ops-draft-status role="status" hidden></p>
     <button type="button" data-ops-reload>RELOAD CURRENT VALUES</button>
+    {% if mode == 'outbound' and can_edit and selected.frost_inspection and not selected.identity_conflict %}<button type="button" data-open-frost-inspection>OPTIONAL FROST INSPECTION</button>{% endif %}
     <div data-ops-detail-body>
     <a href="{{ url_for('neosubzero.deice_log') }}" class="ops-staff-link">TAIL-OWNED APPLICATION HISTORY / AUDITED CORRECTIONS</a>
     {% if selected.identity_conflict %}

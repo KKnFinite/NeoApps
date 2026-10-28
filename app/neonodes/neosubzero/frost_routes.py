@@ -149,6 +149,43 @@ def frost_outcome_download(identifier):
     except (ValueError,RuntimeError):return 'Evidence could not be verified; no source was discarded.',503
 
 
+@bp.route('/frost-vault/prospective-outcomes')
+@gateway_node_required('subzero')
+def frost_prospective_outcomes():
+    """Bounded delivery metadata only; all evaluation stays on the workstation."""
+    from datetime import date
+    from app.models import SortDateOperation
+    gateway=authorized();before=request.args.get('before',type=int)
+    query=NeoSubZeroArchiveDelivery.query.join(SortDateOperation,
+        SortDateOperation.id==NeoSubZeroArchiveDelivery.operation_id).filter(
+        NeoSubZeroArchiveDelivery.gateway_id==gateway.id,SortDateOperation.sort_date>=date(2026,7,1))
+    if before:query=query.filter(NeoSubZeroArchiveDelivery.id<before)
+    rows=query.order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(101).all()
+    response=jsonify(schema='frost-prospective-v1',observations=[dict(id=r.id,source_id=r.source_id,
+        sha256=r.content_checksum,archived=r.delivered_checksum==r.content_checksum,
+        error=r.last_error,url=f'/neosubzero/frost-vault/prospective-outcomes/{r.id}') for r in rows[:100]],
+        next_before=rows[99].id if len(rows)>100 else None)
+    response.headers['Cache-Control']='private, no-store'
+    return response
+
+
+@bp.route('/frost-vault/prospective-outcomes/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_prospective_outcome_download(identifier):
+    gateway=authorized()
+    if not history.memory_allows_work():return 'Evidence transfer deferred for memory safety.',503
+    row=NeoSubZeroArchiveDelivery.query.filter_by(id=identifier,gateway_id=gateway.id).first_or_404()
+    if row.delivered_checksum!=row.content_checksum or not row.vault_key:return 'Evidence delivery pending; retry later.',409
+    try:
+        payload=vault.read_json(row.vault_key,gateway.id,max_bytes=1048576)
+        if vault.digest(vault.canonical(payload))!=row.content_checksum or payload.get('id')!=row.source_id:
+            raise ValueError('Evidence revision mismatch.')
+        response=jsonify(payload)
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        return response
+    except (ValueError,RuntimeError):return 'Evidence could not be verified; no source was discarded.',503
+
+
 @bp.route('/frost-vault/backfill/<int:identifier>')
 @gateway_node_required('subzero')
 def frost_backfill_export(identifier):
