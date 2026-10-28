@@ -90,12 +90,13 @@ def outcome_population(root):
         seen.add(entry['source_id']);sha=entry['sha256']
         if not re.fullmatch('[a-f0-9]{64}',sha):raise ValueError('Unsafe outcome hash.')
         payload=read_json(Path(root)/'objects'/(sha+'.json'))
-        if vault.digest(vault.canonical(payload))!=sha or payload.get('schema_version')!='frost-outcome-evidence-v1' or payload.get('id')!=entry['source_id']:
+        if vault.digest(vault.canonical(payload))!=sha or payload.get('schema_version') not in ('frost-outcome-evidence-v1','frost-physical-inspection-v1') or payload.get('id')!=entry['source_id']:
             raise ValueError('Operational outcome integrity/schema mismatch.')
         result.append(dict(source_sha256=sha,evidence=payload,
             native_treatment_target_eligible=False,
             physical_model_eligible=False,
-            reason='No-spray evidence is a separate population, not other-treatment class 0. Independent physical observation/forecast coverage required.'))
+            physical_inspection=payload.get('schema_version')=='frost-physical-inspection-v1',
+            reason='Physical inspections/no-spray evidence are separate from other-treatment class 0. Independent forecast coverage, exposure and pretreatment quality gates are still required.'))
     return result
 
 
@@ -109,10 +110,15 @@ def assemble(directory,forecast_root,output):
     for document in evidence.manifest['source_catalog']['documents']:
         raw=(evidence.root/'originals'/(document['sha256']+'.csv')).read_bytes()
         if len(raw)!=document['bytes'] or vault.digest(raw)!=document['sha256']:raise ValueError('Original Xchange evidence integrity failure.')
-    available={};source_cases=[]
+    available={};source_cases=[];collections=[];body_hashes=set()
     for root in roots:
         original=read_json(root/'cases.json')
         source_cases.append(vault.digest((root/'cases.json').read_bytes()))
+        collections.append(dict(cache=root.name,source_cases_sha256=source_cases[-1],
+            nights_attempted=len({r['night'] for r in original['cases']+original.get('gaps',[])}),
+            cycles_with_cases=len({r['cycle_at_utc'] for r in original['cases']}),
+            cycle_gaps=original.get('gaps',[]),cases_retained=len(original['cases']),
+            selection=original['selection']))
         if original['source_dataset_fingerprint']!=evidence.manifest['fingerprint']:
             from app.services.frost_dataset_contract import validate
             prior=validate(read_json(evidence.root/'manifests'/(original['source_dataset_fingerprint']+'.json')),historical=True)
@@ -136,6 +142,7 @@ def assemble(directory,forecast_root,output):
             target=clock.instant(row['event_at']);cutoff=target-timedelta(hours=lead)
             cycle=clock.instant(case['cycle_at_utc']);point=checked_point(root,cycle,cache.setdefault(str(root),{}))
             if point is None:excluded[f'h{lead}_missing_point']+=1;continue
+            body_hashes.update(r['sha256'] for r in point['source_receipts'] if r['method']!='HEAD')
             if point['fingerprint']!=case['point_fingerprint']:raise ValueError('Forecast checkpoint changed.')
             valid=target.replace(minute=0,second=0,microsecond=0)
             final_hour=int((valid-cycle).total_seconds()/3600);snapshots=[]
@@ -161,14 +168,20 @@ def assemble(directory,forecast_root,output):
         for season in sorted({r['season'] for r in prepared['examples']})}
     outcomes=outcome_population(Path(output)/'outcomes')
     credible=sum(r['evidence']['learning_eligible'] and r['evidence']['evidence_active'] and
-        r['evidence']['classification']['label']=='LIKELY FROST ABSENT' for r in outcomes)
+        r['evidence'].get('classification',{}).get('label')=='LIKELY FROST ABSENT' for r in outcomes)
+    physical=[r['evidence'] for r in outcomes if r['physical_inspection'] and r['evidence']['evidence_active']]
     result=sealed(dict(schema=SCHEMA,feature_version=native.VERSION,implementation_sha256=code_hash(),source_dataset=evidence.manifest['fingerprint'],
         source_catalog=evidence.manifest['source_catalog']['fingerprint'],source_cases_sha256=sorted(set(source_cases)),
         observation_version=weather.VERSION,classification_version=prepared['manifest']['version'],examples=rows,excluded=dict(excluded),coverage=coverage,
+        forecast_collections=collections,verified_forecast_body_hashes=len(body_hashes),
         historical_population=evidence.manifest['quality']['classifications'],
         eligible_classes={str(h):dict(Counter(str(r['label']) for r in rows if r['lead_hours']==h)) for h in native.HORIZONS},
         operational_observations=outcomes,credible_likely_negative_evidence=credible,
-        credible_physical_negatives=0,confirmed_physical_positives=0,physical_frost_training_ready=False,
+        operational_evidence_catalog='verified_cached' if (Path(output)/'outcomes/catalog.json').exists() else 'not_refreshed_locally',
+        credible_physical_negatives=sum(r['result']=='absent' for r in physical),
+        confirmed_physical_positives=sum(r['result']=='present' for r in physical),
+        pretreatment_confounded_inspections=sum(r.get('prior_pretreat') is True for r in physical),
+        uncertain_physical_inspections=sum(r['result']=='uncertain' for r in physical),physical_frost_training_ready=False,
         reviewed_seasons=list(REVIEWED_SEASONS),operationally_validated=False,
         limitations=['One first recorded treatment per Phase 8 selected night; treatment-selected population',
             'Other treatment reason is not a physical frost-negative label','Historical METAR receipt time unknown',
@@ -176,7 +189,8 @@ def assemble(directory,forecast_root,output):
             'No aircraft/parking/exposure context invented']))
     destination=Path(output);write_json(destination/'datasets'/(result['fingerprint']+'.json'),result)
     write_json(destination/'dataset.json',result)
-    print(json.dumps(dict(fingerprint=result['fingerprint'],coverage=coverage,classes=result['eligible_classes'],training=readiness(rows,None))),flush=True)
+    print(json.dumps(dict(fingerprint=result['fingerprint'],coverage=coverage,classes=result['eligible_classes'],
+        training={str(h):readiness([r for r in rows if r['lead_hours']==h],None) for h in native.HORIZONS})),flush=True)
     return result
 
 
@@ -193,11 +207,38 @@ def readiness(rows,test_season):
     return dict(ready=not reasons,reasons=reasons,seasons=seasons,physical_frost_probability=False)
 
 
+def coverage_report(dataset):
+    """Source-traceable counts/missingness, not a claim of forecast skill."""
+    local_only();verify(dataset)
+    if dataset.get('implementation_sha256')!=code_hash():raise ValueError('Reassemble cached evidence under the current implementation before reporting.')
+    rows=dataset['examples'];horizons=[]
+    for lead in native.HORIZONS:
+        selected=[r for r in rows if r['lead_hours']==lead]
+        identities=[(r['season'],r['night']) for r in selected]
+        if len(set(identities))!=len(identities):raise ValueError('Duplicate operational night in a lead-specific research population.')
+        horizons.append(dict(hours=lead,cases=len(selected),likely_positive=sum(r['label']==1 for r in selected),
+            other_treatment=sum(r['label']==0 for r in selected),validated_cases=0,
+            seasons={season:dict(nights=sum(r['season']==season for r in selected),
+                classes=dict(Counter(str(r['label']) for r in selected if r['season']==season))) for season in sorted({r['season'] for r in rows})},
+            missing_features=dict(Counter(name for r in selected for name in r['missing'])),
+            quality_dispositions=dict(Counter(q.get('disposition','unknown') for r in selected for q in r.get('quality',[]))),
+            training=readiness(selected,None)))
+    return sealed(dict(schema='frost-forecast-native-coverage-v1',dataset_fingerprint=dataset['fingerprint'],
+        feature_version=native.VERSION,source_catalog=dataset['source_catalog'],eligible_cases=len(rows),
+        eligible_nights=len({(r['season'],r['night']) for r in rows}),horizons=horizons,
+        excluded=dataset['excluded'],forecast_collections=dataset.get('forecast_collections',[]),
+        verified_forecast_body_hashes=dataset.get('verified_forecast_body_hashes',0),confirmed_physical_positives=dataset['confirmed_physical_positives'],
+        credible_physical_negatives=dataset['credible_physical_negatives'],
+        operational_evidence_catalog=dataset.get('operational_evidence_catalog','unknown_legacy_cache'),
+        physical_frost_training_ready=False,approved=False,operationally_validated=False))
+
+
 def train(dataset,*,lead_hours,test_season,version):
     local_only();verify(dataset)
     if dataset['schema']!=SCHEMA or dataset['feature_version']!=native.VERSION or dataset.get('implementation_sha256')!=code_hash():raise ValueError('Unsupported/stale native dataset contract; assemble from verified caches.')
     native.contract(lead_hours)
     rows=[r for r in dataset['examples'] if r['lead_hours']==lead_hours]
+    if len({(r['season'],r['night']) for r in rows})!=len(rows):raise ValueError('Duplicate operational nights cannot satisfy seasonal training gates.')
     if any(r['contract']!=native.contract(lead_hours) or len(r['features'])!=len(native.FEATURES) or
         clock.instant(r['event_at'])-clock.instant(r['at'])!=timedelta(hours=lead_hours) for r in rows):raise ValueError('Mixed/leaking horizon features.')
     gate=readiness(rows,test_season)
@@ -261,7 +302,7 @@ def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--local',required=True,action='store_true')
     p.add_argument('--directory',default='instance/frost-local/phase8/dataset');p.add_argument('--forecasts',action='append',help='Repeat for incremental season caches; duplicates reconcile by application/horizon.')
     p.add_argument('--output',default='instance/frost-local/phase9')
-    commands=p.add_subparsers(dest='command',required=True);commands.add_parser('assemble');commands.add_parser('validate')
+    commands=p.add_subparsers(dest='command',required=True);commands.add_parser('assemble');commands.add_parser('validate');commands.add_parser('coverage')
     t=commands.add_parser('train');t.add_argument('--lead-hours',required=True,type=int,choices=native.HORIZONS);t.add_argument('--test-season',required=True);t.add_argument('--version',required=True)
     t=commands.add_parser('refresh-outcomes');t.add_argument('--origin',required=True);t.add_argument('--email',required=True)
     a=p.parse_args(argv);local_only();root=Path(a.output)
@@ -279,6 +320,9 @@ def main(argv=None):
         else:
             dataset=verify(read_json(root/'dataset.json'))
             if a.command=='validate':print(json.dumps({str(h):readiness([r for r in dataset['examples'] if r['lead_hours']==h],None) for h in native.HORIZONS}))
+            elif a.command=='coverage':
+                report=coverage_report(dataset);write_json(root/'coverage-report.json',report)
+                print(json.dumps(report),flush=True)
             else:
                 if not re.fullmatch('[A-Za-z0-9_-]{1,64}',a.version):raise ValueError('Unsafe model version.')
                 destination=root/'candidates'/(a.version+'.json')

@@ -113,3 +113,13 @@ body.neosubzero-ucc-tv-mode { background:#06101a; } body.neosubzero-ucc-tv-mode 
 .neosubzero-shell[data-evidence-root] input[type=checkbox] { width:auto; min-height:0; }
 .neosubzero-shell[data-evidence-root] pre { white-space:pre-wrap; overflow-wrap:anywhere; max-width:100%; }
 .neosubzero-shell[data-evidence-root] .ops-review { color:#ffb6ad; }
+.neosubzero-frost-inspection { margin-top:12px; border-top:1px solid #466174; padding-top:10px; min-width:0; }
+.neosubzero-frost-inspection summary { cursor:pointer; padding:8px 0; font-size:.8rem; color:#a8d6e8; }
+.neosubzero-inspection-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); gap:10px; margin:10px 0; }
+.neosubzero-inspection-form label { display:flex; flex-direction:column; min-width:0; gap:5px; font-size:.8rem; }
+.neosubzero-inspection-form :is(input,select,textarea) { min-width:0; max-width:100%; box-sizing:border-box; width:100%; min-height:40px; background:#0c2231; color:#e4f1f8; border:1px solid #466174; border-radius:3px; font:inherit; padding:7px; color-scheme:dark; }
+.neosubzero-inspection-form input[type=checkbox] { width:22px; min-height:22px; }
+.neosubzero-inspection-form button { min-height:44px; white-space:normal; }
+.frost-native-coverage { width:100%; border-collapse:collapse; font-size:.72rem; }
+.frost-native-coverage :is(th,td) { padding:4px 3px; text-align:left; border-bottom:1px solid #304b5a; }
+.frost-native-coverage caption { text-align:left; padding:5px 0; color:#afcbdc; }

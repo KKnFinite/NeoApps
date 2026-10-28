@@ -187,6 +187,8 @@ def departure_deice_context(gateway, operation, *, now_utc=None):
     from app.services.neosubzero_spray import decorate_departure_rows_with_spray
 
     decorate_departure_rows_with_spray(operation, rows)
+    from app.services.frost_inspections import decorate as decorate_inspections
+    decorate_inspections(operation, rows)
     return {"operation": operation, "rows": rows, "fluid_settings": settings}
 
 
@@ -290,6 +292,7 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
 
 
 def departure_deice_revision(gateway, operation):
+    from app.models import NeoSubZeroAuditEntry
     operation_id = operation.id if operation else None
     mission_ids = select(SortDateMission.id).where(
         SortDateMission.sort_date_operation_id == operation_id,
@@ -349,6 +352,8 @@ def departure_deice_revision(gateway, operation):
         ),
         _aggregate('ucc_people',NeoSubZeroUccAssignment,NeoSubZeroUccAssignment.updated_at,NeoSubZeroUccAssignment.sort_date_operation_id==operation_id),
         _aggregate('application_context',NeoSubZeroOperationContext,NeoSubZeroOperationContext.updated_at,NeoSubZeroOperationContext.sort_date_operation_id==operation_id),
+        _aggregate('frost_inspections',NeoSubZeroAuditEntry,NeoSubZeroAuditEntry.recorded_at_utc,
+            NeoSubZeroAuditEntry.sort_date_operation_id==operation_id,NeoSubZeroAuditEntry.action=='frost_physical_inspection'),
     )
     values = db.session.execute(union_all(*aggregates)).all()
     payload = [

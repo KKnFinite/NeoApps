@@ -50,6 +50,22 @@ def _result(message, *, error=False):
     return redirect(url_for('neosubzero.operations',mode=request.form.get('mode','outbound'),mission=request.form.get('mission_id')))
 
 
+@bp.route('/frost-inspection',methods=['POST'])
+@gateway_node_required('subzero')
+def frost_inspection_mutate():
+    if not can_manage_operations() or request.form.get('board')=='deicer': return 'Access denied.',403
+    from app.services.frost_inspections import record
+    try:
+        operation=locked_operation(legacy.get_current_gateway())
+        mission=locked_mission(operation)
+        record(operation,mission,request.form,actor_id=current_user.id)
+        db.session.commit()
+        return _result('INSPECTION SAVED. Physical evidence recorded; treatment, FIN and CLEAR unchanged.')
+    except (ValueError,IntegrityError) as exc:
+        db.session.rollback()
+        return _result(str(exc) if isinstance(exc,ValueError) else 'Inspection conflicted. Keep your draft and reload current values.',error=True)
+
+
 @bp.route('/participation',methods=['POST'])
 @gateway_node_required('subzero')
 def participation_mutate():

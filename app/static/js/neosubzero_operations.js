@@ -25,7 +25,7 @@
     const formAction = form => new URL(form.getAttribute('action'), location.origin).pathname;
     const formKey = form => [formAction(form), form.elements.pass_number?.value || '',
         form.elements.position_number?.value || '', form.elements.record_id?.value || '',
-        form.querySelector('input[name="action"]')?.value || form.querySelector('button[name="action"]')?.value || ''].join(':');
+        form.querySelector('input[name="action"]')?.value || form.querySelector('button[name="action"]')?.value || form.elements.inspection_action?.value || ''].join(':');
     const draftKey = detail => ['neoapps.subzero.operations.draft', root.dataset.userId,
         root.dataset.operationId, root.dataset.mode, detail.dataset.missionId, detail.dataset.tail].join(':');
     const detail = () => pane.querySelector('[data-ops-detail-content]');
@@ -146,13 +146,17 @@
         ['operationId','layout','ramp'].forEach(key => { root.dataset[key] = next.dataset[key]; });
         const incoming = next.querySelector('[data-ops-detail-content]');
         const current = detail();
+        // Optional evidence/details must not close on an idle live refresh,
+        // including Safari summary taps that do not move keyboard focus.
+        const expansionKey=element=>[element.closest('[data-participant-id]')?.dataset.participantId || '',element.querySelector(':scope > summary')?.textContent].join(':');
+        if (current && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail === incoming.dataset.tail) {
+            const opened=new Set([...current.querySelectorAll('details[open]')].map(expansionKey));
+            incoming.querySelectorAll('details').forEach(element=>{if(opened.has(expansionKey(element)))element.open=true;});
+        }
         if (current && incoming && current.dataset.missionId === incoming.dataset.missionId && current.dataset.tail === incoming.dataset.tail && (dirty() || pane.contains(document.activeElement))) {
             const freshForms = [...incoming.querySelectorAll('form')];
             const active=document.activeElement;
             const caret=active && 'selectionStart' in active ? [active.selectionStart,active.selectionEnd] : null;
-            const expansionKey=element=>[element.closest('[data-participant-id]')?.dataset.participantId || '',element.querySelector(':scope > summary')?.textContent].join(':');
-            const opened=new Set([...current.querySelectorAll('details[open]')].map(expansionKey));
-            incoming.querySelectorAll('details').forEach(element=>{if(opened.has(expansionKey(element)))element.open=true;});
             current.querySelectorAll('form').forEach(form => {
                 if (form.dataset.dirty !== 'true' && (!form.contains(active) || formKey(form) === saved)) return;
                 const replacement = freshForms.find(e => formKey(e) === formKey(form));

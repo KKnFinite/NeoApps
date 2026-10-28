@@ -136,8 +136,9 @@ def operations_mutate():
     handlers = {url_for('neosubzero.' + endpoint): getattr(legacy, endpoint) for endpoint in (
         'pretreat_mutate', 'departure_deice_mutate', 'truck_mutate', 'spray_gallons_mutate',
         'spray_reason_mutate', 'application_context_mutate')}
-    from app.neonodes.neosubzero.release2_routes import participation_mutate,team_mutate
+    from app.neonodes.neosubzero.release2_routes import participation_mutate,team_mutate,frost_inspection_mutate
     handlers.update({url_for('neosubzero.participation_mutate'):participation_mutate,url_for('neosubzero.team_mutate'):team_mutate})
+    handlers[url_for('neosubzero.frost_inspection_mutate')]=frost_inspection_mutate
     handler = handlers.get(request.form.get('target'))
     if handler is None:
         db.session.rollback()

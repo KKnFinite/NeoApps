@@ -5,6 +5,7 @@ The operational registry/inference service remains the sole release authority.
 """
 import json
 import math
+import re
 from pathlib import Path
 
 from app.services import frost_forecast as forecast
@@ -31,6 +32,16 @@ def native_summary():
             raise ValueError('Unsupported independent-validation claim.')
     for key in ('coverage','readiness','collection','limitations','outcomes'):
         if not isinstance(value.get(key),str):raise ValueError('Missing native study interpretation.')
+    if 'season_coverage' in value:
+        coverage=value['season_coverage']
+        if not isinstance(coverage,list) or not 1<=len(coverage)<=11:raise ValueError('Invalid seasonal forecast coverage.')
+        seasons=[r['season'] for r in coverage]
+        if seasons!=sorted(set(seasons)) or any(not re.fullmatch(r'20\d{2}-20\d{2}',s) for s in seasons):raise ValueError('Invalid forecast season identity.')
+        for row in coverage:
+            if any(type(row.get('h'+str(h))) is not int or row['h'+str(h)]<0 for h in HORIZONS):raise ValueError('Invalid independent-night count.')
+        if any(sum(r['h'+str(h['hours'])] for r in coverage)!=h['cases'] for h in value['horizons']):raise ValueError('Seasonal nights do not reconcile with horizon cases.')
+        if not re.fullmatch(r'[a-f0-9]{64}',value.get('dataset_fingerprint','')):raise ValueError('Missing sealed dataset reference.')
+        if not isinstance(value.get('missing_features'),str):raise ValueError('Missing forecast quality interpretation.')
     return value
 
 

@@ -25,6 +25,8 @@ def payloads_for_operation(op):
     payloads={row['id']:archive_payload(row) for row in actual_passes(op)}
     from app.services.frost_operational_evidence import payloads as outcome_payloads
     payloads.update(outcome_payloads(op))
+    from app.services.frost_inspections import payloads as inspection_payloads
+    payloads.update(inspection_payloads(op))
     for receipt in Delivery.query.filter_by(operation_id=op.id).all():
         if receipt.source_id in payloads: continue
         kind,identifier,_,number=receipt.source_id.split(':')
@@ -49,7 +51,7 @@ def reconcile(gateway_id):
         NeoSubZeroPretreatState.pass1_started_at_utc.is_not(None))
     from app.models import NeoSubZeroAuditEntry
     outcomes=db.session.query(NeoSubZeroAuditEntry.sort_date_operation_id).filter(
-        NeoSubZeroAuditEntry.action=='departure_manual_not_sprayed')
+        NeoSubZeroAuditEntry.action.in_(('departure_manual_not_sprayed','frost_physical_inspection')))
     for op in gateway_operations(db.session.get(Gateway,gateway_id)).filter(
             or_(SortDateOperation.id.in_(departure.union(pretreat,outcomes)),SortDateOperation.id.in_(db.session.query(Delivery.operation_id)))).order_by(SortDateOperation.id).all():
         for source_id,payload in payloads_for_operation(op).items():
@@ -89,7 +91,7 @@ def drain(gateway_id, *, limit=3):
                 db.session.rollback()
                 continue  # A concurrent correction is reconciled on the next pass.
             db.session.rollback()  # Release read snapshot before provider calls.
-            if payload.get('schema_version')=='frost-outcome-evidence-v1':
+            if payload.get('schema_version') in ('frost-outcome-evidence-v1','frost-physical-inspection-v1'):
                 from app.services.frost_history import memory_allows_work
                 if not memory_allows_work():
                     item=db.session.get(Delivery,identifier)

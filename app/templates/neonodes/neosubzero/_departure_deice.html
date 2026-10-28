@@ -147,7 +147,38 @@
 <form method="post" action="{{ url_for('neosubzero.departure_deice_mutate') }}" data-subzero-operational-form>
 {{ mutation_identity(row, board, selected_ramp) }}<button class="is-clear" name="action" value="clear">CLEAR</button>
 </form>{% endif %}
+{% if can_edit and row.frost_inspection %}
+{% if mode|default('') == 'outbound' %}
+<details class="neosubzero-frost-inspection">
+<summary>FROST INSPECTION · OPTIONAL</summary>
+<p>Record a direct physical inspection, not a forecast or spray decision. Never required for FIN, CLEAR or departure. Actual Central calendar date/time.</p>
+{% if row.frost_inspection.last %}<p>Last inspection: {{ row.frost_inspection.last.physical_label }} · {{ row.frost_inspection.last_time }} · Observer #{{ row.frost_inspection.last.observer_user_id }} · {{ row.frost_inspection.last.location }}. Prior treatment outside recorded evidence may be unknown.</p>{% endif %}
+{{ inspection_form(row, board, false) }}
+{% if row.frost_inspection.last %}<details><summary>CORRECT LAST INSPECTION</summary>{{ inspection_form(row, board, true) }}</details>{% endif %}
+</details>
+{% else %}
+<p><a href="{{ url_for('neosubzero.operations',mode='outbound',mission=row.mission_id) }}">FROST INSPECTION · OPTIONAL · OPEN OPERATIONS DETAILS</a></p>
+{% endif %}
+{% endif %}
 </section>
+{% endmacro %}
+
+{% macro inspection_form(row, board, correction=false) %}
+<form method="post" action="{{ url_for('neosubzero.frost_inspection_mutate') }}" data-subzero-operational-form class="neosubzero-inspection-form">
+<input type="hidden" name="board" value="{{ board }}"><input type="hidden" name="operation_id" value="{{ operation.id }}">
+<input type="hidden" name="mission_id" value="{{ row.mission_id }}"><input type="hidden" name="physical_tail" value="{{ row.tail }}">
+<input type="hidden" name="inspection_action" value="{{ 'correct' if correction else 'record' }}">
+<input type="hidden" name="inspection_request_id" value="{{ row.frost_inspection.correction_nonce if correction else row.frost_inspection.nonce }}">
+<input type="hidden" name="expected_inspection_id" value="{{ row.frost_inspection.expected }}">
+<label>Actual physical result<select name="frost_result" required><option value="">CHOOSE INSPECTION RESULT</option><option value="present">FROST PRESENT</option><option value="absent">NO FROST OBSERVED</option><option value="uncertain">UNCERTAIN</option></select></label>
+<label>Inspected at · Central<input type="datetime-local" name="inspected_local" required></label>
+<label>Actual inspection location<input name="inspection_location" maxlength="120" required placeholder="Actual ramp, pad or other location"></label>
+<label><input type="checkbox" name="verify_parking" value="yes">I verified the displayed canonical parking position at inspection (otherwise unknown).</label>
+<label>Notes (optional)<textarea name="inspection_notes" maxlength="500" rows="2"></textarea></label>
+{% if correction %}<label>Correction reason<input name="correction_reason" maxlength="500" required></label>{% endif %}
+<label><input type="checkbox" name="inspection_confirmed" value="yes" required>{{ 'I confirm this corrects the recorded physical inspection, not a model prediction.' if correction else 'I personally inspected this actual tail; this is not a model prediction.' }}</label>
+<button type="submit">{{ 'SAVE INSPECTION CORRECTION' if correction else 'RECORD INSPECTION' }}</button>
+</form>
 {% endmacro %}
 
 {% macro participation_identity(row, board, pass_row, position=none, gallons=false) %}

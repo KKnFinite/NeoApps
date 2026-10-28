@@ -1,23 +1,33 @@
 {
   "schema": "frost-forecast-native-study-v1",
   "feature_version": "krfd-forecast-native-v1",
-  "generated_at_utc": "2026-10-28T04:09:23Z",
+  "generated_at_utc": "2026-10-28T06:42:41Z",
   "operationally_validated": false,
   "approved": false,
-  "eligible_cases": 455,
-  "eligible_nights": 114,
+  "eligible_cases": 1117,
+  "eligible_nights": 283,
+  "dataset_fingerprint": "931bd62b91a921e8f0af723bb433fc1537d856124891fd29497e243f6b43f1c6",
   "credible_likely_negatives": 0,
   "confirmed_physical_positives": 0,
   "candidate_count": 0,
   "horizons": [
-    {"hours": 0, "cases": 114, "likely_positive": 28, "other_treatment": 86, "validated_cases": 0},
-    {"hours": 1, "cases": 114, "likely_positive": 28, "other_treatment": 86, "validated_cases": 0},
-    {"hours": 3, "cases": 114, "likely_positive": 28, "other_treatment": 86, "validated_cases": 0},
-    {"hours": 6, "cases": 113, "likely_positive": 27, "other_treatment": 86, "validated_cases": 0}
+    {"hours": 0, "cases": 280, "likely_positive": 83, "other_treatment": 197, "validated_cases": 0},
+    {"hours": 1, "cases": 280, "likely_positive": 83, "other_treatment": 197, "validated_cases": 0},
+    {"hours": 3, "cases": 280, "likely_positive": 83, "other_treatment": 197, "validated_cases": 0},
+    {"hours": 6, "cases": 277, "likely_positive": 83, "other_treatment": 194, "validated_cases": 0}
   ],
-  "coverage": "2023-24: 3 sampled nights; 2024-25: 3 sampled nights; 2025-26: 108 nights (107 at six hours). No assembled forecast-native cases yet for 2015-16 through 2022-23. Availability probes are not continuous season coverage. One unavailable six-hour cycle remains excluded.",
-  "readiness": "BLOCKED: insufficient multi-season forecast population and no new independent holdout after the already-reviewed 2025-26 test. Local fitting/backtesting commands enforce season/night isolation; no successful candidate metrics are fabricated.",
-  "outcomes": "Read-only production audit: zero explicit NOT SPRAYED audit records and zero actual spray contributions at inspection. Historical Xchange reasons are likely-positive treatment evidence, not physical confirmation. Existing records supply no trustworthy untreated control population.",
-  "collection": "Future explicit NOT SPRAYED outcomes can produce compact, attributed FROST Vault evidence through the existing audit/outbox. Canonical Block-Out and unchanged tail are required. Missing exposure or pretreatment context stays unknown; prior pretreatment is not a strong negative. Generic CLEAR, NEGATIVE DEICE, cancelled or missing missions never become automatic negatives.",
-  "limitations": "No validated performance at 0/1/3/6 hours. No physical-frost probability model. Exact historical operator receipt/issue times remain unknown; original NOAA object write time is only an available-by bound. Missing modeled parameters and aircraft context remain missing. Two derived HRRR humidity values exceeded 100%; source values retained and those features marked missing, not clamped. Parking refinements disabled. Existing LOCAL shadow collector remains available; no scheduler or Render worker installed."
+  "season_coverage": [
+    {"season":"2020-2021","h0":50,"h1":50,"h3":50,"h6":48},
+    {"season":"2021-2022","h0":30,"h1":30,"h3":30,"h6":30},
+    {"season":"2022-2023","h0":30,"h1":30,"h3":30,"h6":30},
+    {"season":"2023-2024","h0":31,"h1":31,"h3":31,"h6":31},
+    {"season":"2024-2025","h0":31,"h1":31,"h3":31,"h6":31},
+    {"season":"2025-2026","h0":108,"h1":108,"h3":108,"h6":107}
+  ],
+  "coverage": "Six covered seasons, up from three; 283 independent nights, up from 114. LOCAL sampled-cycle retrieval: 837/849 cycles retained, 12 explicit archive gaps (11 in 2020-21 and one in 2025-26). 11,402 forecast source-body hashes verified. Ten bounded original NOAA GRIB comparisons passed across the five priority seasons. Earlier 2015-16 through 2019-20 probes still lack pre-cutoff availability proof; no fabricated cases.",
+  "missing_features": "At 0/1 hours, forecast cloud fraction is missing for 4/280 cases, gusts for 7, precipitation amount for 6 and precipitation type for 17. At 3 hours the respective counts are 4/5/5/14; at 6 hours 1/3/2/14 of 277. One derived RH value at 0/1 hours is outside 0..100 and stays missing, not clamped. Modeled temperature/dew point/wind speed are present in retained cases. Aircraft exposure/prior treatment remain unknown throughout this treatment corpus; no stands are invented.",
+  "readiness": "BLOCKED at each horizon: five earlier sampled seasons remain below 100 independent cases and/or 20 per class. No genuinely new reserved holdout follows the reviewed 2025-26 sample. Gates unchanged; no experimental fit, independent metrics or new candidate claimed.",
+  "outcomes": "Read-only production audit found zero direct physical inspections, zero explicit NOT SPRAYED audit records and zero actual spray contributions. Across the union of forecast-covered treatment nights, 85 distinct frost-reason examples and 198 other treatments are NOT a physical positive/negative comparison cohort. The local operational-outcome catalog has not been refreshed; zero downloaded observations must not be mistaken for verified future absence.",
+  "collection": "Optional FROST INSPECTION in aircraft Operations details records PRESENT / ABSENT / UNCERTAIN, actual Central time, observer, verified context and audited corrections without delaying FIN/CLEAR. Compact evidence uses the existing private Vault outbox and memory guards. Phase 9 explicit NOT SPRAYED capture remains; generic CLEAR, NEGATIVE DEICE, cancellation and missing records do not create negatives. A LOCAL prospective capture succeeded at 2026-10-28T06:13:25Z; an offline capture gap remains explicit.",
+  "limitations": "No validated performance at 0/1/3/6 hours and no physical-frost probability model. Exact historical operator receipt/issue times remain unknown; NOAA object write time is an available-by bound. Float16 source precision is retained and documented. Pretreatment can prevent frost and confounds untreated comparisons. Parking refinements disabled. All bulk work LOCAL; no scheduler or Render worker installed. Existing imported/approved-model gates unchanged; no model approved or activated."
 }
