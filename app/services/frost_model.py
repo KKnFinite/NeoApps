@@ -222,7 +222,13 @@ def sigmoid(value):
 
 
 def score(artifact, values):
-    if len(values) != len(FEATURES): raise ValueError('Feature dimensions changed.')
+    return score_vector(artifact,values,len(FEATURES))
+
+
+def score_vector(artifact,values,dimensions):
+    """Shared numeric runtime; callers still enforce their own artifact contract."""
+    if len(values) != dimensions or len(artifact['preprocessing']['means'])!=dimensions or len(artifact['preprocessing']['scales'])!=dimensions:
+        raise ValueError('Feature dimensions changed.')
     means, scales = artifact['preprocessing']['means'], artifact['preprocessing']['scales']
     inputs = [(finite(v) - means[i])/scales[i] if v is not None else 0.0 for i, v in enumerate(values)]
     inputs += [float(v is None) for v in values]

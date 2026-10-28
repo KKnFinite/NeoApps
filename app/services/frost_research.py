@@ -10,6 +10,28 @@ from pathlib import Path
 from app.services import frost_forecast as forecast
 
 REPORT = Path(__file__).resolve().parents[1] / 'data' / 'frost_forecast_research.json'
+NATIVE_REPORT = REPORT.with_name('frost_forecast_native_research.json')
+
+
+def native_summary():
+    from app.services.frost_forecast_native import VERSION,HORIZONS
+    with NATIVE_REPORT.open('rb') as handle:raw=handle.read(16385)
+    if len(raw)>16384:raise ValueError('Native study exceeds bounded metadata.')
+    value=json.loads(raw,parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid native study number.')))
+    if value.get('feature_version')!=VERSION or value.get('operationally_validated') is not False or value.get('approved') is not False:
+        raise ValueError('Invalid native research-only contract.')
+    forecast.instant(value['generated_at_utc'])
+    for key in ('credible_likely_negatives','confirmed_physical_positives','candidate_count','eligible_cases','eligible_nights'):
+        if type(value.get(key)) is not int or value[key]<0:raise ValueError('Invalid native population count.')
+    if not isinstance(value.get('horizons'),list) or [r['hours'] for r in value['horizons']]!=list(HORIZONS):raise ValueError('Invalid native horizons.')
+    for row in value['horizons']:
+        for key in ('cases','likely_positive','other_treatment','validated_cases'):
+            if type(row.get(key)) is not int or row[key]<0:raise ValueError('Invalid native horizon count.')
+        if row['likely_positive']+row['other_treatment']!=row['cases'] or row['validated_cases']!=0:
+            raise ValueError('Unsupported independent-validation claim.')
+    for key in ('coverage','readiness','collection','limitations','outcomes'):
+        if not isinstance(value.get(key),str):raise ValueError('Missing native study interpretation.')
+    return value
 
 
 def load():
@@ -43,6 +65,7 @@ def load():
         for key in ('recall','false_positive_rate','brier','above_recall'):
             if not isinstance(row[key],(int,float)) or not math.isfinite(row[key]) or not 0<=row[key]<=1:
                 raise ValueError('Invalid candidate metric.')
+    if NATIVE_REPORT.exists():value['native_study']=native_summary()
     return value
 
 

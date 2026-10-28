@@ -247,7 +247,7 @@ def metrics(labels,scores):
         ece=ece if n else None,reliability_bins=bins)
 
 
-def fit(rows,kind):
+def fit(rows,kind,*,feature_names=None):
     local_only()
     import numpy as np
     from sklearn.linear_model import LogisticRegression
@@ -260,7 +260,9 @@ def fit(rows,kind):
     y=[row['label'] for row in rows]
     if len(set(y))!=2:raise ValueError('Both explicit treatment-reason classes are required in every fitting fold.')
     estimator=LogisticRegression(C=1,solver='lbfgs',max_iter=500,random_state=0) if kind=='logistic' else RandomForestClassifier(n_estimators=32,max_depth=3,min_samples_leaf=5,n_jobs=1,random_state=0)
-    print(f'Fitting {kind}: {len(rows)} applications, {len(model.FEATURES)} weather features',flush=True)
+    names=tuple(feature_names) if feature_names is not None else model.FEATURES
+    if any(len(row['features'])!=len(names) for row in rows):raise ValueError('Fitting feature contract mismatch.')
+    print(f'Fitting {kind}: {len(rows)} applications, {len(names)} weather features',flush=True)
     estimator.fit(x,y)
     if kind=='logistic':
         result=dict(kind=kind,coefficients=estimator.coef_[0].tolist(),intercept=float(estimator.intercept_[0]))

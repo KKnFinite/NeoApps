@@ -222,10 +222,14 @@ def normalized(point,hour):
         cloud_layers=[],clear_sky=None,precipitation_since_hourly_reset_in=None)
 
 
-def collect(directory,output,*,nights=120,budget_mib=512):
+def collect(directory,output,*,nights=120,budget_mib=512,season=None):
     local_only();from scripts.frost_forecast_validation import Evidence
     root=Path(output);evidence=Evidence(directory);prepared=read_json(evidence.root/'prepared.json')
-    latest=max(r['season'] for r in prepared['examples']);pool=[r for r in prepared['examples'] if r['season']==latest]
+    latest=season or max(r['season'] for r in prepared['examples']);pool=[r for r in prepared['examples'] if r['season']==latest]
+    if not pool:raise ValueError('Requested season has no eligible historical treatment evidence.')
+    existing=root/'cases.json'
+    if existing.exists() and any(r['season']!=latest for r in read_json(existing)['cases']):
+        raise ValueError('Use a separate output directory for each season; preserve earlier cases.')
     grouped={}
     for row in sorted(pool,key=lambda r:(r['event_at'],r['group_id'])):grouped.setdefault(row['night'],row)
     all_nights=sorted(grouped);selected=[all_nights[i] for i in sorted({round(i*(len(all_nights)-1)/max(1,min(nights,len(all_nights))-1)) for i in range(min(nights,len(all_nights)))})]
@@ -413,6 +417,7 @@ def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--local',action='store_true',required=True)
     p.add_argument('--directory',default='instance/frost-local/phase8/dataset');p.add_argument('--output',default='instance/frost-local/phase8/hrrr')
     p.add_argument('--nights',type=int,default=120);p.add_argument('--budget-mib',type=int,default=512)
+    p.add_argument('--season',help='Explicit season, e.g. 2024-2025; use a separate output directory.')
     p.add_argument('--baseline-directory')
     p.add_argument('--command',choices=('collect','verify-grib','evaluate','availability'),default='collect')
     args=p.parse_args(argv);local_only()
@@ -420,7 +425,7 @@ def main(argv=None):
     if args.command=='verify-grib':verify_grib(args.output)
     elif args.command=='evaluate':evaluate(args.directory,args.output,baseline_directory=args.baseline_directory)
     elif args.command=='availability':availability_audit(args.directory,args.output)
-    else:collect(args.directory,args.output,nights=args.nights,budget_mib=args.budget_mib)
+    else:collect(args.directory,args.output,nights=args.nights,budget_mib=args.budget_mib,season=args.season)
 
 
 if __name__=='__main__':main()

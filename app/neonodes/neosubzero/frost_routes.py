@@ -107,6 +107,40 @@ def frost_dataset_manifest():
     return response
 
 
+@bp.route('/frost-vault/observations')
+@gateway_node_required('subzero')
+def frost_outcome_catalog():
+    gateway=authorized()
+    before=request.args.get('before',type=int)
+    query=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).filter(
+        NeoSubZeroArchiveDelivery.source_id.like('frost:%'))
+    if before:query=query.filter(NeoSubZeroArchiveDelivery.id<before)
+    rows=query.order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(101).all()
+    response=jsonify(schema='frost-outcome-catalog-v1',observations=[dict(id=r.id,source_id=r.source_id,
+        sha256=r.content_checksum,archived=r.delivered_checksum==r.content_checksum,
+        error=r.last_error,url=f'/neosubzero/frost-vault/observations/{r.id}') for r in rows[:100]],
+        next_before=rows[99].id if len(rows)>100 else None)
+    response.headers['Cache-Control']='private, no-store'
+    return response
+
+
+@bp.route('/frost-vault/observations/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_outcome_download(identifier):
+    gateway=authorized()
+    if not history.memory_allows_work():return 'Evidence transfer deferred for memory safety.',503
+    row=NeoSubZeroArchiveDelivery.query.filter_by(id=identifier,gateway_id=gateway.id).filter(
+        NeoSubZeroArchiveDelivery.source_id.like('frost:%')).first_or_404()
+    if row.delivered_checksum!=row.content_checksum or not row.vault_key:return 'Evidence delivery pending; retry later.',409
+    try:
+        payload=vault.read_json(row.vault_key,gateway.id,max_bytes=65536)
+        if vault.digest(vault.canonical(payload))!=row.content_checksum:raise ValueError('Evidence revision mismatch.')
+        response=jsonify(payload)
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        return response
+    except (ValueError,RuntimeError):return 'Evidence could not be verified; no source was discarded.',503
+
+
 @bp.route('/frost-vault/backfill/<int:identifier>')
 @gateway_node_required('subzero')
 def frost_backfill_export(identifier):

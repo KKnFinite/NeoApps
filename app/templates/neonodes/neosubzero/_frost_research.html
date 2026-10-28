@@ -29,7 +29,7 @@
     {% for candidate in research.corrected_models|default(research.models) %}
     <section class="frost-research-candidate">
         <h3>{{ candidate.model_version }}</h3>
-        <p>Untouched {{ candidate.test_season }} observed-input test: {{ candidate.count }} applications · frost-reason recall {{ '%.2f'|format(candidate.recall * 100) }}% · false-positive rate {{ '%.2f'|format(candidate.false_positive_rate * 100) }}% · Brier {{ '%.4f'|format(candidate.brier) }}.</p>
+        <p>Frozen Phase 8 {{ candidate.test_season }} observed-input evaluation: {{ candidate.count }} applications · frost-reason recall {{ '%.2f'|format(candidate.recall * 100) }}% · false-positive rate {{ '%.2f'|format(candidate.false_positive_rate * 100) }}% · Brier {{ '%.4f'|format(candidate.brier) }}. This reviewed cohort is not a new Phase 9 holdout.</p>
         <p class="frost-research-warning">ABOVE-FREEZING WEAKNESS: {{ candidate.above_positive - candidate.above_missed }}/{{ candidate.above_positive }} frost-reason cases detected ({{ '%.2f'|format(candidate.above_recall * 100) }}%) among {{ candidate.above_count }} applications on {{ candidate.above_nights }} nights. Subsets use each model's own input-time temperature; they are not identical populations.</p>
         <p>{{ candidate.forecast_result }}</p>
     </section>
@@ -42,6 +42,31 @@
     </details>
     {% endif %}
     <p>{{ research.conclusion }}</p>
+    {% if research.native_study %}
+    <section class="frost-research-candidate" data-forecast-native>
+        <h3>FORECAST-NATIVE LEARNING · NOT OPERATIONAL</h3>
+        <p>{{ research.native_study.feature_version }} · Study {{ research.native_study.generated_at_utc }}. Observed METARs and HRRR modeled fields have separate features and missingness; no cloud/ceiling/precipitation substitution.</p>
+        <div class="frost-research-grid">
+            <section><h3>VERIFIED FORECAST POPULATION</h3>
+                <p>{{ research.native_study.eligible_nights }} distinct nights · {{ research.native_study.eligible_cases }} horizon-specific cases. {{ research.native_study.coverage }}</p>
+                {% for row in research.native_study.horizons %}
+                <p>{{ row.hours }}h: {{ row.cases }} eligible · {{ row.likely_positive }} frost-reason / {{ row.other_treatment }} other treatments · {{ row.validated_cases }} independently validated.</p>
+                {% endfor %}
+                <p>Other treatments are NOT physical frost-negative observations.</p>
+            </section>
+            <section><h3>ACTUAL OUTCOME EVIDENCE</h3>
+                <p>{{ research.native_study.credible_likely_negatives }} credible likely-negative observations · {{ research.native_study.confirmed_physical_positives }} confirmed physical positives in the audited population.</p>
+                <p>{{ research.native_study.outcomes }}</p>
+                <p>{{ research.native_study.collection }}</p>
+            </section>
+            <section><h3>MODEL DEVELOPMENT GATE</h3>
+                <p>{{ research.native_study.candidate_count }} forecast-native candidates trained. {{ research.native_study.readiness }}</p>
+                <p>{{ research.native_study.limitations }}</p>
+                <p>All fitting/backtesting LOCAL. No approved or active model; no DUCC warning changes. This is a dated receipt, not live training progress.</p>
+            </section>
+        </div>
+    </section>
+    {% endif %}
     <a href="{{ url_for('neosubzero.frost_forecast_validation') }}">DOWNLOAD DATED RESEARCH SUMMARY</a>
     {% else %}<p>Research summary unavailable. No successful validation claimed; CSV import and the model registry remain available.</p>{% endif %}
 </details>

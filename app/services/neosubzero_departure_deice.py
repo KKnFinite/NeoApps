@@ -279,8 +279,13 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
             raise NeoSubZeroDepartureDeiceError("Choose a valid departure-deice action.")
 
     _sync_tail_deice_status(operation, mission, event)
+    after=evidence_values(event)
+    if action in {'manual_not_sprayed','clear'}:
+        from app.services.frost_operational_evidence import capture
+        observation=capture(operation,mission,event,actor_id=actor_id,action=action,previous=before)
+        if observation:after['frost_learning']=observation
     audit_change(operation,'departure_'+action,actor_id=actor_id,mission=mission,event=event,
-        reason=values.get('correction_reason'),before=before,after=evidence_values(event))
+        reason=values.get('correction_reason'),before=before,after=after)
     return event
 
 

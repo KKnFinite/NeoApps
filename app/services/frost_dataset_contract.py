@@ -41,7 +41,10 @@ def validate(manifest, *, sources=None, training=False, historical=False):
     legacy = historical and (manifest.get('version'),manifest.get('weather_version'),manifest.get('implementation_sha256')) in (
         ('frost-history-v2',weather.LEGACY_VERSION,'a533954b09bf8f4edc51ccac39471e484ccbee5604d27271b27f1fce131b8c23'),
         ('frost-history-v3',weather.VERSION,'c613a9e3d7744d919dcc01e47132283fd5bdff30cc6fb479481b11b997187998'),
-        ('frost-history-v3',weather.VERSION,'56760304cc6757276c1ec65ffa3fd9b3c916a38f3dc2f2b68f234f0023bfd186'))
+        ('frost-history-v3',weather.VERSION,'56760304cc6757276c1ec65ffa3fd9b3c916a38f3dc2f2b68f234f0023bfd186'),
+        # Phase 8 immutable corrected evidence: read-only replay, never a fresh
+        # training/approval attestation under a later implementation.
+        ('frost-history-v3',weather.VERSION,'383b9291f9e8845d76a830f1cb29fc1204ac952789eb23ef09c2c61ce8ce7386'))
     if (not legacy and (manifest.get('version')!=analysis.VERSION or manifest.get('weather_version')!=weather.VERSION)) or manifest.get('time_contract')!=analysis.TIME_CONTRACT or manifest.get('parser_version')!=PARSER_VERSION:
         raise ValueError('Local parser/weather/classification contract mismatch.')
     if not legacy and manifest.get('implementation_sha256')!=code_hash():raise ValueError('Local validation code changed; revalidate cached evidence locally.')

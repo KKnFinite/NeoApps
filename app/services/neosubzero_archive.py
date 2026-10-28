@@ -23,9 +23,12 @@ def payloads_for_operation(op):
     from app.models import NeoSubZeroAuditEntry
     from app.services.neosubzero_evidence import evidence_values
     payloads={row['id']:archive_payload(row) for row in actual_passes(op)}
+    from app.services.frost_operational_evidence import payloads as outcome_payloads
+    payloads.update(outcome_payloads(op))
     for receipt in Delivery.query.filter_by(operation_id=op.id).all():
         if receipt.source_id in payloads: continue
         kind,identifier,_,number=receipt.source_id.split(':')
+        if kind=='frost':continue
         model=NeoSubZeroPretreatState if kind=='pretreat' else NeoSubZeroDepartureDeiceEvent
         parent=db.session.get(model,int(identifier))
         if parent is None: continue  # FK-preserved source disappearance requires administrator investigation.
@@ -44,8 +47,11 @@ def reconcile(gateway_id):
         NeoSubZeroDepartureDeiceEvent.pass1_started_at_utc.is_not(None))
     pretreat=db.session.query(NeoSubZeroPretreatState.sort_date_operation_id).filter(
         NeoSubZeroPretreatState.pass1_started_at_utc.is_not(None))
+    from app.models import NeoSubZeroAuditEntry
+    outcomes=db.session.query(NeoSubZeroAuditEntry.sort_date_operation_id).filter(
+        NeoSubZeroAuditEntry.action=='departure_manual_not_sprayed')
     for op in gateway_operations(db.session.get(Gateway,gateway_id)).filter(
-            or_(SortDateOperation.id.in_(departure.union(pretreat)),SortDateOperation.id.in_(db.session.query(Delivery.operation_id)))).order_by(SortDateOperation.id).all():
+            or_(SortDateOperation.id.in_(departure.union(pretreat,outcomes)),SortDateOperation.id.in_(db.session.query(Delivery.operation_id)))).order_by(SortDateOperation.id).all():
         for source_id,payload in payloads_for_operation(op).items():
             digest = checksum(payload)
             delivery = Delivery.query.filter_by(operation_id=op.id, source_id=source_id).with_for_update().one_or_none()
@@ -83,8 +89,20 @@ def drain(gateway_id, *, limit=3):
                 db.session.rollback()
                 continue  # A concurrent correction is reconciled on the next pass.
             db.session.rollback()  # Release read snapshot before provider calls.
-            saved = export_subzero_record(payload)
-            learning = export_subzero_record(learning_context(payload), learning=True)
+            if payload.get('schema_version')=='frost-outcome-evidence-v1':
+                from app.services.frost_history import memory_allows_work
+                if not memory_allows_work():
+                    item=db.session.get(Delivery,identifier)
+                    if item.content_checksum==expected:
+                        item.last_error='FROST observation delivery deferred for memory safety; automatic retry pending. Operational work is unaffected.'
+                    db.session.commit()
+                    continue
+                from app.services.frost_vault import put_json
+                key=put_json('frost-observations',gateway_id,payload['id'].replace(':','-'),payload)
+                saved=learning=dict(key=key)
+            else:
+                saved = export_subzero_record(payload)
+                learning = export_subzero_record(learning_context(payload), learning=True)
             item = Delivery.query.filter_by(id=identifier).with_for_update().one()
             # A newer correction must never be marked delivered by an older request.
             if item.content_checksum == expected:
