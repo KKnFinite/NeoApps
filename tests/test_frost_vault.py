@@ -155,7 +155,8 @@ class FrostVaultTest(unittest.TestCase):
         client=self.client('master');g.pop('_login_user',None)
         page=client.get('/neosubzero/frost-vault').get_data(as_text=True)
         self.assertIn('aria-label="IMPORT CSV"',page)
-        self.assertEqual(page.count('-frost-history-v1'),2)  # Do not reuse old immutable mobile assets.
+        self.assertEqual(page.count('-frost-auto-v1'),2)  # New collection assets must bypass the prior cached bundle.
+        self.assertNotIn('-frost-history-v1',page)
         self.assertIn('application/vnd.ms-excel,text/plain',page)
         response=client.post('/neosubzero/frost-vault',data={'document':(io.BytesIO(sample()),'source.csv')},headers={'X-Requested-With':'XMLHttpRequest'})
         self.assertEqual(response.status_code,200,response.data)
