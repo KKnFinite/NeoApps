@@ -49,6 +49,12 @@
             const response=await fetch(root.dataset.statusUrl,{credentials:'same-origin',cache:'no-store'});
             if(!response.ok)throw new Error('FROST status refresh failed.');
             const result=await response.json();
+            if(result.auto_collection){
+                for(const el of root.querySelectorAll('[data-auto-field]')){
+                    const value=result.auto_collection[el.dataset.autoField];
+                    el.textContent=value??(el.dataset.autoField==='resource_reason'?'None reported':'Not yet');
+                }
+            }
             if(result.history){
                 const health=result.history;
                 const write=(selector,value)=>{const el=root.querySelector(selector);if(el)el.textContent=value;};

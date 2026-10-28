@@ -16,6 +16,7 @@
     </form>
     <p id="frost-file-help">Choose a CSV from Files, Downloads or iCloud Drive. Selection starts the import. Up to 10 MiB per file; import each season separately.</p>
     <p>CSV originals are preserved byte-for-byte. Extraction retains source rows, truck contributions, units and local clocks. Historical analysis is separate from live operations; no live spray transactions or prediction model are created.</p>
+    {% include 'neonodes/neosubzero/_frost_auto.html' %}
     {% include 'neonodes/neosubzero/_frost_history.html' %}
     <p>Historical analysis and training run locally. Archived research remains available; bulk result publication is retired.</p>
     {% include 'neonodes/neosubzero/_frost_models.html' %}
@@ -40,8 +41,8 @@
     </details>
     <details><summary>STORAGE CONTRACT</summary><p>Independent FROST prefixes and manifests use the existing private provider. Evidence has no automatic expiration. No SPEAR object is moved or deleted.</p><p>{{ categories|join(' · ') }}</p></details>
 </section>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_vault.css',v=config.STATIC_ASSET_VERSION ~ '-frost-history-v1') }}">
-<script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION ~ '-frost-history-v1') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/frost_vault.css',v=config.STATIC_ASSET_VERSION ~ '-frost-auto-v1') }}">
+<script defer src="{{ url_for('static',filename='js/frost_vault.js',v=config.STATIC_ASSET_VERSION ~ '-frost-auto-v1') }}"></script>
 <script defer src="{{ url_for('static',filename='js/frost_models.js',v=config.STATIC_ASSET_VERSION ~ '-frost-local-v1') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/frost_models.css',v=config.STATIC_ASSET_VERSION ~ '-frost-local-v1') }}">
 <link rel="stylesheet" href="{{ url_for('static',filename='css/frost_research.css',v=config.STATIC_ASSET_VERSION ~ '-frost-research-v1') }}">

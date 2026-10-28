@@ -31,3 +31,5 @@
 .frost-analysis-scroll {max-width:100%;overflow-x:auto;}
 .frost-analysis-scroll table {border-collapse:collapse;width:100%;font-size:.8rem;}
 .frost-analysis-scroll th,.frost-analysis-scroll td {padding:5px 8px;text-align:left;border-bottom:1px solid #36556b;white-space:nowrap;}
+.frost-auto-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.6rem 1rem}
+.frost-auto-metrics>div{min-width:0}.frost-auto-metrics dt{font-size:.8rem;opacity:.8}.frost-auto-metrics dd{margin:0;overflow-wrap:anywhere}

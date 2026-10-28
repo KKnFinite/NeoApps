@@ -62,11 +62,11 @@ def task(gateway_id, kind, identity, version=None):
     return row
 
 
-def claim(row):
+def claim(row, *, at=None):
     identifier = row.id
     db.session.commit()
     row = Task.query.filter_by(id=identifier).with_for_update().one()
-    now = datetime.utcnow()
+    now = at or datetime.utcnow()
     if row.retry_at > now:
         db.session.rollback()
         return None

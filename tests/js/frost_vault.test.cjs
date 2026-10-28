@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const source=fs.readFileSync('app/static/js/frost_vault.js','utf8');
-function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=false,legacy=false,health=null}={}){
+function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=false,legacy=false,health=null,auto=null}={}){
  let submit,change,poll,enabled,redirect,pending,last,requests=0,progressEvent;
  const button={disabled:false},output={textContent:'',dataset:{}},progress={hidden:true,value:0};
  const file={files:[],disabled:false,addEventListener:(_,handler)=>change=handler},filename={textContent:''};
@@ -13,8 +13,9 @@ function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=f
  button.click=()=>pending=submit({preventDefault(){}});
  if(legacy)delete form.requestSubmit;
  const state={textContent:''},total={dataset:{historyTotal:'weather_matched'},textContent:''},catalog={dataset:{historyCatalog:'documents'},textContent:''};
+ const autoState={dataset:{autoField:'state'},textContent:''},autoCount={dataset:{autoField:'archived'},textContent:''};
  const root={dataset:{statusUrl:'/status'},querySelector:s=>s==='[data-frost-upload]'?form:s==='[data-history-state]'?state:null,
-  querySelectorAll:s=>s==='[data-history-total]'?[total]:s==='[data-history-catalog]'?[catalog]:[]};
+  querySelectorAll:s=>s==='[data-auto-field]'?[autoState,autoCount]:s==='[data-history-total]'?[total]:s==='[data-history-catalog]'?[catalog]:[]};
  const window={addEventListener(){},location:{href:'https://example.test/neosubzero/frost-vault',assign:u=>redirect=u},NeoLiveUpdates:{create:o=>{
   poll=o.poll;return {setServerStatus:s=>enabled=s.auto_refresh_enabled,destroy(){}};
  }}};
@@ -26,15 +27,23 @@ function fixture({status=200,result={ok:true,document_id:12},failure=null,hold=f
   respond(code=status,payload=result){this.status=code;this.responseText=JSON.stringify(payload);this.onload();}
  }
  vm.runInNewContext(source,{document:{readyState:'complete',querySelector:()=>root},window,
-  fetch:async()=>({ok:true,json:async()=>({documents:[],history:health})}),URL,XMLHttpRequest,
+  fetch:async()=>({ok:true,json:async()=>({documents:[],history:health,auto_collection:auto})}),URL,XMLHttpRequest,
   FormData:class{constructor(){assert.equal(file.disabled,false);}},queueMicrotask});
- return {button,output,file,filename,progress,state,total,catalog,get requests(){return requests;},get enabled(){return enabled;},get redirect(){return redirect;},
+ return {button,output,file,filename,progress,state,total,catalog,autoState,autoCount,get requests(){return requests;},get enabled(){return enabled;},get redirect(){return redirect;},
   select(files){file.files=files;change();return pending;},respond:(...args)=>last.respond(...args),
   advance:event=>progressEvent(event),submit:()=>submit({preventDefault(){}}),poll:()=>poll()};
 }
 test('shared live controller is explicitly enabled',async()=>{
  const f=fixture();
  assert.equal(f.enabled,true);await f.poll();
+});
+test('autonomous collection refresh preserves failed upload selection and truthful zero counts',async()=>{
+ const auto={state:'AUTOMATIC COLLECTION ACTIVE',archived:0};
+ const f=fixture({auto,failure:'error'});await f.select([{name:'keep.csv'}]);await f.poll();
+ assert.equal(f.autoState.textContent,auto.state);assert.equal(f.autoCount.textContent,0);
+ auto.state='RESOURCE SUSPENDED';auto.archived=2;await f.poll();
+ assert.equal(f.autoState.textContent,'RESOURCE SUSPENDED');assert.equal(f.autoCount.textContent,2);
+ assert.equal(f.file.files[0].name,'keep.csv');assert.equal(f.requests,1);
 });
 
 test('historical health refresh updates text without replacing upload drafts or controls',async()=>{

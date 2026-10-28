@@ -11,7 +11,7 @@ from uuid import uuid4
 from flask import current_app, has_request_context, request
 from flask_login import current_user
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.extensions import db
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation as Observation
@@ -481,6 +481,10 @@ def schedule_delivery(app, gateway_id):
                         app.logger.warning('SubZero archive delivery deferred safely',exc_info=True)
                     from app.services.frost_documents import drain as drain_frost_documents
                     drain_frost_documents(gateway_id)
+                    from app.services.frost_auto import tick as capture_frost
+                    capture_frost(gateway_id)
+                    from app.services.frost_xchange_links import drain as link_xchange
+                    link_xchange(gateway_id)
                     # Historical weather/features are workstation-only. The
                     # live outbox retains original and operational archival work.
                 finally:
@@ -504,8 +508,9 @@ def initialize_delivery_heartbeat(app):
     def wake():
         try:
             with app.app_context():
-                from app.models import FrostDocument
-                gateways = [item[0] for item in db.session.query(FrostDocument.gateway_id).distinct().all()]
+                from app.models import FrostDocument,Gateway
+                gateways = sorted({item[0] for item in db.session.query(FrostDocument.gateway_id).distinct().all()} |
+                    {item[0] for item in db.session.query(Gateway.id).filter(func.upper(Gateway.code)=='RFD').all()})
                 db.session.remove()
                 for gateway_id in gateways:
                     schedule_delivery(app,gateway_id)

@@ -87,6 +87,8 @@ def drain(gateway_id,*,limit=2):
             row=Document.query.filter_by(id=identifier,gateway_id=gateway_id).with_for_update().one()
             row.original_key=key;row.extracted_key=extracted;row.manifest_key=manifest
             row.archived_at_utc=datetime.utcnow();row.last_error=None;row.staged_bytes=None
+            from app.services.frost_xchange_links import queue
+            row.extraction_summary=dict(row.extraction_summary,prospective_pages=queue(row,parsed))
             db.session.add(Audit(document_id=identifier,action='archive_verified',details={
                 'original_key':key,'extracted_key':extracted,'manifest_key':manifest,'sha256':row.sha256}))
             db.session.commit();delivered+=1

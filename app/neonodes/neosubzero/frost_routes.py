@@ -16,13 +16,14 @@ from app.services import frost_history as history, frost_analysis
 from app.services import frost_model as model, frost_model_registry as models
 from app.services import frost_local_backfill as backfill
 from app.services import frost_research
+from app.services import frost_auto
 
 
 @bp.before_app_request
 def frost_upload_limit():
     if request.path=='/neosubzero/frost-vault' and request.method=='POST':
         request.max_content_length=MAX_DOCUMENT_BYTES+65536
-    elif request.path=='/neosubzero/frost-vault/models' and request.method=='POST':
+    elif request.path in ('/neosubzero/frost-vault/models','/neosubzero/frost-vault/research-models') and request.method=='POST':
         request.max_content_length=model.MAX_BYTES+65536
     elif request.path=='/neosubzero/frost-vault/backfill/publish' and request.method=='POST':
         request.max_content_length=backfill.MAX_ZIP+65536
@@ -75,7 +76,7 @@ def frost_vault():
         documents=items[:50],next_before=items[49].id if len(items)>50 else None,error=error,import_message=import_message,
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
         model_status=models.status(gateway.id,before=request.args.get('models_before',type=int)),
-        research=research_status(gateway),
+        research=research_status(gateway),auto_collection=frost_auto.status(gateway.id),
         local_backfill=backfill.pending(gateway.id),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
 
@@ -99,10 +100,55 @@ def frost_forecast_validation():
 def frost_vault_status():
     gateway=authorized()
     rows=catalog(gateway).limit(100).all()
-    response=jsonify(ok=True,history=history.health(gateway.id),documents=[dict(id=row.id,archived=bool(row.archived_at_utc),error=row.last_error,
+    response=jsonify(ok=True,auto_collection=frost_auto.status(gateway.id),history=history.health(gateway.id),documents=[dict(id=row.id,archived=bool(row.archived_at_utc),error=row.last_error,
         attempts=row.attempts) for row in rows])
     response.headers['Cache-Control']='no-store'
     return response
+
+
+@bp.route('/frost-vault/research-models',methods=['POST'])
+@gateway_node_required('subzero')
+def frost_research_models():
+    gateway=authorized()
+    try:
+        upload=request.files.get('model')
+        if not upload or not upload.filename.lower().endswith('.json'):raise ValueError('Choose an exact frozen research JSON artifact.')
+        _,created=frost_auto.register_research(gateway.id,current_user.id,upload.stream.read(model.MAX_BYTES+1))
+        db.session.commit()
+        return jsonify(ok=True,message='Private research artifact verified. NOT approved or operational.' if created else 'Exact research artifact already registered. NOT approved or operational.',models=models.status(gateway.id))
+    except (ValueError,KeyError,TypeError,RuntimeError,IntegrityError) as error:
+        db.session.rollback()
+        return jsonify(ok=False,error='Concurrent research registration; reload before retrying.' if isinstance(error,IntegrityError) else str(error)),409 if isinstance(error,IntegrityError) else 503 if isinstance(error,RuntimeError) else 400
+
+
+@bp.route('/frost-vault/auto-evidence')
+@gateway_node_required('subzero')
+def frost_auto_catalog():
+    gateway=authorized();before=request.args.get('before',type=int)
+    query=FrostHistoryTask.query.filter_by(gateway_id=gateway.id,version=frost_auto.VERSION,status='ready').filter(
+        FrostHistoryTask.kind.in_(('auto_capture','xchange_page')))
+    if before:query=query.filter(FrostHistoryTask.id<before)
+    rows=query.order_by(FrostHistoryTask.id.desc()).limit(101).all()
+    response=jsonify(schema=frost_auto.VERSION,evidence=[dict(id=r.id,kind=r.kind,identity=r.identity,sha256=r.input_hash,
+        url=f'/neosubzero/frost-vault/auto-evidence/{r.id}') for r in rows[:100]],next_before=rows[99].id if len(rows)>100 else None)
+    response.headers['Cache-Control']='private, no-store'
+    return response
+
+
+@bp.route('/frost-vault/auto-evidence/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_auto_download(identifier):
+    gateway=authorized()
+    if not history.memory_allows_work():return 'Evidence transfer deferred for memory safety.',503
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,version=frost_auto.VERSION,status='ready').filter(
+        FrostHistoryTask.kind.in_(('auto_capture','xchange_page'))).first_or_404()
+    try:
+        payload=vault.read_json(row.result_key,gateway.id,max_bytes=frost_auto.MAX_SNAPSHOT)
+        if vault.digest(vault.canonical(payload))!=row.input_hash:raise ValueError('Evidence hash mismatch.')
+        response=jsonify(payload)
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        return response
+    except (ValueError,RuntimeError):return 'Evidence could not be verified; original preserved.',503
 
 
 @bp.route('/frost-vault/dataset-manifest')

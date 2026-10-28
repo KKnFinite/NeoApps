@@ -256,7 +256,13 @@ def outcome(payload, source_hash):
     """Explicit evidence only. No negative labels from missing activity."""
     schema=payload.get('schema_version'); cohort=None; label=None; confounded=False
     time_contract='explicit source offset'
-    if schema=='subzero-spray/v1' and payload.get('record_type')=='actual_fluid_application' and payload.get('activity') in ('departure','pretreat'):
+    if schema=='xchange-prospective-outcome-v1':
+        interpreted=analysis.classification(payload['reason'])
+        cohort='anticipated_pretreatment' if interpreted['activity']=='PRETREAT' else 'treatment_reason'
+        label=1 if interpreted['label']=='LIKELY FROST PRESENT' else 0 if interpreted['label']=='NON-FROST TREATMENT' else None
+        confounded=cohort=='anticipated_pretreatment';at=payload['start_utc']
+        time_contract=analysis.TIME_CONTRACT
+    elif schema=='subzero-spray/v1' and payload.get('record_type')=='actual_fluid_application' and payload.get('activity') in ('departure','pretreat'):
         from app.services.frost_analysis import classification
         # Canonical Xchange reason mapping is reused, never guessed from absence.
         interpreted=classification(payload.get('reason'))
@@ -287,6 +293,73 @@ def outcome(payload, source_hash):
     return dict(source_sha256=source_hash,source_id=payload['id'],tail=payload['tail'],at=clock.instant(at).isoformat(),
         cohort=cohort,label=label,confounded=confounded,prior_pretreat=payload.get('prior_pretreat'),time_contract=time_contract,
         context=payload,unknown=label is None)
+
+
+def refresh_auto(remote,directory):
+    """Incremental authenticated verified snapshots/pages; no production DB access."""
+    local_only();root=Path(directory);entries={};before=None
+    while True:
+        page=json.loads(remote.request('GET','/neosubzero/frost-vault/auto-evidence'+(f'?before={before}' if before else '')))
+        if page['schema']!='frost-auto-v1':raise ValueError('Unexpected autonomous evidence catalog.')
+        for entry in page['evidence']:
+            digest=entry['sha256']
+            if not re.fullmatch('[a-f0-9]{64}',digest) or not re.fullmatch(r'/neosubzero/frost-vault/auto-evidence/\d+',entry['url']):raise ValueError('Unsafe evidence reference.')
+            destination=root/'objects'/(digest+'.json')
+            if not destination.exists():
+                raw=remote.request('GET',entry['url'])
+                if len(raw)>1024*1024 or vault.digest(vault.canonical(json.loads(raw)))!=digest:raise ValueError('Autonomous evidence checksum/size mismatch.')
+                immutable(destination,json.loads(raw))
+            if vault.digest(destination.read_bytes())!=digest:raise ValueError('Local autonomous evidence changed.')
+            entries[entry['id']]=entry
+        following=page['next_before']
+        if following is None:break
+        if type(following) is not int or before is not None and following>=before:raise ValueError('Invalid evidence pagination.')
+        before=following
+    result=sealed(dict(schema='frost-auto-v1',retrieved_at_utc=utcnow().isoformat(),evidence=sorted(entries.values(),key=lambda r:r['id'])))
+    immutable(root/'catalogs'/(result['fingerprint']+'.json'),result);write_json(root/'catalog.json',result)
+    return result
+
+
+def assemble_auto(baseline_path,directory,output):
+    """Adapt verified autonomous/Xchange evidence to the existing local evaluator.
+
+    Source objects remain untouched. Derived adapters retain exact archive hashes.
+    No guessed negatives, historical features, refitting, or model activation.
+    """
+    import base64
+    local_only();root=Path(directory);frozen=baseline(baseline_path)
+    catalog=verify(read_json(root/'catalog.json'));records=[];captures=[]
+    adapted=Path(output)/'verified-adapters';entries=[]
+    for entry in catalog['evidence']:
+        raw=(root/'objects'/(entry['sha256']+'.json')).read_bytes()
+        if vault.digest(raw)!=entry['sha256']:raise ValueError('Archived evidence hash mismatch.')
+        payload=json.loads(raw)
+        if payload['schema_version' if entry['kind']=='auto_capture' else 'schema']!='frost-auto-v1':raise ValueError('Evidence contract mismatch.')
+        if entry['kind']=='xchange_page':records.extend(payload['rows']);continue
+        if entry['kind']!='auto_capture' or payload['baseline']!=frozen['fingerprint']:raise ValueError('Frozen autonomous baseline changed.')
+        source=payload['source'];clock.station(source['station']);cutoff=clock.instant(source['cutoff_at_utc'])
+        if clock.instant(payload['committed_at_utc'])<cutoff:raise ValueError('Capture commit predates acquisition.')
+        for receipt in source['sources']:
+            original=base64.b64decode(receipt['raw_base64'],validate=True)
+            if len(original)!=receipt['bytes'] or vault.digest(original)!=receipt['sha256'] or clock.instant(receipt['retrieved_at_utc'])>cutoff:raise ValueError('Original forecast evidence mismatch.')
+        if any(p['state']=='SCORED' for p in payload['predictions']):
+            raise ValueError('Native scores require LOCAL HRRR source-proof reconciliation; no unsupported scoring adapter.')
+        snapshot=sealed(dict(schema=VERSION,baseline=frozen['fingerprint'],slot=entry['identity'],
+            cutoff_at_utc=source['cutoff_at_utc'],captured_at_utc=payload['captured_at_utc'],original_capture_sha256=entry['sha256'],
+            source=dict(observations=source['observations'],forecasts=[],receipts=[]),predictions=payload['predictions']))
+        immutable(adapted/'captures'/(snapshot['fingerprint']+'.json'),snapshot)
+        immutable(adapted/'receipts'/(snapshot['fingerprint']+'.json'),dict(snapshot=snapshot['fingerprint'],committed_at_utc=payload['committed_at_utc']))
+    selected,counts=analysis.deduplicate(records)
+    for item in selected:
+        starts=[f['occurred_at_utc'] for f in item['fluids'] if f.get('occurred_at_utc')]
+        if item['requires_review'] or not starts:continue
+        payload=dict(schema_version='xchange-prospective-outcome-v1',id='xchange:'+item['source_record_id'],
+            tail=item['tail'],reason=item['reason_code'],start_utc=min(starts),source_record=item,
+            prior_pretreat=None)
+        digest=vault.digest(vault.canonical(payload));immutable(adapted/'outcomes'/'objects'/(digest+'.json'),payload)
+        entries.append(dict(source_id=payload['id'],sha256=digest,archived=True))
+    write_json(adapted/'outcomes'/'catalog.json',sealed(dict(schema=VERSION,observations=entries,source_catalog=catalog['fingerprint'],deduplication=counts)))
+    return assemble(baseline_path,adapted,adapted/'outcomes',Path(output)/'dataset')
 
 
 def night(at):
@@ -483,16 +556,19 @@ def main(argv=None):
     f=sub.add_parser('freeze');f.add_argument('--candidates',required=True);f.add_argument('--reports',required=True);f.add_argument('--output',required=True)
     c=sub.add_parser('capture');c.add_argument('--baseline',required=True);c.add_argument('--output',required=True)
     r=sub.add_parser('refresh-outcomes');r.add_argument('--origin',required=True);r.add_argument('--email',required=True);r.add_argument('--output',required=True)
+    r=sub.add_parser('refresh-auto');r.add_argument('--origin',required=True);r.add_argument('--email',required=True);r.add_argument('--output',required=True)
+    a=sub.add_parser('assemble-auto');a.add_argument('--baseline',required=True);a.add_argument('--evidence',required=True);a.add_argument('--output',required=True)
     a=sub.add_parser('assemble');a.add_argument('--baseline',required=True);a.add_argument('--captures',required=True);a.add_argument('--outcomes',required=True);a.add_argument('--output',required=True)
     e=sub.add_parser('evaluate');e.add_argument('--dataset',required=True);e.add_argument('--output',required=True)
     s=sub.add_parser('scheduler-xml');s.add_argument('--baseline',required=True);s.add_argument('--output',required=True);s.add_argument('--xml',required=True);s.add_argument('--user',required=True)
     args=p.parse_args(argv);local_only()
     if args.command=='freeze': result=freeze(args.candidates,args.reports,args.output)
     elif args.command=='capture': result=capture(args.baseline,args.output)
-    elif args.command=='refresh-outcomes':
+    elif args.command in ('refresh-outcomes','refresh-auto'):
         remote=Remote(args.origin,args.email)
-        try: result=refresh_outcomes(remote,args.output)
+        try: result=(refresh_auto if args.command=='refresh-auto' else refresh_outcomes)(remote,args.output)
         finally: remote.close()
+    elif args.command=='assemble-auto':result=assemble_auto(args.baseline,args.evidence,args.output)
     elif args.command=='assemble': result=assemble(args.baseline,args.captures,args.outcomes,args.output)
     elif args.command=='evaluate': result=evaluate(read_json(args.dataset),args.output)
     else: result=scheduler_xml(args.baseline,args.output,args.xml,user=args.user)

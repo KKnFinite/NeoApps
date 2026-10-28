@@ -1,0 +1,21 @@
+<section class="frost-research frost-model-admin" aria-labelledby="frost-auto-title">
+    <h2 id="frost-auto-title">AUTO COLLECTION</h2>
+    <p><strong data-auto-field="state">{{ auto_collection.state }}</strong></p>
+    <p>Hourly UTC slots on the existing NeoApps delivery heartbeat. No workstation, browser, active sort or nightly SubZero entry is required. Service outages and resource suspensions are recorded, not backfilled as forecasts.</p>
+    <dl class="frost-auto-metrics">
+        {% for key,label in [('last_attempt','Last attempt (UTC)'),('last_success','Last capture (UTC)'),('last_archive','Last off-site verified (UTC)'),('next_capture','Next hourly slot (UTC)'),('missed','Missed intervals'),('failed','Failed intervals'),('pending','Pending/retrying intervals'),('archived','Verified snapshots'),('scored','Research scores'),('unavailable','Unavailable model inputs'),('research_models','Private frozen models registered'),('xchange_matches','Xchange RecordIDs linked to forecasts'),('awaiting_outcomes','Forecast periods awaiting Xchange evidence')] %}
+        <div><dt>{{ label }}</dt><dd data-auto-field="{{ key }}">{{ auto_collection[key] if auto_collection[key] is not none else 'Not yet' }}</dd></div>
+        {% endfor %}
+    </dl>
+    <p>Resource suspension: <span data-auto-field="resource_reason">{{ auto_collection.resource_reason or 'None reported' }}</span></p>
+    <p data-auto-field="source_quality">{{ auto_collection.source_quality }}</p>
+    <p>RESEARCH MODELS — NOT OPERATIONALLY APPROVED. {{ auto_collection.source_limit }}</p>
+    <p>{{ auto_collection.limitation }} Later CSV uploads are linked by actual Central-calendar spray START, never upload time. A forecast link without a compatible score is evidence coverage, not successful model validation.</p>
+    <details><summary>REGISTER EXACT FROZEN RESEARCH JSON</summary>
+        <p>Only the eight hash-pinned Phase 12 artifacts are accepted, at most 256 KiB each. This private research registry cannot approve a model or activate DUCC warnings.</p>
+        <form method="post" action="{{ url_for('neosubzero.frost_research_models') }}" enctype="multipart/form-data" data-model-form>
+            <input required type="file" name="model" accept=".json,application/json" aria-label="Frozen research JSON">
+            <button type="submit">REGISTER RESEARCH ARTIFACT</button><output role="status" aria-live="polite"></output>
+        </form>
+    </details>
+</section>
