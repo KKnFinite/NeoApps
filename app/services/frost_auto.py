@@ -20,6 +20,7 @@ from app.services import frost_history as jobs, frost_vault as vault
 from app.services import frost_forecast as clock, frost_forecast_native as native
 from app.services import frost_research, frost_model as model, frost_analysis as analysis
 from app.services.memory_diagnostics import memory_diagnostics
+from app.services import frost_resources as priority
 
 VERSION='frost-auto-v1'
 MAX_SNAPSHOT=1024*1024
@@ -58,6 +59,7 @@ def unpack(value):
 
 def fetch(url, maximum):
     """One bounded request, closed response; job-level retry, never hidden loops."""
+    priority.checkpoint()
     allowed=(url=='https://aviationweather.gov/api/data/metar?ids=KRFD&format=json&hours=14' or
         url=='https://api.weather.gov/points/42.1915,-89.0876' or
         re.fullmatch(r'https://api.weather.gov/gridpoints/LOT/\d+,\d+',url))
@@ -98,6 +100,7 @@ def acquire():
     if has_app_context() and current_app.config.get('FROST_AUTO_HRRR',True) and getattr(g,'frost_capture_gateway',None):
         from app.services import frost_hrrr_point as hrrr
         def guarded():
+            priority.checkpoint()
             budget=jobs.memory_budget()
             if budget['usage'] is not None:
                 resources['container_sample_peak_bytes']=max(resources.get('container_sample_peak_bytes',0),budget['usage'])
@@ -164,7 +167,12 @@ def register_research(gateway_id,actor_id,raw):
 
 def predictions(gateway_id,source):
     cutoff=clock.instant(source['cutoff_at_utc']);result=[]
+    # Detach compact keys and release the read transaction before private I/O.
+    registered=dict(db.session.query(Task.version,Task.source_key).filter_by(
+        gateway_id=gateway_id,kind='research_model',status='ready').all())
+    db.session.rollback()
     for entry in frozen_models():
+        deferred=priority.reason()
         h=entry['hours'];target=cutoff+timedelta(hours=h)
         value=dict(model_version=entry['model_version'],model_sha256=entry['sha256'],hours=h,threshold=.5,
             target=native.TARGET,target_at_utc=stamp(target),state='UNAVAILABLE',score=None,classification=None,
@@ -172,8 +180,10 @@ def predictions(gateway_id,source):
         if not source.get('native_forecasts'):
             value['reason']=source.get('native_unavailable','Compatible native forecast evidence unavailable.')
         else:
-            row=Task.query.filter_by(gateway_id=gateway_id,kind='research_model',version=entry['model_version'],status='ready').one_or_none()
-            if row is None:value['reason']='Exact frozen research artifact has not been privately registered.'
+            key=registered.get(entry['model_version'])
+            if key is None:value['reason']='Exact frozen research artifact has not been privately registered.'
+            elif deferred:value['reason']='Research scoring deferred: '+deferred
+            elif not jobs.memory_allows_work():value['reason']='Research scoring deferred for memory safety.'
             else:
                 try:
                     vector=native.build(source['observations'],[s for s in source['native_forecasts'] if clock.instant(s['valid_at_utc'])<=target],
@@ -184,8 +194,12 @@ def predictions(gateway_id,source):
                 if not vector['core_available'] or analysis.features(stamp(cutoff),source['observations'])['incomplete_window']:
                     value['reason']='Missing/stale core inputs or incomplete preceding observation window.'
                 else:
-                    artifact=vault.read_json(row.source_key,gateway_id,max_bytes=model.MAX_BYTES)
+                    artifact=vault.read_json(key,gateway_id,max_bytes=model.MAX_BYTES)
                     if vault.digest(vault.canonical(artifact))!=entry['sha256']:raise ValueError('Research model hash mismatch.')
+                    deferred=priority.reason()
+                    if deferred or not jobs.memory_allows_work():
+                        value['reason']='Research scoring deferred: '+(deferred or 'memory safety')
+                        result.append(value);continue
                     score=model.score_vector(artifact,vector['features'],len(native.FEATURES))
                     value.update(state='SCORED',score=score,classification=score>=.5,vector=vector)
         result.append(value)
@@ -229,14 +243,17 @@ def tick(gateway_id):
         if row is None:
             row=current_row
         if row.status in ('ready','failed','missed') or row.retry_at>naive(now()):db.session.rollback();return 0
-        if not jobs.memory_allows_work():
+        resource_reason=priority.reason()
+        if not resource_reason and not jobs.memory_allows_work():
             # Pools are closed by their owners; reclaim unreachable cyclic
             # graphs before deciding whether this due slot must suspend. The
             # exact same container threshold/headroom check still decides.
             gc.collect()
-        if not jobs.memory_allows_work():
-            ctrl.summary=dict(ctrl.summary or {},last_attempt_utc=stamp(now()),resource_suspended_at_utc=stamp(now()),resource_reason='75% / 128 MiB headroom protection')
-            row.retry_at=naive(now()+timedelta(minutes=5));row.last_error='Capture deferred for memory safety.'
+        if resource_reason or not jobs.memory_allows_work():
+            why=resource_reason or '75% / 128 MiB headroom protection'
+            ctrl.summary=dict(ctrl.summary or {},last_attempt_utc=stamp(now()),resource_suspended_at_utc=stamp(now()),resource_reason=why)
+            row.summary=dict(row.summary or {},resource_deferrals=(row.summary or {}).get('resource_deferrals',0)+1,last_resource_reason=why)
+            row.retry_at=naive(now()+timedelta(minutes=1 if resource_reason else 5));row.last_error='Capture deferred: '+why
             db.session.commit();return 0
         queued=Task.query.filter_by(gateway_id=gateway_id,kind='auto_capture',version=VERSION).filter(Task.status.in_(('staged','archive_retry'))).count()
         if queued>=2 and row.status not in ('staged','archive_retry'):
@@ -252,6 +269,7 @@ def tick(gateway_id):
                 if row.identity!=identity(current):raise ValueError('Old slot has no committed evidence; never manufacture a historical capture.')
                 # Request-local gateway context, not mutable application config.
                 g.frost_capture_gateway=gateway_id
+                db.session.rollback()  # No read transaction spanning weather acquisition.
                 try:
                     with vault.transport_scope():
                         source=acquire()
@@ -267,7 +285,9 @@ def tick(gateway_id):
                     approved=False,operationally_validated=False,physical_frost_probability=False)
                 locked=Task.query.filter_by(id=identifier).with_for_update().one()
                 if locked.lease_token!=lease:db.session.rollback();return 0
-                locked.summary=dict(staged=pack(payload),captured_at_utc=payload['captured_at_utc'],
+                locked.summary=dict(resource_deferrals=(locked.summary or {}).get('resource_deferrals',0),
+                    last_resource_reason=(locked.summary or {}).get('last_resource_reason'),
+                    staged=pack(payload),captured_at_utc=payload['captured_at_utc'],
                     committed_at_utc=payload['committed_at_utc'],cutoff_at_utc=source['cutoff_at_utc'],
                     source_errors=source.get('errors',[]),nws_horizons=len(source.get('nws_forecasts',[])),
                     scored_hours=sorted({p['hours'] for p in scores if p['state']=='SCORED'}),scored=sum(p['state']=='SCORED' for p in scores),
@@ -284,15 +304,19 @@ def tick(gateway_id):
                 locked.summary=dict(locked.summary,staged=pack(payload),committed_at_utc=payload['committed_at_utc'])
                 locked.input_hash=vault.digest(vault.canonical(payload));db.session.commit()
                 row=db.session.get(Task,identifier)
-            if not jobs.memory_allows_work():
+            delivery_reason=priority.reason()
+            if delivery_reason or not jobs.memory_allows_work():
                 ctrl=db.session.get(Task,ctrl.id)
-                ctrl.summary=dict(ctrl.summary or {},resource_suspended_at_utc=stamp(now()),resource_reason='75% / 128 MiB headroom protection')
+                ctrl.summary=dict(ctrl.summary or {},resource_suspended_at_utc=stamp(now()),resource_reason=delivery_reason or '75% / 128 MiB headroom protection')
                 db.session.commit()
+                if delivery_reason:raise priority.Deferred(delivery_reason)
                 raise RuntimeError('Private delivery deferred for memory safety; committed evidence retained.')
             with vault.transport_scope():
-                key=vault.put_json('weather',gateway_id,'auto-'+row.identity,payload)
-                if vault.digest(vault.canonical(vault.read_json(key,gateway_id,max_bytes=MAX_SNAPSHOT)))!=row.input_hash:raise ValueError('Capture read-back checksum mismatch.')
-            summary={k:v for k,v in row.summary.items() if k!='staged'}
+                capture_identity,digest=row.identity,row.input_hash
+                summary={k:v for k,v in row.summary.items() if k!='staged'}
+                db.session.rollback()
+                key=vault.put_json('weather',gateway_id,'auto-'+capture_identity,payload)
+                if vault.digest(vault.canonical(vault.read_json(key,gateway_id,max_bytes=MAX_SNAPSHOT)))!=digest:raise ValueError('Capture read-back checksum mismatch.')
             summary['archive_verified_at_utc']=stamp(now())
             if not jobs.finish(identifier,lease,status='ready',source_key=key,result_key=key,summary=summary):return 0
             ctrl=db.session.get(Task,ctrl.id);ctrl.summary=dict(ctrl.summary or {},last_success_utc=payload['captured_at_utc'],last_archive_utc=stamp(now()),
@@ -306,9 +330,13 @@ def tick(gateway_id):
             db.session.rollback();row=Task.query.filter_by(id=identifier).with_for_update().one()
             if row.lease_token==lease:
                 staged=bool((row.summary or {}).get('staged'))
+                contention=isinstance(error,priority.Deferred)
+                if contention:
+                    row.attempts=max(0,row.attempts-1)
+                    row.summary=dict(row.summary or {},resource_deferrals=(row.summary or {}).get('resource_deferrals',0)+1,last_resource_reason=str(error))
                 row.status='archive_retry' if staged else 'failed' if row.attempts>=3 else 'retry'
-                row.retry_at=naive(now()+timedelta(seconds=min(3600,60*2**min(row.attempts,6))))
-                row.lease_token=None;row.last_error=type(error).__name__+': acquisition/archive deferred; no success claimed.'
+                row.retry_at=naive(now()+timedelta(seconds=60 if contention else min(3600,60*2**min(row.attempts,6))))
+                row.lease_token=None;row.last_error=str(error) if contention else type(error).__name__+': acquisition/archive deferred; no success claimed.'
                 row.updated_at=naive(now());db.session.commit()
             current_app.logger.warning('FROST autonomous capture deferred slot=%s error=%s',row.identity,type(error).__name__)
             return 0
@@ -327,6 +355,7 @@ def status(gateway_id):
         Task.kind=='auto_capture',Task.version==VERSION,Task.status=='ready').one()
     missed_gaps=db.session.query(func.coalesce(func.sum(Task.summary['intervals'].as_integer()),0)).filter(
         Task.gateway_id==gateway_id,Task.kind=='auto_gap',Task.version==VERSION).scalar()
+    recent=recent_captures(gateway_id)
     last=summary.get('last_archive_utc');active=bool(is_enabled and last and not summary.get('resource_suspended_at_utc') and now()-clock.instant(last)<timedelta(hours=2))
     matched_captures=db.session.query(func.count(func.distinct(Task.summary['capture_id'].as_integer()))).filter(
         Task.gateway_id==gateway_id,Task.kind=='auto_match',Task.version==VERSION,Task.status=='active').scalar()
@@ -336,10 +365,23 @@ def status(gateway_id):
         next_capture=stamp(slot(now())+timedelta(hours=1)),archived=counts.get('ready',0),failed=counts.get('failed',0),
         missed=int(missed_gaps or 0)+counts.get('missed',0),pending=sum(n for key,n in counts.items() if key not in ('ready','failed','missed')),
         scored=int(totals[0]),unavailable=int(totals[1]),resource_suspended=bool(summary.get('resource_suspended_at_utc')),
-        resource_reason=summary.get('resource_reason'),
+        resource_reason=summary.get('resource_reason'),recent=recent,
         source_quality='; '.join(summary.get('source_errors',[])) or f"Latest capture: {summary.get('nws_horizons',0)} issued NWS target horizons retained",
         xchange_matches=outcome_query.filter_by(status='matched').count(),
         awaiting_outcomes=max(0,counts.get('ready',0)-int(matched_captures or 0)),
         outcome_records=outcome_query.count(),research_models=Task.query.filter_by(gateway_id=gateway_id,kind='research_model',status='ready').count(),
         source_limit='METAR/SPECI + issued NWS grid evidence; bounded HRRR KRFD chunks when verified and memory-safe. Exact frozen-model registration and complete native inputs are required for research scoring.',
         limitation='No Xchange record means UNKNOWN. Matched RecordIDs are not independent physical-frost observations; substantial evaluation stays LOCAL.')
+
+
+def recent_captures(gateway_id):
+    """24 compact index entries only; never fetch private weather on page load."""
+    rows=Task.query.filter_by(gateway_id=gateway_id,kind='auto_capture',version=VERSION).order_by(Task.identity.desc()).limit(24).all()
+    identifiers=[r.id for r in rows]
+    matches=dict(db.session.query(Task.summary['capture_id'].as_integer(),func.count(Task.id)).filter(
+        Task.gateway_id==gateway_id,Task.kind=='auto_match',Task.version==VERSION,Task.status=='active',
+        Task.summary['capture_id'].as_integer().in_(identifiers)).group_by(Task.summary['capture_id'].as_integer()).all()) if identifiers else {}
+    return [dict(id=r.id,slot=r.identity,state=r.status,scored=(r.summary or {}).get('scored',0),
+        unavailable=(r.summary or {}).get('unavailable',0),verified=(r.summary or {}).get('archive_verified_at_utc'),
+        deferrals=(r.summary or {}).get('resource_deferrals',0),error=r.last_error,
+        quality=(r.summary or {}).get('source_errors',[]),matches=matches.get(r.id,0)) for r in rows]

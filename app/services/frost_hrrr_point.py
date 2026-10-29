@@ -41,13 +41,14 @@ def memory_available():
         budget['limit']-budget['usage']>=128*1024**2+RESERVE)
 
 
-def numbers(raw,meta,indices):
+def numbers(raw,meta,indices,*,guard=None):
     """Blosc1/LZ4 byte-shuffle subset. Reject other codecs/filters, never pickle.
 
     Header/block layout: Blosc/c-blosc README_CHUNK_FORMAT.rst and blosc_d.
     Decode at most one <=1 MiB block at a time; read requested shuffled scalars
     directly instead of constructing the 18/48 x 150 x 150 scientific array.
     """
+    if guard and not guard():raise RuntimeError('HRRR decoding deferred for resource protection.')
     dtype=meta['dtype'];formats={'<f2':'e','<f4':'f','<f8':'d','<i8':'q'}
     if dtype not in formats or meta['order']!='C' or meta.get('filters'):raise ValueError('Unsupported HRRR array.')
     size=struct.calcsize(formats[dtype]);expected=math.prod(meta['chunks'] or [1])*size
@@ -68,6 +69,7 @@ def numbers(raw,meta,indices):
     if table_end>len(raw):raise ValueError('Truncated HRRR block table.')
     from lz4.block import decompress
     for block in sorted({i*size//blocksize for i in indices}):
+        if guard and not guard():raise RuntimeError('HRRR decoding deferred for resource protection.')
         length=min(blocksize,nbytes-block*blocksize)
         pos=struct.unpack_from('<I',raw,16+4*block)[0]
         if not table_end<=pos<len(raw):raise ValueError('Invalid HRRR block offset.')
@@ -136,6 +138,7 @@ class Source:
             if response.headers.get('Content-Encoding') not in (None,'identity'):raise ValueError('Unexpected HRRR HTTP encoding.')
             if not head:
                 while True:
+                    if not self.guard():raise RuntimeError('HRRR transfer deferred for resource protection.')
                     if time.monotonic()>self.deadline:raise TimeoutError('HRRR transfer deadline exceeded.')
                     part=response.read1(min(65536,maximum+1-length))
                     if not part:break
@@ -166,7 +169,7 @@ def read_point(client,cycle,hours):
         definition=meta[level+'/'+name+'/.zarray'];attrs=meta[level+'/'+name+'/.zattrs']
         if (attrs.get('units') or GRIB_UNITS.get(tuple(attrs.get('GRIB_PARAM',[]))))!=unit:raise ValueError('HRRR units changed: '+name)
         if definition['chunks'][1:]!=[150,150] or definition['shape'][1:]!=[1059,1799] or not 1<=definition['chunks'][0]<=48 or definition['shape'][0]!=definition['chunks'][0]:raise ValueError('HRRR grid changed.')
-        def values(key,indices):return numbers(client.get(root+'/'+key+'/0')[0],meta[key+'/.zarray'],indices)
+        def values(key,indices):return numbers(client.get(root+'/'+key+'/0')[0],meta[key+'/.zarray'],indices,guard=getattr(client,'guard',None))
         n=definition['chunks'][0]
         periods=values('forecast_period',list(range(n)))
         if meta['forecast_period/.zattrs']['units']!='hours' or periods!=list(range(1,n+1)):raise ValueError('HRRR periods changed.')
@@ -190,7 +193,7 @@ def read_point(client,cycle,hours):
             if error.code not in (403,404):raise
             missing.append(dict(variable=name,http_status=error.code));continue
         offsets=[(h-1)*22500+77*150+80 for h in hours]
-        data=numbers(raw,definition,offsets)
+        data=numbers(raw,definition,offsets,guard=getattr(client,'guard',None))
         series[name]=[value if math.isfinite(value) and value!=definition.get('fill_value') else None for value in data]
     point=dict(schema=VERSION,cycle_at_utc=cycle.isoformat(),station=weather.STATION,point=POINT,
         forecast_hours=hours,series=series,missing=missing,source_receipts=sorted(client.receipts,key=lambda r:(r['method'],r['url'])))
@@ -220,6 +223,10 @@ def collect(client,cutoff):
         availability[h]=available.isoformat()
     class Reader:
         receipts=client.receipts
+        @staticmethod
+        def guard():
+            check=getattr(client,'guard',None)
+            return check() if check else True
         def get(self,url):return preflight[1] if url==preflight[0] else client.get(url)
     point=read_point(Reader(),cycle,hours)
     if not point['series'].get('TMP') or not point['series'].get('DPT') or all(v is None for v in point['series']['TMP']) or all(v is None for v in point['series']['DPT']):

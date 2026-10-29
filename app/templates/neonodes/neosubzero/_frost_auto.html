@@ -7,7 +7,7 @@
         <div><dt>{{ label }}</dt><dd data-auto-field="{{ key }}">{{ auto_collection[key] if auto_collection[key] is not none else 'Not yet' }}</dd></div>
         {% endfor %}
     </dl>
-    <p>Resource suspension: <span data-auto-field="resource_reason">{{ auto_collection.resource_reason or 'None reported' }}</span></p>
+    <p>General capture suspension: <span data-auto-field="resource_reason">{{ auto_collection.resource_reason or 'None reported' }}</span>. HRRR can separately defer under its stricter reserve; see source status below.</p>
     <p data-auto-field="source_quality">{{ auto_collection.source_quality }}</p>
     <p>RESEARCH ONLY — TREATMENT-REASON MODEL. RESEARCH MODELS — NOT OPERATIONALLY APPROVED. {{ auto_collection.source_limit }}</p>
     <p>{{ auto_collection.limitation }} Later CSV uploads are linked by actual Central-calendar spray START, never upload time. A forecast link without a compatible score is evidence coverage, not successful model validation.</p>

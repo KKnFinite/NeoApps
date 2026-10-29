@@ -1,0 +1,18 @@
+<section class="frost-research" aria-labelledby="frost-predictions-title" data-frost-predictions>
+    <h2 id="frost-predictions-title">RESEARCH PREDICTIONS</h2>
+    <p><strong>EXPERIMENTAL — FROST TREATMENT-REASON RESEARCH</strong></p>
+    <p>COLLECTING PREDICTIONS · Accuracy validation awaits credible outcomes. H0 recognizes current conditions; H1 / H3 / H6 are research warning horizons. Scores are not physical frost probabilities.</p>
+    <details><summary>RECENT HOURLY COVERAGE · {{ auto_collection.recent|length }} slots</summary>
+        <div class="frost-capture-list">
+        {% for item in auto_collection.recent %}
+            <article><strong>{{ item.slot }} UTC</strong> · {{ item.state|upper }} · {{ item.scored }} scores · {{ item.unavailable }} unavailable · {{ item.deferrals }} resource deferrals
+            <span>{{ item.matches }} treatment links{% if not item.matches %} · OUTCOME UNKNOWN{% endif %}</span>
+            {% if item.error %}<span>{{ item.error }}</span>{% endif %}
+            {% for error in item.quality %}<span>{{ error }}</span>{% endfor %}
+            {% if item.state == 'ready' and item.verified %}<button type="button" data-prediction-url="{{ url_for('neosubzero.frost_auto_download',identifier=item.id) }}">VIEW {{ item.slot }}</button>{% endif %}</article>
+        {% else %}<p>No capture evidence recorded.</p>{% endfor %}
+        </div>
+    </details>
+    <output data-prediction-feedback role="status" aria-live="polite"></output>
+    <div data-prediction-content></div>
+</section>

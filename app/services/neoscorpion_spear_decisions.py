@@ -484,6 +484,9 @@ def schedule_delivery(app, gateway_id):
                     drain_frost_documents(gateway_id)
                     from app.services.frost_auto import tick as capture_frost
                     capture_frost(gateway_id)
+                    from app.services.frost_resources import reason as research_deferred
+                    if research_deferred():
+                        return  # Existing next heartbeat retries optional correlation.
                     from app.services.frost_xchange_links import drain as link_xchange
                     link_xchange(gateway_id)
                     from app.services.frost_departures import drain as reconcile_departures

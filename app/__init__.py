@@ -80,6 +80,8 @@ def create_app(config_class=Config, auto_bootstrap=False):
         maybe_auto_bootstrap_database(app)
     initialize_auth_rate_limit_storage(app)
     register_liveness(app)
+    from app.services.frost_resources import initialize as initialize_frost_priority
+    initialize_frost_priority(app)
     app.before_request(enforce_live_refresh_request_cadence)
     register_pwa_assets(app)
     register_blueprints(app)
