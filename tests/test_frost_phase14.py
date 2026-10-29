@@ -133,6 +133,27 @@ class DecoderTest(unittest.TestCase):
             for raw in bodies.values():(root/(vault.digest(raw)+'.source')).write_bytes(raw)
             study.verify_auto_hrrr(folder,dict(native_point=point,native_forecasts=forecasts),at)
 
+    def test_only_one_older_cycle_on_verified_derivative_publication_gap(self):
+        from urllib.error import HTTPError
+        at=datetime.now(timezone.utc);_,_,bodies=native_fixture(at-timedelta(hours=1))
+        class Client:
+            receipts=[];calls=0
+            def get(self,url,head=False):
+                self.calls+=1
+                if not head and url not in bodies:raise HTTPError(url,404,'Not yet published',{},None)
+                raw=b'' if head else bodies[url]
+                r=dict(url=url,method='HEAD' if head else 'GET',bytes=len(raw),sha256=vault.digest(raw),retrieved_at_utc=at.isoformat(),
+                    last_modified=(at-timedelta(hours=1)).strftime('%a, %d %b %Y %H:%M:%S GMT'))
+                self.receipts.append(r);return raw,r
+        client=Client();point,forecasts=light.collect(client,at)
+        self.assertLessEqual(client.calls,80)
+        self.assertEqual(study.clock.instant(point['cycle_at_utc']),at.replace(minute=0,second=0,microsecond=0)-timedelta(hours=3))
+        self.assertIsNotNone(forecasts[-1]['values']['temperature_c'])
+        self.assertTrue(all(study.clock.instant(f['available_by_utc'])<=at for f in forecasts))
+        empty=Client()
+        with patch.object(empty,'get',side_effect=HTTPError('source',404,'Unavailable',{},None)):
+            with self.assertRaisesRegex(ValueError,'Both recent'):light.collect(empty,at)
+
 
 class RegistrationTest(unittest.TestCase):
     def test_cli_preflights_all_before_upload_and_exact_idempotent_requests(self):

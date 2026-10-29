@@ -193,14 +193,23 @@ def read_point(client,cycle,hours):
         data=numbers(raw,definition,offsets)
         series[name]=[value if math.isfinite(value) and value!=definition.get('fill_value') else None for value in data]
     point=dict(schema=VERSION,cycle_at_utc=cycle.isoformat(),station=weather.STATION,point=POINT,
-        forecast_hours=hours,series=series,missing=missing,source_receipts=client.receipts)
+        forecast_hours=hours,series=series,missing=missing,source_receipts=sorted(client.receipts,key=lambda r:(r['method'],r['url'])))
     point['fingerprint']=vault.digest(vault.canonical(point))
     return point
 
 
 def collect(client,cutoff):
-    # The last fully disseminated run; no probing many cycles or old archives.
+    # The derivative archive may lag NOAA dissemination. Probe exactly two
+    # adjacent recent runs, never scan history or use a different provider.
     cycle=cutoff.replace(minute=0,second=0,microsecond=0)-timedelta(hours=2)
+    preflight=None
+    for attempt in range(2):
+        url='https://hrrrzarr.s3.amazonaws.com/'+cycle.strftime('sfc/%Y%m%d/%Y%m%d_%Hz_fcst.zarr/2m_above_ground/TMP/.zmetadata')
+        try:preflight=(url,client.get(url));break
+        except HTTPError as error:
+            if error.code not in (403,404):raise
+            if attempt:raise ValueError('Both recent HRRR chunk cycles are unpublished/unavailable.') from error
+            cycle-=timedelta(hours=1)
     last=int(((cutoff+timedelta(hours=6)).replace(minute=0,second=0,microsecond=0)-cycle).total_seconds()/3600)
     hours=list(range(1,last+1));availability={}
     for h in hours:
@@ -209,7 +218,12 @@ def collect(client,cutoff):
         available=parsedate_to_datetime(receipt['last_modified'])
         if available.tzinfo is None or not cycle<=available<=cutoff:raise ValueError('HRRR original object was unavailable at cutoff.')
         availability[h]=available.isoformat()
-    point=read_point(client,cycle,hours)
+    class Reader:
+        receipts=client.receipts
+        def get(self,url):return preflight[1] if url==preflight[0] else client.get(url)
+    point=read_point(Reader(),cycle,hours)
+    if not point['series'].get('TMP') or not point['series'].get('DPT') or all(v is None for v in point['series']['TMP']) or all(v is None for v in point['series']['DPT']):
+        raise ValueError('HRRR core temperature/dew point unavailable; no native scoring inputs.')
     forecasts=[dict(station=weather.STATION,cycle_at_utc=cycle.isoformat(),issued_at_utc=None,
         available_by_utc=availability[h],availability_basis='NOAA_original_object_Last-Modified',
         valid_at_utc=(cycle+timedelta(hours=h)).isoformat(),source_sha256=point['fingerprint'],values=normalized(point,h)) for h in hours]
