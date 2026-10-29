@@ -719,7 +719,10 @@ def _require_r2_config(source=None):
 def _r2_client(config):
     import boto3
     from botocore.config import Config
-    return boto3.client("s3", endpoint_url=config["endpoint"], region_name=config["region"], aws_access_key_id=config["access_key"], aws_secret_access_key=config["secret_key"], config=Config(
+    # A bounded owner closes this client. Do not also pin its parsed service
+    # models in boto3's process-global DEFAULT_SESSION after that owner exits.
+    # Explicit credentials, transport limits and signing remain identical.
+    return boto3.session.Session().client("s3", endpoint_url=config["endpoint"], region_name=config["region"], aws_access_key_id=config["access_key"], aws_secret_access_key=config["secret_key"], config=Config(
         signature_version="s3v4",
         connect_timeout=VAULT_CONNECT_TIMEOUT_SECONDS,
         read_timeout=VAULT_READ_TIMEOUT_SECONDS,

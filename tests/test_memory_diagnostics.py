@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
@@ -6,6 +8,7 @@ from app.services.memory_diagnostics import (
     clear_memory_diagnostic_samples,
     observe_process_memory,
     record_process_memory_checkpoint,
+    container_memory_snapshot,
 )
 
 
@@ -121,3 +124,19 @@ class MemoryDiagnosticsTest(unittest.TestCase):
 
         snapshots.assert_called_once()
         self.assertEqual(emit.call_count, 1)
+
+    def test_process_breakdown_reports_pss_threads_and_anonymous_not_secrets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);group=root/'group';group.mkdir();proc=root/'proc';proc.mkdir()
+            (group/'memory.current').write_text('300000000')
+            (group/'memory.max').write_text('536870912')
+            (group/'memory.stat').write_text('anon 200000000\nfile 50000000\nkernel 50000000\n')
+            process=proc/'123';process.mkdir()
+            (process/'status').write_text('Name:\tgunicorn\nPPid:\t1\nVmRSS:\t100 kB\nThreads:\t3\n')
+            (process/'smaps_rollup').write_text('Pss:\t75 kB\nAnonymous:\t60 kB\nPrivate_Dirty:\t50 kB\nShared_Dirty:\t10 kB\nSwap:\t0 kB\n')
+            (process/'environ').write_text('MUST_NOT_READ=secret')
+            value=container_memory_snapshot(group,proc)
+        self.assertEqual(value['processes'],[dict(pid=123,ppid=1,rss_bytes=102400,name='gunicorn',threads=3,
+            pss_bytes=76800,anonymous_bytes=61440,private_dirty_bytes=51200,shared_dirty_bytes=10240,swap_bytes=0)])
+        self.assertEqual(value['usage_bytes'],300000000)
+        self.assertNotIn('secret',str(value))

@@ -348,8 +348,10 @@ class SpearVaultR2Test(unittest.TestCase):
                 archive_calibration_review(self.review, gateway=self.gateway, operation=self.operation, user=self.user, learning_capture_enabled=False, _config=CONFIG)
 
     def test_actual_botocore_config_has_timeouts_and_one_total_attempt(self):
-        with patch('boto3.client') as create:
+        with patch('boto3.session.Session') as session,patch('boto3.client') as global_client:
+            create=session.return_value.client
             vault._r2_client(vault._vault_config(CONFIG))
+        session.assert_called_once_with();global_client.assert_not_called()
         config = create.call_args.kwargs['config']
         self.assertEqual(config.connect_timeout, 5)
         self.assertEqual(config.read_timeout, 10)

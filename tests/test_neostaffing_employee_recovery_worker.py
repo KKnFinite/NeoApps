@@ -1,5 +1,6 @@
 """Expiry scheduling is independent of user traffic and survives process restart."""
 import unittest
+import os
 from datetime import timedelta
 from unittest.mock import patch
 from app.extensions import db
@@ -46,6 +47,29 @@ class RecoveryWorkerTest(unittest.TestCase):
         self.assertEqual(db.session.get(Backup,bid).state,'purged')
         self.assertIsNone(db.session.get(Backup,bid).encrypted_payload)
 
+    def test_database_outage_rolls_back_removes_session_and_retries(self):
+        targets=[];delays=[]
+        class Wake:
+            def wait(self,delay):
+                delays.append(delay)
+                if len(delays)>2:raise StopIteration()
+            def clear(self):pass
+        class Thread:
+            def __init__(self,**kwargs):targets.append(kwargs['target'])
+            def start(self):pass
+        self.app.testing=False
+        try:
+            with patch.object(worker,'Thread',Thread),patch.object(worker,'Event',Wake),\
+                patch.object(recovery,'purge_expired',side_effect=[OSError('isolated outage'),0]) as purge,\
+                patch.object(db.session,'rollback',wraps=db.session.rollback) as rollback,\
+                patch.object(db.session,'remove',wraps=db.session.remove) as remove:
+                worker.start_recovery_worker(self.app)
+                with self.assertRaises(StopIteration):targets[0]()
+                self.assertEqual(delays,[10,30,60]);self.assertEqual(purge.call_count,2)
+                self.assertEqual(rollback.call_count,1);self.assertGreaterEqual(remove.call_count,2)
+        finally:
+            self.app.testing=True;self.app.extensions.pop('employee_recovery_worker',None)
+
     def test_one_failed_file_does_not_block_other_expired_backups(self):
         self.fixture.signed_record();first=self.fixture.delete();first_id=first.id;expires=first.expires_at
         self.fixture.pid=self.fixture.fixture.peer.id
@@ -57,3 +81,12 @@ class RecoveryWorkerTest(unittest.TestCase):
         self.assertEqual(db.session.get(Backup,second_id).state,'purged')
         self.fixture.files.fail=False
         self.assertEqual(recovery.purge_expired(at=at,isolated=True),1);db.session.commit()
+
+
+@unittest.skipUnless(os.environ.get('NEOSTAFFING_TEST_POSTGRES_URL'),'Requires disposable loopback PostgreSQL')
+class RecoveryWorkerPostgresTest(RecoveryWorkerTest):
+    def setUp(self):
+        from tests.test_neostaffing_employee_recovery_postgres import EmployeeRecoveryPostgresTest
+        self.fixture=EmployeeRecoveryPostgresTest();self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.app=self.fixture.app

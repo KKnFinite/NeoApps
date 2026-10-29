@@ -92,6 +92,8 @@ def process_memory_snapshot():
         "python": sys.version.split()[0],
         "container": container_memory_snapshot(),
         "heavy_modules": [name for name in ('numpy', 'pandas', 'ortools.sat.python.cp_model', 'boto3', 'sklearn') if name in sys.modules],
+        "threads": [dict(name=thread.name[:64], native_id=thread.native_id, daemon=thread.daemon)
+                    for thread in threading.enumerate()[:32]],
     }
 
 
@@ -120,9 +122,13 @@ def container_memory_snapshot(root='/sys/fs/cgroup', proc='/proc'):
                 status = dict(line.split(':',1) for line in (entry/'status').read_text().splitlines() if ':' in line)
                 row = dict(pid=int(entry.name),ppid=int(status['PPid'].strip()),
                     rss_bytes=int(status.get('VmRSS','0 kB').split()[0])*1024)
+                row['name']=status.get('Name','').strip()[:64]
+                row['threads']=int(status.get('Threads','0').strip())
                 try:
                     rollup=dict(line.split(':',1) for line in (entry/'smaps_rollup').read_text().splitlines() if ':' in line)
                     row['pss_bytes']=int(rollup['Pss'].split()[0])*1024
+                    for key in ('Anonymous','Private_Dirty','Shared_Dirty','Swap'):
+                        if key in rollup:row[key.lower()+'_bytes']=int(rollup[key].split()[0])*1024
                 except (OSError,KeyError,ValueError):pass
                 processes.append(row)
             except (OSError, KeyError, ValueError):continue
@@ -178,6 +184,7 @@ def _log_sample(app, operation, *, before, after, elapsed_seconds, error_name):
         f"error={error_name}"
         f" container={json.dumps(after.get('container',{}),separators=(',',':'))}"
         f" heavy_modules={','.join(after.get('heavy_modules',[]))}"
+        f" threads={json.dumps(after.get('threads',[]),separators=(',',':'))}"
     )
 
 
