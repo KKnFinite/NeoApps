@@ -16,6 +16,7 @@ from app.extensions import db
 from app.models import (FrostHistoryTask as Task, Gateway, SortDateMission as Mission,
     SortDateParkingAssignment as Parking, SortDateOperation as Operation)
 from app.services import frost_vault as vault
+from app.services.memory_diagnostics import memory_diagnostics
 
 VERSION = 'frost-departures-v1'
 POLICY = 'tail-unique-start-minus6h-plus2h-pretreat24h-v1'
@@ -183,6 +184,7 @@ def correlate(gateway_id, outcome):
     return row
 
 
+@memory_diagnostics('frost_departure_reconciliation')
 def drain(gateway_id):
     """One shared lease, <=50 discovery rows, <=1 archive delivery per wake."""
     from app.services import frost_auto as auto, frost_history as jobs

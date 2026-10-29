@@ -42,7 +42,12 @@ class StartupDatabaseConnectionError(RuntimeError):
 
 
 def run_startup_database_action(app, action, *, action_name):
-    """Run a startup database action with bounded retries for connection loss only."""
+    """Retry connection loss or an explicitly aborted PostgreSQL deadlock.
+
+    The complete idempotent bootstrap is retried after rollback, never just the
+    failed DDL statement. Syntax, constraint and permission failures still fail
+    immediately; attempts/backoff/lock and statement timeouts are unchanged.
+    """
     attempts = _configured_attempts(app)
     delay_seconds = _configured_delay(app)
     max_delay_seconds = max(
@@ -123,6 +128,8 @@ def _configured_float(app, key, default):
 
 
 def _is_transient_connection_error(error):
+    if getattr(getattr(error,'orig',None),'pgcode',None)=='40P01':
+        return True
     message = str(getattr(error, "orig", error) or "").casefold()
     if any(marker in message for marker in _NON_TRANSIENT_ERROR_MARKERS):
         return False

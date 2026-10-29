@@ -14,6 +14,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select, func
 
 from app.extensions import db
+from app.services.memory_diagnostics import observe_process_memory
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation as Observation
 from app.models.neoscorpion_spear_observation import NeoScorpionSpearFleetObservation as FleetObservation
 from app.services.neoscorpion_learning_vault import learning_vault_status
@@ -466,7 +467,7 @@ def schedule_delivery(app, gateway_id):
     _last_worker[gateway_id] = time.monotonic()
     def run():
         try:
-            with app.app_context():
+            with app.app_context(),observe_process_memory('archive_delivery_cycle'):
                 try:
                     try:
                         drain(gateway_id)

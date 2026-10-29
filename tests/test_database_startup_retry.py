@@ -133,6 +133,18 @@ class StartupDatabaseRetryTest(unittest.TestCase):
         self.assertEqual(reset_connections.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
 
+    def test_only_verified_deadlock_sqlstate_retries_not_similar_error_text(self):
+        for code,expected in (('40P01',2),('42501',1),(None,1)):
+            original=RuntimeError('deadlock detected');original.pgcode=code
+            error=OperationalError('isolated bootstrap',{},original)
+            action=Mock(side_effect=[error,'complete'])
+            with self.subTest(code=code),patch('app.services.database_startup_retry._reset_database_connections') as reset,\
+                patch('app.services.database_startup_retry.time.sleep'):
+                if code=='40P01':self.assertEqual(run_startup_database_action(self.app,action,action_name='fixture'),'complete')
+                else:
+                    with self.assertRaises(OperationalError):run_startup_database_action(self.app,action,action_name='fixture')
+                self.assertEqual(action.call_count,expected);self.assertEqual(reset.call_count,int(code=='40P01'))
+
     def test_schema_and_permission_errors_fail_immediately_without_retry(self):
         for message in (
             "duplicate column name: employee_status",
