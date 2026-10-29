@@ -204,6 +204,24 @@ class DepartureTest(unittest.TestCase):
         with patch.object(dep,'stage'):dep.drain(self.f.gateway.id)
         self.assertEqual(dep.status(self.f.gateway.id)['state'],'NO DEPARTURES RECORDED')
 
+    def test_csv_before_forecast_start_preserves_actual_departure_outcome(self):
+        from app.services import frost_xchange_links as links,frost_documents as documents,frost_xchange as parser
+        from tests.test_frost_vault import sample
+        from types import SimpleNamespace
+        self.actual();ctrl=auto.control(self.f.gateway.id)
+        ctrl.summary=dict(started_at_utc=dep.stamp(self.at+timedelta(days=30)));db.session.commit()
+        local=(self.at-timedelta(minutes=20)).replace(tzinfo=timezone.utc).astimezone(auto.analysis.ZONE)
+        raw=sample(RecordID='before-collector',ApplicationDate=local.strftime('%m/%d/%Y'),
+            StartTime1=local.strftime('%H:%M'),Type4Used='',TailNumber=self.m.assigned_tail_number)
+        doc=SimpleNamespace(id=300,gateway_id=self.f.gateway.id,sha256='a'*64,extracted_key='private-extracted')
+        self.assertEqual(links.queue(doc,parser.extract(raw,gateway_code='RFD')),1)
+        page=Task.query.filter_by(kind='xchange_page').one()
+        content=auto.unpack(documents.cipher().decrypt(page.summary['encrypted_stage'].encode()).decode())
+        links.link(self.f.gateway.id,content['rows'][0],'private-source');db.session.commit()
+        match=Task.query.filter_by(kind='departure_match').one()
+        self.assertEqual(match.status,'matched');self.assertEqual(match.summary['capture_ids'],[])
+        self.assertEqual(Task.query.filter_by(kind='auto_capture').count(),0)
+
 
 from tests.test_frost_phase12 import ArchiveAccessTest
 class DepartureAccessTest(ArchiveAccessTest):

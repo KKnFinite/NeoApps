@@ -3,19 +3,34 @@
 Original exports and immutable source pages retain every revision. Matching is
 not model evaluation and never interprets an absent treatment as a negative.
 """
-from datetime import timedelta
+from datetime import datetime,timedelta,timezone
 from types import SimpleNamespace
+from sqlalchemy import func,or_
 from app.extensions import db
-from app.models import FrostHistoryTask as Task
+from app.models import FrostHistoryTask as Task,SortDateMission as Mission,SortDateOperation as Operation,Gateway
 from app.services import frost_auto as auto, frost_history as jobs, frost_vault as vault
 from app.services import frost_analysis as analysis, frost_documents as documents
 
 
 def queue(document, parsed):
+    gateway=db.session.get(Gateway,document.gateway_id)
+    if not gateway or gateway.code.upper()!='RFD':return 0
     ctrl=Task.query.filter_by(gateway_id=document.gateway_id,kind='auto_control',identity='collector',version=auto.VERSION).one_or_none()
     start=(ctrl.summary or {}).get('started_at_utc') if ctrl else None
-    if not start:return 0
-    earliest=(auto.clock.instant(start)-timedelta(days=1)).date().isoformat()
+    # Forecast coverage and departure evidence are separate. A late CSV may
+    # describe real departures before auto collection began; preserve those
+    # outcomes without inventing forecasts for their earlier treatment times.
+    from app.services.frost_departures import SOURCES
+    departed=db.session.query(func.min(Mission.actual_block_out_datetime_utc)).join(
+        Operation,Operation.id==Mission.sort_date_operation_id).filter(Operation.gateway_code=='RFD',
+        or_(Operation.gateway_id==document.gateway_id,Operation.gateway_id.is_(None)),
+        Mission.gateway_code=='RFD',Mission.mission_type=='departure',Mission.actual_block_out_source.in_(SOURCES),
+        Mission.departure_status.is_distinct_from('cancelled'),Mission.actual_block_out_datetime_utc<=datetime.utcnow()).scalar()
+    boundaries=[]
+    if start:boundaries.append((auto.clock.instant(start)-timedelta(days=1)).date().isoformat())
+    if departed:boundaries.append((departed.replace(tzinfo=timezone.utc).astimezone(analysis.ZONE)-timedelta(days=2)).date().isoformat())
+    if not boundaries:return 0
+    earliest=min(boundaries)
     page=[];count=0
     def save():
         nonlocal count
