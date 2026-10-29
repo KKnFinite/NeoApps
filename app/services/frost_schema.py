@@ -24,14 +24,15 @@ def install(connection):
     if inspect(connection).has_table('frost_history_tasks'):
         if connection.dialect.name=='postgresql':
             connection.execute(text("""CREATE OR REPLACE FUNCTION frost_research_receipt_immutable() RETURNS trigger AS $$
-                BEGIN IF OLD.kind IN ('research_model','auto_capture','xchange_page') AND OLD.status='ready'
+                BEGIN IF OLD.kind IN ('research_model','auto_capture','xchange_page','departure_revision','departure_link') AND OLD.status='ready'
                 THEN RAISE EXCEPTION 'Verified FROST research evidence is immutable'; END IF;
                 IF TG_OP='DELETE' THEN RETURN OLD; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql"""))
             connection.execute(text('DROP TRIGGER IF EXISTS frost_research_receipt_immutable ON frost_history_tasks'))
             connection.execute(text('CREATE TRIGGER frost_research_receipt_immutable BEFORE UPDATE OR DELETE ON frost_history_tasks FOR EACH ROW EXECUTE FUNCTION frost_research_receipt_immutable()'))
         else:
             for action in ('UPDATE','DELETE'):
-                connection.execute(text(f"CREATE TRIGGER IF NOT EXISTS frost_research_receipt_no_{action.lower()} BEFORE {action} ON frost_history_tasks WHEN OLD.kind IN ('research_model','auto_capture','xchange_page') AND OLD.status='ready' BEGIN SELECT RAISE(ABORT,'Verified FROST research evidence is immutable'); END"))
+                connection.execute(text(f'DROP TRIGGER IF EXISTS frost_research_receipt_no_{action.lower()}'))
+                connection.execute(text(f"CREATE TRIGGER frost_research_receipt_no_{action.lower()} BEFORE {action} ON frost_history_tasks WHEN OLD.kind IN ('research_model','auto_capture','xchange_page','departure_revision','departure_link') AND OLD.status='ready' BEGIN SELECT RAISE(ABORT,'Verified FROST research evidence is immutable'); END"))
     verify(connection)
 
 

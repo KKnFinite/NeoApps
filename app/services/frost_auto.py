@@ -230,6 +230,11 @@ def tick(gateway_id):
             row=current_row
         if row.status in ('ready','failed','missed') or row.retry_at>naive(now()):db.session.rollback();return 0
         if not jobs.memory_allows_work():
+            # Pools are closed by their owners; reclaim unreachable cyclic
+            # graphs before deciding whether this due slot must suspend. The
+            # exact same container threshold/headroom check still decides.
+            gc.collect()
+        if not jobs.memory_allows_work():
             ctrl.summary=dict(ctrl.summary or {},last_attempt_utc=stamp(now()),resource_suspended_at_utc=stamp(now()),resource_reason='75% / 128 MiB headroom protection')
             row.retry_at=naive(now()+timedelta(minutes=5));row.last_error='Capture deferred for memory safety.'
             db.session.commit();return 0

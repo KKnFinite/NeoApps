@@ -49,6 +49,11 @@
             const response=await fetch(root.dataset.statusUrl,{credentials:'same-origin',cache:'no-store'});
             if(!response.ok)throw new Error('FROST status refresh failed.');
             const result=await response.json();
+            if(result.departure_correlation){
+                for(const el of root.querySelectorAll('[data-departure-field]')){
+                    el.textContent=result.departure_correlation[el.dataset.departureField]??'Not yet';
+                }
+            }
             if(result.auto_collection){
                 for(const el of root.querySelectorAll('[data-auto-field]')){
                     const value=result.auto_collection[el.dataset.autoField];

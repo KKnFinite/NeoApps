@@ -83,6 +83,9 @@ def create_app(config_class=Config, auto_bootstrap=False):
     app.before_request(enforce_live_refresh_request_cadence)
     register_pwa_assets(app)
     register_blueprints(app)
+    # Register transaction-local compact evidence after canonical field-authority
+    # listeners. This performs no network I/O, schema work or startup scan.
+    from app.services import frost_departures
     register_template_helpers(app)
     register_request_guards(app)
     register_security_headers(app)

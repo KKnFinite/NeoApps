@@ -17,6 +17,7 @@ from app.services import frost_model as model, frost_model_registry as models
 from app.services import frost_local_backfill as backfill
 from app.services import frost_research
 from app.services import frost_auto
+from app.services import frost_departures
 
 
 @bp.before_app_request
@@ -77,6 +78,7 @@ def frost_vault():
         vault_status=learning_vault_status(),categories=vault.CATEGORIES,history=history.health(gateway.id),
         model_status=models.status(gateway.id,before=request.args.get('models_before',type=int)),
         research=research_status(gateway),auto_collection=frost_auto.status(gateway.id),
+        departure_correlation=frost_departures.status(gateway.id),
         local_backfill=backfill.pending(gateway.id),
         receipts=NeoSubZeroArchiveDelivery.query.filter_by(gateway_id=gateway.id).order_by(NeoSubZeroArchiveDelivery.id.desc()).limit(100).all()),status
 
@@ -100,7 +102,7 @@ def frost_forecast_validation():
 def frost_vault_status():
     gateway=authorized()
     rows=catalog(gateway).limit(100).all()
-    response=jsonify(ok=True,auto_collection=frost_auto.status(gateway.id),history=history.health(gateway.id),documents=[dict(id=row.id,archived=bool(row.archived_at_utc),error=row.last_error,
+    response=jsonify(ok=True,auto_collection=frost_auto.status(gateway.id),departure_correlation=frost_departures.status(gateway.id),history=history.health(gateway.id),documents=[dict(id=row.id,archived=bool(row.archived_at_utc),error=row.last_error,
         attempts=row.attempts) for row in rows])
     response.headers['Cache-Control']='no-store'
     return response
@@ -133,6 +135,36 @@ def frost_auto_catalog():
         url=f'/neosubzero/frost-vault/auto-evidence/{r.id}') for r in rows[:100]],next_before=rows[99].id if len(rows)>100 else None)
     response.headers['Cache-Control']='private, no-store'
     return response
+
+
+@bp.route('/frost-vault/departure-evidence')
+@gateway_node_required('subzero')
+def frost_departure_catalog():
+    gateway=authorized();before=request.args.get('before',type=int)
+    query=FrostHistoryTask.query.filter_by(gateway_id=gateway.id,version=frost_departures.VERSION,status='ready').filter(
+        FrostHistoryTask.kind.in_(('departure_revision','departure_link')))
+    if before:query=query.filter(FrostHistoryTask.id<before)
+    rows=query.order_by(FrostHistoryTask.id.desc()).limit(51).all()
+    response=jsonify(schema=frost_departures.VERSION,evidence=[dict(id=r.id,kind=r.kind,identity=r.identity,sha256=r.input_hash,
+        url=f'/neosubzero/frost-vault/departure-evidence/{r.id}') for r in rows[:50]],next_before=rows[49].id if len(rows)>50 else None)
+    response.headers['Cache-Control']='private, no-store'
+    return response
+
+
+@bp.route('/frost-vault/departure-evidence/<int:identifier>')
+@gateway_node_required('subzero')
+def frost_departure_download(identifier):
+    gateway=authorized()
+    if not history.memory_allows_work():return 'Evidence transfer deferred for memory safety.',503
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,version=frost_departures.VERSION,status='ready').filter(
+        FrostHistoryTask.kind.in_(('departure_revision','departure_link'))).first_or_404()
+    try:
+        payload=vault.read_json(row.result_key,gateway.id,max_bytes=16384)
+        if vault.digest(vault.canonical(payload))!=row.input_hash:raise ValueError('Evidence hash mismatch.')
+        response=jsonify(payload)
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        return response
+    except (ValueError,RuntimeError):return 'Evidence could not be verified; original preserved.',503
 
 
 @bp.route('/frost-vault/auto-evidence/<int:identifier>')

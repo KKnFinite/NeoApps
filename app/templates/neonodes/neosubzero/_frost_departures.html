@@ -1,0 +1,13 @@
+<section class="frost-research frost-model-admin" aria-labelledby="frost-departures-title">
+    <h2 id="frost-departures-title">DEPARTURE CORRELATION</h2>
+    <p><strong data-departure-field="state">{{ departure_correlation.state }}</strong></p>
+    <dl class="frost-auto-metrics">
+        {% for key,label in [('actual','Verified actual MotherBrain departures'),('linked','Departures with Xchange evidence'),('frost','Frost-reason treatment records'),('other','Other-treatment records'),('unknown','Departures · treatment UNKNOWN'),('no_spray','Explicit likely no-spray evidence'),('physical_present','Physical frost inspections'),('physical_absent','Physical no-frost inspections'),('review','Ambiguous / source-quality review'),('withdrawn','Withdrawn departure evidence'),('archived','Off-site verified departure revisions'),('last','Latest reconciliation (UTC)')] %}
+        <div><dt>{{ label }}</dt><dd data-departure-field="{{ key }}">{{ departure_correlation[key] if departure_correlation[key] is not none else 'Not yet' }}</dd></div>
+        {% endfor %}
+    </dl>
+    <p>Linked pre-treatment forecast snapshots: <span data-departure-field="forecasts">{{ departure_correlation.forecasts }}</span> · With research scores: <span data-departure-field="scored_forecasts">{{ departure_correlation.scored_forecasts }}</span> · Inputs unavailable: <span data-departure-field="unavailable_forecasts">{{ departure_correlation.unavailable_forecasts }}</span></p>
+    <p>RESEARCH — NOT OPERATIONAL. Actual Block-Out only; schedules and ALP planned-time imports are not verified departures. Missing CSV records remain UNKNOWN, never frost-negative. Only unique physical-tail/time matches qualify. Multiple possible departures require review.</p>
+    <p><a href="{{ url_for('neosubzero.frost_departure_catalog') }}">PRIVATE VERIFIED DEPARTURE EVIDENCE</a> · Original revisions and superseded decisions remain available for authorized local research.</p>
+    <p>Departure applications: START within 6 hours before or 2 hours after stand Block-Out. Pretreat: within 24 hours before. Prediction eligibility uses the earlier actual treatment START, never CSV upload or Block-Out time. These links do not establish physical-frost probability; aircraft sharing a weather night are not independent weather events.</p>
+</section>

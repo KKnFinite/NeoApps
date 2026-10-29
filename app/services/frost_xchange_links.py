@@ -76,6 +76,9 @@ def link(gateway_id,item,page_key):
                 break
     row.status='requires_review' if review else 'matched' if summary['capture_ids'] else 'unmatched'
     row.input_hash=item['row_hash'];row.source_key=page_key;row.summary=summary
+    db.session.flush()
+    from app.services.frost_departures import correlate
+    correlate(gateway_id,row)
 
 
 def drain(gateway_id):

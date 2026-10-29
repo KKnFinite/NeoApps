@@ -485,6 +485,8 @@ def schedule_delivery(app, gateway_id):
                     capture_frost(gateway_id)
                     from app.services.frost_xchange_links import drain as link_xchange
                     link_xchange(gateway_id)
+                    from app.services.frost_departures import drain as reconcile_departures
+                    reconcile_departures(gateway_id)
                     # Historical weather/features are workstation-only. The
                     # live outbox retains original and operational archival work.
                 finally:
