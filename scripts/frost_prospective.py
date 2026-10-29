@@ -310,6 +310,19 @@ def refresh_auto(remote,directory):
                 if len(raw)>1024*1024 or vault.digest(vault.canonical(json.loads(raw)))!=digest:raise ValueError('Autonomous evidence checksum/size mismatch.')
                 immutable(destination,json.loads(raw))
             if vault.digest(destination.read_bytes())!=digest:raise ValueError('Local autonomous evidence changed.')
+            payload=read_json(destination)
+            for receipt in (payload.get('source',{}).get('native_point') or {}).get('source_receipts',[]):
+                if receipt.get('method')=='HEAD':continue
+                source_hash=receipt['sha256']
+                if not re.fullmatch('[a-f0-9]{64}',source_hash):raise ValueError('Unsafe HRRR source hash.')
+                path=root/'hrrr-sources'/(source_hash+'.source')
+                if not path.exists():
+                    import base64
+                    envelope=json.loads(remote.request('GET',entry['url']+'/hrrr/'+source_hash))
+                    raw=base64.b64decode(envelope['raw_base64'],validate=True)
+                    if len(raw)>5*1024**2 or len(raw)!=receipt['bytes'] or vault.digest(raw)!=source_hash:raise ValueError('HRRR original failed integrity.')
+                    write_bytes(path,raw)
+                if vault.digest(path.read_bytes())!=source_hash:raise ValueError('Local HRRR evidence changed.')
             entries[entry['id']]=entry
         following=page['next_before']
         if following is None:break
@@ -318,6 +331,36 @@ def refresh_auto(remote,directory):
     result=sealed(dict(schema='frost-auto-v1',retrieved_at_utc=utcnow().isoformat(),evidence=sorted(entries.values(),key=lambda r:r['id'])))
     immutable(root/'catalogs'/(result['fingerprint']+'.json'),result);write_json(root/'catalog.json',result)
     return result
+
+
+def verify_auto_hrrr(root,source,cutoff):
+    """Re-decode source bytes locally, not merely trust normalized JSON fields."""
+    from app.services import frost_hrrr_point as light
+    point=source.get('native_point')
+    if not point:raise ValueError('Scored capture has no original HRRR point proof.')
+    if point['station']!=weather.STATION or point['point']!=light.POINT:raise ValueError('Wrong HRRR cell/station.')
+    if vault.digest(vault.canonical({k:v for k,v in point.items() if k!='fingerprint'}))!=point['fingerprint']:raise ValueError('HRRR point hash mismatch.')
+    receipts=point['source_receipts'];by_url={r['url']:r for r in receipts}
+    if len(by_url)!=len(receipts):raise ValueError('Duplicate HRRR source URL.')
+    class Cache:
+        def __init__(self):self.receipts=[r for r in receipts if r['method']=='HEAD']
+        def get(self,url):
+            r=by_url[url]
+            if r['method']!='GET' or not re.fullmatch('[a-f0-9]{64}',r['sha256']):raise ValueError('Invalid HRRR source receipt.')
+            raw=(Path(root)/'hrrr-sources'/(r['sha256']+'.source')).read_bytes()
+            if len(raw)!=r['bytes'] or len(raw)>light.MAX_SOURCE or vault.digest(raw)!=r['sha256'] or clock.instant(r['retrieved_at_utc'])>cutoff:raise ValueError('HRRR source byte/time mismatch.')
+            self.receipts.append(r);return raw,r
+    cycle=clock.instant(point['cycle_at_utc'])
+    if light.read_point(Cache(),cycle,point['forecast_hours'])!=point:raise ValueError('HRRR point differs from original sources.')
+    for f in source['native_forecasts']:
+        h=int((clock.instant(f['valid_at_utc'])-cycle).total_seconds()/3600)
+        url='https://noaa-hrrr-bdp-pds.s3.amazonaws.com/'+cycle.strftime('hrrr.%Y%m%d/conus/hrrr.t%Hz.wrfsfcf')+f'{h:02d}.grib2'
+        r=by_url[url];available=parsedate_to_datetime(r['last_modified'])
+        if (r['method']!='HEAD' or not cycle<=available<=cutoff or clock.instant(r['retrieved_at_utc'])>cutoff or
+            f['available_by_utc']!=available.isoformat() or f['availability_basis']!='NOAA_original_object_Last-Modified' or
+            f['cycle_at_utc']!=point['cycle_at_utc'] or f['issued_at_utc'] is not None or f['station']!=weather.STATION or
+            f['source_sha256']!=point['fingerprint'] or f['values']!=light.normalized(point,h)):
+            raise ValueError('Forecast differs from original availability/point evidence.')
 
 
 def assemble_auto(baseline_path,directory,output):
@@ -342,11 +385,11 @@ def assemble_auto(baseline_path,directory,output):
         for receipt in source['sources']:
             original=base64.b64decode(receipt['raw_base64'],validate=True)
             if len(original)!=receipt['bytes'] or vault.digest(original)!=receipt['sha256'] or clock.instant(receipt['retrieved_at_utc'])>cutoff:raise ValueError('Original forecast evidence mismatch.')
-        if any(p['state']=='SCORED' for p in payload['predictions']):
-            raise ValueError('Native scores require LOCAL HRRR source-proof reconciliation; no unsupported scoring adapter.')
+        if source.get('native_point'):verify_auto_hrrr(root,source,cutoff)
+        elif any(p['state']=='SCORED' for p in payload['predictions']):raise ValueError('Scored capture lacks HRRR proof.')
         snapshot=sealed(dict(schema=VERSION,baseline=frozen['fingerprint'],slot=entry['identity'],
             cutoff_at_utc=source['cutoff_at_utc'],captured_at_utc=payload['captured_at_utc'],original_capture_sha256=entry['sha256'],
-            source=dict(observations=source['observations'],forecasts=[],receipts=[]),predictions=payload['predictions']))
+            source=dict(observations=source['observations'],forecasts=source.get('native_forecasts',[]),receipts=[]),predictions=payload['predictions']))
         immutable(adapted/'captures'/(snapshot['fingerprint']+'.json'),snapshot)
         immutable(adapted/'receipts'/(snapshot['fingerprint']+'.json'),dict(snapshot=snapshot['fingerprint'],committed_at_utc=payload['committed_at_utc']))
     selected,counts=analysis.deduplicate(records)
@@ -550,6 +593,34 @@ def scheduler_xml(baseline_path, output, destination, *, user, interval=3600):
     return dict(state='XML GENERATED ONLY — NOT INSTALLED',path=str(destination))
 
 
+def register_models(remote,baseline_path):
+    """Explicit authenticated upload, exact frozen local bytes, never approval.
+
+    Preflight ALL eight before the first write. A failure retains immutable
+    successful registrations; rerunning is idempotent, not an automatic retry.
+    """
+    local_only();frozen=baseline(baseline_path);root=Path(baseline_path).parent
+    from app.services.frost_auto import frozen_models
+    pins={(r['model_version'],r['sha256']) for r in frozen_models()}
+    if {(r['model_version'],r['sha256']) for r in frozen['models']}!=pins:raise ValueError('Not the production-pinned eight-model baseline.')
+    checked=[]
+    for entry in frozen['models']:
+        with (root/'artifacts'/(entry['sha256']+'.json')).open('rb') as handle:raw=handle.read(model.MAX_BYTES+1)
+        if len(raw)>model.MAX_BYTES or vault.digest(raw)!=entry['sha256']:raise ValueError('Frozen artifact hash/size mismatch.')
+        artifact=json.loads(raw);check_artifact(artifact,entry['hours'])
+        for test in artifact['parity_checks']:
+            if abs(model.score_vector(artifact,test['features'],len(native.FEATURES))-test['score'])>1e-9:raise ValueError('Frozen numerical self-test failed.')
+        checked.append((entry,raw))
+    results=[]
+    for entry,raw in checked:
+        result=json.loads(remote.request('POST','/neosubzero/frost-vault/research-models',
+            data=dict(csrf_token=remote.csrf),files=dict(model=(entry['model_version']+'.json',raw,'application/json'))))
+        if result.get('ok') is not True:raise ValueError('Research registration was not confirmed.')
+        results.append(dict(model_version=entry['model_version'],sha256=entry['sha256'],message=result['message']))
+        print('Verified private research registration:',entry['model_version'],'NOT APPROVED',flush=True)
+    return dict(registered=len(results),models=results,approved=False)
+
+
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--local',required=True,action='store_true')
     sub=p.add_subparsers(dest='command',required=True)
@@ -557,6 +628,7 @@ def main(argv=None):
     c=sub.add_parser('capture');c.add_argument('--baseline',required=True);c.add_argument('--output',required=True)
     r=sub.add_parser('refresh-outcomes');r.add_argument('--origin',required=True);r.add_argument('--email',required=True);r.add_argument('--output',required=True)
     r=sub.add_parser('refresh-auto');r.add_argument('--origin',required=True);r.add_argument('--email',required=True);r.add_argument('--output',required=True)
+    r=sub.add_parser('register-models');r.add_argument('--origin',required=True);r.add_argument('--email',required=True);r.add_argument('--baseline',required=True)
     a=sub.add_parser('assemble-auto');a.add_argument('--baseline',required=True);a.add_argument('--evidence',required=True);a.add_argument('--output',required=True)
     a=sub.add_parser('assemble');a.add_argument('--baseline',required=True);a.add_argument('--captures',required=True);a.add_argument('--outcomes',required=True);a.add_argument('--output',required=True)
     e=sub.add_parser('evaluate');e.add_argument('--dataset',required=True);e.add_argument('--output',required=True)
@@ -564,9 +636,10 @@ def main(argv=None):
     args=p.parse_args(argv);local_only()
     if args.command=='freeze': result=freeze(args.candidates,args.reports,args.output)
     elif args.command=='capture': result=capture(args.baseline,args.output)
-    elif args.command in ('refresh-outcomes','refresh-auto'):
+    elif args.command in ('refresh-outcomes','refresh-auto','register-models'):
         remote=Remote(args.origin,args.email)
-        try: result=(refresh_auto if args.command=='refresh-auto' else refresh_outcomes)(remote,args.output)
+        try:
+            result=register_models(remote,args.baseline) if args.command=='register-models' else (refresh_auto if args.command=='refresh-auto' else refresh_outcomes)(remote,args.output)
         finally: remote.close()
     elif args.command=='assemble-auto':result=assemble_auto(args.baseline,args.evidence,args.output)
     elif args.command=='assemble': result=assemble(args.baseline,args.captures,args.outcomes,args.output)

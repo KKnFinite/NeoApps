@@ -38,6 +38,7 @@ def resolve_database_uri():
 class Config:
     # Bounded current evidence only; historical analysis/training stays LOCAL.
     FROST_AUTO_COLLECTION = env_flag('FROST_AUTO_COLLECTION', True)
+    FROST_AUTO_HRRR = env_flag('FROST_AUTO_HRRR', True)
     # Inject a private durable adapter in deployment configuration; no DB/disk fallback.
     EMPLOYEE_RECORD_SIGNATURE_STORAGE = None
     SECRET_KEY = os.getenv("SECRET_KEY")

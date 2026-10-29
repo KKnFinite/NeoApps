@@ -151,6 +151,30 @@ def frost_auto_download(identifier):
     except (ValueError,RuntimeError):return 'Evidence could not be verified; original preserved.',503
 
 
+@bp.route('/frost-vault/auto-evidence/<int:identifier>/hrrr/<string:digest>')
+@gateway_node_required('subzero')
+def frost_auto_hrrr_download(identifier,digest):
+    import re
+    gateway=authorized()
+    if not re.fullmatch('[a-f0-9]{64}',digest):abort(404)
+    if not history.memory_allows_work():return 'Evidence transfer deferred for memory safety.',503
+    row=FrostHistoryTask.query.filter_by(id=identifier,gateway_id=gateway.id,version=frost_auto.VERSION,status='ready',kind='auto_capture').first_or_404()
+    try:
+        payload=vault.read_json(row.result_key,gateway.id,max_bytes=frost_auto.MAX_SNAPSHOT)
+        if vault.digest(vault.canonical(payload))!=row.input_hash:raise ValueError('Capture hash mismatch.')
+        source=next((r for r in (payload['source'].get('native_point') or {}).get('source_receipts',[]) if r['sha256']==digest and r.get('source_key')),None)
+        if source is None:abort(404)
+        from app.services import frost_hrrr_point as hrrr
+        original=vault.read_json(source['source_key'],gateway.id,max_bytes=7*1024**2)
+        import base64
+        raw=base64.b64decode(original['raw_base64'],validate=True)
+        if len(raw)>hrrr.MAX_SOURCE or len(raw)!=source['bytes'] or vault.digest(raw)!=digest or original['sha256']!=digest:raise ValueError('HRRR source hash mismatch.')
+        response=jsonify(original)
+        response.headers.update({'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        return response
+    except (ValueError,RuntimeError):return 'HRRR evidence could not be verified; original preserved.',503
+
+
 @bp.route('/frost-vault/dataset-manifest')
 @gateway_node_required('subzero')
 def frost_dataset_manifest():

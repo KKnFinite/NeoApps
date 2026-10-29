@@ -1,17 +1,18 @@
 """Hourly private KRFD evidence on the existing delivery heartbeat.
 
-No scripts, training libraries, HRRR extraction, sort dependency or new worker.
+No scripts, training libraries, scientific arrays, sort dependency or new worker.
 FrostHistoryTask is a receipt/index, not a second operational activity database.
 """
 import base64
 import gzip
+import gc
 import json
 import re
 import zlib
 from datetime import datetime, timedelta, timezone
 from urllib.request import Request, urlopen
 
-from flask import current_app
+from flask import current_app, g, has_app_context
 from sqlalchemy import func
 from app.extensions import db
 from app.models import FrostHistoryTask as Task, Gateway
@@ -93,11 +94,40 @@ def acquire():
     except Exception as error:
         errors.append('NWS forecast unavailable: '+type(error).__name__)
     if cutoff is None:cutoff=now()
+    native_point=None;native_forecasts=[];native_error='Lightweight HRRR capture disabled.';resources={}
+    if has_app_context() and current_app.config.get('FROST_AUTO_HRRR',True) and getattr(g,'frost_capture_gateway',None):
+        from app.services import frost_hrrr_point as hrrr
+        def guarded():
+            budget=jobs.memory_budget()
+            if budget['usage'] is not None:
+                resources['container_sample_peak_bytes']=max(resources.get('container_sample_peak_bytes',0),budget['usage'])
+                resources['container_limit_bytes']=budget['limit']
+            return hrrr.memory_available()
+        def retain(raw,receipt):
+            if receipt['method']=='HEAD':return receipt
+            if not guarded():raise RuntimeError('HRRR evidence deferred: hard memory guard plus 32 MiB transfer reserve.')
+            evidence=dict(schema=hrrr.VERSION,sha256=receipt['sha256'],raw_base64=base64.b64encode(raw).decode())
+            # Content-addressed originals remain independently durable. The
+            # hourly snapshot holds compact references, never all tile bodies.
+            key=vault.put_json('weather',g.frost_capture_gateway,
+                'hrrr-source-'+receipt['sha256'],evidence)
+            return dict(receipt,source_key=key)
+        try:
+            with vault.transport_scope():
+                client=hrrr.Source(now,retain,guarded)
+                native_point,native_forecasts=hrrr.collect(client,cutoff)
+                resources.update(requests=client.calls,downloaded_bytes=client.bytes)
+            native_error=None
+        except Exception as error:
+            detail=str(error)[:180] if isinstance(error,(ValueError,RuntimeError,TimeoutError)) else type(error).__name__
+            native_error='Lightweight HRRR unavailable: '+detail
+            errors.append(native_error)
+        cutoff=now()
     recent=analysis.features(stamp(cutoff),observations)
     if not recent['matched']:raise ValueError('KRFD observations are missing/stale; capture will retry, never backdate.')
     return dict(station=STATION,cutoff_at_utc=stamp(cutoff),observations=observations,
-        sources=sources,nws_forecasts=projected,native_forecasts=[],errors=errors,
-        native_unavailable='krfd-forecast-native-v1 requires verified HRRR modeled fields and original availability proofs. Render does not run the LOCAL HRRR extractor. NWS fields are not substitutes.')
+        sources=sources,nws_forecasts=projected,native_forecasts=native_forecasts,native_point=native_point,errors=errors,
+        native_unavailable=native_error,native_resources=resources)
 
 
 def frozen_models():return frost_research.prospective_summary()['models']
@@ -215,8 +245,17 @@ def tick(gateway_id):
             row=db.session.get(Task,identifier)
             if not (row.summary or {}).get('staged'):
                 if row.identity!=identity(current):raise ValueError('Old slot has no committed evidence; never manufacture a historical capture.')
-                source=acquire()
-                with vault.transport_scope():scores=predictions(gateway_id,source)
+                # Request-local gateway context, not mutable application config.
+                g.frost_capture_gateway=gateway_id
+                try:
+                    with vault.transport_scope():
+                        source=acquire()
+                        scores=predictions(gateway_id,source)
+                finally:
+                    # SDK graphs can be cyclic even after their pools close.
+                    # One client for raw sources + all eight models, then reclaim
+                    # before opening the small snapshot-delivery transport.
+                    gc.collect()
                 payload=dict(schema_version=VERSION,gateway_id=gateway_id,slot_utc=stamp(current),
                     station=source['station'],captured_at_utc=stamp(now()),committed_at_utc=None,
                     source=source,predictions=scores,baseline=frost_research.prospective_summary()['baseline'],
@@ -252,7 +291,9 @@ def tick(gateway_id):
             summary['archive_verified_at_utc']=stamp(now())
             if not jobs.finish(identifier,lease,status='ready',source_key=key,result_key=key,summary=summary):return 0
             ctrl=db.session.get(Task,ctrl.id);ctrl.summary=dict(ctrl.summary or {},last_success_utc=payload['captured_at_utc'],last_archive_utc=stamp(now()),
-                source_errors=payload['source'].get('errors',[]),nws_horizons=len(payload['source'].get('nws_forecasts',[])))
+                source_errors=payload['source'].get('errors',[]),nws_horizons=len(payload['source'].get('nws_forecasts',[])),
+                last_scored_utc=payload['captured_at_utc'] if any(p['state']=='SCORED' for p in payload['predictions']) else (ctrl.summary or {}).get('last_scored_utc'),
+                native_horizons=sorted({p['hours'] for p in payload['predictions'] if p['state']=='SCORED'}))
             db.session.commit()
             current_app.logger.info('FROST autonomous capture verified slot=%s gateway=%s sha256=%s',row.identity,gateway_id,row.input_hash)
             return 1
@@ -286,7 +327,7 @@ def status(gateway_id):
         Task.gateway_id==gateway_id,Task.kind=='auto_match',Task.version==VERSION,Task.status=='active').scalar()
     outcome_query=Task.query.filter_by(gateway_id=gateway_id,kind='xchange_outcome',version=VERSION)
     return dict(enabled=is_enabled,active=active,state='AUTOMATIC COLLECTION ACTIVE' if active else 'AUTOMATIC COLLECTION ENABLED — AWAITING VERIFIED CAPTURE' if is_enabled else 'AUTOMATIC COLLECTION DISABLED',
-        last_attempt=summary.get('last_attempt_utc'),last_success=summary.get('last_success_utc'),last_archive=last,
+        last_attempt=summary.get('last_attempt_utc'),last_success=summary.get('last_success_utc'),last_archive=last,last_scored=summary.get('last_scored_utc'),
         next_capture=stamp(slot(now())+timedelta(hours=1)),archived=counts.get('ready',0),failed=counts.get('failed',0),
         missed=int(missed_gaps or 0)+counts.get('missed',0),pending=sum(n for key,n in counts.items() if key not in ('ready','failed','missed')),
         scored=int(totals[0]),unavailable=int(totals[1]),resource_suspended=bool(summary.get('resource_suspended_at_utc')),
@@ -295,5 +336,5 @@ def status(gateway_id):
         xchange_matches=outcome_query.filter_by(status='matched').count(),
         awaiting_outcomes=max(0,counts.get('ready',0)-int(matched_captures or 0)),
         outcome_records=outcome_query.count(),research_models=Task.query.filter_by(gateway_id=gateway_id,kind='research_model',status='ready').count(),
-        source_limit='METAR/SPECI + issued NWS grid evidence. Native HRRR model scoring unavailable without its exact compatible input contract.',
+        source_limit='METAR/SPECI + issued NWS grid evidence; bounded HRRR KRFD chunks when verified and memory-safe. Exact frozen-model registration and complete native inputs are required for research scoring.',
         limitation='No Xchange record means UNKNOWN. Matched RecordIDs are not independent physical-frost observations; substantial evaluation stays LOCAL.')
