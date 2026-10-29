@@ -1,6 +1,7 @@
 <section class="frost-research frost-model-admin" aria-labelledby="frost-departures-title">
     <h2 id="frost-departures-title">DEPARTURE CORRELATION</h2>
     <p><strong data-departure-field="state">{{ departure_correlation.state }}</strong></p>
+    <p data-departure-field="discovery">{{ departure_correlation.discovery }}</p>
     <dl class="frost-auto-metrics">
         {% for key,label in [('actual','Verified actual MotherBrain departures'),('linked','Departures with Xchange evidence'),('frost','Frost-reason treatment records'),('other','Other-treatment records'),('unknown','Departures · treatment UNKNOWN'),('no_spray','Explicit likely no-spray evidence'),('physical_present','Physical frost inspections'),('physical_absent','Physical no-frost inspections'),('review','Ambiguous / source-quality review'),('withdrawn','Withdrawn departure evidence'),('archived','Off-site verified departure revisions'),('last','Latest reconciliation (UTC)')] %}
         <div><dt>{{ label }}</dt><dd data-departure-field="{{ key }}">{{ departure_correlation[key] if departure_correlation[key] is not none else 'Not yet' }}</dd></div>

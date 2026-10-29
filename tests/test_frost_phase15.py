@@ -192,6 +192,18 @@ class DepartureTest(unittest.TestCase):
         dep.stage(db.session.connection(),stale,historical=True);db.session.commit()
         self.assertEqual(self.index().input_hash,before)
 
+    def test_initial_discovery_uses_fifty_row_keyset_and_does_not_claim_complete(self):
+        for number in range(61):self.f._departure('5X'+str(9000+number),'N'+str(9000+number),'SDF',1)
+        db.session.commit()
+        with patch.object(dep,'stage') as staging:
+            dep.drain(self.f.gateway.id)
+            self.assertEqual(staging.call_count,50)
+        state=dep.status(self.f.gateway.id)
+        self.assertEqual(state['state'],'DEPARTURE DISCOVERY IN PROGRESS')
+        self.assertIn('not all historical departures',state['discovery'])
+        with patch.object(dep,'stage'):dep.drain(self.f.gateway.id)
+        self.assertEqual(dep.status(self.f.gateway.id)['state'],'NO DEPARTURES RECORDED')
+
 
 from tests.test_frost_phase12 import ArchiveAccessTest
 class DepartureAccessTest(ArchiveAccessTest):

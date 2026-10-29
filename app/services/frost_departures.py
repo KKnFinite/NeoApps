@@ -5,6 +5,7 @@ delivers them later. Missing treatment evidence is ALWAYS UNKNOWN. Historical
 discovery is keyset-bounded and never reconstructs a tail from today's roster.
 """
 from datetime import datetime, timedelta, timezone
+import gc
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 from sqlalchemy import event, inspect, select, insert, update
@@ -198,6 +199,7 @@ def drain(gateway_id):
             Mission.mission_type=='departure').order_by(Mission.id).limit(50).all()
         for mission in missions:stage(db.session.connection(), mission, historical=True)
         cursor.summary = dict(last_mission_id=missions[-1].id if missions else after,
+            discovery_complete=bool((cursor.summary or {}).get('discovery_complete') or len(missions)<50),
             last_reconciliation_utc=auto.stamp(auto.now()))
         db.session.commit()
         receipt = Task.query.filter_by(gateway_id=gateway_id, version=VERSION).filter(
@@ -214,6 +216,7 @@ def drain(gateway_id):
                             raise ValueError('Departure archive read-back mismatch.')
                     jobs.finish(identifier,lease,status='ready',source_key=key,result_key=key)
                 except Exception as error:jobs.defer(identifier,lease,error)
+                finally:gc.collect()  # Closed SDK graphs must not accumulate between minute wakes.
         # Corrections/late departures reconcile a bounded keyset of existing
         # Xchange identities. No source-page downloads or historical analysis.
         cursor = jobs.task(gateway_id, 'departure_control', 'outcomes', VERSION)
@@ -257,11 +260,14 @@ def status(gateway_id):
             forecast.gateway_id==gateway_id,forecast.kind=='auto_match',forecast.status=='active')
     linked_forecasts=forecast_matches.scalar()
     scored=forecast_matches.filter(forecast.summary['score_available'].as_boolean().is_(True)).scalar()
-    return dict(state='NO DEPARTURES RECORDED' if not qualified else
+    discovery_complete=bool(cursor and (cursor.summary or {}).get('discovery_complete'))
+    return dict(state=('DEPARTURE EVIDENCE REQUIRES REVIEW' if departures.get('requires_review',0) else
+            'DEPARTURE DISCOVERY IN PROGRESS' if cursor and not discovery_complete else 'NO DEPARTURES RECORDED') if not qualified else
         'DEPARTURES WITH VERIFIED OUTCOME EVIDENCE' if linked else 'DEPARTURES RECORDED — TREATMENT OUTCOME UNKNOWN',
         actual=qualified,linked=linked,unknown=max(0,qualified-linked),frost=frost,other=other,
         review=departures.get('requires_review',0)+matches.get('requires_review',0),
         withdrawn=departures.get('withdrawn',0),archived=counts('departure_revision').get('ready',0),
         physical_present=physical['physical_present'],physical_absent=physical['physical_absent'],no_spray=no_spray,
         forecasts=linked_forecasts,scored_forecasts=scored,unavailable_forecasts=max(0,linked_forecasts-scored),
+        discovery='Initial bounded discovery complete' if discovery_complete else 'Initial discovery pending/in progress; counts are indexed evidence so far, not all historical departures',
         last=(cursor.summary or {}).get('last_reconciliation_utc') if cursor else None)
