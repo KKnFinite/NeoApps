@@ -114,6 +114,25 @@ class DecoderTest(unittest.TestCase):
             (root/(receipt['sha256']+'.source')).write_bytes(b'corrupt')
             with self.assertRaises(ValueError):study.verify_auto_hrrr(folder,source,at)
 
+    def test_documented_missing_archive_field_remains_missing_during_local_replay(self):
+        from urllib.error import HTTPError
+        at=datetime.now(timezone.utc);_,_,bodies=native_fixture(at)
+        class Client:
+            receipts=[]
+            def get(self,url,head=False):
+                if '/TCDC/TCDC/' in url or '/entire_atmosphere/TCDC/entire_atmosphere/TCDC/' in url:
+                    raise HTTPError(url,404,'Absent source',{},None)
+                raw=b'' if head else bodies[url]
+                r=dict(url=url,method='HEAD' if head else 'GET',bytes=len(raw),sha256=vault.digest(raw),retrieved_at_utc=at.isoformat(),
+                    last_modified=(at-timedelta(hours=1)).strftime('%a, %d %b %Y %H:%M:%S GMT'))
+                self.receipts.append(r);return raw,r
+        point,forecasts=light.collect(Client(),at)
+        self.assertIsNone(forecasts[0]['values']['cloud_cover_percent'])
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)/'hrrr-sources';root.mkdir()
+            for raw in bodies.values():(root/(vault.digest(raw)+'.source')).write_bytes(raw)
+            study.verify_auto_hrrr(folder,dict(native_point=point,native_forecasts=forecasts),at)
+
 
 class RegistrationTest(unittest.TestCase):
     def test_cli_preflights_all_before_upload_and_exact_idempotent_requests(self):

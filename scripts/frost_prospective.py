@@ -345,6 +345,14 @@ def verify_auto_hrrr(root,source,cutoff):
     class Cache:
         def __init__(self):self.receipts=[r for r in receipts if r['method']=='HEAD']
         def get(self,url):
+            if url not in by_url:
+                from urllib.error import HTTPError
+                for level,name,_ in light.VARIABLES:
+                    provider_root='https://hrrrzarr.s3.amazonaws.com/'+clock.instant(point['cycle_at_utc']).strftime('sfc/%Y%m%d/%Y%m%d_%Hz_fcst.zarr/')+level+'/'+name
+                    absent=next((m for m in point.get('missing',[]) if m['variable']==name and m['http_status'] in (403,404)),None)
+                    if absent and url in (provider_root+'/.zmetadata',provider_root+'/'+level+'/'+name+'/0.4.7'):
+                        raise HTTPError(url,absent['http_status'],'Retained source-unavailable receipt',{},None)
+                raise ValueError('Missing original HRRR receipt.')
             r=by_url[url]
             if r['method']!='GET' or not re.fullmatch('[a-f0-9]{64}',r['sha256']):raise ValueError('Invalid HRRR source receipt.')
             raw=(Path(root)/'hrrr-sources'/(r['sha256']+'.source')).read_bytes()
