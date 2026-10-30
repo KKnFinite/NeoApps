@@ -28,7 +28,7 @@ from app.services.google_motherbrain_live_poll_lease import (
 from app.services.google_motherbrain_live_polling import (
     google_motherbrain_live_polling_enabled,
 )
-from app.services.google_motherbrain_sheets import read_google_motherbrain_live_rows
+from app.services.google_motherbrain_sheets import read_google_motherbrain_live_rows, safe_poll_failure
 from app.services.google_rain_live_milestones import (
     apply_google_rain_departure_milestones,
 )
@@ -128,9 +128,10 @@ def execute_google_motherbrain_live_poll(
     except Exception as error:
         rolled_back = _rollback_poll_safely(operation_id)
         current_app.logger.warning(
-            "Google MotherBrain live poll failed safely: operation_id=%s error=%s",
+            "Google MotherBrain live poll failed safely: operation_id=%s error=%s diagnostics=%s",
             operation_id,
             type(error).__name__,
+            safe_poll_failure(error),
         )
         try:
             # Never let a bookkeeping commit include unrolled-back mission work.

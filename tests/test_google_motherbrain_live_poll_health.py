@@ -27,6 +27,17 @@ from app.services.permission_rules import ensure_default_permission_rules
 class GoogleMotherBrainLivePollHealthTest(unittest.TestCase):
     NOW_UTC = datetime(2026, 6, 19, 3, 30, tzinfo=timezone.utc)
 
+    def test_structured_failure_display_is_safe(self):
+        self._enable()
+        from app.services.google_motherbrain_live_poll_lease import _minimal_error
+        from app.services.google_motherbrain_sheets import GoogleMotherBrainReaderError
+        self._state(last_error=_minimal_error(GoogleMotherBrainReaderError(
+            'spreadsheet_access_denied', 'SECRET', stage='open_spreadsheet', provider_status=403)))
+        health = google_motherbrain_live_poll_health(self.gateway, now=self.NOW_UTC)
+        self.assertEqual(health['failure_detail']['code'], 'spreadsheet_access_denied')
+        self.assertEqual(health['failure_detail']['provider_status'], 403)
+        self.assertNotIn('SECRET', str(health))
+
     def setUp(self):
         TestConfig = type(
             "GoogleMotherBrainLivePollHealthTestConfig",

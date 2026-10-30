@@ -1,6 +1,7 @@
 """Safe display status for the server-resolved Google MotherBrain live poll."""
 
 from datetime import datetime, timedelta, timezone
+import json
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -108,6 +109,19 @@ def google_motherbrain_live_poll_health(gateway, now=None):
             ),
         }
     )
+
+    if state:
+        health['last_attempt_label'] = _last_success_label(state.last_attempt_at_utc, gateway)
+        health['stale'] = not _is_current(state.last_success_at_utc, now)
+        health['retry_eligible'] = bool(
+            (not state.lease_expires_at_utc or state.lease_expires_at_utc <= _utc_naive(now))
+            and (not state.last_attempt_at_utc or state.last_attempt_at_utc <= _utc_naive(now) - timedelta(minutes=1)))
+        if state.last_error:
+            try:
+                detail = json.loads(state.last_error)
+                health['failure_detail'] = detail if isinstance(detail, dict) else {}
+            except (ValueError, TypeError):
+                health['failure_detail'] = {'code': 'legacy_failure', 'stage': 'unknown'}
 
     if state and state.last_error:
         health.update({"status": "error", "label": "Error"})

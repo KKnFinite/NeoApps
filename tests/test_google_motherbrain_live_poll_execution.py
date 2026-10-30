@@ -917,6 +917,21 @@ class GoogleMotherBrainLivePollExecutionTest(unittest.TestCase):
         self.assertEqual(state.last_error, "RuntimeError")
         self.assertEqual(state.lease_token, "")
 
+    def test_structured_reader_failure_preserves_diagnostics_and_releases_lease(self):
+        import json
+        from app.services.google_motherbrain_sheets import GoogleMotherBrainReaderError
+        self._enable()
+        result = execute_google_motherbrain_live_poll(self.gateway, now=self.NOW,
+            reader=Mock(side_effect=GoogleMotherBrainReaderError('google_timeout', 'SECRET',
+                stage='read_live_ranges')))
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(SortDateMission.query.count(), 0)
+        state = self._state(db.session.get(SortDateOperation, result['operation_id']))
+        self.assertEqual(json.loads(state.last_error), dict(code='google_timeout',
+            stage='read_live_ranges', provider_status=None))
+        self.assertNotIn('SECRET', state.last_error)
+        self.assertEqual(state.lease_token, '')
+
     def test_malformed_row_and_outbound_canx_do_not_block_valid_work(self):
         self._enable()
         reader = Mock(

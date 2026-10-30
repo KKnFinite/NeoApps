@@ -66,9 +66,11 @@ GOOGLE_MOTHERBRAIN_REQUIRED_TABS = frozenset(
 class GoogleMotherBrainReaderError(RuntimeError):
     """A safe, user-facing Google reader failure."""
 
-    def __init__(self, code, message):
+    def __init__(self, code, message, *, stage="validation", provider_status=None):
         self.code = code
         self.message = message
+        self.stage = stage
+        self.provider_status = provider_status
         super().__init__(message)
 
 
@@ -665,7 +667,7 @@ def _google_call(action, callback):
         response = getattr(exc, "response", None)
         status_code = getattr(response, "status_code", None)
         exception_name = type(exc).__name__.lower()
-        if status_code in {401, 403} or exception_name == "spreadsheetnotfound":
+        if status_code in {401, 403} or exception_name in {"spreadsheetnotfound", "permissionerror"}:
             message = (
                 "The locked Google workbook was not found or is not shared "
                 "with the configured service account as Viewer."
@@ -674,10 +676,47 @@ def _google_call(action, callback):
         elif isinstance(exc, TimeoutError) or "timeout" in exception_name:
             message = "Google Sheets did not respond before the request timed out."
             code = "google_timeout"
+        elif status_code == 429:
+            message = "Google Sheets rate limit reached; the next scheduled poll will retry."
+            code = "google_rate_limited"
+        elif isinstance(status_code, int) and 500 <= status_code <= 599:
+            message = "Google Sheets is temporarily unavailable."
+            code = "google_server_failure"
+        elif "connection" in exception_name or "transport" in exception_name:
+            message = "The Google connection could not be completed."
+            code = "google_connection_failure"
+        elif "refresherror" in exception_name:
+            message = "Google service-account authentication failed."
+            code = "google_authentication_failed"
         else:
             message = "Google Sheets could not be read. Please try again."
             code = "google_api_failure"
-        raise GoogleMotherBrainReaderError(code, message) from exc
+        # gspread wraps APIError in PermissionError/SpreadsheetNotFound.
+        # Preserve the status from that cause, never its body or exception text.
+        cause_response = getattr(getattr(exc, '__cause__', None), 'response', None)
+        status_code = status_code or getattr(cause_response, 'status_code', None)
+        raise GoogleMotherBrainReaderError(
+            code, message, stage=action,
+            provider_status=status_code if isinstance(status_code, int) else None,
+        ) from exc
+
+
+def safe_poll_failure(error):
+    """Bounded diagnostics containing only our enums; no provider text/data."""
+    codes = {'spreadsheet_access_denied', 'google_timeout', 'google_rate_limited',
+        'google_server_failure', 'google_connection_failure', 'google_authentication_failed',
+        'google_api_failure', 'invalid_credentials', 'missing_credentials', 'reader_disabled',
+        'missing_spreadsheet_id', 'invalid_spreadsheet_id', 'invalid_ranges', 'invalid_date',
+        'invalid_workbook', 'wrong_spreadsheet_title', 'wrong_spreadsheet_timezone',
+        'missing_sheet_tab', 'missing_sheet_range', 'reader_unavailable'}
+    stages = {'open_spreadsheet', 'read_live_ranges', 'read_raw_ranges', 'read_formatted_ranges',
+        'read_metadata', 'validation'}
+    code = getattr(error, 'code', None)
+    stage = getattr(error, 'stage', None)
+    status = getattr(error, 'provider_status', None)
+    return dict(code=code if code in codes else 'poll_failure',
+        stage=stage if stage in stages else 'application',
+        provider_status=status if type(status) is int and 100 <= status <= 599 else None)
 
 
 def _trim(value):

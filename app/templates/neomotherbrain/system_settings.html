@@ -182,6 +182,13 @@
                     <strong class="google-live-poll-health-badge is-{{ google_live_poll_health.status }}">{{ google_live_poll_health.label }}</strong>
                 </div>
                 <p>LAST SUCCESSFUL: <strong>{{ google_live_poll_health.last_success_label }}</strong></p>
+                {% if google_live_poll_health.failure_detail %}
+                <p>LAST FAILED ATTEMPT: {{ google_live_poll_health.last_attempt_label }} ·
+                    {{ google_live_poll_health.failure_detail.code }} · {{ google_live_poll_health.failure_detail.stage }}
+                    {% if google_live_poll_health.failure_detail.provider_status %}· Provider HTTP {{ google_live_poll_health.failure_detail.provider_status }}{% endif %}
+                    · Retry {{ 'eligible' if google_live_poll_health.retry_eligible else 'waiting' }}
+                    · Data {{ 'stale' if google_live_poll_health.stale else 'within freshness window' }}</p>
+                {% endif %}
             </div>
             {% endif %}
 

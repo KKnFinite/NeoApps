@@ -7,6 +7,7 @@ coordinates which worker may perform a future poll for one operation scope.
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import secrets
+import json
 
 from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
@@ -246,6 +247,9 @@ def _lease_is_valid(state, now_utc):
 
 
 def _minimal_error(error):
+    from app.services.google_motherbrain_sheets import GoogleMotherBrainReaderError, safe_poll_failure
+    if isinstance(error, GoogleMotherBrainReaderError):
+        return json.dumps(safe_poll_failure(error), separators=(',', ':'))
     if isinstance(error, BaseException):
         return error.__class__.__name__
     return "poll failed"
