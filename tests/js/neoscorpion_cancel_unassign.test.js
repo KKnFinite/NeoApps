@@ -105,7 +105,8 @@ test('cancel refresh restores details and scroll when the active cycle key chang
     const window={location:{pathname:'/neoscorpion/fuel-dispatch'},scrollX:4,scrollY:60,
         scrollTo({top,left}){this.scrollY=top;this.scrollX=left;},requestAnimationFrame:fn=>fn(),
         sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)}};
-    const initialize=vm.runInNewContext(`(${source.slice(start,end).trim()})`,{
+    const helpers=source.slice(source.indexOf('function consoleSectionOpen'),source.indexOf('function initializeDispatchDetails'));
+    const initialize=vm.runInNewContext(`${helpers}\n(${source.slice(start,end).trim()})`,{
         window,document:{getElementById:id=>id.endsWith(key)?detail:null},
     });
     const scroll=initialize(scope),saved=scroll.snapshot();

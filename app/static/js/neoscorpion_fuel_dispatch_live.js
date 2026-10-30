@@ -325,8 +325,27 @@
         close.addEventListener("click", dismiss);
     }
 
+    function consoleSectionOpen(section) {
+        return section.querySelector?.('[data-operation-toggle]')
+            ? section.querySelector('[data-operation-toggle]').getAttribute('aria-expanded') === 'true'
+            : section.open;
+    }
+
+    function setConsoleSectionOpen(section, open) {
+        const toggle = section.querySelector?.('[data-operation-toggle]');
+        if (!toggle) { section.open = open; return; }
+        toggle.setAttribute('aria-expanded', String(open));
+        section.querySelector('[data-operation-panel]').hidden = !open;
+    }
+
     function initializeDispatchDetails(scope) {
         scope.addEventListener("click", (event) => {
+            const operation = event.target.closest('[data-operation-toggle]');
+            if (operation) {
+                const section = operation.closest('[data-console-section]');
+                setConsoleSectionOpen(section, !consoleSectionOpen(section));
+                return;
+            }
             const manageAssets = event.target.closest("[data-assets-open]");
             if (manageAssets) {
                 event.preventDefault();
@@ -471,7 +490,7 @@
                 assetWorkspaceOpen: scope.querySelector('[data-assets-workspace]')?.open,
                 assetWorkspaceScrollTop: scope.querySelector('[data-assets-workspace]')?.scrollTop || 0,
                 openAssetSections: Array.from(scope.querySelectorAll('[data-assets-disclosure][open]')).map(item => item.dataset.assetsDisclosure),
-                openConsoleSections: Array.from(scope.querySelectorAll('details[data-console-section][open]'))
+                openConsoleSections: Array.from(scope.querySelectorAll('[data-console-section]')).filter(consoleSectionOpen)
                     .map(item => [item.closest('[data-neoscorpion-dispatch-detail-row]')?.id, item.dataset.consoleSection]),
                 openActiveDetails: Array.from(scope.querySelectorAll(
                     ".neoscorpion-dispatch-primary-row [data-neoscorpion-dispatch-details][aria-expanded='true']"
@@ -495,8 +514,8 @@
             if (assets && Number.isFinite(saved.assetWorkspaceScrollTop)) assets.scrollTop = saved.assetWorkspaceScrollTop;
             (saved.openConsoleSections || []).forEach(([id, key]) => {
                 const row = scope.querySelector(`[id="${id}"]`);
-                Array.from(row?.querySelectorAll('details[data-console-section]') || [])
-                    .filter(item => item.dataset.consoleSection === key).forEach(item => item.open = true);
+                Array.from(row?.querySelectorAll('[data-console-section]') || [])
+                    .filter(item => item.dataset.consoleSection === key).forEach(item => setConsoleSectionOpen(item, true));
             });
             if (Number.isFinite(saved.y) || Number.isFinite(saved.x)) {
                 window.scrollTo({
@@ -1025,9 +1044,9 @@
                     const newRegion=nextDetails.querySelector(`[data-console-region="${region}"]`);
                     if (oldRegion && newRegion) oldRegion.hidden=newRegion.hidden && !groupDirty([oldRegion]);
                 });
-                const incoming = new Map(Array.from(nextDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]') && (hasSpear || !item.closest('[data-console-region="spear"]'))).map(
+                const incoming = new Map(Array.from(nextDetails.querySelectorAll('[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]') && (hasSpear || !item.closest('[data-console-region="spear"]'))).map(
                     item => [item.dataset.consoleSection, item]));
-                Array.from(currentDetails.querySelectorAll('details[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).forEach(item => {
+                Array.from(currentDetails.querySelectorAll('[data-console-section]')).filter(item => !item.closest('[data-dispatch-action-center]')).forEach(item => {
                     if (!hasSpear && item.closest('[data-console-region="spear"]')) {
                         incoming.delete(item.dataset.consoleSection);
                         return;
@@ -1037,7 +1056,7 @@
                         if (!fresh) item.remove();
                         else {
                             const copy = fresh.cloneNode(true);
-                            copy.open = item.open;
+                            setConsoleSectionOpen(copy, consoleSectionOpen(item));
                             if (item.outerHTML !== copy.outerHTML) item.replaceWith(copy);
                         }
                     } else if (!fresh) {
@@ -1048,7 +1067,15 @@
                         item.querySelectorAll('button[type="submit"], button:not([type])').forEach(button => {
                             button.disabled = fresh.dataset.operationUnavailable === 'true';
                         });
-                        item.querySelector('summary')?.replaceWith(fresh.querySelector('summary').cloneNode(true));
+                        item.dataset.operationUnavailable = fresh.dataset.operationUnavailable;
+                        // Keep the actual focused trigger, as well as inputs.
+                        const toggle = item.querySelector('[data-operation-toggle]');
+                        const description = fresh.querySelector('[data-operation-toggle]').getAttribute('aria-describedby');
+                        if (description) toggle.setAttribute('aria-describedby', description);
+                        else toggle.removeAttribute('aria-describedby');
+                        item.querySelector('[data-operation-reason]')?.remove();
+                        const reason = fresh.querySelector('[data-operation-reason]');
+                        if (reason) item.appendChild(reason.cloneNode(true));
                     }
                     incoming.delete(item.dataset.consoleSection);
                 });

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('app/static/js/neoscorpion_fuel_dispatch_live.js', 'utf8');
 const initialize = source.slice(source.indexOf('function initializeDispatchScroll'), source.indexOf('function initializeDispatchSelects'));
+const sectionHelpers = source.slice(source.indexOf('function consoleSectionOpen'), source.indexOf('function initializeDispatchDetails'));
 function fixture() {
     const stored = new Map();
     const wrap = {scrollTop: 500, scrollLeft: 87, getBoundingClientRect: () => ({top:100,bottom:600})};
@@ -16,7 +17,7 @@ function fixture() {
         scrollTo({top,left}) {this.scrollY=top;this.scrollX=left;}, requestAnimationFrame: f => f(),
         sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)}};
     const document={activeElement:null,getElementById:()=>null};
-    const create=vm.runInNewContext(`(${initialize.trim()})`,{window,document});
+    const create=vm.runInNewContext(`${sectionHelpers}\n(${initialize.trim()})`,{window,document});
     return {stored,wrap,row,scope,window,document,create};
 }
 test('live completion drops only the completed anchor and preserves both scroll axes', () => {

@@ -1471,6 +1471,7 @@ def fuel_report_context(gateway):
                 ),
                 joinedload(NeoScorpionFuelingEvent.fueler_user),
                 joinedload(NeoScorpionFuelingEvent.fuel_truck),
+                selectinload(NeoScorpionFuelingEvent.tank_snapshots),
             )
             .filter(
                 NeoScorpionFuelingEvent.sort_date_operation_id == operation.id
@@ -1493,6 +1494,14 @@ def fuel_report_context(gateway):
             event_type = str(event.event_type or "fuel").strip().lower()
             if event_type in counts:
                 counts[event_type] += 1
+            # FOB is the measured pre-transfer tank total, not the current
+            # shared-tail reading (which can belong to a later visit).
+            layout = tank_layout_for_tail(event.tail_number)
+            remaining = {tank.tank_code: tank.remaining_lbs
+                         for tank in event.tank_snapshots}
+            fob_lbs = (sum(remaining[code] for code, _label in layout)
+                       if layout and all(remaining.get(code) is not None
+                                         for code, _label in layout) else None)
             rows.append(
                 {
                     "number": index,
@@ -1530,6 +1539,7 @@ def fuel_report_context(gateway):
                     "required_fuel_display": (
                         format_display_thousands(event.required_fuel_lbs) or "-"
                     ),
+                    "fob_display": format_display_thousands(fob_lbs) or "-",
                     "neo_fuel_display": (
                         format_display_thousands(event.neo_fuel_lbs) or "-"
                     ),

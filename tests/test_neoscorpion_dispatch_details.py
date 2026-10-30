@@ -33,7 +33,7 @@ class Operations(HTMLParser):
         super().__init__(); self.states={};self.feed(html)
     def handle_starttag(self,tag,attrs):
         attrs=dict(attrs)
-        if tag=='details' and 'data-operation-unavailable' in attrs:
+        if 'data-operation-unavailable' in attrs:
             self.states[attrs['data-console-section']]=attrs['data-operation-unavailable']=='false'
 
 

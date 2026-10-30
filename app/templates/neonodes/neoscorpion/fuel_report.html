@@ -48,6 +48,7 @@
                         <th>End</th>
                         <th>T/F</th>
                         <th>Fuel Load</th>
+                        <th title="Fuel on Board, K lbs">FOB</th>
                         <th>Neo Fuel</th>
                     </tr>
                 </thead>
@@ -64,6 +65,7 @@
                         <td>{{ row.ended_time }}</td>
                         <td>{{ '{:,}'.format(row.transfer_fuel_gallons) if row.transfer_fuel_gallons is not none else '-' }} GAL</td>
                         <td>{{ row.required_fuel_display }}</td>
+                        <td>{{ row.fob_display }}</td>
                         <td>{{ row.neo_fuel_display }}</td>
                     </tr>
                     {% endfor %}

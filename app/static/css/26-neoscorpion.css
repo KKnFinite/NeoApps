@@ -1458,12 +1458,14 @@ body.operational-board-view .neoscorpion-screen[data-fuel-dispatch-live] .neosco
 .scorpion-desktop-console [hidden], .scorpion-details-count[hidden] { display: none !important; }
 .scorpion-desktop-console .scorpion-operations { display: block; }
 .scorpion-operation-list, .scorpion-console-secondary, .scorpion-console-secondary > .neoscorpion-dispatch-detail-actions { display: flex; flex-wrap: wrap; align-items: start; gap: 4px 10px; }
-.scorpion-operation-list > details, .scorpion-console-secondary > details, .scorpion-console-secondary > .neoscorpion-dispatch-detail-actions > details { flex: 0 1 auto; max-width: 100%; }
-.scorpion-operation-list > details[open], .scorpion-console-secondary > details[open], .scorpion-console-secondary > .neoscorpion-dispatch-detail-actions > details[open] { flex: 1 1 100%; }
-.scorpion-operation-list summary { font-weight: 700; font-size: 11px; }
-.scorpion-operation-list details:not([open]) summary small { display: none; }
-.scorpion-operation-list details[open] summary small { display: block; color: #aeb3bb; font-weight: 400; }
-.scorpion-operation-list [data-operation-unavailable=true] summary { color: #aeb3bb; }
+.scorpion-console-secondary > details, .scorpion-console-secondary > .neoscorpion-dispatch-detail-actions > details { flex: 0 1 auto; max-width: 100%; }
+.scorpion-console-secondary > details[open], .scorpion-console-secondary > .neoscorpion-dispatch-detail-actions > details[open] { flex: 1 1 100%; }
+/* Buttons stay together; expanded forms occupy their own row below them. */
+.scorpion-operation { display: contents; }
+.scorpion-operation > button { order: 0; }
+.scorpion-operation > [data-operation-panel] { order: 1; flex: 1 1 100%; min-width: 0; }
+.scorpion-operation > [data-operation-reason] { display: none; order: 2; flex: 1 1 100%; color: #aeb3bb; overflow-wrap: anywhere; }
+.scorpion-operation:has([aria-expanded=true]) > [data-operation-reason] { display: block; }
 .scorpion-console-secondary { margin-top: 5px; }
 .scorpion-console-secondary details[open] > label { width: min(100%, 160px); margin-right: 5px; vertical-align: bottom; }
 .scorpion-action-center { margin: 5px 0; }

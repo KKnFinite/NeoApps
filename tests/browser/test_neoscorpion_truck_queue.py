@@ -71,7 +71,10 @@ class TruckQueueBrowserTest(unittest.TestCase):
                         detail=dispatch.locator(f'#neoscorpion-dispatch-detail-{mid}-1')
                         for position,truck in enumerate((trucks[1],trucks[0],trucks[1],trucks[0]),1):
                             operation=detail.locator('[data-console-section="second-truck"]')
-                            if not operation.evaluate('n=>n.open'):operation.locator('summary').click()
+                            trigger=operation.locator('[data-operation-toggle]')
+                            if trigger.count():
+                                if trigger.get_attribute('aria-expanded')!='true':trigger.click()
+                            elif not operation.evaluate('n=>n.open'):operation.locator('summary').click()
                             form=operation.locator('form');form.locator('[name=proposed_truck_id]').select_option(str(truck))
                             form.get_by_role('button',name='PLAN ANOTHER TRUCK',exact=True).click()
                             plans=dispatch.locator(f'[data-truck-lines-mission="{mid}"] [data-truck-line-plan]' if baseline else f'tr[data-truck-lines-mission="{mid}"][data-truck-line-plan]')

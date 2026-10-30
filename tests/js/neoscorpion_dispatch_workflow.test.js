@@ -50,7 +50,8 @@ test("refresh restores the specific cycle row and its details for a shared missi
         sessionStorage: {getItem: key => stored.get(key), setItem: (key, val) => stored.set(key, val),
             removeItem: key => stored.delete(key)},
     };
-    const initialize = vm.runInNewContext(`(${source.trim()})`, {
+    const helpers = script.slice(script.indexOf('function consoleSectionOpen'), script.indexOf('function initializeDispatchDetails'));
+    const initialize = vm.runInNewContext(`${helpers}\n(${source.trim()})`, {
         window, document: {getElementById: () => detail},
     });
     const scroll=initialize(scope);

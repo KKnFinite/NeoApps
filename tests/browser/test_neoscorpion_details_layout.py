@@ -135,7 +135,10 @@ class DetailsLayoutBrowserTest(unittest.TestCase):
                         for key in ('tail-notes','second-truck','start-uplift','start-defuel','spear','management-4',f'source-{case.work.id}'):
                             disclosure=console.locator(f'[data-console-section="{key}"]')
                             if not disclosure.is_visible():continue
-                            if not disclosure.evaluate('e=>e.open'):disclosure.locator('summary').click()
+                            if disclosure.locator('[data-operation-toggle]').count():
+                                if disclosure.locator('[data-operation-toggle]').get_attribute('aria-expanded')!='true':
+                                    disclosure.locator('[data-operation-toggle]').click()
+                            elif not disclosure.evaluate('e=>e.open'):disclosure.locator('summary').click()
                         for width in (1440,1024):
                             page.set_viewport_size({'width':width,'height':1000})
                             clipped=console.evaluate("""e=>{const b=e.getBoundingClientRect();return [...e.querySelectorAll('input:not([type=hidden]),select,textarea,button')].filter(n=>{const r=n.getBoundingClientRect();return r.width&&r.height&&(r.left<b.left-1||r.right>b.right+1);}).map(n=>n.outerHTML.slice(0,180));}""")
@@ -163,7 +166,9 @@ class DetailsLayoutBrowserTest(unittest.TestCase):
                             dict(before=scroll_before,after=page.evaluate('scrollY'),note=note.bounding_box()))
                         for key in ('tail-notes','second-truck','spear'):
                             disclosure=console.locator(f'[data-console-section="{key}"]')
-                            if disclosure.is_visible():self.assertTrue(disclosure.evaluate('e=>e.open'))
+                            if disclosure.is_visible():
+                                self.assertTrue(disclosure.locator('[data-operation-toggle]').get_attribute('aria-expanded')=='true'
+                                    if disclosure.locator('[data-operation-toggle]').count() else disclosure.evaluate('e=>e.open'))
                         expect(console.locator(f'[data-action-key="verify-{case.work.id}"]')).to_be_visible()
                         console.locator('[data-tail-note-form]').get_by_role('button',name='SAVE',exact=True).click()
                         expect(console.locator('[data-tail-note-status]')).to_contain_text('SAVED',timeout=10000)

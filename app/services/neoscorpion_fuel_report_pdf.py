@@ -28,14 +28,17 @@ def fuel_report_pdf(context):
     if any(stat["incomplete"] for stat in totals.values()):
         story.append(Paragraph("* Known subtotal; missing values are excluded. A dash means all values are unknown.", styles["Normal"]))
     story.append(Spacer(1, 12))
-    headers = ["#", "Type", "Flight / Dest", "Tail", "Fueler", "Truck", "Start", "End", "T/F GAL", "Fuel Load", "Neo Fuel"]
-    data = [headers]
+    story.append(Paragraph("Fuel Load / FOB / Neo Fuel: K lbs. FOB is the recorded pre-transfer tank total.", styles["Normal"]))
+    story.append(Spacer(1, 6))
+    headers = ["#", "Type", "Flight / Dest", "Tail", "Fueler", "Truck", "Start", "End", "T/F GAL", "Fuel Load", "FOB", "Neo Fuel"]
+    # All cells wrap within the landscape printable width, including headers.
+    data = [[Paragraph(escape(value), cell_style) for value in headers]]
     for row in context["fuel_report_rows"]:
         gallons = row["transfer_fuel_gallons"]
-        values = [row["number"], row["event_type_label"], f"{row['flight_number']} / {row['destination']}", row["tail_number"], row["fueler_name"], row["truck_number"], row["started_time"], row["ended_time"], f"{gallons:,}" if gallons is not None else "-", row["required_fuel_display"], row["neo_fuel_display"]]
+        values = [row["number"], row["event_type_label"], f"{row['flight_number']} / {row['destination']}", row["tail_number"], row["fueler_name"], row["truck_number"], row["started_time"], row["ended_time"], f"{gallons:,}" if gallons is not None else "-", row["required_fuel_display"], row["fob_display"], row["neo_fuel_display"]]
         data.append([Paragraph(escape(str(value or "-")), cell_style) for value in values])
     if len(data) > 1:
-        table = Table(data, colWidths=[24, 48, 100, 65, 110, 50, 43, 43, 65, 58, 58], repeatRows=1)
+        table = Table(data, colWidths=[22, 46, 94, 60, 100, 46, 40, 40, 60, 52, 52, 52], repeatRows=1)
         table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ece8d6")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, 0), 8), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOTTOMPADDING", (0, 0), (-1, -1), 6), ("LINEBELOW", (0, 0), (-1, -1), .3, colors.lightgrey)]))
         story.append(table)
     else:
