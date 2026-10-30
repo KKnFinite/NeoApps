@@ -109,12 +109,14 @@ def neosubzero_ucc_context(gateway, operation):
         aircraft.sort(key=_aircraft_sort_key)
         queue = _physical_queue(aircraft) if ramp in UCC_RAMP_ORDER else []
         throat = queue[0] if queue else None
-        waiting_rows = queue[1:4]
+        waiting_rows = queue[1:3]
         for queue_position, row in enumerate(waiting_rows, start=1):
             row["queue_position"] = queue_position
         waiting_queue = tuple(waiting_rows)
         parked = [row for row in aircraft if row.get("block_out_at_utc") is None]
-        parking = _parking_projection(ramp, parked, parking_9_10_enabled)
+        prefix = 'ABCDE'[UCC_RAMP_ORDER.index(ramp)] if ramp in UCC_RAMP_ORDER else ''
+        occupied = ({prefix+'10'} if throat else set()) | ({prefix+'09'} if len(waiting_queue) == 2 else set())
+        parking = _parking_projection(ramp, [row for row in parked if row['parking'] not in occupied], parking_9_10_enabled)
         visible_codes = {place["code"] for place in parking}
         slots = []
         for position in UCC_POSITIONS if ramp in RAMP_ORDER else ():
@@ -147,10 +149,10 @@ def neosubzero_ucc_context(gateway, operation):
                 "waiting_queue": waiting_queue,
                 "queue": tuple(queue),
                 "queue_version": _queue_version(aircraft),
-                "exceptions": tuple(queue[4:]),
+                "exceptions": tuple(queue[3:]),
                 "location_exceptions": tuple(row for row in aircraft if row.get("block_out_at_utc") and ramp not in UCC_RAMP_ORDER),
                 "parking_positions": parking,
-                "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes),
+                "parking_exceptions": tuple(row for row in parked if row["parking"] not in visible_codes or row['parking'] in occupied),
                 "active_conflicts": tuple(row for row in queue[1:] if _is_active_throat(row)),
                 "slots": tuple(slots),
             }
@@ -672,6 +674,8 @@ def _visual_state(row):
         return "negative"
     if status == "finished":
         return "finished"
+    if getattr(event, 'pass1_started_at_utc', None):
+        return 'deicing'
     if status == "deice_planned":
         return "deice-planned"
     if status == "configured":
@@ -691,6 +695,7 @@ def _visual_label(state):
         "configured": "CONFIGURED",
         "pretreated": "PRETREATED",
         "deice-planned": "DEICE PLANNED",
+        "deicing": "DEICING",
         "finished": "FINISHED / AWAITING CLEARANCE",
         "negative": "NEGATIVE DEICE",
         "cleared": "CLEARED",
@@ -711,7 +716,7 @@ def _departure_event_status(row):
 def _is_active_throat(row):
     event = row.get("event")
     status = _departure_event_status(row)
-    return row.get("block_out_at_utc") is not None and (status == "finished" or (
+    return row.get("block_out_at_utc") is not None and (getattr(event, "pass1_started_at_utc", None) is not None or status == "finished" or (
         status == "configured"
         and getattr(event, "configured_at_utc", None) is not None
     ))

@@ -270,6 +270,8 @@ def mutate_departure_deice(operation, mission, action, values, *, event=None, ac
                 raise NeoSubZeroDepartureDeiceError('Enter a correction reason for completed treatment changes.')
             if event.pass2_started_at_utc and values.get('treatment_plan') == 'one_type_i':
                 raise NeoSubZeroDepartureDeiceError('Recorded Pass 2 evidence cannot be removed.')
+            if values.get('pass1_start') and not event.pass1_started_at_utc:
+                _validate_throat_start(operation, mission)
             _save_treatment(operation, mission, event, values)
             if previous_status in {'finished','cleared'}:
                 if event.status != 'finished': raise NeoSubZeroDepartureDeiceError('Completed pass evidence cannot be erased.')
@@ -512,6 +514,31 @@ def _departure_row(
     }
 
 
+def _validate_throat_start(operation, mission):
+    """The operation lock held by the caller serializes throat admission."""
+    if not mission.actual_block_out_datetime_utc:
+        return  # Treatment at a parked aircraft is not throat occupancy.
+    from app.services.neosubzero_ucc import neosubzero_ucc_context
+    gateway = db.session.get(Gateway, operation.gateway_id) if operation.gateway_id else Gateway.query.filter_by(code=operation.gateway_code).one()
+    context = neosubzero_ucc_context(gateway, operation)
+    for ramp in context['ramps']:
+        if ramp['name'] == 'Remote':
+            continue
+        if any(row['mission_id'] == mission.id for row in ramp['queue']):
+            if any(str(row['parking']).upper().endswith('10') for row in ramp['parking_exceptions']):
+                raise NeoSubZeroDepartureDeiceError(
+                    'Position 10 also has a parked aircraft recorded. Resolve its MotherBrain parking before START.')
+            if any(row['mission_id'] != mission.id and
+                   getattr(row.get('event'), 'pass1_started_at_utc', None)
+                   for row in ramp['queue']):
+                raise NeoSubZeroDepartureDeiceError(
+                    'Another aircraft has recorded treatment in this throat. Complete and CLEAR it before START.')
+            if ramp['queue'][0]['mission_id'] != mission.id:
+                raise NeoSubZeroDepartureDeiceError(
+                    'Only the aircraft at throat Position 10 may START. Clear the aircraft ahead or correct the waiting queue first.')
+            return
+
+
 def _save_treatment(operation, mission, event, values):
     plan = str(values.get("treatment_plan") or "").strip().lower()
     pass_types = PLAN_PASS_TYPES.get(plan)
@@ -727,7 +754,9 @@ def _validate_ramp_configuration_available(operation, mission, event):
         )
         .filter(
             NeoSubZeroDepartureDeiceEvent.sort_date_operation_id == operation.id,
-            NeoSubZeroDepartureDeiceEvent.status.in_(("configured", "finished")),
+            or_(NeoSubZeroDepartureDeiceEvent.status.in_(("configured", "finished")),
+                NeoSubZeroDepartureDeiceEvent.pass1_started_at_utc.is_not(None)),
+            NeoSubZeroDepartureDeiceEvent.status != 'cleared',
             SortDateMission.mission_type == "departure",
             or_(
                 SortDateMission.departure_status.is_(None),

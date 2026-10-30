@@ -80,8 +80,8 @@ class OperationsBrowserTest(unittest.TestCase):
             root=page.locator('[data-ops-workspace]')
             for mode in ('outbound','pretreat'):
                 self.ready(page,'/neosubzero/operations?mode='+mode)
-                for width in (320,375,430,768,1024,1440,1920,2560):
-                    page.set_viewport_size({'width':width,'height':1000})
+                for width,height in ((320,900),(375,900),(390,900),(430,900),(768,1024),(1366,768),(1920,900),(1920,1080),(3840,2160)):
+                    page.set_viewport_size({'width':width,'height':height})
                     page.wait_for_function('(w)=>document.documentElement.clientWidth===w',arg=width)
                     for layout in ('list','visual'):
                         self.layout(page,layout)

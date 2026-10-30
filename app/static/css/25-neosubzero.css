@@ -42,6 +42,7 @@
 .neosubzero-ucc .ucc-deice-pad { min-height:78px; border-radius:18px 18px 3px 3px; }
 .neosubzero-ucc .ucc-deice-pad > b,.neosubzero-ucc .ucc-deice-waiting > b { color:#e3c771; font-size:.6rem; overflow-wrap:anywhere; }
 .neosubzero-ucc .ucc-deice-pad > span { color:#91abba; font-size:.6rem; }
+.neosubzero-ucc .ucc-plane.state-deicing { background:#23533b; color:#fff; }
 .neosubzero-ucc .ucc-remote-parking { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; }
 .neosubzero-ucc .is-remote .ucc-plane-icon { font-size:1.4rem; }
 .neosubzero-ucc .ucc-plane > span:not(.ucc-plane-icon) { overflow-wrap:anywhere; }

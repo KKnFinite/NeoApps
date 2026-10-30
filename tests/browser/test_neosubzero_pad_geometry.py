@@ -65,8 +65,8 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
             page=context.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
             self.login(page);self.ready(page,'/neosubzero/ucc')
             alpha=page.locator('[data-ucc-ramp="Alpha"]')
-            for width in (320,375,430,768,1024,1440,1920,2560):
-                page.set_viewport_size({'width':width,'height':1000})
+            for width,height in ((320,900),(375,900),(390,900),(430,900),(768,1024),(1366,768),(1920,900),(1920,1080),(3840,2160)):
+                page.set_viewport_size({'width':width,'height':height})
                 page.wait_for_function('(w)=>document.documentElement.clientWidth===w && document.querySelector("main.content").getBoundingClientRect().width===w',arg=width)
                 self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1)
                 self.assertEqual(page.locator('[data-ucc-ramp]').evaluate_all('(els)=>els.map(el=>el.dataset.uccRamp)'),['Alpha','Bravo','Charlie','Delta','Echo','Remote'])
@@ -95,13 +95,13 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
                             self.assertGreaterEqual(spots[middle]['y'],spots[left]['y']-1)
                             self.assertLessEqual(spots[middle]['y']+spots[middle]['height'],spots[left]['y']+spots[left]['height']+1)
                         expect(ramp.locator('[data-ucc-deice-pad]')).to_be_visible()
-                    for q,left,right in ((1,1,5),(2,2,6),(3,3,7)):
+                    for q,left,right in ((1,2,6),(2,4,8)):
                         b=alpha.locator(f'[data-ucc-queue-position="{q}"]').bounding_box()
                         l=alpha.locator(f'[data-ucc-parking="A{left:02d}"]').bounding_box();r=alpha.locator(f'[data-ucc-parking="A{right:02d}"]').bounding_box()
                         self.assertLess(l['x'],b['x']);self.assertLess(b['x'],r['x'])
                         self.assertGreaterEqual(b['y'],l['y']-1);self.assertLessEqual(b['y']+b['height'],l['y']+l['height']+1)
-                    q=alpha.locator('[data-ucc-queue-position="1"]').bounding_box();park=alpha.locator('[data-ucc-parking="A10"]').bounding_box()
-                    self.assertLessEqual(q['y']+q['height'],park['y'])
+                    pad=alpha.locator('[data-ucc-deice-pad]').bounding_box();park=alpha.locator('[data-ucc-parking="A10"]').bounding_box()
+                    self.assertAlmostEqual(pad['y'],park['y'],delta=1)
                     remote=page.locator('[data-ucc-ramp="Remote"]')
                     slots=remote.locator('[data-ucc-parking]').evaluate_all('(els)=>els.map(e=>({code:e.dataset.uccParking,x:e.getBoundingClientRect().x,y:e.getBoundingClientRect().y}))')
                     self.assertEqual([s['code'] for s in slots],['R04','R03','R02','R01']);self.assertEqual(len({round(s['y']) for s in slots}),1)
@@ -126,7 +126,7 @@ class UccPadGeometryBrowserTest(unittest.TestCase):
             with self.app.app_context():
                 MotherBrainParkingSettings.query.one().include_throat_default=False;db.session.commit()
             expect(page.locator('[data-ucc-parking$="09"], [data-ucc-parking$="10"]')).to_have_count(0,timeout=10000)
-            expect(alpha.locator('[data-ucc-queue-position]')).to_have_count(3)
+            expect(alpha.locator('[data-ucc-queue-position]')).to_have_count(2)
             expect(alpha.locator('[data-ucc-aircraft="%s"]'%self.parked_id)).to_be_visible()
             expect(draft).to_be_focused();expect(draft).to_have_value(str(self.people[2]))
             self.weather_data['future_forecast'][0]['conditions']='LIVE FORECAST EVIDENCE'

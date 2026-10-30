@@ -13,6 +13,7 @@ from app.models import (
     StaffingDailyAttendance,
     StaffingPerson,
     StaffingPersonQualification,
+    StaffingLeadershipAssignment,
     StaffingUnit,
     StaffingWorkAssignment,
     User,
@@ -38,6 +39,15 @@ from app.services.permission_rules import (
 
 
 class NeoSubZeroStaffingTest(unittest.TestCase):
+    def _authorize_attendance_recorder(self):
+        """Give this fixture real canonical authority; application role alone is insufficient."""
+        person=StaffingPerson(employee_id='R100',first_name='Attendance',last_name='Recorder',
+            seniority_date=date(2020,1,1),classification='division_manager',employee_status='active',active=True)
+        db.session.add(person);db.session.flush()
+        db.session.add(StaffingLeadershipAssignment(person_id=person.id,unit_id=self.night.id,
+            leadership_level='sort',active=True))
+        db.session.commit()
+
     def setUp(self):
         config = type(
             "TestConfig",
@@ -228,6 +238,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         self.assertFalse(assignment.active)
 
     def test_not_here_attendance_suppresses_then_restores_selected_callout(self):
+        self._authorize_attendance_recorder()
         set_staffing_person_qualification(
             self.permanent,
             DEICE_QUALIFICATION_KEY,
@@ -292,6 +303,7 @@ class NeoSubZeroStaffingTest(unittest.TestCase):
         )
 
     def test_manual_callout_removal_does_not_restore_when_here(self):
+        self._authorize_attendance_recorder()
         set_staffing_person_qualification(
             self.callout,
             DEICE_QUALIFICATION_KEY,

@@ -135,7 +135,7 @@ class UccPostgresTest(unittest.TestCase):
         db.session.commit();ids=[event.id for event in events]
         before=neosubzero_ucc_context(f.gateway,f.operation)['ramps'][0]
         self.assertEqual(before['pad']['mission_id'],missions[0].id)
-        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions[1:]])
+        self.assertEqual([row['mission_id'] for row in before['waiting_queue']],[m.id for m in missions[1:3]])
         events[0].status='finished';events[0].pass1_ended_at_utc=datetime(2026,9,1,1,5)
         mutate_departure_deice(f.operation,missions[0],'clear',{},event=events[0]);db.session.commit()
         db.session.expire_all()

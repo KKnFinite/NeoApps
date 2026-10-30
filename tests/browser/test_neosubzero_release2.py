@@ -139,8 +139,8 @@ class Release2BrowserTest(unittest.TestCase):
             driver.once('dialog',lambda dialog:dialog.accept());driver.locator('[data-evidence-reload]').click()
             expect(own.locator('[name="gallons"]')).to_have_value('18.50')
             expect(pane.locator(f'[data-participant-id="{rid}"] [name="gallons"]')).to_have_value('18.5',timeout=10000)
-            for width in (320,375,430,768,1024,1440,1920,2560):
-                page.set_viewport_size({'width':width,'height':1000})
+            for width,height in ((320,900),(375,900),(390,900),(430,900),(768,1024),(1366,768),(1920,900),(1920,1080),(3840,2160)):
+                page.set_viewport_size({'width':width,'height':height})
                 self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth-innerWidth'),1,dict(engine=engine,width=width))
                 self.assertLessEqual(pane.evaluate('e=>e.scrollWidth-e.clientWidth'),1,dict(engine=engine,width=width))
                 page.screenshot(path=str(evidence/f'{engine}-operations-{width}.png'))

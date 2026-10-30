@@ -534,7 +534,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         self.assertIn(b'data-weather-theme="snow"', page.data)
         self.assertIn(b'data-weather-motion="on"', page.data)
         self.assertIn(b"/neosubzero/ucc/weather-preference", page.data)
-        self.assertIn(b"DEICE PAD", page.data)
+        self.assertIn(b"THROAT", page.data)
         self.assertIn(b'data-ucc-deice-pad', page.data)
         self.assertNotIn(b"WAITING QUEUE", page.data)
         self.assertEqual(denied.status_code, 403)
@@ -878,10 +878,10 @@ class NeoSubZeroUccTest(unittest.TestCase):
             mission.actual_block_out_datetime_utc=datetime(2026,9,1,1,index);self._deice_event(mission,'deice_planned')
         db.session.commit();ramp=self._ramp_context('Alpha')
         stand=next(p for p in ramp['parking_positions'] if p['code']=='A10')
-        self.assertEqual(stand['aircraft'][0]['mission_id'],parked.id)
+        self.assertEqual(stand['aircraft'],())
         self.assertEqual(ramp['pad']['mission_id'],self.alpha.id)
         self.assertEqual(ramp['waiting_queue'][0]['mission_id'],waiting.id)
-        self.assertEqual(ramp['parking_exceptions'],())
+        self.assertEqual([row['mission_id'] for row in ramp['parking_exceptions']],[parked.id])
 
     def test_off_sort_still_shows_five_empty_ramps_without_future_records(self):
         context=neosubzero_ucc_context(self.gateway,None)
@@ -959,7 +959,7 @@ class NeoSubZeroUccTest(unittest.TestCase):
         context=neosubzero_ucc_context(self.gateway,self.operation)
         self.assertNotIn("FUTURE-TAIL",{row["tail"] for ramp in context["ramps"] for row in ramp["aircraft"]})
 
-    def test_pad_three_waiting_places_automatic_clear_advance_and_capacity_review(self):
+    def test_three_throat_places_automatic_clear_advance_and_capacity_review(self):
         missions = [self.alpha]
         for i in range(4):
             mission = self._departure(f"5X30{i}", f"N30{i}", "DEN", 4)
@@ -971,15 +971,15 @@ class NeoSubZeroUccTest(unittest.TestCase):
         db.session.commit()
         ramp = self._ramp_context("Alpha")
         self.assertEqual(ramp['pad']['mission_id'],missions[0].id)
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[1:4]])
-        self.assertEqual([r["mission_id"] for r in ramp["exceptions"]], [missions[4].id])
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[1:3]])
+        self.assertEqual([r["mission_id"] for r in ramp["exceptions"]], [m.id for m in missions[3:]])
         self.assertTrue(all(not p["aircraft"] for p in ramp["parking_positions"]))
         ramp["throat"]["event"].status = "cleared"
         db.session.commit()
         ramp = self._ramp_context("Alpha")
         self.assertEqual(ramp['pad']['mission_id'],missions[1].id)
-        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[2:]])
-        self.assertEqual(ramp["exceptions"], ())
+        self.assertEqual([row['mission_id'] for row in ramp['waiting_queue']],[m.id for m in missions[2:4]])
+        self.assertEqual([r['mission_id'] for r in ramp['exceptions']], [missions[4].id])
 
     def test_queue_correction_uses_existing_events_stale_guard_and_audit(self):
         second = self._departure("5X400", "N400", "DEN", 4)

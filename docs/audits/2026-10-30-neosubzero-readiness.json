@@ -1,0 +1,54 @@
+{
+  "baseline_sha": "c82a7c14ca0bd2de975e85e6b373be0a7d2eea0c",
+  "readiness": "NO-GO for first operational night pending real staffing/fluid setup and authenticated production acceptance",
+  "isolated_workflow_status": "Treatment, tail ownership, crew/truck changes, gallons, FIN/CLEAR, reporting and responsive browser workflows verified",
+  "fixed": [
+    {"priority": "GO-LIVE BLOCKER", "issue": "Waiting throat aircraft could submit a pass START", "correction": "Validate Position 10 under existing operation lock; retain active treatment until CLEAR"},
+    {"priority": "HIGH PRIORITY", "issue": "One pad plus three waiting aircraft exceeded the three-position throat contract", "correction": "Position 10, Middle, Position 9 only; retain all overflow for review"},
+    {"priority": "HIGH PRIORITY", "issue": "Started pass without CONFIGURED marker could display PLANNED and be displaced", "correction": "Use recorded pass START for DEICING presentation and active throat priority; reject competing configuration"},
+    {"priority": "HIGH PRIORITY", "issue": "Canonical parked aircraft and throat aircraft could appear in one position", "correction": "Preserve conflicting parked aircraft in PARKING REVIEW; require Position 10 conflict resolution before START"}
+  ],
+  "production_read_only_configuration": {
+    "gateway": "RFD",
+    "latest_operation_id": 83,
+    "latest_sort_date": "2026-10-29",
+    "active_deice_qualified_people": 0,
+    "assigned_crew_slots": 0,
+    "assigned_trucks": 0,
+    "saved_fluid_settings_rows": 0,
+    "required_actions": ["Authorize actual qualified staff", "Assign actual Driver/Flyer teams and trucks for the launch sort", "Save verified fluid product names and actual Type I concentration", "Confirm role-specific authenticated production access and current MotherBrain source data"]
+  },
+  "verified_contracts": [
+    "PRETREAT and OUTBOUND remain independent and physical-tail owned",
+    "Original mission context retained through swaps before/during/after spray",
+    "Both pass fluid types and surfaces visible; remaining pass plan editable before its START",
+    "Final required pass END establishes FIN; explicit CLEAR preserves evidence",
+    "Unsprayed CLEAR creates no fake spray; missing gallons do not block FIN/CLEAR",
+    "Per-pass START context and END crew snapshots survive later staffing moves",
+    "Driver access uses documented participation after reassignment; other-truck writes denied",
+    "Stale writes, rollover and concurrent corrections reject safely",
+    "Actual pass reports retain individual trucks, weather, surfaces, products and copy text",
+    "Archive outage and correction retries remain outside operational transaction success",
+    "Inspections and explicit no-spray evidence retain provenance and pretreatment uncertainty"
+  ],
+  "tests": {
+    "postgres_initial": "71 tests: 70 passed; one inherited obsolete FROST asset-count assertion failed",
+    "core_initial": "93 tests: 91 passed; two attendance fixtures lacked canonical leadership authority, reproduced on unchanged main",
+    "final_core": "81 affected tests: 80 passed initially; obsolete independent-pad assertion updated to three-position review behavior, then all 40 UCC tests passed",
+    "final_staffing_and_evidence": "26 passed: canonical staffing fixtures, new PostgreSQL throat guards and physical-inspection provenance/concurrency/archive tests",
+    "fixture_corrections": "Attendance tests now grant real fixture leadership, without changing production authorization; asset marker assertion follows the new UCC stylesheet cache key",
+    "browser": "Four workflow methods passed Chromium and WebKit; final geometry and optional inspection rerun also passed",
+    "viewports": ["1920x900", "1920x1080", "1366x768", "3840x2160", "768x1024", "320px", "375px", "390px", "430px"],
+    "javascript": "Five UCC/report-copy harness tests and Operations/departure syntax checks passed",
+    "broad_discovery": "Stopped an uninformative broad discovery run; no completion claim. Explicit focused suites supply the results. No WSL or load benchmark run."
+  },
+  "limitations": [
+    "No fabricated production flights, employees or spray transactions",
+    "Browser access disabled in Work settings prevents authenticated production acceptance in this session",
+    "Private off-site outage/read-back behavior exercised in isolated fixtures; no production spray archive was created for testing",
+    "Google MotherBrain live-poll cause remains a separate unresolved dependency; its diagnostics are untouched",
+    "Historical DEICE PAD evidence retains its original location text",
+    "Issue 21 Application Context dropdown/weather automation remains outside scope"
+  ],
+  "preserved": ["FROST code and models", "Google diagnostics", "Gunicorn and memory safeguards", "Employee recovery", "Other NeoApps nodes", "Original data, artwork, local files and stashes"]
+}
