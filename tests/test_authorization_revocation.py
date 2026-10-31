@@ -316,3 +316,17 @@ class AuthorizationRevocationTest(unittest.TestCase):
         self.assertFalse(user_can('neostaffing.people.edit',self.user))
         access.request_app_access_for_user(self.user,'neostaffing');db.session.commit()
         self.assertFalse(user_can('neostaffing.people.edit',self.user))
+
+    def test_new_grant_savepoint_obeys_caller_rollback(self):
+        self.assertIsNone(PortalAppAccess.query.filter_by(user_id=self.user.id,app_code='neostaffing').first())
+        access.ensure_user_app_access(self.user,'neostaffing')
+        db.session.rollback()
+        self.assertIsNone(PortalAppAccess.query.filter_by(user_id=self.user.id,app_code='neostaffing').first())
+
+    def test_new_default_gateway_and_nodes_obey_caller_rollback(self):
+        GatewayNodeRole.query.delete();GatewayMembership.query.delete();PortalAppAccess.query.delete()
+        NeoNode.query.delete();Gateway.query.delete();db.session.commit()
+        access.ensure_default_gateway_and_nodes()
+        db.session.rollback()
+        self.assertEqual(Gateway.query.count(),0)
+        self.assertEqual(NeoNode.query.count(),0)

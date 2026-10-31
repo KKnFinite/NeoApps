@@ -878,6 +878,15 @@ def _get_or_create_grant(model, identity, defaults):
     existing = model.query.filter_by(**identity).first()
     if existing is not None:
         return existing, False
+    connection = db.session.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        # sqlite3 legacy transaction mode does not BEGIN for SELECT/SAVEPOINT.
+        # Enclose the savepoint in the caller's real transaction so RELEASE
+        # cannot independently commit a grant before the caller succeeds.
+        connection.exec_driver_sql("BEGIN")
     try:
         with db.session.begin_nested():
             row = model(**identity, **defaults)
