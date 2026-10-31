@@ -10,6 +10,7 @@ import time
 
 from flask import current_app, jsonify, render_template, request, session
 from markupsafe import Markup, escape
+from flask_login import current_user
 
 
 CSRF_FORM_FIELD = "csrf_token"
@@ -61,7 +62,10 @@ def validate_csrf_request():
     if _resolved_view_is_csrf_exempt():
         return True
 
-    token = _request_token()
+    return _validate_token(_request_token())
+
+
+def _validate_token(token, *, enforce_expiry=True):
     if not token:
         return False
 
@@ -81,7 +85,7 @@ def validate_csrf_request():
 
     now = int(time.time())
     ttl = int(current_app.config["CSRF_TOKEN_TTL_SECONDS"])
-    return issued_at_value <= now and now - issued_at_value <= ttl
+    return issued_at_value <= now and (not enforce_expiry or now - issued_at_value <= ttl)
 
 
 def csrf_exempt(view_function):
@@ -91,10 +95,48 @@ def csrf_exempt(view_function):
 
 
 def csrf_failure_response():
-    """Return a safe response for browser and fetch CSRF validation failures."""
+    """Identify only rejections made before any mutation handler executes."""
     if _is_api_request():
-        return jsonify({"error": "CSRF validation failed. Refresh and try again."}), 400
-    return render_template("csrf_error.html"), 400
+        response = jsonify({
+            "error": "CSRF validation failed. Your entry is kept; renew the form session and try again.",
+            "code": "csrf_rejected", "request_executed": False,
+        })
+    else:
+        response = current_app.make_response(render_template("csrf_error.html"))
+    response.status_code = 400
+    response.headers["X-NeoApps-CSRF-Rejected"] = "1"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def csrf_renewal_response():
+    """Renew expiry, never identity or authority; old tabs cannot cross logins.
+
+    An expired but correctly signed, same-session token is proof for renewal
+    only. Unsafe methods still require the full, unchanged expiration check.
+    """
+    from app.services.auth_session_security import session_version_matches_user
+
+    if not current_user.is_authenticated or not session_version_matches_user(session, current_user):
+        response = jsonify(error="Your sign-in session expired. Sign in again before saving.", code="authentication_required")
+        response.status_code = 401
+    elif (
+        request.headers.get("X-CSRF-Renewal") != "1"
+        or request.headers.get("Sec-Fetch-Site", "same-origin") != "same-origin"
+        or (request.headers.get("Origin") and request.headers["Origin"] != request.host_url.rstrip("/"))
+    ):
+        response = jsonify(error="Same-origin token renewal is required.", code="csrf_origin_rejected")
+        response.status_code = 403
+    elif not _validate_token(_request_token(), enforce_expiry=False):
+        response = jsonify(error="Your sign-in session changed. Reopen this screen after signing in; your entry has not been submitted.", code="csrf_session_changed")
+        response.status_code = 403
+    else:
+        response = jsonify(csrf_token=csrf_token(), expires_in=int(current_app.config["CSRF_TOKEN_TTL_SECONDS"]))
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.vary.add("Cookie")
+    return response
 
 
 def inject_csrf_tokens(response):

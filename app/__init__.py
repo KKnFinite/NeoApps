@@ -551,6 +551,7 @@ def register_request_guards(app):
         allowed_endpoints = {
             "auth.change_password",
             "auth.logout",
+            "auth.renew_csrf",
         }
         if request.endpoint in allowed_endpoints:
             return None

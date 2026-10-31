@@ -48,7 +48,7 @@
         singleForm?.addEventListener("submit", () => {
             try {
                 sessionStorage.setItem("neostaffing.people.single-add", JSON.stringify(
-                    Object.fromEntries(new FormData(singleForm).entries())
+                    Object.fromEntries([...new FormData(singleForm).entries()].filter(([name])=>name!=='csrf_token'))
                 ));
             } catch (_error) {}
         });
@@ -57,6 +57,7 @@
             const succeeded = document.body.textContent.includes("Person added.");
             if (!succeeded) {
                 Object.entries(stored).forEach(([name, value]) => {
+                    if (name === 'csrf_token') return;
                     const field = singleForm.elements.namedItem(name);
                     if (field && "value" in field) field.value = value;
                 });

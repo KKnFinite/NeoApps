@@ -126,62 +126,19 @@
     {% if is_neostaffing_page %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shell.css', v='20261007-nav-construction-v1') }}">
     <script defer src="{{ url_for('static', filename='js/neostaffing_filters.js', v='20261001-report-state') }}"></script>
-    <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION) }}"></script>
+    <script defer src="{{ url_for('static', filename='js/staffing_people.js', v=config.STATIC_ASSET_VERSION, csrf='20261031-renewal-v1') }}"></script>
     {% if request.endpoint == 'neostaffing.reports' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_reports.css', v='20261001-report-date') }}">
     <script defer src="{{ url_for('static', filename='js/neostaffing_reports.js', v='20261001-console') }}"></script>
     {% endif %}
     {% endif %}
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="csrf-token" content="{{ csrf_token() }}"
+          data-renew-url="{{ url_for('auth.renew_csrf') }}"
+          data-authenticated="{{ 'true' if current_user.is_authenticated else 'false' }}"
+          data-ttl="{{ config.CSRF_TOKEN_TTL_SECONDS }}">
+    <script src="{{ url_for('static', filename='js/csrf.js', v='20261031-renewal-v1') }}"></script>
     <script>
     (() => {
-        const token = document.querySelector("meta[name='csrf-token']")?.content || "";
-        const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-        window.neoAppsCsrfToken = token;
-
-        const isSameOrigin = (value) => {
-            try {
-                return new URL(value, window.location.href).origin === window.location.origin;
-            } catch (_error) {
-                return false;
-            }
-        };
-
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = (input, init = {}) => {
-            const method = String(
-                init.method || (input instanceof Request ? input.method : "GET")
-            ).toUpperCase();
-            const url = input instanceof Request ? input.url : input;
-            if (!token || !unsafeMethods.has(method) || !isSameOrigin(url)) {
-                return originalFetch(input, init);
-            }
-
-            const headers = new Headers(
-                init.headers || (input instanceof Request ? input.headers : undefined)
-            );
-            headers.set("X-CSRF-Token", token);
-            return originalFetch(input, { ...init, headers });
-        };
-
-        document.addEventListener("submit", (event) => {
-            const form = event.target instanceof HTMLFormElement ? event.target : null;
-            if (!form || !token) {
-                return;
-            }
-            const method = String(
-                event.submitter?.formMethod || form.method || "GET"
-            ).toUpperCase();
-            if (!unsafeMethods.has(method) || form.querySelector("input[name='csrf_token']")) {
-                return;
-            }
-            const field = document.createElement("input");
-            field.type = "hidden";
-            field.name = "csrf_token";
-            field.value = token;
-            form.prepend(field);
-        }, true);
-
         document.addEventListener("change", (event) => {
             const select = event.target instanceof HTMLSelectElement ? event.target : null;
             if (select?.matches("[data-submit-on-change]") && select.form) {

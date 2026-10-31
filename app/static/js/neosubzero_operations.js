@@ -39,14 +39,14 @@
         if (context) {
             try {
                 const key = ['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':');
-                if (context.dataset.dirty === 'true') sessionStorage.setItem(key,JSON.stringify([...context.elements].filter(e=>e.name).map(e=>({name:e.name,value:e.value}))));
+                if (context.dataset.dirty === 'true') sessionStorage.setItem(key,JSON.stringify([...context.elements].filter(e=>e.name && e.name!=='csrf_token').map(e=>({name:e.name,value:e.value}))));
                 else sessionStorage.removeItem(key);
             } catch (_) { notify('Context draft remains open. Browser storage is unavailable; save before reloading.',true); }
         }
         const content = detail(); if (!content) return;
         const forms = [...content.querySelectorAll('form[data-dirty="true"]')].map(form => ({
             key: formKey(form), unlocked: form.dataset.unlocked,
-            fields: [...form.elements].filter(e => e.name && !['submit', 'button'].includes(e.type)).map(e => ({name:e.name, value:e.value, checked:e.checked}))
+            fields: [...form.elements].filter(e => e.name && e.name !== 'csrf_token' && !['submit', 'button'].includes(e.type)).map(e => ({name:e.name, value:e.value, checked:e.checked}))
         }));
         try {
             if (forms.length) sessionStorage.setItem(draftKey(content), JSON.stringify(forms));
@@ -74,14 +74,17 @@
         pane.querySelectorAll('form').forEach(sync);
         if (!restore || !detail()) return;
         let drafts = [];
-        try { drafts = JSON.parse(sessionStorage.getItem(draftKey(detail())) || '[]'); } catch (_) { /* current DOM remains usable */ }
+        try { drafts = JSON.parse(sessionStorage.getItem(draftKey(detail())) || '[]');
+            drafts.forEach(draft => { draft.fields = draft.fields.filter(field => field.name !== 'csrf_token'); });
+            if (drafts.length) sessionStorage.setItem(draftKey(detail()),JSON.stringify(drafts));
+        } catch (_) { /* current DOM remains usable */ }
         for (const draft of drafts) {
             const form = [...pane.querySelectorAll('form')].find(e => formKey(e) === draft.key);
             if (!form) continue;
             form.dataset.unlocked = draft.unlocked || form.dataset.unlocked;
             draft.fields.forEach(saved => {
                 const field = form.elements[saved.name];
-                if (!field || !('value' in field)) return;
+                if (saved.name === 'csrf_token' || !field || !('value' in field)) return;
                 if (field.tagName === 'SELECT' && saved.value && ![...field.options].some(option=>option.value===saved.value)) {
                     const option=document.createElement('option');option.value=saved.value;option.textContent='PREVIOUS SELECTION ('+saved.value+') — REVIEW';field.append(option);
                 }
@@ -287,7 +290,7 @@
     if (context) {
         try {
             const draft = JSON.parse(sessionStorage.getItem(['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':')) || 'null');
-            if (draft) { draft.forEach(saved=>{if (context.elements[saved.name]) context.elements[saved.name].value=saved.value;}); context.dataset.dirty='true'; notify('RESTORED UNSAVED APPLICATION CONTEXT DRAFT'); }
+            if (draft) { const safeDraft=draft.filter(saved=>saved.name!=='csrf_token'); sessionStorage.setItem(['neoapps.subzero.operations.context',root.dataset.userId,root.dataset.operationId].join(':'),JSON.stringify(safeDraft)); safeDraft.forEach(saved=>{if (context.elements[saved.name]) context.elements[saved.name].value=saved.value;}); context.dataset.dirty='true'; notify('RESTORED UNSAVED APPLICATION CONTEXT DRAFT'); }
         } catch (_) { /* Current server values remain available. */ }
     }
     tagOrder(); applyLayout(); initialize(true); syncFeedback();

@@ -67,7 +67,7 @@ class VendorWorkflowTest(TestCase):
         from werkzeug.exceptions import Forbidden
         user,_account,_token=self.vendor()
         allowed={'static','healthz','auth.portal_dashboard','neonodes.index','auth.login','auth.logout',
-            'auth.change_password','auth.forgot_password','auth.reset_password','auth.verify_email',
+            'auth.change_password','auth.forgot_password','auth.reset_password','auth.verify_email','auth.renew_csrf',
             'scorpion_vendor.account','scorpion_vendor.my_truck','scorpion_vendor.live',
             'scorpion_vendor.revision','scorpion_vendor.fuel_reading','scorpion_vendor.invitation'}
         checked=0

@@ -78,7 +78,7 @@ def vendor_request_boundary():
     if endpoint in {'auth.portal_dashboard', 'neonodes.index'} and request.method == 'GET':
         return redirect(url_for('scorpion_vendor.account'))
     allowed_auth = {'auth.login', 'auth.logout', 'auth.change_password', 'auth.forgot_password',
-        'auth.reset_password', 'auth.verify_email'}
+        'auth.reset_password', 'auth.verify_email', 'auth.renew_csrf'}
     if endpoint == 'static' or endpoint in allowed_auth or endpoint == 'healthz':
         return None
     if endpoint in {'scorpion_vendor.account','scorpion_vendor.my_truck','scorpion_vendor.live',

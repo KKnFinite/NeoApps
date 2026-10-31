@@ -80,7 +80,7 @@ class CsrfProtectionTest(unittest.TestCase):
         self.assertIn(b"Form session expired", without_token.data)
         self.assertEqual(invalid_token.status_code, 400)
         self.assertIn(b'name="csrf_token"', login_page.data)
-        self.assertIn(b'X-CSRF-Token', login_page.data)
+        self.assertIn(b'/static/js/csrf.js', login_page.data)
         self.assertEqual(successful.status_code, 302)
 
     def test_expired_csrf_token_is_rejected(self):
@@ -188,7 +188,7 @@ class CsrfProtectionTest(unittest.TestCase):
 
         self.assertEqual(conductor_page.status_code, 200)
         self.assertEqual(without_token.status_code, 400)
-        self.assertEqual(without_token.get_json()["error"], "CSRF validation failed. Refresh and try again.")
+        self.assertEqual(without_token.get_json()["error"], "CSRF validation failed. Your entry is kept; renew the form session and try again.")
         self.assertEqual(with_token.status_code, 200)
         self.assertTrue(with_token.get_json()["ok"])
 
@@ -210,13 +210,16 @@ class CsrfProtectionTest(unittest.TestCase):
         db.session.commit()
         self._login(user)
 
+        # Current mutation contract requires the assignment revision too.
+        revision = staffing_service.assignment_service.version(person)
         without_token = self.client.post(
             f"/neostaffing/people/{person.id}/clear-work-area",
+            data={"expected_assignment_version": revision},
         )
         token = self._csrf_token(self.client.get("/neostaffing/people"))
         with_token = self.client.post(
             f"/neostaffing/people/{person.id}/clear-work-area",
-            data={"csrf_token": token},
+            data={"csrf_token": token, "expected_assignment_version": revision},
             follow_redirects=False,
         )
 

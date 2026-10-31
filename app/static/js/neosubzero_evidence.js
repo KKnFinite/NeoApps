@@ -14,11 +14,13 @@
         location.reload();
     });
     const save=form=>{
-        try {sessionStorage.setItem(key(form),JSON.stringify([...new FormData(form)]));} catch (_) { /* Keep the visible draft. */ }
+        try {sessionStorage.setItem(key(form),JSON.stringify([...new FormData(form)].filter(([name])=>name!=='csrf_token')));} catch (_) { /* Keep the visible draft. */ }
     };
     forms.forEach(form=>{
         try {
-            const draft=JSON.parse(sessionStorage.getItem(key(form)) || 'null');
+            const stored=JSON.parse(sessionStorage.getItem(key(form)) || 'null');
+            const draft=stored?.filter(([name])=>name!=='csrf_token');
+            if (draft && draft.length!==stored.length) sessionStorage.setItem(key(form),JSON.stringify(draft));
             if (draft) {
                 draft.forEach(([name,value])=>{
                     const input=form.elements[name];

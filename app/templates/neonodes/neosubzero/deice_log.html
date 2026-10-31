@@ -63,7 +63,7 @@
 </details>
 {% if audits %}<details><summary>OPERATIONAL AUDIT · APPEND-ONLY</summary>{% for entry in audits %}<details><summary>{{ entry.recorded_at_utc }} UTC · {{ entry.action }} · {{ entry.tail_number or 'DUCC / SORT' }} · ACTOR {{ entry.actor_user_id or 'NOT RECORDED' }}</summary><p>{{ entry.reason or '' }} · MISSION {{ entry.mission_id or '—' }} · EVENT {{ entry.event_id or '—' }} · RECORD {{ entry.spray_record_id or '—' }}</p><pre>{{ entry.before_values|tojson(indent=2) }}</pre><pre>{{ entry.after_values|tojson(indent=2) }}</pre></details>{% endfor %}</details>{% endif %}
 </section>
-<script src="{{ url_for('static',filename='js/neosubzero_evidence.js',v=STATIC_ASSET_VERSION) }}" defer></script>
+<script src="{{ url_for('static',filename='js/neosubzero_evidence.js',v=STATIC_ASSET_VERSION,csrf='20261031-renewal-v1') }}" defer></script>
 <script src="{{ url_for('static',filename='js/neosubzero_departure.js',v='20261023-release3-v1') }}" defer></script>
 <script src="{{ url_for('static',filename='js/neosubzero_reporting.js',v=STATIC_ASSET_VERSION) }}" defer></script>
 {% endblock %}

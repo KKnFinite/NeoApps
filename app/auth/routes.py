@@ -47,7 +47,7 @@ from app.services.auth_rate_limits import (
     record_login_failure,
     record_password_reset_request,
 )
-from app.services.csrf import clear_csrf_session_state
+from app.services.csrf import clear_csrf_session_state, csrf_renewal_response
 from app.services.password_policy import (
     PASSWORD_POLICY_GUIDANCE,
     set_user_password,
@@ -145,6 +145,11 @@ def portal_grandmaster_required(view_func):
         PORTAL_MANAGEMENT_VIEW_PERMISSION,
         "Portal Management requires Grandmaster access.",
     )(view_func)
+
+
+@bp.get("/csrf-token")
+def renew_csrf():
+    return csrf_renewal_response()
 
 
 @bp.route("/login", methods=["GET", "POST"])
