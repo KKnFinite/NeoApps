@@ -57,6 +57,7 @@ from app.services.user_tokens import (
     EMAIL_VERIFICATION,
     PASSWORD_RESET,
     create_user_token,
+    claim_password_reset_token,
     get_token_record,
     get_valid_token_record,
     mark_token_used,
@@ -397,36 +398,49 @@ def forgot_password():
 
 @bp.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    token_record = get_valid_token_record(token, PASSWORD_RESET)
-    if not token_record:
-        return render_template("auth/reset_password.html", token=token, valid=False), 400
-
     if request.method == "POST":
-        password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
         try:
-            set_user_password(token_record.user, password, confirm_password)
+            token_record = claim_password_reset_token(token)
+            if not token_record:
+                db.session.rollback()
+                return render_template("auth/reset_password.html", token=token, valid=False), 400
+
+            set_user_password(
+                token_record.user,
+                request.form.get("password", ""),
+                request.form.get("confirm_password", ""),
+            )
+            token_record.user.password_reset_required = False
+            token_record.user.password_policy_update_required = False
+            token_record.user.temporary_password_expires_at = None
+            revoke_unused_password_reset_tokens(token_record.user)
+            db.session.commit()
         except ValueError as error:
+            # A policy rejection must release the account lock and undo the
+            # claim, leaving this otherwise-valid link available for correction.
+            db.session.rollback()
             flash(str(error), "error")
             return render_template(
-                "auth/reset_password.html",
-                token=token,
-                valid=True,
+                "auth/reset_password.html", token=token, valid=True,
                 password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
             ), 400
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.warning("Password reset transaction could not be confirmed.")
+            flash("Password reset could not be confirmed. Try signing in or request a new reset link.", "error")
+            return render_template(
+                "auth/reset_password.html", token=token, valid=True,
+                password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
+            ), 500
 
-        token_record.user.password_reset_required = False
-        token_record.user.password_policy_update_required = False
-        token_record.user.temporary_password_expires_at = None
-        revoke_unused_password_reset_tokens(token_record.user)
-        db.session.commit()
         flash("Password reset complete. You can log in now.", "info")
         return redirect(url_for("auth.login"))
 
+    token_record = get_valid_token_record(token, PASSWORD_RESET)
+    if not token_record:
+        return render_template("auth/reset_password.html", token=token, valid=False), 400
     return render_template(
-        "auth/reset_password.html",
-        token=token,
-        valid=True,
+        "auth/reset_password.html", token=token, valid=True,
         password_policy_guidance=PASSWORD_POLICY_GUIDANCE,
     )
 

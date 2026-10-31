@@ -6,7 +6,7 @@ import secrets
 from flask import current_app
 
 from app.extensions import db
-from app.models import UserToken
+from app.models import User, UserToken
 
 
 EMAIL_VERIFICATION = "email_verification"
@@ -63,13 +63,50 @@ def get_valid_token_record(raw_token, token_type):
     return token_record
 
 
+def claim_password_reset_token(raw_token):
+    """Claim once inside the caller's transaction, before changing a password.
+
+    Always lock the account before any reset-token writes. Different outstanding
+    links for one account must serialize too. Refresh ORM state after waiting;
+    neither a prior form GET nor an identity-map snapshot authorizes a reset.
+    The caller must commit password + revocations together, or roll back all.
+    """
+    token_hash = hash_user_token(raw_token)
+    user_id = db.session.query(UserToken.user_id).filter_by(
+        token_hash=token_hash, token_type=PASSWORD_RESET,
+    ).scalar()
+    if user_id is None:
+        return None
+    user = User.query.filter_by(id=user_id).with_for_update().populate_existing().first()
+    if user is None:
+        return None
+    token_record = UserToken.query.filter_by(
+        token_hash=token_hash, token_type=PASSWORD_RESET, user_id=user.id,
+    ).populate_existing().first()
+    now = datetime.utcnow()  # Evaluate after the account lock, not request start.
+    if token_record is None or token_record.is_used or token_record.is_expired(now):
+        return None
+    claimed = UserToken.query.filter(
+        UserToken.id == token_record.id,
+        UserToken.used_at.is_(None),
+        UserToken.expires_at > now,
+    ).update({UserToken.used_at: now}, synchronize_session=False)
+    if claimed != 1:
+        return None
+    db.session.expire(token_record, ["used_at"])
+    return token_record
+
+
 def mark_token_used(token_record):
     token_record.used_at = datetime.utcnow()
     db.session.flush()
 
 
 def revoke_unused_password_reset_tokens(user):
-    """Invalidate every unused reset token before issuing or completing a reset."""
+    """Serialize issuance/revocation with reset completion for this account."""
+    # Account-first order matches claim_password_reset_token. Do not refresh or
+    # overwrite caller-owned password edits while acquiring this lock.
+    db.session.query(User.id).filter(User.id == user.id).with_for_update().one()
     UserToken.query.filter(
         UserToken.user_id == user.id,
         UserToken.token_type == PASSWORD_RESET,
