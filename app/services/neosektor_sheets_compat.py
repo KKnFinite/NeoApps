@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import threading
 import time
+from contextvars import ContextVar
+from copy import copy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 
 from flask import has_app_context
 
@@ -24,6 +28,7 @@ except ImportError:  # Optional locally; production installs the dependency.
 from app.extensions import db
 from app.models import NeoSektorOperationalSetting
 from app.services.access_control import get_current_gateway
+from app.services.google_motherbrain_sheets import _sheets_request_timeout
 
 
 logger = logging.getLogger(__name__)
@@ -143,6 +148,94 @@ class NeoSektorSharedAuthorityError(NeoSektorGoogleError):
 
 class NeoSektorRecoveryError(NeoSektorSharedAuthorityError):
     """A fenced NeoSektor recovery or return-control operation could not finish."""
+
+
+_google_operation_state = ContextVar("neosektor_google_operation", default=None)
+
+
+def _google_operation(function):
+    """Own one lazy client per logical call, including nested authority checks.
+
+    No idle/global client is retained. Context-local ownership isolates separate
+    requests; supplied worksheets are borrowed and never closed here.
+    """
+    @wraps(function)
+    def scoped(*args, **kwargs):
+        if _google_operation_state.get() is not None:
+            return function(*args, **kwargs)
+        state = {"client": None, "spreadsheet": None}
+        token = _google_operation_state.set(state)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _google_operation_state.reset(token)
+            client = state["client"]
+            if client is not None:
+                try:
+                    # Auth HTTP calls own/close their separate transports.
+                    client.http_client.session.close()
+                except Exception as error:
+                    # Cleanup failure cannot turn an acknowledged write into a
+                    # failed operation that an operator might submit again.
+                    _log_safe_warning("client cleanup", error)
+    return scoped
+
+
+def _shared_authority_write(function):
+    @wraps(function)
+    def guarded(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except Exception as error:
+            with _shared_authority_cache_lock:
+                _shared_authority_cache.clear()
+            _log_safe_warning("shared authority write", error)
+            raise NeoSektorSharedAuthorityError(
+                "NeoSektor shared authority save is unverified. Refresh its state before recovery."
+            ) from error
+    return guarded
+
+
+def _bounded_borrowed_worksheet(worksheet):
+    if gspread is not None and isinstance(worksheet, gspread.Worksheet):
+        # Bound an injected gspread worksheet without mutating its caller's
+        # shared HTTPClient timeout or taking ownership of the HTTP session.
+        borrowed = copy(worksheet)
+        borrowed.client = gspread.HTTPClient(None, session=worksheet.client.session)
+        borrowed.client.set_timeout(_sheets_request_timeout())
+        return borrowed
+    return worksheet  # Non-network test doubles retain their existing protocol.
+
+
+def _bounded_google_http_client(auth, session=None):
+    """Bound SDK authentication calls even when they explicitly pass None.
+
+    google-auth can perform an independent IAM lookup after token refresh.
+    Its transport must not borrow a session that the Sheets operation closes.
+    Each auth HTTP call owns its short-lived session; SDK retry policy and
+    credential/security decisions are unchanged.
+    """
+    from google.auth.transport.requests import AuthorizedSession, Request
+    from requests import Session
+
+    limit = _sheets_request_timeout()
+
+    def auth_request(*args, timeout=None, **kwargs):
+        if not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+            timeout = limit
+        with Session() as transport:
+            return Request(session=transport)(*args, timeout=min(timeout, limit), **kwargs)
+
+    # gspread's documented http_client factory hook supplies no session for
+    # our service-account client. Retain its borrowed-session API semantics.
+    owned = session is None
+    transport = AuthorizedSession(auth, auth_request=auth_request) if owned else session
+    try:
+        return gspread.HTTPClient(auth, session=transport)
+    except Exception:
+        if owned:
+            transport.close()
+        raise
 
 
 def neosektor_integration_mode(gateway=None, *, settings=None):
@@ -304,6 +397,7 @@ def neosektor_shared_authority_status(gateway=None, *, force=False):
         }
 
 
+@_google_operation
 def read_neosektor_shared_authority(gateway=None, *, force=False, worksheet=None):
     """Read the dedicated shared NeoSektor authority record.
 
@@ -326,7 +420,8 @@ def read_neosektor_shared_authority(gateway=None, *, force=False, worksheet=None
         )
 
     try:
-        worksheet = worksheet or _get_shared_authority_worksheet()
+        worksheet = (_get_shared_authority_worksheet() if worksheet is None
+                     else _bounded_borrowed_worksheet(worksheet))
         batch_values = worksheet.batch_get(list(NEOSEKTOR_SHARED_AUTHORITY_CELLS))
         values = [
             _batch_item_value(batch_values[index])
@@ -347,6 +442,7 @@ def read_neosektor_shared_authority(gateway=None, *, force=False, worksheet=None
     return dict(status)
 
 
+@_google_operation
 def initialize_neosektor_shared_authority(gateway, *, actor=None, metadata=None):
     """Create the opt-in authority tab with Neo as generation-one primary.
 
@@ -387,6 +483,7 @@ def initialize_neosektor_shared_authority(gateway, *, actor=None, metadata=None)
     return verified
 
 
+@_google_operation
 def transition_neosektor_shared_authority(
     gateway,
     requested_authority,
@@ -452,6 +549,7 @@ def transition_neosektor_shared_authority(
     return verified
 
 
+@_google_operation
 def preview_neosektor_standalone_reconciliation(
     gateway,
     *,
@@ -475,6 +573,7 @@ def preview_neosektor_standalone_reconciliation(
     )
 
 
+@_google_operation
 def neosektor_standalone_recovery_context(gateway):
     """Build read-only authority/reconciliation context for System Settings."""
     authority = neosektor_shared_authority_status(gateway, force=True)
@@ -503,6 +602,7 @@ def neosektor_standalone_recovery_context(gateway):
     return context
 
 
+@_google_operation
 def reconcile_neosektor_standalone_state(
     gateway,
     *,
@@ -582,6 +682,7 @@ def reconcile_neosektor_standalone_state(
     }
 
 
+@_google_operation
 def return_neosektor_control_to_neo(
     gateway,
     *,
@@ -694,6 +795,7 @@ def _reconciliation_preview(authority, standalone_values, canonical_values):
     }
 
 
+@_google_operation
 def _record_neosektor_reconciliation_metadata(gateway, authority, reconciliation):
     current = _require_standalone_recovery_authority(
         gateway,
@@ -729,6 +831,7 @@ def _current_generation_reconciliation(authority):
     return reconciliation
 
 
+@_google_operation
 def _verify_neosektor_return_control(gateway, transitioned_authority):
     """Mark a previously verified return record writable only after a fresh read."""
     current = read_neosektor_shared_authority(gateway, force=True)
@@ -834,6 +937,7 @@ def google_primary_wave_timer_starts(gateway, *, operational_settings=None):
         return dict(starts)
 
 
+@_google_operation
 def write_google_primary_operational_values(
     gateway,
     updates,
@@ -870,6 +974,7 @@ def mirror_neosektor_sheet_update(
     )
 
 
+@_google_operation
 def mirror_neosektor_operational_values(
     before_values,
     after_values,
@@ -913,11 +1018,14 @@ def mirror_neosektor_operational_values(
         _record_mirror_failure(gateway, error, settings=settings)
         return {"status": "error", "updated": 0}
 
-    _record_mirror_success(
-        gateway,
-        settings=settings,
-        warning_pending=warning_pending,
-    )
+    # A later acknowledged delta does not verify other cells left uncertain by
+    # an earlier failure. Only the existing explicit full sync clears warning.
+    if force:
+        _record_mirror_success(
+            gateway,
+            settings=settings,
+            warning_pending=warning_pending,
+        )
     return {"status": "mirrored", "updated": len(updates)}
 
 
@@ -930,9 +1038,10 @@ def retry_neosektor_google_mirror(gateway):
     return set_neosektor_google_mirror_writes(gateway, True)
 
 
+@_google_operation
 def read_neosektor_sheet_values(worksheet=None):
     """Read the fixed operational contract in one Google batch request."""
-    worksheet = worksheet or _get_worksheet()
+    worksheet = _get_worksheet() if worksheet is None else _bounded_borrowed_worksheet(worksheet)
     batch_values = worksheet.batch_get(list(SHEET_CELL_ORDER))
     return {
         cell: _batch_item_value(batch_values[index])
@@ -1019,6 +1128,7 @@ def sync_neosektor_from_google_if_due(gateway, now=None):
     return {"status": "read", "updated": 0}
 
 
+@_google_operation
 def _write_google_operational_values(gateway, updates):
     if not updates:
         return
@@ -1030,15 +1140,18 @@ def _write_google_operational_values(gateway, updates):
             if cell in updates:
                 worksheet.update_acell(cell, updates[cell])
     except Exception as error:
+        clear_neosektor_google_cache(gateway)
         _log_safe_warning("write", error, cell_count=len(updates))
-        raise NeoSektorGoogleError("NeoSektor could not save the Google live state.") from error
+        raise NeoSektorGoogleError(
+            "NeoSektor could not save the Google live state. Outcome is unverified; refresh before trying again."
+        ) from error
     _merge_cached_google_values(gateway.id, updates)
 
 
 def _record_mirror_failure(gateway, error, *, settings=None):
     settings = settings or ensure_neosektor_integration_setting(gateway)
     settings.google_mirror_sync_needed = True
-    settings.google_mirror_last_error = "Google mirror failed. Retry is required."
+    settings.google_mirror_last_error = "Google mirror is unverified. Review and retry synchronization."
     settings.google_mirror_failed_at_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     db.session.commit()
     _log_safe_warning("mirror", error)
@@ -1075,14 +1188,28 @@ def _get_worksheet():
 
 def _get_spreadsheet():
     """Open the configured shared workbook once for operational/control access."""
+    state = _google_operation_state.get()
+    if state is None:
+        raise NeoSektorGoogleError("Google workbook access requires an operation scope.")
+    if state["spreadsheet"] is not None:
+        return state["spreadsheet"]
     if gspread is None:
-        raise RuntimeError("gspread unavailable")
-
-    credentials = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-    if "private_key" in credentials:
-        credentials["private_key"] = credentials["private_key"].replace("\\n", "\n")
-    client = gspread.service_account_from_dict(credentials)
-    return client.open_by_key(os.environ["GOOGLE_SHEETS_ID"])
+        raise NeoSektorGoogleError("NeoSektor Google client is unavailable.")
+    try:
+        credentials = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+        if "private_key" in credentials:
+            credentials["private_key"] = credentials["private_key"].replace("\\n", "\n")
+        client = gspread.service_account_from_dict(credentials, http_client=_bounded_google_http_client)
+        state["client"] = client
+        # Standard gspread HTTPClient, no backoff/replay client. A scalar bounds
+        # both requests connect/read waits. Authentication is independently
+        # bounded above, including SDK requests that explicitly pass None.
+        client.set_timeout(_sheets_request_timeout())
+        state["spreadsheet"] = client.open_by_key(os.environ["GOOGLE_SHEETS_ID"])
+        return state["spreadsheet"]
+    except Exception as error:
+        _log_safe_warning("open workbook", error)
+        raise NeoSektorGoogleError("NeoSektor could not open its configured Google workbook.") from error
 
 
 def _get_shared_authority_worksheet(*, create=False):
@@ -1096,7 +1223,12 @@ def _get_shared_authority_worksheet(*, create=False):
         return spreadsheet.worksheet(title)
     except Exception as error:
         if not create or not _is_missing_worksheet_error(error):
-            raise
+            if _is_missing_worksheet_error(error):
+                raise
+            _log_safe_warning("shared authority lookup", error)
+            raise NeoSektorSharedAuthorityError(
+                "NeoSektor could not open its shared authority worksheet."
+            ) from error
     try:
         return spreadsheet.add_worksheet(title=title, rows=4, cols=5)
     except Exception as error:
@@ -1247,6 +1379,7 @@ def _authority_timestamp():
     )
 
 
+@_shared_authority_write
 def _write_shared_authority_headers(worksheet):
     if hasattr(worksheet, "batch_update"):
         worksheet.batch_update(
@@ -1260,6 +1393,7 @@ def _write_shared_authority_headers(worksheet):
         worksheet.update_acell(cell, value)
 
 
+@_shared_authority_write
 def _write_shared_authority_record(worksheet, status):
     values = (
         status["authority"],
@@ -1277,6 +1411,7 @@ def _write_shared_authority_record(worksheet, status):
         worksheet.update_acell(cell, value)
 
 
+@_shared_authority_write
 def _write_shared_authority_metadata(worksheet, metadata):
     value = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
     if hasattr(worksheet, "batch_update"):
