@@ -148,6 +148,12 @@ class Config:
     AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS = int(
         os.getenv("AUTH_PASSWORD_RESET_MAX_COOLDOWN_SECONDS", "3600")
     )
+    # Shared workplace NATs need a substantially larger allowance than one
+    # registration email. Fixed windows bound cooldown without extending it
+    # on rejected submissions; all attempts count before password hashing.
+    AUTH_REGISTRATION_WINDOW_SECONDS = int(os.getenv("AUTH_REGISTRATION_WINDOW_SECONDS", "3600"))
+    AUTH_REGISTRATION_IP_MAX_ATTEMPTS = int(os.getenv("AUTH_REGISTRATION_IP_MAX_ATTEMPTS", "120"))
+    AUTH_REGISTRATION_IDENTIFIER_MAX_ATTEMPTS = int(os.getenv("AUTH_REGISTRATION_IDENTIFIER_MAX_ATTEMPTS", "5"))
     SQLALCHEMY_DATABASE_URI = resolve_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Production startup retries transient connection loss during schema/bootstrap

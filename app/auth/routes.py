@@ -46,6 +46,7 @@ from app.services.auth_rate_limits import (
     password_reset_is_limited,
     record_login_failure,
     record_password_reset_request,
+    reserve_registration_attempt,
 )
 from app.services.csrf import clear_csrf_session_state, csrf_renewal_response
 from app.services.password_policy import (
@@ -278,6 +279,24 @@ def create_account():
     form = _account_form_from_request()
 
     if request.method == "POST":
+        try:
+            retry_after = reserve_registration_attempt(
+                client_ip_for_request(request), _normalize_email(form["email"])
+            )
+        except SQLAlchemyError as error:
+            db.session.rollback()
+            current_app.logger.warning(
+                "Registration admission unavailable: exception_class=%s", type(error).__name__
+            )
+            flash("Account requests are temporarily unavailable. Please try again later.", "error")
+            return render_template(
+                "auth/create_account.html", app_definitions=portal_app_definitions(), form=form,
+            ), 503, {"Retry-After": "60", "Cache-Control": "no-store"}
+        if retry_after:
+            flash("Too many account requests. Please wait before trying again or contact an administrator.", "error")
+            return render_template(
+                "auth/create_account.html", app_definitions=portal_app_definitions(), form=form,
+            ), 429, {"Retry-After": str(retry_after), "Cache-Control": "no-store"}
         try:
             user = _build_user_from_account_form(form)
             requested_apps = _requested_portal_apps_from_form()

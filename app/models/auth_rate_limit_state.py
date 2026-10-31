@@ -4,7 +4,7 @@ from app.extensions import db
 
 
 class AuthRateLimitState(db.Model):
-    """Persistent login and password-reset abuse-control state."""
+    """Persistent login, password-reset and registration abuse-control state."""
 
     __tablename__ = "auth_rate_limit_states"
     __table_args__ = (

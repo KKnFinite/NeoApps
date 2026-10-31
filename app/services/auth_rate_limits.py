@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import ipaddress
 import logging
+import math
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +16,7 @@ from app.models.auth_rate_limit_state import AuthRateLimitState
 
 LOGIN_ACTION = "login"
 PASSWORD_RESET_ACTION = "password_reset"
+REGISTRATION_ACTION = "registration"
 IP_SUBJECT = "ip"
 IDENTIFIER_SUBJECT = "identifier"
 
@@ -28,9 +30,16 @@ def initialize_auth_rate_limit_storage(app):
     Keeping this check connection-free lets configuration validation run before a
     production database is available while still requiring a shared backend.
     """
-    if not app.config.get("AUTH_RATE_LIMIT_ENABLED", True) or app.config.get(
-        "TESTING"
+    if not app.config.get("AUTH_RATE_LIMIT_ENABLED", True):
+        return
+    for setting, default in (
+        ("AUTH_REGISTRATION_WINDOW_SECONDS", 3600),
+        ("AUTH_REGISTRATION_IP_MAX_ATTEMPTS", 120),
+        ("AUTH_REGISTRATION_IDENTIFIER_MAX_ATTEMPTS", 5),
     ):
+        if int(app.config.get(setting, default)) <= 0:
+            raise RuntimeError(f"{setting} must be positive.")
+    if app.config.get("TESTING"):
         return
     if app.config.get("AUTH_RATE_LIMIT_STORAGE") != "database":
         raise RuntimeError(
@@ -118,6 +127,55 @@ def record_password_reset_request(client_ip, identifier):
     )
 
 
+def reserve_registration_attempt(client_ip, identifier):
+    """Atomically admit an attempt, returning seconds to retry (zero if allowed).
+
+    Commit the short reservation transaction BEFORE hashing, provisioning or
+    email delivery. A failed registration still consumes its reservation.
+    All callers lock IP then identifier; uniqueness/savepoints also serialize
+    first use across PostgreSQL workers. This is a fixed window: rejected
+    requests neither extend the cooldown nor spend the shared IP allowance
+    when only the identifier is blocked.
+    """
+    if not current_app.config.get("AUTH_RATE_LIMIT_ENABLED", True):
+        return 0
+
+    now = datetime.utcnow()
+    window = timedelta(seconds=current_app.config["AUTH_REGISTRATION_WINDOW_SECONDS"])
+    subjects = [(IP_SUBJECT, _normalized_ip(client_ip) or "unknown",
+                 current_app.config["AUTH_REGISTRATION_IP_MAX_ATTEMPTS"])]
+    # Match registration's strip/lower email identity contract exactly. The
+    # existing login/reset casefold policy remains unchanged.
+    identifier = str(identifier or "").strip().lower()
+    if identifier:
+        subjects.append((IDENTIFIER_SUBJECT, identifier,
+                         current_app.config["AUTH_REGISTRATION_IDENTIFIER_MAX_ATTEMPTS"]))
+
+    states = []
+    for subject_type, subject_value, maximum in subjects:
+        state = _get_state(REGISTRATION_ACTION, subject_type, subject_value,
+                           lock=True, refresh=True)
+        if state is None:
+            state = _create_state(REGISTRATION_ACTION, subject_type, subject_value, now)
+        if now - state.window_started_at >= window:
+            state.window_started_at = now
+            state.attempt_count = 0
+            state.blocked_until = None
+        if state.attempt_count >= maximum:
+            state.blocked_until = state.window_started_at + window
+            retry_after = max(1, math.ceil((state.blocked_until - now).total_seconds()))
+            db.session.commit()
+            return retry_after
+        states.append((state, maximum))
+
+    for state, maximum in states:
+        state.attempt_count += 1
+        if state.attempt_count >= maximum:
+            state.blocked_until = state.window_started_at + window
+    db.session.commit()
+    return 0
+
+
 def _is_limited(action, client_ip, identifier):
     if not current_app.config.get("AUTH_RATE_LIMIT_ENABLED", True):
         return False
@@ -195,7 +253,7 @@ def _subjects(client_ip, identifier):
     return subjects
 
 
-def _get_state(action, subject_type, subject_value, *, lock):
+def _get_state(action, subject_type, subject_value, *, lock, refresh=False):
     query = AuthRateLimitState.query.filter_by(
         action=action,
         subject_type=subject_type,
@@ -203,6 +261,8 @@ def _get_state(action, subject_type, subject_value, *, lock):
     )
     if lock:
         query = query.with_for_update()
+    if refresh:
+        query = query.populate_existing()
     return query.first()
 
 

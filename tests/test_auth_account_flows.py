@@ -297,6 +297,9 @@ class AuthAccountFlowsTest(unittest.TestCase):
         hibp_check.assert_not_called()
 
     def test_account_registration_enforces_shared_password_policy(self):
+        # This matrix isolates password policy; dedicated registration abuse
+        # tests cover the production five-attempt email allowance.
+        self.app.config["AUTH_REGISTRATION_IDENTIFIER_MAX_ATTEMPTS"] = 20
         rejected_cases = (
             ("elevenchars", "elevenchars", b"at least 12 characters"),
             ("x" * 129, "x" * 129, b"no more than 128 characters"),
