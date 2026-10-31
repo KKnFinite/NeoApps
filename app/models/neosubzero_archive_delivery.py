@@ -17,4 +17,5 @@ class NeoSubZeroArchiveDelivery(db.Model):
     attempts = db.Column(db.Integer, nullable=False, default=0)
     retry_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     delivered_at = db.Column(db.DateTime, nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.String(200), nullable=True)

@@ -10,7 +10,8 @@ from tests.browser.neoscorpion_helpers import wait_for_fuel_saved
 from app.extensions import db
 from app.models import (User, SortDateOperation, SortDateMission, SortDateParkingAssignment,
     NeoScorpionFuelAssignment, NeoScorpionFuelTruck, NeoScorpionSortTruck,
-    NeoScorpionSortFueler, NeoScorpionTailFuelState, NeoScorpionFuelWorkState, NeoScorpionFuelingEvent)
+    NeoScorpionSortFueler, NeoScorpionTailFuelState, NeoScorpionFuelWorkState, NeoScorpionFuelingEvent, NeoScorpionSettings)
+from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation as Observation
 from app.services.access_control import ensure_default_gateway_and_nodes
 from tests.browser import test_mobile_drawer as fixtures
 
@@ -27,6 +28,7 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                 operation=SortDateOperation(generated_by_user_id=user.id,gateway_id=gateway.id,
                     gateway_code=gateway.code,sort_date=date.today(),sort_name='night',window_minutes=60)
                 db.session.add(operation);db.session.flush();oid=operation.id;cases=[]
+                db.session.add(NeoScorpionSettings(gateway_id=gateway.id, spear_learning_capture_enabled=True))
                 db.session.add(NeoScorpionSortFueler(sort_date_operation_id=oid,user_id=user.id))
                 for index,tail in enumerate(('N124UP','N491UP')):
                     truck=NeoScorpionFuelTruck(gateway_id=gateway.id,truck_number=f'FUELER-{index}',capacity_gallons=20000)
@@ -45,7 +47,8 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                 db.session.commit()
             measurements=[]
             with patch('app.services.neoscorpion.current_existing_operational_sort_operations',
-                    side_effect=lambda gateway,now=None:[db.session.get(SortDateOperation,oid)]):
+                    side_effect=lambda gateway,now=None:[db.session.get(SortDateOperation,oid)]), \
+                    patch('app.services.neoscorpion_learning_vault._r2_client', side_effect=AssertionError('R2 must not run in completion requests')) as remote:
                 for engine in ('chromium','webkit'):
                     browser=getattr(F.pw,engine).launch()
                     try:
@@ -177,7 +180,7 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                             page.screenshot(path=str(evidence/f'off-ready-{engine}-390.png'),full_page=True)
                             card.locator('[data-fueler-submit-form] button').click()
                             expect(card.locator('[data-fueler-submission-status]')).to_contain_text('SUBMITTED',timeout=10000)
-                            dispatch=browser.new_page(viewport={'width':1440,'height':900},service_workers='block')
+                            dispatch=browser.new_page(viewport={'width':1920,'height':900},service_workers='block')
                             F().login(dispatch);dispatch.evaluate("localStorage.setItem('neoapps.neoscorpion.spear-splash.v1','seen')")
                             F().ready(dispatch,'/neoscorpion/fuel-dispatch')
                             row=dispatch.locator(f'[data-dispatch-mission-id="{mid}"]')
@@ -187,6 +190,11 @@ class FuelerRedesignBrowserTest(unittest.TestCase):
                             with F.app.app_context():
                                 self.assertEqual(NeoScorpionFuelingEvent.query.filter_by(fuel_assignment_id=aid).count(),1)
                                 self.assertIsNotNone(db.session.get(NeoScorpionFuelWorkState,int(wid)).physical_finalized_at_utc)
+                                queued = Observation.query.filter_by(assignment_id=aid, kind='completed').one()
+                                self.assertIsNone(queued.delivered_at)
+                                self.assertIsNone(queued.verified_at)
+                                self.assertEqual(queued.payload['fuel_events'][0]['work_state_id'], int(wid))
+                            remote.assert_not_called()
                             self.assertEqual(errors,[])
                     finally:browser.close()
             (evidence/f'{"before" if baseline else "after"}-measurements.json').write_text(json.dumps(measurements,indent=2))

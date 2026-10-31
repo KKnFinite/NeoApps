@@ -104,7 +104,7 @@ class Release3Test(r2.Release2Test):
         receipt.retry_at=datetime.utcnow()-timedelta(seconds=1);db.session.commit()
         saved=[]
         def export(payload,**kwargs):
-            saved.append((payload,kwargs));return dict(key='test/'+str(len(saved)))
+            saved.append((payload,kwargs));return dict(key='test/'+str(len(saved)),verified=True)
         with patch('app.services.neoscorpion_learning_vault.export_subzero_record',side_effect=export):
             self.assertEqual(drain(f.gateway.id),1);self.assertEqual(drain(f.gateway.id),0)
             old=receipt.delivered_checksum
@@ -125,7 +125,7 @@ class Release3Test(r2.Release2Test):
 
     def test_retracted_start_archives_correction_not_unsprayed_observation(self):
         f=self.f;event,values=self.flow(end='');exports=[]
-        def export(payload,**kwargs):exports.append(payload);return dict(key='fixture')
+        def export(payload,**kwargs):exports.append(payload);return dict(key='fixture',verified=True)
         with patch('app.services.neoscorpion_learning_vault.export_subzero_record',side_effect=export):
             self.assertEqual(drain(f.gateway.id),1)
             values['pass1_start']='';mutate_departure_deice(f.operation,f.alpha,'save_treatment',values,event=event);db.session.commit()
@@ -140,7 +140,7 @@ class Release3Test(r2.Release2Test):
         from app.services.neoscorpion_learning_vault import export_subzero_record,_canonical_json
         import hashlib
         client=MagicMock();digest=hashlib.sha256(_canonical_json(payload)).hexdigest()
-        client.head_object.return_value={'Metadata':{'checksum':digest}}
+        client.get_object.return_value={'Body': __import__('io').BytesIO(__import__('gzip').compress(_canonical_json(payload))), 'Metadata':{'checksum':digest}}
         with patch('app.services.neoscorpion_learning_vault._require_r2_config',return_value={'bucket':'fixture'}),patch('app.services.neoscorpion_learning_vault._r2_client',return_value=client):
             self.assertTrue(export_subzero_record(payload)['already_saved']);client.put_object.assert_not_called()
             with self.assertRaises(ValueError):export_subzero_record({**payload,'record_type':'negative'})
@@ -175,7 +175,7 @@ class Release3Test(r2.Release2Test):
             response=client.get('/neosubzero/deice-log',query_string=dict(operation_id=f.operation.id))
             self.assertEqual(response.status_code,200)
         self.assertEqual(archive_payload(actual_passes(f.operation)[0])['gateway_id'],f.gateway.id)
-        with patch('app.services.neoscorpion_learning_vault.export_subzero_record',return_value=dict(key='fixture')):
+        with patch('app.services.neoscorpion_learning_vault.export_subzero_record',return_value=dict(key='fixture',verified=True)):
             self.assertEqual(drain(f.gateway.id),1)
         self.assertIsNone(f.operation.gateway_id)
 

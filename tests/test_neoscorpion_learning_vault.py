@@ -42,7 +42,9 @@ class _Client:
     def delete_object(self, **kwargs): self.objects.pop(kwargs["Key"], None)
     def list_objects_v2(self, **kwargs):
         return {"Contents": [{"Key": key, "LastModified": datetime(2026, 9, 3), "Size": len(value)} for key, value in self.objects.items()]}
-    def get_object(self, **kwargs): return {"Body": io.BytesIO(self.objects[kwargs["Key"]])}
+    def get_object(self, **kwargs):
+        self.head_object(**kwargs)
+        return {"Body": io.BytesIO(self.objects[kwargs["Key"]])}
 
 
 class SpearVaultR2Test(unittest.TestCase):
@@ -327,9 +329,9 @@ class SpearVaultR2Test(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "malformed"):
                 self._read(saved["key"])
 
-    def test_head_failure_does_not_attempt_write_or_leak_provider_error(self):
-        with patch.object(self.client, "head_object", side_effect=ValueError('SECRET SQL endpoint')), patch.object(self.client, "put_object") as put:
-            with self.assertRaisesRegex(LearningVaultUnavailable, '^SPEAR Vault connection failed') as error:
+    def test_readback_failure_does_not_attempt_write_or_leak_provider_error(self):
+        with patch.object(self.client, "get_object", side_effect=ValueError('SECRET SQL endpoint')), patch.object(self.client, "put_object") as put:
+            with self.assertRaisesRegex(LearningVaultUnavailable, 'Archive content is unverified') as error:
                 self._save()
             self.assertNotIn('SECRET', str(error.exception))
             put.assert_not_called()

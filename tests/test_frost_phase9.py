@@ -195,7 +195,7 @@ class OutcomeTest(unittest.TestCase):
         receipt=NeoSubZeroArchiveDelivery.query.one();self.assertIsNone(receipt.delivered_checksum)
         receipt.retry_at=datetime.utcnow()-timedelta(seconds=1);db.session.commit();saved=[]
         def put(category,gateway,identity,payload):saved.append(payload);return 'fixture/key'
-        with patch('app.services.frost_vault.put_json',side_effect=put),patch('app.services.neoscorpion_learning_vault.export_subzero_record',return_value={'key':'spray-fixture'}):
+        with patch('app.services.frost_vault.put_json',side_effect=put),patch('app.services.neoscorpion_learning_vault.export_subzero_record',return_value={'key':'spray-fixture','verified':True}):
             self.assertEqual(drain(f.gateway.id),1);self.assertEqual(drain(f.gateway.id),0)
             event.pass1_started_at_utc=datetime.utcnow();db.session.commit()
             self.assertEqual(drain(f.gateway.id),2)

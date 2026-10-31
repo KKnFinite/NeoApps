@@ -489,7 +489,6 @@ def fuel_on_board():
 
     if result.changed:
         db.session.commit()
-        _capture_learning_after_commit(gateway, result.assignment.id)
         flash("FUEL ON BOARD COMPLETED.", "success")
     else:
         flash("FUEL ON BOARD WAS ALREADY COMPLETED.", "info")
@@ -555,7 +554,6 @@ def fuel_dispatch_complete():
 
     if result.changed:
         db.session.commit()
-        _capture_learning_after_commit(gateway, result.assignment.id)
         owner=getattr(result.assignment,'_parent_assignment',result.assignment)
         flash("FUELING COMPLETE." if owner.completed_at_utc else "PHYSICAL VISIT VERIFIED · REMAINING WORK / VERIFICATION STILL OPEN.", "success")
         event = result.fueling_event
@@ -942,9 +940,9 @@ def fueler():
             return _fueler_response(gateway, access, status_code=400)
         if result.changed:
             terminal = bool(result.fuel_work_state and result.fuel_work_state.fuel_assignment.completed_at_utc)
-            db.session.commit()
             if terminal:
-                _capture_learning_after_commit(gateway, request.form.get("assignment_id"))
+                capture_completed_learning_outcome(gateway, request.form.get("assignment_id"))
+            db.session.commit()
         if json_response:
             work_state = result.fuel_work_state
             return _json_no_store(
@@ -1010,39 +1008,12 @@ def fueler_off():
     return redirect(url_for("neoscorpion.fueler"))
 
 
-def _capture_learning_after_commit(gateway, assignment_id):
-    try:
-        result = capture_completed_learning_outcome(gateway, assignment_id)
-        if result.captured:
-            current_app.logger.info(
-                "SPEAR learning outcome archived: assignment_id=%s eligible=%s duplicate=%s",
-                assignment_id,
-                result.training_eligible,
-                result.already_saved,
-            )
-    except Exception:
-        # Fuel operations are canonical and already committed. Learning storage
-        # is deliberately fail-open so Vault availability can never undo work.
-        current_app.logger.exception(
-            "SPEAR learning capture failed after committed fuel operation: assignment_id=%s",
-            assignment_id,
-        )
-
-
 def _backfill_learning_after_enable(gateway, operation_id):
-    try:
-        results = capture_current_sort_learning_outcomes(gateway, operation_id)
-        captured = sum(1 for item in results if item.captured)
-        current_app.logger.info(
-            "SPEAR learning capture enabled: operation_id=%s archived=%s",
-            operation_id,
-            captured,
-        )
-    except Exception:
-        current_app.logger.exception(
-            "SPEAR current-sort learning backfill failed safely: operation_id=%s",
-            operation_id,
-        )
+    # Authorized settings action only. Its caller commits these immutable
+    # snapshots with the enable change; delivery belongs to the heartbeat.
+    results = capture_current_sort_learning_outcomes(gateway, operation_id)
+    current_app.logger.info("SPEAR current-sort learning snapshots queued: operation_id=%s count=%s",
+                            operation_id, sum(item.captured for item in results))
 
 
 def _fuel_data_permissions(dispatcher):
@@ -1145,9 +1116,9 @@ def _fuel_data_request(assignment_id, *, dispatcher=False, off=False, truck_on=F
         if result.changed:
             work = getattr(result, "fuel_work_state", None)
             terminal = bool(work and work.fuel_assignment.completed_at_utc)
-            db.session.commit()
             if terminal:
-                _capture_learning_after_commit(gateway, assignment_id)
+                capture_completed_learning_outcome(gateway, assignment_id)
+            db.session.commit()
         else:
             db.session.rollback()
     except FuelerDataConflict as exc:
@@ -1640,6 +1611,11 @@ def spear_settings():
         try:
             guard_settings(gateway, 'spear', request.form)
             result = save_spear_settings(gateway, current_user, request.form)
+            learning_capture_now = request.form.get("learning_capture_enabled") == "1"
+            if learning_capture_now and not previous_learning_capture:
+                operation = current_sort_operation(gateway)
+                if operation is not None:
+                    _backfill_learning_after_enable(gateway, operation.id)
         except (IntegrityError, ValueError) as exc:
             db.session.rollback()
             flash(
@@ -1648,11 +1624,6 @@ def spear_settings():
             )
             return _spear_settings_response(gateway, access, status_code=409 if isinstance(exc, SettingsConflict) else 400)
         db.session.commit()
-        learning_capture_now = request.form.get("learning_capture_enabled") == "1"
-        if learning_capture_now and not previous_learning_capture:
-            operation = current_sort_operation(gateway)
-            if operation is not None:
-                _backfill_learning_after_enable(gateway, operation.id)
         flash("SPEAR SETTINGS SAVED." if result.changed else "NO SPEAR SETTING CHANGES.", "success" if result.changed else "info")
         if result.automation_just_enabled:
             return redirect(url_for("neoscorpion.fuel_dispatch"))

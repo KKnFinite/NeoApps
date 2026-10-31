@@ -3473,6 +3473,8 @@ def complete_fuel_on_board(gateway, user, assignment_id, *, now_utc=None):
     mission.fuel_completed_at_utc = now_utc
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    from app.services.neoscorpion_spear_learning_capture import capture_completed_learning_outcome
+    capture_completed_learning_outcome(gateway, assignment.id)
     return FuelOnBoardResult(
         changed=True,
         revision=int(asset_state.revision),
@@ -4130,6 +4132,10 @@ def complete_fueled_assignment(gateway, user, assignment_id, *, now_utc=None,
     mission.fuel_completed_at_utc = now_utc
     asset_state = record_nightly_operational_change(asset_state, operation.id)
     db.session.flush()
+    # Freeze the terminal physical evidence before follow-up promotion can
+    # change assignment/mission state; commit it atomically with completion.
+    from app.services.neoscorpion_spear_learning_capture import capture_completed_learning_outcome
+    capture_completed_learning_outcome(gateway, parent_assignment.id)
     if source_work is None or not assignment._detached_segment:
         from app.services.neoscorpion_pending_uplift import promote_after_completion
         promote_after_completion(gateway,user,operation,parent_assignment,parent_mission,now_utc)

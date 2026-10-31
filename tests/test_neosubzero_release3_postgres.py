@@ -41,7 +41,10 @@ class Release3PostgresTest(r3.Release3Test):
         self.flow();gid=self.f.gateway.id
         reconcile(gid);db.session.remove()
         writes=[]
-        def export(payload,**kwargs):writes.append(payload);return dict(key='fixture')
+        def export(payload,**kwargs):
+            self.assertFalse(db.session().in_transaction())
+            writes.append(payload)
+            return dict(key='fixture',verified=True)
         def worker(index):
             with self.f.app.app_context():
                 try:return drain(gid)

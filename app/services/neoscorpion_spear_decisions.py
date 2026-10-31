@@ -426,7 +426,7 @@ def reconcile(gateway_id, *, limit=40):
 
 def drain(gateway_id, *, limit=3):
     """Bounded retryable delivery; invoked outside the operational request transaction."""
-    from app.services.neoscorpion_learning_vault import export_decision_record
+    from app.services.neoscorpion_learning_vault import export_decision_record, export_learning_record
     if not enabled(gateway_id):
         return 0
     reconcile(gateway_id)
@@ -439,22 +439,44 @@ def drain(gateway_id, *, limit=3):
         FleetObservation.delivered_at.is_(None), FleetObservation.retry_at <= now)
         .order_by(FleetObservation.created_at,FleetObservation.id).limit(limit).with_for_update(skip_locked=True)).all()
     rows = sorted([*rows,*fleet],key=lambda item:(item.created_at,item.id))[:limit]
-    ids = [(type(item),item.id) for item in rows]
+    claims = []
     for item in rows:
         item.attempts += 1
-        item.retry_at = now + timedelta(seconds=min(3600, 30 * 2 ** min(item.attempts, 6)))
+        item.retry_at = now + timedelta(minutes=5)
+        identity = ((item.assignment_id, item.mission_id, item.operation_id, item.event_key)
+                    if type(item) is Observation and item.kind in ('completed', 'backfill') else None)
+        claims.append((type(item), item.id, item.attempts, item.kind, json.loads(json.dumps(item.payload)), identity))
     db.session.commit()  # Claim bounded work before any external I/O; retry leases survive crashes.
     delivered = 0
-    for model,identifier in ids:
-        item = db.session.get(model, identifier)
+    for model,identifier,attempt,kind,payload,identity in claims:
         try:
-            saved = export_decision_record(item.payload)
+            # Frozen JSON is all delivery needs. No transaction spans R2 I/O.
+            if identity:
+                if (payload['assignment']['id'], payload['mission']['id'], payload['sort']['operation_id'], _hash(payload)) != identity:
+                    raise ValueError('Completed snapshot identity/checksum differs.')
+                if payload['gateway']['id'] != gateway_id:
+                    raise ValueError('Completed snapshot gateway differs.')
+            elif payload.get('id') != identifier or payload.get('record_type') != kind or payload.get('gateway_id') != gateway_id:
+                raise ValueError('SPEAR observation identity differs.')
+            saved = (export_learning_record(payload) if model is Observation and kind in ('completed','backfill')
+                     else export_decision_record(payload))
+            if saved.get('verified') is not True:
+                raise ValueError('Archive read-back is not verified.')
+            item = db.session.query(model).filter_by(id=identifier, attempts=attempt, delivered_at=None).with_for_update().first()
+            if item is None:
+                db.session.rollback()
+                continue  # Expired claim was replaced; its worker owns the receipt.
             item.vault_key = saved['key']
             item.delivered_at = datetime.utcnow()
+            item.verified_at = item.delivered_at
             db.session.commit()
             delivered += 1
         except Exception:
             db.session.rollback()
+            db.session.query(model).filter_by(id=identifier, attempts=attempt, delivered_at=None).update({
+                'retry_at': datetime.utcnow() + timedelta(seconds=min(3600, 30 * 2 ** min(attempt, 6))),
+            })
+            db.session.commit()
             current_app.logger.warning('SPEAR observation delivery deferred: id=%s', identifier)
     return delivered
 
@@ -473,13 +495,13 @@ def schedule_delivery(app, gateway_id):
                         drain(gateway_id)
                     except Exception:
                         db.session.rollback()
-                        app.logger.warning('SPEAR archive delivery deferred safely', exc_info=True)
+                        app.logger.warning('SPEAR archive delivery deferred safely')
                     from app.services.neosubzero_archive import drain as drain_subzero
                     try:
                         drain_subzero(gateway_id)
                     except Exception:
                         db.session.rollback()
-                        app.logger.warning('SubZero archive delivery deferred safely',exc_info=True)
+                        app.logger.warning('SubZero archive delivery deferred safely')
                     from app.services.frost_documents import drain as drain_frost_documents
                     drain_frost_documents(gateway_id)
                     from app.services.frost_auto import tick as capture_frost
@@ -496,7 +518,7 @@ def schedule_delivery(app, gateway_id):
                 finally:
                     db.session.remove()
         except Exception:
-            app.logger.warning('SPEAR outbox reconciliation deferred safely', exc_info=True)
+            app.logger.warning('SPEAR outbox reconciliation deferred safely')
         finally:
             _worker_lock.release()
     threading.Thread(target=run, daemon=True, name='spear-learning-outbox').start()

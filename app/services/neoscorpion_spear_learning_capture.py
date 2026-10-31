@@ -1,7 +1,11 @@
-"""Automatic SPEAR learning capture from committed NeoScorpion outcomes."""
+"""Immutable completed SPEAR snapshots in the existing transactional outbox."""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import json
+from uuid import uuid4
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.extensions import db
 from app.models import (
@@ -16,7 +20,8 @@ from app.models import (
     SortDateOperation,
     SortDateParkingAssignment,
 )
-from app.services.neoscorpion_learning_vault import export_learning_record
+from app.services.neoscorpion_learning_vault import _canonical_json, _learning_key
+from app.models.neoscorpion_spear_observation import NeoScorpionSpearObservation
 from app.services.neoscorpion_prof import event_math
 
 
@@ -29,7 +34,18 @@ class LearningCaptureResult:
     already_saved: bool = False
 
 
-def capture_completed_learning_outcome(gateway, assignment_id):
+def capture_completed_learning_outcome(gateway, assignment_id, *, backfill=False):
+    """Queue in the caller's canonical transaction. Never commit or contact R2."""
+    try:
+        return _queue_completed_learning_outcome(gateway, assignment_id, backfill=backfill)
+    except SQLAlchemyError:
+        # INSERT errors can include the complete JSON payload in SQLAlchemy's
+        # exception. The caller must roll back its canonical transaction; never
+        # expose private evidence or continue with a missing durable intent.
+        raise ValueError('Completion evidence could not be recorded. Reload and retry.') from None
+
+
+def _queue_completed_learning_outcome(gateway, assignment_id, *, backfill=False):
     settings = NeoScorpionSettings.query.filter_by(gateway_id=gateway.id).first()
     if settings is None or not bool(settings.spear_learning_capture_enabled):
         return LearningCaptureResult(False, "learning_capture_off")
@@ -41,6 +57,11 @@ def capture_completed_learning_outcome(gateway, assignment_id):
     operation = db.session.get(SortDateOperation, assignment.sort_date_operation_id)
     if mission is None or operation is None:
         return LearningCaptureResult(False, "canonical_record_missing")
+    same_gateway = operation.gateway_id == gateway.id or (
+        operation.gateway_id is None and str(operation.gateway_code or '').upper() == str(gateway.code or '').upper()
+    )
+    if not same_gateway or mission.sort_date_operation_id != operation.id:
+        return LearningCaptureResult(False, "canonical_scope_mismatch")
     if (
         assignment.review_status != "complete"
         or mission.fuel_status != "complete"
@@ -52,13 +73,28 @@ def capture_completed_learning_outcome(gateway, assignment_id):
         return LearningCaptureResult(False, "assignment_not_terminal")
 
     record = build_completed_learning_record(gateway, operation, assignment, mission)
-    saved = export_learning_record(record)
+    canonical = _canonical_json(record)
+    checksum = hashlib.sha256(canonical).hexdigest()
+    existing = NeoScorpionSpearObservation.query.filter_by(event_key=checksum).first()
+    if existing is None:
+        intent = NeoScorpionSpearObservation(
+            id=uuid4().hex, event_key=checksum, kind='backfill' if backfill else 'completed',
+            gateway_id=gateway.id, operation_id=operation.id, mission_id=mission.id,
+            assignment_id=assignment.id, cycle_number=int(assignment.current_cycle_number or 1),
+            payload=json.loads(canonical), created_at=datetime.utcnow(),
+        )
+        try:
+            with db.session.begin_nested():
+                db.session.add(intent)
+                db.session.flush()
+        except IntegrityError:
+            existing = NeoScorpionSpearObservation.query.filter_by(event_key=checksum).one()
     return LearningCaptureResult(
         True,
-        "captured",
-        key=saved["key"],
+        "queued",
+        key=_learning_key(record, checksum),
         training_eligible=record["training_eligible"],
-        already_saved=bool(saved["already_saved"]),
+        already_saved=existing is not None,
     )
 
 
@@ -75,7 +111,7 @@ def capture_current_sort_learning_outcomes(gateway, operation_id):
         ).all()
     ]
     return tuple(
-        capture_completed_learning_outcome(gateway, assignment_id)
+        capture_completed_learning_outcome(gateway, assignment_id, backfill=True)
         for assignment_id in assignment_ids
     )
 

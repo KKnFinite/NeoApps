@@ -26,6 +26,7 @@ class NeoScorpionSpearObservation(db.Model):
     retry_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     reconcile_after = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     delivered_at = db.Column(db.DateTime)
+    verified_at = db.Column(db.DateTime)
     vault_key = db.Column(db.String(512))
 
 
@@ -54,6 +55,7 @@ class NeoScorpionSpearFleetObservation(db.Model):
     attempts = db.Column(db.Integer, nullable=False, default=0)
     retry_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     delivered_at = db.Column(db.DateTime)
+    verified_at = db.Column(db.DateTime)
     vault_key = db.Column(db.String(512))
 
 

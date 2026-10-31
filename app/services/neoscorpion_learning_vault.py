@@ -6,9 +6,12 @@ import gzip
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import zlib
+from contextvars import ContextVar
+from functools import wraps
 
 
 MAX_REVIEW_BYTES = 1_000_000
@@ -23,6 +26,120 @@ CALIBRATION_PREFIX = "calibration-review/"
 LEARNING_PREFIX = "learning-record/"
 ARCHIVE_FIELDS = frozenset({"learning_capture_enabled", "saved_at", "saved_by_user_id", "gateway", "sort", "checksum"})
 REVIEW_FIELDS = frozenset({"schema_version", "spear_algorithm_version", "capture_mode", "operation_id", "training_eligible", "calibrations"})
+_vault_scope = ContextVar('spear_vault_transport', default=None)
+
+
+def _vault_operation(function):
+    @wraps(function)
+    def bounded(*args, **kwargs):
+        if _vault_scope.get() is not None:
+            return function(*args, **kwargs)
+        state = {'client': None, 'config': None}
+        token = _vault_scope.set(state)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _vault_scope.reset(token)
+            close = getattr(state['client'], 'close', None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    logging.getLogger(__name__).warning('SPEAR Vault transport cleanup failed.')
+    return bounded
+
+
+def _vault_client(config):
+    state = _vault_scope.get()
+    if state is None:
+        raise RuntimeError('SPEAR transport requires an owned operation.')
+    if state['client'] is None:
+        try:
+            state['client'], state['config'] = _r2_client(config), config
+        except Exception:
+            raise LearningVaultUnavailable(_safe_provider_error(None)) from None
+    if state['config'] != config:
+        raise ValueError('SPEAR transport configuration changed during delivery.')
+    return state['client']
+
+
+def _provider_status(error):
+    return getattr(error, 'response', {}).get('ResponseMetadata', {}).get('HTTPStatusCode')
+
+
+def _read_stored_json(client, config, key):
+    response = client.get_object(Bucket=config['bucket'], Key=key)
+    stream = response['Body']
+    try:
+        if int(response.get('ContentLength', 0)) > MAX_REVIEW_BYTES:
+            raise ValueError('Stored evidence exceeds the archive limit.')
+        raw = stream.read(MAX_REVIEW_BYTES + 1)
+    finally:
+        stream.close()
+    if len(raw) > MAX_REVIEW_BYTES:
+        raise ValueError('Stored evidence exceeds the archive limit.')
+    payload = json.loads(_inflate_bounded(raw, 'Stored evidence').decode('utf-8'),
+                         object_pairs_hook=_unique_object, parse_constant=_reject_json_constant)
+    if not isinstance(payload, dict):
+        raise ValueError('Stored evidence is malformed.')
+    return payload, response.get('Metadata', {})
+
+
+def _verified_write(config, key, payload, checksum, metadata, *, envelope=False, validator=None):
+    """Conditional immutable PUT followed by independent bounded GET verification.
+
+    A lost PUT response remains unverified. The durable outbox retries by reading
+    the same key, never by overwriting it. Existing legacy metadata may be absent;
+    the actual stored content must still satisfy the complete checksum contract.
+    """
+    serialized = _canonical_json(payload)
+    if len(serialized) > MAX_DECOMPRESSED_REVIEW_BYTES:
+        raise LearningVaultUnavailable('Evidence exceeds the archive size limit.')
+    compressed = gzip.compress(serialized)
+    if len(compressed) > MAX_REVIEW_BYTES:
+        raise LearningVaultUnavailable('Evidence exceeds the archive size limit.')
+    client = _vault_client(config)
+
+    def verify(saved, headers):
+        if validator:
+            validator(saved, key, headers)
+        else:
+            content = dict(saved)
+            if envelope:
+                if content.pop('checksum', None) != checksum:
+                    raise ValueError('Stored evidence checksum differs.')
+                stamp = content.pop('saved_at', None)
+                if not isinstance(stamp, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z', stamp):
+                    raise ValueError('Stored evidence timestamp is invalid.')
+                datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+            if not hmac.compare_digest(hashlib.sha256(_canonical_json(content)).hexdigest(), checksum):
+                raise ValueError('Stored evidence identity or checksum differs.')
+        for name in ('checksum', 'schema-version', 'record-type', 'training-eligible'):
+            if name in headers and headers[name] != metadata.get(name):
+                raise ValueError('Stored evidence metadata differs.')
+
+    try:
+        try:
+            saved, headers = _read_stored_json(client, config, key)
+        except Exception as error:
+            if _provider_status(error) != 404:
+                raise
+        else:
+            verify(saved, headers)
+            return dict(key=key, checksum=checksum, already_saved=True, verified=True)
+        created = True
+        try:
+            client.put_object(Bucket=config['bucket'], Key=key, Body=compressed,
+                ContentType='application/json', ContentEncoding='gzip', Metadata=metadata, IfNoneMatch='*')
+        except Exception as error:
+            if _provider_status(error) not in (409, 412):
+                raise
+            created = False
+        saved, headers = _read_stored_json(client, config, key)
+        verify(saved, headers)
+        return dict(key=key, checksum=checksum, already_saved=not created, verified=True)
+    except Exception:
+        raise LearningVaultUnavailable('Archive content is unverified; retry or administrator review is required. No existing evidence was overwritten.') from None
 
 
 class LearningVaultNotConfigured(ValueError):
@@ -55,80 +172,35 @@ def require_learning_vault(_config=None):
     return status
 
 
+@_vault_operation
 def export_learning_record(record, _config=None):
-    """Persist one immutable, idempotent completed-operation learning record."""
+    """Persist a completed-operation record only after independent read-back."""
     config = _require_r2_config(_config)
     _validate_learning_record(record)
-    canonical_record = _canonical_json(record)
-    checksum = hashlib.sha256(canonical_record).hexdigest()
-    key = _learning_key(record, checksum)
-    client = _r2_client(config)
-    try:
-        client.head_object(Bucket=config["bucket"], Key=key)
-        return {"key": key, "checksum": checksum, "already_saved": True}
-    except Exception as exc:
-        response = getattr(exc, "response", {})
-        metadata = response.get("ResponseMetadata") if isinstance(response, dict) else None
-        if not isinstance(metadata, dict) or metadata.get("HTTPStatusCode") != 404:
-            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-
-    payload = dict(record)
-    payload.update({
-        "checksum": checksum,
-        "saved_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-    })
-    serialized = _canonical_json(payload)
-    if len(serialized) > MAX_DECOMPRESSED_REVIEW_BYTES:
-        raise LearningVaultUnavailable("SPEAR learning record is too large.")
-    compressed = gzip.compress(serialized)
-    if len(compressed) > MAX_REVIEW_BYTES:
-        raise LearningVaultUnavailable("SPEAR learning record is too large.")
-    try:
-        client.put_object(
-            Bucket=config["bucket"],
-            Key=key,
-            Body=compressed,
-            ContentType="application/json",
-            ContentEncoding="gzip",
-            Metadata={
-                "schema-version": str(record.get("schema_version", "spear-learning/v1")),
-                "record-type": str(record.get("record_type", "completed_fuel_outcome")),
-                "checksum": checksum,
-                "training-eligible": "true" if record.get("training_eligible") else "false",
-            },
-        )
-    except Exception as exc:
-        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-    return {"key": key, "checksum": checksum, "already_saved": False}
+    checksum = hashlib.sha256(_canonical_json(record)).hexdigest()
+    payload = dict(record, checksum=checksum,
+                   saved_at=datetime.utcnow().isoformat(timespec="seconds") + "Z")
+    return _verified_write(config, _learning_key(record, checksum), payload, checksum, {
+        "schema-version": record["schema_version"], "record-type": record["record_type"],
+        "checksum": checksum, "training-eligible": "true" if record["training_eligible"] else "false",
+    }, envelope=True)
 
 
+@_vault_operation
 def export_decision_record(record, _config=None):
-    """Separate validated contract; completed-outcome v1/v2/v3 remain unchanged."""
     from app.services.neoscorpion_spear_decisions import validate_record
     validate_record(record)
     config = _require_r2_config(_config)
-    body = _canonical_json(record)
-    checksum = hashlib.sha256(body).hexdigest()
+    checksum = hashlib.sha256(_canonical_json(record)).hexdigest()
     key = (f"decision-observation/v1/{record['gateway_id']}/{record['operation_id']}/"
            f"{record['id']}/{checksum}.json.gz")
-    client = _r2_client(config)
-    try:
-        client.head_object(Bucket=config['bucket'], Key=key)
-        return {'key': key, 'checksum': checksum, 'already_saved': True}
-    except Exception as exc:
-        status = getattr(exc, 'response', {}).get('ResponseMetadata', {}).get('HTTPStatusCode')
-        if status != 404:
-            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-    try:
-        client.put_object(Bucket=config['bucket'], Key=key, Body=gzip.compress(body),
-            ContentType='application/json', ContentEncoding='gzip',
-            Metadata={'schema-version': record['schema_version'], 'record-type': record['record_type'],
-                      'checksum': checksum, 'training-eligible': 'false'})
-    except Exception as exc:
-        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-    return {'key': key, 'checksum': checksum, 'already_saved': False}
+    return _verified_write(config, key, record, checksum, {
+        'schema-version': record['schema_version'], 'record-type': record['record_type'],
+        'checksum': checksum, 'training-eligible': 'false',
+    })
 
 
+@_vault_operation
 def export_subzero_record(record, *, learning=False, _config=None):
     """SubZero evidence uses the same private Vault client and immutable revisions."""
     expected = 'neofrost-treatment-context/v1' if learning else 'subzero-spray/v1'
@@ -151,31 +223,26 @@ def export_subzero_record(record, *, learning=False, _config=None):
     prefix = namespace(source['gateway_id'], 'treatment-context' if learning else 'spray-history').rstrip('/')
     key = f"{prefix}/{int(source['operation_id'])}/{identity}/{checksum}.json.gz"
     config = _require_r2_config(_config)
-    client = _r2_client(config)
-    try:
-        existing = client.head_object(Bucket=config['bucket'], Key=key)
-        if existing.get('Metadata', {}).get('checksum') != checksum:
-            raise LearningVaultUnavailable('Stored SubZero archive checksum requires review.')
-        return dict(key=key, checksum=checksum, already_saved=True)
-    except LearningVaultUnavailable:
-        raise
-    except Exception as exc:
-        if getattr(exc, 'response', {}).get('ResponseMetadata', {}).get('HTTPStatusCode') != 404:
-            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-    try:
-        client.put_object(Bucket=config['bucket'], Key=key, Body=gzip.compress(body),
-            ContentType='application/json', ContentEncoding='gzip',
-            Metadata={'schema-version': expected, 'record-type': record['record_type'], 'checksum': checksum,
-                      'training-eligible': 'false'})
-    except Exception as exc:
-        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-    return dict(key=key, checksum=checksum, already_saved=False)
+    return _verified_write(config, key, record, checksum, {
+        'schema-version': expected, 'record-type': record['record_type'],
+        'checksum': checksum, 'training-eligible': 'false',
+    })
 
 
+@_vault_operation
+def export_subzero_pair(record):
+    """One owned transport for two independent immutable evidence contracts."""
+    from app.services.neosubzero_reporting import learning_context
+    return (export_subzero_record(record),
+            export_subzero_record(learning_context(record), learning=True))
+
+
+
+@_vault_operation
 def list_learning_records(*, limit=50, _config=None):
     config = _require_r2_config(_config)
     try:
-        response = _r2_client(config).list_objects_v2(
+        response = _vault_client(config).list_objects_v2(
             Bucket=config["bucket"],
             Prefix=LEARNING_PREFIX,
             MaxKeys=max(1, min(int(limit), 50)),
@@ -197,12 +264,13 @@ def list_learning_records(*, limit=50, _config=None):
     )
 
 
+@_vault_operation
 def read_learning_record(key, _config=None):
     if not _valid_learning_key(key):
         raise ValueError("Invalid SPEAR learning record.")
     config = _require_r2_config(_config)
     try:
-        response = _r2_client(config).get_object(Bucket=config["bucket"], Key=key)
+        response = _vault_client(config).get_object(Bucket=config["bucket"], Key=key)
         stream = response["Body"]
         try:
             body = stream.read(MAX_REVIEW_BYTES + 1)
@@ -249,13 +317,14 @@ def read_learning_record(key, _config=None):
         raise ValueError("Stored SPEAR learning record is malformed.") from None
 
 
+@_vault_operation
 def test_learning_vault_connection(_config=None):
     config = _require_r2_config(_config)
     key = f"_system/healthchecks/neoapps-{datetime.utcnow():%Y%m%dT%H%M%S%fZ}.json"
     client = None
     deleting = False
     try:
-        client = _r2_client(config)
+        client = _vault_client(config)
         client.put_object(Bucket=config["bucket"], Key=key, Body=b'{"ok":true}', ContentType="application/json")
         client.head_object(Bucket=config["bucket"], Key=key)
         deleting = True
@@ -267,23 +336,13 @@ def test_learning_vault_connection(_config=None):
     return True
 
 
+@_vault_operation
 def archive_calibration_review(review, *, gateway, operation, user, learning_capture_enabled, _config=None):
     """Archive one human-selected review; no Neon payload mirror is retained."""
     config = _require_r2_config(_config)
     canonical_review = _canonical_json(review)
     checksum = hashlib.sha256(canonical_review).hexdigest()
     key = _calibration_key(operation, gateway, checksum)
-    try:
-        client = _r2_client(config)
-        client.head_object(Bucket=config["bucket"], Key=key)
-        return {"key": key, "checksum": checksum, "already_saved": True}
-    except Exception as exc:
-        # Only a confirmed missing object permits a write. A failed HEAD is not
-        # evidence of absence, and must not turn into an unsafe retry/overwrite.
-        response = getattr(exc, "response", {})
-        metadata = response.get("ResponseMetadata") if isinstance(response, dict) else None
-        if not isinstance(metadata, dict) or metadata.get("HTTPStatusCode") != 404:
-            raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
     payload = dict(review)
     payload.update({
         "capture_mode": "manual_calibration_review",
@@ -295,24 +354,18 @@ def archive_calibration_review(review, *, gateway, operation, user, learning_cap
         "sort": {"operation_id": getattr(operation, "id", None), "sort_date": str(getattr(operation, "sort_date", ""))},
         "checksum": checksum,
     })
-    serialized = _canonical_json(payload)
-    if len(serialized) > MAX_DECOMPRESSED_REVIEW_BYTES:
-        raise LearningVaultUnavailable("SPEAR Vault archive is too large.")
     _validate_review(payload, key)
-    compressed = gzip.compress(serialized)
-    if len(compressed) > MAX_REVIEW_BYTES:
-        raise LearningVaultUnavailable("SPEAR Vault archive is too large.")
-    try:
-        client.put_object(Bucket=config["bucket"], Key=key, Body=compressed, ContentType="application/json", ContentEncoding="gzip", Metadata={"schema-version": str(payload.get("schema_version", "v1")), "checksum": checksum, "training-eligible": "false"})
-    except Exception as exc:
-        raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
-    return {"key": key, "checksum": checksum, "already_saved": False}
+    return _verified_write(config, key, payload, checksum, {
+        'schema-version': str(payload.get('schema_version', 'v1')), 'checksum': checksum,
+        'training-eligible': 'false',
+    }, validator=_validate_review)
 
 
+@_vault_operation
 def list_calibration_reviews(*, limit=50, _config=None):
     config = _require_r2_config(_config)
     try:
-        response = _r2_client(config).list_objects_v2(Bucket=config["bucket"], Prefix=CALIBRATION_PREFIX, MaxKeys=max(1, min(int(limit), 50)))
+        response = _vault_client(config).list_objects_v2(Bucket=config["bucket"], Prefix=CALIBRATION_PREFIX, MaxKeys=max(1, min(int(limit), 50)))
     except Exception as exc:
         raise LearningVaultUnavailable(_safe_provider_error(exc)) from None
     records = []
@@ -323,12 +376,13 @@ def list_calibration_reviews(*, limit=50, _config=None):
     return tuple(sorted(records, key=lambda item: str(item["saved_at"]), reverse=True)[:50])
 
 
+@_vault_operation
 def read_calibration_review(key, _config=None):
     if not _valid_calibration_key(key):
         raise ValueError("Invalid SPEAR Vault review.")
     config = _require_r2_config(_config)
     try:
-        response = _r2_client(config).get_object(Bucket=config["bucket"], Key=key)
+        response = _vault_client(config).get_object(Bucket=config["bucket"], Key=key)
         stream = response["Body"]
         try:
             body = stream.read(MAX_REVIEW_BYTES + 1)
@@ -745,7 +799,7 @@ def _safe_component(value):
 
 
 def _canonical_json(payload):
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str, allow_nan=False).encode("utf-8")
 
 
 def _best_effort_delete(client, bucket, key):

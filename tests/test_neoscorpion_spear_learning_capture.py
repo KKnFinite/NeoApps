@@ -204,7 +204,7 @@ class SpearLearningCaptureTest(unittest.TestCase):
         )
 
     @patch(
-        "app.services.neoscorpion_spear_learning_capture.export_learning_record"
+        "app.services.neoscorpion_learning_vault.export_learning_record"
     )
     def test_capture_only_runs_when_enabled_and_is_idempotent_at_vault_boundary(self, export):
         export.return_value = {
@@ -218,7 +218,7 @@ class SpearLearningCaptureTest(unittest.TestCase):
         )
         self.assertTrue(first.captured)
         self.assertTrue(first.training_eligible)
-        export.assert_called_once()
+        export.assert_not_called()
 
         settings = NeoScorpionSettings.query.filter_by(
             gateway_id=self.gateway.id
@@ -235,7 +235,7 @@ class SpearLearningCaptureTest(unittest.TestCase):
         export.assert_not_called()
 
     @patch(
-        "app.services.neoscorpion_spear_learning_capture.export_learning_record"
+        "app.services.neoscorpion_learning_vault.export_learning_record"
     )
     def test_enable_backfill_captures_completed_current_sort(self, export):
         export.return_value = {
@@ -249,7 +249,7 @@ class SpearLearningCaptureTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 1)
         self.assertTrue(results[0].captured)
-        export.assert_called_once()
+        export.assert_not_called()
 
 
 if __name__ == "__main__":

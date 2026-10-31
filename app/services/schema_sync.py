@@ -636,6 +636,12 @@ POSTGRES_OPTIONAL_COLUMNS = {
 }
 
 
+for _table in ('neoscorpion_spear_observations', 'neoscorpion_spear_fleet_observations',
+               'neosubzero_archive_deliveries'):
+    # Nullable and deliberately unfilled for legacy PUT/HEAD-only receipts.
+    POSTGRES_OPTIONAL_COLUMNS.setdefault(_table, {})['verified_at'] = 'TIMESTAMP'
+    LOCAL_SQLITE_OPTIONAL_COLUMNS.setdefault(_table, {})['verified_at'] = 'DATETIME'
+
 # One SubZero contract feeds both canonical dialect registries.
 from app.services.neosubzero_schema import NEOSUBZERO_OPTIONAL_COLUMNS
 for _table, _columns in NEOSUBZERO_OPTIONAL_COLUMNS.items():
