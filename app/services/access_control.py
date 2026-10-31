@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from flask import current_app, g, has_request_context, request
 from sqlalchemy import and_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.extensions import db
@@ -249,7 +250,6 @@ def prime_lightweight_live_request_scope(
             and_(
                 GatewayNodeRole.gateway_membership_id == GatewayMembership.id,
                 GatewayNodeRole.node_id == NeoNode.id,
-                GatewayNodeRole.is_active.is_(True),
             ),
         )
     )
@@ -319,7 +319,7 @@ def prime_lightweight_live_request_scope(
         and node is not None
     ):
         if node_role is not None:
-            resolved_node_role = node_role.role
+            resolved_node_role = node_role.role if node_role.is_active else None
         elif app_access.role in ROLE_LEVELS:
             resolved_node_role = app_access.role
         else:
@@ -383,35 +383,28 @@ def ensure_default_gateway_and_nodes():
         if gateway is MISSING:
             gateway = Gateway.query.filter_by(code=gateway_code).first()
         if not gateway:
-            gateway = Gateway(
-                code=gateway_code,
-                name=current_app.config.get("DEFAULT_GATEWAY_NAME", "NeoGateway"),
-                is_active=True,
+            gateway, _created = _get_or_create_grant(
+                Gateway, {"code": gateway_code},
+                {"name": current_app.config.get("DEFAULT_GATEWAY_NAME", "NeoGateway"),
+                 "is_active": True},
             )
-            db.session.add(gateway)
-            db.session.flush()
         else:
             gateway.name = current_app.config.get("DEFAULT_GATEWAY_NAME", gateway.name)
-            gateway.is_active = True
 
         set_request_cached("access.default_gateway", gateway_code, gateway)
 
         for code, name, sort_order in DEFAULT_NEONODES:
             node = NeoNode.query.filter_by(code=code).first()
             if not node:
-                node = NeoNode(
-                    code=code,
-                    name=name,
-                    sort_order=sort_order,
-                    is_active=True,
+                node, _created = _get_or_create_grant(
+                    NeoNode, {"code": code},
+                    {"name": name, "sort_order": sort_order, "is_active": True},
                 )
-                db.session.add(node)
             else:
                 node.name = name
                 node.sort_order = sort_order
-                node.is_active = True
 
-            set_request_cached("access.active_node", code, node)
+            set_request_cached("access.active_node", code, node if node.is_active else None)
 
         db.session.flush()
         return gateway
@@ -476,10 +469,9 @@ def get_user_node_role(user, gateway_code, node_code):
         node_role = GatewayNodeRole.query.filter_by(
             gateway_membership_id=membership.id,
             node_id=node.id,
-            is_active=True,
         ).first()
-        if node_role:
-            return node_role.role
+        if node_role is not None:
+            return node_role.role if node_role.is_active else None
 
         seed_role = _neogateway_seed_role_for_user(user)
         if _is_lightweight_live_state_request():
@@ -490,7 +482,7 @@ def get_user_node_role(user, gateway_code, node_code):
             node_id=node.id,
             is_active=True,
         ).first()
-        return node_role.role if node_role else "watcher"
+        return node_role.role if node_role and node_role.is_active else None
 
     return request_cached("access.node_role", cache_key, resolve)
 
@@ -564,7 +556,6 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
                 and_(
                     GatewayNodeRole.gateway_membership_id == GatewayMembership.id,
                     GatewayNodeRole.node_id == NeoNode.id,
-                    GatewayNodeRole.is_active.is_(True),
                 ),
             )
             .filter(Gateway.code == gateway_code)
@@ -584,7 +575,7 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
                 and active_node is not None
             ):
                 if node_role is not None:
-                    resolved_role = node_role.role
+                    resolved_role = node_role.role if node_role.is_active else None
                 elif app_access.role in ROLE_LEVELS:
                     resolved_role = app_access.role
                 else:
@@ -617,25 +608,23 @@ def prime_user_node_roles_for_request(user, gateway_code, node_codes):
     }
 
 
+def ensure_user_gateway_membership(user, gateway):
+    """Create a pending request only; existing decisions always win."""
+    membership, created = _get_or_create_grant(
+        GatewayMembership, {"user_id": user.id, "gateway_id": gateway.id},
+        {"status": "pending", "is_active": True},
+    )
+    if created:
+        _mark_access_initialization_changed()
+        clear_request_cache()
+    return membership
+
+
 def request_default_gateway_access_for_user(user):
     gateway = ensure_default_gateway_and_nodes()
-    membership = GatewayMembership.query.filter_by(
-        user_id=user.id,
-        gateway_id=gateway.id,
-    ).first()
-    if not membership:
-        membership = GatewayMembership(
-            user_id=user.id,
-            gateway_id=gateway.id,
-            status="pending",
-            is_active=True,
-        )
-        db.session.add(membership)
-    else:
-        membership.is_active = True
-        if membership.status not in {"approved", "denied"}:
-            membership.status = "pending"
-
+    membership = ensure_user_gateway_membership(user, gateway)
+    membership = GatewayMembership.query.filter_by(id=membership.id).with_for_update().populate_existing().one()
+    _request_reinstatement(membership)
     db.session.flush()
     request_app_access_for_user(user, "neogateway")
     clear_request_cache()
@@ -647,29 +636,24 @@ def backfill_default_gateway_node_roles(user, role="grandmaster"):
         raise ValueError("Unsupported node role.")
 
     gateway = ensure_default_gateway_and_nodes()
-    membership = GatewayMembership.query.filter_by(
-        user_id=user.id,
-        gateway_id=gateway.id,
-    ).first()
-    if not membership:
-        membership = GatewayMembership(
-            user_id=user.id,
-            gateway_id=gateway.id,
-        )
-        db.session.add(membership)
-        db.session.flush()
-
-    membership.status = "approved"
-    membership.is_active = True
-
-    seed_gateway_node_roles(membership, role, overwrite_existing=True)
-
-    db.session.flush()
-    app_access = ensure_user_app_access(user, "neogateway")
-    app_access.status = "approved"
-    app_access.role = role
-    app_access.is_active = True
-    app_access.approved_at = app_access.approved_at or datetime.utcnow()
+    # Bootstrap/legacy provisioning creates missing grants only. It is not an
+    # administrator reactivation action, including for the bootstrap account.
+    membership, created = _get_or_create_grant(
+        GatewayMembership, {"user_id": user.id, "gateway_id": gateway.id},
+        {"status": "approved", "is_active": True},
+    )
+    app_access, _app_created = _get_or_create_grant(
+        PortalAppAccess, {"user_id": user.id, "app_code": "neogateway"},
+        {"status": membership.status, "is_active": membership.is_active,
+         "role": role,
+         "approved_by_user_id": membership.approved_by_user_id,
+         "approved_at": membership.approved_at or (datetime.utcnow() if created else None),
+         "approval_notes": membership.approval_notes,
+         "denied_by_user_id": membership.denied_by_user_id,
+         "denied_at": membership.denied_at, "denial_notes": membership.denial_notes},
+    )
+    if _membership_is_approved_active(membership) and _app_access_is_approved_active(app_access):
+        seed_gateway_node_roles(membership, app_access.role, overwrite_existing=False)
     clear_request_cache()
     return membership
 
@@ -680,39 +664,29 @@ def seed_gateway_node_roles(membership, role="watcher", overwrite_existing=False
     if role not in ROLE_LEVELS:
         raise ValueError("Unsupported node role.")
 
+    if overwrite_existing:
+        raise ValueError("Existing node grants require an explicit administrator role edit.")
+    if not _membership_is_approved_active(membership):
+        return
+
     active_nodes = NeoNode.query.filter_by(is_active=True).all()
-    existing_roles = {
-        node_role.node_id: node_role
-        for node_role in GatewayNodeRole.query.filter_by(
+    existing_ids = {
+        row.node_id for row in GatewayNodeRole.query.filter_by(
             gateway_membership_id=membership.id,
         ).all()
     }
-
     changed = False
     for node in active_nodes:
-        node_role = existing_roles.get(node.id)
-        if not node_role:
-            db.session.add(
-                GatewayNodeRole(
-                    gateway_membership_id=membership.id,
-                    node_id=node.id,
-                    role=role,
-                    is_active=True,
-                )
+        if node.id not in existing_ids:
+            _row, created = _get_or_create_grant(
+                GatewayNodeRole,
+                {"gateway_membership_id": membership.id, "node_id": node.id},
+                {"role": role, "is_active": True},
             )
-            changed = True
-            continue
-
-        if overwrite_existing or not node_role.is_active:
-            if node_role.role != role or not node_role.is_active:
-                changed = True
-            node_role.role = role
-            node_role.is_active = True
-
-    db.session.flush()
+            changed = changed or created
     if changed:
         _mark_access_initialization_changed()
-    clear_request_cache()
+        clear_request_cache()
 
 
 def portal_app_definitions():
@@ -747,17 +721,13 @@ def ensure_user_app_access(user, app_code):
     if access:
         return access
 
-    access = PortalAppAccess(
-        user_id=user.id,
-        app_code=normalized,
-        status="pending",
-        role="watcher",
-        is_active=True,
+    access, created = _get_or_create_grant(
+        PortalAppAccess, {"user_id": user.id, "app_code": normalized},
+        {"status": "pending", "role": "watcher", "is_active": True},
     )
-    db.session.add(access)
-    db.session.flush()
-    _mark_access_initialization_changed()
-    clear_request_cache()
+    if created:
+        _mark_access_initialization_changed()
+        clear_request_cache()
     return access
 
 
@@ -807,9 +777,8 @@ def user_can_access_app(user, app_code, minimum_role="watcher"):
 
 def request_app_access_for_user(user, app_code):
     access = ensure_user_app_access(user, app_code)
-    if access.status != "approved":
-        access.status = "pending"
-    access.is_active = True
+    access = PortalAppAccess.query.filter_by(id=access.id).with_for_update().populate_existing().one()
+    _request_reinstatement(access)
     db.session.flush()
     clear_request_cache()
     return access
@@ -870,7 +839,7 @@ def _sync_neogateway_app_access_from_gateway_membership(user):
     if not _is_real_user(user):
         return None
 
-    gateway = ensure_default_gateway_and_nodes()
+    gateway = get_default_gateway()
     membership = get_user_gateway_membership(user, gateway.code)
     if not membership:
         return None
@@ -882,24 +851,59 @@ def _sync_neogateway_app_access_from_gateway_membership(user):
     if access:
         return access
 
-    access = PortalAppAccess(
-        user_id=user.id,
-        app_code="neogateway",
-        status=membership.status,
-        role=_role_from_gateway_membership(user, membership),
-        is_active=membership.is_active,
-        approved_by_user_id=membership.approved_by_user_id,
-        approved_at=membership.approved_at,
-        approval_notes=membership.approval_notes,
-        denied_by_user_id=membership.denied_by_user_id,
-        denied_at=membership.denied_at,
-        denial_notes=membership.denial_notes,
+    access, created = _get_or_create_grant(
+        PortalAppAccess, {"user_id": user.id, "app_code": "neogateway"},
+        {"status": membership.status,
+         "role": _role_from_gateway_membership(user, membership),
+         "is_active": membership.is_active,
+         "approved_by_user_id": membership.approved_by_user_id,
+         "approved_at": membership.approved_at,
+         "approval_notes": membership.approval_notes,
+         "denied_by_user_id": membership.denied_by_user_id,
+         "denied_at": membership.denied_at,
+         "denial_notes": membership.denial_notes},
     )
-    db.session.add(access)
-    db.session.flush()
-    _mark_access_initialization_changed()
-    clear_request_cache()
+    if created:
+        _mark_access_initialization_changed()
+        clear_request_cache()
     return access
+
+
+def _get_or_create_grant(model, identity, defaults):
+    """Only insert missing unique identities; a race never updates the winner.
+
+    A savepoint contains the expected uniqueness conflict without rolling back
+    the caller's transaction. Unexpected integrity failures still propagate.
+    """
+    existing = model.query.filter_by(**identity).first()
+    if existing is not None:
+        return existing, False
+    try:
+        with db.session.begin_nested():
+            row = model(**identity, **defaults)
+            db.session.add(row)
+            db.session.flush()
+        return row, True
+    except IntegrityError:
+        winner = model.query.filter_by(**identity).populate_existing().first()
+        if winner is None:
+            raise
+        return winner, False
+
+
+def _request_reinstatement(grant):
+    # Denials remain denials. An inactive grant can rejoin the approval queue,
+    # never the authorized population. Retain the previous decision metadata.
+    if grant.status == "denied" or grant.is_active:
+        return
+    previous_status = grant.status
+    grant.status = "pending"
+    grant.is_active = True
+    transition = (
+        f"Reinstatement requested {datetime.utcnow().isoformat()} UTC; "
+        f"previous status={previous_status}, active=False. Administrator approval required."
+    )
+    grant.approval_notes = "\n".join(filter(None, (grant.approval_notes, transition)))
 
 
 def access_initialization_changed_this_request():

@@ -83,8 +83,9 @@ def _bootstrap_database_once(app, username, email, password, used_fallback):
     user.supervisor_name = user.supervisor_name or "System Bootstrap"
     user.work_area = user.work_area or "NeoGateway"
     user.access_reason = user.access_reason or "Initial NeoGateway Grandmaster bootstrap."
-    user.role = "grandmaster"
-    user.is_active = True
+    if created_user:
+        user.role = "grandmaster"
+        user.is_active = True
     user.email_verified_at = user.email_verified_at or datetime.utcnow()
     user.password_reset_required = False
     user.temporary_password_expires_at = None

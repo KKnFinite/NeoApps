@@ -13,6 +13,7 @@ from app.models.user import MANAGEMENT_LEVELS, ROLE_LEVELS
 from app.services import email_service
 from app.services.access_control import (
     ensure_user_app_access,
+    ensure_user_gateway_membership,
     get_current_gateway,
     get_user_node_role,
     portal_install_rows_for_user,
@@ -798,14 +799,7 @@ def update_user_gateway_membership(user_id):
     membership = _current_gateway_membership_for_user(target_user, gateway)
 
     if action in {"approve", "deny"} and not membership:
-        membership = GatewayMembership(
-            user_id=target_user.id,
-            gateway_id=gateway.id,
-            status="pending",
-            is_active=True,
-        )
-        db.session.add(membership)
-        db.session.flush()
+        membership = ensure_user_gateway_membership(target_user, gateway)
 
     try:
         if action == "approve":
@@ -1108,7 +1102,7 @@ def _apply_portal_app_access_form(target_user, bypass_email_verification=False):
 
         access = ensure_user_app_access(target_user, app_code)
         previous_status = access.status
-        if status == "approved" and previous_status != "approved":
+        if status == "approved" and (previous_status != "approved" or (is_active and not access.is_active)):
             _approve_portal_app_access(
                 access,
                 role,
@@ -1139,14 +1133,7 @@ def _approve_portal_app_access(
         gateway = get_current_gateway()
         membership = _current_gateway_membership_for_user(access.user, gateway)
         if not membership:
-            membership = GatewayMembership(
-                user_id=access.user_id,
-                gateway_id=gateway.id,
-                status="pending",
-                is_active=True,
-            )
-            db.session.add(membership)
-            db.session.flush()
+            membership = ensure_user_gateway_membership(access.user, gateway)
         _approve_membership(
             membership, notes, seed_role=role,
             bypass_email_verification=bypass_email_verification,
@@ -1395,18 +1382,12 @@ def _apply_gateway_membership_edit_form(
         raise ValueError("Unsupported gateway membership status.")
 
     if not membership:
-        membership = GatewayMembership(
-            user_id=target_user.id,
-            gateway_id=gateway.id,
-            status="pending",
-            is_active=True,
-        )
-        db.session.add(membership)
-        db.session.flush()
+        membership = ensure_user_gateway_membership(target_user, gateway)
 
     if status != "approved" or not is_active:
         _guard_last_grandmaster_gateway_change(target_user)
 
+    was_inactive = not membership.is_active
     if status == "approved":
         if membership.status != "approved":
             _approve_membership(
@@ -1415,7 +1396,7 @@ def _apply_gateway_membership_edit_form(
                 bypass_email_verification=bypass_email_verification,
             )
         membership.is_active = is_active
-        if membership.is_active:
+        if was_inactive and membership.is_active:
             _restore_approved_membership_operational_state(membership)
     elif status == "denied":
         if membership.status != "denied":
@@ -1685,8 +1666,7 @@ def _highest_node_role(node_roles):
 
 def _node_role_rows(user, membership):
     nodes = NeoNode.query.filter_by(is_active=True).order_by(
-        NeoNode.sort_order.asc(),
-        NeoNode.name.asc(),
+        NeoNode.sort_order.asc(), NeoNode.name.asc(),
     ).all()
     seed_role = _neogateway_seed_role_for_membership(user, membership)
     existing_roles = {}
@@ -1694,36 +1674,25 @@ def _node_role_rows(user, membership):
         if _membership_is_approved_active(membership):
             seed_gateway_node_roles(membership, seed_role, overwrite_existing=False)
         existing_roles = {
-            role.node_id: role
-            for role in GatewayNodeRole.query.filter_by(
+            role.node_id: role for role in GatewayNodeRole.query.filter_by(
                 gateway_membership_id=membership.id,
-                is_active=True,
             ).all()
         }
 
-    return [
-        {
-            "node": node,
-            "override": existing_roles.get(node.id),
-            "effective_role": existing_roles.get(node.id).role
-            if existing_roles.get(node.id)
-            else seed_role,
-            "source_label": existing_roles.get(node.id).role
-            if existing_roles.get(node.id)
-            else (
-                "Seeded from NeoGateway approval"
-                if seed_role != "watcher"
-                else "Watcher fallback"
+    rows = []
+    for node in nodes:
+        override = existing_roles.get(node.id)
+        effective_role = (override.role if override.is_active else "disabled") if override else seed_role
+        rows.append({
+            "node": node, "override": override, "effective_role": effective_role,
+            "source_label": "Disabled" if effective_role == "disabled" else (
+                override.role if override else (
+                    "Seeded from NeoGateway approval" if seed_role != "watcher" else "Watcher fallback"
+                )
             ),
-            "role_choices": _role_choices_for_node(
-                existing_roles.get(node.id),
-                effective_role=existing_roles.get(node.id).role
-                if existing_roles.get(node.id)
-                else seed_role,
-            ),
-        }
-        for node in nodes
-    ]
+            "role_choices": _role_choices_for_node(override, effective_role=effective_role),
+        })
+    return rows
 
 
 def _approval_node_role_rows():
@@ -1777,6 +1746,15 @@ def _apply_node_role_form(target_user, membership):
             continue
 
         selected_role = request.form.get(field_name, "").strip().lower()
+        if selected_role == "disabled":
+            existing_role = existing_roles.get(node.id)
+            if existing_role and existing_role.is_active:
+                if not _current_user_can_assign_role(existing_role.role):
+                    raise ValueError("You cannot disable a role equal to or higher than your own role.")
+                if _would_remove_last_grandmaster(node, selected_role, existing_role):
+                    raise ValueError("Cannot remove the last active Grandmaster MotherBrain access.")
+                existing_role.is_active = False
+            continue
         if selected_role not in ROLE_CHOICES:
             raise ValueError("Unsupported node role selected.")
 
@@ -1809,7 +1787,13 @@ def _approval_node_role_values_from_form():
 
     values = {}
     for node in NeoNode.query.filter_by(is_active=True).all():
-        selected_role = request.form.get(f"node_{node.id}", "watcher").strip().lower()
+        field_name = f"node_{node.id}"
+        if field_name not in request.form:
+            continue
+        selected_role = request.form.get(field_name, "").strip().lower()
+        if selected_role == "disabled":
+            values[node.id] = selected_role
+            continue
         if selected_role not in ROLE_CHOICES:
             raise ValueError("Unsupported node role selected.")
         _guard_role_assignment_allowed(selected_role, None)
@@ -1863,7 +1847,7 @@ def _role_choices_for_node(existing_role, effective_role=None):
 
 def _guard_role_assignment_allowed(selected_role, existing_role):
     existing_effective_role = existing_role.role if existing_role else "watcher"
-    if selected_role == existing_effective_role:
+    if selected_role == existing_effective_role and (not existing_role or existing_role.is_active):
         return
 
     if not _current_user_can_assign_role(selected_role):
@@ -2025,8 +2009,15 @@ def _approve_membership(
                 node_role = node_roles.get(node_id)
                 if not node_role:
                     continue
-                node_role.role = selected_role
-                node_role.is_active = True
+                if selected_role == "disabled":
+                    if node_role.is_active and not _current_user_can_assign_role(node_role.role):
+                        raise ValueError("You cannot disable a role equal to or higher than your own role.")
+                    if _would_remove_last_grandmaster(node_role.node, selected_role, node_role):
+                        raise ValueError("Cannot remove the last active Grandmaster MotherBrain access.")
+                    node_role.is_active = False
+                else:
+                    node_role.role = selected_role
+                    node_role.is_active = True
 
     if not was_approved:
         send_result = email_service.send_access_approved(membership.user, membership.gateway)

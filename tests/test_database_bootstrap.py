@@ -352,7 +352,7 @@ class DatabaseBootstrapTest(unittest.TestCase):
             expected_rules,
         )
 
-    def test_bootstrap_updates_existing_kessler_user_without_overwriting_password(self):
+    def test_bootstrap_preserves_existing_account_disable_role_and_password(self):
         db.create_all()
         user = User(
             username="Kessler",
@@ -377,12 +377,38 @@ class DatabaseBootstrapTest(unittest.TestCase):
         updated = User.query.filter_by(username="Kessler").first()
         self.assertEqual(User.query.count(), 1)
         self.assertEqual(updated.email, "bootstrap@example.com")
-        self.assertEqual(updated.role, "grandmaster")
-        self.assertTrue(updated.is_active)
+        self.assertEqual(updated.role, "watcher")
+        self.assertFalse(updated.is_active)
         self.assertTrue(updated.email_verified_at)
         self.assertTrue(updated.check_password("OldPassword123!"))
         self.assertFalse(updated.check_password("NewHarborSignal123!"))
-        self.assertTrue(user_can_access_node(updated, "RFD", "motherbrain", "grandmaster"))
+        self.assertFalse(user_can_access_node(updated, "RFD", "motherbrain", "grandmaster"))
+
+    def test_bootstrap_preserves_explicit_global_membership_app_and_node_revocations(self):
+        from app.models import PortalAppAccess
+        bootstrap_database(self.app)
+        user = User.query.filter_by(username="Kessler").one()
+        gateway = Gateway.query.filter_by(code="RFD").one()
+        membership = GatewayMembership.query.filter_by(user_id=user.id).one()
+        app_access = PortalAppAccess.query.filter_by(user_id=user.id, app_code="neogateway").one()
+        node = NeoNode.query.filter_by(code="rain").one()
+        role = GatewayNodeRole.query.filter_by(gateway_membership_id=membership.id, node_id=node.id).one()
+        user.is_active = False
+        user.role = "watcher"
+        gateway.is_active = False
+        membership.is_active = False
+        app_access.is_active = False
+        role.role = "watcher"
+        role.is_active = False
+        node.is_active = False
+        db.session.commit()
+        for _ in range(2):
+            bootstrap_database(self.app)
+            db.session.refresh(user); db.session.refresh(gateway); db.session.refresh(membership)
+            db.session.refresh(app_access); db.session.refresh(role); db.session.refresh(node)
+            self.assertFalse(any((user.is_active, gateway.is_active, membership.is_active,
+                                  app_access.is_active, role.is_active, node.is_active)))
+            self.assertEqual((user.role, role.role), ("watcher", "watcher"))
 
     def test_bootstrap_can_run_twice_without_duplicates(self):
         first_result = self._bootstrap()
