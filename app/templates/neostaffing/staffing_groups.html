@@ -94,7 +94,7 @@
 </section>
 
 {% if can_edit_staffing_groups %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const consoleRoot = document.querySelector('.neostaffing-groups-console');
     if (!consoleRoot) return;

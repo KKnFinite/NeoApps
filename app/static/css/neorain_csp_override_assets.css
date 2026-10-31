@@ -1,0 +1,17 @@
+.rain-override {display:flex; align-items:center; justify-content:center; gap:2px; min-width:0; position:relative; font:inherit; line-height:1.2;}
+.rain-override [hidden] {display:none!important;}
+.rain-override [data-rain-override-readout] {white-space:nowrap; font-variant-numeric:tabular-nums;}
+.rain-override input[type=text] {box-sizing:border-box; width:100%; max-width:58px; min-width:0; height:26px; padding:2px 1px; margin:0; background:#101722; color:inherit; border:1px solid rgba(var(--node-rgb),.5); border-radius:3px; font:inherit; font-variant-numeric:tabular-nums; text-align:center;}
+.rain-override input[type=text]:focus-visible {outline:2px solid var(--node-highlight); outline-offset:1px;}
+.rain-reset-tools {display:flex; flex:0 0 auto; align-items:center; justify-content:flex-end; gap:6px; min-width:0; padding:3px 0 5px; font-size:.65rem;}
+.rain-reset-tools span {min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rain-reset-tools button {flex:0 0 auto; padding:3px 6px; border:1px solid rgba(var(--node-rgb),.4); border-radius:3px; background:#101722; color:var(--node-highlight); font:inherit; cursor:pointer;}
+.rain-reset-tools button:disabled {opacity:.5; cursor:default;}
+.rain-reset-tools button:focus-visible {outline:2px solid var(--node-highlight); outline-offset:1px;}
+.rain-override input[type=checkbox] {width:15px; height:15px; margin:0; accent-color:var(--node-highlight);}
+/* Save announcements remain accessible without adding a source/status row. */
+.rain-override output {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap;}
+.rain-override.is-error output {position:absolute; top:100%; left:0; z-index:31; width:max-content; max-width:160px; height:auto; margin:0; padding:3px; clip-path:none; white-space:normal; overflow-wrap:anywhere; background:#101722; color:#f2a3aa; font-size:.6rem;}
+body.blueprint-neorain .neorain-desktop-board .neorain-outbound-table tbody > tr:not(.neorain-delay-panel-row) > td {padding-top:5px; padding-bottom:5px;}
+@media (max-width:900px) {body.blueprint-neorain .neorain-mobile-mission-grid > .neorain-mobile-mission-open {min-height:34px; padding:3px 5px;}}
+@media (max-width:900px) {.rain-override {font-size:.65rem;}}

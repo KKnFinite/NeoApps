@@ -277,7 +277,7 @@
     {% endif %}
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const select = document.getElementById("door-select");
     if (!select) {
@@ -305,7 +305,7 @@
 })();
 </script>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const dialog = document.querySelector("[data-door-supervision-dialog]");
     const openButton = document.querySelector("[data-door-supervision-open]");
@@ -327,7 +327,7 @@
 {% if selected_door %}
 <script src="{{ url_for('static', filename='js/door_view_alert_clock.js', v=config.STATIC_ASSET_VERSION) }}"></script>
 <script src="{{ url_for('static', filename='js/neoermac_live_integrity.js', v='ermac-integrity-1') }}"></script>
-<script type="application/json" id="neoermac-door-config">{{ {
+<script nonce="{{ csp_nonce() }}" type="application/json" id="neoermac-door-config">{{ {
     'refresh': refresh_status,
     'canEdit': can_edit,
     'doorViewUrl': url_for('neoermac.door_view'),

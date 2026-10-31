@@ -138,7 +138,7 @@
     </main>
 </section>
 <script src="{{ url_for('static', filename='js/neosektor_live.js', v=config.STATIC_ASSET_VERSION, live='20260908-v1') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-neosektor-discharge]");
     if (!root) {

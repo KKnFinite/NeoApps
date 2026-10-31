@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -631,6 +630,8 @@ def _is_operational_gateway_path(path):
 
 def register_security_headers(app):
     _validate_security_headers_configuration(app)
+    # Only explicit application template call sites can grant script trust.
+    app.jinja_env.globals["csp_nonce"] = _csp_nonce
 
     @app.after_request
     def add_security_headers(response):
@@ -648,7 +649,6 @@ def register_security_headers(app):
                 "Content-Security-Policy",
                 _content_security_policy(nonce),
             )
-            _inject_csp_nonce(response, nonce)
 
         if _should_apply_hsts(app):
             response.headers.setdefault(
@@ -663,10 +663,6 @@ def register_security_headers(app):
 
 
 HSTS_MINIMUM_MAX_AGE_SECONDS = 31_536_000
-_CSP_NONCE_ATTRIBUTE_PATTERN = re.compile(
-    r"<script\b(?![^>]*\bnonce\s*=)",
-    flags=re.IGNORECASE,
-)
 
 
 def _is_production_environment(app):
@@ -715,12 +711,11 @@ def _validate_security_headers_configuration(app):
 
 
 def _csp_nonce():
-    from flask import g
-
-    nonce = getattr(g, "_neoapps_csp_nonce", None)
+    # Request-local even when a test/CLI caller holds an outer app context.
+    nonce = request.environ.get("neoapps.csp_nonce")
     if not nonce:
         nonce = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
-        g._neoapps_csp_nonce = nonce
+        request.environ["neoapps.csp_nonce"] = nonce
     return nonce
 
 
@@ -745,22 +740,6 @@ def _content_security_policy(nonce):
             "base-uri 'self'",
             "frame-ancestors 'self'",
             "form-action 'self'",
-        )
-    )
-
-
-def _inject_csp_nonce(response, nonce):
-    if response.mimetype != "text/html" or response.is_streamed:
-        return
-
-    body = response.get_data(as_text=True)
-    if "<script" not in body.lower():
-        return
-
-    response.set_data(
-        _CSP_NONCE_ATTRIBUTE_PATTERN.sub(
-            f'<script nonce="{nonce}"',
-            body,
         )
     )
 

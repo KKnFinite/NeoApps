@@ -2,11 +2,11 @@ import os
 import sys
 
 from app import create_app
-from app.config import DevelopmentConfig
+from app.config import DevelopmentConfig, runtime_environment
 
 
 class RunEnvironmentConfig:
-    NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", ""))
+    NEOAPPS_ENV = runtime_environment()
 
 
 app = (

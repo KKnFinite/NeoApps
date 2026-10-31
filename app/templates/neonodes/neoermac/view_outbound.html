@@ -46,7 +46,7 @@
     </div>
 </section>
 <script src="{{ url_for('static', filename='js/neoermac_outbound_live.js', v='ermac-transport-1') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
 NeoErmacOutboundLive.create(document.querySelector('[data-neoermac-outbound-refresh]'), {
     refresh: {{ refresh_status|tojson }}, manifest: {{ row_manifest|tojson }}
 });

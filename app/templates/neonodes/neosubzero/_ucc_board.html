@@ -5,7 +5,7 @@
 </button>
 {%- endmacro %}
 {% macro parking_place(place, positioned=true) -%}
-<div class="ucc-parking-place" data-ucc-parking="{{ place.code }}" {% if positioned and place.grid_row %}style="grid-row:{{ place.grid_row }};grid-column:{{ place.grid_column }}"{% endif %}>
+<div class="ucc-parking-place{% if positioned and place.grid_row %} ucc-grid-row-{{ place.grid_row }} ucc-grid-column-{{ place.grid_column }}{% endif %}" data-ucc-parking="{{ place.code }}">
     <b>{{ place.code }}</b>
     {% for row in place.aircraft %}{{ aircraft(row, 'parking ' ~ place.code) }}{% else %}<span>EMPTY</span>{% endfor %}
 </div>
@@ -19,7 +19,7 @@
         {% set stand = ramp.parking_positions|selectattr('grid_column','equalto',2)|selectattr('grid_row','equalto',level)|first %}
         {% set queue_index = 0 if level == 2 else 1 if level == 4 else -1 %}
         {% set waiting = ramp.waiting_queue[queue_index] if queue_index >= 0 and queue_index < ramp.waiting_queue|length else none %}
-        {% if stand or waiting or level == 1 %}<div class="ucc-center-position" style="grid-row:{{ level }};grid-column:2">
+        {% if stand or waiting or level == 1 %}<div class="ucc-center-position ucc-grid-row-{{ level }} ucc-grid-column-2">
             {% if level == 1 %}<div class="ucc-deice-pad" data-ucc-deice-pad {% if stand %}data-ucc-parking="{{ stand.code }}"{% endif %}><b>THROAT · POSITION 10</b>{% if ramp.pad %}{{ aircraft(ramp.pad, 'throat Position 10') }}{% elif stand and stand.aircraft %}{% for row in stand.aircraft %}{{ aircraft(row, 'parking ' ~ stand.code) }}{% endfor %}{% else %}<span>EMPTY</span>{% endif %}</div>
             {% elif waiting %}<div class="ucc-deice-waiting" data-ucc-queue-position="{{ queue_index + 1 }}" {% if stand %}data-ucc-parking="{{ stand.code }}"{% endif %}><b>{{ 'MIDDLE' if queue_index == 0 else 'POSITION 9' }} · WAITING</b>{{ aircraft(waiting, 'throat Middle' if queue_index == 0 else 'throat Position 9') }}</div>
             {% elif stand %}{{ parking_place(stand, false) }}{% endif %}
@@ -33,7 +33,7 @@
 {%- endmacro %}
 <div data-ucc-live-board>
 {% if not operation %}<p class="neosubzero-empty">No current sort. Staffing management is unavailable.</p>{% endif %}
-<script type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
+<script nonce="{{ csp_nonce() }}" type="application/json" data-ucc-assignment-index>{{ assignment_index|tojson }}</script>
 <header class="ucc-board-heading"><h2>RAMP OPERATIONS <span class="ucc-mobile-label">· STAFFING</span></h2><span class="ucc-desktop-label">Select an aircraft for planning information · treatment entry remains in Deice Operations</span></header>
 <aside class="ucc-aircraft-panel ucc-desktop-label" aria-label="Aircraft planning information" data-ucc-info hidden>
     <p data-ucc-info-empty>Select an aircraft above. This board does not record sprays.</p>

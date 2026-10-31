@@ -10,7 +10,7 @@
 {% for row in rows %}<tr><td><strong>{{ row.tail }}</strong></td><td>{{ row.inbound_eta or '-' }}</td><td>{{ row.tail_status }}</td><td>{{ row.outbound_std or '-' }}</td><td>{{ row.parking }}</td><td>{{ row.ground_time }}</td><td>{{ 'PRETREATED' if row.completed else ('PLANNED' if row.planned else '-') }} · DEICE {{ row.deice_status }}</td><td>{{ row.configured or '-' }}</td><td>{{ pretreat_editor(row) }}</td></tr>{% endfor %}</tbody></table></div>
 <div class="neosubzero-mobile"><section><h2>PLANNED</h2>{% for row in rows if row.planned and not row.completed %}{{ mobile_mission(row) }}{% else %}<p>None planned.</p>{% endfor %}</section><section><h2>COMPLETED</h2>{% for row in rows if row.completed %}{{ mobile_mission(row) }}{% else %}<p>None completed.</p>{% endfor %}</section></div>
 {% endif %}</section>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-subzero-live]");
     const canEdit = {{ can_edit|tojson }};

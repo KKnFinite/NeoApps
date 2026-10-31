@@ -90,7 +90,7 @@
         {% else %}<div class="neostaffing-attendance-empty-state" role="status">{{ attendance.message }}</div>{% endif %}
     </main>
 </section>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const tree = document.querySelector("[data-attendance-tree]");
     const scroller = document.querySelector("[data-attendance-tree-scroll]");

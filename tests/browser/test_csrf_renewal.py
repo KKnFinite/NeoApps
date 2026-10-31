@@ -25,7 +25,7 @@ class CsrfRenewalBrowserTest(unittest.TestCase):
             <button type="submit" name="intent" value="complete">Complete</button></form>
             <form id="ajax" method="post" action="/_csrf-lab/save"><input name="notes" value="AJAX draft">
             <button type="submit">Save</button></form><output id="result"></output>
-            <script>window.originalDocument=true;
+            <script nonce="{{ csp_nonce() }}">window.originalDocument=true;
             document.querySelector('#ajax').addEventListener('submit',async event=>{
                 event.preventDefault();try{const response=await fetch(event.target.getAttribute('action'),{
                 method:'POST',body:new FormData(event.target),headers:{Accept:'application/json'}});

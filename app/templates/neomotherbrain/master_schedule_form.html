@@ -236,7 +236,7 @@
 </section>
 
 {{ military_time_script()|safe }}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const uppercaseAirportCodes = (root) => {
         root.querySelectorAll(".airport-code-input").forEach((input) => {

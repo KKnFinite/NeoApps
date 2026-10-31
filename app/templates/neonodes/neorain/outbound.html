@@ -43,7 +43,7 @@
 {% if can_edit_service_fields %}
 <script defer src="{{ url_for('static', filename='js/neorain_outbound_service_fields.js', v=config.STATIC_ASSET_VERSION, ui='20261008-service-fields-v1') }}"></script>
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
     if (!root) return;
@@ -94,7 +94,7 @@
 })();
 </script>
 {% if can_edit_timestamp_milestones %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
     const mutationUrl = root?.dataset.mutationUrl;
@@ -391,7 +391,7 @@
 </script>
 {% endif %}
 {% if can_edit %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
     const url = root?.dataset.lateInclusionUrl;
@@ -450,7 +450,7 @@
 })();
 </script>
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const root = document.querySelector("[data-neorain-outbound-live]");
     const board = root?.querySelector('[data-neorain-mobile-board="outbound"]');

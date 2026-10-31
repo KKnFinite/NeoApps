@@ -108,7 +108,7 @@
         </div>
     </div>
 </section>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const form = document.querySelector("[data-operation-window-form]");
     const globalInput = form?.querySelector("[data-global-window-input]");

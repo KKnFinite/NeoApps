@@ -34,6 +34,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename=stylesheet, rain='20261016-rain-ui-v1' if stylesheet == 'css/22-neorain.css' else none, discharge='20260911-controls-v1' if stylesheet == 'css/16-neosektor.css' else none, v=config.STATIC_ASSET_VERSION, ucc='20261030-subzero-launch-v1' if stylesheet == 'css/25-neosubzero.css' else none, ermac='20260910-cleanup-v1' if stylesheet in ['css/01-neoermac.css', 'css/03-neoermac.css', 'css/05-neoermac.css', 'css/11-neoermac.css'] else none, sektor='20260907-shared-geometry-v2' if is_sektor_dashboard and stylesheet == 'css/17-shared.css' else none, dock='20260907-viewport-v1' if stylesheet in ['css/13-shared.css', 'css/23-neosubzero.css', 'css/28-shared.css'] else none, viewport='20260907-shared-v1' if stylesheet in ['css/13-shared.css', 'css/17-shared.css'] else none, desktop='20260909-gateway-fade-v3' if stylesheet == 'css/28-shared.css' else '20260909-hero-v1' if stylesheet == 'css/06-shared.css' else none, scorpion='20261021-responsive-v1' if stylesheet == 'css/14-neoscorpion.css' else '20261030-report-actions-v1' if stylesheet == 'css/26-neoscorpion.css' else none, shiftflow='20261007-editor-rail-v1' if stylesheet == 'css/18-neostaffing.css' else none) }}">
     {% endfor %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/interaction_states.css', v=config.STATIC_ASSET_VERSION) }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/csp_compatibility.css', v='20261031-csp-v1') }}">
     {% if request.endpoint == 'neostaffing.shift_flow' %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neostaffing_shift_map.css', v='20261012-setup-colors-v1') }}">
     {% endif %}
@@ -94,7 +95,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/neosubzero_workspace.css', v='20261022-navigation-v2') }}">
     {% endif %}
     {% if uses_operational_shell and operational_shell_supports_board_view %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         if (!window.matchMedia("(min-width: 901px)").matches) return;
         try {
@@ -109,7 +110,7 @@
     </script>
     {% endif %}
     {% if request.endpoint == 'neoscorpion.fuel_dispatch' %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         if ("scrollRestoration" in window.history) {
             window.history.scrollRestoration = "manual";
@@ -137,24 +138,7 @@
           data-authenticated="{{ 'true' if current_user.is_authenticated else 'false' }}"
           data-ttl="{{ config.CSRF_TOKEN_TTL_SECONDS }}">
     <script src="{{ url_for('static', filename='js/csrf.js', v='20261031-renewal-v1') }}"></script>
-    <script>
-    (() => {
-        document.addEventListener("change", (event) => {
-            const select = event.target instanceof HTMLSelectElement ? event.target : null;
-            if (select?.matches("[data-submit-on-change]") && select.form) {
-                select.form.requestSubmit();
-            }
-        });
-
-        document.addEventListener("submit", (event) => {
-            const form = event.target instanceof HTMLFormElement ? event.target : null;
-            const message = form?.dataset.confirmMessage;
-            if (message && !window.confirm(message)) {
-                event.preventDefault();
-            }
-        });
-    })();
-    </script>
+    <script src="{{ url_for('static', filename='js/form_actions.js', v='20261031-csp-v1') }}"></script>
 </head>
 <body class="{% if is_neostaffing_page and request.endpoint == "neostaffing.index" %}staffing-dashboard {% endif %}blueprint-{{ request.blueprint or 'public' }}{% if uses_mobile_chrome %} mobile-app-chrome has-mobile-topbar{% endif %}{% if show_mobile_bottom_nav and not uses_operational_shell %} has-mobile-bottom-nav{% endif %}{% if uses_operational_shell %} operational-shell-page{% endif %}{% if is_portal_dashboard_page %} portal-shell-page{% endif %}{% if is_rfd_hub_page %} rfd-hub-page gateway-shell-page{% endif %}{% if uses_node_header %} motherbrain-fixed-header node-fixed-header{% endif %}{% if uses_motherbrain_header %} motherbrain-desktop-nav-page{% endif %}{% if uses_node_desktop_shell %} node-desktop-nav-page{% endif %}{% if is_neoscorpion_page %} neoscorpion-node-page{% endif %}{% if is_neoermac_page %} neoermac-fixed-header{% endif %}{% if is_neosektor_page and not is_neosektor_driver_page %} neosektor-fixed-header{% endif %}{% if is_neosektor_ballmat_operator_page %} neosektor-ballmat-operator-page{% endif %}{% if is_neosektor_tunnel_operator_page %} neosektor-tunnel-operator-page{% endif %}{% if is_neosektor_live_counts_page %} neosektor-live-counts-page{% endif %}{% if is_neosektor_driver_page %} neosektor-driver-page{% endif %}{% if is_motherbrain_landing %} motherbrain-home-page{% endif %}{% if is_motherbrain_mobile_tile_landing %} motherbrain-mobile-landing-shell{% endif %}{% if is_motherbrain_manage_sort_detail %} motherbrain-mobile-manage-sort-shell{% endif %}{% if is_parking_plan_page %} motherbrain-parking-plan-page{% endif %}{% if is_parking_plan_page and optimizer_defaults is defined and not optimizer_defaults.include_throat %} motherbrain-parking-throat-disabled{% endif %}{% if is_parking_rules_page %} motherbrain-parking-rules-page{% endif %}{% if is_permission_management_page %} motherbrain-permission-rules-page{% endif %}{% if is_gateway_matrix_page %} motherbrain-gateway-matrix-page{% endif %}"{% if uses_operational_shell %} data-operational-shell data-operational-board-supported="{{ 'true' if operational_shell_supports_board_view else 'false' }}"{% endif %}{% if is_rfd_hub_page %} data-gateway-shell{% endif %}>
     <div class="shell"{% if is_gateway_dock_page %} data-gateway-dock{% endif %}{% if is_gateway_typography_page %} data-gateway-typography{% endif %}>
@@ -588,7 +572,7 @@
     </div>
     {% if uses_shared_mobile_drawer %}{% include "_mobile_drawer.html" %}{% endif %}
     {% if uses_node_header %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         const button = document.querySelector("[data-motherbrain-menu-button]");
         const panel = document.querySelector("[data-motherbrain-menu-panel]");
@@ -627,7 +611,7 @@
     </script>
     {% endif %}
     {% if is_authenticated_app and not is_rfd_hub_page %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         const switchers = Array.from(document.querySelectorAll("[data-character-switcher]"))
             .filter((switcher) => !switcher.closest("[data-mobile-navigation]"));
@@ -659,7 +643,7 @@
     </script>
     {% endif %}
     {% if uses_mobile_chrome and not uses_shared_mobile_drawer %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         const topbar = document.querySelector("[data-mobile-topbar]");
         const menuPanel = document.querySelector("[data-mobile-shell-menu-panel]");
@@ -870,7 +854,7 @@
         });
     })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         const dialog = document.querySelector("[data-mobile-share-dialog]");
         const openButton = document.querySelector("[data-mobile-share-open]");
@@ -900,7 +884,7 @@
     <script defer src="{{ url_for('static', filename='js/operational_shell.js', v=config.STATIC_ASSET_VERSION) }}"></script>
     {% endif %}
     {% if uses_google_live_poll_heartbeat %}
-    <script
+    <script nonce="{{ csp_nonce() }}"
         data-google-live-poll-heartbeat
         data-endpoint="{{ url_for('neomotherbrain.execute_google_live_poll') }}"
         data-client-version="{{ google_live_poll_heartbeat_client_version }}"
@@ -957,7 +941,7 @@
     })();
     </script>
     {% endif %}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         const key = "neoapps.same-page-scroll.v1";
         const page = `${location.pathname}${location.search}`;
@@ -983,7 +967,7 @@
         });
     })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         const pressableSelector = [
             "button",
@@ -1077,7 +1061,7 @@
         });
     })();
     </script>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     (() => {
         if (!("serviceWorker" in navigator)) {
             return;

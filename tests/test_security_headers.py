@@ -1,9 +1,17 @@
 from tests.css_contracts import stylesheet_source
 import re
+import os
+import runpy
+import sys
+from types import ModuleType
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+
+from flask import render_template_string
 
 from app import create_app
+from app.config import runtime_environment
 from app.extensions import db
 from app.models import PortalAppAccess, User
 from app.services.access_control import backfill_default_gateway_node_roles, ensure_default_gateway_and_nodes
@@ -33,6 +41,14 @@ class SecurityHeadersTest(unittest.TestCase):
         ensure_default_permission_rules()
         db.session.commit()
         self.client = self.app.test_client()
+
+        @self.app.get('/_security-probe')
+        def probe():
+            return render_template_string('''
+                <script nonce="{{ csp_nonce() }}">window.trusted=true;</script>
+                {{ untrusted|safe }}
+            ''', untrusted='<script id="untrusted">window.untrusted=true;</script>'
+                '<button onclick="window.injected=true">Untrusted</button>')
 
     def tearDown(self):
         db.session.remove()
@@ -94,7 +110,8 @@ class SecurityHeadersTest(unittest.TestCase):
             stylesheet_source(),
         )
         self.assertNotIn("style=", fuel_dispatch)
-        self.assertIn('<progress class="neoscorpion-truck-gauge', fuel_dispatch)
+        summary = (root / "app/templates/neonodes/neoscorpion/_fuel_dispatch_panel.html").read_text(encoding="utf-8")
+        self.assertIn('<progress class="neoscorpion-truck-gauge', summary)
         self.assertNotIn(".style.", copy_script)
         self.assertIn('input.className = "neoscorpion-copy-fallback"', copy_script)
         self.assertIn("replacement.hidden = current.hidden", live_updates)
@@ -118,6 +135,83 @@ class SecurityHeadersTest(unittest.TestCase):
 
         self.assertNotIn("Strict-Transport-Security", response.headers)
         self.assertNotIn("Content-Security-Policy", response.headers)
+
+        # An attacker-controlled Host/forwarded scheme cannot enable a
+        # production environment on a local app.
+        spoofed = local_app.test_client().get('/healthz', base_url='https://neoapps.onrender.com',
+            headers={'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'neoapps.onrender.com'})
+        self.assertNotIn('Strict-Transport-Security', spoofed.headers)
+
+    def test_render_runtime_without_optional_environment_names_enforces_headers(self):
+        with patch.dict(os.environ, {'RENDER': 'true', 'NEOAPPS_ENV': '', 'FLASK_ENV': ''}):
+            environment = runtime_environment()
+        self.assertEqual(environment, 'production')
+        # Reproduce run.py's production path, rather than relying only on an
+        # explicitly production-labelled test config as the original test did.
+        self.app.config['NEOAPPS_ENV'] = environment
+        for path in ('/login', '/healthz', '/not-a-route'):
+            response = self.client.get(path)
+            self.assertIn('Content-Security-Policy', response.headers)
+            self.assertNotIn('Content-Security-Policy-Report-Only', response.headers)
+            self.assertEqual(response.headers['Strict-Transport-Security'],
+                             'max-age=31536000; includeSubDomains')
+
+    def test_run_entrypoint_uses_the_same_runtime_environment_resolver(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / 'run.py').read_text(encoding='utf-8')
+        self.assertIn('NEOAPPS_ENV = runtime_environment()', source)
+        with patch.dict(os.environ, {'RENDER': 'false', 'NEOAPPS_ENV': 'development'}):
+            self.assertEqual(runtime_environment(), 'development')
+
+    def test_actual_wsgi_entrypoint_on_render_enables_headers_without_database_startup(self):
+        root = Path(__file__).resolve().parents[1]
+        observed = []
+
+        def isolated_factory(runtime_config, **kwargs):
+            observed.append(runtime_config.NEOAPPS_ENV)
+            config = type('RenderFixture', (runtime_config,), {
+                'TESTING': True, 'SECRET_KEY': 'isolated-render-fixture-secret-0123456789',
+                'APP_BASE_URL': 'https://neoapps.onrender.com',
+                'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+                'SQLALCHEMY_TRACK_MODIFICATIONS': False,
+            })
+            return create_app(config, **kwargs)
+
+        # Import the real WSGI entrypoint. Prevent background loop startup, as
+        # Gunicorn does before post_worker_init; health requires no DB tables.
+        with patch.dict(os.environ, {'RENDER': 'true', 'NEOAPPS_ENV': '', 'FLASK_ENV': ''}), \
+                patch.dict(sys.modules, {'gunicorn': ModuleType('gunicorn')}), \
+                patch('app.create_app', side_effect=isolated_factory):
+            runtime = runpy.run_path(str(root / 'run.py'), run_name='isolated_wsgi')
+        response = runtime['app'].test_client().get('/healthz')
+        self.assertEqual(observed, ['production'])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Content-Security-Policy', response.headers)
+        self.assertEqual(response.headers['Strict-Transport-Security'],
+                         'max-age=31536000; includeSubDomains')
+
+    def test_each_response_nonce_is_fresh_and_only_explicit_template_scripts_receive_it(self):
+        nonces = []
+        for _ in range(3):
+            response = self.client.get('/_security-probe')
+            nonce = re.search(r"'nonce-([^']+)'", response.headers['Content-Security-Policy'])[1]
+            nonces.append(nonce)
+            self.assertIn(f'<script nonce="{nonce}">'.encode(), response.data)
+            self.assertIn(b'<script id="untrusted">', response.data)
+            self.assertNotIn(f'nonce="{nonce}" id="untrusted"'.encode(), response.data)
+            self.assertIn("script-src-attr 'none'", response.headers['Content-Security-Policy'])
+        self.assertEqual(len(set(nonces)), 3)
+
+    def test_owned_templates_have_no_inline_handlers_styles_or_untrusted_script_grants(self):
+        root = Path(__file__).resolve().parents[1] / 'app/templates'
+        for path in root.rglob('*.html'):
+            source = path.read_text(encoding='utf-8')
+            with self.subTest(template=str(path.relative_to(root))):
+                self.assertNotRegex(source, r'<[^>]+\s(?:on\w+|style)\s*=')
+                self.assertNotRegex(source, r'<style\b')
+                for match in re.finditer(r'<script\b[^>]*>', source):
+                    if not re.search(r'\bsrc\s*=', match[0]):
+                        self.assertIn('nonce="{{ csp_nonce() }}"', match[0])
 
     def test_production_hsts_requires_https_app_base_url(self):
         InsecureProductionConfig = type(

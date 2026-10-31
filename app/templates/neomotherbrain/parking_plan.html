@@ -337,7 +337,7 @@
     </section>
 
     {% if can_edit_parking_plan %}
-    <script type="application/json" data-parking-picker-bootstrap>{{ {
+    <script nonce="{{ csp_nonce() }}" type="application/json" data-parking-picker-bootstrap>{{ {
         "all_tails": tail_rows | map(attribute="tail") | list,
         "unassigned_tails": unassigned_tail_rows | map(attribute="tail") | list,
     } | tojson }}</script>

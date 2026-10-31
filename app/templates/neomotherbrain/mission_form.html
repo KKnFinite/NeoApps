@@ -125,7 +125,7 @@
     </form>
 </section>
 {{ military_time_script()|safe }}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const missionType = document.querySelector("[data-mission-type-select]");
     const scheduledLabel = document.querySelector("[data-mission-scheduled-label]");

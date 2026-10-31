@@ -2,30 +2,7 @@
 {% block title %}Daily Briefing | NeoRain{% endblock %}
 {% block content %}
 {% include "neonodes/neorain/_report_style.html" %}
-<style>
-.rain-daily-briefing .briefing-input-panel{padding:8px;border:1px solid rgba(var(--node-rgb),.25);background:#0b1018;font-family:NeoFontPlain,Arial,sans-serif}
-.rain-daily-briefing .briefing-input-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.rain-daily-briefing .briefing-input-header h2{margin:0}
-.rain-daily-briefing .briefing-input-header [role=status]{margin-left:auto}
-.rain-daily-briefing .briefing-input-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;margin-top:6px;align-items:start}
-.rain-daily-briefing .briefing-short-fields{grid-template-columns:repeat(12,minmax(0,1fr));max-width:1280px;align-items:end}
-.rain-daily-briefing .briefing-short-note{grid-column:span 2}
-.rain-daily-briefing .briefing-input-row label{min-width:0;font-size:.7rem;line-height:1.25}
-.rain-daily-briefing .briefing-input-row input,.rain-daily-briefing .briefing-input-row textarea{display:block;width:100%;min-width:0;min-height:30px;margin-top:3px;padding:5px 7px;font:400 .8rem/18px NeoFontPlain,Arial,sans-serif}
-.rain-daily-briefing .briefing-input-row input{height:30px}
-.rain-daily-briefing .briefing-short-fields textarea{height:30px;max-height:30px;resize:none}
-.rain-daily-briefing .briefing-notes-row textarea{max-height:144px;resize:vertical}
-.rain-daily-briefing .briefing-notes-row textarea{min-height:50px}
-.rain-daily-briefing [data-briefing-status]{display:block;font-size:.75rem;line-height:1.3}
-.rain-daily-briefing [data-briefing-status]:empty{display:none}
-.rain-daily-briefing .briefing-copy-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:4px}
-.rain-daily-briefing .briefing-delay-toggle{display:inline-flex;align-items:center;gap:6px;font:400 .75rem/1.3 NeoFontPlain,Arial,sans-serif}
-.rain-daily-briefing .briefing-delay-toggle input{width:16px;height:16px;min-height:0;margin:0;padding:0;accent-color:var(--node-highlight)}
-.rain-daily-briefing .briefing-delay-mode{color:var(--node-highlight);min-width:2ch}
-@media(max-width:1100px){.rain-daily-briefing .briefing-short-fields{grid-template-columns:repeat(6,minmax(0,1fr))}}
-@media(max-width:700px){.rain-daily-briefing .briefing-short-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.rain-daily-briefing .briefing-short-note{grid-column:auto}}
-@media(max-width:480px){.rain-daily-briefing .briefing-notes-row{grid-template-columns:1fr}}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/neorain_csp_daily_briefing.css', v='20261031-csp-v1') }}">
 {% macro briefing_field(key, label, rows=1) %}
   {% set field = report.fields[key] %}
   <label{% if field.kind == 'note' and rows == 1 %} class="briefing-short-note"{% endif %} for="briefing-{{ key }}">{{ label }}
@@ -81,7 +58,7 @@
       <span id="copy-briefing-status" role="status" aria-live="polite"></span>
     </div>
     <pre class="rain-report-briefing" id="briefing-text">{{ briefing }}</pre>
-    <script type="application/json" data-briefing-reports>{{ {'briefing':briefing,'briefing_detailed':briefing_detailed}|tojson }}</script>
+    <script nonce="{{ csp_nonce() }}" type="application/json" data-briefing-reports>{{ {'briefing':briefing,'briefing_detailed':briefing_detailed}|tojson }}</script>
   </section>
 </main>
 <script defer src="{{ url_for('static',filename='js/neorain_daily_briefing.js',v='20261021-delay-details-v1') }}"></script>

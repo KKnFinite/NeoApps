@@ -1,0 +1,1 @@
+.cert-buttons{display:flex;flex-wrap:wrap;gap:6px}.cert-buttons button{background:#101722;color:var(--node-highlight);border:1px solid var(--node-highlight);padding:8px;font:inherit}#cert-result{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem}

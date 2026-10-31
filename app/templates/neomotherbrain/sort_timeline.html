@@ -280,7 +280,7 @@
     {% endif %}
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const form = document.querySelector("[data-sort-timeline-autosave]");
     const status = document.querySelector("[data-sort-timeline-save-status]");

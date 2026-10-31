@@ -102,7 +102,7 @@
 </section>
 <script src="{{ url_for('static', filename='js/neoermac_live_integrity.js', v='ermac-integrity-1') }}"></script>
 <script src="{{ url_for('static', filename='js/neoermac_lineup_live.js', v='ermac-flight-identity-2') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}">
 NeoErmacLineupLive.create(document.querySelector('[data-neoermac-lineup-live]'), {
     pullTimes: {{ pull_time_lookup|tojson }}, choices: {{ destination_choices|tojson }},
     commonVersion: {{ lineup_common_version|tojson }}, refresh: {{ refresh_status|tojson }}

@@ -6,5 +6,5 @@
     <small>Keep this tab open to compare your entries. Resolve conflicts in the current-values tab before saving; this form is not automatically rebased.</small>
     <details><summary>Unsaved entries</summary><dl>{% for name, value in admin_form_draft['values'].items() if name not in ['settings_baseline', 'action'] %}<dt>{{ name }}</dt><dd>{{ value or '—' }}</dd>{% endfor %}</dl></details>
 </div>
-<script type="application/json" data-admin-form-draft>{{ admin_form_draft|tojson }}</script>
+<script nonce="{{ csp_nonce() }}" type="application/json" data-admin-form-draft>{{ admin_form_draft|tojson }}</script>
 {% endif %}

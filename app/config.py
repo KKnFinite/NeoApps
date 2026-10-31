@@ -27,6 +27,17 @@ def env_int(name, default):
         return int(default)
 
 
+def runtime_environment():
+    """Use deployment-owned configuration, never the request Host or scheme.
+
+    Render sets RENDER=true automatically. Its service environment does not
+    necessarily define the optional Flask/NeoApps environment names.
+    """
+    if env_flag("RENDER"):
+        return "production"
+    return os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
+
+
 def resolve_database_uri():
     database_url = os.getenv("DATABASE_URL")
     if database_url:
@@ -42,7 +53,7 @@ class Config:
     # Inject a private durable adapter in deployment configuration; no DB/disk fallback.
     EMPLOYEE_RECORD_SIGNATURE_STORAGE = None
     SECRET_KEY = os.getenv("SECRET_KEY")
-    NEOAPPS_ENV = os.getenv("NEOAPPS_ENV", os.getenv("FLASK_ENV", "")).strip().lower()
+    NEOAPPS_ENV = runtime_environment()
     STATIC_ASSET_VERSION = os.getenv("STATIC_ASSET_VERSION", "20260928-neoscorpion-seamless-refresh")
     DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
     DEFAULT_GATEWAY_CODE = os.getenv("DEFAULT_GATEWAY_CODE", "RFD").upper()

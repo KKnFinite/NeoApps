@@ -1,0 +1,31 @@
+/* Fixed application-owned values formerly expressed in style attributes. */
+col.neo-column-width-29 { width: 2.9%; }
+col.neo-column-width-30 { width: 3%; }
+col.neo-column-width-31 { width: 3.1%; }
+col.neo-column-width-40 { width: 4%; }
+col.neo-column-width-44 { width: 4.4%; }
+col.neo-column-width-45 { width: 4.5%; }
+col.neo-column-width-46 { width: 4.6%; }
+col.neo-column-width-47 { width: 4.7%; }
+col.neo-column-width-48 { width: 4.8%; }
+col.neo-column-width-49 { width: 4.9%; }
+col.neo-column-width-50 { width: 5%; }
+col.neo-column-width-56 { width: 5.6%; }
+col.neo-column-width-60 { width: 6%; }
+col.neo-column-width-64 { width: 6.4%; }
+col.neo-column-width-68 { width: 6.8%; }
+col.neo-column-width-70 { width: 7%; }
+col.neo-column-width-80 { width: 8%; }
+col.neo-column-width-90 { width: 9%; }
+col.neo-column-width-100 { width: 10%; }
+col.neo-column-width-120 { width: 12%; }
+col.neo-column-width-140 { width: 14%; }
+col.neo-column-width-160 { width: 16%; }
+.neo-preserve-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.neosubzero-ucc .ucc-grid-row-1 { grid-row: 1; }
+.neosubzero-ucc .ucc-grid-row-2 { grid-row: 2; }
+.neosubzero-ucc .ucc-grid-row-3 { grid-row: 3; }
+.neosubzero-ucc .ucc-grid-row-4 { grid-row: 4; }
+.neosubzero-ucc .ucc-grid-column-1 { grid-column: 1; }
+.neosubzero-ucc .ucc-grid-column-2 { grid-column: 2; }
+.neosubzero-ucc .ucc-grid-column-3 { grid-column: 3; }

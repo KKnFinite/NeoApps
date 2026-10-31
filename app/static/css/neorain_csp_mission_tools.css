@@ -1,0 +1,7 @@
+.neorain-mission-tools {padding:8px 0; font-size:.75rem;}
+.neorain-mission-tools summary {cursor:pointer; color:var(--node-highlight); margin-bottom:8px;}
+.neorain-mission-tools form {display:flex; flex-wrap:wrap; align-items:end; gap:6px; margin:8px 0;}
+.neorain-mission-tools label {display:grid; min-width:0;}
+.neorain-mission-tools input,.neorain-mission-tools select,.neorain-mission-tools button {max-width:100%; min-height:32px; background:#101722; color:#fff; border:1px solid rgba(var(--node-rgb),.45); padding:5px; font:inherit;}
+.neorain-mission-tools input {width:130px;}
+.neorain-mission-tools a {display:inline-block; margin:3px;}

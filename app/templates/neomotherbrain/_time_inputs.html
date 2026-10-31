@@ -49,7 +49,7 @@
 {% endmacro %}
 
 {% macro military_time_script() %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     window.NeoAppsTimeInputs = window.NeoAppsTimeInputs || {
         initialize(root = document) {

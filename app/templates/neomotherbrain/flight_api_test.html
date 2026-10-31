@@ -865,7 +865,7 @@
     {% endif %}
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
     const trigger = document.querySelector("[data-auto-poll-trigger]");
     const resultPanel = document.querySelector("[data-auto-poll-result]");
